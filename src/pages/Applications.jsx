@@ -56,6 +56,12 @@ export default function Applications() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        {APPS.length === 0 && !isAdmin && (
+          <div className="col-span-2 flex flex-col items-center justify-center py-16 text-slate-400">
+            <p className="font-medium">No apps assigned to your account yet.</p>
+            <p className="text-sm mt-1">Contact your administrator.</p>
+          </div>
+        )}
         {APPS.map((app) => {
           const Icon = app.icon;
           return (
