@@ -63,8 +63,19 @@ export default function Products() {
 
   return (
     <div>
-      <PageHeader title="Products & Items" subtitle="Manage inventory, assets, and items" onAdd={() => { setEditing(null); setFormOpen(true); }} addLabel="New Item" />
-      <DataTable columns={columns} data={products} searchField="name" onEdit={(row) => { setEditing(row); setFormOpen(true); }} onDelete={(row) => setDeleting(row)} />
+      <PageHeader
+        title="Products & Items"
+        subtitle="Manage inventory, assets, and items"
+        onAdd={perms.can_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
+        addLabel="New Item"
+      />
+      <DataTable
+        columns={columns}
+        data={products}
+        searchField="name"
+        onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
+        onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
+      />
       <ProductForm
         open={formOpen}
         onClose={() => { setFormOpen(false); setEditing(null); }}
