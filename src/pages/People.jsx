@@ -105,15 +105,15 @@ export default function People() {
         <PeopleGroupedView
           people={processedPeople}
           groupBy={groupBy}
-          onEdit={(row) => { setEditing(row); setFormOpen(true); }}
-          onDelete={(row) => setDeleting(row)}
+          onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
+          onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
         />
       ) : (
         <DataTable
           columns={columns}
           data={processedPeople}
-          onEdit={(row) => { setEditing(row); setFormOpen(true); }}
-          onDelete={(row) => setDeleting(row)}
+          onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
+          onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
         />
       )}
 
