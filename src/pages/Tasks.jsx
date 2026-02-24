@@ -280,7 +280,7 @@ export default function Tasks() {
     base44.auth.me().then((u) => { setCurrentUser(u); setLoadingUser(false); }).catch(() => setLoadingUser(false));
   }, []);
 
-  const isAdmin = currentUser?.role === "admin";
+  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
 
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks"], queryFn: () => base44.entities.Task.list("-created_date") });
   const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers"], queryFn: () => base44.entities.User.list(), enabled: isAdmin });
