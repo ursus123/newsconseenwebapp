@@ -281,13 +281,19 @@ export default function Tasks() {
   }, []);
 
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+  const isSuperAdmin = currentUser?.role === "super_admin";
+  const companyId = currentUser?.company_id;
 
-  const { data: tasks = [] } = useQuery({ queryKey: ["tasks"], queryFn: () => base44.entities.Task.list("-created_date") });
-  const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers"], queryFn: () => base44.entities.User.list(), enabled: isAdmin });
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises"], queryFn: () => base44.entities.Enterprise.list(), enabled: isAdmin });
-  const { data: products = [] } = useQuery({ queryKey: ["products"], queryFn: () => base44.entities.Product.list(), enabled: isAdmin });
-  const { data: services = [] } = useQuery({ queryKey: ["services"], queryFn: () => base44.entities.Service.list(), enabled: isAdmin });
-  const { data: people = [] } = useQuery({ queryKey: ["people"], queryFn: () => base44.entities.Person.list(), enabled: isAdmin });
+  const listFn = (entity, sort = "-created_date") => isSuperAdmin || !companyId
+    ? entity.list(sort)
+    : entity.filter({ company_id: companyId }, sort);
+
+  const { data: tasks = [] } = useQuery({ queryKey: ["tasks", companyId], queryFn: () => listFn(base44.entities.Task) });
+  const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.User.list() : base44.entities.User.filter({ company_id: companyId }), enabled: isAdmin });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId], queryFn: () => listFn(base44.entities.Enterprise), enabled: isAdmin });
+  const { data: products = [] } = useQuery({ queryKey: ["products", companyId], queryFn: () => listFn(base44.entities.Product), enabled: isAdmin });
+  const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service), enabled: isAdmin });
+  const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person), enabled: isAdmin });
 
   if (loadingUser) {
     return (
