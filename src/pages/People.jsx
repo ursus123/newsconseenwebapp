@@ -92,7 +92,12 @@ export default function People() {
 
   return (
     <div>
-      <PageHeader title="People" subtitle="Manage your team members, contractors and staff" onAdd={() => { setEditing(null); setFormOpen(true); }} addLabel="Add Person" />
+      <PageHeader
+        title="People"
+        subtitle="Manage your team members, contractors and staff"
+        onAdd={perms.can_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
+        addLabel="Add Person"
+      />
 
       <PeopleToolbar search={search} setSearch={setSearch} groupBy={groupBy} setGroupBy={setGroupBy} sortBy={sortBy} setSortBy={setSortBy} />
 
