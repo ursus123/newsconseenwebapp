@@ -46,6 +46,7 @@ export default function Enterprises() {
 
   const isSuperAdmin = currentUser?.role === "super_admin";
   const companyId = currentUser?.company_id;
+  const perms = usePermissions(currentUser);
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["enterprises", companyId],
