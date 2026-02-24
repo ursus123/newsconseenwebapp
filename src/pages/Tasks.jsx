@@ -33,6 +33,12 @@ function TaskCard({ task, onEdit, onDelete, onStatusChange }) {
               {task.assigned_to && (
                 <Badge variant="outline" className="text-xs gap-1"><User className="w-3 h-3" />{task.assigned_to}</Badge>
               )}
+              {task.related_enterprise && (
+                <Badge variant="outline" className="text-xs gap-1"><Building2 className="w-3 h-3" />{task.related_enterprise}</Badge>
+              )}
+              {task.related_item && (
+                <Badge variant="outline" className="text-xs gap-1"><Package className="w-3 h-3" />{task.related_item}</Badge>
+              )}
               {task.due_date && (
                 <Badge variant="outline" className="text-xs gap-1"><Calendar className="w-3 h-3" />{format(new Date(task.due_date), "MMM d")}</Badge>
               )}
