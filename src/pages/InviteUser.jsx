@@ -48,13 +48,14 @@ export default function InviteUser() {
         last_name: form.last_name,
         email: form.email,
         phone: form.phone || undefined,
-        person_type: form.role === "admin" ? "employee" : "employee",
+        person_type: "employee",
         status: "active",
+        company_id: form.company_id || currentUser?.company_id || undefined,
         internal_notes: form.enterprise_name ? `Enterprise: ${form.enterprise_name}` : undefined,
       });
 
       setStatus("success");
-      setForm({ first_name: "", last_name: "", email: "", phone: "", enterprise_name: "", role: "user" });
+      setForm({ first_name: "", last_name: "", email: "", phone: "", enterprise_name: "", company_id: "", role: "user" });
     } catch (err) {
       setStatus("error");
       setErrorMsg(err?.message || "Failed to send invitation. The user may already exist.");
