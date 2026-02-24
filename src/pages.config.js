@@ -60,6 +60,7 @@ import Services from './pages/Services';
 import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';
 import Applications from './pages/Applications';
+import ClockInOut from './pages/ClockInOut';
 import __Layout from './Layout.jsx';
 
 
@@ -77,6 +78,7 @@ export const PAGES = {
     "Tasks": Tasks,
     "Transactions": Transactions,
     "Applications": Applications,
+    "ClockInOut": ClockInOut,
 }
 
 export const pagesConfig = {
