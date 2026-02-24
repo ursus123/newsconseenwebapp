@@ -120,15 +120,21 @@ export default function InviteUser() {
             </div>
           </Field>
 
+          {isSuperAdmin && (
+            <Field label="Company ID">
+              <Input value={form.company_id} onChange={(e) => set("company_id", e.target.value)} className="rounded-xl" placeholder="e.g. chilohcare" />
+            </Field>
+          )}
+
           <Field label="Role" required>
             <Select value={form.role} onValueChange={(v) => set("role", v)}>
               <SelectTrigger className="rounded-xl">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="user">User — can log in and see their tasks</SelectItem>
+                <SelectItem value="user">User — sees only what admin allows</SelectItem>
                 <SelectItem value="admin">Admin — manages their company's data</SelectItem>
-                <SelectItem value="super_admin">Super Admin — sees all companies</SelectItem>
+                {isSuperAdmin && <SelectItem value="super_admin">Super Admin — sees all companies</SelectItem>}
               </SelectContent>
             </Select>
           </Field>
