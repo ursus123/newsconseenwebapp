@@ -66,23 +66,18 @@ const ALL_NAV_PHASES = [
 
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
-    base44.auth.me().then((u) => {
-      setIsAdmin(u?.role === "admin" || u?.role === "super_admin");
-    }).catch(() => {});
+    base44.auth.me().then(setCurrentUser).catch(() => {});
   }, []);
 
-  // For non-admin users, only show Dashboard and Tasks
-  const visiblePhases = isAdmin
-    ? NAV_PHASES
-    : NAV_PHASES.filter((p) => p.items.some((i) => ["Dashboard", "Tasks"].includes(i.page)));
+  const { allowedPages } = usePermissions(currentUser);
 
-  // Filter items within phases for non-admin
-  const filteredPhases = visiblePhases.map((phase) => ({
+  // Filter nav based on allowed pages (null = all allowed for super_admin)
+  const filteredPhases = ALL_NAV_PHASES.map((phase) => ({
     ...phase,
-    items: isAdmin ? phase.items : phase.items.filter((i) => ["Dashboard", "Tasks"].includes(i.page)),
+    items: phase.items.filter((item) => allowedPages === null || allowedPages.includes(item.page)),
   })).filter((p) => p.items.length > 0);
 
   return (
