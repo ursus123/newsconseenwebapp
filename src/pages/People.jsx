@@ -52,7 +52,9 @@ export default function People() {
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   const isSuperAdmin = currentUser?.role === "super_admin";
+  const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
   const companyId = currentUser?.company_id;
+  const perms = usePermissions(currentUser);
 
   const { data: people = [] } = useQuery({
     queryKey: ["people", companyId],
