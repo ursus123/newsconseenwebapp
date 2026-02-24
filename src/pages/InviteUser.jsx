@@ -177,7 +177,11 @@ export default function InviteUser() {
                 <p className="text-sm font-medium text-slate-700">{u.full_name || "—"}</p>
                 <p className="text-xs text-slate-400">{u.email}</p>
               </div>
-              <Badge className={u.role === "admin" ? "bg-violet-50 text-violet-700" : "bg-slate-100 text-slate-500"}>
+              <Badge className={
+                u.role === "super_admin" ? "bg-emerald-50 text-emerald-700" :
+                u.role === "admin" ? "bg-violet-50 text-violet-700" :
+                "bg-slate-100 text-slate-500"
+              }>
                 {u.role || "user"}
               </Badge>
             </div>
