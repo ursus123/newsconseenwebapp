@@ -5,7 +5,7 @@ import { base44 } from "@/api/base44Client";
 export const ALL_ADMIN_PAGES = [
   "Dashboard", "Tasks", "Enterprises", "People", "Products",
   "Services", "Addresses", "Relationships", "Transactions",
-  "Reports", "InviteUser", "Permissions"
+  "Reports", "Applications", "InviteUser", "Permissions"
 ];
 
 // Default page access per role (fallback when no RolePermissions record exists)
