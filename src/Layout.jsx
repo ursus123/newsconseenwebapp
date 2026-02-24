@@ -55,6 +55,11 @@ const ALL_NAV_PHASES = [
     label: "Phase 5 — Intelligence",
     items: [
       { name: "Reports", icon: FileBarChart, page: "Reports" },
+    ],
+  },
+  {
+    label: "Apps",
+    items: [
       { name: "Applications", icon: LayoutDashboard, page: "Applications" },
     ],
   },
