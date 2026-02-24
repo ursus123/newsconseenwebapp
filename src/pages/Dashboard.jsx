@@ -119,13 +119,20 @@ function WorkerDashboard({ user }) {
 }
 
 // ── Admin Dashboard — full BI overview ───────────────────────────────────────
-function AdminDashboard() {
-  const { data: people = [] } = useQuery({ queryKey: ["people"], queryFn: () => base44.entities.Person.list() });
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises"], queryFn: () => base44.entities.Enterprise.list() });
-  const { data: products = [] } = useQuery({ queryKey: ["products"], queryFn: () => base44.entities.Product.list() });
-  const { data: services = [] } = useQuery({ queryKey: ["services"], queryFn: () => base44.entities.Service.list() });
-  const { data: transactions = [] } = useQuery({ queryKey: ["transactions"], queryFn: () => base44.entities.Transaction.list("-date", 100) });
-  const { data: tasks = [] } = useQuery({ queryKey: ["tasks"], queryFn: () => base44.entities.Task.list() });
+function AdminDashboard({ user }) {
+  const isSuperAdmin = user?.role === "super_admin";
+  const companyId = user?.company_id;
+
+  const listFn = (entity) => isSuperAdmin || !companyId
+    ? entity.list()
+    : entity.filter({ company_id: companyId });
+
+  const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person) });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId], queryFn: () => listFn(base44.entities.Enterprise) });
+  const { data: products = [] } = useQuery({ queryKey: ["products", companyId], queryFn: () => listFn(base44.entities.Product) });
+  const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service) });
+  const { data: transactions = [] } = useQuery({ queryKey: ["transactions", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.Transaction.list("-date", 100) : base44.entities.Transaction.filter({ company_id: companyId }, "-date", 100) });
+  const { data: tasks = [] } = useQuery({ queryKey: ["tasks", companyId], queryFn: () => listFn(base44.entities.Task) });
 
   const totalIncome = transactions
     .filter((t) => t.transaction_type === "sale_service")
