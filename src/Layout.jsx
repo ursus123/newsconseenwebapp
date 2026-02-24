@@ -15,7 +15,8 @@ import {
   X,
   ChevronRight,
   LogOut,
-  Link2
+  Link2,
+  UserPlus
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
