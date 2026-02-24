@@ -314,6 +314,8 @@ export default function Tasks() {
         products={products}
         services={services}
         people={people}
+        companyId={companyId}
+        isSuperAdmin={isSuperAdmin}
       />
     );
   }
