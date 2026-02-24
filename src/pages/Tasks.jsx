@@ -101,7 +101,19 @@ export default function Tasks() {
         ))}
       </div>
 
-      <EntityForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }} onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)} fields={formFields} initialData={editing} title={editing ? "Edit Task" : "Add Task"} />
+      <TaskForm
+        open={formOpen}
+        onClose={() => { setFormOpen(false); setEditing(null); }}
+        onSubmit={(d, saveAndNew) => {
+          if (editing) { updateMut.mutate({ id: editing.id, data: d }); }
+          else { createMut.mutate(d); if (saveAndNew) { setEditing(null); setFormOpen(true); } }
+        }}
+        initialData={editing}
+        people={people}
+        enterprises={enterprises}
+        products={products}
+        services={services}
+      />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.title} />
     </div>
   );
