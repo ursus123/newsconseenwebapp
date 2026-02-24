@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Clock, ChevronRight } from "lucide-react";
+import { Clock, ChevronRight, Pill } from "lucide-react";
 
 const APPS = [
   {
