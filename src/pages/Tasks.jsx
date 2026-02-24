@@ -14,22 +14,7 @@ import { motion } from "framer-motion";
 const priorityColor = { low: "bg-slate-100 text-slate-600", medium: "bg-blue-50 text-blue-700", high: "bg-amber-50 text-amber-700", urgent: "bg-rose-50 text-rose-700" };
 const statusMap = { todo: "To Do", in_progress: "In Progress", completed: "Completed", cancelled: "Cancelled" };
 
-const formFields = [
-  { key: "title", label: "Title", required: true },
-  { key: "description", label: "Description", type: "textarea" },
-  { key: "assigned_to", label: "Assigned To" },
-  { key: "priority", label: "Priority", type: "select", default: "medium", options: [
-    { value: "low", label: "Low" }, { value: "medium", label: "Medium" }, { value: "high", label: "High" }, { value: "urgent", label: "Urgent" },
-  ]},
-  { key: "status", label: "Status", type: "select", default: "todo", options: [
-    { value: "todo", label: "To Do" }, { value: "in_progress", label: "In Progress" }, { value: "completed", label: "Completed" }, { value: "cancelled", label: "Cancelled" },
-  ]},
-  { key: "due_date", label: "Due Date", type: "date" },
-  { key: "category", label: "Category", type: "select", default: "operations", options: [
-    { value: "operations", label: "Operations" }, { value: "sales", label: "Sales" }, { value: "finance", label: "Finance" },
-    { value: "hr", label: "HR" }, { value: "marketing", label: "Marketing" }, { value: "maintenance", label: "Maintenance" }, { value: "other", label: "Other" },
-  ]},
-];
+
 
 function TaskCard({ task, onEdit, onDelete, onStatusChange }) {
   const borderColor = { todo: "border-l-slate-300", in_progress: "border-l-blue-400", completed: "border-l-emerald-400", cancelled: "border-l-rose-300" };
