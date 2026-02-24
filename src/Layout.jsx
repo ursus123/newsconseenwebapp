@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   ChevronRight,
-  LogOut
+  LogOut,
+  Link2
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
@@ -24,6 +25,7 @@ const navItems = [
   { name: "Enterprises", icon: Building2, page: "Enterprises" },
   { name: "Addresses", icon: MapPin, page: "Addresses" },
 
+  { name: "Relationships", icon: Link2, page: "Relationships" },
   { name: "Products", icon: Package, page: "Products" },
   { name: "Services", icon: Wrench, page: "Services" },
   { name: "Transactions", icon: ArrowLeftRight, page: "Transactions" },
