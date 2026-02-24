@@ -23,13 +23,11 @@ import { base44 } from "@/api/base44Client";
 import { usePermissions, DEFAULT_PAGES } from "@/components/shared/usePermissions";
 import { useQuery } from "@tanstack/react-query";
 
-// Nav grouped by operational phase
-const NAV_PHASES = [
+// All nav items
+const ALL_NAV_PHASES = [
   {
     label: "Overview",
-    items: [
-      { name: "Dashboard", icon: LayoutDashboard, page: "Dashboard" },
-    ],
+    items: [{ name: "Dashboard", icon: LayoutDashboard, page: "Dashboard" }],
   },
   {
     label: "Phase 1 — Setup",
@@ -43,32 +41,25 @@ const NAV_PHASES = [
   },
   {
     label: "Phase 2 — Connections",
-    items: [
-      { name: "Relationships", icon: Link2, page: "Relationships" },
-    ],
+    items: [{ name: "Relationships", icon: Link2, page: "Relationships" }],
   },
   {
     label: "Phase 3 — Operations",
-    items: [
-      { name: "Tasks", icon: ClipboardList, page: "Tasks" },
-    ],
+    items: [{ name: "Tasks", icon: ClipboardList, page: "Tasks" }],
   },
   {
     label: "Phase 4 — Ledger",
-    items: [
-      { name: "Transactions", icon: ArrowLeftRight, page: "Transactions" },
-    ],
+    items: [{ name: "Transactions", icon: ArrowLeftRight, page: "Transactions" }],
   },
   {
     label: "Phase 5 — Intelligence",
-    items: [
-      { name: "Reports", icon: FileBarChart, page: "Reports" },
-    ],
+    items: [{ name: "Reports", icon: FileBarChart, page: "Reports" }],
   },
   {
     label: "Admin",
     items: [
-      { name: "InviteUser", icon: UserPlus, page: "InviteUser" },
+      { name: "Invite User", icon: UserPlus, page: "InviteUser" },
+      { name: "Permissions", icon: ShieldCheck, page: "Permissions" },
     ],
   },
 ];
