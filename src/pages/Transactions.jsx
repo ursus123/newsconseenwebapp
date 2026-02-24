@@ -72,8 +72,19 @@ export default function Transactions() {
 
   return (
     <div>
-      <PageHeader title="Transactions" subtitle="Record stock movements, assignments, sales & expenses" onAdd={() => { setEditing(null); setFormOpen(true); }} addLabel="New Transaction" />
-      <DataTable columns={columns} data={transactions} searchField="enterprise" onEdit={(row) => { setEditing(row); setFormOpen(true); }} onDelete={(row) => setDeleting(row)} />
+      <PageHeader
+        title="Transactions"
+        subtitle="Record stock movements, assignments, sales & expenses"
+        onAdd={perms.can_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
+        addLabel="New Transaction"
+      />
+      <DataTable
+        columns={columns}
+        data={transactions}
+        searchField="enterprise"
+        onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
+        onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
+      />
       <TransactionForm
         open={formOpen}
         onClose={() => { setFormOpen(false); setEditing(null); }}
