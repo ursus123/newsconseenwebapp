@@ -56,6 +56,7 @@ import Services from './pages/Services';
 import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';
 import Addresses from './pages/Addresses';
+import Relationships from './pages/Relationships';
 import __Layout from './Layout.jsx';
 
 
@@ -69,6 +70,7 @@ export const PAGES = {
     "Tasks": Tasks,
     "Transactions": Transactions,
     "Addresses": Addresses,
+    "Relationships": Relationships,
 }
 
 export const pagesConfig = {
