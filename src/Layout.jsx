@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -19,22 +19,70 @@ import {
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
-const navItems = [
-  { name: "Dashboard", icon: LayoutDashboard, page: "Dashboard" },
-  { name: "People", icon: Users, page: "People" },
-  { name: "Enterprises", icon: Building2, page: "Enterprises" },
-  { name: "Addresses", icon: MapPin, page: "Addresses" },
-
-  { name: "Relationships", icon: Link2, page: "Relationships" },
-  { name: "Products", icon: Package, page: "Products" },
-  { name: "Services", icon: Wrench, page: "Services" },
-  { name: "Transactions", icon: ArrowLeftRight, page: "Transactions" },
-  { name: "Tasks", icon: ClipboardList, page: "Tasks" },
-  { name: "Reports", icon: FileBarChart, page: "Reports" },
+// Nav grouped by operational phase
+const NAV_PHASES = [
+  {
+    label: "Overview",
+    items: [
+      { name: "Dashboard", icon: LayoutDashboard, page: "Dashboard" },
+    ],
+  },
+  {
+    label: "Phase 1 — Setup",
+    items: [
+      { name: "Enterprises", icon: Building2, page: "Enterprises" },
+      { name: "People", icon: Users, page: "People" },
+      { name: "Products", icon: Package, page: "Products" },
+      { name: "Services", icon: Wrench, page: "Services" },
+      { name: "Addresses", icon: MapPin, page: "Addresses" },
+    ],
+  },
+  {
+    label: "Phase 2 — Connections",
+    items: [
+      { name: "Relationships", icon: Link2, page: "Relationships" },
+    ],
+  },
+  {
+    label: "Phase 3 — Operations",
+    items: [
+      { name: "Tasks", icon: ClipboardList, page: "Tasks" },
+    ],
+  },
+  {
+    label: "Phase 4 — Ledger",
+    items: [
+      { name: "Transactions", icon: ArrowLeftRight, page: "Transactions" },
+    ],
+  },
+  {
+    label: "Phase 5 — Intelligence",
+    items: [
+      { name: "Reports", icon: FileBarChart, page: "Reports" },
+    ],
+  },
 ];
 
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    base44.auth.me().then((u) => {
+      setIsAdmin(u?.role === "admin");
+    }).catch(() => {});
+  }, []);
+
+  // For non-admin users, only show Dashboard and Tasks
+  const visiblePhases = isAdmin
+    ? NAV_PHASES
+    : NAV_PHASES.filter((p) => p.items.some((i) => ["Dashboard", "Tasks"].includes(i.page)));
+
+  // Filter items within phases for non-admin
+  const filteredPhases = visiblePhases.map((phase) => ({
+    ...phase,
+    items: isAdmin ? phase.items : phase.items.filter((i) => ["Dashboard", "Tasks"].includes(i.page)),
+  })).filter((p) => p.items.length > 0);
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -63,35 +111,42 @@ export default function Layout({ children, currentPageName }) {
                 <p className="text-slate-500 text-[10px] uppercase tracking-[0.2em]">Business Manager</p>
               </div>
             </Link>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden text-slate-400 hover:text-white transition-colors"
-            >
+            <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white transition-colors">
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto">
-            {navItems.map((item) => {
-              const isActive = currentPageName === item.page;
-              return (
-                <Link
-                  key={item.page}
-                  to={createPageUrl(item.page)}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`group flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200
-                    ${isActive
-                      ? "bg-emerald-500/10 text-emerald-400"
-                      : "text-slate-400 hover:text-white hover:bg-white/5"
-                    }`}
-                >
-                  <item.icon className={`w-5 h-5 transition-colors ${isActive ? "text-emerald-400" : "text-slate-500 group-hover:text-slate-300"}`} />
-                  <span>{item.name}</span>
-                  {isActive && <ChevronRight className="w-4 h-4 ml-auto text-emerald-400/50" />}
-                </Link>
-              );
-            })}
+          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+            {filteredPhases.map((phase, pi) => (
+              <div key={pi} className={pi > 0 ? "pt-3" : ""}>
+                {/* Phase label — only show for admin (multi-phase) */}
+                {isAdmin && (
+                  <p className="px-4 pb-1.5 text-[9px] font-bold text-slate-600 uppercase tracking-[0.2em]">
+                    {phase.label}
+                  </p>
+                )}
+                {phase.items.map((item) => {
+                  const isActive = currentPageName === item.page;
+                  return (
+                    <Link
+                      key={item.page}
+                      to={createPageUrl(item.page)}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`group flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                        ${isActive
+                          ? "bg-emerald-500/10 text-emerald-400"
+                          : "text-slate-400 hover:text-white hover:bg-white/5"
+                        }`}
+                    >
+                      <item.icon className={`w-5 h-5 transition-colors ${isActive ? "text-emerald-400" : "text-slate-500 group-hover:text-slate-300"}`} />
+                      <span>{item.name}</span>
+                      {isActive && <ChevronRight className="w-4 h-4 ml-auto text-emerald-400/50" />}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
 
           {/* Footer */}
@@ -109,7 +164,6 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Main content */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar */}
         <header className="flex items-center h-16 px-4 lg:px-8 bg-white border-b border-slate-100 shrink-0">
           <button
             onClick={() => setSidebarOpen(true)}
@@ -122,7 +176,6 @@ export default function Layout({ children, currentPageName }) {
           </div>
         </header>
 
-        {/* Page content */}
         <div className="flex-1 overflow-y-auto">
           <div className="p-4 lg:p-8 max-w-[1600px] mx-auto w-full">
             {children}
