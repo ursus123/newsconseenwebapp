@@ -14,6 +14,16 @@ const APPS = [
     page: "ClockInOut",
     status: "live",
   },
+  {
+    id: "medadmin",
+    title: "Medication Administration",
+    subtitle: "eMAR — point-of-care recording, IDD-ready",
+    icon: Pill,
+    color: "from-blue-700 to-blue-900",
+    accent: "bg-blue-300",
+    page: "MedAdmin",
+    status: "live",
+  },
 ];
 
 export default function Applications() {
