@@ -116,8 +116,7 @@ export default function Layout({ children, currentPageName }) {
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
             {filteredPhases.map((phase, pi) => (
               <div key={pi} className={pi > 0 ? "pt-3" : ""}>
-                {/* Phase label — only show for admin (multi-phase) */}
-                {isAdmin && (
+                {filteredPhases.length > 1 && (
                   <p className="px-4 pb-1.5 text-[9px] font-bold text-slate-600 uppercase tracking-[0.2em]">
                     {phase.label}
                   </p>
@@ -136,7 +135,7 @@ export default function Layout({ children, currentPageName }) {
                         }`}
                     >
                       <item.icon className={`w-5 h-5 transition-colors ${isActive ? "text-emerald-400" : "text-slate-500 group-hover:text-slate-300"}`} />
-                      <span>{item.name === "InviteUser" ? "Invite User" : item.name}</span>
+                      <span>{item.name}</span>
                       {isActive && <ChevronRight className="w-4 h-4 ml-auto text-emerald-400/50" />}
                     </Link>
                   );
