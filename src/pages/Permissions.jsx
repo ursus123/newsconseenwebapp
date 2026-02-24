@@ -20,6 +20,9 @@ const ALL_PAGES = [
   { key: "Relationships", label: "Relationships", group: "setup" },
   { key: "Transactions",  label: "Transactions",  group: "ledger" },
   { key: "Reports",       label: "Reports",       group: "intelligence" },
+  { key: "Applications",  label: "Applications",  group: "intelligence" },
+  { key: "ClockInOut",    label: "Clock In/Out",  group: "intelligence" },
+  { key: "MedAdmin",      label: "Med Administration", group: "intelligence" },
   { key: "InviteUser",    label: "Invite User",   group: "admin" },
   { key: "Permissions",   label: "Permissions",   group: "admin" },
 ];
