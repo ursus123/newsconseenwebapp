@@ -5,7 +5,9 @@ import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import TransactionForm from "../components/transactions/TransactionForm";
+import { usePermissions } from "@/components/shared/usePermissions";
 import { Badge } from "@/components/ui/badge";
+import { Lock } from "lucide-react";
 import { format } from "date-fns";
 
 const typeColor = (t) => {
