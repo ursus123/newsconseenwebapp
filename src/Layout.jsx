@@ -10,6 +10,7 @@ import {
   ArrowLeftRight,
   ClipboardList,
   FileBarChart,
+  Building2,
   Menu,
   X,
   ChevronRight,
