@@ -5,6 +5,7 @@ import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import EnterpriseForm from "../components/enterprise/EnterpriseForm";
+import { usePermissions } from "@/components/shared/usePermissions";
 import { Badge } from "@/components/ui/badge";
 
 const statusColor = (s) => {
