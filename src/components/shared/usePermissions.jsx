@@ -17,9 +17,7 @@ export function usePermissions(user) {
 
   const { data: perms = [] } = useQuery({
     queryKey: ["permissions", companyId, role],
-    queryFn: () => companyId
-      ? base44.entities.RolePermissions.filter({ company_id: companyId })
-      : base44.entities.RolePermissions.filter({ company_id: null }),
+    queryFn: () => base44.entities.RolePermissions.filter({ company_id: companyId || null }),
     enabled: !!user && !isSuperAdmin,
   });
 
