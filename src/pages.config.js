@@ -62,6 +62,7 @@ import Transactions from './pages/Transactions';
 import Applications from './pages/Applications';
 import ClockInOut from './pages/ClockInOut';
 import MedAdmin from './pages/MedAdmin';
+import UserManagement from './pages/UserManagement';
 import __Layout from './Layout.jsx';
 
 
@@ -81,6 +82,7 @@ export const PAGES = {
     "Applications": Applications,
     "ClockInOut": ClockInOut,
     "MedAdmin": MedAdmin,
+    "UserManagement": UserManagement,
 }
 
 export const pagesConfig = {
