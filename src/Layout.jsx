@@ -147,7 +147,7 @@ export default function Layout({ children, currentPageName }) {
                         }`}
                     >
                       <item.icon className={`w-5 h-5 transition-colors ${isActive ? "text-emerald-400" : "text-slate-500 group-hover:text-slate-300"}`} />
-                      <span>{item.name}</span>
+                      <span>{item.name === "InviteUser" ? "Invite User" : item.name}</span>
                       {isActive && <ChevronRight className="w-4 h-4 ml-auto text-emerald-400/50" />}
                     </Link>
                   );
