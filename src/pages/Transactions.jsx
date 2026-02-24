@@ -36,11 +36,23 @@ export default function Transactions() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
 
-  const { data: transactions = [] } = useQuery({ queryKey: ["transactions"], queryFn: () => base44.entities.Transaction.list("-date") });
+  React.useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Transaction.create(d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setFormOpen(false); } });
+  const isSuperAdmin = currentUser?.role === "super_admin";
+  const companyId = currentUser?.company_id;
+
+  const { data: transactions = [] } = useQuery({
+    queryKey: ["transactions", companyId],
+    queryFn: () => isSuperAdmin || !companyId ? base44.entities.Transaction.list("-date") : base44.entities.Transaction.filter({ company_id: companyId }, "-date"),
+    enabled: currentUser !== null,
+  });
+
+  const withCompany = (d) => companyId && !isSuperAdmin ? { ...d, company_id: companyId } : d;
+
+  const createMut = useMutation({ mutationFn: (d) => base44.entities.Transaction.create(withCompany(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setFormOpen(false); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Transaction.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); } });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Transaction.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setDeleting(null); } });
 

@@ -45,11 +45,23 @@ export default function People() {
   const [search, setSearch] = useState("");
   const [groupBy, setGroupBy] = useState("none");
   const [sortBy, setSortBy] = useState("created_date_desc");
+  const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
 
-  const { data: people = [] } = useQuery({ queryKey: ["people"], queryFn: () => base44.entities.Person.list("-created_date") });
+  React.useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Person.create(d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setFormOpen(false); } });
+  const isSuperAdmin = currentUser?.role === "super_admin";
+  const companyId = currentUser?.company_id;
+
+  const { data: people = [] } = useQuery({
+    queryKey: ["people", companyId],
+    queryFn: () => isSuperAdmin || !companyId ? base44.entities.Person.list("-created_date") : base44.entities.Person.filter({ company_id: companyId }, "-created_date"),
+    enabled: currentUser !== null,
+  });
+
+  const withCompany = (d) => companyId && !isSuperAdmin ? { ...d, company_id: companyId } : d;
+
+  const createMut = useMutation({ mutationFn: (d) => base44.entities.Person.create(withCompany(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setFormOpen(false); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Person.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setFormOpen(false); setEditing(null); } });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Person.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setDeleting(null); } });
 
