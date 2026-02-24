@@ -4,7 +4,6 @@ import { createPageUrl } from "@/utils";
 import {
   LayoutDashboard,
   Users,
-  Briefcase,
   Package,
   Wrench,
   ArrowLeftRight,
