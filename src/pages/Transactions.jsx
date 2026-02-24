@@ -44,7 +44,19 @@ export default function Transactions() {
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   const isSuperAdmin = currentUser?.role === "super_admin";
+  const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
   const companyId = currentUser?.company_id;
+  const perms = usePermissions(currentUser);
+
+  // Only admins and super_admins may access Transactions
+  if (currentUser && !isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-400">
+        <Lock className="w-8 h-8" />
+        <p className="font-medium">Transactions are restricted to administrators.</p>
+      </div>
+    );
+  }
 
   const { data: transactions = [] } = useQuery({
     queryKey: ["transactions", companyId],
