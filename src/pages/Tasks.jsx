@@ -65,6 +65,10 @@ export default function Tasks() {
   const qc = useQueryClient();
 
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks"], queryFn: () => base44.entities.Task.list("-created_date") });
+  const { data: people = [] } = useQuery({ queryKey: ["people"], queryFn: () => base44.entities.Person.list() });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises"], queryFn: () => base44.entities.Enterprise.list() });
+  const { data: products = [] } = useQuery({ queryKey: ["products"], queryFn: () => base44.entities.Product.list() });
+  const { data: services = [] } = useQuery({ queryKey: ["services"], queryFn: () => base44.entities.Service.list() });
 
   const createMut = useMutation({ mutationFn: (d) => base44.entities.Task.create(d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["tasks"] }); setFormOpen(false); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Task.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["tasks"] }); setFormOpen(false); setEditing(null); } });
