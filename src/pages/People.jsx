@@ -7,6 +7,7 @@ import DeleteDialog from "../components/shared/DeleteDialog";
 import PeopleForm from "../components/people/PeopleForm";
 import PeopleToolbar from "../components/people/PeopleToolbar";
 import PeopleGroupedView from "../components/people/PeopleGroupedView";
+import { usePermissions } from "@/components/shared/usePermissions";
 import { Badge } from "@/components/ui/badge";
 
 const statusColor = (s) => {
