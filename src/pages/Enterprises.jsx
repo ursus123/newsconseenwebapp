@@ -68,13 +68,18 @@ export default function Enterprises() {
 
   return (
     <div>
-      <PageHeader title="Enterprises" subtitle="Manage business entities and enterprise records" onAdd={() => { setEditing(null); setFormOpen(true); }} addLabel="New Enterprise" />
+      <PageHeader
+        title="Enterprises"
+        subtitle="Manage business entities and enterprise records"
+        onAdd={perms.can_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
+        addLabel="New Enterprise"
+      />
       <DataTable
         columns={columns}
         data={enterprises}
         searchField="enterprise_name"
-        onEdit={(row) => { setEditing(row); setFormOpen(true); }}
-        onDelete={(row) => setDeleting(row)}
+        onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
+        onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
       />
       <EnterpriseForm
         open={formOpen}
