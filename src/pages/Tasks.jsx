@@ -2,12 +2,12 @@ import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
-import EntityForm from "../components/shared/EntityForm";
+import TaskForm from "../components/tasks/TaskForm";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Pencil, Trash2, Calendar, User } from "lucide-react";
+import { Pencil, Trash2, Calendar, User, Building2, Package } from "lucide-react";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 
