@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 
 // Default pages per role (fallback when no RolePermissions record exists)
 export const DEFAULT_PAGES = {
-  super_admin: null, // no restriction
+  super_admin: null, // no restriction — all pages
   admin: ["Dashboard", "Tasks", "Enterprises", "People", "Products", "Services", "Addresses", "Relationships", "Transactions", "Reports", "InviteUser", "Permissions"],
   user: ["Dashboard", "Tasks"],
 };
