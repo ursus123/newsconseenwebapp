@@ -62,6 +62,7 @@ const ALL_NAV_PHASES = [
     label: "Admin",
     items: [
       { name: "Invite User", icon: UserPlus, page: "InviteUser" },
+      { name: "User Management", icon: Users, page: "UserManagement" },
       { name: "Permissions", icon: ShieldCheck, page: "Permissions" },
     ],
   },

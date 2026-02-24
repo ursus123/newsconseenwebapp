@@ -1,9 +1,11 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Clock, ChevronRight, Pill } from "lucide-react";
+import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
 
-const APPS = [
+const ALL_APPS = [
   {
     id: "clockinout",
     title: "Clock In / Out",
@@ -27,6 +29,25 @@ const APPS = [
 ];
 
 export default function Applications() {
+  const [user, setUser] = useState(null);
+  useEffect(() => { base44.auth.me().then(setUser).catch(() => {}); }, []);
+
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+
+  const { data: accessRecords = [] } = useQuery({
+    queryKey: ["userAppAccess"],
+    queryFn: () => base44.entities.UserAppAccess.list(),
+    enabled: !!user && !isAdmin,
+  });
+
+  // Admins see all apps; regular users see only their assigned apps
+  const myRecord = accessRecords.find((r) => r.user_email === user?.email);
+  const APPS = isAdmin
+    ? ALL_APPS
+    : myRecord
+    ? ALL_APPS.filter((a) => myRecord.allowed_apps?.includes(a.page))
+    : [];
+
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <div>
