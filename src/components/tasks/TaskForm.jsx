@@ -8,65 +8,72 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Save, X, CheckCircle, AlertCircle } from "lucide-react";
 
-// ── Task type catalogue ───────────────────────────────────────────────────────
 export const TASK_TYPE_GROUPS = [
   {
-    group: "Time & Attendance",
+    group: "🕒 Time & Attendance",
     types: [
-      { value: "clock_in_out", label: "Clock-In / Clock-Out" },
-      { value: "shift_start_end", label: "Shift Start / End" },
-      { value: "break", label: "Break" },
-      { value: "overtime_approval", label: "Overtime Approval" },
-      { value: "absence_leave", label: "Absence / Leave" },
+      { value: "clock_in", label: "Clock-In" },
+      { value: "clock_out", label: "Clock-Out" },
+      { value: "shift_start", label: "Shift Start" },
+      { value: "shift_end", label: "Shift End" },
+      { value: "break_start_end", label: "Break Start / Break End" },
+      { value: "absence_leave", label: "Absence / Leave Declaration" },
     ],
   },
   {
-    group: "Operations & Inventory",
+    group: "📦 Inventory & Operations",
     types: [
       { value: "stock_counting", label: "Stock Counting" },
-      { value: "shelf_restocking", label: "Shelf Restocking" },
       { value: "inventory_inspection", label: "Inventory Inspection" },
-      { value: "receiving_check", label: "Receiving Check" },
-      { value: "picking_packing", label: "Picking / Packing" },
+      { value: "shelf_restocking", label: "Shelf Restocking" },
+      { value: "receiving_verification", label: "Receiving Verification" },
+      { value: "picking_task", label: "Picking Task" },
+      { value: "packing_task", label: "Packing Task" },
       { value: "delivery_preparation", label: "Delivery Preparation" },
       { value: "delivery_confirmation", label: "Delivery Confirmation" },
     ],
   },
   {
-    group: "Service & Maintenance",
+    group: "🛠️ Service & Maintenance",
     types: [
       { value: "maintenance", label: "Maintenance Task" },
+      { value: "preventive_maintenance", label: "Preventive Maintenance" },
       { value: "repair", label: "Repair Task" },
       { value: "installation", label: "Installation Task" },
       { value: "cleaning", label: "Cleaning Task" },
-      { value: "inspection", label: "Inspection Task" },
-      { value: "preventive_maintenance", label: "Preventive Maintenance" },
-      { value: "service_visit", label: "Service Visit" },
+      { value: "equipment_inspection", label: "Equipment Inspection" },
+      { value: "service_visit", label: "Service Visit Execution" },
     ],
   },
   {
-    group: "Healthcare / Regulated",
+    group: "💊 Healthcare / Regulated Care",
     types: [
       { value: "medication_admin", label: "Medication Administration" },
+      { value: "medication_refusal", label: "Medication Refusal / Missed Dose" },
       { value: "vital_signs_check", label: "Vital Signs Check" },
-      { value: "incident_observation", label: "Incident Observation" },
       { value: "care_plan_activity", label: "Care Plan Activity" },
+      { value: "incident_observation", label: "Incident Observation" },
       { value: "safety_check", label: "Safety Check" },
+      { value: "behavior_monitoring", label: "Behavior Monitoring" },
+      { value: "documentation_review", label: "Documentation Review" },
+      { value: "medical_escort", label: "Medical Appointment Escort" },
+      { value: "daily_living_support", label: "Daily Living Support Activity" },
     ],
   },
   {
-    group: "Administrative",
+    group: "👥 Administrative & HR",
     types: [
-      { value: "staff_onboarding", label: "Staff Onboarding" },
+      { value: "staff_onboarding", label: "Staff Onboarding Step" },
       { value: "training_completion", label: "Training Completion" },
-      { value: "certification_renewal", label: "Certification Renewal" },
+      { value: "certification_renewal", label: "Certification Renewal Reminder" },
+      { value: "policy_acknowledgment", label: "Policy Acknowledgment" },
+      { value: "performance_review", label: "Performance Review Task" },
       { value: "document_review", label: "Document Review" },
-      { value: "performance_review", label: "Performance Review" },
       { value: "meeting_followup", label: "Meeting Follow-Up" },
     ],
   },
   {
-    group: "Logistics & Field",
+    group: "🚚 Logistics & Field",
     types: [
       { value: "delivery_task", label: "Delivery Task" },
       { value: "pickup_task", label: "Pickup Task" },
@@ -77,13 +84,14 @@ export const TASK_TYPE_GROUPS = [
     ],
   },
   {
-    group: "Financial & Support",
+    group: "🧾 Financial & Support",
     types: [
       { value: "expense_preparation", label: "Expense Preparation" },
       { value: "invoice_review", label: "Invoice Review" },
       { value: "payment_followup", label: "Payment Follow-Up" },
       { value: "customer_support", label: "Customer Support Ticket" },
       { value: "complaint_handling", label: "Complaint Handling" },
+      { value: "audit_evidence", label: "Audit Evidence Collection" },
     ],
   },
   {
@@ -92,7 +100,6 @@ export const TASK_TYPE_GROUPS = [
   },
 ];
 
-// Lookup helper
 export const taskTypeLabel = (value) => {
   for (const g of TASK_TYPE_GROUPS) {
     const t = g.types.find((t) => t.value === value);
@@ -118,8 +125,7 @@ function Field({ label, required, hint, children }) {
   return (
     <div className="space-y-1.5">
       <Label className="text-sm font-medium text-slate-700">
-        {label}
-        {required && <span className="text-rose-500 ml-0.5">*</span>}
+        {label}{required && <span className="text-rose-500 ml-0.5">*</span>}
       </Label>
       {children}
       {hint && <p className="text-[11px] text-slate-400">{hint}</p>}
@@ -136,19 +142,12 @@ function SectionDivider({ label }) {
   );
 }
 
-export default function TaskForm({ open, onClose, onSubmit, initialData, people, enterprises, products, services }) {
+export default function TaskForm({ open, onClose, onSubmit, initialData, appUsers, enterprises, products, services, people }) {
   const [form, setForm] = useState({});
 
   useEffect(() => {
     if (open) {
-      setForm(
-        initialData || {
-          status: "open",
-          priority: "normal",
-          outcome: "pending",
-          trigger_transaction: false,
-        }
-      );
+      setForm(initialData || { status: "open", priority: "normal", outcome: "pending", trigger_transaction: false });
     }
   }, [open, initialData]);
 
@@ -158,43 +157,41 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, people,
   const handleMarkCompleted = () => onSubmit({ ...form, status: "completed", outcome: "completed" });
   const handleSaveAndNew = () => onSubmit(form, true);
 
+  const handleUserSelect = (email) => {
+    const u = (appUsers || []).find((u) => u.email === email);
+    set("assigned_to_email", email);
+    set("assigned_to_name", u ? u.full_name || u.email : email);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl w-full p-0 overflow-hidden max-h-[95vh] flex flex-col">
-        {/* ── Header ── */}
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-slate-100 shrink-0">
           <div className="flex items-start justify-between gap-3">
             <div>
               <DialogTitle className="text-base font-semibold text-slate-800">
                 {initialData ? "Edit Task" : "New Task"}
               </DialogTitle>
-              <p className="text-xs text-slate-400 mt-0.5">Assign and track a unit of work — does not change stock, revenue, or ownership</p>
+              <p className="text-xs text-slate-400 mt-0.5">Assign work to an app user — does not change stock, revenue, or records</p>
             </div>
             <div className="flex gap-1.5 shrink-0">
-              <Badge className={PRIORITY_COLOR[form.priority] || PRIORITY_COLOR.normal}>
-                {form.priority || "normal"}
-              </Badge>
-              <Badge className={STATUS_COLOR[form.status] || STATUS_COLOR.open}>
-                {(form.status || "open").replace(/_/g, " ")}
-              </Badge>
+              <Badge className={PRIORITY_COLOR[form.priority] || PRIORITY_COLOR.normal}>{form.priority || "normal"}</Badge>
+              <Badge className={STATUS_COLOR[form.status] || STATUS_COLOR.open}>{(form.status || "open").replace(/_/g, " ")}</Badge>
             </div>
           </div>
         </DialogHeader>
 
-        {/* ── Body ── */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
 
             {/* Task Type */}
             <Field label="Task Type" required>
               <Select value={form.task_type || ""} onValueChange={(v) => set("task_type", v)}>
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Select task type..." />
-                </SelectTrigger>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select task type..." /></SelectTrigger>
                 <SelectContent className="max-h-72">
                   {TASK_TYPE_GROUPS.map((g) => (
                     <React.Fragment key={g.group}>
-                      <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{g.group}</div>
+                      <div className="px-2 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider bg-slate-50">{g.group}</div>
                       {g.types.map((t) => (
                         <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                       ))}
@@ -205,16 +202,10 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, people,
             </Field>
 
             {/* Title */}
-            <Field label="Task Title / Summary" required>
-              <Input
-                value={form.title || ""}
-                onChange={(e) => set("title", e.target.value)}
-                className="rounded-xl"
-                placeholder="e.g. Deliver package to Warehouse A..."
-              />
+            <Field label="Task Title / Instructions" required>
+              <Input value={form.title || ""} onChange={(e) => set("title", e.target.value)} className="rounded-xl" placeholder="What needs to be done..." />
             </Field>
 
-            {/* Status & Priority */}
             <div className="grid grid-cols-2 gap-3">
               <Field label="Status">
                 <Select value={form.status || "open"} onValueChange={(v) => set("status", v)}>
@@ -240,37 +231,36 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, people,
               </Field>
             </div>
 
-            {/* ── Assignment ── */}
             <SectionDivider label="Assignment" />
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Assigned To (Executor)">
-                <Select value={form.assigned_to || ""} onValueChange={(v) => set("assigned_to", v)}>
-                  <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select person..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={null}>— None —</SelectItem>
-                    {(people || []).map((p) => {
-                      const name = p.preferred_name || `${p.first_name} ${p.last_name}`.trim();
-                      return <SelectItem key={p.id} value={name}>{name}</SelectItem>;
-                    })}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Enterprise">
-                <Select value={form.enterprise || ""} onValueChange={(v) => set("enterprise", v)}>
-                  <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select enterprise..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={null}>— None —</SelectItem>
-                    {(enterprises || []).map((e) => (
-                      <SelectItem key={e.id} value={e.enterprise_name}>{e.enterprise_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
+            {/* Assign to App User */}
+            <Field label="Assign To (App User)" required hint="The user who will see and complete this task">
+              <Select value={form.assigned_to_email || ""} onValueChange={handleUserSelect}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select user..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={null}>— Unassigned —</SelectItem>
+                  {(appUsers || []).map((u) => (
+                    <SelectItem key={u.id} value={u.email}>
+                      {u.full_name ? `${u.full_name} (${u.email})` : u.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
 
-            {/* ── Contextual Links ── */}
-            <SectionDivider label="Related To (optional — references only, no ownership change)" />
+            <Field label="Enterprise">
+              <Select value={form.enterprise || ""} onValueChange={(v) => set("enterprise", v)}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select enterprise..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={null}>— None —</SelectItem>
+                  {(enterprises || []).map((e) => (
+                    <SelectItem key={e.id} value={e.enterprise_name}>{e.enterprise_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <SectionDivider label="Related To (optional references)" />
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Related Person (client, patient…)">
@@ -310,7 +300,6 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, people,
               </Select>
             </Field>
 
-            {/* ── Timing ── */}
             <SectionDivider label="Timing" />
 
             <div className="grid grid-cols-2 gap-3">
@@ -328,7 +317,6 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, people,
               </Field>
             </div>
 
-            {/* ── Execution Result ── */}
             <SectionDivider label="Execution Result" />
 
             <Field label="Outcome">
@@ -346,17 +334,10 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, people,
             </Field>
 
             <Field label="Outcome Notes">
-              <Textarea
-                value={form.outcome_notes || ""}
-                onChange={(e) => set("outcome_notes", e.target.value)}
-                className="rounded-xl resize-none"
-                rows={3}
-                placeholder="What happened, observations, results..."
-              />
+              <Textarea value={form.outcome_notes || ""} onChange={(e) => set("outcome_notes", e.target.value)} className="rounded-xl resize-none" rows={2} placeholder="What happened, observations, results..." />
             </Field>
 
-            {/* ── Transaction Trigger ── */}
-            <SectionDivider label="Trigger a Transaction? (Optional)" />
+            <SectionDivider label="Transaction Trigger (Optional)" />
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
               <div className="flex items-center gap-3">
@@ -368,12 +349,11 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, people,
                   <span className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${form.trigger_transaction ? "translate-x-4" : "translate-x-0"}`} />
                 </button>
                 <span className="text-sm text-slate-700">
-                  {form.trigger_transaction ? "Yes — this task should trigger a transaction" : "No — task only, no state change"}
+                  {form.trigger_transaction ? "Yes — this task should trigger a transaction" : "No — task only"}
                 </span>
               </div>
-
               {form.trigger_transaction && (
-                <Field label="Transaction Type to Trigger" hint="The actual transaction must be created separately in the Transactions module.">
+                <Field label="Transaction Type" hint="Create the actual transaction in the Transactions module.">
                   <Select value={form.transaction_type || ""} onValueChange={(v) => set("transaction_type", v)}>
                     <SelectTrigger className="rounded-xl bg-white"><SelectValue placeholder="Select type..." /></SelectTrigger>
                     <SelectContent>
@@ -387,26 +367,17 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, people,
                   </Select>
                 </Field>
               )}
-
               <div className="flex items-start gap-2 text-xs text-slate-400 bg-white rounded-lg p-2.5 border border-slate-100">
                 <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-400" />
-                <span>Tasks never modify inventory, revenue, or ownership. Go to <strong className="text-slate-600">Transactions</strong> to record the actual state change.</span>
+                <span>Tasks never modify inventory, revenue, or records directly.</span>
               </div>
             </div>
 
-            {/* Internal Notes */}
-            <Field label="Internal Notes">
-              <Textarea
-                value={form.internal_notes || ""}
-                onChange={(e) => set("internal_notes", e.target.value)}
-                className="rounded-xl resize-none"
-                rows={2}
-                placeholder="Internal context, instructions..."
-              />
+            <Field label="Internal Notes (Admin Only)">
+              <Textarea value={form.internal_notes || ""} onChange={(e) => set("internal_notes", e.target.value)} className="rounded-xl resize-none" rows={2} placeholder="Admin context, instructions..." />
             </Field>
           </div>
 
-          {/* ── Footer ── */}
           <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/40 shrink-0">
             <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl text-sm">
               <X className="w-4 h-4 mr-1" /> Cancel
@@ -415,12 +386,7 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, people,
               <Button type="button" variant="outline" onClick={handleSaveAndNew} className="rounded-xl text-sm border-slate-300">
                 Save &amp; New
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleMarkCompleted}
-                className="rounded-xl text-sm border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-              >
+              <Button type="button" variant="outline" onClick={handleMarkCompleted} className="rounded-xl text-sm border-emerald-300 text-emerald-700 hover:bg-emerald-50">
                 <CheckCircle className="w-4 h-4 mr-1.5" /> Mark Completed
               </Button>
               <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 rounded-xl text-sm shadow-lg shadow-emerald-500/20">
