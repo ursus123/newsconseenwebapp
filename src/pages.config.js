@@ -52,13 +52,14 @@ import Dashboard from './pages/Dashboard';
 import Enterprises from './pages/Enterprises';
 import InviteUser from './pages/InviteUser';
 import People from './pages/People';
+import Permissions from './pages/Permissions';
 import Products from './pages/Products';
 import Relationships from './pages/Relationships';
 import Reports from './pages/Reports';
 import Services from './pages/Services';
 import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';
-import Permissions from './pages/Permissions';
+import Applications from './pages/Applications';
 import __Layout from './Layout.jsx';
 
 
@@ -68,13 +69,14 @@ export const PAGES = {
     "Enterprises": Enterprises,
     "InviteUser": InviteUser,
     "People": People,
+    "Permissions": Permissions,
     "Products": Products,
     "Relationships": Relationships,
     "Reports": Reports,
     "Services": Services,
     "Tasks": Tasks,
     "Transactions": Transactions,
-    "Permissions": Permissions,
+    "Applications": Applications,
 }
 
 export const pagesConfig = {
