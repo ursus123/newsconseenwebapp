@@ -76,7 +76,7 @@ export default function Layout({ children, currentPageName }) {
 
   useEffect(() => {
     base44.auth.me().then((u) => {
-      setIsAdmin(u?.role === "admin");
+      setIsAdmin(u?.role === "admin" || u?.role === "super_admin");
     }).catch(() => {});
   }, []);
 

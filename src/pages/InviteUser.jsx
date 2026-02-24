@@ -122,7 +122,8 @@ export default function InviteUser() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="user">User — can log in and see their tasks</SelectItem>
-                <SelectItem value="admin">Admin — full access to all modules</SelectItem>
+                <SelectItem value="admin">Admin — manages their company's data</SelectItem>
+                <SelectItem value="super_admin">Super Admin — sees all companies</SelectItem>
               </SelectContent>
             </Select>
           </Field>

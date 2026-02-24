@@ -50,6 +50,7 @@
 import Addresses from './pages/Addresses';
 import Dashboard from './pages/Dashboard';
 import Enterprises from './pages/Enterprises';
+import InviteUser from './pages/InviteUser';
 import People from './pages/People';
 import Products from './pages/Products';
 import Relationships from './pages/Relationships';
@@ -57,7 +58,6 @@ import Reports from './pages/Reports';
 import Services from './pages/Services';
 import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';
-import InviteUser from './pages/InviteUser';
 import __Layout from './Layout.jsx';
 
 
@@ -65,6 +65,7 @@ export const PAGES = {
     "Addresses": Addresses,
     "Dashboard": Dashboard,
     "Enterprises": Enterprises,
+    "InviteUser": InviteUser,
     "People": People,
     "Products": Products,
     "Relationships": Relationships,
@@ -72,7 +73,6 @@ export const PAGES = {
     "Services": Services,
     "Tasks": Tasks,
     "Transactions": Transactions,
-    "InviteUser": InviteUser,
 }
 
 export const pagesConfig = {
