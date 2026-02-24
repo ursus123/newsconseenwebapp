@@ -62,6 +62,12 @@ const NAV_PHASES = [
       { name: "Reports", icon: FileBarChart, page: "Reports" },
     ],
   },
+  {
+    label: "Admin",
+    items: [
+      { name: "InviteUser", icon: UserPlus, page: "InviteUser" },
+    ],
+  },
 ];
 
 export default function Layout({ children, currentPageName }) {
