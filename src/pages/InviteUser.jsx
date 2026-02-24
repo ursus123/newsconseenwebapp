@@ -21,6 +21,10 @@ function Field({ label, required, children }) {
 }
 
 export default function InviteUser() {
+  const [currentUser, setCurrentUser] = React.useState(null);
+  React.useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
+  const isSuperAdmin = currentUser?.role === "super_admin";
+
   const [form, setForm] = useState({ first_name: "", last_name: "", email: "", phone: "", enterprise_name: "", company_id: "", role: "user" });
   const [status, setStatus] = useState(null); // null | "loading" | "success" | "error"
   const [errorMsg, setErrorMsg] = useState("");
