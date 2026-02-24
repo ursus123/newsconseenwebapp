@@ -178,6 +178,6 @@ export default function Dashboard() {
     );
   }
 
-  if (user?.role === "admin") return <AdminDashboard />;
+  if (user?.role === "admin" || user?.role === "super_admin") return <AdminDashboard />;
   return <WorkerDashboard user={user} />;
 }
