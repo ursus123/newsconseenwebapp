@@ -5,7 +5,7 @@ import { base44 } from "@/api/base44Client";
 export const ALL_ADMIN_PAGES = [
   "Dashboard", "Tasks", "Enterprises", "People", "Products",
   "Services", "Addresses", "Relationships", "Transactions",
-  "Reports", "Applications", "ClockInOut", "MedAdmin", "InviteUser", "Permissions"
+  "Reports", "Applications", "ClockInOut", "MedAdmin", "InviteUser", "UserManagement", "Permissions"
 ];
 
 export const ALL_APP_PAGES = ["Applications", "ClockInOut", "MedAdmin"];
