@@ -11,6 +11,7 @@ import {
   ClipboardList,
   FileBarChart,
   Building2,
+  MapPin,
   Menu,
   X,
   ChevronRight,
