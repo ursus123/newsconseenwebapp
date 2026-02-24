@@ -61,6 +61,7 @@ import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';
 import Applications from './pages/Applications';
 import ClockInOut from './pages/ClockInOut';
+import MedAdmin from './pages/MedAdmin';
 import __Layout from './Layout.jsx';
 
 
@@ -79,6 +80,7 @@ export const PAGES = {
     "Transactions": Transactions,
     "Applications": Applications,
     "ClockInOut": ClockInOut,
+    "MedAdmin": MedAdmin,
 }
 
 export const pagesConfig = {
