@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
@@ -36,7 +36,7 @@ export default function Products() {
   const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
 
-  React.useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
+  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   const isSuperAdmin = currentUser?.role === "super_admin";
   const companyId = currentUser?.company_id;
