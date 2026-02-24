@@ -155,15 +155,17 @@ function MyTasksList({ tasks }) {
 }
 
 // Admin view: kanban + filters + full CRUD
-function AdminTasksView({ tasks, appUsers, enterprises, products, services, people }) {
+function AdminTasksView({ tasks, appUsers, enterprises, products, services, people, companyId, isSuperAdmin }) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [filter, setFilter] = useState("all");
   const qc = useQueryClient();
 
+  const withCompany = (d) => companyId && !isSuperAdmin ? { ...d, company_id: companyId } : d;
+
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Task.create(d), onSuccess: () => { invalidate(); setFormOpen(false); } });
+  const createMut = useMutation({ mutationFn: (d) => base44.entities.Task.create(withCompany(d)), onSuccess: () => { invalidate(); setFormOpen(false); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Task.update(id, data), onSuccess: () => { invalidate(); setFormOpen(false); setEditing(null); } });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Task.delete(id), onSuccess: () => { invalidate(); setDeleting(null); } });
 
