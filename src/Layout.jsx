@@ -83,11 +83,16 @@ export default function Layout({ children, currentPageName }) {
 
   const { allowedPages } = usePermissions(currentUser);
 
+  // While user hasn't loaded yet, show nothing (avoid flash of empty sidebar)
+  const userLoaded = currentUser !== null;
+
   // Filter nav based on allowed pages (null = all allowed for super_admin)
-  const filteredPhases = ALL_NAV_PHASES.map((phase) => ({
-    ...phase,
-    items: phase.items.filter((item) => allowedPages === null || allowedPages.includes(item.page)),
-  })).filter((p) => p.items.length > 0);
+  const filteredPhases = userLoaded
+    ? ALL_NAV_PHASES.map((phase) => ({
+        ...phase,
+        items: phase.items.filter((item) => allowedPages === null || allowedPages.includes(item.page)),
+      })).filter((p) => p.items.length > 0)
+    : [];
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
