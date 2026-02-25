@@ -388,7 +388,7 @@ export default function AddClient() {
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs text-slate-400 font-medium">Search for an existing person first:</p>
-                  <ExistingPicker items={people} labelKey="first_name" onSelect={setSelectedPerson} selected={selectedPerson} />
+                  <ExistingPicker items={people} labelKey="first_name" type="person" onSelect={setSelectedPerson} selected={selectedPerson} />
                 </div>
                 {!selectedPerson && (
                   <div className="space-y-4 border-t border-slate-100 pt-4">
@@ -417,7 +417,7 @@ export default function AddClient() {
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs text-slate-400 font-medium">Search for an existing enterprise first:</p>
-                  <ExistingPicker items={enterprises} labelKey="enterprise_name" onSelect={setSelectedEnterprise} selected={selectedEnterprise} />
+                  <ExistingPicker items={enterprises} labelKey="enterprise_name" type="enterprise" onSelect={setSelectedEnterprise} selected={selectedEnterprise} />
                 </div>
                 {!selectedEnterprise && (
                   <div className="space-y-4 border-t border-slate-100 pt-4">
@@ -442,7 +442,7 @@ export default function AddClient() {
               <MapPin className="w-5 h-5 text-slate-400" />
               <h3 className="font-bold text-slate-800">Address</h3>
             </div>
-            <ExistingPicker items={addresses} labelKey="address_line1" onSelect={setSelectedAddress} selected={selectedAddress} />
+            <ExistingPicker items={addresses} labelKey="address_line1" type="address" onSelect={setSelectedAddress} selected={selectedAddress} />
             {!selectedAddress && !skipAddress && (
               <div className="space-y-4 border-t border-slate-100 pt-4">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Plus className="w-3 h-3" /> New address</p>
