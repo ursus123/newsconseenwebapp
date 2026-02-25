@@ -344,6 +344,7 @@ export default function Tasks() {
   const { data: products = [] } = useQuery({ queryKey: ["products", companyId], queryFn: () => listFn(base44.entities.Product), enabled: isAdmin });
   const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service), enabled: isAdmin });
   const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person), enabled: isAdmin });
+  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", companyId], queryFn: () => listFn(base44.entities.Address), enabled: isAdmin });
 
   if (loadingUser) {
     return (
