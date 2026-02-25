@@ -241,33 +241,13 @@ export default function MedAdmin() {
 
       {/* Administer Modal from alert */}
       {administerTarget && (
-        <div className="fixed inset-0 z-[95]">
-          {/* Re-use AdministerModal component */}
-          <div className="min-h-screen bg-gray-50 flex flex-col max-w-lg mx-auto relative">
-            <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3">
-              <button
-                onClick={() => setAdministerTarget(null)}
-                className="p-2 -ml-2 rounded-lg text-gray-400 hover:bg-gray-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              <p className="text-sm font-bold text-gray-800">Administer Medication</p>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              <MedDashboard
-                user={user}
-                people={people}
-                products={products}
-                selectedClient={people.find((p) => `${p.first_name} ${p.last_name}` === administerTarget.related_person)}
-                onSelectClient={() => {}}
-                tasks={[administerTarget]}
-                refetch={() => {
-                  refetch();
-                  setAdministerTarget(null);
-                }}
-              />
-            </div>
-          </div>
+        <div className="relative z-[95]">
+          <AdministerModal
+            task={administerTarget}
+            user={user}
+            onClose={() => setAdministerTarget(null)}
+            onSuccess={() => { setAdministerTarget(null); refetch(); }}
+          />
         </div>
       )}
     </div>
