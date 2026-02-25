@@ -363,6 +363,7 @@ export default function Tasks() {
         products={products}
         services={services}
         people={people}
+        addresses={addresses}
         companyId={companyId}
         isSuperAdmin={isSuperAdmin}
       />
