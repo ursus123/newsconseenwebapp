@@ -47,6 +47,7 @@ export default function People() {
   const [search, setSearch] = useState("");
   const [groupBy, setGroupBy] = useState("none");
   const [sortBy, setSortBy] = useState("created_date_desc");
+  const [filters, setFilters] = useState({ status: "", availability_status: "", person_type: "", country: "", primary_role: "" });
   const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
 
