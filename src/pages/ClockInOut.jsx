@@ -201,11 +201,14 @@ export default function ClockInOut() {
     enabled: !!user,
   });
 
-  // Derive state
-  const clockInTask = todayTasks.find((t) => t.task_type === "clock_in" && t.status === "completed");
-  const clockOutTask = todayTasks.find((t) => t.task_type === "clock_out" && t.status === "completed");
+  // Derive state from most recent clock-in / clock-out
+  const sorted = [...todayTasks].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+  const clockInTask = sorted.find((t) => t.task_type === "clock_in" && t.status === "completed");
+  const clockOutTask = sorted.find((t) => t.task_type === "clock_out" && t.status === "completed");
 
-  const isClockedIn = !!clockInTask && !clockOutTask;
+  // Clocked in if the last relevant event was a clock_in
+  const lastEvent = sorted.find((t) => t.task_type === "clock_in" || t.task_type === "clock_out");
+  const isClockedIn = lastEvent?.task_type === "clock_in";
   const currentStatus = isClockedIn ? "clocked_in" : "clocked_out";
 
   // Update currentEnterprise from last transfer or clock-in
