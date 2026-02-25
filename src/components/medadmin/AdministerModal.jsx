@@ -28,15 +28,37 @@ export default function AdministerModal({ task, user, onClose, onSuccess }) {
   const reasonOptions = outcome === "refused" ? REFUSED_REASONS : MISSED_REASONS;
 
   const saveMut = useMutation({
-    mutationFn: () => base44.entities.Task.update(task.id, {
-      status: outcome === "completed" || outcome === "partially_done" ? "completed" : "completed",
-      outcome,
-      outcome_notes: [
-        notes,
-        reason ? `Reason: ${reason}` : "",
-        `Recorded at ${time} by ${user?.full_name || user?.email}`,
-      ].filter(Boolean).join(" | "),
-    }),
+    mutationFn: async () => {
+      await base44.entities.Task.update(task.id, {
+        status: "completed",
+        outcome,
+        outcome_notes: [
+          notes,
+          reason ? `Reason: ${reason}` : "",
+          `Recorded at ${time} by ${user?.full_name || user?.email}`,
+        ].filter(Boolean).join(" | "),
+      });
+
+      // Only post a stock-out transaction when the medication was actually administered
+      if (outcome === "completed" || outcome === "partially_done") {
+        await base44.entities.Transaction.create({
+          transaction_type: "stock_out",
+          status: "posted",
+          date: todayStr(),
+          time,
+          enterprise: task.enterprise || null,
+          description: `Medication Administration — ${task.title} for ${task.related_person || "patient"}`,
+          assigned_person: task.related_person || null,
+          line_items: [{
+            item_name: task.title,
+            quantity: outcome === "partially_done" ? 0.5 : 1,
+            unit: "piece",
+            unit_price: 0,
+          }],
+          internal_notes: `Admin: ${user?.full_name || user?.email} | Outcome: ${outcome} | Task ref: ${task.id}`,
+        });
+      }
+    },
     onSuccess,
   });
 
