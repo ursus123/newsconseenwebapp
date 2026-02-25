@@ -144,6 +144,7 @@ export default function MedDashboard({ user, people, products = [], selectedClie
                     task={med}
                     status={getMedStatus(med)}
                     onAdminister={() => setAdminTarget(med)}
+                    product={products.find((p) => p.name?.toLowerCase() === med.title?.toLowerCase()?.replace(/^prn:\s*/i, ""))}
                   />
                 ))}
               </div>
