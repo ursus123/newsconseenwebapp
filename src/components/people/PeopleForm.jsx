@@ -337,28 +337,55 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
         );
       case "employment":
         return (
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Engagement Type">
-              <SelectField value={form.engagement_type} onChange={(v) => set("engagement_type", v)} options={[
-                { value: "full_time", label: "Full Time" }, { value: "part_time", label: "Part Time" },
-                { value: "contract", label: "Contract" }, { value: "casual", label: "Casual" }, { value: "internship", label: "Internship" },
-              ]} />
-            </Field>
-            <Field label="Payment Type">
-              <SelectField value={form.payment_type} onChange={(v) => set("payment_type", v)} options={[
-                { value: "monthly_salary", label: "Monthly Salary" }, { value: "hourly", label: "Hourly" },
-                { value: "daily", label: "Daily" }, { value: "per_task", label: "Per Task" }, { value: "retainer", label: "Retainer" },
-              ]} />
-            </Field>
-            <Field label="Start Date">
-              <Input value={form.start_date || ""} onChange={(e) => set("start_date", e.target.value)} className="rounded-xl" type="date" />
-            </Field>
-            <Field label="End Date">
-              <Input value={form.end_date || ""} onChange={(e) => set("end_date", e.target.value)} className="rounded-xl" type="date" />
-            </Field>
-            <Field label="Cost Rate">
-              <Input value={form.cost_rate || ""} onChange={(e) => set("cost_rate", parseFloat(e.target.value) || "")} className="rounded-xl" type="number" step="0.01" placeholder="e.g. 1500" />
-            </Field>
+          <div className="space-y-4">
+            {/* Enterprise picker */}
+            <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-100">
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                <Building2 className="w-4 h-4" /> Enterprise / Organisation
+              </div>
+              <Field label="Link to Enterprise">
+                <Select value={form._enterprise_name || ""} onValueChange={(v) => set("_enterprise_name", v)}>
+                  <SelectTrigger className="rounded-xl border-slate-200">
+                    <SelectValue placeholder="Select enterprise..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={null}>— None —</SelectItem>
+                    {enterprises.map((e) => (
+                      <SelectItem key={e.id} value={e.enterprise_name}>{e.enterprise_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              {form._enterprise_name && (
+                <div className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
+                  A <strong>person–enterprise relationship</strong> will be created in Relationships on save.
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Engagement Type">
+                <SelectField value={form.engagement_type} onChange={(v) => set("engagement_type", v)} options={[
+                  { value: "full_time", label: "Full Time" }, { value: "part_time", label: "Part Time" },
+                  { value: "contract", label: "Contract" }, { value: "casual", label: "Casual" }, { value: "internship", label: "Internship" },
+                ]} />
+              </Field>
+              <Field label="Payment Type">
+                <SelectField value={form.payment_type} onChange={(v) => set("payment_type", v)} options={[
+                  { value: "monthly_salary", label: "Monthly Salary" }, { value: "hourly", label: "Hourly" },
+                  { value: "daily", label: "Daily" }, { value: "per_task", label: "Per Task" }, { value: "retainer", label: "Retainer" },
+                ]} />
+              </Field>
+              <Field label="Start Date">
+                <Input value={form.start_date || ""} onChange={(e) => set("start_date", e.target.value)} className="rounded-xl" type="date" />
+              </Field>
+              <Field label="End Date">
+                <Input value={form.end_date || ""} onChange={(e) => set("end_date", e.target.value)} className="rounded-xl" type="date" />
+              </Field>
+              <Field label="Cost Rate">
+                <Input value={form.cost_rate || ""} onChange={(e) => set("cost_rate", parseFloat(e.target.value) || "")} className="rounded-xl" type="number" step="0.01" placeholder="e.g. 1500" />
+              </Field>
+            </div>
           </div>
         );
       case "availability":
