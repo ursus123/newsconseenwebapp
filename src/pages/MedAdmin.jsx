@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, isPast, parseISO, addHours } from "date-fns";
-import { ChevronLeft, Pill, Plus, FileText, User, Home, History, Settings, RefreshCw } from "lucide-react";
+import { ChevronLeft, Pill, Plus, FileText, User, Home, History, Settings, RefreshCw, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import MedDashboard from "@/components/medadmin/MedDashboard";
@@ -12,6 +12,7 @@ import MARMonthlyView from "@/components/medadmin/MARMonthlyView";
 import ScheduleMonthModal from "@/components/medadmin/ScheduleMonthModal";
 import MedProfileTab from "@/components/medadmin/MedProfileTab";
 import NotificationCenter from "@/components/medadmin/NotificationCenter";
+import MedAlertModal from "@/components/medadmin/MedAlertModal";
 import { useMedNotifications } from "@/components/medadmin/useMedNotifications";
 
 export default function MedAdmin() {
@@ -21,10 +22,19 @@ export default function MedAdmin() {
   const [prnOpen, setPrnOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [marMonth, setMarMonth] = useState(new Date());
+  const [alertNotification, setAlertNotification] = useState(null);
+  const [administerTarget, setAdministerTarget] = useState(null);
 
   useEffect(() => { base44.auth.me().then(setUser).catch(() => {}); }, []);
 
-  const { notifications, dismiss, dismissAll } = useMedNotifications(user, !!user);
+  const { notifications, dismiss, dismissAll, snooze } = useMedNotifications(user, !!user);
+
+  // Auto-show alert modal for new notifications
+  useEffect(() => {
+    if (notifications.length > 0 && !alertNotification) {
+      setAlertNotification(notifications[0]);
+    }
+  }, [notifications, alertNotification]);
 
   const { data: people = [] } = useQuery({
     queryKey: ["med-people"],
@@ -203,6 +213,61 @@ export default function MedAdmin() {
           onClose={() => setPrnOpen(false)}
           onSuccess={() => { setPrnOpen(false); refetch(); }}
         />
+      )}
+
+      {/* Alert Modal for medication due */}
+      {alertNotification && (
+        <MedAlertModal
+          notification={alertNotification}
+          onSnooze={(minutes) => {
+            snooze(alertNotification.taskId, minutes);
+            setAlertNotification(null);
+          }}
+          onAdminister={() => {
+            const task = allTasks.find((t) => t.id === alertNotification.taskId);
+            if (task) {
+              setAdministerTarget(task);
+              setAlertNotification(null);
+              dismiss(alertNotification.taskId);
+            }
+          }}
+          onDismiss={() => {
+            dismiss(alertNotification.taskId);
+            setAlertNotification(null);
+          }}
+        />
+      )}
+
+      {/* Administer Modal from alert */}
+      {administerTarget && (
+        <div className="fixed inset-0 z-[95]">
+          {/* Re-use AdministerModal component */}
+          <div className="min-h-screen bg-gray-50 flex flex-col max-w-lg mx-auto relative">
+            <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3">
+              <button
+                onClick={() => setAdministerTarget(null)}
+                className="p-2 -ml-2 rounded-lg text-gray-400 hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <p className="text-sm font-bold text-gray-800">Administer Medication</p>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <MedDashboard
+                user={user}
+                people={people}
+                products={products}
+                selectedClient={people.find((p) => `${p.first_name} ${p.last_name}` === administerTarget.related_person)}
+                onSelectClient={() => {}}
+                tasks={[administerTarget]}
+                refetch={() => {
+                  refetch();
+                  setAdministerTarget(null);
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
