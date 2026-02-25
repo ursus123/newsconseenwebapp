@@ -289,21 +289,50 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
         );
       case "address":
         return (
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <Field label="Street Address">
-                <Input value={form.address || ""} onChange={(e) => set("address", e.target.value)} className="rounded-xl" />
+          <div className="space-y-4">
+            <Field label="Country">
+              <Input value={form.country || ""} onChange={(e) => set("country", e.target.value)} className="rounded-xl" placeholder="e.g. United States, Canada, UK..." />
+            </Field>
+            <Field label="Street Address">
+              <Input value={form.address || ""} onChange={(e) => set("address", e.target.value)} className="rounded-xl" placeholder="Street number and name" />
+            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="City">
+                <Input value={form.city || ""} onChange={(e) => set("city", e.target.value)} className="rounded-xl" />
+              </Field>
+              <Field label="Region / State">
+                <Input value={form.region || ""} onChange={(e) => set("region", e.target.value)} className="rounded-xl" />
               </Field>
             </div>
-            <Field label="City">
-              <Input value={form.city || ""} onChange={(e) => set("city", e.target.value)} className="rounded-xl" />
-            </Field>
-            <Field label="Region / State">
-              <Input value={form.region || ""} onChange={(e) => set("region", e.target.value)} className="rounded-xl" />
-            </Field>
-            <Field label="Country">
-              <Input value={form.country || ""} onChange={(e) => set("country", e.target.value)} className="rounded-xl" />
-            </Field>
+            {/* Geocoding */}
+            <div className="border-t border-slate-100 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Geo Coordinates</p>
+                <Button type="button" variant="outline" size="sm" onClick={geocodeAddress}
+                  disabled={geocoding || !form.country} className="rounded-lg text-xs h-7">
+                  {geocoding ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Geocoding...</> : <><Search className="w-3 h-3 mr-1.5" />Auto-fill from Address</>}
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Latitude">
+                  <Input type="number" step="any" value={form.latitude ?? ""} onChange={(e) => set("latitude", e.target.value ? parseFloat(e.target.value) : undefined)} className="rounded-xl" placeholder="0.0000" />
+                </Field>
+                <Field label="Longitude">
+                  <Input type="number" step="any" value={form.longitude ?? ""} onChange={(e) => set("longitude", e.target.value ? parseFloat(e.target.value) : undefined)} className="rounded-xl" placeholder="0.0000" />
+                </Field>
+              </div>
+              {geocodeError && <div className="mt-2 text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-800">{geocodeError}</div>}
+              {geocodeNote && <div className="mt-2 text-xs bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-blue-700">{geocodeNote}</div>}
+              {form.latitude && form.longitude && !geocodeNote && (
+                <div className="mt-2 text-xs text-emerald-600 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5" />Coordinates set: {parseFloat(form.latitude).toFixed(4)}, {parseFloat(form.longitude).toFixed(4)}
+                </div>
+              )}
+            </div>
+            {/* Note about Address record */}
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 text-xs text-blue-700">
+              <strong>Note:</strong> On save, this address will be automatically added to the <em>Addresses</em> database and linked to this person.
+            </div>
           </div>
         );
       case "employment":
