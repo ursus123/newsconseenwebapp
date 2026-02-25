@@ -73,16 +73,20 @@ export default function People() {
   const processedPeople = useMemo(() => {
     let list = [...people];
 
-    // Filter by search
+    // Fuzzy search across name fields and address
     if (search) {
-      const q = search.toLowerCase();
-      list = list.filter((p) =>
-        `${p.first_name} ${p.last_name} ${p.preferred_name} ${p.primary_role} ${p.city}`.toLowerCase().includes(q)
-      );
+      list = fuzzyFilter(list, search, ["first_name", "last_name", "preferred_name", "primary_role", "city", "country", "address", "email", "phone"]);
     }
 
-    // Sort
-    list.sort((a, b) => {
+    // Advanced filters
+    if (filters.status) list = list.filter((p) => p.status === filters.status);
+    if (filters.availability_status) list = list.filter((p) => (p.availability_status || "available") === filters.availability_status);
+    if (filters.person_type) list = list.filter((p) => p.person_type === filters.person_type);
+    if (filters.primary_role) list = list.filter((p) => p.primary_role === filters.primary_role);
+    if (filters.country) list = list.filter((p) => (p.country || "").toLowerCase().includes(filters.country.toLowerCase()));
+
+    // Sort (skip re-sort when search is active since fuzzy results are already ranked)
+    if (!search) list.sort((a, b) => {
       if (sortBy === "name_asc") return `${a.first_name}${a.last_name}`.localeCompare(`${b.first_name}${b.last_name}`);
       if (sortBy === "name_desc") return `${b.first_name}${b.last_name}`.localeCompare(`${a.first_name}${a.last_name}`);
       if (sortBy === "created_date_asc") return new Date(a.created_date) - new Date(b.created_date);
