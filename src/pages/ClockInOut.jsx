@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, differenceInMinutes, parseISO } from "date-fns";
-import { Clock, Coffee, LogIn, LogOut, CheckCircle2, AlertCircle, ChevronLeft } from "lucide-react";
+import { format, differenceInMinutes } from "date-fns";
+import { Clock, LogIn, LogOut, ArrowRightLeft, CheckCircle2, AlertCircle, ChevronLeft, X, MapPin, Building2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-
-// ─── helpers ────────────────────────────────────────────────────────────────
 
 function todayStr() { return format(new Date(), "yyyy-MM-dd"); }
 function nowTimeStr() { return format(new Date(), "HH:mm"); }
@@ -15,95 +13,6 @@ function fmtDuration(mins) {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
-// ─── Clock face ─────────────────────────────────────────────────────────────
-function LiveClock() {
-  const [now, setNow] = useState(new Date());
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  return (
-    <div className="text-center select-none">
-      <p className="text-7xl font-black tracking-tighter text-slate-900 tabular-nums leading-none">
-        {format(now, "HH:mm")}
-        <span className="text-3xl text-slate-300 ml-1">{format(now, "ss")}</span>
-      </p>
-      <p className="text-sm text-slate-400 mt-2 font-medium tracking-wide">
-        {format(now, "EEEE, MMMM d, yyyy")}
-      </p>
-    </div>
-  );
-}
-
-// ─── Status badge ────────────────────────────────────────────────────────────
-function StatusPill({ status }) {
-  const cfg = {
-    clocked_out: { label: "Not clocked in", cls: "bg-slate-100 text-slate-500" },
-    clocked_in:  { label: "Clocked In",     cls: "bg-emerald-100 text-emerald-700" },
-    on_break:    { label: "On Break",        cls: "bg-amber-100 text-amber-700" },
-  }[status] || { label: status, cls: "bg-slate-100 text-slate-500" };
-
-  return (
-    <span className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold ${cfg.cls}`}>
-      <span className={`w-2 h-2 rounded-full ${status === "clocked_in" ? "bg-emerald-500 animate-pulse" : status === "on_break" ? "bg-amber-500 animate-pulse" : "bg-slate-300"}`} />
-      {cfg.label}
-    </span>
-  );
-}
-
-// ─── Big action button ───────────────────────────────────────────────────────
-function ActionButton({ label, icon: Icon, onClick, color, disabled }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`w-full flex items-center justify-center gap-4 py-6 rounded-2xl text-xl font-black tracking-tight shadow-lg active:scale-95 transition-all duration-150
-        ${disabled ? "opacity-40 cursor-not-allowed" : "hover:shadow-xl hover:-translate-y-0.5 cursor-pointer"}
-        ${color}`}
-    >
-      <Icon className="w-7 h-7" />
-      {label}
-    </button>
-  );
-}
-
-// ─── Timeline entry ──────────────────────────────────────────────────────────
-function TimelineEntry({ task }) {
-  const typeMap = {
-    clock_in:       { label: "Clocked In",    dot: "bg-emerald-500" },
-    clock_out:      { label: "Clocked Out",   dot: "bg-slate-400" },
-    break_start_end:{ label: "Break",          dot: "bg-amber-400" },
-  };
-  const cfg = typeMap[task.task_type] || { label: task.task_type, dot: "bg-slate-300" };
-  const time = task.scheduled_time || "";
-  const outTime = task.outcome_notes?.match(/\d{2}:\d{2}/)?.[0] || "";
-
-  return (
-    <div className="flex items-start gap-3 py-3 border-b border-slate-50 last:border-0">
-      <div className={`w-3 h-3 rounded-full mt-1 shrink-0 ${cfg.dot}`} />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-slate-700">{cfg.label}</p>
-        {task.outcome_notes && (
-          <p className="text-xs text-slate-400 mt-0.5 truncate">{task.outcome_notes}</p>
-        )}
-      </div>
-      <p className="text-xs font-mono text-slate-400 shrink-0">{time}{outTime && time ? ` → ${outTime}` : outTime}</p>
-    </div>
-  );
-}
-
-// ─── Toast feedback ──────────────────────────────────────────────────────────
-function Toast({ msg, ok }) {
-  return (
-    <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl text-white font-bold text-sm transition-all
-      ${ok ? "bg-emerald-600" : "bg-rose-600"}`}>
-      {ok ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-      {msg}
-    </div>
-  );
-}
-
-// ─── Main page ───────────────────────────────────────────────────────────────
 async function getLocationString() {
   return new Promise((resolve) => {
     if (!navigator.geolocation) return resolve(null);
@@ -124,16 +33,159 @@ async function getLocationString() {
   });
 }
 
+function LiveClock() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="text-center select-none">
+      <p className="text-7xl font-black tracking-tighter text-slate-900 tabular-nums leading-none">
+        {format(now, "HH:mm")}
+        <span className="text-3xl text-slate-300 ml-1">{format(now, "ss")}</span>
+      </p>
+      <p className="text-sm text-slate-400 mt-2 font-medium tracking-wide">
+        {format(now, "EEEE, MMMM d, yyyy")}
+      </p>
+    </div>
+  );
+}
+
+function StatusPill({ status, enterprise }) {
+  const cfg = {
+    clocked_out: { label: "Not clocked in", cls: "bg-slate-100 text-slate-500", dot: "bg-slate-300" },
+    clocked_in:  { label: "Clocked In",     cls: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-500 animate-pulse" },
+  }[status] || { label: status, cls: "bg-slate-100 text-slate-500", dot: "bg-slate-300" };
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <span className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold ${cfg.cls}`}>
+        <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+        {cfg.label}
+      </span>
+      {enterprise && status === "clocked_in" && (
+        <span className="text-xs text-slate-400 flex items-center gap-1">
+          <Building2 className="w-3 h-3" /> {enterprise}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function TimelineEntry({ task }) {
+  const typeMap = {
+    clock_in:        { label: "Clocked In",    dot: "bg-emerald-500" },
+    clock_out:       { label: "Clocked Out",   dot: "bg-slate-400" },
+    stock_transfer:  { label: "Transfer",       dot: "bg-blue-400" },
+  };
+  const cfg = typeMap[task.task_type] || { label: task.task_type, dot: "bg-slate-300" };
+  const time = task.scheduled_time || "";
+
+  return (
+    <div className="flex items-start gap-3 py-3 border-b border-slate-50 last:border-0">
+      <div className={`w-3 h-3 rounded-full mt-1 shrink-0 ${cfg.dot}`} />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-slate-700">{cfg.label}</p>
+        {task.outcome_notes && (
+          <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{task.outcome_notes}</p>
+        )}
+      </div>
+      <p className="text-xs font-mono text-slate-400 shrink-0">{time}</p>
+    </div>
+  );
+}
+
+function Toast({ msg, ok }) {
+  return (
+    <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl text-white font-bold text-sm
+      ${ok ? "bg-emerald-600" : "bg-rose-600"}`}>
+      {ok ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+      {msg}
+    </div>
+  );
+}
+
+function TransferModal({ enterprises, onConfirm, onClose }) {
+  const [enterprise, setEnterprise] = useState("");
+  const [address, setAddress] = useState("");
+  const [locLoading, setLocLoading] = useState(false);
+
+  const detectLocation = async () => {
+    setLocLoading(true);
+    const loc = await getLocationString();
+    setAddress(loc || "");
+    setLocLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-bold text-slate-800">Transfer Location</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Enterprise</label>
+            <select
+              value={enterprise}
+              onChange={(e) => setEnterprise(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+            >
+              <option value="">— Select enterprise —</option>
+              {enterprises.map((e) => (
+                <option key={e.id} value={e.enterprise_name}>{e.enterprise_name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Address / Location</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Enter address or detect..."
+                className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+              <button
+                onClick={detectLocation}
+                disabled={locLoading}
+                className="px-3 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors text-slate-600 disabled:opacity-50"
+                title="Detect my location"
+              >
+                {locLoading ? <Clock className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => onConfirm(enterprise, address)}
+          disabled={!enterprise && !address}
+          className="w-full py-3.5 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-40"
+        >
+          Confirm Transfer
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ClockInOut() {
   const [user, setUser] = useState(null);
   const [toast, setToast] = useState(null);
-  const [notes, setNotes] = useState("");
-  const [showNotes, setShowNotes] = useState(false);
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [currentEnterprise, setCurrentEnterprise] = useState("");
   const qc = useQueryClient();
 
   useEffect(() => { base44.auth.me().then(setUser).catch(() => {}); }, []);
 
-  // Today's attendance tasks for this user
   const { data: todayTasks = [], isLoading } = useQuery({
     queryKey: ["clock-tasks", user?.email, todayStr()],
     queryFn: () => base44.entities.Task.filter({
@@ -143,17 +195,27 @@ export default function ClockInOut() {
     enabled: !!user?.email,
   });
 
-  // Derive current state from tasks
+  const { data: enterprises = [] } = useQuery({
+    queryKey: ["enterprises"],
+    queryFn: () => base44.entities.Enterprise.list(),
+    enabled: !!user,
+  });
+
+  // Derive state
   const clockInTask = todayTasks.find((t) => t.task_type === "clock_in" && t.status === "completed");
   const clockOutTask = todayTasks.find((t) => t.task_type === "clock_out" && t.status === "completed");
-  const breakTask = todayTasks.find((t) => t.task_type === "break_start_end" && t.status === "in_progress");
-  const breakEndTask = todayTasks.find((t) => t.task_type === "break_start_end" && t.status === "completed");
 
-  let currentStatus = "clocked_out";
-  if (clockInTask && !clockOutTask) currentStatus = breakTask ? "on_break" : "clocked_in";
-  if (clockOutTask) currentStatus = "clocked_out";
+  const isClockedIn = !!clockInTask && !clockOutTask;
+  const currentStatus = isClockedIn ? "clocked_in" : "clocked_out";
 
-  // Duration on clock
+  // Update currentEnterprise from last transfer or clock-in
+  useEffect(() => {
+    const sorted = [...todayTasks].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+    const last = sorted.find((t) => t.enterprise);
+    if (last?.enterprise) setCurrentEnterprise(last.enterprise);
+  }, [todayTasks]);
+
+  // Elapsed timer
   const [elapsed, setElapsed] = useState(null);
   useEffect(() => {
     if (!clockInTask || clockOutTask) { setElapsed(null); return; }
@@ -173,57 +235,50 @@ export default function ClockInOut() {
     mutationFn: (data) => base44.entities.Task.create({
       task_type: data.task_type,
       title: data.title,
-      status: data.status,
-      outcome: data.status === "completed" ? "completed" : "pending",
+      status: "completed",
+      outcome: "completed",
       outcome_notes: data.notes || null,
+      enterprise: data.enterprise || null,
       assigned_to_email: user.email,
       assigned_to_name: user.full_name || user.email,
       scheduled_date: todayStr(),
       scheduled_time: nowTimeStr(),
-      company_id: user.company_id || null,
     }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["clock-tasks"] });
-      setNotes("");
-      setShowNotes(false);
-    },
-  });
-
-  const updateTask = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["clock-tasks"] }),
   });
 
   const handleClockIn = async () => {
+    if (isClockedIn) return;
     const time = nowTimeStr();
     const loc = await getLocationString();
     const locNote = loc ? ` | Location: ${loc}` : "";
-    createTask.mutate({ task_type: "clock_in", title: "Clock In", status: "completed", notes: (notes || `Clocked in at ${time}`) + locNote });
+    createTask.mutate({ task_type: "clock_in", title: "Clock In", notes: `Clocked in at ${time}${locNote}`, enterprise: currentEnterprise });
     showToast(`Clocked in at ${time} ✓`);
   };
 
   const handleClockOut = async () => {
+    if (!isClockedIn) return;
     const time = nowTimeStr();
     const loc = await getLocationString();
     const locNote = loc ? ` | Location: ${loc}` : "";
-    createTask.mutate({ task_type: "clock_out", title: "Clock Out", status: "completed", notes: (notes || `Clocked out at ${time}`) + locNote });
+    createTask.mutate({ task_type: "clock_out", title: "Clock Out", notes: `Clocked out at ${time}${locNote}`, enterprise: currentEnterprise });
     showToast(`Clocked out at ${time} ✓`);
   };
 
-  const handleStartBreak = () => {
-    createTask.mutate({ task_type: "break_start_end", title: "Break", status: "in_progress", notes: `Break started at ${nowTimeStr()}` });
-    showToast("Break started");
+  const handleTransfer = async (enterprise, address) => {
+    setShowTransfer(false);
+    const time = nowTimeStr();
+    const notes = [
+      `Transferred at ${time}`,
+      enterprise && `Enterprise: ${enterprise}`,
+      address && `Address: ${address}`,
+    ].filter(Boolean).join(" | ");
+    createTask.mutate({ task_type: "stock_transfer", title: "Transfer", notes, enterprise });
+    if (enterprise) setCurrentEnterprise(enterprise);
+    showToast(`Transferred to ${enterprise || address} ✓`);
   };
 
-  const handleEndBreak = () => {
-    if (!breakTask) return;
-    updateTask.mutate({ id: breakTask.id, data: { status: "completed", outcome: "completed", outcome_notes: `${breakTask.outcome_notes} → ended ${nowTimeStr()}` } });
-    showToast("Break ended, back on shift");
-  };
-
-  const isBusy = createTask.isPending || updateTask.isPending;
-
-  // Sort tasks for timeline
+  const isBusy = createTask.isPending;
   const timeline = [...todayTasks].sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
 
   if (!user || isLoading) {
@@ -248,63 +303,74 @@ export default function ClockInOut() {
       </div>
 
       <div className="max-w-md mx-auto px-4 py-8 space-y-8">
-        {/* Live clock */}
         <LiveClock />
 
         {/* Status */}
         <div className="flex flex-col items-center gap-2">
-          <StatusPill status={currentStatus} />
+          <StatusPill status={currentStatus} enterprise={currentEnterprise} />
           {elapsed !== null && (
             <p className="text-sm text-slate-400">On shift for <span className="font-bold text-slate-600">{fmtDuration(elapsed)}</span></p>
           )}
         </div>
 
-        {/* Main action buttons */}
-        <div className="space-y-3">
-          {currentStatus === "clocked_out" && (
-            <>
-              {clockOutTask && (
-                <div className="flex flex-col items-center gap-2 py-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-500" />
-                  <p className="text-sm font-bold text-slate-800">Last shift complete</p>
-                  <p className="text-xs text-slate-400">
-                    {clockInTask?.scheduled_time && clockOutTask?.scheduled_time
-                      ? `${clockInTask.scheduled_time} → ${clockOutTask.scheduled_time}`
-                      : "All done"}
-                  </p>
-                </div>
-              )}
-              <ActionButton
-                label="Clock In"
-                icon={LogIn}
-                onClick={handleClockIn}
-                color="bg-emerald-500 text-white"
-                disabled={isBusy}
-              />
-            </>
-          )}
+        {/* 3 Action Buttons */}
+        <div className="grid grid-cols-3 gap-3">
+          {/* Clock In */}
+          <button
+            onClick={handleClockIn}
+            disabled={isBusy || isClockedIn}
+            className={`flex flex-col items-center justify-center gap-2 py-6 rounded-2xl font-bold text-sm shadow-md active:scale-95 transition-all duration-200
+              ${isClockedIn
+                ? "bg-emerald-500 text-white shadow-emerald-200 cursor-not-allowed opacity-80"
+                : "bg-white border-2 border-emerald-400 text-emerald-600 hover:bg-emerald-50"
+              }
+              ${isBusy ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            <LogIn className="w-6 h-6" />
+            Clock In
+          </button>
+
+          {/* Clock Out */}
+          <button
+            onClick={handleClockOut}
+            disabled={isBusy || !isClockedIn}
+            className={`flex flex-col items-center justify-center gap-2 py-6 rounded-2xl font-bold text-sm shadow-md active:scale-95 transition-all duration-200
+              ${!isClockedIn
+                ? "bg-slate-800 text-white shadow-slate-300 cursor-not-allowed opacity-80"
+                : "bg-white border-2 border-slate-700 text-slate-700 hover:bg-slate-50"
+              }
+              ${isBusy ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            <LogOut className="w-6 h-6" />
+            Clock Out
+          </button>
+
+          {/* Transfer */}
+          <button
+            onClick={() => isClockedIn && setShowTransfer(true)}
+            disabled={isBusy || !isClockedIn}
+            className={`flex flex-col items-center justify-center gap-2 py-6 rounded-2xl font-bold text-sm shadow-md active:scale-95 transition-all duration-200
+              ${isClockedIn
+                ? "bg-white border-2 border-blue-500 text-blue-600 hover:bg-blue-50"
+                : "bg-white border-2 border-slate-200 text-slate-300 cursor-not-allowed"
+              }
+              ${isBusy ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            <ArrowRightLeft className="w-6 h-6" />
+            Transfer
+          </button>
         </div>
 
-        {/* Optional notes toggle */}
-        {currentStatus !== "clocked_out" || !clockOutTask ? (
-          <div>
-            <button
-              onClick={() => setShowNotes(!showNotes)}
-              className="text-xs text-slate-400 hover:text-slate-600 underline underline-offset-2 transition-colors"
-            >
-              {showNotes ? "Hide notes" : "+ Add a note (optional)"}
-            </button>
-            {showNotes && (
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Starting later, site visit, etc."
-                rows={2}
-                className="w-full mt-2 px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-700 placeholder-slate-300 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
-              />
-            )}
+        {/* Shift summary if clocked out after a shift */}
+        {!isClockedIn && clockOutTask && clockInTask && (
+          <div className="flex items-center justify-center gap-3 py-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+            <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+            <div>
+              <p className="text-sm font-bold text-slate-800">Shift complete</p>
+              <p className="text-xs text-slate-400">{clockInTask.scheduled_time} → {clockOutTask.scheduled_time}</p>
+            </div>
           </div>
-        ) : null}
+        )}
 
         {/* Today's timeline */}
         {timeline.length > 0 && (
@@ -314,6 +380,14 @@ export default function ClockInOut() {
           </div>
         )}
       </div>
+
+      {showTransfer && (
+        <TransferModal
+          enterprises={enterprises}
+          onConfirm={handleTransfer}
+          onClose={() => setShowTransfer(false)}
+        />
+      )}
 
       {toast && <Toast msg={toast.msg} ok={toast.ok} />}
     </div>
