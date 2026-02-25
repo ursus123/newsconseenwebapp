@@ -207,7 +207,7 @@ export default function AddClient() {
   const [createPerson, setCreatePerson] = useState(true);
 
   // Step 1 — Enterprise
-  const [enterpriseData, setEnterpriseData] = useState({ enterprise_name: "", enterprise_type: "other" });
+  const [enterpriseData, setEnterpriseData] = useState({ enterprise_name: "", enterprise_type: "other", relationshipRole: "Client" });
   const [selectedEnterprise, setSelectedEnterprise] = useState(null);
   const [createEnterprise, setCreateEnterprise] = useState(true);
 
