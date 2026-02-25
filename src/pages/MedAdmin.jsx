@@ -174,6 +174,17 @@ export default function MedAdmin() {
         })}
       </nav>
 
+      {/* Schedule Month Modal */}
+      {scheduleOpen && (
+        <ScheduleMonthModal
+          client={selectedClient}
+          products={products}
+          user={user}
+          onClose={() => setScheduleOpen(false)}
+          onSuccess={() => { setScheduleOpen(false); refetch(); }}
+        />
+      )}
+
       {/* PRN Modal */}
       {prnOpen && (
         <PRNFlow
