@@ -277,7 +277,7 @@ export default function AddClient() {
     let finalAddress = selectedAddress;
 
     if (needsPerson && !selectedPerson && personData.first_name) {
-      finalPerson = await base44.entities.Person.create({ ...personData, status: "active", person_type: "vendor" });
+      finalPerson = await base44.entities.Person.create({ ...personData, status: "active" });
     }
     if (needsEnterprise && !selectedEnterprise && enterpriseData.enterprise_name) {
       finalEnterprise = await base44.entities.Enterprise.create({ ...enterpriseData, status: "active" });
