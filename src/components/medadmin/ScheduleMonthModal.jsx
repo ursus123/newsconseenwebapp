@@ -173,21 +173,20 @@ export default function ScheduleMonthModal({ client, products, user, onClose, on
                       )}
                     </div>
 
-                    {/* Name */}
+                    {/* Name — searchable from Products */}
                     <div>
                       <label className="text-[11px] font-semibold text-gray-400 block mb-1">Medication Name *</label>
-                      <input
-                        list={`products-list-${i}`}
+                      <MedSearchInput
+                        products={products}
                         value={med.name}
-                        onChange={(e) => updateMed(i, "name", e.target.value)}
-                        placeholder="e.g. Metformin 500mg"
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        onChange={(val, product) => {
+                          updateMed(i, "name", val);
+                          if (product) {
+                            if (product.dosage_instructions && !med.instructions) updateMed(i, "instructions", product.dosage_instructions);
+                            if (product.storage_instructions && !med.indication) updateMed(i, "indication", product.storage_instructions);
+                          }
+                        }}
                       />
-                      <datalist id={`products-list-${i}`}>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.name} />
-                        ))}
-                      </datalist>
                     </div>
 
                     {/* Dose + Route */}
