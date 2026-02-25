@@ -73,6 +73,26 @@ export default function Reports() {
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Report.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["reports"] }); setFormOpen(false); setEditing(null); } });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Report.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["reports"] }); setDeleting(null); } });
 
+  const handleSaveChart = async (chartData) => {
+    // Store chart config in report's content field as JSON
+    const chartJson = JSON.stringify(chartData);
+    const reportData = {
+      title: chartData.title,
+      type: "custom",
+      status: "draft",
+      content: chartJson,
+    };
+    
+    if (editingChart) {
+      await updateMut.mutateAsync({ id: editingChart.id, data: reportData });
+    } else {
+      await createMut.mutateAsync(reportData);
+    }
+    
+    setChartBuilderOpen(false);
+    setEditingChart(null);
+  };
+
   // Quick stats for built-in charts
   const expenseByCategory = React.useMemo(() => {
     const cats = {};
