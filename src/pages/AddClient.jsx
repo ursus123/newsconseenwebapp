@@ -251,7 +251,7 @@ export default function AddClient() {
     const addrLine = selectedAddress?.address_line1 || (skipAddress ? null : addressData.address_line1);
 
     if (personName && entName) {
-      rels.push({ relationship_type: "person_enterprise", person_name: personName, enterprise_name: entName, role: personData.role || "Customer", start_date: today });
+      rels.push({ relationship_type: "person_enterprise", person_name: personName, enterprise_name: entName, role: personData.primary_role || "Client", start_date: today });
     }
     if (personName && addrLine) {
       rels.push({ relationship_type: "item_person", person_name: personName, item_name: addrLine, role: "Billing Address", start_date: today });
