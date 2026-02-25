@@ -7,7 +7,7 @@ import DeleteDialog from "../components/shared/DeleteDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Pencil, Trash2, Calendar, User, Building2, CheckCircle, AlertCircle, Clock, ShieldCheck } from "lucide-react";
+import { Pencil, Trash2, Calendar, User, Building2, CheckCircle, AlertCircle, Clock, ShieldCheck, Filter, MapPin } from "lucide-react";
 import { format, isToday, isPast, parseISO } from "date-fns";
 import { motion } from "framer-motion";
 
