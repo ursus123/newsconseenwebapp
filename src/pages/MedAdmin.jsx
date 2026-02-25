@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, isPast, parseISO, addHours } from "date-fns";
-import { ChevronLeft, Pill, Plus, Clock, AlertTriangle, CheckCircle2, XCircle, FileText, User, Home, History, Settings, Search, RefreshCw } from "lucide-react";
+import { ChevronLeft, Pill, Plus, FileText, User, Home, History, Settings, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import MedDashboard from "@/components/medadmin/MedDashboard";
