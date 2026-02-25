@@ -65,6 +65,28 @@ export default function Enterprises() {
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Enterprise.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); setFormOpen(false); setEditing(null); } });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Enterprise.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); setDeleting(null); } });
 
+  const processedEnterprises = useMemo(() => {
+    let list = [...enterprises];
+
+    if (search) {
+      list = fuzzyFilter(list, search, ["enterprise_name", "short_name", "city", "country", "region", "email", "phone"]);
+    }
+
+    if (filters.status) list = list.filter((e) => e.status === filters.status);
+    if (filters.enterprise_type) list = list.filter((e) => e.enterprise_type === filters.enterprise_type);
+    if (filters.operating_status) list = list.filter((e) => (e.operating_status || "open") === filters.operating_status);
+    if (filters.country) list = list.filter((e) => (e.country || "").toLowerCase().includes(filters.country.toLowerCase()));
+
+    if (!search) list.sort((a, b) => {
+      if (sortBy === "name_asc") return (a.enterprise_name || "").localeCompare(b.enterprise_name || "");
+      if (sortBy === "name_desc") return (b.enterprise_name || "").localeCompare(a.enterprise_name || "");
+      if (sortBy === "created_date_asc") return new Date(a.created_date) - new Date(b.created_date);
+      return new Date(b.created_date) - new Date(a.created_date);
+    });
+
+    return list;
+  }, [enterprises, search, sortBy, filters]);
+
   const handleArchive = (enterprise) => {
     updateMut.mutate({ id: enterprise.id, data: { ...enterprise, status: "archived" } });
     setFormOpen(false);
