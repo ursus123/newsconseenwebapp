@@ -399,9 +399,19 @@ export default function AddClient() {
                     </div>
                     <Field label="Email"><Input type="email" value={personData.email} onChange={(e) => setPersonData({ ...personData, email: e.target.value })} placeholder="jane@example.com" /></Field>
                     <Field label="Phone"><Input value={personData.phone} onChange={(e) => setPersonData({ ...personData, phone: e.target.value })} placeholder="+1 555 000 0000" /></Field>
-                    <Field label="Role">
-                      <Select value={personData.role} onChange={(e) => setPersonData({ ...personData, role: e.target.value })}>
-                        {["Customer", "Contact", "Decision Maker", "Billing Contact", "Representative"].map((r) => <option key={r}>{r}</option>)}
+                    <Field label="Person Type">
+                      <Select value={personData.person_type} onChange={(e) => setPersonData({ ...personData, person_type: e.target.value })}>
+                        {["employee","contractor","freelancer","vendor","client","patient","external_partner"].map((t) => (
+                          <option key={t} value={t}>{t.replace(/_/g, " ")}</option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field label="Role (in Relationship)">
+                      <Select value={personData.primary_role} onChange={(e) => setPersonData({ ...personData, primary_role: e.target.value })}>
+                        <option value="">Select role…</option>
+                        {["Owner","Manager","Employee","Contractor","Consultant","Director","Supervisor","Coordinator","Assistant","Analyst","Developer","Designer","Sales Rep","Customer","Client","Vendor","Partner","Representative","Other"].map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
                       </Select>
                     </Field>
                   </div>
