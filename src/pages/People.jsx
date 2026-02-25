@@ -90,11 +90,11 @@ export default function People() {
       if (sortBy === "name_asc") return `${a.first_name}${a.last_name}`.localeCompare(`${b.first_name}${b.last_name}`);
       if (sortBy === "name_desc") return `${b.first_name}${b.last_name}`.localeCompare(`${a.first_name}${a.last_name}`);
       if (sortBy === "created_date_asc") return new Date(a.created_date) - new Date(b.created_date);
-      return new Date(b.created_date) - new Date(a.created_date); // default: newest first
+      return new Date(b.created_date) - new Date(a.created_date);
     });
 
     return list;
-  }, [people, search, sortBy]);
+  }, [people, search, sortBy, filters]);
 
   return (
     <div>
