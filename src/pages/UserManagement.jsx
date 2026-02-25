@@ -12,9 +12,11 @@ import {
   ChevronDown, ChevronUp, UserPlus, Mail, CheckCircle, AlertCircle, Building2, Phone
 } from "lucide-react";
 
+// Keep this in sync with ALL_APPS in pages/Applications.jsx
 const ALL_APPS = [
   { id: "ClockInOut", label: "Clock In / Out", icon: Clock, color: "bg-slate-800", accent: "text-emerald-400" },
   { id: "MedAdmin",   label: "Med Administration", icon: Pill, color: "bg-blue-800", accent: "text-blue-300" },
+  { id: "AddClient",  label: "Add Client", icon: UserPlus, color: "bg-violet-800", accent: "text-violet-300" },
 ];
 
 function Field({ label, required, children }) {
