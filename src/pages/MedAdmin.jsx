@@ -138,6 +138,9 @@ export default function MedAdmin() {
           user={user}
           selectedClient={selectedClient}
           people={people}
+          products={products}
+          enterprises={enterprises}
+          addresses={addresses}
           onClose={() => setPrnOpen(false)}
           onSuccess={() => { setPrnOpen(false); refetch(); }}
         />
