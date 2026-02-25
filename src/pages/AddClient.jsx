@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
   ChevronLeft, ChevronRight, User, Building2, Users, CheckCircle2, Search,
-  MapPin, Plus, ArrowRight, Loader2
+  MapPin, Plus, ArrowRight, Loader2, Upload, AlertCircle
 } from "lucide-react";
 
 // ── tiny helpers ────────────────────────────────────────────────────────────
