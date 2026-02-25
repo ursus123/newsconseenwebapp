@@ -181,7 +181,20 @@ export default function AddressForm({ open, onClose, onSubmit, onArchive, initia
                   <Input type="number" step="any" value={form.longitude ?? ""} onChange={(e) => set("longitude", e.target.value ? parseFloat(e.target.value) : undefined)} className="rounded-xl" placeholder="0.0000" />
                 </Field>
               </div>
-              {form.latitude && form.longitude && (
+              
+              {geocodeError && (
+                <div className="mt-2 text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-800">
+                  {geocodeError}
+                </div>
+              )}
+              
+              {geocodeNote && (
+                <div className="mt-2 text-xs bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-blue-700">
+                  {geocodeNote}
+                </div>
+              )}
+              
+              {form.latitude && form.longitude && !geocodeNote && (
                 <div className="mt-2 text-xs text-emerald-600 flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5" />
                   Coordinates set: {form.latitude.toFixed(4)}, {form.longitude.toFixed(4)}
