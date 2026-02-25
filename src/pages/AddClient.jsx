@@ -433,9 +433,18 @@ export default function AddClient() {
                   <div className="space-y-4 border-t border-slate-100 pt-4">
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Plus className="w-3 h-3" /> Or create new</p>
                     <Field label="Business Name"><Input value={enterpriseData.enterprise_name} onChange={(e) => setEnterpriseData({ ...enterpriseData, enterprise_name: e.target.value })} placeholder="Acme Corp" /></Field>
-                    <Field label="Type">
+                    <Field label="Enterprise Type">
                       <Select value={enterpriseData.enterprise_type} onChange={(e) => setEnterpriseData({ ...enterpriseData, enterprise_type: e.target.value })}>
-                        {["retail","food_beverage","healthcare","technology","construction","education","finance","manufacturing","logistics","hospitality","agriculture","media","other"].map((t) => <option key={t} value={t}>{t.replace("_", " ")}</option>)}
+                        {["retail","food_beverage","healthcare","technology","construction","education","finance","manufacturing","logistics","hospitality","agriculture","media","other"].map((t) => (
+                          <option key={t} value={t}>{t.replace(/_/g, " ")}</option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field label="Role (in Relationship)">
+                      <Select value={enterpriseData.relationshipRole} onChange={(e) => setEnterpriseData({ ...enterpriseData, relationshipRole: e.target.value })}>
+                        {["Client","Customer","Supplier","Partner","Vendor","Contractor","Sub-contractor","Franchisor","Franchisee","Distributor","Agent","Other"].map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
                       </Select>
                     </Field>
                   </div>
