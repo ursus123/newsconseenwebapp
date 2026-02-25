@@ -261,55 +261,27 @@ export default function ClockInOut() {
 
         {/* Main action buttons */}
         <div className="space-y-3">
-          {currentStatus === "clocked_out" && !clockOutTask && (
-            <ActionButton
-              label="Clock In"
-              icon={LogIn}
-              onClick={handleClockIn}
-              color="bg-emerald-500 text-white"
-              disabled={isBusy}
-            />
-          )}
-
-          {currentStatus === "clocked_in" && (
+          {currentStatus === "clocked_out" && (
             <>
+              {clockOutTask && (
+                <div className="flex flex-col items-center gap-2 py-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                  <p className="text-sm font-bold text-slate-800">Last shift complete</p>
+                  <p className="text-xs text-slate-400">
+                    {clockInTask?.scheduled_time && clockOutTask?.scheduled_time
+                      ? `${clockInTask.scheduled_time} → ${clockOutTask.scheduled_time}`
+                      : "All done"}
+                  </p>
+                </div>
+              )}
               <ActionButton
-                label="Clock Out"
-                icon={LogOut}
-                onClick={handleClockOut}
-                color="bg-slate-900 text-white"
-                disabled={isBusy}
-              />
-              <ActionButton
-                label="Start Break"
-                icon={Coffee}
-                onClick={handleStartBreak}
-                color="bg-amber-400 text-slate-900"
+                label="Clock In"
+                icon={LogIn}
+                onClick={handleClockIn}
+                color="bg-emerald-500 text-white"
                 disabled={isBusy}
               />
             </>
-          )}
-
-          {currentStatus === "on_break" && (
-            <ActionButton
-              label="End Break"
-              icon={Coffee}
-              onClick={handleEndBreak}
-              color="bg-amber-400 text-slate-900"
-              disabled={isBusy}
-            />
-          )}
-
-          {clockOutTask && (
-            <div className="flex flex-col items-center gap-2 py-6 bg-white rounded-2xl border border-slate-100 shadow-sm">
-              <CheckCircle2 className="w-10 h-10 text-emerald-500" />
-              <p className="text-base font-bold text-slate-800">Shift complete</p>
-              <p className="text-sm text-slate-400">
-                {clockInTask?.scheduled_time && clockOutTask?.scheduled_time
-                  ? `${clockInTask.scheduled_time} → ${clockOutTask.scheduled_time}`
-                  : "All done for today"}
-              </p>
-            </div>
           )}
         </div>
 
