@@ -1,7 +1,56 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { X, Save, Plus, Trash2, Loader2 } from "lucide-react";
+import { X, Save, Plus, Trash2, Loader2, Search } from "lucide-react";
+
+function MedSearchInput({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState(value || "");
+  const { data: products = [] } = useQuery({
+    queryKey: ["products-med"],
+    queryFn: () => base44.entities.Product.list(),
+  });
+  const filtered = products.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
+
+  const handleSelect = (p) => {
+    setQ(p.name);
+    onChange(p.name, p);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
+        <input
+          value={q}
+          onChange={(e) => { setQ(e.target.value); onChange(e.target.value, null); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Search from inventory or type name…"
+          className={INPUT + " pl-8"}
+        />
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+          {filtered.slice(0, 10).map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onMouseDown={() => handleSelect(p)}
+              className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 text-gray-800 border-b border-gray-50 last:border-0"
+            >
+              <span className="font-medium">{p.name}</span>
+              {p.sku && <span className="text-xs text-gray-400 ml-2">SKU: {p.sku}</span>}
+              {p.batch_number && <span className="text-xs text-orange-500 ml-2">Batch: {p.batch_number}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const ROUTES = ["oral", "sublingual", "topical", "inhalation", "injection", "rectal", "ophthalmic", "otic", "nasal", "IV", "other"];
 const STATUSES = [
