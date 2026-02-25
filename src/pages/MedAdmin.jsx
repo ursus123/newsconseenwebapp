@@ -59,7 +59,7 @@ export default function MedAdmin() {
     queryFn: () => base44.entities.Task.filter({
       related_person: selectedClient ? `${selectedClient.first_name} ${selectedClient.last_name}` : undefined,
       task_type: "medication_admin",
-    }, "-scheduled_date", 200),
+    }, "-scheduled_date", 500),
     enabled: !!selectedClient,
   });
 
