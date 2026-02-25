@@ -9,6 +9,7 @@ import PeopleToolbar from "../components/people/PeopleToolbar";
 import PeopleGroupedView from "../components/people/PeopleGroupedView";
 import { usePermissions } from "@/components/shared/usePermissions";
 import { Badge } from "@/components/ui/badge";
+import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 
 const statusColor = (s) => {
   const map = { active: "bg-emerald-50 text-emerald-700", inactive: "bg-slate-100 text-slate-600", on_leave: "bg-amber-50 text-amber-700" };
