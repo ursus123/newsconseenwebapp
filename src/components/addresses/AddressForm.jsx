@@ -94,6 +94,9 @@ export default function AddressForm({ open, onClose, onSubmit, onArchive, initia
       case "details":
         return (
           <div className="space-y-4">
+            <Field label="Country" required>
+              <Input value={form.country || ""} onChange={(e) => set("country", e.target.value)} className="rounded-xl" placeholder="e.g. United States, Canada, UK..." />
+            </Field>
             <Field label="Address Line 1" required>
               <Input value={form.address_line1 || ""} onChange={(e) => set("address_line1", e.target.value)} className="rounded-xl" placeholder="Street number and name" />
             </Field>
@@ -108,24 +111,47 @@ export default function AddressForm({ open, onClose, onSubmit, onArchive, initia
                 <Input value={form.state_region || ""} onChange={(e) => set("state_region", e.target.value)} className="rounded-xl" />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Postal Code">
-                <Input value={form.postal_code || ""} onChange={(e) => set("postal_code", e.target.value)} className="rounded-xl" />
-              </Field>
-              <Field label="Country">
-                <Input value={form.country || ""} onChange={(e) => set("country", e.target.value)} className="rounded-xl" />
-              </Field>
-            </div>
+            <Field label="Postal Code">
+              <Input value={form.postal_code || ""} onChange={(e) => set("postal_code", e.target.value)} className="rounded-xl" />
+            </Field>
             <div className="border-t border-slate-100 pt-4">
-              <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-3">Geo Coordinates (optional)</p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Geo Coordinates</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={geocodeAddress}
+                  disabled={geocoding || !form.country}
+                  className="rounded-lg text-xs h-7"
+                >
+                  {geocoding ? (
+                    <>
+                      <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                      Geocoding...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-3 h-3 mr-1.5" />
+                      Auto-fill from Address
+                    </>
+                  )}
+                </Button>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Latitude">
-                  <Input type="number" value={form.latitude ?? ""} onChange={(e) => set("latitude", parseFloat(e.target.value) || undefined)} className="rounded-xl" placeholder="0.0000" />
+                  <Input type="number" step="any" value={form.latitude ?? ""} onChange={(e) => set("latitude", e.target.value ? parseFloat(e.target.value) : undefined)} className="rounded-xl" placeholder="0.0000" />
                 </Field>
                 <Field label="Longitude">
-                  <Input type="number" value={form.longitude ?? ""} onChange={(e) => set("longitude", parseFloat(e.target.value) || undefined)} className="rounded-xl" placeholder="0.0000" />
+                  <Input type="number" step="any" value={form.longitude ?? ""} onChange={(e) => set("longitude", e.target.value ? parseFloat(e.target.value) : undefined)} className="rounded-xl" placeholder="0.0000" />
                 </Field>
               </div>
+              {form.latitude && form.longitude && (
+                <div className="mt-2 text-xs text-emerald-600 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5" />
+                  Coordinates set: {form.latitude.toFixed(4)}, {form.longitude.toFixed(4)}
+                </div>
+              )}
             </div>
           </div>
         );
