@@ -202,7 +202,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         addLabel="Assign Task"
       />
 
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-3">
         {FILTERS.map((f) => (
           <button
             key={f.key}
@@ -221,6 +221,49 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
             )}
           </button>
         ))}
+      </div>
+
+      {/* Secondary filters: People, Enterprise, Address */}
+      <div className="flex flex-wrap gap-2 mb-6 items-center">
+        <Filter className="w-3.5 h-3.5 text-slate-400" />
+        <select
+          value={filterPerson}
+          onChange={(e) => setFilterPerson(e.target.value)}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+        >
+          <option value="">All People</option>
+          {people.map((p) => (
+            <option key={p.id} value={`${p.first_name} ${p.last_name}`}>{p.first_name} {p.last_name}</option>
+          ))}
+        </select>
+        <select
+          value={filterEnterprise}
+          onChange={(e) => setFilterEnterprise(e.target.value)}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+        >
+          <option value="">All Enterprises</option>
+          {enterprises.map((e) => (
+            <option key={e.id} value={e.enterprise_name}>{e.enterprise_name}</option>
+          ))}
+        </select>
+        <select
+          value={filterAddress}
+          onChange={(e) => setFilterAddress(e.target.value)}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+        >
+          <option value="">All Addresses</option>
+          {addresses.map((a) => (
+            <option key={a.id} value={a.address_line1}>{a.label ? `${a.label} – ` : ""}{a.address_line1}{a.city ? `, ${a.city}` : ""}</option>
+          ))}
+        </select>
+        {(filterPerson || filterEnterprise || filterAddress) && (
+          <button
+            onClick={() => { setFilterPerson(""); setFilterEnterprise(""); setFilterAddress(""); }}
+            className="text-xs text-slate-400 hover:text-rose-500 underline"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {showKanban ? (
