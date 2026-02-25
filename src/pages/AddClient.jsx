@@ -292,7 +292,7 @@ export default function AddClient() {
 
     const relPromises = [];
     if (personName && entName) {
-      relPromises.push(base44.entities.Relationship.create({ relationship_type: "person_enterprise", person_name: personName, enterprise_name: entName, role: personData.role || "Customer", start_date: today, status: "active" }));
+      relPromises.push(base44.entities.Relationship.create({ relationship_type: "person_enterprise", person_name: personName, enterprise_name: entName, role: personData.primary_role || "Client", start_date: today, status: "active" }));
     }
     if (personName && addrLine1) {
       relPromises.push(base44.entities.Relationship.create({ relationship_type: "item_person", person_name: personName, item_name: addrLine1, role: "Billing Address", start_date: today, status: "active" }));
