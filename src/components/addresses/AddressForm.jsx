@@ -38,6 +38,8 @@ export default function AddressForm({ open, onClose, onSubmit, onArchive, initia
     if (open) {
       setActiveTab("details");
       setForm(initialData || { status: "active", attachment_urls: [], linked_people: [], linked_enterprises: [] });
+      setGeocodeError(null);
+      setGeocodeNote(null);
     }
   }, [open, initialData]);
 
