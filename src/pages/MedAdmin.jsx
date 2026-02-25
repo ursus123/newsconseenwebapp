@@ -8,6 +8,8 @@ import { createPageUrl } from "@/utils";
 import MedDashboard from "@/components/medadmin/MedDashboard";
 import MedHistory from "@/components/medadmin/MedHistory";
 import PRNFlow from "@/components/medadmin/PRNFlow";
+import MARMonthlyView from "@/components/medadmin/MARMonthlyView";
+import ScheduleMonthModal from "@/components/medadmin/ScheduleMonthModal";
 import NotificationCenter from "@/components/medadmin/NotificationCenter";
 import { useMedNotifications } from "@/components/medadmin/useMedNotifications";
 
