@@ -31,6 +31,8 @@ export default function AddressForm({ open, onClose, onSubmit, onArchive, initia
   const [form, setForm] = useState({});
   const [uploading, setUploading] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
+  const [geocodeError, setGeocodeError] = useState(null);
+  const [geocodeNote, setGeocodeNote] = useState(null);
 
   useEffect(() => {
     if (open) {
