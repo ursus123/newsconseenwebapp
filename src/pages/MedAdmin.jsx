@@ -133,6 +133,10 @@ export default function MedAdmin() {
           </div>
         )}
 
+        {activeTab === "medlist" && (
+          <MedProfileTab selectedClient={selectedClient} isAdmin={isAdmin} />
+        )}
+
         {activeTab === "history" && (
           <MedHistory tasks={allTasks} selectedClient={selectedClient} people={people} products={products} />
         )}
