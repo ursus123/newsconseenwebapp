@@ -119,7 +119,22 @@ export default function Reports() {
 
   return (
     <div>
-      <PageHeader title="Reports" subtitle={isAdmin ? "Create and manage business reports" : "Your assigned reports"} onAdd={isAdmin ? () => { setEditing(null); setFormOpen(true); } : undefined} addLabel="Create Report" />
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-3xl font-black text-slate-800">Reports</h1>
+          <p className="text-slate-400 text-sm mt-1">{isAdmin ? "Create and manage business reports" : "Your assigned reports"}</p>
+        </div>
+        {isAdmin && (
+          <div className="flex gap-2">
+            <Button onClick={() => { setEditingChart(null); setChartBuilderOpen(true); }}>
+              <Plus className="w-4 h-4 mr-2" /> Create Chart
+            </Button>
+            <Button variant="outline" onClick={() => { setEditing(null); setFormOpen(true); }}>
+              <Plus className="w-4 h-4 mr-2" /> Create Report
+            </Button>
+          </div>
+        )}
+      </div>
 
       {/* Quick Insights */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
