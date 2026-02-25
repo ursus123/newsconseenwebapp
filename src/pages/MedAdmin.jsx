@@ -69,6 +69,7 @@ export default function MedAdmin() {
   const tabs = [
     { id: "home",     label: "Daily",    icon: Home },
     { id: "mar",      label: "MAR",      icon: FileText },
+    { id: "medlist",  label: "Meds",     icon: Pill },
     { id: "history",  label: "History",  icon: History },
     { id: "profile",  label: "Settings", icon: Settings },
   ];
