@@ -167,12 +167,22 @@ function SectionDivider({ label }) {
 
 export default function TaskForm({ open, onClose, onSubmit, initialData, appUsers, enterprises, products, services, people }) {
   const [form, setForm] = useState({});
+  const [appAccessMap, setAppAccessMap] = useState({});
 
   useEffect(() => {
     if (open) {
       setForm(initialData || { status: "open", priority: "normal", outcome: "pending", trigger_transaction: false });
     }
   }, [open, initialData]);
+
+  // Build a map of user email => allowed apps
+  useEffect(() => {
+    const map = {};
+    (appUsers || []).forEach((u) => {
+      map[u.email] = [];
+    });
+    setAppAccessMap(map);
+  }, [appUsers]);
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
@@ -184,6 +194,29 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, appUser
     const u = (appUsers || []).find((u) => u.email === email);
     set("assigned_to_email", email);
     set("assigned_to_name", u ? u.full_name || u.email : email);
+  };
+
+  // Get available task types for the selected user
+  const availableTaskTypes = () => {
+    if (!form.assigned_to_email) return TASK_TYPE_GROUPS;
+    
+    // Get user's allowed apps
+    const userAllowedApps = appAccessMap[form.assigned_to_email] || [];
+    
+    // Filter task type groups and types based on user app access
+    return TASK_TYPE_GROUPS.map((group) => ({
+      ...group,
+      types: group.types.filter((t) => {
+        const appNeeded = TASK_TYPE_TO_APP[t.value];
+        // Show task if no specific app mapping or if user has access
+        return !appNeeded || userAllowedApps.includes(appNeeded);
+      }),
+    })).filter((g) => g.types.length > 0);
+  };
+
+  // Get app to navigate to
+  const getTaskApp = () => {
+    return TASK_TYPE_TO_APP[form.task_type];
   };
 
   return (
