@@ -1,5 +1,6 @@
-import React from "react";
-import { Pill, CheckCircle2, XCircle, Clock, AlertTriangle } from "lucide-react";
+import React, { useState } from "react";
+import { Pill, CheckCircle2, XCircle, Clock, AlertTriangle, Info } from "lucide-react";
+import MedInfoModal from "./MedInfoModal";
 
 const STATUS_CONFIG = {
   due:          { label: "Due",          dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 border-emerald-200",  border: "border-l-emerald-500" },
