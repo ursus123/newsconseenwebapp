@@ -47,8 +47,8 @@ export default function ClientSwitcher({ people, current, onSelect, onClose }) {
                     : <User className="w-5 h-5 text-blue-600" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-900">{p.first_name} {p.last_name}</p>
-                  {p.primary_role && <p className="text-xs text-gray-400 truncate">{p.primary_role}</p>}
+                  <p className="text-sm font-bold text-gray-900">{p.preferred_name || `${p.first_name} ${p.last_name}`}</p>
+                  <p className="text-xs text-gray-400 truncate">{p.primary_role || (p.person_type === "patient" ? "Patient / Care Recipient" : p.person_type) || ""}</p>
                 </div>
                 {isActive && <span className="text-xs font-bold text-blue-600">Current</span>}
               </button>
