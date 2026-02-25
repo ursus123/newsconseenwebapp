@@ -109,6 +109,28 @@ export const taskTypeLabel = (value) => {
   return value || "—";
 };
 
+// Map task types to application pages
+export const TASK_TYPE_TO_APP = {
+  // Time & Attendance
+  clock_in: "ClockInOut",
+  clock_out: "ClockInOut",
+  shift_start: "ClockInOut",
+  shift_end: "ClockInOut",
+  break_start_end: "ClockInOut",
+  absence_leave: "ClockInOut",
+  // Healthcare / Regulated Care
+  medication_admin: "MedAdmin",
+  medication_refusal: "MedAdmin",
+  vital_signs_check: "MedAdmin",
+  care_plan_activity: "MedAdmin",
+  incident_observation: "MedAdmin",
+  safety_check: "MedAdmin",
+  behavior_monitoring: "MedAdmin",
+  documentation_review: "MedAdmin",
+  medical_escort: "MedAdmin",
+  daily_living_support: "MedAdmin",
+};
+
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-600",
   normal: "bg-blue-50 text-blue-700",
