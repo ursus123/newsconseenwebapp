@@ -37,11 +37,16 @@ export default function MedAdmin() {
     }
   }, [notifications, alertNotification]);
 
-  const { data: people = [] } = useQuery({
+  const { data: allPeople = [] } = useQuery({
     queryKey: ["med-people"],
     queryFn: () => base44.entities.Person.filter({ status: "active" }),
     enabled: !!user,
   });
+
+  // Prefer patients/care recipients, fall back to all active people
+  const people = allPeople.filter((p) => p.person_type === "patient").length > 0
+    ? allPeople.filter((p) => p.person_type === "patient")
+    : allPeople;
 
   const { data: products = [] } = useQuery({
     queryKey: ["med-products"],
