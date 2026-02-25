@@ -76,6 +76,7 @@ export default function MedAdmin() {
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Medication Administration</p>
           <p className="text-sm font-bold text-gray-800 leading-tight">{user?.full_name || user?.email || "Staff"}</p>
         </div>
+        <NotificationCenter notifications={notifications} dismiss={dismiss} dismissAll={dismissAll} />
         <button onClick={() => refetch()} className="p-2 rounded-lg text-gray-400 hover:bg-gray-100">
           <RefreshCw className="w-4 h-4" />
         </button>
