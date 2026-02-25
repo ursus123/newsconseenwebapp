@@ -3,12 +3,13 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Clock, Pill, CheckCircle2, Circle, Save, Loader2 } from "lucide-react";
+import { Users, Clock, Pill, FileBarChart, CheckCircle2, Circle, Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const ALL_APPS = [
   { id: "ClockInOut", label: "Clock In / Out", icon: Clock, color: "bg-slate-800", accent: "text-emerald-400" },
   { id: "MedAdmin",   label: "Med Administration", icon: Pill, color: "bg-blue-800", accent: "text-blue-300" },
+  { id: "Reports",    label: "Reports", icon: FileBarChart, color: "bg-violet-800", accent: "text-violet-300" },
 ];
 
 function UserAppCard({ user, accessRecord, onSave, saving }) {
