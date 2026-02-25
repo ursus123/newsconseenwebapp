@@ -120,15 +120,50 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
   const [activeSection, setActiveSection] = useState("identity");
   const [form, setForm] = useState({});
   const [uploading, setUploading] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [geocodeNote, setGeocodeNote] = useState(null);
+  const [geocodeError, setGeocodeError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const { data: enterprises = [] } = useQuery({
+    queryKey: ["enterprises-list"],
+    queryFn: () => base44.entities.Enterprise.list(),
+    enabled: open,
+  });
 
   useEffect(() => {
     if (open) {
       setActiveSection("identity");
       setForm(initialData || { status: "active", person_type: "employee", availability_status: "available" });
+      setGeocodeNote(null);
+      setGeocodeError(null);
     }
   }, [open, initialData]);
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
+
+  const geocodeAddress = async () => {
+    const { address, city, region, country } = form;
+    if (!country) { setGeocodeError("Please enter a country first."); return; }
+    setGeocoding(true); setGeocodeError(null); setGeocodeNote(null);
+    const strategies = [
+      [address, city, region, country].filter(Boolean).join(", "),
+      [city, region, country].filter(Boolean).join(", "),
+    ].filter(Boolean);
+    let result = null, usedStrategy = 0;
+    for (let i = 0; i < strategies.length; i++) {
+      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(strategies[i])}&limit=1`);
+      const data = await resp.json();
+      if (data && data.length > 0) { result = data[0]; usedStrategy = i; break; }
+    }
+    if (result) {
+      setForm((f) => ({ ...f, latitude: parseFloat(result.lat), longitude: parseFloat(result.lon) }));
+      setGeocodeNote(usedStrategy === 0 ? `✓ Match: ${result.display_name}` : `⚠ City-level match: ${result.display_name}`);
+    } else {
+      setGeocodeError("Could not find coordinates. Check spelling or enter manually.");
+    }
+    setGeocoding(false);
+  };
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -139,9 +174,44 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
     setUploading(false);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSubmit(form);
+    setSaving(true);
+    try {
+      // 1. Save the person first
+      const savedPerson = await onSubmit(form);
+      const personName = form.preferred_name || `${form.first_name || ""} ${form.last_name || ""}`.trim();
+
+      // 2. If address data provided, create/update Address record and link person to it
+      if (form.country || form.address || form.city) {
+        const addressPayload = {
+          label: `${personName} - Home`,
+          status: "active",
+          address_line1: form.address || "",
+          city: form.city || "",
+          state_region: form.region || "",
+          country: form.country || "",
+          latitude: form.latitude,
+          longitude: form.longitude,
+          linked_people: [{ person_name: personName, address_type: "Home", active: true }],
+        };
+        await base44.entities.Address.create(addressPayload);
+      }
+
+      // 3. If enterprise selected, create Relationship record
+      if (form._enterprise_name) {
+        await base44.entities.Relationship.create({
+          relationship_type: "person_enterprise",
+          status: "active",
+          person_name: personName,
+          enterprise_name: form._enterprise_name,
+          role: form.primary_role || "",
+          start_date: form.start_date || new Date().toISOString().split("T")[0],
+        });
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const renderSection = () => {
