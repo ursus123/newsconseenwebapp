@@ -460,13 +460,49 @@ export default function AddClient() {
         </div>
 
         {/* ── Step 0: Client Type ── */}
-        {step === 0 && (
-          <div className="space-y-5">
-            <div>
-              <h2 className="text-xl font-black text-slate-800">Who is the client?</h2>
-              <p className="text-sm text-slate-400 mt-1">Select the type to determine which records will be created.</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+         {step === 0 && (
+           <div className="space-y-6">
+             <div>
+               <h2 className="text-xl font-black text-slate-800">Who is the client?</h2>
+               <p className="text-sm text-slate-400 mt-1">Select the type to determine which records will be created.</p>
+             </div>
+
+             {/* File Upload Section */}
+             <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 space-y-3">
+               <div className="flex items-start gap-2">
+                 <Upload className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                 <div>
+                   <p className="text-sm font-semibold text-slate-800">Import from file</p>
+                   <p className="text-xs text-slate-400 mt-0.5">Upload Excel or PDF to auto-fill the form</p>
+                 </div>
+               </div>
+               {uploadError && (
+                 <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg">
+                   <AlertCircle className="w-4 h-4 text-rose-600 mt-0.5 shrink-0" />
+                   <p className="text-xs text-rose-700">{uploadError}</p>
+                 </div>
+               )}
+               <label className="block">
+                 <input
+                   type="file"
+                   accept=".xlsx,.xls,.csv,.pdf"
+                   onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+                   disabled={uploadLoading}
+                   className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 disabled:opacity-50"
+                 />
+               </label>
+             </div>
+
+             <div className="relative">
+               <div className="absolute inset-0 flex items-center">
+                 <div className="w-full border-t border-slate-200" />
+               </div>
+               <div className="relative flex justify-center text-xs">
+                 <span className="px-2 bg-slate-50 text-slate-400">OR</span>
+               </div>
+             </div>
+
+             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
                 { key: "individual", icon: User, label: "Individual", desc: "A person as the client" },
                 { key: "business", icon: Building2, label: "Business", desc: "A company or enterprise" },
