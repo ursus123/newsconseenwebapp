@@ -374,6 +374,14 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
             </Field>
           </div>
         );
+      case "relationships":
+        return (
+          <RelatedEntitiesPanel
+            entityType="enterprise"
+            entityName={form.enterprise_name}
+          />
+        );
+
       default:
         return null;
     }

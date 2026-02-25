@@ -312,6 +312,14 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
             </Field>
           </div>
         );
+      case "relationships":
+        return (
+          <RelatedEntitiesPanel
+            entityType="person"
+            entityName={form.preferred_name || (form.first_name && form.last_name ? `${form.first_name} ${form.last_name}`.trim() : null)}
+          />
+        );
+
       default:
         return null;
     }

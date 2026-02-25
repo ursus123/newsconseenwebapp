@@ -336,6 +336,14 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
           </div>
         );
 
+      case "relationships":
+        return (
+          <RelatedEntitiesPanel
+            entityType="product"
+            entityName={form.name}
+          />
+        );
+
       default:
         return null;
     }
