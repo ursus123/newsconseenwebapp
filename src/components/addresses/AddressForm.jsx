@@ -30,6 +30,7 @@ export default function AddressForm({ open, onClose, onSubmit, onArchive, initia
   const [activeTab, setActiveTab] = useState("details");
   const [form, setForm] = useState({});
   const [uploading, setUploading] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
 
   useEffect(() => {
     if (open) {
