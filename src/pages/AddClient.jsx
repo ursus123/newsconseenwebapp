@@ -298,7 +298,7 @@ export default function AddClient() {
       relPromises.push(base44.entities.Relationship.create({ relationship_type: "item_person", person_name: personName, item_name: addrLine1, role: "Billing Address", start_date: today, status: "active" }));
     }
     if (entName && addrLine1) {
-      relPromises.push(base44.entities.Relationship.create({ relationship_type: "item_enterprise", enterprise_name: entName, item_name: addrLine1, role: "Billing", start_date: today, status: "active" }));
+      relPromises.push(base44.entities.Relationship.create({ relationship_type: "item_enterprise", enterprise_name: entName, item_name: addrLine1, role: enterpriseData.relationshipRole || "Client", start_date: today, status: "active" }));
     }
     await Promise.all(relPromises);
 
