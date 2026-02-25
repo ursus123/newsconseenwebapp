@@ -201,7 +201,7 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
       }
 
       // 3. If enterprise selected, create Relationship
-      if (_enterprise_name) {
+      if (_enterprise_name && _enterprise_name !== "__none__") {
         await base44.entities.Relationship.create({
           relationship_type: "person_enterprise",
           status: "active",
