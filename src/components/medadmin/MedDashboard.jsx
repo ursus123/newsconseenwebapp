@@ -38,7 +38,7 @@ function getMedStatus(task) {
   return "due";
 }
 
-export default function MedDashboard({ user, people, selectedClient, onSelectClient, tasks, refetch }) {
+export default function MedDashboard({ user, people, products = [], selectedClient, onSelectClient, tasks, refetch }) {
   const [filter, setFilter] = useState("All");
   const [clientSwitcherOpen, setClientSwitcherOpen] = useState(false);
   const [adminTarget, setAdminTarget] = useState(null);
