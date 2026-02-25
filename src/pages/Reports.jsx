@@ -96,7 +96,7 @@ export default function Reports() {
 
   return (
     <div>
-      <PageHeader title="Reports" subtitle="Create and manage business reports" onAdd={() => { setEditing(null); setFormOpen(true); }} addLabel="Create Report" />
+      <PageHeader title="Reports" subtitle={isAdmin ? "Create and manage business reports" : "Your assigned reports"} onAdd={isAdmin ? () => { setEditing(null); setFormOpen(true); } : undefined} addLabel="Create Report" />
 
       {/* Quick Insights */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
