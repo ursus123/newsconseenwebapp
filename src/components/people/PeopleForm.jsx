@@ -157,11 +157,16 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
             <Field label="Preferred / Display Name">
               <Input value={form.preferred_name || ""} onChange={(e) => set("preferred_name", e.target.value)} className="rounded-xl" placeholder="Optional" />
             </Field>
-            <Field label="Person Type">
+            <Field label="Person Type" required>
               <SelectField value={form.person_type} onChange={(v) => set("person_type", v)} options={[
-                { value: "employee", label: "Employee" }, { value: "contractor", label: "Contractor" },
-                { value: "vendor", label: "Vendor" }, { value: "freelancer", label: "Freelancer" },
-              ]} />
+                { value: "employee", label: "Employee" },
+                { value: "contractor", label: "Contractor" },
+                { value: "freelancer", label: "Freelancer" },
+                { value: "vendor", label: "Vendor / Supplier" },
+                { value: "client", label: "Client / Customer" },
+                { value: "patient", label: "Patient / Care Recipient" },
+                { value: "external_partner", label: "External Partner" },
+              ]} placeholder="Select person type..." />
             </Field>
             <Field label="Status">
               <SelectField value={form.status} onChange={(v) => set("status", v)} options={[
