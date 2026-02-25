@@ -139,7 +139,13 @@ export default function Reports() {
       </div>
 
       <h3 className="text-sm font-semibold text-slate-600 mb-4">Your Reports</h3>
-      <DataTable columns={columns} data={reports} searchField="title" onEdit={(row) => { setEditing(row); setFormOpen(true); }} onDelete={(row) => setDeleting(row)} />
+      <DataTable
+        columns={columns}
+        data={visibleReports}
+        searchField="title"
+        onEdit={isAdmin ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
+        onDelete={isAdmin ? (row) => setDeleting(row) : undefined}
+      />
       <EntityForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }} onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)} fields={formFields} initialData={editing} title={editing ? "Edit Report" : "Create Report"} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.title} />
     </div>
