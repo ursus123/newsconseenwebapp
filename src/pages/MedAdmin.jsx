@@ -6,6 +6,7 @@ import { ChevronLeft, Pill, Plus, FileText, User, Home, History, Settings, Refre
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import MedDashboard from "@/components/medadmin/MedDashboard";
+import AdministerModal from "@/components/medadmin/AdministerModal";
 import MedHistory from "@/components/medadmin/MedHistory";
 import PRNFlow from "@/components/medadmin/PRNFlow";
 import MARMonthlyView from "@/components/medadmin/MARMonthlyView";
