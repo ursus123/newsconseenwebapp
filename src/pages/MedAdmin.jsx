@@ -102,6 +102,35 @@ export default function MedAdmin() {
             refetch={refetch}
           />
         )}
+        {activeTab === "mar" && (
+          <div className="p-4 space-y-3">
+            {/* Month nav + Schedule button */}
+            <div className="flex items-center justify-between bg-white rounded-xl border border-gray-100 px-4 py-3 shadow-sm">
+              <button
+                onClick={() => setMarMonth((m) => { const d = new Date(m); d.setMonth(d.getMonth() - 1); return d; })}
+                className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 font-bold text-lg leading-none"
+              >‹</button>
+              <span className="text-sm font-black text-gray-800">
+                {marMonth.toLocaleString("default", { month: "long", year: "numeric" })}
+              </span>
+              <button
+                onClick={() => setMarMonth((m) => { const d = new Date(m); d.setMonth(d.getMonth() + 1); return d; })}
+                className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 font-bold text-lg leading-none"
+              >›</button>
+            </div>
+            {isAdmin && (
+              <button
+                onClick={() => setScheduleOpen(true)}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 active:scale-95 transition-all shadow"
+              >
+                <Plus className="w-4 h-4" />
+                Schedule Medications for Month
+              </button>
+            )}
+            <MARMonthlyView tasks={allTasks} selectedClient={selectedClient} selectedMonth={marMonth} />
+          </div>
+        )}
+
         {activeTab === "history" && (
           <MedHistory tasks={allTasks} selectedClient={selectedClient} people={people} products={products} />
         )}
