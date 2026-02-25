@@ -19,6 +19,8 @@ export default function MedAdmin() {
 
   useEffect(() => { base44.auth.me().then(setUser).catch(() => {}); }, []);
 
+  const { notifications, dismiss, dismissAll } = useMedNotifications(user, !!user);
+
   const { data: people = [] } = useQuery({
     queryKey: ["med-people"],
     queryFn: () => base44.entities.Person.filter({ status: "active" }),
