@@ -64,12 +64,29 @@ export default function MedCard({ task, status, onAdminister, product }) {
               Administer
             </button>
             <button
+              onClick={() => setShowInfo(true)}
+              className="px-4 py-3 rounded-xl bg-blue-50 text-blue-600 text-sm font-bold active:scale-95 transition-all hover:bg-blue-100"
+              title="Medication info"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+            <button
               onClick={onAdminister}
               className="px-4 py-3 rounded-xl bg-orange-100 text-orange-700 text-sm font-bold active:scale-95 transition-all"
+              title="Refuse / Miss"
             >
               <XCircle className="w-4 h-4" />
             </button>
           </div>
+        )}
+
+        {isDone && (
+          <button
+            onClick={() => setShowInfo(true)}
+            className="mt-2 flex items-center gap-1.5 text-xs text-blue-500 font-semibold hover:underline"
+          >
+            <Info className="w-3.5 h-3.5" /> View medication info
+          </button>
         )}
 
         {isDone && (
