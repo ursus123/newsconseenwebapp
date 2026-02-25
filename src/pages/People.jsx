@@ -105,7 +105,7 @@ export default function People() {
         addLabel="Add Person"
       />
 
-      <PeopleToolbar search={search} setSearch={setSearch} groupBy={groupBy} setGroupBy={setGroupBy} sortBy={sortBy} setSortBy={setSortBy} />
+      <PeopleToolbar search={search} setSearch={setSearch} groupBy={groupBy} setGroupBy={setGroupBy} sortBy={sortBy} setSortBy={setSortBy} filters={filters} setFilters={setFilters} />
 
       {groupBy !== "none" ? (
         <PeopleGroupedView
