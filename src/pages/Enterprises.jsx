@@ -101,10 +101,10 @@ export default function Enterprises() {
         onAdd={perms.can_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
         addLabel="New Enterprise"
       />
+      <EnterpriseToolbar search={search} setSearch={setSearch} filters={filters} setFilters={setFilters} sortBy={sortBy} setSortBy={setSortBy} />
       <DataTable
         columns={columns}
-        data={enterprises}
-        searchField="enterprise_name"
+        data={processedEnterprises}
         onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
         onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
       />
