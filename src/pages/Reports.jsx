@@ -40,9 +40,28 @@ export default function Reports() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
 
+  React.useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
+
+  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+
   const { data: reports = [] } = useQuery({ queryKey: ["reports"], queryFn: () => base44.entities.Report.list("-created_date") });
+
+  const { data: accessRecord } = useQuery({
+    queryKey: ["myAccess", currentUser?.email],
+    queryFn: async () => {
+      const records = await base44.entities.UserAppAccess.filter({ user_email: currentUser.email });
+      return records[0] || null;
+    },
+    enabled: !!currentUser && !isAdmin,
+  });
+
+  // For regular users: only show reports they're assigned to
+  const visibleReports = isAdmin
+    ? reports
+    : reports.filter((r) => accessRecord?.allowed_reports?.includes(r.id));
   const { data: transactions = [] } = useQuery({ queryKey: ["transactions_r"], queryFn: () => base44.entities.Transaction.list("-date", 200) });
   const { data: people = [] } = useQuery({ queryKey: ["people_r"], queryFn: () => base44.entities.Person.list() });
   const { data: clients = [] } = useQuery({ queryKey: ["clients_r"], queryFn: () => base44.entities.Client.list() });
