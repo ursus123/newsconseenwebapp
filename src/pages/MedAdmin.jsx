@@ -18,6 +18,8 @@ export default function MedAdmin() {
   const [activeTab, setActiveTab] = useState("home");
   const [selectedClient, setSelectedClient] = useState(null);
   const [prnOpen, setPrnOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [marMonth, setMarMonth] = useState(new Date());
 
   useEffect(() => { base44.auth.me().then(setUser).catch(() => {}); }, []);
 
