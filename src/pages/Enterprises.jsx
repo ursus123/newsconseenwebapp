@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import EnterpriseForm from "../components/enterprise/EnterpriseForm";
+import EnterpriseToolbar from "../components/enterprise/EnterpriseToolbar";
 import { usePermissions } from "@/components/shared/usePermissions";
 import { Badge } from "@/components/ui/badge";
+import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 
 const statusColor = (s) => {
   const map = { active: "bg-emerald-50 text-emerald-700", inactive: "bg-slate-100 text-slate-600", prospect: "bg-blue-50 text-blue-700", archived: "bg-slate-100 text-slate-400" };
