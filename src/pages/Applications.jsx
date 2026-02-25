@@ -26,6 +26,16 @@ const ALL_APPS = [
     page: "MedAdmin",
     status: "live",
   },
+  {
+    id: "addclient",
+    title: "Add Client",
+    subtitle: "Guided intake — People, Enterprises & Addresses",
+    icon: UserPlus,
+    color: "from-violet-700 to-violet-900",
+    accent: "bg-violet-300",
+    page: "AddClient",
+    status: "live",
+  },
 ];
 
 export default function Applications() {
