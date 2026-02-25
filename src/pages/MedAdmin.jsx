@@ -23,6 +23,24 @@ export default function MedAdmin() {
     enabled: !!user,
   });
 
+  const { data: products = [] } = useQuery({
+    queryKey: ["med-products"],
+    queryFn: () => base44.entities.Product.filter({ status: "active" }),
+    enabled: !!user,
+  });
+
+  const { data: enterprises = [] } = useQuery({
+    queryKey: ["med-enterprises"],
+    queryFn: () => base44.entities.Enterprise.filter({ status: "active" }),
+    enabled: !!user,
+  });
+
+  const { data: addresses = [] } = useQuery({
+    queryKey: ["med-addresses"],
+    queryFn: () => base44.entities.Address.filter({ status: "active" }),
+    enabled: !!user,
+  });
+
   // Auto-select first client
   useEffect(() => {
     if (people.length > 0 && !selectedClient) setSelectedClient(people[0]);
