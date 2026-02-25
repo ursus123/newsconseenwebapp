@@ -90,7 +90,7 @@ export default function MedAdmin() {
           />
         )}
         {activeTab === "history" && (
-          <MedHistory tasks={allTasks} selectedClient={selectedClient} />
+          <MedHistory tasks={allTasks} selectedClient={selectedClient} people={people} products={products} />
         )}
         {activeTab === "profile" && (
           <div className="p-6 space-y-4">
