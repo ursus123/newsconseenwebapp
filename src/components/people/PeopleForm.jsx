@@ -19,6 +19,7 @@ const SECTIONS = [
   { id: "availability", label: "Availability", icon: Clock },
   { id: "skills", label: "Skills", icon: Star },
   { id: "notes", label: "Notes", icon: FileText },
+  { id: "relationships", label: "Relationships", icon: Link2 },
 ];
 
 const ALL_ROLES = [

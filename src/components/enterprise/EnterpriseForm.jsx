@@ -18,6 +18,7 @@ const TABS = [
   { id: "operations", label: "Operations", icon: Activity },
   { id: "compliance", label: "Compliance & Risk", icon: Shield },
   { id: "notes", label: "Notes & Files", icon: FileText },
+  { id: "relationships", label: "Relationships", icon: Link2 },
 ];
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];

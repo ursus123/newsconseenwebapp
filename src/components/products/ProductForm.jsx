@@ -18,6 +18,7 @@ const TABS = [
   { id: "lifecycle", label: "Lifecycle & Condition", icon: Clock },
   { id: "compliance", label: "Compliance & Tracking", icon: Shield },
   { id: "notes", label: "Notes & Files", icon: FileText },
+  { id: "relationships", label: "Relationships", icon: Link2 },
 ];
 
 const ITEM_CLASSES = ["asset", "inventory", "service", "digital"];
