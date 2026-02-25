@@ -5,12 +5,13 @@ import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
 import EntityForm from "../components/shared/EntityForm";
 import DeleteDialog from "../components/shared/DeleteDialog";
+import ChartBuilder from "../components/reports/ChartBuilder";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { Eye } from "lucide-react";
+import { Eye, Plus } from "lucide-react";
 
 const reportTypes = [
   { value: "financial", label: "Financial" }, { value: "inventory", label: "Inventory" },
