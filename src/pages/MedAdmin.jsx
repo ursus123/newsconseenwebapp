@@ -88,6 +88,7 @@ export default function MedAdmin() {
           <MedDashboard
             user={user}
             people={people}
+            products={products}
             selectedClient={selectedClient}
             onSelectClient={setSelectedClient}
             tasks={allTasks}
