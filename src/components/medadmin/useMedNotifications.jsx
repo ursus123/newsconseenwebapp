@@ -6,10 +6,11 @@ import { base44 } from "@/api/base44Client";
  * Polls medication tasks every 60 s and generates in-app notifications
  * for tasks that are due (within 10 min) or overdue.
  *
- * Returns: { notifications, dismiss, dismissAll }
+ * Returns: { notifications, dismiss, dismissAll, snooze }
  */
 export function useMedNotifications(user, enabled = true) {
   const [notifications, setNotifications] = useState([]);
+  const [snoozedTasks, setSnoozedTasks] = useState({}); // taskId -> snoozeUntil timestamp
   const seenRef = useRef(new Set()); // track tasks we've already notified about
 
   function buildKey(task, type) {
@@ -32,6 +33,11 @@ export function useMedNotifications(user, enabled = true) {
 
     tasks.forEach((task) => {
       if (!task.scheduled_time) return;
+
+      // Skip snoozed tasks
+      const snoozedUntil = snoozedTasks[task.id];
+      if (snoozedUntil && now.getTime() < snoozedUntil) return;
+
       const scheduled = new Date(`${task.scheduled_date}T${task.scheduled_time}`);
       const diffMs = scheduled - now; // negative = overdue
       const diffMin = diffMs / 60000;
@@ -96,15 +102,26 @@ export function useMedNotifications(user, enabled = true) {
     checkTasks(); // immediate
     const interval = setInterval(checkTasks, 60 * 1000); // every 60s
     return () => clearInterval(interval);
-  }, [user, enabled]);
+  }, [user, enabled, snoozedTasks]);
 
-  function dismiss(id) {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  function dismiss(idOrTaskId) {
+    // Support both notification id and taskId
+    setNotifications((prev) => prev.filter((n) => n.id !== idOrTaskId && n.taskId !== idOrTaskId));
   }
 
   function dismissAll() {
     setNotifications([]);
   }
 
-  return { notifications, dismiss, dismissAll };
+  function snooze(taskId, minutes) {
+    const snoozeUntil = new Date().getTime() + minutes * 60 * 1000;
+    setSnoozedTasks((prev) => ({ ...prev, [taskId]: snoozeUntil }));
+    dismiss(taskId);
+    // Allow re-notification after snooze expires
+    seenRef.current = new Set(
+      [...seenRef.current].filter((k) => !k.startsWith(taskId + ":"))
+    );
+  }
+
+  return { notifications, dismiss, dismissAll, snooze };
 }
