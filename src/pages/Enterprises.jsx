@@ -42,6 +42,9 @@ export default function Enterprises() {
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("created_date_desc");
+  const [filters, setFilters] = useState({ status: "", enterprise_type: "", operating_status: "", country: "" });
   const qc = useQueryClient();
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
