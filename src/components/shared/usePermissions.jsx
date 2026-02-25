@@ -44,10 +44,10 @@ export function usePermissions(user) {
     ? myPerm.allowed_pages
     : DEFAULT_PAGES[role] ?? ["Dashboard", "Tasks"];
 
-  // Admins can always create/edit by default; users are more restricted
+  // Admins can always create/edit/delete by default; users are more restricted
   const defaultCreate = role === "admin" ? true : false;
   const defaultEdit   = role === "admin" ? true : false;
-  const defaultDelete = false;
+  const defaultDelete = role === "admin" ? true : false;
 
   return {
     allowedPages,
