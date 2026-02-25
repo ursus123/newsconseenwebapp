@@ -155,11 +155,14 @@ function MyTasksList({ tasks }) {
 }
 
 // Admin view: kanban + filters + full CRUD
-function AdminTasksView({ tasks, appUsers, enterprises, products, services, people, companyId, isSuperAdmin }) {
+function AdminTasksView({ tasks, appUsers, enterprises, products, services, people, addresses, companyId, isSuperAdmin }) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [filterPerson, setFilterPerson] = useState("");
+  const [filterEnterprise, setFilterEnterprise] = useState("");
+  const [filterAddress, setFilterAddress] = useState("");
   const qc = useQueryClient();
 
   const withCompany = (d) => companyId && !isSuperAdmin ? { ...d, company_id: companyId } : d;
