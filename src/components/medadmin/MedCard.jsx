@@ -89,6 +89,10 @@ export default function MedCard({ task, status, onAdminister, product }) {
           </button>
         )}
 
+        {showInfo && (
+          <MedInfoModal product={product} taskTitle={medName} onClose={() => setShowInfo(false)} />
+        )}
+
         {isDone && (
           <div className={`mt-3 flex items-center gap-2 text-xs font-semibold
             ${status === "administered" ? "text-emerald-600" : status === "refused" ? "text-orange-600" : "text-gray-400"}`}>
