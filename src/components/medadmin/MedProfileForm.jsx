@@ -116,10 +116,19 @@ export default function MedProfileForm({ client, existing, onClose, onSuccess })
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* Medication name */}
+          {/* Medication name — searchable from Products */}
           <Field label="Medication Name *">
-            <input value={form.medication_name} onChange={(e) => set("medication_name", e.target.value)}
-              placeholder="e.g. Acidophilus Probiotic Tablet" className={INPUT} />
+            <MedSearchInput
+              value={form.medication_name}
+              onChange={(name, product) => {
+                set("medication_name", name);
+                if (product) {
+                  if (product.dosage_instructions && !form.instructions) set("instructions", product.dosage_instructions);
+                  if (product.side_effects && !form.notes) set("notes", `Side effects: ${product.side_effects}`);
+                  if (product.batch_number && !form.rx_number) set("rx_number", product.batch_number);
+                }
+              }}
+            />
           </Field>
 
           {/* Strength + Dose */}
