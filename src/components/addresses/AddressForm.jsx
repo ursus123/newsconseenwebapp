@@ -46,26 +46,57 @@ export default function AddressForm({ open, onClose, onSubmit, onArchive, initia
   const geocodeAddress = async () => {
     const { address_line1, address_line2, city, state_region, postal_code, country } = form;
     if (!country) {
-      alert("Please enter a country first to geocode the address.");
+      setGeocodeError("Please enter a country first");
       return;
     }
 
     setGeocoding(true);
+    setGeocodeError(null);
+    setGeocodeNote(null);
+    
     try {
-      const parts = [address_line1, address_line2, city, state_region, postal_code, country].filter(Boolean);
-      const query = encodeURIComponent(parts.join(", "));
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`);
-      const data = await response.json();
+      // Try multiple query strategies
+      const strategies = [
+        // Strategy 1: Full address
+        [address_line1, address_line2, city, state_region, postal_code, country].filter(Boolean).join(", "),
+        // Strategy 2: Without address line 2
+        [address_line1, city, state_region, postal_code, country].filter(Boolean).join(", "),
+        // Strategy 3: City-level fallback
+        city && country ? [city, state_region, country].filter(Boolean).join(", ") : null,
+      ].filter(Boolean);
+
+      let result = null;
+      let usedStrategy = 0;
+
+      for (let i = 0; i < strategies.length; i++) {
+        const query = encodeURIComponent(strategies[i]);
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`);
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+          result = data[0];
+          usedStrategy = i;
+          break;
+        }
+      }
       
-      if (data && data.length > 0) {
-        const { lat, lon } = data[0];
+      if (result) {
+        const { lat, lon, display_name } = result;
         setForm((f) => ({ ...f, latitude: parseFloat(lat), longitude: parseFloat(lon) }));
+        
+        if (usedStrategy === 0) {
+          setGeocodeNote(`✓ Exact match found: ${display_name}`);
+        } else if (usedStrategy === 1) {
+          setGeocodeNote(`⚠ Approximate match (no unit/suite): ${display_name}`);
+        } else {
+          setGeocodeNote(`⚠ City-level match only: ${display_name}. Consider adding more address details for precision.`);
+        }
       } else {
-        alert("Could not find coordinates for this address. Please try a more specific address or enter coordinates manually.");
+        setGeocodeError("Could not find coordinates. Try: (1) Check spelling, (2) Add more address details, (3) Enter coordinates manually.");
       }
     } catch (error) {
       console.error("Geocoding error:", error);
-      alert("Failed to geocode address. Please try again or enter coordinates manually.");
+      setGeocodeError("Network error. Please check your connection and try again.");
     } finally {
       setGeocoding(false);
     }
