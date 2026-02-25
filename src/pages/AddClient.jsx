@@ -257,7 +257,7 @@ export default function AddClient() {
       rels.push({ relationship_type: "item_person", person_name: personName, item_name: addrLine, role: "Billing Address", start_date: today });
     }
     if (entName && addrLine) {
-      rels.push({ relationship_type: "item_enterprise", enterprise_name: entName, item_name: addrLine, role: "Billing", start_date: today });
+      rels.push({ relationship_type: "item_enterprise", enterprise_name: entName, item_name: addrLine, role: enterpriseData.relationshipRole || "Client", start_date: today });
     }
     setRelationships(rels);
   };
