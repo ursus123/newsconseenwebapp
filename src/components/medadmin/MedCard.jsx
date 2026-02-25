@@ -10,7 +10,8 @@ const STATUS_CONFIG = {
   missed:       { label: "Missed",       dot: "bg-gray-400",   badge: "bg-gray-50 text-gray-600 border-gray-200",           border: "border-l-gray-400" },
 };
 
-export default function MedCard({ task, status, onAdminister }) {
+export default function MedCard({ task, status, onAdminister, product }) {
+  const [showInfo, setShowInfo] = useState(false);
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.due;
   const isDone = status === "administered" || status === "refused" || status === "missed";
   const isOverdue = status === "overdue";
