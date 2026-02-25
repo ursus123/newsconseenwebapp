@@ -173,11 +173,13 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Task.delete(id), onSuccess: () => { invalidate(); setDeleting(null); } });
 
   const filtered = tasks.filter((t) => {
-    if (filter === "all") return true;
-    if (filter === "open") return t.status === "open" || t.status === "in_progress";
-    if (filter === "overdue") return isDuePast(t);
-    if (filter === "today") return t.due_date && isToday(parseISO(t.due_date));
-    if (filter === "completed") return t.status === "completed";
+    if (filter === "open" && t.status !== "open" && t.status !== "in_progress") return false;
+    if (filter === "overdue" && !isDuePast(t)) return false;
+    if (filter === "today" && !(t.due_date && isToday(parseISO(t.due_date)))) return false;
+    if (filter === "completed" && t.status !== "completed") return false;
+    if (filterPerson && t.related_person !== filterPerson) return false;
+    if (filterEnterprise && t.enterprise !== filterEnterprise) return false;
+    if (filterAddress && !((t.outcome_notes || "").includes(filterAddress) || (t.title || "").includes(filterAddress))) return false;
     return true;
   });
 
