@@ -512,8 +512,9 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
               <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl text-sm">
                 <X className="w-4 h-4 mr-1" /> Cancel
               </Button>
-              <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 rounded-xl text-sm shadow-lg shadow-emerald-500/20">
-                <Save className="w-4 h-4 mr-2" /> Save Person
+              <Button type="submit" disabled={saving} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl text-sm shadow-lg shadow-emerald-500/20">
+                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                {saving ? "Saving..." : "Save Person"}
               </Button>
             </div>
           </div>
