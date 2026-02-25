@@ -63,8 +63,11 @@ export default function MedAdmin() {
     enabled: !!selectedClient,
   });
 
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+
   const tabs = [
-    { id: "home",     label: "MAR",      icon: Home },
+    { id: "home",     label: "Daily",    icon: Home },
+    { id: "mar",      label: "MAR",      icon: FileText },
     { id: "history",  label: "History",  icon: History },
     { id: "profile",  label: "Settings", icon: Settings },
   ];
