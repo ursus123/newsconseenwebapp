@@ -321,6 +321,66 @@ export default function AddClient() {
     goNext();
   };
 
+  const handleFileUpload = async (file) => {
+    setUploadLoading(true);
+    setUploadError(null);
+    const result = await extractDataFromFile(file);
+    setUploadLoading(false);
+    
+    if (result.error) {
+      setUploadError(result.error);
+      return;
+    }
+    
+    const data = result.data || {};
+    
+    // Determine client type based on extracted data
+    const hasPerson = !!(data.first_name || data.last_name);
+    const hasEnterprise = !!data.enterprise_name;
+    let newClientType = clientType;
+    
+    if (!clientType) {
+      if (hasPerson && hasEnterprise) newClientType = "both";
+      else if (hasPerson) newClientType = "individual";
+      else if (hasEnterprise) newClientType = "business";
+    }
+    
+    setClientType(newClientType || "both");
+    
+    // Auto-fill person data
+    if (hasPerson) {
+      setPersonData(prev => ({
+        ...prev,
+        first_name: data.first_name || prev.first_name,
+        last_name: data.last_name || prev.last_name,
+        email: data.email || prev.email,
+        phone: data.phone || prev.phone,
+        person_type: data.person_type || prev.person_type,
+      }));
+    }
+    
+    // Auto-fill enterprise data
+    if (hasEnterprise) {
+      setEnterpriseData(prev => ({
+        ...prev,
+        enterprise_name: data.enterprise_name || prev.enterprise_name,
+        enterprise_type: data.enterprise_type || prev.enterprise_type,
+      }));
+    }
+    
+    // Auto-fill address data
+    if (data.address_line1) {
+      setAddressData(prev => ({
+        ...prev,
+        address_line1: data.address_line1 || prev.address_line1,
+        city: data.city || prev.city,
+        state_region: data.state_region || prev.state_region,
+        country: data.country || prev.country,
+        postal_code: data.postal_code || prev.postal_code,
+      }));
+    }
+  };
+
   // ── Save ─────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     setSaving(true);
