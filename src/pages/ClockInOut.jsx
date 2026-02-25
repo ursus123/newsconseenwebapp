@@ -194,14 +194,20 @@ export default function ClockInOut() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["clock-tasks"] }),
   });
 
-  const handleClockIn = () => {
-    createTask.mutate({ task_type: "clock_in", title: "Clock In", status: "completed", notes: notes || `Clocked in at ${nowTimeStr()}` });
-    showToast(`Clocked in at ${nowTimeStr()} ✓`);
+  const handleClockIn = async () => {
+    const time = nowTimeStr();
+    const loc = await getLocationString();
+    const locNote = loc ? ` | Location: ${loc}` : "";
+    createTask.mutate({ task_type: "clock_in", title: "Clock In", status: "completed", notes: (notes || `Clocked in at ${time}`) + locNote });
+    showToast(`Clocked in at ${time} ✓`);
   };
 
-  const handleClockOut = () => {
-    createTask.mutate({ task_type: "clock_out", title: "Clock Out", status: "completed", notes: notes || `Clocked out at ${nowTimeStr()}` });
-    showToast(`Clocked out at ${nowTimeStr()} ✓`);
+  const handleClockOut = async () => {
+    const time = nowTimeStr();
+    const loc = await getLocationString();
+    const locNote = loc ? ` | Location: ${loc}` : "";
+    createTask.mutate({ task_type: "clock_out", title: "Clock Out", status: "completed", notes: (notes || `Clocked out at ${time}`) + locNote });
+    showToast(`Clocked out at ${time} ✓`);
   };
 
   const handleStartBreak = () => {
