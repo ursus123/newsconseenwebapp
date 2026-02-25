@@ -64,7 +64,7 @@ export default function People() {
 
   const withCompany = (d) => companyId && !isSuperAdmin ? { ...d, company_id: companyId } : d;
 
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Person.create(withCompany(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setFormOpen(false); } });
+  const createMut = useMutation({ mutationFn: (d) => base44.entities.Person.create(withCompany(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); qc.invalidateQueries({ queryKey: ["addresses"] }); qc.invalidateQueries({ queryKey: ["relationships"] }); setFormOpen(false); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Person.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setFormOpen(false); setEditing(null); } });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Person.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setDeleting(null); } });
 
