@@ -10,6 +10,7 @@ import MedHistory from "@/components/medadmin/MedHistory";
 import PRNFlow from "@/components/medadmin/PRNFlow";
 import MARMonthlyView from "@/components/medadmin/MARMonthlyView";
 import ScheduleMonthModal from "@/components/medadmin/ScheduleMonthModal";
+import MedProfileTab from "@/components/medadmin/MedProfileTab";
 import NotificationCenter from "@/components/medadmin/NotificationCenter";
 import { useMedNotifications } from "@/components/medadmin/useMedNotifications";
 
