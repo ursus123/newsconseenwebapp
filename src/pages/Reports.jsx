@@ -185,6 +185,7 @@ export default function Reports() {
         onDelete={isAdmin ? (row) => setDeleting(row) : undefined}
       />
       <EntityForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }} onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)} fields={formFields} initialData={editing} title={editing ? "Edit Report" : "Create Report"} />
+      <ChartBuilder open={chartBuilderOpen} onClose={() => { setChartBuilderOpen(false); setEditingChart(null); }} onSave={handleSaveChart} initialData={editingChart ? JSON.parse(editingChart.content || "{}") : null} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.title} />
     </div>
   );
