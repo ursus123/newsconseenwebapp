@@ -202,7 +202,7 @@ export default function AddClient() {
   const [clientType, setClientType] = useState(null); // "individual" | "business" | "both"
 
   // Step 1 — Person
-  const [personData, setPersonData] = useState({ first_name: "", last_name: "", email: "", phone: "", role: "Customer" });
+  const [personData, setPersonData] = useState({ first_name: "", last_name: "", email: "", phone: "", person_type: "client", primary_role: "" });
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [createPerson, setCreatePerson] = useState(true);
 
