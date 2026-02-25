@@ -2,7 +2,50 @@ import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths } from "date-fns";
-import { X, Plus, Trash2, CalendarDays, Loader2, CheckCircle2 } from "lucide-react";
+import { X, Plus, Trash2, CalendarDays, Loader2, CheckCircle2, Search } from "lucide-react";
+
+function MedSearchInput({ products, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState(value || "");
+  const filtered = products.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
+
+  const handleSelect = (p) => {
+    setQ(p.name);
+    onChange(p.name, p);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
+        <input
+          value={q}
+          onChange={(e) => { setQ(e.target.value); onChange(e.target.value, null); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Search or type medication name…"
+          className="w-full pl-8 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+        />
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-40 overflow-y-auto">
+          {filtered.slice(0, 10).map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onMouseDown={() => handleSelect(p)}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 text-gray-800 border-b border-gray-50 last:border-0"
+            >
+              <span className="font-medium">{p.name}</span>
+              {p.sku && <span className="text-xs text-gray-400 ml-2">{p.sku}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const FREQUENCIES = [
   { label: "Every Day (Daily)", value: "daily" },
