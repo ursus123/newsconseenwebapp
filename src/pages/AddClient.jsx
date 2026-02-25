@@ -193,6 +193,58 @@ function ExistingPicker({ items, labelKey, type, onSelect, selected }) {
   );
 }
 
+// ── File upload & extraction ─────────────────────────────────────────────────
+async function extractDataFromFile(file) {
+  try {
+    // Upload file
+    const uploadResp = await base44.integrations.Core.UploadFile({ file });
+    const fileUrl = uploadResp.file_url;
+    
+    // Determine file type
+    const fileExt = file.name.split(".").pop().toLowerCase();
+    const isExcel = ["xlsx", "xls", "csv"].includes(fileExt);
+    const isPdf = fileExt === "pdf";
+    
+    if (!isExcel && !isPdf) {
+      return { error: "Unsupported file type. Please upload Excel or PDF." };
+    }
+    
+    // Extract data based on type
+    const schema = {
+      type: "object",
+      properties: {
+        first_name: { type: "string", description: "Person first name" },
+        last_name: { type: "string", description: "Person last name" },
+        email: { type: "string", description: "Email address" },
+        phone: { type: "string", description: "Phone number" },
+        person_type: { type: "string", description: "Person type (employee, contractor, freelancer, vendor, client, patient, external_partner)" },
+        enterprise_name: { type: "string", description: "Company/business name" },
+        enterprise_type: { type: "string", description: "Type of enterprise (retail, food_beverage, healthcare, technology, construction, education, finance, manufacturing, logistics, hospitality, agriculture, media, other)" },
+        address_line1: { type: "string", description: "Street address" },
+        city: { type: "string", description: "City" },
+        state_region: { type: "string", description: "State or region" },
+        country: { type: "string", description: "Country" },
+        postal_code: { type: "string", description: "Postal/ZIP code" },
+      }
+    };
+    
+    const result = await base44.integrations.Core.ExtractDataFromUploadedFile({
+      file_url: fileUrl,
+      json_schema: schema
+    });
+    
+    if (result.status === "error") {
+      return { error: result.details || "Failed to extract data from file" };
+    }
+    
+    // Handle both single object and array responses
+    const data = Array.isArray(result.output) ? result.output[0] : result.output;
+    return { data };
+  } catch (err) {
+    return { error: err.message || "Failed to process file" };
+  }
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 export default function AddClient() {
   const qc = useQueryClient();
@@ -200,6 +252,8 @@ export default function AddClient() {
 
   // Step 0
   const [clientType, setClientType] = useState(null); // "individual" | "business" | "both"
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
 
   // Step 1 — Person
   const [personData, setPersonData] = useState({ first_name: "", last_name: "", email: "", phone: "", person_type: "client", primary_role: "" });
