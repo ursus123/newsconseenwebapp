@@ -47,6 +47,7 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
+import AddClient from './pages/AddClient';
 import Addresses from './pages/Addresses';
 import Applications from './pages/Applications';
 import ClockInOut from './pages/ClockInOut';
@@ -63,11 +64,11 @@ import Services from './pages/Services';
 import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';
 import UserManagement from './pages/UserManagement';
-import AddClient from './pages/AddClient';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
+    "AddClient": AddClient,
     "Addresses": Addresses,
     "Applications": Applications,
     "ClockInOut": ClockInOut,
@@ -84,7 +85,6 @@ export const PAGES = {
     "Tasks": Tasks,
     "Transactions": Transactions,
     "UserManagement": UserManagement,
-    "AddClient": AddClient,
 }
 
 export const pagesConfig = {

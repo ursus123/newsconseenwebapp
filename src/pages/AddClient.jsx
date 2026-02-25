@@ -53,10 +53,100 @@ function StepIndicator({ current }) {
   );
 }
 
+// Fuzzy search helper with scoring
+function fuzzySearch(items, query, searchFields) {
+  if (!query || query.length < 2) return [];
+  const q = query.toLowerCase().trim();
+  
+  const scored = items.map((item) => {
+    let score = 0;
+    let matchedField = "";
+    let matchedValue = "";
+    
+    for (const field of searchFields) {
+      const value = String(item[field] || "").toLowerCase();
+      if (!value) continue;
+      
+      // Exact match (highest score)
+      if (value === q) {
+        score = Math.max(score, 100);
+        matchedField = field;
+        matchedValue = item[field];
+      }
+      // Starts with query (high score)
+      else if (value.startsWith(q)) {
+        score = Math.max(score, 80);
+        if (!matchedField) {
+          matchedField = field;
+          matchedValue = item[field];
+        }
+      }
+      // Contains query (medium score)
+      else if (value.includes(q)) {
+        score = Math.max(score, 60);
+        if (!matchedField) {
+          matchedField = field;
+          matchedValue = item[field];
+        }
+      }
+      // Fuzzy match: check if all query chars appear in order
+      else {
+        let qIdx = 0;
+        for (let i = 0; i < value.length && qIdx < q.length; i++) {
+          if (value[i] === q[qIdx]) qIdx++;
+        }
+        if (qIdx === q.length) {
+          score = Math.max(score, 40);
+          if (!matchedField) {
+            matchedField = field;
+            matchedValue = item[field];
+          }
+        }
+      }
+    }
+    
+    return { item, score, matchedField, matchedValue };
+  });
+  
+  return scored
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((s) => ({ ...s.item, _matchInfo: { field: s.matchedField, value: s.matchedValue } }));
+}
+
 // Search + select or create new
-function ExistingPicker({ items, labelKey, onSelect, selected }) {
+function ExistingPicker({ items, labelKey, type, onSelect, selected }) {
   const [q, setQ] = useState("");
-  const filtered = items.filter((i) => (i[labelKey] || "").toLowerCase().includes(q.toLowerCase()));
+  
+  // Define search fields based on type
+  const searchFields = type === "person" 
+    ? ["first_name", "last_name", "preferred_name", "email", "phone"]
+    : type === "enterprise"
+    ? ["enterprise_name", "short_name", "email", "phone"]
+    : ["label", "address_line1", "city", "state_region", "country"];
+  
+  const filtered = fuzzySearch(items, q, searchFields);
+  
+  const placeholder = type === "person"
+    ? "Search by name, email, or phone…"
+    : type === "enterprise"
+    ? "Search by name, email, or phone…"
+    : "Search by address, city, or region…";
+  
+  const getDisplayText = (item) => {
+    if (type === "person") {
+      const name = `${item.first_name} ${item.last_name}`;
+      const extra = item.email || item.phone;
+      return extra ? `${name} • ${extra}` : name;
+    }
+    if (type === "enterprise") {
+      const name = item.enterprise_name;
+      const extra = item.short_name || item.email;
+      return extra ? `${name} • ${extra}` : name;
+    }
+    return item[labelKey];
+  };
+  
   return (
     <div className="space-y-2">
       <div className="relative">
@@ -64,28 +154,38 @@ function ExistingPicker({ items, labelKey, onSelect, selected }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search existing…"
+          placeholder={placeholder}
           className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
         />
       </div>
-      {q.length > 0 && filtered.length > 0 && (
-        <div className="border border-slate-200 rounded-xl overflow-hidden max-h-40 overflow-y-auto">
-          {filtered.map((item) => (
+      {q.length >= 2 && filtered.length > 0 && (
+        <div className="border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+          {filtered.slice(0, 10).map((item) => (
             <button
               key={item.id}
               onClick={() => { onSelect(item); setQ(""); }}
               className={`w-full text-left px-4 py-2.5 text-sm hover:bg-emerald-50 transition-colors border-b border-slate-50 last:border-0
                 ${selected?.id === item.id ? "bg-emerald-50 text-emerald-700 font-semibold" : "text-slate-700"}`}
             >
-              {item[labelKey]}
+              <div className="font-medium">{getDisplayText(item)}</div>
+              {item._matchInfo?.field && item._matchInfo.field !== labelKey && (
+                <div className="text-xs text-slate-400 mt-0.5">
+                  Match: {item._matchInfo.field.replace("_", " ")}
+                </div>
+              )}
               {selected?.id === item.id && <CheckCircle2 className="inline ml-2 w-3.5 h-3.5 text-emerald-500" />}
             </button>
           ))}
         </div>
       )}
+      {q.length >= 2 && filtered.length === 0 && (
+        <div className="px-4 py-3 text-xs text-slate-400 text-center border border-slate-100 rounded-xl">
+          No matches found
+        </div>
+      )}
       {selected && (
         <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-700 font-semibold">
-          <CheckCircle2 className="w-4 h-4" /> Using: {selected[labelKey]}
+          <CheckCircle2 className="w-4 h-4" /> Using: {getDisplayText(selected)}
           <button onClick={() => onSelect(null)} className="ml-auto text-slate-400 hover:text-rose-500 font-normal text-xs">× Clear</button>
         </div>
       )}
