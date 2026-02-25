@@ -8,6 +8,8 @@ import { createPageUrl } from "@/utils";
 import MedDashboard from "@/components/medadmin/MedDashboard";
 import MedHistory from "@/components/medadmin/MedHistory";
 import PRNFlow from "@/components/medadmin/PRNFlow";
+import NotificationCenter from "@/components/medadmin/NotificationCenter";
+import { useMedNotifications } from "@/components/medadmin/useMedNotifications";
 
 export default function MedAdmin() {
   const [user, setUser] = useState(null);
