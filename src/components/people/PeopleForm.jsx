@@ -349,7 +349,7 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
                     <SelectValue placeholder="Select enterprise..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={null}>— None —</SelectItem>
+                    <SelectItem value="__none__">— None —</SelectItem>
                     {enterprises.map((e) => (
                       <SelectItem key={e.id} value={e.enterprise_name}>{e.enterprise_name}</SelectItem>
                     ))}
