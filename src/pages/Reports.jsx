@@ -41,6 +41,8 @@ export default function Reports() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [chartBuilderOpen, setChartBuilderOpen] = useState(false);
+  const [editingChart, setEditingChart] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
 
