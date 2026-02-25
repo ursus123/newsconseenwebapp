@@ -178,14 +178,17 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
     e.preventDefault();
     setSaving(true);
     try {
-      // 1. Save the person first
-      const savedPerson = await onSubmit(form);
       const personName = form.preferred_name || `${form.first_name || ""} ${form.last_name || ""}`.trim();
+      // Strip internal UI fields before saving person
+      const { _enterprise_name, latitude, longitude, ...personData } = form;
 
-      // 2. If address data provided, create/update Address record and link person to it
+      // 1. Save person
+      await onSubmit(personData);
+
+      // 2. If address data, create Address record with linked person
       if (form.country || form.address || form.city) {
-        const addressPayload = {
-          label: `${personName} - Home`,
+        await base44.entities.Address.create({
+          label: `${personName} – Home`,
           status: "active",
           address_line1: form.address || "",
           city: form.city || "",
@@ -194,17 +197,16 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
           latitude: form.latitude,
           longitude: form.longitude,
           linked_people: [{ person_name: personName, address_type: "Home", active: true }],
-        };
-        await base44.entities.Address.create(addressPayload);
+        });
       }
 
-      // 3. If enterprise selected, create Relationship record
-      if (form._enterprise_name) {
+      // 3. If enterprise selected, create Relationship
+      if (_enterprise_name) {
         await base44.entities.Relationship.create({
           relationship_type: "person_enterprise",
           status: "active",
           person_name: personName,
-          enterprise_name: form._enterprise_name,
+          enterprise_name: _enterprise_name,
           role: form.primary_role || "",
           start_date: form.start_date || new Date().toISOString().split("T")[0],
         });
