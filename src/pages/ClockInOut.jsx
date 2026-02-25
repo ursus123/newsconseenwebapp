@@ -104,6 +104,26 @@ function Toast({ msg, ok }) {
 }
 
 // ─── Main page ───────────────────────────────────────────────────────────────
+async function getLocationString() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
+          const data = await res.json();
+          resolve(data.display_name || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+        } catch {
+          resolve(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+        }
+      },
+      () => resolve(null),
+      { timeout: 6000 }
+    );
+  });
+}
+
 export default function ClockInOut() {
   const [user, setUser] = useState(null);
   const [toast, setToast] = useState(null);

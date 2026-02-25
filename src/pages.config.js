@@ -48,9 +48,12 @@
  * The mainPage value must match a key in the PAGES object exactly.
  */
 import Addresses from './pages/Addresses';
+import Applications from './pages/Applications';
+import ClockInOut from './pages/ClockInOut';
 import Dashboard from './pages/Dashboard';
 import Enterprises from './pages/Enterprises';
 import InviteUser from './pages/InviteUser';
+import MedAdmin from './pages/MedAdmin';
 import People from './pages/People';
 import Permissions from './pages/Permissions';
 import Products from './pages/Products';
@@ -59,18 +62,18 @@ import Reports from './pages/Reports';
 import Services from './pages/Services';
 import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';
-import Applications from './pages/Applications';
-import ClockInOut from './pages/ClockInOut';
-import MedAdmin from './pages/MedAdmin';
 import UserManagement from './pages/UserManagement';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
     "Addresses": Addresses,
+    "Applications": Applications,
+    "ClockInOut": ClockInOut,
     "Dashboard": Dashboard,
     "Enterprises": Enterprises,
     "InviteUser": InviteUser,
+    "MedAdmin": MedAdmin,
     "People": People,
     "Permissions": Permissions,
     "Products": Products,
@@ -79,9 +82,6 @@ export const PAGES = {
     "Services": Services,
     "Tasks": Tasks,
     "Transactions": Transactions,
-    "Applications": Applications,
-    "ClockInOut": ClockInOut,
-    "MedAdmin": MedAdmin,
     "UserManagement": UserManagement,
 }
 
