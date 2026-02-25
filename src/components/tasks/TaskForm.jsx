@@ -303,19 +303,19 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, appUser
             <SectionDivider label="Assignment" />
 
             {/* Assign to App User */}
-            <Field label="Assign To (App User)" required hint="The user who will see and complete this task">
-              <Select value={form.assigned_to_email || ""} onValueChange={handleUserSelect}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select user..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={null}>— Unassigned —</SelectItem>
-                  {(appUsers || []).map((u) => (
-                    <SelectItem key={u.id} value={u.email}>
-                      {u.full_name ? `${u.full_name} (${u.email})` : u.email}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+             <Field label="Assign To (App User)" required hint="Tasks will be filtered to apps this user has access to">
+               <Select value={form.assigned_to_email || ""} onValueChange={handleUserSelect}>
+                 <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select user..." /></SelectTrigger>
+                 <SelectContent>
+                   <SelectItem value={null}>— Unassigned —</SelectItem>
+                   {(appUsers || []).map((u) => (
+                     <SelectItem key={u.id} value={u.email}>
+                       {u.full_name ? `${u.full_name} (${u.email})` : u.email}
+                     </SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
+             </Field>
 
             <Field label="Enterprise">
               <Select value={form.enterprise || ""} onValueChange={(v) => set("enterprise", v)}>
