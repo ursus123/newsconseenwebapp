@@ -241,21 +241,34 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, appUser
           <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
 
             {/* Task Type */}
-            <Field label="Task Type" required>
-              <Select value={form.task_type || ""} onValueChange={(v) => set("task_type", v)}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select task type..." /></SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {TASK_TYPE_GROUPS.map((g) => (
-                    <React.Fragment key={g.group}>
-                      <div className="px-2 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider bg-slate-50">{g.group}</div>
-                      {g.types.map((t) => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                      ))}
-                    </React.Fragment>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+             <Field label="Task Type" required>
+               <div className="space-y-2">
+                 <Select value={form.task_type || ""} onValueChange={(v) => set("task_type", v)}>
+                   <SelectTrigger className="rounded-xl"><SelectValue placeholder={form.assigned_to_email ? "Select task type..." : "Assign user first..."} /></SelectTrigger>
+                   <SelectContent className="max-h-72">
+                     {availableTaskTypes().map((g) => (
+                       <React.Fragment key={g.group}>
+                         <div className="px-2 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider bg-slate-50">{g.group}</div>
+                         {g.types.map((t) => (
+                           <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                         ))}
+                       </React.Fragment>
+                     ))}
+                   </SelectContent>
+                 </Select>
+                 {getTaskApp() && (
+                   <a
+                     href={createPageUrl(getTaskApp())}
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     className="inline-flex items-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                   >
+                     <ExternalLink className="w-3.5 h-3.5" />
+                     Go to {getTaskApp()} App
+                   </a>
+                 )}
+               </div>
+             </Field>
 
             {/* Title */}
             <Field label="Task Title / Instructions" required>
