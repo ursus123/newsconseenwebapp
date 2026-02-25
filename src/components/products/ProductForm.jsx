@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Save, X, Plus, Trash2, Upload, Package, Tag, BarChart2, Link2, Clock, Shield, FileText } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
 
 const TABS = [
   { id: "basic", label: "Basic Info", icon: Package },

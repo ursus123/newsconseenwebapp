@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Save, X, ChevronRight, User, Briefcase, Phone, MapPin, Calendar, Clock, Star, FileText, Upload } from "lucide-react";
+import { Save, X, ChevronRight, User, Briefcase, Phone, MapPin, Calendar, Clock, Star, FileText, Upload, Link2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
 
 const SECTIONS = [
   { id: "identity", label: "Identity", icon: User },
