@@ -41,6 +41,34 @@ export default function AddressForm({ open, onClose, onSubmit, onArchive, initia
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
+  const geocodeAddress = async () => {
+    const { address_line1, address_line2, city, state_region, postal_code, country } = form;
+    if (!country) {
+      alert("Please enter a country first to geocode the address.");
+      return;
+    }
+
+    setGeocoding(true);
+    try {
+      const parts = [address_line1, address_line2, city, state_region, postal_code, country].filter(Boolean);
+      const query = encodeURIComponent(parts.join(", "));
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`);
+      const data = await response.json();
+      
+      if (data && data.length > 0) {
+        const { lat, lon } = data[0];
+        setForm((f) => ({ ...f, latitude: parseFloat(lat), longitude: parseFloat(lon) }));
+      } else {
+        alert("Could not find coordinates for this address. Please try a more specific address or enter coordinates manually.");
+      }
+    } catch (error) {
+      console.error("Geocoding error:", error);
+      alert("Failed to geocode address. Please try again or enter coordinates manually.");
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
