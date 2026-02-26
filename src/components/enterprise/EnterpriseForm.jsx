@@ -197,13 +197,28 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Primary Location</p>
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
+                  <Field label="Country">
+                    <Input value={form.country || ""} onChange={(e) => set("country", e.target.value)} className="rounded-xl" placeholder="e.g. Canada" />
+                  </Field>
+                </div>
+                <Field label="Region / State"><Input value={form.region || ""} onChange={(e) => set("region", e.target.value)} className="rounded-xl" /></Field>
+                <Field label="City"><Input value={form.city || ""} onChange={(e) => set("city", e.target.value)} className="rounded-xl" /></Field>
+                <div className="col-span-2">
                   <Field label="Street Address">
                     <Input value={form.primary_address || ""} onChange={(e) => set("primary_address", e.target.value)} className="rounded-xl" />
                   </Field>
                 </div>
-                <Field label="City"><Input value={form.city || ""} onChange={(e) => set("city", e.target.value)} className="rounded-xl" /></Field>
-                <Field label="Region / State"><Input value={form.region || ""} onChange={(e) => set("region", e.target.value)} className="rounded-xl" /></Field>
-                <Field label="Country"><Input value={form.country || ""} onChange={(e) => set("country", e.target.value)} className="rounded-xl" /></Field>
+                <Field label="Latitude">
+                  <Input value={form.latitude || ""} onChange={(e) => set("latitude", parseFloat(e.target.value) || "")} className="rounded-xl" placeholder="Auto-fill" type="number" step="any" />
+                </Field>
+                <Field label="Longitude">
+                  <div className="flex gap-2">
+                    <Input value={form.longitude || ""} onChange={(e) => set("longitude", parseFloat(e.target.value) || "")} className="rounded-xl flex-1" placeholder="Auto-fill" type="number" step="any" />
+                    <Button type="button" variant="outline" size="sm" className="rounded-xl shrink-0 h-9" onClick={geocodeAddress} disabled={geocoding}>
+                      {geocoding ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                </Field>
               </div>
             </div>
             <div>
