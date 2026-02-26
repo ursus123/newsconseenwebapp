@@ -208,6 +208,11 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
                     <Input value={form.primary_address || ""} onChange={(e) => set("primary_address", e.target.value)} className="rounded-xl" />
                   </Field>
                 </div>
+                <div className="col-span-2">
+                  <Field label="Zip / Postal Code">
+                    <Input value={form.postal_code || ""} onChange={(e) => set("postal_code", e.target.value)} className="rounded-xl" placeholder="e.g. A1B 2C3" />
+                  </Field>
+                </div>
                 <Field label="Latitude">
                   <Input value={form.latitude || ""} onChange={(e) => set("latitude", parseFloat(e.target.value) || "")} className="rounded-xl" placeholder="Auto-fill" type="number" step="any" />
                 </Field>
