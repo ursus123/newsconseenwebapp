@@ -86,6 +86,23 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
     set("business_model", current.includes(model) ? current.filter((m) => m !== model) : [...current, model]);
   };
 
+  const geocodeAddress = async () => {
+    const parts = [form.primary_address, form.city, form.region, form.country].filter(Boolean);
+    if (parts.length === 0) return;
+    setGeocoding(true);
+    const result = await base44.integrations.Core.InvokeLLM({
+      prompt: `Given this address: "${parts.join(", ")}", return the latitude and longitude as numbers. If the address is incomplete, do your best estimate based on the city/country.`,
+      response_json_schema: {
+        type: "object",
+        properties: { latitude: { type: "number" }, longitude: { type: "number" } }
+      }
+    });
+    if (result?.latitude && result?.longitude) {
+      setForm(f => ({ ...f, latitude: result.latitude, longitude: result.longitude }));
+    }
+    setGeocoding(false);
+  };
+
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
