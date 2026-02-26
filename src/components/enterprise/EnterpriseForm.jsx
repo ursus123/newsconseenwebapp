@@ -6,9 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Save, X, Plus, Trash2, Upload, Building2, Tag, MapPin, Users, Activity, Shield, FileText, Link2, Loader2 } from "lucide-react";
+import { Save, X, Plus, Trash2, Upload, Building2, Tag, MapPin, Users, Activity, Shield, FileText, Link2, Loader2, Search, UserPlus } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
+import { useQuery } from "@tanstack/react-query";
 
 const TABS = [
   { id: "basic", label: "Basic Info", icon: Building2 },
@@ -50,11 +51,66 @@ function Sel({ value, onChange, options, placeholder }) {
   );
 }
 
+// Person picker with search + create fallback
+function PersonPicker({ onSelect, excludeNames = [] }) {
+  const [query, setQuery] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  const { data: people = [] } = useQuery({
+    queryKey: ["people-picker"],
+    queryFn: () => base44.entities.Person.list(),
+  });
+
+  const filtered = people.filter((p) => {
+    const full = `${p.first_name} ${p.last_name}`.toLowerCase();
+    return full.includes(query.toLowerCase()) && !excludeNames.includes(`${p.first_name} ${p.last_name}`);
+  });
+
+  return (
+    <div className="relative">
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <Input
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setShowDropdown(true); }}
+            onFocus={() => setShowDropdown(true)}
+            placeholder="Search people..."
+            className="rounded-xl pl-8 text-sm h-9"
+          />
+        </div>
+        <Button type="button" variant="outline" size="sm" className="rounded-xl h-9 shrink-0"
+          onClick={() => onSelect({ isNew: true, name: query })}>
+          <UserPlus className="w-3.5 h-3.5 mr-1" /> New
+        </Button>
+      </div>
+      {showDropdown && query && (
+        <div className="absolute z-50 top-10 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg max-h-40 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-slate-400">No match — click "New" to create</div>
+          ) : (
+            filtered.map((p) => (
+              <button key={p.id} type="button"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 hover:text-emerald-700"
+                onClick={() => { onSelect({ isNew: false, person: p, name: `${p.first_name} ${p.last_name}` }); setShowDropdown(false); setQuery(""); }}>
+                {p.first_name} {p.last_name}
+                {p.primary_role && <span className="text-xs text-slate-400 ml-2">({p.primary_role})</span>}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, initialData }) {
   const [activeTab, setActiveTab] = useState("basic");
   const [form, setForm] = useState({});
   const [uploading, setUploading] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
+  const [showOwnerPicker, setShowOwnerPicker] = useState(false);
+  const [showMgmtPicker, setShowMgmtPicker] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -76,7 +132,6 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
-  // Helpers for array fields
   const addItem = (key, item) => set(key, [...(form[key] || []), item]);
   const removeItem = (key, idx) => set(key, (form[key] || []).filter((_, i) => i !== idx));
   const updateItem = (key, idx, field, val) => set(key, (form[key] || []).map((item, i) => i === idx ? { ...item, [field]: val } : item));
@@ -86,12 +141,21 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
     set("business_model", current.includes(model) ? current.filter((m) => m !== model) : [...current, model]);
   };
 
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    set("attachment_urls", [...(form.attachment_urls || []), file_url]);
+    setUploading(false);
+  };
+
   const geocodeAddress = async () => {
     const parts = [form.primary_address, form.city, form.region, form.country].filter(Boolean);
     if (parts.length === 0) return;
     setGeocoding(true);
     const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `Given this address: "${parts.join(", ")}", return the latitude and longitude as numbers. If the address is incomplete, do your best estimate based on the city/country.`,
+      prompt: `Given this address: "${parts.join(", ")}", return the latitude and longitude as numbers.`,
       response_json_schema: {
         type: "object",
         properties: { latitude: { type: "number" }, longitude: { type: "number" } }
@@ -103,13 +167,67 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
     setGeocoding(false);
   };
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setUploading(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    set("attachment_urls", [...(form.attachment_urls || []), file_url]);
-    setUploading(false);
+  // Handle picking an owner (existing or new)
+  const handleOwnerSelect = async (selection) => {
+    setShowOwnerPicker(false);
+    let personName = selection.name;
+
+    if (selection.isNew && selection.name) {
+      // Create a new Person record with type employee, role owners
+      const nameParts = selection.name.trim().split(" ");
+      const newPerson = await base44.entities.Person.create({
+        first_name: nameParts[0] || selection.name,
+        last_name: nameParts.slice(1).join(" ") || "",
+        person_type: "employee",
+        primary_role: "Owner",
+      });
+      personName = `${newPerson.first_name} ${newPerson.last_name}`;
+    }
+
+    // Add to owners list and also create a Relationship record
+    addItem("owners", { person_name: personName, role: "Owner", since: new Date().getFullYear().toString() });
+
+    // Create Relationship
+    if (form.enterprise_name) {
+      await base44.entities.Relationship.create({
+        relationship_type: "person_enterprise",
+        person_name: personName,
+        enterprise_name: form.enterprise_name,
+        role: "Owner",
+        status: "active",
+        start_date: new Date().toISOString().split("T")[0],
+      });
+    }
+  };
+
+  // Handle picking a management person
+  const handleMgmtSelect = async (selection, roleTitle) => {
+    setShowMgmtPicker(false);
+    let personName = selection.name;
+
+    if (selection.isNew && selection.name) {
+      const nameParts = selection.name.trim().split(" ");
+      const newPerson = await base44.entities.Person.create({
+        first_name: nameParts[0] || selection.name,
+        last_name: nameParts.slice(1).join(" ") || "",
+        person_type: "employee",
+        primary_role: roleTitle || "Manager",
+      });
+      personName = `${newPerson.first_name} ${newPerson.last_name}`;
+    }
+
+    addItem("management_roles", { role: roleTitle || "", assigned_person: personName });
+
+    if (form.enterprise_name) {
+      await base44.entities.Relationship.create({
+        relationship_type: "person_enterprise",
+        person_name: personName,
+        enterprise_name: form.enterprise_name,
+        role: roleTitle || "Manager",
+        status: "active",
+        start_date: new Date().toISOString().split("T")[0],
+      });
+    }
   };
 
   const handleSubmit = (e) => {
@@ -254,10 +372,19 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Owners</p>
                 <Button type="button" variant="outline" size="sm" className="rounded-xl text-xs h-7"
-                  onClick={() => addItem("owners", { person_name: "", role: "Owner", since: "" })}>
-                  <Plus className="w-3 h-3 mr-1" /> Link Person
+                  onClick={() => setShowOwnerPicker((v) => !v)}>
+                  <Plus className="w-3 h-3 mr-1" /> Link / Add Person
                 </Button>
               </div>
+              {showOwnerPicker && (
+                <div className="mb-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <p className="text-xs text-slate-500 mb-2">Search existing people or click "New" to create</p>
+                  <PersonPicker
+                    excludeNames={(form.owners || []).map((o) => o.person_name)}
+                    onSelect={handleOwnerSelect}
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 {(form.owners || []).map((o, i) => (
                   <div key={i} className="flex gap-2 items-center bg-slate-50 rounded-xl p-2">
@@ -267,17 +394,26 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
                     <button type="button" onClick={() => removeItem("owners", i)} className="text-slate-400 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 ))}
-                {(form.owners || []).length === 0 && <p className="text-xs text-slate-400 py-3 text-center">No owners linked yet</p>}
+                {(form.owners || []).length === 0 && !showOwnerPicker && <p className="text-xs text-slate-400 py-3 text-center">No owners linked yet</p>}
               </div>
             </div>
             <div>
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Management Roles</p>
                 <Button type="button" variant="outline" size="sm" className="rounded-xl text-xs h-7"
-                  onClick={() => addItem("management_roles", { role: "", assigned_person: "" })}>
+                  onClick={() => setShowMgmtPicker((v) => !v)}>
                   <Plus className="w-3 h-3 mr-1" /> Add Role
                 </Button>
               </div>
+              {showMgmtPicker && (
+                <div className="mb-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <p className="text-xs text-slate-500 mb-2">Search existing people or create a new one</p>
+                  <PersonPicker
+                    excludeNames={(form.management_roles || []).map((r) => r.assigned_person)}
+                    onSelect={(sel) => handleMgmtSelect(sel, "")}
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 {(form.management_roles || []).map((r, i) => (
                   <div key={i} className="flex gap-2 items-center bg-slate-50 rounded-xl p-2">
@@ -286,7 +422,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
                     <button type="button" onClick={() => removeItem("management_roles", i)} className="text-slate-400 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 ))}
-                {(form.management_roles || []).length === 0 && <p className="text-xs text-slate-400 py-3 text-center">No management roles added yet</p>}
+                {(form.management_roles || []).length === 0 && !showMgmtPicker && <p className="text-xs text-slate-400 py-3 text-center">No management roles added yet</p>}
               </div>
             </div>
           </div>
@@ -363,7 +499,6 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
                 {(form.insurance || []).length === 0 && <p className="text-xs text-slate-400 py-2 text-center">No insurance added</p>}
               </div>
             </div>
-            {/* Risk Flags */}
             <div className="bg-amber-50 rounded-xl p-4">
               <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2">Risk Flags</p>
               <div className="space-y-1.5 text-sm text-slate-600">
@@ -412,6 +547,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
             </Field>
           </div>
         );
+
       case "relationships":
         return (
           <RelatedEntitiesPanel
@@ -430,7 +566,6 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl w-full p-0 overflow-hidden max-h-[92vh]">
-        {/* Header */}
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-slate-100">
           <div className="flex items-center justify-between">
             <div>
@@ -447,7 +582,6 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
 
         <form onSubmit={handleSubmit}>
           <div className="flex overflow-hidden">
-            {/* Tab Nav */}
             <div className="bg-slate-50/60 px-3 py-4 shrink-0 border-r border-slate-100 min-h-[460px]">
               {TABS.map((t) => {
                 const Icon = t.icon;
@@ -463,7 +597,6 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
               })}
             </div>
 
-            {/* Content */}
             <div className="flex-1 px-6 py-5 overflow-y-auto max-h-[460px]">
               <div className="mb-4">
                 <h3 className="text-sm font-semibold text-slate-700">{TABS.find((t) => t.id === activeTab)?.label}</h3>
@@ -473,7 +606,6 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
             </div>
           </div>
 
-          {/* Footer */}
           <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/40">
             <div className="flex gap-2">
               {currentIdx > 0 && (
