@@ -54,6 +54,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
   const [activeTab, setActiveTab] = useState("basic");
   const [form, setForm] = useState({});
   const [uploading, setUploading] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
 
   useEffect(() => {
     if (open) {
