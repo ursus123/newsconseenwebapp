@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { triggerAttendanceTransaction } from "@/components/shared/triggerTaskTransaction";
+import { queryEnterprises } from "@/components/shared/masterDataQuery";
 import { format, differenceInMinutes } from "date-fns";
 import { Clock, LogIn, LogOut, ArrowRightLeft, CheckCircle2, AlertCircle, ChevronLeft, X, MapPin, Building2 } from "lucide-react";
 import { Link } from "react-router-dom";

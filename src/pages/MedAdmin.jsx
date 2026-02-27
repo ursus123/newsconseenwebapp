@@ -15,6 +15,7 @@ import MedProfileTab from "@/components/medadmin/MedProfileTab";
 import NotificationCenter from "@/components/medadmin/NotificationCenter";
 import MedAlertModal from "@/components/medadmin/MedAlertModal";
 import { useMedNotifications } from "@/components/medadmin/useMedNotifications";
+import { queryPatients, queryProducts, queryEnterprises, queryAddresses } from "@/components/shared/masterDataQuery";
 
 export default function MedAdmin() {
   const [user, setUser] = useState(null);
