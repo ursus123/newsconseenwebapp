@@ -197,9 +197,10 @@ export default function ClockInOut() {
     enabled: !!user?.email,
   });
 
+  // Safe read-only query via master data layer (Tier 1 fields only)
   const { data: enterprises = [] } = useQuery({
-    queryKey: ["enterprises"],
-    queryFn: () => base44.entities.Enterprise.list(),
+    queryKey: ["enterprises-app"],
+    queryFn: () => queryEnterprises({ status: "active" }),
     enabled: !!user,
   });
 

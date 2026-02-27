@@ -38,32 +38,28 @@ export default function MedAdmin() {
     }
   }, [notifications, alertNotification]);
 
-  const { data: allPeople = [] } = useQuery({
+  // Safe read-only queries via master data layer (field-filtered per tier)
+  const { data: people = [] } = useQuery({
     queryKey: ["med-people"],
-    queryFn: () => base44.entities.Person.filter({ status: "active" }),
+    queryFn: () => queryPatients(),           // Tier 2: includes certifications, expiry
     enabled: !!user,
   });
 
-  // Prefer patients/care recipients, fall back to all active people
-  const people = allPeople.filter((p) => p.person_type === "patient").length > 0
-    ? allPeople.filter((p) => p.person_type === "patient")
-    : allPeople;
-
   const { data: products = [] } = useQuery({
     queryKey: ["med-products"],
-    queryFn: () => base44.entities.Product.filter({ status: "active" }),
+    queryFn: () => queryProducts({ tier: 2 }), // Tier 2: includes dosage, expiry, side effects
     enabled: !!user,
   });
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["med-enterprises"],
-    queryFn: () => base44.entities.Enterprise.filter({ status: "active" }),
+    queryFn: () => queryEnterprises({ status: "active" }), // Tier 1: name, status, address
     enabled: !!user,
   });
 
   const { data: addresses = [] } = useQuery({
     queryKey: ["med-addresses"],
-    queryFn: () => base44.entities.Address.filter({ status: "active" }),
+    queryFn: () => queryAddresses(),           // Tier 1: label, location fields
     enabled: !!user,
   });
 
