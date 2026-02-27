@@ -29,8 +29,9 @@ const columns = [
   { key: "transaction_type", label: "Type", render: (val) => <Badge className={typeColor(val)}>{(val || "—").replace(/_/g, " ")}</Badge> },
   { key: "date", label: "Date", render: (v) => v ? format(new Date(v), "MMM d, yyyy") : "—" },
   { key: "enterprise", label: "Enterprise" },
+  { key: "primary_person", label: "Person", render: (v, row) => v || row.assigned_person || "—" },
+  { key: "counterparty", label: "Counterparty", render: (v, row) => v || row.supplier_customer || "—" },
   { key: "amount", label: "Total", render: (v) => v != null ? `$${parseFloat(v).toLocaleString()}` : "—" },
-  { key: "supplier_customer", label: "Party" },
   { key: "status", label: "Status", render: (val) => <Badge className={statusColor(val)}>{(val || "draft").replace(/_/g, " ")}</Badge> },
 ];
 
