@@ -134,6 +134,7 @@ function AdminDashboard({ user }) {
   const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service) });
   const { data: transactions = [] } = useQuery({ queryKey: ["transactions", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.Transaction.list("-date", 100) : base44.entities.Transaction.filter({ company_id: companyId }, "-date", 100) });
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks", companyId], queryFn: () => listFn(base44.entities.Task) });
+  const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.User.list() : base44.entities.User.filter({ company_id: companyId }) });
 
   const totalIncome = transactions
     .filter((t) => t.transaction_type === "sale_service")
