@@ -340,7 +340,16 @@ export default function Tasks() {
 
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks", companyId], queryFn: () => listFn(base44.entities.Task), enabled: currentUser !== null });
   const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.User.list() : base44.entities.User.filter({ company_id: companyId }), enabled: isAdmin });
+  const qc = useQueryClient();
   const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId], queryFn: () => listFn(base44.entities.Enterprise), enabled: isAdmin });
+
+  // Refresh enterprise list in real-time when new enterprises are added
+  useEffect(() => {
+    const unsub = base44.entities.Enterprise.subscribe(() => {
+      qc.invalidateQueries({ queryKey: ["enterprises"] });
+    });
+    return unsub;
+  }, []);
   const { data: products = [] } = useQuery({ queryKey: ["products", companyId], queryFn: () => listFn(base44.entities.Product), enabled: isAdmin });
   const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service), enabled: isAdmin });
   const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person), enabled: isAdmin });
