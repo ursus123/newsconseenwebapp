@@ -169,8 +169,31 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const withCompany = (d) => companyId && !isSuperAdmin ? { ...d, company_id: companyId } : d;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Task.create(withCompany(d)), onSuccess: () => { invalidate(); setFormOpen(false); } });
-  const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Task.update(id, data), onSuccess: () => { invalidate(); setFormOpen(false); setEditing(null); } });
+
+  // Step 2 → Step 3: after saving a completed task, auto-trigger transaction if flagged
+  const afterSave = async (task) => {
+    if (task.status === "completed" && task.trigger_transaction) {
+      await triggerTaskTransaction(task, null);
+    }
+    invalidate();
+  };
+
+  const createMut = useMutation({
+    mutationFn: async (d) => {
+      const task = await base44.entities.Task.create(withCompany(d));
+      await afterSave(task);
+      return task;
+    },
+    onSuccess: () => { setFormOpen(false); },
+  });
+  const updateMut = useMutation({
+    mutationFn: async ({ id, data }) => {
+      const task = await base44.entities.Task.update(id, data);
+      await afterSave(task);
+      return task;
+    },
+    onSuccess: () => { setFormOpen(false); setEditing(null); },
+  });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Task.delete(id), onSuccess: () => { invalidate(); setDeleting(null); } });
 
   const filtered = tasks.filter((t) => {
