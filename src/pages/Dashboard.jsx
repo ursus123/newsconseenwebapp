@@ -166,6 +166,8 @@ function AdminDashboard({ user }) {
         </div>
         <RecentActivity transactions={transactions} />
       </div>
+
+      <TeamActivity tasks={tasks} appUsers={appUsers} />
     </div>
   );
 }
