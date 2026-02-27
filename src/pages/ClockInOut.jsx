@@ -236,18 +236,24 @@ export default function ClockInOut() {
   };
 
   const createTask = useMutation({
-    mutationFn: (data) => base44.entities.Task.create({
-      task_type: data.task_type,
-      title: data.title,
-      status: "completed",
-      outcome: "completed",
-      outcome_notes: data.notes || null,
-      enterprise: data.enterprise || null,
-      assigned_to_email: user.email,
-      assigned_to_name: user.full_name || user.email,
-      scheduled_date: todayStr(),
-      scheduled_time: nowTimeStr(),
-    }),
+    mutationFn: async (data) => {
+      // Step 2: Create Task (intent layer)
+      const task = await base44.entities.Task.create({
+        task_type: data.task_type,
+        title: data.title,
+        status: "completed",
+        outcome: "completed",
+        outcome_notes: data.notes || null,
+        enterprise: data.enterprise || null,
+        assigned_to_email: user.email,
+        assigned_to_name: user.full_name || user.email,
+        scheduled_date: todayStr(),
+        scheduled_time: nowTimeStr(),
+      });
+      // Step 3: Trigger Transaction (fact layer) — attendance only
+      await triggerAttendanceTransaction(data.task_type, task, user);
+      return task;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["clock-tasks"] }),
   });
 
