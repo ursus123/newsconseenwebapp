@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
@@ -6,6 +6,7 @@ import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import ServiceForm from "../components/services/ServiceForm";
 import { Badge } from "@/components/ui/badge";
+import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 
 const statusColor = (s) => ({
   active: "bg-emerald-50 text-emerald-700",
@@ -30,11 +31,21 @@ export default function Services() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
 
-  const { data: services = [] } = useQuery({ queryKey: ["services"], queryFn: () => base44.entities.Service.list("-created_date") });
+  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Service.create(d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setFormOpen(false); } });
+  const listFn = useEntityListFn(currentUser);
+  const withScope = useWithScope(currentUser);
+
+  const { data: services = [] } = useQuery({
+    queryKey: ["services", currentUser?.company_id, currentUser?.email],
+    queryFn: () => listFn(base44.entities.Service),
+    enabled: currentUser !== null,
+  });
+
+  const createMut = useMutation({ mutationFn: (d) => base44.entities.Service.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setFormOpen(false); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Service.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setFormOpen(false); setEditing(null); } });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Service.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setDeleting(null); } });
 
