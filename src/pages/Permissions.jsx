@@ -60,6 +60,12 @@ const LAYERS = [
       { key: "can_edit",    label: "Edit",    desc: "Modify existing records" },
       { key: "can_archive", label: "Archive", desc: "Deactivate without deleting" },
     ],
+    adminFields: [
+      { key: "can_view",    label: "View",    desc: "View own enterprise master records", alwaysOn: true },
+      { key: "can_create",  label: "Create",  desc: "Add master records in own enterprise only" },
+      { key: "can_edit",    label: "Edit",    desc: "Edit own enterprise records only" },
+      { key: "can_archive", label: "Archive", desc: "Archive own enterprise records only" },
+    ],
   },
   {
     key: "layer2_relationships",
