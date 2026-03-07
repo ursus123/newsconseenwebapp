@@ -176,6 +176,15 @@ function InviteForm({ enterprises, isSuperAdmin, currentUser, onSuccess }) {
       await base44.users.inviteUser(form.email, form.role);
       // Determine company_id: super_admin can specify it manually, admin inherits their own
       const effectiveCompanyId = isSuperAdmin ? (form.company_id || undefined) : (currentUser?.company_id || undefined);
+      // Save a PendingInvitation so the automation can stamp company_id when the user registers
+      if (effectiveCompanyId) {
+        await base44.entities.PendingInvitation.create({
+          email: form.email,
+          company_id: effectiveCompanyId,
+          role: form.role,
+          invited_by: currentUser?.email,
+        });
+      }
       await base44.entities.Person.create({
         first_name: form.first_name, last_name: form.last_name, email: form.email,
         phone: form.phone || undefined, person_type: "employee", status: "active",
