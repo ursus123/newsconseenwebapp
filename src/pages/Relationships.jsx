@@ -49,7 +49,11 @@ export default function Relationships() {
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
+  const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
+
+  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
+  const perms = usePermissions(currentUser);
 
   const { data: relationships = [] } = useQuery({ queryKey: ["relationships"], queryFn: () => base44.entities.Relationship.list("-created_date") });
   const { data: people = [] } = useQuery({ queryKey: ["people"], queryFn: () => base44.entities.Person.list() });
