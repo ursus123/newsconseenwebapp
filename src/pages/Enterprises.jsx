@@ -53,14 +53,16 @@ export default function Enterprises() {
   const isSuperAdmin = currentUser?.role === "super_admin";
   const companyId = currentUser?.company_id;
   const perms = usePermissions(currentUser);
+  const listFn = useEntityListFn(currentUser);
+  const withScope = useWithScope(currentUser);
 
   const { data: enterprises = [] } = useQuery({
-    queryKey: ["enterprises", companyId],
-    queryFn: () => isSuperAdmin || !companyId ? base44.entities.Enterprise.list("-created_date") : base44.entities.Enterprise.filter({ company_id: companyId }, "-created_date"),
+    queryKey: ["enterprises", companyId, currentUser?.email],
+    queryFn: () => listFn(base44.entities.Enterprise),
     enabled: currentUser !== null,
   });
 
-  const withCompany = (d) => companyId && !isSuperAdmin ? { ...d, company_id: companyId } : d;
+  const withCompany = withScope;
 
   const createMut = useMutation({ mutationFn: (d) => base44.entities.Enterprise.create(withCompany(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); setFormOpen(false); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Enterprise.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); setFormOpen(false); setEditing(null); } });

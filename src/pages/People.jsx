@@ -58,14 +58,16 @@ export default function People() {
   const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
   const companyId = currentUser?.company_id;
   const perms = usePermissions(currentUser);
+  const listFn = useEntityListFn(currentUser);
+  const withScope = useWithScope(currentUser);
 
   const { data: people = [] } = useQuery({
-    queryKey: ["people", companyId],
-    queryFn: () => isSuperAdmin || !companyId ? base44.entities.Person.list("-created_date") : base44.entities.Person.filter({ company_id: companyId }, "-created_date"),
+    queryKey: ["people", companyId, currentUser?.email],
+    queryFn: () => listFn(base44.entities.Person),
     enabled: currentUser !== null,
   });
 
-  const withCompany = (d) => companyId && !isSuperAdmin ? { ...d, company_id: companyId } : d;
+  const withCompany = withScope;
 
   const createMut = useMutation({ mutationFn: (d) => base44.entities.Person.create(withCompany(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); qc.invalidateQueries({ queryKey: ["addresses"] }); qc.invalidateQueries({ queryKey: ["relationships"] }); setFormOpen(false); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Person.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setFormOpen(false); setEditing(null); } });

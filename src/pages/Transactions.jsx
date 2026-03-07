@@ -49,6 +49,8 @@ export default function Transactions() {
   const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
   const companyId = currentUser?.company_id;
   const perms = usePermissions(currentUser);
+  const listFn = useEntityListFn(currentUser);
+  const withScope = useWithScope(currentUser);
 
   // Layer 4: users need at least l4_view; if no view access, block
   if (currentUser && !perms.l4_view && !isAdmin) {
@@ -61,12 +63,12 @@ export default function Transactions() {
   }
 
   const { data: transactions = [] } = useQuery({
-    queryKey: ["transactions", companyId],
-    queryFn: () => isSuperAdmin || !companyId ? base44.entities.Transaction.list("-date") : base44.entities.Transaction.filter({ company_id: companyId }, "-date"),
+    queryKey: ["transactions", companyId, currentUser?.email],
+    queryFn: () => listFn(base44.entities.Transaction, "-date"),
     enabled: currentUser !== null,
   });
 
-  const withCompany = (d) => companyId && !isSuperAdmin ? { ...d, company_id: companyId } : d;
+  const withCompany = withScope;
 
   // Layer 4 rules: drafts → anyone with l4_create_draft; post/void → l4_post / l4_void
   const createMut = useMutation({ mutationFn: (d) => base44.entities.Transaction.create(withCompany(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setFormOpen(false); } });
