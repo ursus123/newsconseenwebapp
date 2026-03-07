@@ -179,8 +179,19 @@ export default function Layout({ children, currentPageName }) {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="ml-2 lg:ml-0">
+          <div className="ml-2 lg:ml-0 flex items-center gap-3">
             <h2 className="text-lg font-semibold text-slate-800">{currentPageName}</h2>
+            {currentUser && (
+              currentUser.role === "super_admin" ? (
+                <span className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold">
+                  <Globe className="w-3 h-3" /> All Enterprises
+                </span>
+              ) : currentUser.company_id ? (
+                <span className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
+                  <Building2 className="w-3 h-3" /> {currentUser.company_id}
+                </span>
+              ) : null
+            )}
           </div>
         </header>
 
