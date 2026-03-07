@@ -169,9 +169,9 @@ function AdminDashboard({ user }) {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2">
-          <RevenueChart transactions={transactions} />
+          <RevenueChart transactions={postedTransactions} />
         </div>
-        <RecentActivity transactions={transactions} />
+        <RecentActivity transactions={postedTransactions} />
       </div>
 
       <TeamActivity tasks={tasks} appUsers={appUsers} />
