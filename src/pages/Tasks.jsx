@@ -302,9 +302,9 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
               </div>
               <div className="space-y-3">
                 {col.items.map((task) => (
-                  <TaskCard key={task.id} task={task} onEdit={openEdit} onDelete={(t) => setDeleting(t)} isAdmin={true} />
-                ))}
-                {col.items.length === 0 && (
+                  <TaskCard key={task.id} task={task} onEdit={perms.l3_create ? openEdit : undefined} onDelete={perms.can_delete ? (t) => setDeleting(t) : undefined} isAdmin={perms.l3_create} />
+                  ))}
+                  {col.items.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-slate-100 rounded-2xl">
                     <CheckCircle className="w-6 h-6 text-slate-200 mb-1" />
                     <p className="text-xs text-slate-300">No tasks</p>
