@@ -161,7 +161,7 @@ function UserAppCard({ user, accessRecord, allReports, onSave, saving }) {
   );
 }
 
-function InviteForm({ enterprises, isSuperAdmin, onSuccess }) {
+function InviteForm({ enterprises, isSuperAdmin, currentUser, onSuccess }) {
   const [form, setForm] = useState({ first_name: "", last_name: "", email: "", phone: "", enterprise_name: "", company_id: "", role: "user" });
   const [status, setStatus] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
