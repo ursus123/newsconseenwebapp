@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
@@ -6,6 +6,7 @@ import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import AddressForm from "../components/addresses/AddressForm";
 import { Badge } from "@/components/ui/badge";
+import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 
 const statusColor = (s) => ({
   active: "bg-emerald-50 text-emerald-700",
@@ -29,11 +30,21 @@ export default function Addresses() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
 
-  const { data: addresses = [] } = useQuery({ queryKey: ["addresses"], queryFn: () => base44.entities.Address.list("-created_date") });
+  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Address.create(d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); setFormOpen(false); } });
+  const listFn = useEntityListFn(currentUser);
+  const withScope = useWithScope(currentUser);
+
+  const { data: addresses = [] } = useQuery({
+    queryKey: ["addresses", currentUser?.company_id, currentUser?.email],
+    queryFn: () => listFn(base44.entities.Address),
+    enabled: currentUser !== null,
+  });
+
+  const createMut = useMutation({ mutationFn: (d) => base44.entities.Address.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); setFormOpen(false); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Address.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); setFormOpen(false); setEditing(null); } });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Address.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); setDeleting(null); } });
 
