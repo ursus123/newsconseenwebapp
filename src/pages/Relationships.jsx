@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, Building2, Package } from "lucide-react";
 import { usePermissions } from "@/components/shared/usePermissions";
+import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 
 const TYPE_CONFIG = {
   person_enterprise: { label: "Person → Enterprise", color: "bg-blue-50 text-blue-700" },
@@ -54,13 +55,15 @@ export default function Relationships() {
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
   const perms = usePermissions(currentUser);
+  const listFn = useEntityListFn(currentUser);
+  const withScope = useWithScope(currentUser);
 
-  const { data: relationships = [] } = useQuery({ queryKey: ["relationships"], queryFn: () => base44.entities.Relationship.list("-created_date") });
-  const { data: people = [] } = useQuery({ queryKey: ["people"], queryFn: () => base44.entities.Person.list() });
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises"], queryFn: () => base44.entities.Enterprise.list() });
-  const { data: products = [] } = useQuery({ queryKey: ["products"], queryFn: () => base44.entities.Product.list() });
+  const { data: relationships = [] } = useQuery({ queryKey: ["relationships", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Relationship), enabled: currentUser !== null });
+  const { data: people = [] } = useQuery({ queryKey: ["people", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Person), enabled: currentUser !== null });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Enterprise), enabled: currentUser !== null });
+  const { data: products = [] } = useQuery({ queryKey: ["products", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Product), enabled: currentUser !== null });
 
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Relationship.create(d), onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); setFormOpen(false); } });
+  const createMut = useMutation({ mutationFn: (d) => base44.entities.Relationship.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); setFormOpen(false); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Relationship.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); setFormOpen(false); setEditing(null); } });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Relationship.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); setDeleting(null); } });
 
