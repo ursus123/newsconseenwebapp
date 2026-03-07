@@ -174,9 +174,12 @@ function InviteForm({ enterprises, isSuperAdmin, currentUser, onSuccess }) {
     setErrorMsg("");
     try {
       await base44.users.inviteUser(form.email, form.role);
+      // Determine company_id: super_admin can specify it manually, admin inherits their own
+      const effectiveCompanyId = isSuperAdmin ? (form.company_id || undefined) : (currentUser?.company_id || undefined);
       await base44.entities.Person.create({
         first_name: form.first_name, last_name: form.last_name, email: form.email,
         phone: form.phone || undefined, person_type: "employee", status: "active",
+        company_id: effectiveCompanyId,
         internal_notes: form.enterprise_name ? `Enterprise: ${form.enterprise_name}` : undefined,
       });
       setStatus("success");
