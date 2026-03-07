@@ -7,10 +7,19 @@
  *  - admin without company_id → sees records they created (created_by = their email)
  *  - regular user  → same as admin (their own records)
  */
+/**
+ * Shared data-scoping logic.
+ *
+ * Rules:
+ *  - super_admin  → sees ALL records (no filter)
+ *  - admin (any)  → sees ALL records (no filter) — they manage the whole system
+ *  - user with company_id → sees records scoped to their company_id
+ *  - user without company_id → sees records they created (created_by = their email)
+ */
 export function buildQuery(currentUser, extraFilters = {}) {
   if (!currentUser) return null;
-  const isSuperAdmin = currentUser.role === "super_admin";
-  if (isSuperAdmin) return extraFilters; // no scope restriction
+  const isAdmin = currentUser.role === "admin" || currentUser.role === "super_admin";
+  if (isAdmin) return extraFilters; // no scope restriction
   if (currentUser.company_id) return { company_id: currentUser.company_id, ...extraFilters };
   return { created_by: currentUser.email, ...extraFilters };
 }
@@ -22,8 +31,8 @@ export function buildQuery(currentUser, extraFilters = {}) {
 export function useEntityListFn(currentUser) {
   return (entity, sort = "-created_date") => {
     if (!currentUser) return Promise.resolve([]);
-    const isSuperAdmin = currentUser.role === "super_admin";
-    if (isSuperAdmin) return entity.list(sort);
+    const isAdmin = currentUser.role === "admin" || currentUser.role === "super_admin";
+    if (isAdmin) return entity.list(sort);
     if (currentUser.company_id) return entity.filter({ company_id: currentUser.company_id }, sort);
     return entity.filter({ created_by: currentUser.email }, sort);
   };
@@ -34,9 +43,10 @@ export function useEntityListFn(currentUser) {
  */
 export function useWithScope(currentUser) {
   return (data) => {
-    if (!currentUser || currentUser.role === "super_admin") return data;
+    if (!currentUser) return data;
+    const isAdmin = currentUser.role === "admin" || currentUser.role === "super_admin";
+    if (isAdmin) return data; // admins don't need scope stamping
     if (currentUser.company_id) return { ...data, company_id: currentUser.company_id };
-    // No company_id — created_by is stamped automatically by the platform, nothing extra needed
     return data;
   };
 }
