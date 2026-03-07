@@ -49,12 +49,12 @@ export default function Transactions() {
   const companyId = currentUser?.company_id;
   const perms = usePermissions(currentUser);
 
-  // Only admins and super_admins may access Transactions
-  if (currentUser && !isAdmin) {
+  // Layer 4: users need at least l4_view; if no view access, block
+  if (currentUser && !perms.l4_view && !isAdmin) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-400">
         <Lock className="w-8 h-8" />
-        <p className="font-medium">Transactions are restricted to administrators.</p>
+        <p className="font-medium">You don't have access to Transactions.</p>
       </div>
     );
   }
@@ -67,6 +67,7 @@ export default function Transactions() {
 
   const withCompany = (d) => companyId && !isSuperAdmin ? { ...d, company_id: companyId } : d;
 
+  // Layer 4 rules: drafts → anyone with l4_create_draft; post/void → l4_post / l4_void
   const createMut = useMutation({ mutationFn: (d) => base44.entities.Transaction.create(withCompany(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setFormOpen(false); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Transaction.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); } });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Transaction.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setDeleting(null); } });
@@ -75,15 +76,15 @@ export default function Transactions() {
     <div>
       <PageHeader
         title="Transactions"
-        subtitle="Record stock movements, assignments, sales & expenses"
-        onAdd={perms.can_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
+        subtitle="Record what actually happened — auditable & reversible"
+        onAdd={perms.l4_create_draft ? () => { setEditing(null); setFormOpen(true); } : undefined}
         addLabel="New Transaction"
       />
       <DataTable
         columns={columns}
         data={transactions}
         searchField="enterprise"
-        onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
+        onEdit={perms.l4_create_draft ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
         onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
       />
       <TransactionForm

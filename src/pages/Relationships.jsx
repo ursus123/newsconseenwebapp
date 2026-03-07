@@ -8,6 +8,9 @@ import RelationshipForm from "../components/relationships/RelationshipForm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, Building2, Package } from "lucide-react";
+import { usePermissions } from "@/components/shared/usePermissions";
+import { useState as useStateUser, useEffect } from "react";
+import { base44 as base44Auth } from "@/api/base44Client";
 
 const TYPE_CONFIG = {
   person_enterprise: { label: "Person → Enterprise", color: "bg-blue-50 text-blue-700" },
