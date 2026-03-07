@@ -16,12 +16,16 @@ import { taskTypeLabel } from "../components/tasks/TaskForm";
 
 // ── Worker Dashboard — only shows their tasks ────────────────────────────────
 function WorkerDashboard({ user }) {
+  const companyId = user?.company_id;
   const { data: tasks = [] } = useQuery({
-    queryKey: ["tasks"],
-    queryFn: () => base44.entities.Task.list("-created_date"),
+    queryKey: ["tasks", companyId, user?.email],
+    queryFn: () => companyId
+      ? base44.entities.Task.filter({ company_id: companyId, assigned_to_email: user.email }, "-created_date")
+      : base44.entities.Task.filter({ assigned_to_email: user?.email }, "-created_date"),
+    enabled: !!user,
   });
 
-  const myTasks = tasks.filter((t) => t.assigned_to_email === user?.email);
+  const myTasks = tasks;
   const open = myTasks.filter((t) => t.status === "open" || t.status === "in_progress");
   const overdue = myTasks.filter((t) => {
     if (!t.due_date) return false;
