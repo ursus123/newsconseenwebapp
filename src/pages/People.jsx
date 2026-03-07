@@ -101,7 +101,7 @@ export default function People() {
       <PageHeader
         title="People"
         subtitle="Manage your team members, contractors and staff"
-        onAdd={perms.can_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
+        onAdd={perms.l1_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
         addLabel="Add Person"
       />
 
@@ -111,14 +111,14 @@ export default function People() {
         <PeopleGroupedView
           people={processedPeople}
           groupBy={groupBy}
-          onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
+          onEdit={perms.l1_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
           onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
         />
       ) : (
         <DataTable
           columns={columns}
           data={processedPeople}
-          onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
+          onEdit={perms.l1_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
           onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
         />
       )}
