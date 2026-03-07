@@ -16,7 +16,8 @@ import {
   ChevronRight,
   LogOut,
   Link2,
-  ShieldCheck
+  ShieldCheck,
+  Globe
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { usePermissions, DEFAULT_PAGES } from "@/components/shared/usePermissions";
