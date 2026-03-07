@@ -49,6 +49,7 @@ export default function Reports() {
   React.useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+  // Layer 5: dashboards/reports are read-only for users; only admins create/edit
 
   const { data: reports = [] } = useQuery({ queryKey: ["reports"], queryFn: () => base44.entities.Report.list("-created_date") });
 
