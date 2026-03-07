@@ -354,6 +354,7 @@ export default function UserManagement() {
       <InviteForm
         enterprises={enterprises}
         isSuperAdmin={isSuperAdmin}
+        currentUser={currentUser}
         onSuccess={() => qc.invalidateQueries({ queryKey: ["appUsers"] })}
       />
 
