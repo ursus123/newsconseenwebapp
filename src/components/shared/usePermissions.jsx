@@ -19,6 +19,10 @@ export const DEFAULT_PAGES = {
 
 const SUPER_ADMIN_PERMS = {
   allowedPages: null,
+  isSuperAdmin: true,
+  isAdmin: false,
+  isUser: false,
+  companyId: null,
   // Layer 1 — Master Data
   l1_view: true, l1_create: true, l1_edit: true, l1_archive: true,
   // Layer 2 — Relationships
