@@ -8,6 +8,7 @@ import PeopleForm from "../components/people/PeopleForm";
 import PeopleToolbar from "../components/people/PeopleToolbar";
 import PeopleGroupedView from "../components/people/PeopleGroupedView";
 import { usePermissions } from "@/components/shared/usePermissions";
+import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Badge } from "@/components/ui/badge";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 

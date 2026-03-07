@@ -6,6 +6,7 @@ import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import ProductForm from "../components/products/ProductForm";
 import { usePermissions } from "@/components/shared/usePermissions";
+import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Badge } from "@/components/ui/badge";
 
 const statusColor = (s) => {

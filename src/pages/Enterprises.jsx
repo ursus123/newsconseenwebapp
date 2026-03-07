@@ -7,6 +7,7 @@ import DeleteDialog from "../components/shared/DeleteDialog";
 import EnterpriseForm from "../components/enterprise/EnterpriseForm";
 import EnterpriseToolbar from "../components/enterprise/EnterpriseToolbar";
 import { usePermissions } from "@/components/shared/usePermissions";
+import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Badge } from "@/components/ui/badge";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 
