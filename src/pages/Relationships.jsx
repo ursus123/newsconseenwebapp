@@ -85,18 +85,20 @@ export default function Relationships() {
     <div>
       <PageHeader title="Relationships" subtitle="Assign people, items and enterprises — preserve history" />
 
-      {/* Quick-add buttons */}
-      <div className="flex flex-wrap gap-3 mb-6">
-        <Button onClick={() => openNew("person_enterprise")} className="bg-blue-600 hover:bg-blue-700 rounded-xl shadow shadow-blue-500/20">
-          <Users className="w-4 h-4 mr-2" /> Assign Person → Enterprise
-        </Button>
-        <Button onClick={() => openNew("item_enterprise")} className="bg-purple-600 hover:bg-purple-700 rounded-xl shadow shadow-purple-500/20">
-          <Building2 className="w-4 h-4 mr-2" /> Assign Item → Enterprise
-        </Button>
-        <Button onClick={() => openNew("item_person")} className="bg-amber-500 hover:bg-amber-600 rounded-xl shadow shadow-amber-500/20">
-          <Package className="w-4 h-4 mr-2" /> Assign Item → Person
-        </Button>
-      </div>
+      {/* Quick-add buttons — Layer 2: l2_assign required */}
+      {perms.l2_assign && (
+        <div className="flex flex-wrap gap-3 mb-6">
+          <Button onClick={() => openNew("person_enterprise")} className="bg-blue-600 hover:bg-blue-700 rounded-xl shadow shadow-blue-500/20">
+            <Users className="w-4 h-4 mr-2" /> Assign Person → Enterprise
+          </Button>
+          <Button onClick={() => openNew("item_enterprise")} className="bg-purple-600 hover:bg-purple-700 rounded-xl shadow shadow-purple-500/20">
+            <Building2 className="w-4 h-4 mr-2" /> Assign Item → Enterprise
+          </Button>
+          <Button onClick={() => openNew("item_person")} className="bg-amber-500 hover:bg-amber-600 rounded-xl shadow shadow-amber-500/20">
+            <Package className="w-4 h-4 mr-2" /> Assign Item → Person
+          </Button>
+        </div>
+      )}
 
       {/* Filter tabs */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mb-6 w-fit">
