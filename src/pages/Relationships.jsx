@@ -116,8 +116,8 @@ export default function Relationships() {
         columns={columns}
         data={filtered}
         searchField="person_name"
-        onEdit={(row) => { setEditing(row); setFormType(row.relationship_type); setFormOpen(true); }}
-        onDelete={(row) => setDeleting(row)}
+        onEdit={perms.l2_assign ? (row) => { setEditing(row); setFormType(row.relationship_type); setFormOpen(true); } : undefined}
+        onDelete={perms.l2_unassign ? (row) => setDeleting(row) : undefined}
       />
 
       <RelationshipForm
