@@ -8,6 +8,7 @@ import StatCard from "../components/dashboard/StatCard";
 import RevenueChart from "../components/dashboard/RevenueChart";
 import RecentActivity from "../components/dashboard/RecentActivity";
 import TeamActivity from "../components/dashboard/TeamActivity";
+import AnalyticsEngagement from "../components/dashboard/AnalyticsEngagement";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { format, isToday, isPast, parseISO } from "date-fns";
