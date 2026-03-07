@@ -221,18 +221,21 @@ function PermissionCard({ title, subtitle, icon: Icon, roleKey, perm, onSave, av
       <div>
         <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3">Permission Layers</p>
         <div className="space-y-3">
-          {LAYERS.map((layer) => (
-            <LayerCard
-              key={layer.key}
-              layerNumber={layer.layerNumber}
-              title={layer.title}
-              subtitle={layer.subtitle}
-              color={layer.color}
-              fields={layer.fields}
-              values={local[layer.key]}
-              onChange={(fieldKey, val) => setLayerFlag(layer.key, fieldKey, val)}
-            />
-          ))}
+          {LAYERS.map((layer) => {
+            const fields = (roleKey === "admin" && layer.adminFields) ? layer.adminFields : layer.fields;
+            return (
+              <LayerCard
+                key={layer.key}
+                layerNumber={layer.layerNumber}
+                title={layer.title}
+                subtitle={layer.subtitle}
+                color={layer.color}
+                fields={fields}
+                values={local[layer.key]}
+                onChange={(fieldKey, val) => setLayerFlag(layer.key, fieldKey, val)}
+              />
+            );
+          })}
         </div>
       </div>
 
