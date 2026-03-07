@@ -110,6 +110,10 @@ export function usePermissions(user) {
 
   return {
     allowedPages,
+    isSuperAdmin: false,
+    isAdmin: role === "admin",
+    isUser: role === "user",
+    companyId,
     ...flattenLayers(myPerm, roleDefaults),
   };
 }
