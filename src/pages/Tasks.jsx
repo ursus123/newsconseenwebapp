@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
+import { usePermissions } from "@/components/shared/usePermissions";
 import { triggerTaskTransaction } from "../components/shared/triggerTaskTransaction";
 import TaskForm, { taskTypeLabel } from "../components/tasks/TaskForm";
 import DeleteDialog from "../components/shared/DeleteDialog";
@@ -223,7 +224,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
       <PageHeader
         title="Tasks"
         subtitle="Assign and manage tasks for app users"
-        onAdd={() => { setEditing(null); setFormOpen(true); }}
+        onAdd={perms.l3_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
         addLabel="Assign Task"
       />
 
@@ -322,7 +323,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
             </div>
           ) : (
             filtered.map((task) => (
-              <TaskCard key={task.id} task={task} onEdit={openEdit} onDelete={(t) => setDeleting(t)} isAdmin={true} />
+              <TaskCard key={task.id} task={task} onEdit={perms.l3_create ? openEdit : undefined} onDelete={perms.can_delete ? (t) => setDeleting(t) : undefined} isAdmin={perms.l3_create} />
             ))
           )}
         </div>
@@ -400,6 +401,7 @@ export default function Tasks() {
         addresses={addresses}
         companyId={companyId}
         isSuperAdmin={isSuperAdmin}
+        currentUser={currentUser}
       />
     );
   }
