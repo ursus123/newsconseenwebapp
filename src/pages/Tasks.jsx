@@ -168,8 +168,9 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const [filterAddress, setFilterAddress] = useState("");
   const qc = useQueryClient();
   const perms = usePermissions(currentUser);
+  const withScope = useWithScope(currentUser);
 
-  const withCompany = (d) => companyId && !isSuperAdmin ? { ...d, company_id: companyId } : d;
+  const withCompany = withScope;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
 
