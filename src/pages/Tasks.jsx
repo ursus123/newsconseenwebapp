@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
 import { usePermissions } from "@/components/shared/usePermissions";
+import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { triggerTaskTransaction } from "../components/shared/triggerTaskTransaction";
 import TaskForm, { taskTypeLabel } from "../components/tasks/TaskForm";
 import DeleteDialog from "../components/shared/DeleteDialog";
@@ -359,15 +360,12 @@ export default function Tasks() {
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
   const isSuperAdmin = currentUser?.role === "super_admin";
   const companyId = currentUser?.company_id;
+  const listFn = useEntityListFn(currentUser);
 
-  const listFn = (entity, sort = "-created_date") => isSuperAdmin || !companyId
-    ? entity.list(sort)
-    : entity.filter({ company_id: companyId }, sort);
-
-  const { data: tasks = [] } = useQuery({ queryKey: ["tasks", companyId], queryFn: () => listFn(base44.entities.Task), enabled: currentUser !== null });
+  const { data: tasks = [] } = useQuery({ queryKey: ["tasks", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Task), enabled: currentUser !== null });
   const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.User.list() : base44.entities.User.filter({ company_id: companyId }), enabled: isAdmin });
   const qcRoot = useQueryClient();
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId], queryFn: () => listFn(base44.entities.Enterprise), enabled: isAdmin });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Enterprise), enabled: isAdmin });
 
   // Refresh enterprise list in real-time when new enterprises are added
   useEffect(() => {
@@ -376,10 +374,10 @@ export default function Tasks() {
     });
     return unsub;
   }, []);
-  const { data: products = [] } = useQuery({ queryKey: ["products", companyId], queryFn: () => listFn(base44.entities.Product), enabled: isAdmin });
-  const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service), enabled: isAdmin });
-  const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person), enabled: isAdmin });
-  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", companyId], queryFn: () => listFn(base44.entities.Address), enabled: isAdmin });
+  const { data: products = [] } = useQuery({ queryKey: ["products", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Product), enabled: isAdmin });
+  const { data: services = [] } = useQuery({ queryKey: ["services", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Service), enabled: isAdmin });
+  const { data: people = [] } = useQuery({ queryKey: ["people", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Person), enabled: isAdmin });
+  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Address), enabled: isAdmin });
 
   if (loadingUser) {
     return (
