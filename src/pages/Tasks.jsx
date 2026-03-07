@@ -156,7 +156,7 @@ function MyTasksList({ tasks }) {
 }
 
 // Admin view: kanban + filters + full CRUD
-function AdminTasksView({ tasks, appUsers, enterprises, products, services, people, addresses, companyId, isSuperAdmin }) {
+function AdminTasksView({ tasks, appUsers, enterprises, products, services, people, addresses, companyId, isSuperAdmin, currentUser }) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
@@ -165,6 +165,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const [filterEnterprise, setFilterEnterprise] = useState("");
   const [filterAddress, setFilterAddress] = useState("");
   const qc = useQueryClient();
+  const perms = usePermissions(currentUser);
 
   const withCompany = (d) => companyId && !isSuperAdmin ? { ...d, company_id: companyId } : d;
 
