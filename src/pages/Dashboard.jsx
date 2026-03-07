@@ -141,10 +141,12 @@ function AdminDashboard({ user }) {
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks", companyId], queryFn: () => listFn(base44.entities.Task) });
   const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.User.list() : base44.entities.User.filter({ company_id: companyId }) });
 
-  const totalIncome = transactions
+  // Rule 5 — dashboards must only reflect Posted transactions
+  const postedTransactions = transactions.filter((t) => t.status === "posted");
+  const totalIncome = postedTransactions
     .filter((t) => t.transaction_type === "sale_service")
     .reduce((s, t) => s + (t.amount || 0), 0);
-  const totalExpense = transactions
+  const totalExpense = postedTransactions
     .filter((t) => t.transaction_type === "expense")
     .reduce((s, t) => s + (t.amount || 0), 0);
   const openTasks = tasks.filter((t) => t.status === "open" || t.status === "in_progress").length;
