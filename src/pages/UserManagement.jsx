@@ -385,6 +385,11 @@ export default function UserManagement() {
     saveMut.mutate({ user, selectedApps, selectedReports, record });
   };
 
+  const handleAssignCompany = async (user, companyId) => {
+    await base44.entities.User.update(user.id, { company_id: companyId || null });
+    qc.invalidateQueries({ queryKey: ["appUsers"] });
+  };
+
   if (!currentUser) return null;
 
   if (!isAdmin) {
