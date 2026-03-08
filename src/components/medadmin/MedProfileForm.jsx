@@ -1,23 +1,78 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { X, Save, Plus, Trash2, Loader2, Search } from "lucide-react";
+import { X, Save, Plus, Trash2, Loader2, Search, Zap } from "lucide-react";
+
+// Fetch drug suggestions from OpenFDA
+async function fetchFdaDrugs(query) {
+  if (!query || query.length < 2) return [];
+  const url = `https://api.fda.gov/drug/label.json?search=openfda.brand_name:"${encodeURIComponent(query)}"&limit=5`;
+  const res = await fetch(url);
+  if (!res.ok) return [];
+  const json = await res.json();
+  return (json.results || []).map((r) => {
+    const openfda = r.openfda || {};
+    const brandName = openfda.brand_name?.[0] || "";
+    const genericName = openfda.generic_name?.[0] || "";
+    const strength = openfda.strength?.[0] || r.dosage_and_administration_table?.[0] || "";
+    const route = openfda.route?.[0]?.toLowerCase() || "";
+    const dosageInstructions = r.dosage_and_administration?.[0] || "";
+    const indication = r.indications_and_usage?.[0] || "";
+    const warnings = r.warnings?.[0] || "";
+    return { brandName, genericName, strength, route, dosageInstructions, indication, warnings, _source: "fda" };
+  }).filter((d) => d.brandName);
+}
 
 function MedSearchInput({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState(value || "");
+  const [fdaResults, setFdaResults] = useState([]);
+  const [fdaLoading, setFdaLoading] = useState(false);
+  const debounceRef = useRef(null);
+
   const { data: products = [] } = useQuery({
     queryKey: ["products-med"],
     queryFn: () => base44.entities.Product.list(),
   });
-  const filtered = products.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
 
-  const handleSelect = (p) => {
+  const filteredProducts = products.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
+
+  // Debounced FDA search
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (q.length < 2) { setFdaResults([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      setFdaLoading(true);
+      const results = await fetchFdaDrugs(q);
+      setFdaResults(results);
+      setFdaLoading(false);
+    }, 400);
+  }, [q]);
+
+  const handleSelectProduct = (p) => {
     setQ(p.name);
     onChange(p.name, p);
     setOpen(false);
   };
+
+  const handleSelectFda = (drug) => {
+    const name = drug.brandName;
+    setQ(name);
+    // Build autofill payload similar to a product record
+    const autofill = {
+      _fdaAutofill: true,
+      strength: drug.strength,
+      route: drug.route,
+      dosage_instructions: drug.dosageInstructions,
+      indication: drug.indication,
+      side_effects: drug.warnings,
+    };
+    onChange(name, autofill);
+    setOpen(false);
+  };
+
+  const showDropdown = open && (filteredProducts.length > 0 || fdaResults.length > 0 || fdaLoading);
 
   return (
     <div className="relative">
@@ -27,25 +82,50 @@ function MedSearchInput({ value, onChange }) {
           value={q}
           onChange={(e) => { setQ(e.target.value); onChange(e.target.value, null); setOpen(true); }}
           onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Search from inventory or type name…"
+          onBlur={() => setTimeout(() => setOpen(false), 200)}
+          placeholder="Search inventory or drug database…"
           className={INPUT + " pl-8"}
         />
+        {fdaLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-400 animate-spin" />}
       </div>
-      {open && filtered.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-          {filtered.slice(0, 10).map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onMouseDown={() => handleSelect(p)}
-              className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 text-gray-800 border-b border-gray-50 last:border-0"
-            >
-              <span className="font-medium">{p.name}</span>
-              {p.sku && <span className="text-xs text-gray-400 ml-2">SKU: {p.sku}</span>}
-              {p.batch_number && <span className="text-xs text-orange-500 ml-2">Batch: {p.batch_number}</span>}
-            </button>
-          ))}
+      {showDropdown && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+          {/* Inventory results */}
+          {filteredProducts.length > 0 && (
+            <>
+              <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50 border-b border-gray-100">Your Inventory</div>
+              {filteredProducts.slice(0, 5).map((p) => (
+                <button key={p.id} type="button" onMouseDown={() => handleSelectProduct(p)}
+                  className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 text-gray-800 border-b border-gray-50 last:border-0">
+                  <span className="font-medium">{p.name}</span>
+                  {p.sku && <span className="text-xs text-gray-400 ml-2">SKU: {p.sku}</span>}
+                </button>
+              ))}
+            </>
+          )}
+          {/* FDA results */}
+          {fdaResults.length > 0 && (
+            <>
+              <div className="px-3 py-1.5 text-[10px] font-bold text-blue-500 uppercase tracking-wider bg-blue-50 border-b border-blue-100 flex items-center gap-1">
+                <Zap className="w-3 h-3" /> OpenFDA Drug Database
+              </div>
+              {fdaResults.map((drug, i) => (
+                <button key={i} type="button" onMouseDown={() => handleSelectFda(drug)}
+                  className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 text-gray-800 border-b border-gray-50 last:border-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-blue-700">{drug.brandName}</span>
+                    <span className="text-[10px] bg-blue-100 text-blue-600 rounded px-1.5 py-0.5 font-bold">FDA</span>
+                  </div>
+                  {drug.genericName && <p className="text-xs text-gray-400 mt-0.5">{drug.genericName}{drug.strength ? ` · ${drug.strength}` : ""}{drug.route ? ` · ${drug.route}` : ""}</p>}
+                </button>
+              ))}
+            </>
+          )}
+          {fdaLoading && (
+            <div className="px-3 py-3 text-xs text-gray-400 flex items-center gap-2">
+              <Loader2 className="w-3 h-3 animate-spin" /> Searching drug database…
+            </div>
+          )}
         </div>
       )}
     </div>
