@@ -77,12 +77,14 @@ function ReportToggle({ report, selected, onToggle }) {
   );
 }
 
-function UserAppCard({ user, accessRecord, allReports, onSave, saving }) {
+function UserAppCard({ user, accessRecord, allReports, onSave, saving, enterprises, onAssignCompany, isSuperAdmin, currentUser }) {
   const initialApps = accessRecord?.allowed_apps ?? [];
   const initialReports = accessRecord?.allowed_reports ?? [];
   const [selectedApps, setSelectedApps] = useState(initialApps);
   const [selectedReports, setSelectedReports] = useState(initialReports);
   const [reportsOpen, setReportsOpen] = useState(false);
+  const [companyId, setCompanyId] = useState(user.company_id || "");
+  const [assigningCompany, setAssigningCompany] = useState(false);
 
   useEffect(() => {
     setSelectedApps(accessRecord?.allowed_apps ?? []);
