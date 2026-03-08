@@ -243,8 +243,20 @@ function InviteForm({ enterprises, isSuperAdmin, currentUser, onSuccess }) {
           </div>
         </Field>
         {isSuperAdmin && (
-          <Field label="Company ID">
-            <Input value={form.company_id} onChange={(e) => set("company_id", e.target.value)} className="rounded-xl" placeholder="e.g. chilohcare" />
+          <Field label="Company (Enterprise)">
+            <div className="relative">
+              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 z-10 pointer-events-none" />
+              <Select value={form.company_id} onValueChange={(v) => set("company_id", v)}>
+                <SelectTrigger className="rounded-xl pl-9">
+                  <SelectValue placeholder="Assign to enterprise..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {enterprises.map((e) => (
+                    <SelectItem key={e.id} value={e.enterprise_name}>{e.enterprise_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </Field>
         )}
         <Field label="Role" required>
