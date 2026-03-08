@@ -94,6 +94,17 @@ function UserAppCard({ user, accessRecord, allReports, onSave, saving, enterpris
   const toggleApp = (id) => setSelectedApps((s) => s.includes(id) ? s.filter((a) => a !== id) : [...s, id]);
   const toggleReport = (id) => setSelectedReports((s) => s.includes(id) ? s.filter((r) => r !== id) : [...s, id]);
 
+  const handleAssignCompany = async () => {
+    setAssigningCompany(true);
+    await onAssignCompany(user, companyId);
+    setAssigningCompany(false);
+  };
+
+  // For admins, the only assignable company is their own
+  const assignableEnterprises = isSuperAdmin
+    ? enterprises
+    : enterprises.filter((e) => e.enterprise_name === currentUser?.company_id);
+
   const isDirty =
     JSON.stringify([...selectedApps].sort()) !== JSON.stringify([...initialApps].sort()) ||
     JSON.stringify([...selectedReports].sort()) !== JSON.stringify([...initialReports].sort());
