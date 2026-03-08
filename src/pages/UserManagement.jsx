@@ -455,6 +455,10 @@ export default function UserManagement() {
                   allReports={allReports}
                   onSave={handleSave}
                   saving={savingEmail === u.email}
+                  enterprises={enterprises}
+                  onAssignCompany={handleAssignCompany}
+                  isSuperAdmin={isSuperAdmin}
+                  currentUser={currentUser}
                 />
               );
             })}
