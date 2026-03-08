@@ -128,6 +128,33 @@ function UserAppCard({ user, accessRecord, allReports, onSave, saving, enterpris
       </div>
 
       <div className="space-y-2">
+        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Enterprise</p>
+        <div className="flex gap-2">
+          <Select value={companyId} onValueChange={setCompanyId}>
+            <SelectTrigger className="rounded-xl flex-1 text-sm">
+              <SelectValue placeholder="Assign enterprise..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={null}>— None —</SelectItem>
+              {assignableEnterprises.map((e) => (
+                <SelectItem key={e.id} value={e.enterprise_name}>{e.enterprise_name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {companyId !== (user.company_id || "") && (
+            <Button
+              size="sm"
+              onClick={handleAssignCompany}
+              disabled={assigningCompany}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl shrink-0"
+            >
+              {assigningCompany ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2">
         <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Apps</p>
         {ALL_APPS.map((app) => (
           <AppToggle key={app.id} app={app} selected={selectedApps} onToggle={toggleApp} />
