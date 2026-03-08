@@ -193,6 +193,7 @@ export default function MedProfileForm({ client, existing, onClose, onSuccess })
           item_type: "consumable",
           category: "health_beauty",
           status: "active",
+          ...(currentUser?.company_id && { company_id: currentUser.company_id }),
           ...(form.strength && { sku: form.strength }),
           ...(form.instructions && { dosage_instructions: form.instructions }),
           ...(form.notes && { side_effects: form.notes }),
