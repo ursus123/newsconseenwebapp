@@ -47,12 +47,23 @@ export default function Products() {
   const withScope = useWithScope(currentUser);
 
   const { data: products = [] } = useQuery({
-    queryKey: ["products", companyId, currentUser?.email],
-    queryFn: () => listFn(base44.entities.Product),
+    queryKey: ["products", currentUser?.role, companyId, currentUser?.email],
+    queryFn: async () => {
+      if (!currentUser) return [];
+      if (currentUser.role === "super_admin") return base44.entities.Product.list("-created_date");
+      if (currentUser.company_id) {
+        const [byCompany, byUser] = await Promise.all([
+          base44.entities.Product.filter({ company_id: currentUser.company_id }, "-created_date"),
+          base44.entities.Product.filter({ created_by: currentUser.email }, "-created_date"),
+        ]);
+        const seen = new Set();
+        return [...byCompany, ...byUser].filter((r) => { if (seen.has(r.id)) return false; seen.add(r.id); return true; });
+      }
+      return base44.entities.Product.filter({ created_by: currentUser.email }, "-created_date");
+    },
     enabled: currentUser !== null,
     staleTime: 0,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    refetchOnMount: "always",
   });
 
   const withCompany = withScope;
