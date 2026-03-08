@@ -166,17 +166,48 @@ export default function MedProfileForm({ client, existing, onClose, onSuccess })
 
   const handleSave = async () => {
     setLoading(true);
+    const clientFullName = `${client.first_name} ${client.last_name}`;
     const payload = {
       ...form,
       client_id: client.id,
-      client_name: `${client.first_name} ${client.last_name}`,
+      client_name: clientFullName,
       refills_remaining: form.refills_remaining !== "" ? Number(form.refills_remaining) : undefined,
     };
+
     if (existing) {
       await base44.entities.MedicationProfile.update(existing.id, payload);
     } else {
+      // 1. Save MedicationProfile
       await base44.entities.MedicationProfile.create(payload);
+
+      // 2. Upsert into Products table (only if not already there)
+      const existingProducts = await base44.entities.Product.filter({ name: form.medication_name });
+      let productRecord = existingProducts[0];
+      if (!productRecord) {
+        productRecord = await base44.entities.Product.create({
+          name: form.medication_name,
+          item_type: "consumable",
+          category: "health_beauty",
+          status: "active",
+          ...(form.strength && { sku: form.strength }),
+          ...(form.instructions && { dosage_instructions: form.instructions }),
+          ...(form.notes && { side_effects: form.notes }),
+          ...(form.rx_number && { batch_number: form.rx_number }),
+        });
+      }
+
+      // 3. Create Relationship: item_person (medication ↔ client/patient)
+      await base44.entities.Relationship.create({
+        relationship_type: "item_person",
+        status: "active",
+        item_name: form.medication_name,
+        person_name: clientFullName,
+        role: "patient",
+        start_date: form.start_date || new Date().toISOString().split("T")[0],
+        notes: `Medication assigned via MedAdmin. Rx: ${form.rx_number || "N/A"}`,
+      });
     }
+
     setLoading(false);
     onSuccess();
   };
