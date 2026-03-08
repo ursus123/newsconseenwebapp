@@ -50,6 +50,9 @@ export default function Products() {
     queryKey: ["products", companyId, currentUser?.email],
     queryFn: () => listFn(base44.entities.Product),
     enabled: currentUser !== null,
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   const withCompany = withScope;
