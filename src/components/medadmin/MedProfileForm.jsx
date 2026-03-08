@@ -157,6 +157,9 @@ export default function MedProfileForm({ client, existing, onClose, onSuccess })
     start_date: format(new Date(), "yyyy-MM-dd"),
   });
   const [loading, setLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   const set = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
