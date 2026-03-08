@@ -11,7 +11,20 @@ export function useEntityListFn(currentUser) {
   return (entity, sort = "-created_date") => {
     if (!currentUser) return Promise.resolve([]);
     if (currentUser.role === "super_admin") return entity.list(sort);
-    if (currentUser.company_id) return entity.filter({ company_id: currentUser.company_id }, sort);
+    if (currentUser.company_id) {
+      // Return records scoped to this company OR created by this user
+      return Promise.all([
+        entity.filter({ company_id: currentUser.company_id }, sort),
+        entity.filter({ created_by: currentUser.email }, sort),
+      ]).then(([byCompany, byUser]) => {
+        const seen = new Set();
+        return [...byCompany, ...byUser].filter((r) => {
+          if (seen.has(r.id)) return false;
+          seen.add(r.id);
+          return true;
+        });
+      });
+    }
     // Fallback: no enterprise assigned yet — show only own records
     return entity.filter({ created_by: currentUser.email }, sort);
   };
