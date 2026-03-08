@@ -202,7 +202,15 @@ export default function MedProfileForm({ client, existing, onClose, onSuccess })
               value={form.medication_name}
               onChange={(name, product) => {
                 set("medication_name", name);
-                if (product) {
+                if (product?._fdaAutofill) {
+                  // Autofill from OpenFDA
+                  if (product.strength) set("strength", product.strength);
+                  if (product.route) set("route", product.route);
+                  if (product.dosage_instructions) set("instructions", product.dosage_instructions.slice(0, 500));
+                  if (product.indication) set("indication", product.indication.slice(0, 300));
+                  if (product.side_effects) set("notes", `Side effects: ${product.side_effects.slice(0, 300)}`);
+                } else if (product) {
+                  // Autofill from local inventory
                   if (product.dosage_instructions && !form.instructions) set("instructions", product.dosage_instructions);
                   if (product.side_effects && !form.notes) set("notes", `Side effects: ${product.side_effects}`);
                   if (product.batch_number && !form.rx_number) set("rx_number", product.batch_number);
