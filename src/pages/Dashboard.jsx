@@ -161,7 +161,7 @@ function AdminDashboard({ user }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
         <StatCard title="People" value={people.length} icon={Users} color="blue" subtitle={`${people.filter(p => p.status === "active").length} active`} />
         <StatCard title="Enterprises" value={enterprises.length} icon={Building2} color="purple" subtitle={`${enterprises.filter(e => e.status === "active").length} active`} />
-        <StatCard title="Products" value={products.length} icon={Package} color="amber" subtitle={`${products.filter(p => (p.stock_quantity || 0) <= (p.min_stock_level || 0)).length} low stock`} />
+
 
       </div>
 
