@@ -211,8 +211,7 @@ function AdminDashboard({ user }) {
         </div>
       )}
 
-      <TeamActivity tasks={tasks} appUsers={appUsers} />
-      <AnalyticsEngagement />
+
     </div>
   );
 }
