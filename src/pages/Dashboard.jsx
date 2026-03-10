@@ -174,6 +174,52 @@ function AdminDashboard({ user }) {
         <RecentActivity transactions={postedTransactions} />
       </div>
 
+      {/* Enterprise Profiles */}
+      {enterprises.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-slate-700">Enterprise Profiles</h2>
+            <Link to={createPageUrl("Enterprises")} className="text-xs text-emerald-600 hover:underline font-medium">Manage →</Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {enterprises.map((e) => {
+              const statusColor = { active: "bg-emerald-50 text-emerald-700", inactive: "bg-slate-100 text-slate-500", prospect: "bg-amber-50 text-amber-700", archived: "bg-slate-100 text-slate-400" };
+              const opColor = { open: "bg-emerald-400", closed: "bg-rose-400", temporarily_closed: "bg-amber-400", seasonal: "bg-blue-400" };
+              return (
+                <Card key={e.id} className="p-5 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
+                        <Building2 className="w-5 h-5 text-purple-500" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-800 text-sm leading-tight">{e.enterprise_name}</p>
+                        {e.short_name && <p className="text-xs text-slate-400">{e.short_name}</p>}
+                      </div>
+                    </div>
+                    <Badge className={statusColor[e.status] || "bg-slate-100 text-slate-500"}>{e.status || "active"}</Badge>
+                  </div>
+                  {e.enterprise_type && (
+                    <p className="text-xs text-slate-500 mb-2 capitalize">{e.enterprise_type.replace(/_/g, " ")}</p>
+                  )}
+                  <div className="space-y-1">
+                    {e.city && <p className="text-xs text-slate-400 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-300 inline-block" />{e.city}{e.country ? `, ${e.country}` : ""}</p>}
+                    {e.phone && <p className="text-xs text-slate-400 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-300 inline-block" />{e.phone}</p>}
+                    {e.email && <p className="text-xs text-slate-400 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-300 inline-block" />{e.email}</p>}
+                  </div>
+                  {e.operating_status && (
+                    <div className="mt-3 flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${opColor[e.operating_status] || "bg-slate-300"}`} />
+                      <span className="text-[11px] text-slate-500 capitalize">{e.operating_status.replace(/_/g, " ")}</span>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <TeamActivity tasks={tasks} appUsers={appUsers} />
       <AnalyticsEngagement />
     </div>
