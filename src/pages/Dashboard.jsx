@@ -131,21 +131,7 @@ function AdminDashboard({ user }) {
 
   const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person) });
   const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId], queryFn: () => listFn(base44.entities.Enterprise) });
-  const { data: products = [] } = useQuery({ queryKey: ["products", companyId], queryFn: () => listFn(base44.entities.Product) });
-  const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service) });
-  const { data: transactions = [] } = useQuery({ queryKey: ["transactions", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.Transaction.list("-date", 100) : base44.entities.Transaction.filter({ company_id: companyId }, "-date", 100) });
-  const { data: tasks = [] } = useQuery({ queryKey: ["tasks", companyId], queryFn: () => listFn(base44.entities.Task) });
-  const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.User.list() : base44.entities.User.filter({ company_id: companyId }) });
 
-  // Rule 5 — dashboards must only reflect Posted transactions
-  const postedTransactions = transactions.filter((t) => t.status === "posted");
-  const totalIncome = postedTransactions
-    .filter((t) => t.transaction_type === "sale_service")
-    .reduce((s, t) => s + (t.amount || 0), 0);
-  const totalExpense = postedTransactions
-    .filter((t) => t.transaction_type === "expense")
-    .reduce((s, t) => s + (t.amount || 0), 0);
-  const openTasks = tasks.filter((t) => t.status === "open" || t.status === "in_progress").length;
 
   return (
     <div className="space-y-8">
