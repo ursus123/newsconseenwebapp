@@ -246,6 +246,28 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
                 { value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }, { value: "on_leave", label: "On Leave" },
               ]} />
             </Field>
+            <Field label="Date of Birth">
+              <Input value={form.date_of_birth || ""} onChange={(e) => set("date_of_birth", e.target.value)} className="rounded-xl" type="date" />
+            </Field>
+            <Field label="Gender">
+              <SelectField value={form.gender} onChange={(v) => set("gender", v)} options={[
+                { value: "male", label: "Male" },
+                { value: "female", label: "Female" },
+                { value: "non_binary", label: "Non-binary" },
+                { value: "prefer_not_to_say", label: "Prefer not to say" },
+              ]} placeholder="Select gender..." />
+            </Field>
+            <Field label="ID / National ID Number">
+              <Input value={form.national_id || ""} onChange={(e) => set("national_id", e.target.value)} className="rounded-xl" placeholder="e.g. passport, SSN, national ID" />
+            </Field>
+            <div className="col-span-2 grid grid-cols-2 gap-4">
+              <Field label="Height (cm)">
+                <Input value={form.height_cm || ""} onChange={(e) => set("height_cm", e.target.value ? parseFloat(e.target.value) : "")} className="rounded-xl" type="number" step="0.1" placeholder="e.g. 175" />
+              </Field>
+              <Field label="Weight (kg)">
+                <Input value={form.weight_kg || ""} onChange={(e) => set("weight_kg", e.target.value ? parseFloat(e.target.value) : "")} className="rounded-xl" type="number" step="0.1" placeholder="e.g. 70" />
+              </Field>
+            </div>
           </div>
         );
       case "roles":
