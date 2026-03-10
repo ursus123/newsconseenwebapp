@@ -165,13 +165,6 @@ function AdminDashboard({ user }) {
 
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2">
-          <RevenueChart transactions={postedTransactions} />
-        </div>
-        <RecentActivity transactions={postedTransactions} />
-      </div>
-
       {/* Enterprise Profiles */}
       {enterprises.length > 0 && (
         <div>
