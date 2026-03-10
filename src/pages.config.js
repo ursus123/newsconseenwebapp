@@ -64,6 +64,7 @@ import Services from './pages/Services';
 import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';
 import UserManagement from './pages/UserManagement';
+import QueryBuilder from './pages/QueryBuilder';
 import __Layout from './Layout.jsx';
 
 
@@ -85,6 +86,7 @@ export const PAGES = {
     "Tasks": Tasks,
     "Transactions": Transactions,
     "UserManagement": UserManagement,
+    "QueryBuilder": QueryBuilder,
 }
 
 export const pagesConfig = {
