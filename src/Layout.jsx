@@ -41,7 +41,10 @@ const ALL_NAV_PHASES = [
 },
 {
   label: "Phase 2 — Connections",
-  items: [{ name: "Relationships", icon: Link2, page: "Relationships" }]
+  items: [
+    { name: "Relationships", icon: Link2, page: "Relationships" },
+    { name: "Query Builder", icon: Database, page: "QueryBuilder" },
+  ]
 },
 {
   label: "Phase 3 — Operations",
