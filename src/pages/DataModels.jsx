@@ -296,7 +296,9 @@ const LAYER_COLORS = {
 export default function DataModels() {
   const [zoom, setZoom] = useState(0.85);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [dragging, setDragging] = useState(null);
+  const [panDrag, setPanDrag] = useState(null);       // canvas panning
+  const [nodeDrag, setNodeDrag] = useState(null);     // { id, startMouseX, startMouseY, startNodeX, startNodeY }
+  const [positions, setPositions] = useState(DEFAULT_POSITIONS);
   const [selectedTable, setSelectedTable] = useState(null);
   const [hoveredEdge, setHoveredEdge] = useState(null);
   const containerRef = useRef(null);
@@ -304,18 +306,36 @@ export default function DataModels() {
   const CANVAS_W = 1420;
   const CANVAS_H = 840;
 
-  const handleMouseDown = (e) => {
-    if (e.target === containerRef.current || e.target.tagName === "svg" || e.target.tagName === "rect") {
-      setDragging({ startX: e.clientX - pan.x, startY: e.clientY - pan.y });
+  // Canvas pan starts only on background clicks
+  const handleCanvasMouseDown = (e) => {
+    if (e.target === containerRef.current || e.target.tagName === "svg" || e.target.tagName === "rect" || e.target.tagName === "circle") {
+      setPanDrag({ startX: e.clientX - pan.x, startY: e.clientY - pan.y });
     }
   };
 
-  const handleMouseMove = useCallback((e) => {
-    if (!dragging) return;
-    setPan({ x: e.clientX - dragging.startX, y: e.clientY - dragging.startY });
-  }, [dragging]);
+  // Node drag start
+  const handleNodeMouseDown = (e, id) => {
+    e.stopPropagation();
+    const pos = positions[id];
+    setNodeDrag({ id, startMouseX: e.clientX, startMouseY: e.clientY, startNodeX: pos.x, startNodeY: pos.y });
+  };
 
-  const handleMouseUp = () => setDragging(null);
+  const handleMouseMove = useCallback((e) => {
+    if (nodeDrag) {
+      const dx = (e.clientX - nodeDrag.startMouseX) / zoom;
+      const dy = (e.clientY - nodeDrag.startMouseY) / zoom;
+      setPositions((prev) => ({
+        ...prev,
+        [nodeDrag.id]: { x: Math.max(0, nodeDrag.startNodeX + dx), y: Math.max(0, nodeDrag.startNodeY + dy) },
+      }));
+    } else if (panDrag) {
+      setPan({ x: e.clientX - panDrag.startX, y: e.clientY - panDrag.startY });
+    }
+  }, [nodeDrag, panDrag, zoom]);
+
+  const handleMouseUp = () => { setNodeDrag(null); setPanDrag(null); };
+
+  const dragging = panDrag || nodeDrag;
 
   const selected = selectedTable ? TABLES.find((t) => t.id === selectedTable) : null;
 
