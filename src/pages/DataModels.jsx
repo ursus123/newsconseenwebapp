@@ -257,20 +257,19 @@ function tableHeight(t) {
   return TABLE_H_BASE + t.fields.length * FIELD_H + 10;
 }
 
-function tableCenter(id) {
-  const p = POSITIONS[id];
+function getTableCenter(id, positions) {
+  const p = positions[id];
   const t = TABLES.find((x) => x.id === id);
   return { x: p.x + TABLE_W / 2, y: p.y + tableHeight(t) / 2 };
 }
 
-// Pick edge attachment point on border
-function edgePoint(fromId, toId, side) {
-  const p = POSITIONS[fromId];
+function getEdgePoint(fromId, toId, positions) {
+  const p = positions[fromId];
   const t = TABLES.find((x) => x.id === fromId);
   const h = tableHeight(t);
   const cx = p.x + TABLE_W / 2;
   const cy = p.y + h / 2;
-  const tc = tableCenter(toId);
+  const tc = getTableCenter(toId, positions);
 
   const dx = tc.x - cx;
   const dy = tc.y - cy;
