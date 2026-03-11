@@ -360,7 +360,7 @@ export default function DataModels() {
               <ZoomIn className="w-4 h-4" />
             </button>
           </div>
-          <button onClick={() => { setZoom(0.85); setPan({ x: 0, y: 0 }); }}
+          <button onClick={() => { setZoom(0.85); setPan({ x: 0, y: 0 }); setPositions(DEFAULT_POSITIONS); }}
             className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 transition-colors">
             <Maximize2 className="w-4 h-4" />
           </button>
