@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Save, X, Plus, Trash2, Upload, Building2, Tag, MapPin, Users, Activity, Shield, FileText, Link2, Loader2, Search, UserPlus, Landmark } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
-import OrgChartBuilder from "@/components/enterprise/OrgChartBuilder";
+import OrgManagementTab from "@/components/enterprise/OrgManagementTab";
 import { useQuery } from "@tanstack/react-query";
 
 const TABS = [
