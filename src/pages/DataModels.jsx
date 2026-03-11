@@ -234,8 +234,8 @@ const EDGES = [
   { from: "Address", to: "Person", label: "linked_people" },
 ];
 
-// ─── Layout positions ─────────────────────────────────────────────────────────
-const POSITIONS = {
+// ─── Default layout positions ─────────────────────────────────────────────────
+const DEFAULT_POSITIONS = {
   Enterprise:         { x: 420, y: 80 },
   Person:             { x: 780, y: 80 },
   Product:            { x: 60,  y: 280 },
