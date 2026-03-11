@@ -466,9 +466,10 @@ export default function DataModels() {
 
             {/* Table nodes */}
             {TABLES.map((table) => {
-              const pos = POSITIONS[table.id];
+              const pos = positions[table.id];
               const h = tableHeight(table);
               const isSelected = selectedTable === table.id;
+              const isDraggingThis = nodeDrag?.id === table.id;
               const layerCls = LAYER_COLORS[table.layer] || "";
               return (
                 <div
@@ -478,20 +479,15 @@ export default function DataModels() {
                     left: pos.x,
                     top: pos.y,
                     width: TABLE_W,
-                    zIndex: isSelected ? 20 : 5,
-                  }}
-                  className={`rounded-xl border-2 shadow-md cursor-pointer select-none transition-all duration-150
-                    ${isSelected ? "ring-2 ring-indigo-400 ring-offset-1 shadow-xl" : "hover:shadow-lg"}`}
-                  style={{
-                    position: "absolute",
-                    left: pos.x,
-                    top: pos.y,
-                    width: TABLE_W,
                     backgroundColor: table.bg,
                     borderColor: isSelected ? table.color : table.border,
-                    zIndex: isSelected ? 20 : 5,
+                    zIndex: isDraggingThis ? 50 : isSelected ? 20 : 5,
                   }}
-                  onClick={() => setSelectedTable(selectedTable === table.id ? null : table.id)}
+                  className={`rounded-xl border-2 shadow-md select-none
+                    ${isDraggingThis ? "shadow-2xl cursor-grabbing" : "cursor-grab hover:shadow-lg"}
+                    ${isSelected ? "ring-2 ring-indigo-400 ring-offset-1 shadow-xl" : ""}`}
+                  onMouseDown={(e) => handleNodeMouseDown(e, table.id)}
+                  onClick={() => { if (!nodeDrag) setSelectedTable(selectedTable === table.id ? null : table.id); }}
                 >
                   {/* Header */}
                   <div
