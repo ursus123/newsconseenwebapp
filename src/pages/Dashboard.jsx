@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Users, Package, ArrowLeftRight, ClipboardList, Building2, Clock, CheckCircle, AlertCircle, Calendar } from "lucide-react";
 import StatCard from "../components/dashboard/StatCard";
+import OnboardingChecklist from "../components/dashboard/OnboardingChecklist";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { format, isToday, isPast, parseISO } from "date-fns";

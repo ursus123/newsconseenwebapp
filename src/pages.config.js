@@ -52,6 +52,7 @@ import Addresses from './pages/Addresses';
 import Applications from './pages/Applications';
 import ClockInOut from './pages/ClockInOut';
 import Dashboard from './pages/Dashboard';
+import DataModels from './pages/DataModels';
 import Enterprises from './pages/Enterprises';
 import InviteUser from './pages/InviteUser';
 import MedAdmin from './pages/MedAdmin';
@@ -65,7 +66,6 @@ import Services from './pages/Services';
 import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';
 import UserManagement from './pages/UserManagement';
-import DataModels from './pages/DataModels';
 import __Layout from './Layout.jsx';
 
 
@@ -75,6 +75,7 @@ export const PAGES = {
     "Applications": Applications,
     "ClockInOut": ClockInOut,
     "Dashboard": Dashboard,
+    "DataModels": DataModels,
     "Enterprises": Enterprises,
     "InviteUser": InviteUser,
     "MedAdmin": MedAdmin,
@@ -88,7 +89,6 @@ export const PAGES = {
     "Tasks": Tasks,
     "Transactions": Transactions,
     "UserManagement": UserManagement,
-    "DataModels": DataModels,
 }
 
 export const pagesConfig = {
