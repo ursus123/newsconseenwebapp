@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Save, X, Plus, Trash2, Upload, Building2, Tag, MapPin, Users, Activity, Shield, FileText, Link2, Loader2, Search, UserPlus, Landmark } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
+import OrgChartBuilder from "@/components/enterprise/OrgChartBuilder";
 import { useQuery } from "@tanstack/react-query";
 
 const TABS = [
@@ -16,7 +17,7 @@ const TABS = [
   { id: "classification", label: "Classification", icon: Tag },
   { id: "contact", label: "Contact & Location", icon: MapPin },
   { id: "ownership", label: "Ownership & People", icon: Users },
-  { id: "org_management", label: "Org & Management", icon: Landmark },
+  { id: "org_management", label: "Organization and Management", icon: Landmark },
   { id: "operations", label: "Operations", icon: Activity },
   { id: "compliance", label: "Compliance & Risk", icon: Shield },
   { id: "notes", label: "Notes & Files", icon: FileText },
@@ -247,8 +248,8 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
             <Field label="Short Name / Code">
               <Input value={form.short_name || ""} onChange={(e) => set("short_name", e.target.value)} className="rounded-xl" placeholder="Optional" />
             </Field>
-            <Field label="Description">
-              <Textarea value={form.description || ""} onChange={(e) => set("description", e.target.value)} className="rounded-xl resize-none" rows={3} />
+            <Field label="Introduction to the Enterprise">
+              <Textarea value={form.description || ""} onChange={(e) => set("description", e.target.value)} className="rounded-xl resize-none" rows={3} placeholder="Introduce this enterprise — its mission, background, and purpose..." />
             </Field>
             <Field label="Status">
               <Sel value={form.status} onChange={(v) => set("status", v)} options={[
