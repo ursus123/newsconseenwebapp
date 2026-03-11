@@ -58,13 +58,14 @@ import MedAdmin from './pages/MedAdmin';
 import People from './pages/People';
 import Permissions from './pages/Permissions';
 import Products from './pages/Products';
+import QueryBuilder from './pages/QueryBuilder';
 import Relationships from './pages/Relationships';
 import Reports from './pages/Reports';
 import Services from './pages/Services';
 import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';
 import UserManagement from './pages/UserManagement';
-import QueryBuilder from './pages/QueryBuilder';
+import DataModels from './pages/DataModels';
 import __Layout from './Layout.jsx';
 
 
@@ -80,13 +81,14 @@ export const PAGES = {
     "People": People,
     "Permissions": Permissions,
     "Products": Products,
+    "QueryBuilder": QueryBuilder,
     "Relationships": Relationships,
     "Reports": Reports,
     "Services": Services,
     "Tasks": Tasks,
     "Transactions": Transactions,
     "UserManagement": UserManagement,
-    "QueryBuilder": QueryBuilder,
+    "DataModels": DataModels,
 }
 
 export const pagesConfig = {

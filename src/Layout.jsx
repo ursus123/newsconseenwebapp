@@ -45,6 +45,7 @@ const ALL_NAV_PHASES = [
   items: [
     { name: "Relationships", icon: Link2, page: "Relationships" },
     { name: "Query Builder", icon: Database, page: "QueryBuilder" },
+    { name: "Data Models", icon: GitBranch, page: "DataModels" },
   ]
 },
 {
