@@ -150,6 +150,8 @@ function AdminDashboard({ user }) {
         <p className="text-sm text-slate-400 mt-1">Business overview — reads master data, relationships, and transactions</p>
       </div>
 
+      <OnboardingChecklist done={onboardingDone} />
+
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
         <StatCard title="People" value={people.length} icon={Users} color="blue" subtitle={`${people.filter(p => p.status === "active").length} active`} />
         <StatCard title="Enterprises" value={enterprises.length} icon={Building2} color="purple" subtitle={`${enterprises.filter(e => e.status === "active").length} active`} />
