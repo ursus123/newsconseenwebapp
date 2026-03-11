@@ -384,8 +384,8 @@ export default function DataModels() {
         {/* Canvas */}
         <div
           ref={containerRef}
-          className="flex-1 border border-slate-200 rounded-2xl bg-slate-50 overflow-hidden cursor-grab active:cursor-grabbing relative"
-          onMouseDown={handleMouseDown}
+          className={`flex-1 border border-slate-200 rounded-2xl bg-slate-50 overflow-hidden relative ${nodeDrag ? "cursor-grabbing" : panDrag ? "cursor-grabbing" : "cursor-grab"}`}
+          onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
