@@ -132,7 +132,16 @@ function AdminDashboard({ user }) {
 
   const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person) });
   const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId], queryFn: () => listFn(base44.entities.Enterprise) });
+  const { data: products = [] } = useQuery({ queryKey: ["products", companyId], queryFn: () => listFn(base44.entities.Product) });
+  const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service) });
+  const { data: tasks = [] } = useQuery({ queryKey: ["tasks-dash", companyId], queryFn: () => listFn(base44.entities.Task) });
 
+  const onboardingDone = {
+    enterprise: enterprises.length > 0,
+    person: people.length > 0,
+    product: products.length > 0 || services.length > 0,
+    task: tasks.length > 0,
+  };
 
   return (
     <div className="space-y-8">
