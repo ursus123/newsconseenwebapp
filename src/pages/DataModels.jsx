@@ -425,8 +425,8 @@ export default function DataModels() {
                 </marker>
               </defs>
               {EDGES.map((edge, i) => {
-                const from = edgePoint(edge.from, edge.to);
-                const to = edgePoint(edge.to, edge.from);
+                const from = getEdgePoint(edge.from, edge.to, positions);
+                const to = getEdgePoint(edge.to, edge.from, positions);
                 const isTrigger = edge.label === "triggers →";
                 const isHovered = hoveredEdge === i;
                 const mx = (from.x + to.x) / 2;
