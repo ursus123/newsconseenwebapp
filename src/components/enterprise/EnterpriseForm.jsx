@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Save, X, Plus, Trash2, Upload, Building2, Tag, MapPin, Users, Activity, Shield, FileText, Link2, Loader2, Search, UserPlus } from "lucide-react";
+import { Save, X, Plus, Trash2, Upload, Building2, Tag, MapPin, Users, Activity, Shield, FileText, Link2, Loader2, Search, UserPlus, Landmark } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
 import { useQuery } from "@tanstack/react-query";
@@ -16,6 +16,7 @@ const TABS = [
   { id: "classification", label: "Classification", icon: Tag },
   { id: "contact", label: "Contact & Location", icon: MapPin },
   { id: "ownership", label: "Ownership & People", icon: Users },
+  { id: "org_management", label: "Org & Management", icon: Landmark },
   { id: "operations", label: "Operations", icon: Activity },
   { id: "compliance", label: "Compliance & Risk", icon: Shield },
   { id: "notes", label: "Notes & Files", icon: FileText },
@@ -423,6 +424,133 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
                   </div>
                 ))}
                 {(form.management_roles || []).length === 0 && !showMgmtPicker && <p className="text-xs text-slate-400 py-3 text-center">No management roles added yet</p>}
+              </div>
+            </div>
+          </div>
+        );
+
+      case "org_management":
+        return (
+          <div className="space-y-6">
+            {/* Legal Status & Ownership */}
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Legal Status & Ownership</p>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Legal Structure">
+                  <Sel value={form.legal_structure} onChange={(v) => set("legal_structure", v)} options={[
+                    { value: "sole_proprietorship", label: "Sole Proprietorship" },
+                    { value: "partnership", label: "Partnership" },
+                    { value: "llc", label: "LLC" },
+                    { value: "corporation", label: "Corporation" },
+                    { value: "nonprofit", label: "Non-Profit" },
+                    { value: "cooperative", label: "Cooperative" },
+                    { value: "government", label: "Government / Public Entity" },
+                    { value: "other", label: "Other" },
+                  ]} placeholder="Select legal structure..." />
+                </Field>
+                <Field label="Registration Number">
+                  <Input value={form.registration_number || ""} onChange={(e) => set("registration_number", e.target.value)} className="rounded-xl" placeholder="e.g. Company reg. #" />
+                </Field>
+                <Field label="Tax / VAT Number">
+                  <Input value={form.tax_number || ""} onChange={(e) => set("tax_number", e.target.value)} className="rounded-xl" />
+                </Field>
+                <Field label="Ownership Type">
+                  <Sel value={form.ownership_type} onChange={(v) => set("ownership_type", v)} options={[
+                    { value: "privately_owned", label: "Privately Owned" },
+                    { value: "publicly_traded", label: "Publicly Traded" },
+                    { value: "family_owned", label: "Family Owned" },
+                    { value: "government_owned", label: "Government Owned" },
+                    { value: "joint_venture", label: "Joint Venture" },
+                    { value: "other", label: "Other" },
+                  ]} placeholder="Select ownership type..." />
+                </Field>
+                <div className="col-span-2">
+                  <Field label="Legal Notes">
+                    <Textarea value={form.legal_notes || ""} onChange={(e) => set("legal_notes", e.target.value)} className="rounded-xl resize-none" rows={2} placeholder="Any additional legal details..." />
+                  </Field>
+                </div>
+              </div>
+            </div>
+
+            {/* Org Chart & Table of Management */}
+            <div className="border-t border-slate-100 pt-5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Organization Chart & Table of Management</p>
+              <Field label="Org Chart Description / Structure">
+                <Textarea value={form.org_chart_description || ""} onChange={(e) => set("org_chart_description", e.target.value)} className="rounded-xl resize-none" rows={3} placeholder="Describe the org structure (e.g. CEO → COO → Departments...)" />
+              </Field>
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-slate-500 font-medium">Management Table</p>
+                  <Button type="button" variant="outline" size="sm" className="rounded-xl text-xs h-7"
+                    onClick={() => addItem("management_table", { title: "", name: "", department: "", reports_to: "" })}>
+                    <Plus className="w-3 h-3 mr-1" /> Add Row
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {(form.management_table || []).map((row, i) => (
+                    <div key={i} className="grid grid-cols-4 gap-2 items-center bg-slate-50 rounded-xl p-2">
+                      <Input placeholder="Title / Position" value={row.title || ""} onChange={(e) => updateItem("management_table", i, "title", e.target.value)} className="rounded-lg text-xs h-8" />
+                      <Input placeholder="Person Name" value={row.name || ""} onChange={(e) => updateItem("management_table", i, "name", e.target.value)} className="rounded-lg text-xs h-8" />
+                      <Input placeholder="Department" value={row.department || ""} onChange={(e) => updateItem("management_table", i, "department", e.target.value)} className="rounded-lg text-xs h-8" />
+                      <div className="flex gap-1">
+                        <Input placeholder="Reports To" value={row.reports_to || ""} onChange={(e) => updateItem("management_table", i, "reports_to", e.target.value)} className="rounded-lg text-xs h-8 flex-1" />
+                        <button type="button" onClick={() => removeItem("management_table", i)} className="text-slate-400 hover:text-rose-500 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </div>
+                  ))}
+                  {(form.management_table || []).length === 0 && <p className="text-xs text-slate-400 py-2 text-center">No management rows added</p>}
+                </div>
+              </div>
+            </div>
+
+            {/* Services & Scope */}
+            <div className="border-t border-slate-100 pt-5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Services to Be Delivered & Scope</p>
+              <Field label="Services Description">
+                <Textarea value={form.services_description || ""} onChange={(e) => set("services_description", e.target.value)} className="rounded-xl resize-none" rows={3} placeholder="Describe services this enterprise delivers..." />
+              </Field>
+              <div className="mt-3">
+                <Field label="Scope of Services">
+                  <Textarea value={form.scope_of_services || ""} onChange={(e) => set("scope_of_services", e.target.value)} className="rounded-xl resize-none" rows={3} placeholder="Define the scope, boundaries, and service levels..." />
+                </Field>
+              </div>
+            </div>
+
+            {/* Job Descriptions & Resumes */}
+            <div className="border-t border-slate-100 pt-5">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Job Descriptions & Employee Resumes</p>
+                <Button type="button" variant="outline" size="sm" className="rounded-xl text-xs h-7"
+                  onClick={() => addItem("employee_docs", { employee_name: "", job_title: "", job_description: "", resume_url: "" })}>
+                  <Plus className="w-3 h-3 mr-1" /> Add Employee
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {(form.employee_docs || []).map((doc, i) => (
+                  <div key={i} className="bg-slate-50 rounded-xl p-3 space-y-2 border border-slate-100">
+                    <div className="flex gap-2 items-center">
+                      <Input placeholder="Employee Name" value={doc.employee_name || ""} onChange={(e) => updateItem("employee_docs", i, "employee_name", e.target.value)} className="rounded-lg text-xs h-8 flex-1" />
+                      <Input placeholder="Job Title" value={doc.job_title || ""} onChange={(e) => updateItem("employee_docs", i, "job_title", e.target.value)} className="rounded-lg text-xs h-8 flex-1" />
+                      <button type="button" onClick={() => removeItem("employee_docs", i)} className="text-slate-400 hover:text-rose-500 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <Textarea placeholder="Job description..." value={doc.job_description || ""} onChange={(e) => updateItem("employee_docs", i, "job_description", e.target.value)} className="rounded-lg text-xs resize-none" rows={2} />
+                    <div className="flex gap-2 items-center">
+                      <Input placeholder="Resume URL (upload separately)" value={doc.resume_url || ""} onChange={(e) => updateItem("employee_docs", i, "resume_url", e.target.value)} className="rounded-lg text-xs h-8 flex-1" />
+                      <label className="shrink-0">
+                        <Button type="button" variant="outline" size="sm" className="rounded-lg text-xs h-8 pointer-events-none">
+                          <Upload className="w-3 h-3 mr-1" /> Upload
+                        </Button>
+                        <input type="file" className="hidden" onChange={async (e) => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          const { file_url } = await base44.integrations.Core.UploadFile({ file });
+                          updateItem("employee_docs", i, "resume_url", file_url);
+                        }} />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+                {(form.employee_docs || []).length === 0 && <p className="text-xs text-slate-400 py-2 text-center">No employee documents added</p>}
               </div>
             </div>
           </div>
