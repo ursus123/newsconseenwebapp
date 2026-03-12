@@ -258,6 +258,7 @@ export default function QueryBuilder() {
   }, []);
 
   const runQuery = async () => {
+    loadingRef.current = true;
     setLoading(true);
     setError(null);
     setResults(null);
@@ -271,7 +272,10 @@ export default function QueryBuilder() {
     } catch (e) {
       setError(e.message);
     } finally {
+      loadingRef.current = false;
       setLoading(false);
+      // Sync any store mutations that happened during query
+      setUploadedTables(UploadedDataStore.getAll());
     }
   };
 
