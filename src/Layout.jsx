@@ -19,7 +19,8 @@ import {
   ShieldCheck,
   Globe,
   Database,
-  GitBranch } from
+  GitBranch,
+  Network } from
 "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { usePermissions, DEFAULT_PAGES } from "@/components/shared/usePermissions";
