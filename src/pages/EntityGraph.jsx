@@ -413,7 +413,7 @@ export default function EntityGraph() {
                 {links.map((link) => {
                   const sp = positions[link.source], tp = positions[link.target];
                   if (!sp || !tp) return null;
-                  const col = LINK_COLORS[link.label] || "#94a3b8";
+                  const col = LINK_COLORS[link.label] || "#6366f1";
                   const isHighlighted = selected && (link.source === selected || link.target === selected);
                   const isDimmed = selected && !isHighlighted;
                   const mx = (sp.x + tp.x) / 2;
