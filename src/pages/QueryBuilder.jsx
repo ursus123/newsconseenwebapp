@@ -259,8 +259,10 @@ export default function QueryBuilder() {
     setError(null);
     setResults(null);
     setMessage(null);
+    // Always get the freshest snapshot right before executing
+    const currentUploaded = UploadedDataStore.getAll();
     try {
-      const result = await executeSQL(sql, UploadedDataStore.getAll());
+      const result = await executeSQL(sql, currentUploaded);
       if (result.type === "select") setResults(result.rows);
       setMessage(result.message);
     } catch (e) {
