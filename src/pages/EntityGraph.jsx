@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -164,7 +164,7 @@ export default function EntityGraph() {
   }, []);
 
   // Build nodes & links from live data
-  const { nodes, links } = React.useMemo(() => {
+  const { nodes, links } = useMemo(() => {
     const nodes = [];
     const links = [];
 
@@ -245,7 +245,7 @@ export default function EntityGraph() {
   const { positions: forcePos, nudge } = useForceLayout(nodes, links, W, H);
 
   // Merge force positions with manual overrides
-  const positions = React.useMemo(() => ({ ...forcePos, ...manualPositions }), [forcePos, manualPositions]);
+  const positions = useMemo(() => ({ ...forcePos, ...manualPositions }), [forcePos, manualPositions]);
 
   // Pan & node drag
   const handleCanvasMouseDown = (e) => {
