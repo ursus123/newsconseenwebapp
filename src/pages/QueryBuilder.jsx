@@ -249,9 +249,12 @@ export default function QueryBuilder() {
   const [showSchema, setShowSchema] = useState(false);
   const [uploadedTables, setUploadedTables] = useState(() => UploadedDataStore.getAll());
 
-  // Keep local state in sync with the store (e.g. after row mutations)
+  // Sync store changes to local state (skip during active query to avoid re-render cascade)
+  const loadingRef = React.useRef(false);
   useEffect(() => {
-    return UploadedDataStore.subscribe((all) => setUploadedTables({ ...all }));
+    return UploadedDataStore.subscribe((all) => {
+      if (!loadingRef.current) setUploadedTables({ ...all });
+    });
   }, []);
 
   const runQuery = async () => {
