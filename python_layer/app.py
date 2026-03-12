@@ -4,16 +4,20 @@ from etl import tasks, transactions, services, enterprises, people
 app = FastAPI(
     title="Newsconseen Analytics Layer",
     description="Python ETL + Analytics microservice for Newsconseen",
-    version="1.0.0",
+    version="1.0.0"
 )
 
-
+# ---------------------------
+# Health Check
+# ---------------------------
 @app.get("/")
 def root():
     return {"status": "ok", "service": "newsconseen-python-layer"}
 
 
-# ---- TASKS ----
+# ---------------------------
+# TASKS
+# ---------------------------
 @app.get("/task-summary")
 def task_summary():
     df = tasks.extract_tasks()
@@ -21,7 +25,9 @@ def task_summary():
     return summary.to_dict(orient="records")
 
 
-# ---- TRANSACTIONS ----
+# ---------------------------
+# TRANSACTIONS
+# ---------------------------
 @app.get("/transaction-summary")
 def transaction_summary():
     df = transactions.extract_transactions()
@@ -29,7 +35,9 @@ def transaction_summary():
     return summary.to_dict(orient="records")
 
 
-# ---- SERVICES ----
+# ---------------------------
+# SERVICES
+# ---------------------------
 @app.get("/service-summary")
 def service_summary():
     df = services.extract_services()
@@ -37,7 +45,9 @@ def service_summary():
     return summary.to_dict(orient="records")
 
 
-# ---- ENTERPRISES ----
+# ---------------------------
+# ENTERPRISES
+# ---------------------------
 @app.get("/enterprise-summary")
 def enterprise_summary():
     df = enterprises.extract_enterprises()
@@ -45,7 +55,9 @@ def enterprise_summary():
     return summary.to_dict(orient="records")
 
 
-# ---- PEOPLE ----
+# ---------------------------
+# PEOPLE
+# ---------------------------
 @app.get("/people-summary")
 def people_summary():
     df = people.extract_people()
