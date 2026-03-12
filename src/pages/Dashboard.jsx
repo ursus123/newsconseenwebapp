@@ -171,6 +171,27 @@ function AdminDashboard({ user }) {
             {enterprises.map((e) => {
               const statusColor = { active: "bg-emerald-50 text-emerald-700", inactive: "bg-slate-100 text-slate-500", prospect: "bg-amber-50 text-amber-700", archived: "bg-slate-100 text-slate-400" };
               const opColor = { open: "bg-emerald-400", closed: "bg-rose-400", temporarily_closed: "bg-amber-400", seasonal: "bg-blue-400" };
+
+              // Profile completion
+              const PROFILE_FIELDS = [
+                "enterprise_name", "short_name", "description", "enterprise_type",
+                "phone", "email", "website", "city", "country", "legal_structure",
+                "operating_status", "owners",
+              ];
+              const filled = PROFILE_FIELDS.filter((f) => {
+                const v = e[f];
+                if (Array.isArray(v)) return v.length > 0;
+                return v !== undefined && v !== null && v !== "";
+              }).length;
+              const completionPct = Math.round((filled / PROFILE_FIELDS.length) * 100);
+              const completionColor = completionPct >= 80 ? "bg-emerald-400" : completionPct >= 50 ? "bg-amber-400" : "bg-rose-400";
+              const completionText = completionPct >= 80 ? "text-emerald-600" : completionPct >= 50 ? "text-amber-600" : "text-rose-500";
+
+              // Relationships count for this enterprise
+              const relCount = relationships.filter((r) =>
+                r.enterprise_name && r.enterprise_name.toLowerCase() === (e.enterprise_name || "").toLowerCase() && r.status !== "archived"
+              ).length;
+
               return (
                 <Card key={e.id} className="p-5 hover:shadow-md transition-shadow">
                   <div className="flex items-start justify-between gap-2 mb-3">
@@ -199,6 +220,20 @@ function AdminDashboard({ user }) {
                       <span className="text-[11px] text-slate-500 capitalize">{e.operating_status.replace(/_/g, " ")}</span>
                     </div>
                   )}
+
+                  {/* Relationships & profile completion */}
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                      <Link2 className="w-3.5 h-3.5 text-slate-400" />
+                      <span><span className="font-semibold text-slate-700">{relCount}</span> relationship{relCount !== 1 ? "s" : ""}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-1 justify-end">
+                      <div className="flex-1 max-w-[80px] h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${completionColor}`} style={{ width: `${completionPct}%` }} />
+                      </div>
+                      <span className={`text-[11px] font-semibold ${completionText}`}>{completionPct}%</span>
+                    </div>
+                  </div>
                 </Card>
               );
             })}
