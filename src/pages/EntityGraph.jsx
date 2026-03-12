@@ -171,6 +171,17 @@ export default function EntityGraph() {
     const nodes = [];
     const links = [];
 
+    // Build lookup maps by name for Relationship matching
+    const enterpriseByName = {};
+    enterprises.forEach((e) => { if (e.enterprise_name) enterpriseByName[e.enterprise_name.toLowerCase()] = e; });
+    const personByName = {};
+    people.forEach((p) => {
+      const name = `${p.first_name || ""} ${p.last_name || ""}`.trim().toLowerCase();
+      if (name) personByName[name] = p;
+    });
+    const serviceByName = {};
+    services.forEach((s) => { if (s.name) serviceByName[s.name.toLowerCase()] = s; });
+
     if (filter.enterprise) {
       enterprises.forEach((e) => nodes.push({ id: `ent_${e.id}`, type: "enterprise", label: e.enterprise_name || e.short_name || "Enterprise", raw: e }));
     }
@@ -183,57 +194,77 @@ export default function EntityGraph() {
 
     const nodeIds = new Set(nodes.map((n) => n.id));
 
-    // Enterprise → Service links via linked_service_ids
-    enterprises.forEach((e) => {
-      (e.linked_service_ids || []).forEach((svcId) => {
-        const src = `ent_${e.id}`, tgt = `svc_${svcId}`;
-        if (nodeIds.has(src) && nodeIds.has(tgt)) {
-          links.push({ id: `${src}-${tgt}`, source: src, target: tgt, label: "linked service" });
-        }
-      });
-      // Enterprise → Service via linked_services array
-      (e.linked_services || []).forEach((ls) => {
-        if (ls.id) {
-          const src = `ent_${e.id}`, tgt = `svc_${ls.id}`;
+    // ── Primary source: Relationship records ──────────────────────────────────
+    relationships.forEach((rel) => {
+      if (rel.status === "archived") return;
+
+      // person ↔ enterprise
+      if (rel.relationship_type === "person_enterprise" && rel.person_name && rel.enterprise_name) {
+        const person = personByName[rel.person_name.toLowerCase()];
+        const enterprise = enterpriseByName[rel.enterprise_name.toLowerCase()];
+        if (person && enterprise) {
+          const src = `per_${person.id}`, tgt = `ent_${enterprise.id}`;
           if (nodeIds.has(src) && nodeIds.has(tgt)) {
-            links.push({ id: `${src}-${tgt}-ls`, source: src, target: tgt, label: "provides service" });
+            links.push({ id: `rel_${rel.id}`, source: src, target: tgt, label: rel.role || "works at" });
           }
         }
-      });
-      // Enterprise → Person via linked_employee_ids
+      }
+
+      // item ↔ enterprise (product to enterprise)
+      if (rel.relationship_type === "item_enterprise" && rel.enterprise_name) {
+        const enterprise = enterpriseByName[rel.enterprise_name.toLowerCase()];
+        if (enterprise) {
+          const tgt = `ent_${enterprise.id}`;
+          if (nodeIds.has(tgt)) {
+            links.push({ id: `rel_${rel.id}`, source: tgt, target: tgt, label: rel.role || "has item" });
+          }
+        }
+      }
+    });
+
+    // ── Fallback: Enterprise fields ───────────────────────────────────────────
+    // Enterprise → Person via linked_employee_ids (IDs)
+    enterprises.forEach((e) => {
       (e.linked_employee_ids || []).forEach((pId) => {
         const src = `ent_${e.id}`, tgt = `per_${pId}`;
         if (nodeIds.has(src) && nodeIds.has(tgt)) {
-          links.push({ id: `${src}-${tgt}`, source: src, target: tgt, label: "employs" });
+          links.push({ id: `emp_${src}_${tgt}`, source: src, target: tgt, label: "employs" });
         }
       });
-      // Enterprise → Person via employee_docs
+      // Enterprise → Person via employee_docs (has person_id)
       (e.employee_docs || []).forEach((doc) => {
         if (doc.person_id) {
           const src = `ent_${e.id}`, tgt = `per_${doc.person_id}`;
           if (nodeIds.has(src) && nodeIds.has(tgt)) {
-            links.push({ id: `${src}-${tgt}-doc`, source: src, target: tgt, label: "employs" });
+            links.push({ id: `edoc_${src}_${tgt}`, source: src, target: tgt, label: "employs" });
           }
+        }
+      });
+      // Enterprise → Service via linked_service_ids (IDs)
+      (e.linked_service_ids || []).forEach((svcId) => {
+        const src = `ent_${e.id}`, tgt = `svc_${svcId}`;
+        if (nodeIds.has(src) && nodeIds.has(tgt)) {
+          links.push({ id: `svc_${src}_${tgt}`, source: src, target: tgt, label: "linked service" });
         }
       });
     });
 
-    // Service → Enterprise via linked_enterprises
+    // Service → Enterprise via linked_enterprises (by name)
     services.forEach((s) => {
       (s.linked_enterprises || []).forEach((le) => {
         if (le.enterprise_name) {
-          const matchEnt = enterprises.find((e) => e.enterprise_name === le.enterprise_name);
+          const matchEnt = enterpriseByName[le.enterprise_name.toLowerCase()];
           if (matchEnt) {
             const src = `svc_${s.id}`, tgt = `ent_${matchEnt.id}`;
             if (nodeIds.has(src) && nodeIds.has(tgt)) {
-              links.push({ id: `${src}-${tgt}-sle`, source: src, target: tgt, label: "provides service" });
+              links.push({ id: `sle_${src}_${tgt}`, source: src, target: tgt, label: "provides service" });
             }
           }
         }
       });
     });
 
-    // Deduplicate links
+    // Deduplicate: keep first occurrence of each source↔target pair
     const seen = new Set();
     const uniqueLinks = links.filter((l) => {
       const key = [l.source, l.target].sort().join("|");
@@ -243,7 +274,7 @@ export default function EntityGraph() {
     });
 
     return { nodes, links: uniqueLinks };
-  }, [enterprises, people, services, filter]);
+  }, [enterprises, people, services, relationships, filter]);
 
   const { positions: forcePos, nudge } = useForceLayout(nodes, links, W, H);
 
