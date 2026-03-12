@@ -134,6 +134,7 @@ export default function EntityGraph() {
   const [enterprises, setEnterprises] = useState([]);
   const [people, setPeople] = useState([]);
   const [services, setServices] = useState([]);
+  const [relationships, setRelationships] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [filter, setFilter] = useState({ enterprise: true, person: true, service: true });
@@ -150,14 +151,16 @@ export default function EntityGraph() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [ents, ppl, svcs] = await Promise.all([
-        base44.entities.Enterprise.list("-created_date", 200),
-        base44.entities.Person.list("-created_date", 200),
-        base44.entities.Service.list("-created_date", 200),
+      const [ents, ppl, svcs, rels] = await Promise.all([
+        base44.entities.Enterprise.list("-created_date", 500),
+        base44.entities.Person.list("-created_date", 500),
+        base44.entities.Service.list("-created_date", 500),
+        base44.entities.Relationship.list("-created_date", 1000),
       ]);
       setEnterprises(ents);
       setPeople(ppl);
       setServices(svcs);
+      setRelationships(rels);
       setLoading(false);
     };
     load();
