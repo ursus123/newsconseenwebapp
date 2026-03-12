@@ -58,13 +58,15 @@ async function executeSQL(sql, uploadedTables) {
     const tableName = fromMatch[1].toLowerCase();
 
     let rows;
-    if (MASTER_TABLES[tableName]) {
+    const isUploaded = Object.prototype.hasOwnProperty.call(uploadedTables, tableName);
+    if (isUploaded) {
+      rows = uploadedTables[tableName].rows.map((r) => ({ ...r }));
+    } else if (MASTER_TABLES[tableName]) {
       const entity = base44.entities[MASTER_TABLES[tableName].entity];
       rows = await entity.list("-created_date", 2000);
-    } else if (uploadedTables[tableName]) {
-      rows = [...uploadedTables[tableName].rows];
     } else {
-      throw new Error(`Unknown table "${tableName}". Master tables: ${Object.keys(MASTER_TABLES).join(", ")}. Uploaded: ${Object.keys(uploadedTables).join(", ") || "none"}`);
+      const uploadedList = Object.keys(uploadedTables).join(", ") || "none";
+      throw new Error(`Unknown table "${tableName}". Master tables: ${Object.keys(MASTER_TABLES).join(", ")}. Uploaded: ${uploadedList}`);
     }
 
     // SELECT columns
