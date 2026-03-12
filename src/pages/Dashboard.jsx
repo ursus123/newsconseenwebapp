@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Users, Package, ArrowLeftRight, ClipboardList, Building2, Clock, CheckCircle, AlertCircle, Calendar } from "lucide-react";
+import { Users, Package, ArrowLeftRight, ClipboardList, Building2, Clock, CheckCircle, AlertCircle, Calendar, Link2 } from "lucide-react";
 import StatCard from "../components/dashboard/StatCard";
 import OnboardingChecklist from "../components/dashboard/OnboardingChecklist";
 import { Badge } from "@/components/ui/badge";
@@ -135,6 +135,7 @@ function AdminDashboard({ user }) {
   const { data: products = [] } = useQuery({ queryKey: ["products", companyId], queryFn: () => listFn(base44.entities.Product) });
   const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service) });
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks-dash", companyId], queryFn: () => listFn(base44.entities.Task) });
+  const { data: relationships = [] } = useQuery({ queryKey: ["relationships-dash", companyId], queryFn: () => base44.entities.Relationship.list("-created_date", 1000) });
 
   const onboardingDone = {
     enterprise: enterprises.length > 0,
