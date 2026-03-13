@@ -158,12 +158,27 @@ function MyTasksList({ tasks }) {
   );
 }
 
+const COLUMN_STYLES = {
+  open: { header: "bg-slate-50 border-slate-200", dot: "bg-slate-400", count: "bg-slate-100 text-slate-500" },
+  in_progress: { header: "bg-blue-50 border-blue-200", dot: "bg-blue-400", count: "bg-blue-100 text-blue-600" },
+  completed: { header: "bg-emerald-50 border-emerald-200", dot: "bg-emerald-400", count: "bg-emerald-100 text-emerald-600" },
+  cancelled: { header: "bg-rose-50 border-rose-200", dot: "bg-rose-400", count: "bg-rose-100 text-rose-600" },
+};
+
+const KANBAN_COLUMNS = [
+  { key: "open", label: "Open" },
+  { key: "in_progress", label: "In Progress" },
+  { key: "completed", label: "Completed" },
+  { key: "cancelled", label: "Cancelled" },
+];
+
 // Admin view: kanban + filters + full CRUD
 function AdminTasksView({ tasks, appUsers, enterprises, products, services, people, addresses, companyId, isSuperAdmin, currentUser }) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [viewMode, setViewMode] = useState("kanban"); // "kanban" | "list"
   const [filterPerson, setFilterPerson] = useState("");
   const [filterEnterprise, setFilterEnterprise] = useState("");
   const [filterAddress, setFilterAddress] = useState("");
@@ -175,7 +190,6 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
 
-  // Step 2 → Step 3: after saving a completed task, auto-trigger transaction if flagged
   const afterSave = async (task) => {
     if (task.status === "completed" && task.trigger_transaction) {
       await triggerTaskTransaction(task, null);
@@ -212,10 +226,19 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
     return true;
   });
 
-  const showKanban = filter === "all";
-  const grouped = STATUS_GROUPS.map((s) => ({ ...s, items: filtered.filter((t) => t.status === s.key) }));
+  const grouped = KANBAN_COLUMNS.map((s) => ({ ...s, items: filtered.filter((t) => t.status === s.key) }));
   const openEdit = (t) => { setEditing(t); setFormOpen(true); };
   const overdueCount = tasks.filter(isDuePast).length;
+
+  const onDragEnd = (result) => {
+    const { destination, source, draggableId } = result;
+    if (!destination) return;
+    if (destination.droppableId === source.droppableId) return;
+    const newStatus = destination.droppableId;
+    const task = tasks.find((t) => t.id === draggableId);
+    if (!task) return;
+    updateMut.mutate({ id: draggableId, data: { ...task, status: newStatus } });
+  };
 
   return (
     <div>
@@ -224,12 +247,30 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Admin View — All Tasks</span>
       </div>
 
-      <PageHeader
-        title="Tasks"
-        subtitle="Assign and manage tasks for app users"
-        onAdd={perms.l3_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
-        addLabel="Assign Task"
-      />
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+        <div>
+          <PageHeader
+            title="Tasks"
+            subtitle="Assign and manage tasks for app users"
+            onAdd={perms.l3_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
+            addLabel="Assign Task"
+          />
+        </div>
+        <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+          <button
+            onClick={() => setViewMode("kanban")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === "kanban" ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" /> Kanban
+          </button>
+          <button
+            onClick={() => setViewMode("list")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === "list" ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            <List className="w-3.5 h-3.5" /> List
+          </button>
+        </div>
+      </div>
 
       <div className="flex flex-wrap gap-2 mb-3">
         {FILTERS.map((f) => (
@@ -252,7 +293,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         ))}
       </div>
 
-      {/* Secondary filters: People, Enterprise, Address */}
+      {/* Secondary filters */}
       <div className="flex flex-wrap gap-2 mb-6 items-center">
         <Filter className="w-3.5 h-3.5 text-slate-400" />
         <select
@@ -295,28 +336,60 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         )}
       </div>
 
-      {showKanban ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {grouped.map((col) => (
-            <div key={col.key}>
-              <div className="flex items-center gap-2 mb-3">
-                <h3 className="text-sm font-semibold text-slate-600">{col.label}</h3>
-                <span className="text-xs bg-slate-100 text-slate-500 rounded-full px-2 py-0.5">{col.items.length}</span>
-              </div>
-              <div className="space-y-3">
-                {col.items.map((task) => (
-                  <TaskCard key={task.id} task={task} onEdit={perms.l3_create ? openEdit : undefined} onDelete={perms.can_delete ? (t) => setDeleting(t) : undefined} isAdmin={perms.l3_create} />
-                  ))}
-                  {col.items.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-slate-100 rounded-2xl">
-                    <CheckCircle className="w-6 h-6 text-slate-200 mb-1" />
-                    <p className="text-xs text-slate-300">No tasks</p>
+      {viewMode === "kanban" ? (
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            {grouped.map((col) => {
+              const style = COLUMN_STYLES[col.key] || COLUMN_STYLES.open;
+              return (
+                <div key={col.key} className="flex flex-col min-h-[300px]">
+                  <div className={`flex items-center gap-2 px-3 py-2.5 rounded-t-xl border ${style.header} mb-0`}>
+                    <span className={`w-2 h-2 rounded-full ${style.dot}`} />
+                    <h3 className="text-sm font-semibold text-slate-700 flex-1">{col.label}</h3>
+                    <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${style.count}`}>{col.items.length}</span>
                   </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+                  <Droppable droppableId={col.key}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className={`flex-1 p-2 rounded-b-xl border border-t-0 transition-colors min-h-[200px] space-y-2 ${
+                          snapshot.isDraggingOver ? "bg-slate-100 border-slate-300" : "bg-slate-50/50 border-slate-100"
+                        }`}
+                      >
+                        {col.items.map((task, index) => (
+                          <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={!perms.l3_create}>
+                            {(prov, snap) => (
+                              <div
+                                ref={prov.innerRef}
+                                {...prov.draggableProps}
+                                {...prov.dragHandleProps}
+                                className={snap.isDragging ? "opacity-80 rotate-1 scale-[1.02]" : ""}
+                              >
+                                <TaskCard
+                                  task={task}
+                                  onEdit={perms.l3_create ? openEdit : undefined}
+                                  onDelete={perms.can_delete ? (t) => setDeleting(t) : undefined}
+                                  isAdmin={perms.l3_create}
+                                />
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                        {col.items.length === 0 && !snapshot.isDraggingOver && (
+                          <div className="flex flex-col items-center justify-center py-8 rounded-xl border-2 border-dashed border-slate-100">
+                            <p className="text-xs text-slate-300">Drop here</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Droppable>
+                </div>
+              );
+            })}
+          </div>
+        </DragDropContext>
       ) : (
         <div className="space-y-3">
           {filtered.length === 0 ? (
