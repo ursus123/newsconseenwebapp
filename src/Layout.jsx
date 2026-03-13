@@ -194,15 +194,15 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Main content */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="flex items-center h-16 px-4 lg:px-8 bg-white border-b border-slate-100 shrink-0">
+        <header className="flex items-center h-16 px-4 lg:px-8 bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800 shrink-0">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="lg:hidden p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors">
+            className="lg:hidden p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
 
             <Menu className="w-5 h-5" />
           </button>
           <div className="ml-2 lg:ml-0 flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-slate-800">{currentPageName}</h2>
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{currentPageName}</h2>
             {currentUser && (
             currentUser.role === "super_admin" ?
             <span className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold">
