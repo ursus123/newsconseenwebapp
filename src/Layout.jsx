@@ -201,18 +201,9 @@ export default function Layout({ children, currentPageName }) {
             null)
             }
           </div>
-          <div className="ml-auto">
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title="Toggle dark mode"
-            >
-              {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
-            </button>
-          </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900">
+        <div className="flex-1 overflow-y-auto">
           <div className="p-4 lg:p-8 max-w-[1600px] mx-auto w-full">
             {children}
           </div>
