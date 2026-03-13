@@ -1,0 +1,88 @@
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------
+  # POSTGRES — Analytics Database
+  # ---------------------------------------------------------
+  postgres:
+    image: postgres:15
+    container_name: newsconseen_postgres
+    environment:
+      POSTGRES_USER: newsconseen
+      POSTGRES_PASSWORD: newsconseen
+      POSTGRES_DB: analytics
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # ---------------------------------------------------------
+  # FASTAPI — Python Layer (ETL Microservice)
+  # ---------------------------------------------------------
+  fastapi:
+    build:
+      context: ./python_layer
+      dockerfile: Dockerfile
+    container_name: newsconseen_fastapi
+    env_file:
+      - ./python_layer/.env
+    depends_on:
+      - postgres
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./python_layer:/app
+
+  # ---------------------------------------------------------
+  # AIRFLOW — Scheduler + Webserver + Worker
+  # ---------------------------------------------------------
+  airflow:
+    image: apache/airflow:2.9.0
+    container_name: newsconseen_airflow
+    depends_on:
+      - postgres
+      - fastapi
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://newsconseen:newsconseen@postgres:5432/analytics
+      PYTHONPATH: /opt/airflow/python_layer
+    volumes:
+      - ./python_layer/dags:/opt/airflow/dags
+      - ./python_layer:/opt/airflow/python_layer
+    ports:
+      - "8080:8080"
+    command: >
+      bash -c "
+      airflow db migrate &&
+      airflow users create --username admin --password admin --firstname admin --lastname admin --role Admin --email admin@example.com &&
+      airflow webserver & airflow scheduler
+      "
+
+  # ---------------------------------------------------------
+  # SUPERSET — BI Dashboards
+  # ---------------------------------------------------------
+  superset:
+    image: apache/superset:latest
+    container_name: newsconseen_superset
+    depends_on:
+      - postgres
+    environment:
+      SUPERSET_SECRET_KEY: "newsconseen_secret_key"
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+    volumes:
+      - superset_home:/app/superset_home
+    ports:
+      - "8088:8088"
+    command: >
+      bash -c "
+      superset db upgrade &&
+      superset fab create-admin --username admin --password admin --firstname admin --lastname admin --email admin@example.com ||
+      true &&
+      superset init &&
+      superset run -p 8088 --host 0.0.0.0
+      "
+
+volumes:
+  postgres_data:
+  superset_home:
