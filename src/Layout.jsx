@@ -20,7 +20,9 @@ import {
   Globe,
   Database,
   GitBranch,
-  Network } from
+  Network,
+  Sun,
+  Moon } from
 "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { usePermissions, DEFAULT_PAGES } from "@/components/shared/usePermissions";
