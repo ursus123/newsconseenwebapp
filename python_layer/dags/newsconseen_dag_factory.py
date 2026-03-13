@@ -14,6 +14,7 @@ ENTITY_CONFIG = {
     "services": (services.extract_services, services.transform_services),
     "enterprises": (enterprises.extract_enterprises, enterprises.transform_enterprises),
     "people": (people.extract_people, people.transform_people),
+    "geospatial": (geospatial.extract, geospatial.transform),
 }
 
 
