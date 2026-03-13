@@ -3,6 +3,7 @@ from airflow.operators.python import PythonOperator
 from datetime import datetime
 from python_layer.etl import tasks, transactions, services, enterprises, people
 from python_layer.etl.load import load_dataframe
+from python_layer.etl import geospatial
 
 
 # -----------------------------------------
