@@ -1,38 +1,84 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  PlayCircle, Download, ChevronDown, ChevronUp, Info,
+  PlayCircle, Download, ChevronDown, ChevronRight, ChevronUp,
   Database, Table2, Upload, CheckCircle2, AlertCircle,
+  Hash, Type, Calendar, ToggleLeft, Layers, RefreshCw,
 } from "lucide-react";
 import UploadPanel from "../components/querybuilder/UploadPanel";
 import { UploadedDataStore } from "../components/querybuilder/UploadedDataStore";
 
-// ── Master table → SDK entity map ─────────────────────────────────────────────
+// ── Entity → column schema map ─────────────────────────────────────────────
 const MASTER_TABLES = {
-  enterprises:   { entity: "Enterprise",   label: "Enterprises",   readOnly: false },
-  people:        { entity: "Person",        label: "People",        readOnly: false },
-  products:      { entity: "Product",       label: "Products",      readOnly: false },
-  services:      { entity: "Service",       label: "Services",      readOnly: false },
-  addresses:     { entity: "Address",       label: "Addresses",     readOnly: false },
-  relationships: { entity: "Relationship",  label: "Relationships", readOnly: false },
-  tasks:         { entity: "Task",          label: "Tasks",         readOnly: false },
-  transactions:  { entity: "Transaction",   label: "Transactions",  readOnly: false },
+  enterprises:   { entity: "Enterprise",   label: "Enterprises" },
+  people:        { entity: "Person",        label: "People" },
+  products:      { entity: "Product",       label: "Products" },
+  services:      { entity: "Service",       label: "Services" },
+  addresses:     { entity: "Address",       label: "Addresses" },
+  relationships: { entity: "Relationship",  label: "Relationships" },
+  tasks:         { entity: "Task",          label: "Tasks" },
+  transactions:  { entity: "Transaction",   label: "Transactions" },
 };
 
 const PROTECTED_TABLES = new Set(["enterprises", "people", "products", "services", "addresses"]);
 
-const MASTER_SCHEMA = [
-  { t: "enterprises",   fields: "enterprise_name, status, enterprise_type, city, country" },
-  { t: "people",        fields: "first_name, last_name, person_type, status, primary_role" },
-  { t: "products",      fields: "name, sku, status, stock_quantity, unit_price, category" },
-  { t: "services",      fields: "name, status, category, price, pricing_model" },
-  { t: "addresses",     fields: "label, city, country, status" },
-  { t: "relationships", fields: "relationship_type, person_name, enterprise_name, status" },
-  { t: "tasks",         fields: "title, task_type, status, priority, scheduled_date" },
-  { t: "transactions",  fields: "transaction_type, status, date, amount, payment_status" },
-];
+const MASTER_SCHEMA = {
+  enterprises:   [
+    { col: "id", type: "VARCHAR" }, { col: "enterprise_name", type: "VARCHAR" },
+    { col: "short_name", type: "VARCHAR" }, { col: "status", type: "ENUM" },
+    { col: "enterprise_type", type: "ENUM" }, { col: "city", type: "VARCHAR" },
+    { col: "country", type: "VARCHAR" }, { col: "phone", type: "VARCHAR" },
+    { col: "email", type: "VARCHAR" }, { col: "created_date", type: "DATETIME" },
+  ],
+  people: [
+    { col: "id", type: "VARCHAR" }, { col: "first_name", type: "VARCHAR" },
+    { col: "last_name", type: "VARCHAR" }, { col: "person_type", type: "ENUM" },
+    { col: "status", type: "ENUM" }, { col: "primary_role", type: "VARCHAR" },
+    { col: "email", type: "VARCHAR" }, { col: "phone", type: "VARCHAR" },
+    { col: "start_date", type: "DATE" }, { col: "created_date", type: "DATETIME" },
+  ],
+  products: [
+    { col: "id", type: "VARCHAR" }, { col: "name", type: "VARCHAR" },
+    { col: "sku", type: "VARCHAR" }, { col: "status", type: "ENUM" },
+    { col: "item_type", type: "ENUM" }, { col: "stock_quantity", type: "INT" },
+    { col: "unit_price", type: "FLOAT" }, { col: "cost_price", type: "FLOAT" },
+    { col: "category", type: "ENUM" }, { col: "created_date", type: "DATETIME" },
+  ],
+  services: [
+    { col: "id", type: "VARCHAR" }, { col: "name", type: "VARCHAR" },
+    { col: "status", type: "ENUM" }, { col: "category", type: "ENUM" },
+    { col: "price", type: "FLOAT" }, { col: "pricing_model", type: "ENUM" },
+    { col: "created_date", type: "DATETIME" },
+  ],
+  addresses: [
+    { col: "id", type: "VARCHAR" }, { col: "label", type: "VARCHAR" },
+    { col: "address_line1", type: "VARCHAR" }, { col: "city", type: "VARCHAR" },
+    { col: "country", type: "VARCHAR" }, { col: "status", type: "ENUM" },
+    { col: "created_date", type: "DATETIME" },
+  ],
+  relationships: [
+    { col: "id", type: "VARCHAR" }, { col: "relationship_type", type: "ENUM" },
+    { col: "person_name", type: "VARCHAR" }, { col: "enterprise_name", type: "VARCHAR" },
+    { col: "status", type: "ENUM" }, { col: "start_date", type: "DATE" },
+    { col: "created_date", type: "DATETIME" },
+  ],
+  tasks: [
+    { col: "id", type: "VARCHAR" }, { col: "title", type: "VARCHAR" },
+    { col: "task_type", type: "ENUM" }, { col: "status", type: "ENUM" },
+    { col: "priority", type: "ENUM" }, { col: "assigned_to_email", type: "VARCHAR" },
+    { col: "scheduled_date", type: "DATE" }, { col: "due_date", type: "DATE" },
+    { col: "created_date", type: "DATETIME" },
+  ],
+  transactions: [
+    { col: "id", type: "VARCHAR" }, { col: "transaction_type", type: "ENUM" },
+    { col: "status", type: "ENUM" }, { col: "date", type: "DATE" },
+    { col: "amount", type: "FLOAT" }, { col: "payment_status", type: "ENUM" },
+    { col: "primary_person", type: "VARCHAR" }, { col: "enterprise", type: "VARCHAR" },
+    { col: "created_date", type: "DATETIME" },
+  ],
+};
 
 const SAMPLES = [
   { label: "Active enterprises",    query: "SELECT * FROM enterprises WHERE status = 'active'" },
@@ -42,68 +88,77 @@ const SAMPLES = [
   { label: "Posted transactions",   query: "SELECT * FROM transactions WHERE status = 'posted'" },
   { label: "INSERT into master",    query: "INSERT INTO enterprises (enterprise_name, status) VALUES ('New Co', 'active')" },
   { label: "UPDATE master",         query: "UPDATE tasks SET status = 'completed' WHERE id = 'REPLACE_WITH_ID'" },
-  { label: "DELETE uploaded row",   query: "DELETE FROM my_uploaded_table WHERE row_index = 0" },
   { label: "INSERT uploaded → master", query: "INSERT INTO people SELECT first_name, last_name, person_type FROM my_uploaded_table" },
 ];
 
-// ── SQL Parser / Executor ─────────────────────────────────────────────────────
+// ── Type icon helper ──────────────────────────────────────────────────────
+function TypeIcon({ type }) {
+  const cls = "w-3 h-3 shrink-0";
+  if (type === "INT" || type === "FLOAT") return <Hash className={`${cls} text-blue-400`} />;
+  if (type === "DATE" || type === "DATETIME") return <Calendar className={`${cls} text-amber-400`} />;
+  if (type === "ENUM") return <ToggleLeft className={`${cls} text-violet-400`} />;
+  return <Type className={`${cls} text-slate-400`} />;
+}
+
+function TypeBadge({ type }) {
+  const color = type === "INT" || type === "FLOAT" ? "text-blue-400" :
+    type === "DATE" || type === "DATETIME" ? "text-amber-400" :
+    type === "ENUM" ? "text-violet-400" : "text-slate-500";
+  return <span className={`font-mono text-[9px] font-bold ${color}`}>{type}</span>;
+}
+
+function inferType(values) {
+  const nonEmpty = values.filter((v) => v !== null && v !== undefined && String(v).trim() !== "");
+  if (!nonEmpty.length) return "TEXT";
+  if (nonEmpty.every((v) => !isNaN(Number(v)) && !isNaN(parseFloat(v)))) {
+    return nonEmpty.every((v) => Number.isInteger(Number(v))) ? "INT" : "FLOAT";
+  }
+  if (nonEmpty.every((v) => /^\d{4}-\d{2}-\d{2}/.test(String(v)))) return "DATE";
+  return "TEXT";
+}
+
+function getUploadedSchema(rows) {
+  if (!rows.length) return [];
+  return Object.keys(rows[0]).map((col) => ({ col, type: inferType(rows.map((r) => r[col])) }));
+}
+
+// ── SQL Executor ──────────────────────────────────────────────────────────
 async function executeSQL(sql, uploadedTables) {
   const s = sql.trim().replace(/\s+/g, " ");
   const upper = s.toUpperCase();
 
-  // ── SELECT ────────────────────────────────────────────────────────────────
   if (upper.startsWith("SELECT")) {
     const fromMatch = s.match(/FROM\s+(\w+)/i);
     if (!fromMatch) throw new Error("Missing FROM clause.");
     const tableName = fromMatch[1].toLowerCase();
-
     let rows;
-    const isUploaded = Object.prototype.hasOwnProperty.call(uploadedTables, tableName);
-    if (isUploaded) {
+    if (Object.prototype.hasOwnProperty.call(uploadedTables, tableName)) {
       rows = uploadedTables[tableName].rows.map((r) => ({ ...r }));
     } else if (MASTER_TABLES[tableName]) {
-      const entity = base44.entities[MASTER_TABLES[tableName].entity];
-      rows = await entity.list("-created_date", 2000);
+      rows = await base44.entities[MASTER_TABLES[tableName].entity].list("-created_date", 2000);
     } else {
-      const uploadedList = Object.keys(uploadedTables).join(", ") || "none";
-      throw new Error(`Unknown table "${tableName}". Master tables: ${Object.keys(MASTER_TABLES).join(", ")}. Uploaded: ${uploadedList}`);
+      throw new Error(`Unknown table "${tableName}".`);
     }
-
-    // SELECT columns
     const colsMatch = s.match(/SELECT\s+(.+?)\s+FROM/i);
     const colStr = colsMatch ? colsMatch[1].trim() : "*";
     if (colStr !== "*") {
       const cols = colStr.split(",").map((c) => c.trim());
-      rows = rows.map((r) => {
-        const obj = {};
-        cols.forEach((c) => { obj[c] = r[c]; });
-        return obj;
-      });
+      rows = rows.map((r) => { const o = {}; cols.forEach((c) => { o[c] = r[c]; }); return o; });
     }
-
-    // WHERE
     rows = applyWhere(rows, s);
     return { type: "select", rows, message: `${rows.length} row(s) returned.` };
   }
 
-  // ── INSERT INTO … SELECT (copy uploaded → master) ─────────────────────────
   if (upper.startsWith("INSERT") && upper.includes("SELECT")) {
     const m = s.match(/INSERT\s+INTO\s+(\w+)\s+SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
-    if (!m) throw new Error("Invalid INSERT...SELECT syntax. Example: INSERT INTO people SELECT first_name, last_name FROM my_table");
+    if (!m) throw new Error("Invalid INSERT...SELECT syntax.");
     const [, destTable, colStr, srcTable, whereClause] = m;
-    const dest = destTable.toLowerCase();
-    const src = srcTable.toLowerCase();
-
-    if (!MASTER_TABLES[dest]) throw new Error(`INSERT destination must be a master table. Got: "${dest}"`);
-    if (!uploadedTables[src]) throw new Error(`Source table "${src}" not found in uploaded tables.`);
-
-    const cols = colStr.trim() === "*"
-      ? uploadedTables[src].columns
-      : colStr.split(",").map((c) => c.trim());
-
+    const dest = destTable.toLowerCase(), src = srcTable.toLowerCase();
+    if (!MASTER_TABLES[dest]) throw new Error(`INSERT destination must be a master table.`);
+    if (!uploadedTables[src]) throw new Error(`Source table "${src}" not found.`);
+    const cols = colStr.trim() === "*" ? uploadedTables[src].columns : colStr.split(",").map((c) => c.trim());
     let srcRows = [...uploadedTables[src].rows];
     if (whereClause) srcRows = applyWhere(srcRows, `SELECT * FROM x WHERE ${whereClause}`);
-
     const entity = base44.entities[MASTER_TABLES[dest].entity];
     let inserted = 0;
     for (const row of srcRows) {
@@ -115,81 +170,65 @@ async function executeSQL(sql, uploadedTables) {
     return { type: "mutation", rows: [], message: `✓ Inserted ${inserted} row(s) into ${dest}.` };
   }
 
-  // ── INSERT INTO … VALUES ───────────────────────────────────────────────────
   if (upper.startsWith("INSERT")) {
     const m = s.match(/INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i);
-    if (!m) throw new Error("Invalid INSERT syntax. Example: INSERT INTO enterprises (enterprise_name, status) VALUES ('Acme', 'active')");
+    if (!m) throw new Error("Invalid INSERT syntax.");
     const [, tableName, colsStr, valsStr] = m;
     const dest = tableName.toLowerCase();
-    if (!MASTER_TABLES[dest] && !uploadedTables[dest]) throw new Error(`Unknown table "${dest}".`);
-
     const cols = colsStr.split(",").map((c) => c.trim());
     const vals = valsStr.split(",").map((v) => v.trim().replace(/^['"]|['"]$/g, ""));
-    const payload = {};
-    cols.forEach((c, i) => { payload[c] = vals[i] ?? ""; });
-
+    const payload = {}; cols.forEach((c, i) => { payload[c] = vals[i] ?? ""; });
     if (MASTER_TABLES[dest]) {
-      const entity = base44.entities[MASTER_TABLES[dest].entity];
-      const created = await entity.create(payload);
+      const created = await base44.entities[MASTER_TABLES[dest].entity].create(payload);
       return { type: "mutation", rows: [created], message: `✓ Inserted 1 row into ${dest}.` };
     } else {
       UploadedDataStore.addRow(dest, payload);
-      return { type: "mutation", rows: [], message: `✓ Inserted 1 row into uploaded table "${dest}".` };
+      return { type: "mutation", rows: [], message: `✓ Inserted 1 row into "${dest}".` };
     }
   }
 
-  // ── UPDATE ─────────────────────────────────────────────────────────────────
   if (upper.startsWith("UPDATE")) {
     const m = s.match(/UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(.+)$/i);
-    if (!m) throw new Error("Invalid UPDATE syntax. Example: UPDATE tasks SET status = 'completed' WHERE id = 'abc'");
+    if (!m) throw new Error("Invalid UPDATE syntax.");
     const [, tableName, setStr, whereStr] = m;
     const tbl = tableName.toLowerCase();
-
     const updates = {};
     setStr.split(",").forEach((part) => {
       const eq = part.match(/^\s*(\w+)\s*=\s*'?([^']*)'?\s*$/);
       if (eq) updates[eq[1].trim()] = eq[2].trim();
     });
-
     if (MASTER_TABLES[tbl]) {
-      // Fetch matching rows then update each
       const entity = base44.entities[MASTER_TABLES[tbl].entity];
       const allRows = await entity.list("-created_date", 2000);
       const matched = applyWhere(allRows, `SELECT * FROM x WHERE ${whereStr}`);
-      if (!matched.length) return { type: "mutation", rows: [], message: "No rows matched the WHERE clause." };
+      if (!matched.length) return { type: "mutation", rows: [], message: "No rows matched." };
       for (const row of matched) await entity.update(row.id, updates);
       return { type: "mutation", rows: [], message: `✓ Updated ${matched.length} row(s) in ${tbl}.` };
     } else if (uploadedTables[tbl]) {
       const rows = uploadedTables[tbl].rows;
       const matched = applyWhere(rows.map((r, i) => ({ ...r, _idx: i })), `SELECT * FROM x WHERE ${whereStr}`);
       matched.forEach((r) => UploadedDataStore.updateRow(tbl, r._idx, updates));
-      return { type: "mutation", rows: [], message: `✓ Updated ${matched.length} row(s) in uploaded table "${tbl}".` };
-    } else {
-      throw new Error(`Unknown table "${tbl}".`);
+      return { type: "mutation", rows: [], message: `✓ Updated ${matched.length} row(s) in "${tbl}".` };
     }
+    throw new Error(`Unknown table "${tbl}".`);
   }
 
-  // ── DELETE ─────────────────────────────────────────────────────────────────
   if (upper.startsWith("DELETE")) {
     const m = s.match(/DELETE\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
     if (!m) throw new Error("Invalid DELETE syntax.");
     const [, tableName, whereStr] = m;
     const tbl = tableName.toLowerCase();
-
-    if (PROTECTED_TABLES.has(tbl)) throw new Error(`❌ DELETE is not allowed on master table "${tbl}" to protect data integrity. Use the app pages to archive records instead.`);
-
+    if (PROTECTED_TABLES.has(tbl)) throw new Error(`❌ DELETE blocked on protected table "${tbl}".`);
     if (MASTER_TABLES[tbl]) {
       const entity = base44.entities[MASTER_TABLES[tbl].entity];
       const allRows = await entity.list("-created_date", 2000);
       const matched = whereStr ? applyWhere(allRows, `SELECT * FROM x WHERE ${whereStr}`) : allRows;
-      if (!matched.length) return { type: "mutation", rows: [], message: "No rows matched." };
       for (const row of matched) await entity.delete(row.id);
       return { type: "mutation", rows: [], message: `✓ Deleted ${matched.length} row(s) from ${tbl}.` };
     } else if (uploadedTables[tbl]) {
       if (whereStr) {
         const rows = uploadedTables[tbl].rows;
         const matched = applyWhere(rows.map((r, i) => ({ ...r, _idx: i })), `SELECT * FROM x WHERE ${whereStr}`);
-        // delete in reverse to keep indices valid
         matched.reverse().forEach((r) => UploadedDataStore.deleteRow(tbl, r._idx));
         return { type: "mutation", rows: [], message: `✓ Deleted ${matched.length} row(s) from "${tbl}".` };
       } else {
@@ -197,9 +236,8 @@ async function executeSQL(sql, uploadedTables) {
         UploadedDataStore.set(tbl, { ...uploadedTables[tbl], rows: [] });
         return { type: "mutation", rows: [], message: `✓ Deleted all ${count} row(s) from "${tbl}".` };
       }
-    } else {
-      throw new Error(`Unknown table "${tbl}".`);
     }
+    throw new Error(`Unknown table "${tbl}".`);
   }
 
   throw new Error("Unsupported SQL. Supported: SELECT, INSERT, UPDATE, DELETE.");
@@ -215,8 +253,7 @@ function applyWhere(rows, sql) {
       if (!m) return true;
       const [, field, op, val] = m;
       const rowVal = row[field];
-      const numVal = parseFloat(val);
-      const rowNum = parseFloat(rowVal);
+      const numVal = parseFloat(val), rowNum = parseFloat(rowVal);
       switch (op.toUpperCase()) {
         case "=":    return String(rowVal ?? "").toLowerCase() === val.toLowerCase();
         case "!=": case "<>": return String(rowVal ?? "").toLowerCase() !== val.toLowerCase();
@@ -241,18 +278,56 @@ function exportCSV(rows) {
   URL.revokeObjectURL(url);
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Schema Tree Item ──────────────────────────────────────────────────────
+function TableTreeItem({ name, schema, isUploaded, onSelect, isActive, onQueryClick }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <div
+        className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all text-xs select-none
+          ${isActive ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+        onClick={() => { setOpen((v) => !v); onSelect(name); }}
+      >
+        {open ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
+        <Table2 className={`w-3 h-3 shrink-0 ${isUploaded ? "text-indigo-400" : "text-slate-500"}`} />
+        <span className="font-mono truncate flex-1">{name}</span>
+        {PROTECTED_TABLES.has(name) && <span className="text-[8px] text-slate-600">RO</span>}
+        <button
+          onClick={(e) => { e.stopPropagation(); onQueryClick(name); }}
+          className="opacity-0 group-hover:opacity-100 text-[9px] text-emerald-400 hover:text-emerald-300 font-bold transition-opacity px-1 rounded"
+          title="SELECT * FROM this table"
+        >
+          ▶
+        </button>
+      </div>
+      {open && (
+        <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/5 pl-2">
+          {schema.map(({ col, type }) => (
+            <div key={col} className="flex items-center gap-2 px-2 py-1 rounded text-[10px] text-slate-500 hover:text-slate-300 hover:bg-white/5 cursor-default">
+              <TypeIcon type={type} />
+              <span className="font-mono flex-1 truncate">{col}</span>
+              <TypeBadge type={type} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────
 export default function QueryBuilder() {
   const [sql, setSql] = useState("SELECT * FROM enterprises WHERE status = 'active'");
   const [results, setResults] = useState(null);
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [showSchema, setShowSchema] = useState(false);
+  const [activeTable, setActiveTable] = useState(null);
   const [uploadedTables, setUploadedTables] = useState(() => UploadedDataStore.getAll());
+  const [bottomTab, setBottomTab] = useState("output"); // "output" | "upload"
+  const loadingRef = useRef(false);
+  const textareaRef = useRef(null);
 
-  // Sync store changes to local state (skip during active query to avoid re-render cascade)
-  const loadingRef = React.useRef(false);
   useEffect(() => {
     return UploadedDataStore.subscribe((all) => {
       if (!loadingRef.current) setUploadedTables({ ...all });
@@ -261,22 +336,19 @@ export default function QueryBuilder() {
 
   const runQuery = async () => {
     loadingRef.current = true;
-    setLoading(true);
-    setError(null);
-    setResults(null);
-    setMessage(null);
-    // Always get the freshest snapshot right before executing
+    setLoading(true); setError(null); setResults(null); setMessage(null);
     const currentUploaded = UploadedDataStore.getAll();
     try {
       const result = await executeSQL(sql, currentUploaded);
       if (result.type === "select") setResults(result.rows);
       setMessage(result.message);
+      setBottomTab("output");
     } catch (e) {
       setError(e.message);
+      setBottomTab("output");
     } finally {
       loadingRef.current = false;
       setLoading(false);
-      // Sync any store mutations that happened during query
       setUploadedTables(UploadedDataStore.getAll());
     }
   };
@@ -285,202 +357,215 @@ export default function QueryBuilder() {
     ? Object.keys(results[0]).filter((k) => !["attachment_urls", "image_url", "photo_url", "attachment_url"].includes(k))
     : [];
 
+  const uploadedNames = Object.keys(uploadedTables);
+
   return (
-    <div className="flex gap-6 min-h-0">
-      {/* ── Left sidebar ──────────────────────────────────────────────────── */}
-      <aside className="w-64 shrink-0 space-y-5">
-        {/* Master tables */}
-        <div>
-          <div className="flex items-center gap-2 mb-2.5">
-            <Database className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Master Tables</span>
-          </div>
-          <div className="space-y-1">
-            {Object.entries(MASTER_TABLES).map(([name, conf]) => (
-              <button
-                key={name}
-                onClick={() => setSql(`SELECT * FROM ${name}`)}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors group text-left"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <Table2 className="w-3 h-3 text-slate-400 shrink-0" />
-                  <span className="font-mono text-xs text-slate-700 truncate">{name}</span>
-                </div>
-                {PROTECTED_TABLES.has(name) && (
-                  <span className="text-[9px] text-slate-300 font-medium">no DELETE</span>
-                )}
-              </button>
-            ))}
-          </div>
+    <div className="flex h-[calc(100vh-8rem)] gap-0 bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700">
+
+      {/* ── Schema sidebar ──────────────────────────────────────────────── */}
+      <aside className="w-60 shrink-0 flex flex-col border-r border-white/5 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center gap-2 px-3 py-3 border-b border-white/5">
+          <Database className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">Schema</span>
         </div>
 
-        {/* Uploaded tables */}
-        <div>
-          <div className="flex items-center gap-2 mb-2.5">
-            <Upload className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="text-xs font-bold text-indigo-500 uppercase tracking-wider">Uploaded Tables</span>
+        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-4">
+          {/* Master tables */}
+          <div>
+            <div className="flex items-center gap-1.5 px-2 py-1 mb-1">
+              <Layers className="w-3 h-3 text-slate-600" />
+              <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">Master</span>
+            </div>
+            {Object.keys(MASTER_TABLES).map((name) => (
+              <TableTreeItem
+                key={name}
+                name={name}
+                schema={MASTER_SCHEMA[name] || []}
+                isUploaded={false}
+                isActive={activeTable === name}
+                onSelect={setActiveTable}
+                onQueryClick={(n) => setSql(`SELECT * FROM ${n}`)}
+              />
+            ))}
           </div>
-          <UploadPanel uploadedTables={uploadedTables} onTablesChange={setUploadedTables} />
-          {Object.keys(uploadedTables).length > 0 && (
-            <div className="mt-2 space-y-1">
-              {Object.entries(uploadedTables).map(([name, t]) => (
-                <button
-                  key={name}
-                  onClick={() => setSql(`SELECT * FROM ${name}`)}
-                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-indigo-50 transition-colors text-left"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Table2 className="w-3 h-3 text-indigo-400 shrink-0" />
-                    <span className="font-mono text-xs text-indigo-700 truncate">{name}</span>
-                  </div>
-                  <Badge className="bg-indigo-50 text-indigo-500 text-[9px] px-1.5">{t.rows.length}</Badge>
-                </button>
-              ))}
+
+          {/* Uploaded tables */}
+          {uploadedNames.length > 0 && (
+            <div>
+              <div className="flex items-center gap-1.5 px-2 py-1 mb-1">
+                <Upload className="w-3 h-3 text-indigo-500" />
+                <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest">Uploaded</span>
+              </div>
+              {uploadedNames.map((name) => {
+                const tbl = uploadedTables[name];
+                const schema = getUploadedSchema(tbl.rows || []);
+                return (
+                  <TableTreeItem
+                    key={name}
+                    name={name}
+                    schema={schema}
+                    isUploaded={true}
+                    isActive={activeTable === name}
+                    onSelect={setActiveTable}
+                    onQueryClick={(n) => setSql(`SELECT * FROM ${n}`)}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
       </aside>
 
-      {/* ── Main area ─────────────────────────────────────────────────────── */}
-      <div className="flex-1 space-y-5 min-w-0">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">Query Builder</h1>
-          <p className="text-sm text-slate-400 mt-1">Run SQL queries — SELECT, INSERT, UPDATE, DELETE across master &amp; uploaded tables</p>
-        </div>
+      {/* ── Main area ───────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden">
 
-        {/* Sample queries */}
-        <div className="flex flex-wrap gap-2">
-          {SAMPLES.map((s) => (
-            <button
-              key={s.label}
-              onClick={() => setSql(s.query)}
-              className="text-xs px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all"
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-
-        {/* SQL Editor */}
-        <div className="bg-slate-950 rounded-2xl overflow-hidden shadow-xl">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
-            <div className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-full bg-rose-500/80" />
-              <span className="w-3 h-3 rounded-full bg-amber-500/80" />
-              <span className="w-3 h-3 rounded-full bg-emerald-500/80" />
-              <span className="ml-3 text-xs text-slate-500 font-mono">query.sql</span>
-            </div>
-            <Button
-              size="sm"
-              onClick={runQuery}
-              disabled={loading}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2 rounded-lg h-7 px-3 text-xs"
-            >
-              <PlayCircle className="w-3.5 h-3.5" />
-              {loading ? "Running…" : "Run Query"}
-            </Button>
-          </div>
-          <textarea
-            value={sql}
-            onChange={(e) => setSql(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) runQuery(); }}
-            className="w-full bg-transparent text-emerald-300 font-mono text-sm p-4 outline-none resize-none min-h-[120px] placeholder-slate-600"
-            spellCheck={false}
-          />
-          <div className="px-4 py-2 border-t border-white/5 flex items-center gap-2">
-            <Info className="w-3 h-3 text-slate-600" />
-            <span className="text-[11px] text-slate-600 font-mono">
-              Ctrl+Enter to run &nbsp;·&nbsp; SELECT, INSERT, UPDATE, DELETE &nbsp;·&nbsp; DELETE blocked on master data tables
-            </span>
-          </div>
-        </div>
-
-        {/* Schema reference */}
-        <button
-          onClick={() => setShowSchema((v) => !v)}
-          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
-        >
-          {showSchema ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          {showSchema ? "Hide" : "Show"} master table fields
-        </button>
-
-        {showSchema && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-            {MASTER_SCHEMA.map(({ t, fields }) => (
-              <div key={t} className="bg-white border border-slate-200 rounded-xl p-3">
-                <p className="font-mono text-xs font-bold text-slate-700 mb-1">{t}</p>
-                <p className="text-[10px] text-slate-400 leading-relaxed">{fields}</p>
-              </div>
+        {/* ── Toolbar ─────────────────────────────────────────────────── */}
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-slate-900 shrink-0">
+          <Button
+            size="sm"
+            onClick={runQuery}
+            disabled={loading}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 h-7 px-3 text-xs rounded-lg"
+          >
+            {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
+            {loading ? "Running…" : "Run"}
+          </Button>
+          <span className="text-[10px] text-slate-600 font-mono">Ctrl+Enter to run</span>
+          <div className="flex-1" />
+          {/* Sample queries */}
+          <div className="flex items-center gap-1 overflow-x-auto max-w-[500px]">
+            {SAMPLES.slice(0, 5).map((s) => (
+              <button
+                key={s.label}
+                onClick={() => setSql(s.query)}
+                className="text-[10px] px-2.5 py-1 rounded-full border border-white/10 bg-white/5 text-slate-500 hover:text-slate-300 hover:bg-white/10 whitespace-nowrap transition-all"
+              >
+                {s.label}
+              </button>
             ))}
           </div>
-        )}
+        </div>
 
-        {/* Success message */}
-        {message && !error && (
-          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            {message}
+        {/* ── SQL Editor ──────────────────────────────────────────────── */}
+        <div className="shrink-0 border-b border-white/5 relative">
+          <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-800/50 border-b border-white/5">
+            <span className="text-[10px] text-slate-600 font-mono">query.sql</span>
           </div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-sm text-rose-700">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            {error}
-          </div>
-        )}
-
-        {/* Results */}
-        {results !== null && results.length >= 0 && (
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-slate-700">Results</span>
-                <Badge className="bg-slate-100 text-slate-600">{results.length} rows</Badge>
-              </div>
-              {results.length > 0 && (
-                <Button size="sm" variant="outline" onClick={() => exportCSV(results)} className="gap-1.5 h-7 px-3 text-xs">
-                  <Download className="w-3.5 h-3.5" /> Export CSV
-                </Button>
-              )}
+          <div className="flex">
+            {/* Line numbers */}
+            <div className="select-none px-3 py-4 text-right font-mono text-[12px] text-slate-700 bg-slate-900/50 min-w-[40px] leading-5">
+              {sql.split("\n").map((_, i) => <div key={i}>{i + 1}</div>)}
             </div>
-            {results.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 text-sm">No rows matched your query.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      {columns.map((c) => (
-                        <th key={c} className="text-left px-4 py-2.5 text-slate-500 font-semibold whitespace-nowrap font-mono">{c}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {results.map((row, i) => (
-                      <tr key={row.id || i} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                        {columns.map((c) => {
-                          const val = row[c];
-                          const display = Array.isArray(val)
-                            ? `[${val.length} items]`
-                            : typeof val === "object" && val !== null
-                            ? JSON.stringify(val).slice(0, 60)
-                            : String(val ?? "");
-                          return (
-                            <td key={c} className="px-4 py-2.5 text-slate-700 whitespace-nowrap max-w-[200px] overflow-hidden text-ellipsis font-mono">
-                              {display || <span className="text-slate-300">—</span>}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <textarea
+              ref={textareaRef}
+              value={sql}
+              onChange={(e) => setSql(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) runQuery(); }}
+              className="flex-1 bg-transparent text-emerald-300 font-mono text-[13px] px-4 py-4 outline-none resize-none leading-5 min-h-[120px] max-h-[240px]"
+              spellCheck={false}
+            />
+          </div>
+        </div>
+
+        {/* ── Bottom panel ────────────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Tab bar */}
+          <div className="flex items-center gap-0 border-b border-white/5 bg-slate-800/30 shrink-0">
+            {[
+              { key: "output", label: "Output" },
+              { key: "upload", label: "Upload Table" },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setBottomTab(key)}
+                className={`px-4 py-2 text-xs font-medium border-b-2 transition-colors ${
+                  bottomTab === key
+                    ? "border-emerald-400 text-emerald-300"
+                    : "border-transparent text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                {label}
+                {key === "upload" && uploadedNames.length > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 bg-indigo-500/20 text-indigo-400 text-[9px] rounded-full font-bold">{uploadedNames.length}</span>
+                )}
+              </button>
+            ))}
+            {/* Right: status info */}
+            <div className="ml-auto px-4 text-[10px] text-slate-600 font-mono">
+              {message && !error && <span className="text-emerald-500">{message}</span>}
+              {error && <span className="text-rose-400 truncate max-w-[300px] block">{error}</span>}
+            </div>
+          </div>
+
+          {/* Tab content */}
+          <div className="flex-1 overflow-auto">
+            {bottomTab === "output" && (
+              <>
+                {!results && !error && !message && (
+                  <div className="flex items-center justify-center h-full text-slate-600 text-sm font-mono">
+                    Run a query to see results
+                  </div>
+                )}
+                {error && (
+                  <div className="flex items-start gap-2 px-4 py-4 text-sm text-rose-400">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <pre className="font-mono text-xs whitespace-pre-wrap">{error}</pre>
+                  </div>
+                )}
+                {results !== null && results.length === 0 && !error && (
+                  <div className="flex items-center justify-center h-full text-slate-500 text-sm font-mono">No rows matched.</div>
+                )}
+                {results !== null && results.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-slate-800/20 sticky top-0 z-10">
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px]">{results.length} rows</Badge>
+                      </div>
+                      <Button size="sm" variant="ghost" onClick={() => exportCSV(results)} className="gap-1.5 h-6 px-2 text-[10px] text-slate-400 hover:text-white">
+                        <Download className="w-3 h-3" /> Export CSV
+                      </Button>
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-10 z-10">
+                        <tr className="bg-slate-800">
+                          <th className="text-left px-3 py-2 text-slate-500 font-mono font-semibold border-b border-white/5 w-10">#</th>
+                          {columns.map((c) => (
+                            <th key={c} className="text-left px-4 py-2 text-slate-400 font-mono font-semibold border-b border-white/5 whitespace-nowrap">{c}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {results.map((row, i) => (
+                          <tr key={row.id || i} className={`border-b border-white/3 hover:bg-white/3 transition-colors ${i % 2 === 0 ? "" : "bg-white/[0.02]"}`}>
+                            <td className="px-3 py-2 text-slate-600 font-mono">{i + 1}</td>
+                            {columns.map((c) => {
+                              const val = row[c];
+                              const display = Array.isArray(val) ? `[${val.length}]` :
+                                typeof val === "object" && val !== null ? JSON.stringify(val).slice(0, 60) :
+                                String(val ?? "");
+                              return (
+                                <td key={c} className="px-4 py-2 text-slate-300 whitespace-nowrap max-w-[200px] overflow-hidden text-ellipsis font-mono">
+                                  {display || <span className="text-slate-600">NULL</span>}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+
+            {bottomTab === "upload" && (
+              <div className="p-4">
+                <UploadPanel uploadedTables={uploadedTables} onTablesChange={setUploadedTables} />
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
