@@ -6,7 +6,7 @@ import {
   PlayCircle, Download, ChevronDown, ChevronUp, Info,
   Database, Table2, Upload, CheckCircle2, AlertCircle,
 } from "lucide-react";
-import UploadPanel from "../components/querybuilder/UploadPanel";
+import UploadPanel from "../components/querybuilder/UploadPanel.jsx";
 import { UploadedDataStore } from "../components/querybuilder/UploadedDataStore";
 
 // ── Master table → SDK entity map ─────────────────────────────────────────────

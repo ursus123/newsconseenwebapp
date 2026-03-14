@@ -54,6 +54,7 @@ import ClockInOut from './pages/ClockInOut';
 import Dashboard from './pages/Dashboard';
 import DataModels from './pages/DataModels';
 import Enterprises from './pages/Enterprises';
+import EntityGraph from './pages/EntityGraph';
 import InviteUser from './pages/InviteUser';
 import MedAdmin from './pages/MedAdmin';
 import People from './pages/People';
@@ -77,6 +78,7 @@ export const PAGES = {
     "Dashboard": Dashboard,
     "DataModels": DataModels,
     "Enterprises": Enterprises,
+    "EntityGraph": EntityGraph,
     "InviteUser": InviteUser,
     "MedAdmin": MedAdmin,
     "People": People,
