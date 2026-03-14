@@ -60,6 +60,7 @@ const AuthenticatedApp = () => {
         />
       ))}
       <Route path="/EntityGraph" element={<LayoutWrapper currentPageName="EntityGraph"><EntityGraph /></LayoutWrapper>} />
+      <Route path="/PdfToExcel" element={<LayoutWrapper currentPageName="PDF to Excel"><PdfToExcel /></LayoutWrapper>} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

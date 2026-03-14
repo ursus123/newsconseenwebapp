@@ -36,6 +36,16 @@ const ALL_APPS = [
     page: "AddClient",
     status: "live",
   },
+  {
+    id: "pdftoexcel",
+    title: "PDF to Excel",
+    subtitle: "Extract tables from PDFs — download CSV or push to Query Builder",
+    icon: FileSpreadsheet,
+    color: "from-rose-700 to-rose-900",
+    accent: "bg-rose-300",
+    page: "PdfToExcel",
+    status: "live",
+  },
 ];
 
 export default function Applications() {
