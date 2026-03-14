@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Upload, Trash2, Table2, Loader2, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UploadedDataStore } from "./UploadedDataStore";
-import FilePreviewModal from "./FilePreviewModal.js";
+import FilePreviewModal from "./FilePreviewModal";
 
 function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
