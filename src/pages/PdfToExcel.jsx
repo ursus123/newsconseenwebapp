@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import {
   Upload, Download, Database, Loader2, AlertCircle, CheckCircle2,
-  FileText, Table2, X, ArrowRight, Eye, EyeOff, ChevronRight
+  FileText, Table2, X, ArrowRight, ChevronLeft, ChevronRight, ZoomIn, ZoomOut
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,20 +11,15 @@ import { UploadedDataStore } from "@/components/querybuilder/UploadedDataStore";
 function inferType(values) {
   const nonEmpty = values.filter((v) => v !== null && v !== undefined && String(v).trim() !== "");
   if (!nonEmpty.length) return "TEXT";
-  if (nonEmpty.every((v) => !isNaN(Number(v)) && !isNaN(parseFloat(v)))) {
+  if (nonEmpty.every((v) => !isNaN(Number(v)) && !isNaN(parseFloat(v))))
     return nonEmpty.every((v) => Number.isInteger(Number(v))) ? "INT" : "FLOAT";
-  }
   if (nonEmpty.every((v) => /^\d{4}-\d{2}-\d{2}/.test(String(v)))) return "DATE";
   return "TEXT";
 }
 
 function getSchema(rows) {
   if (!rows.length) return [];
-  const headers = Object.keys(rows[0]);
-  return headers.map((col) => ({
-    col,
-    type: inferType(rows.map((r) => r[col])),
-  }));
+  return Object.keys(rows[0]).map((col) => ({ col, type: inferType(rows.map((r) => r[col])) }));
 }
 
 function downloadCSV(table) {
@@ -35,7 +30,7 @@ function downloadCSV(table) {
     ...table.rows.map((r) =>
       headers.map((h) => {
         const val = String(r[h] ?? "").replace(/"/g, '""');
-        return val.includes(",") || val.includes('"') ? `"${val}"` : val;
+        return val.includes(",") || val.includes('"') || val.includes("\n") ? `"${val}"` : val;
       }).join(",")
     ),
   ].join("\n");
@@ -45,28 +40,211 @@ function downloadCSV(table) {
   URL.revokeObjectURL(url);
 }
 
+// ── PDF Viewer ─────────────────────────────────────────────────────────────
+function PdfViewer({ fileUrl }) {
+  return (
+    <div className="w-full h-full rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+      <iframe
+        src={`${fileUrl}#toolbar=1&navpanes=1&scrollbar=1`}
+        className="w-full h-full"
+        title="PDF Preview"
+        style={{ minHeight: "500px" }}
+      />
+    </div>
+  );
+}
+
+// ── Table selection sidebar ────────────────────────────────────────────────
+function TableSelector({ tables, selectedIdx, uploadedToSystem, onSelect }) {
+  return (
+    <div className="flex flex-col gap-1 overflow-y-auto">
+      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2 py-1 shrink-0">
+        {tables.length} Table{tables.length !== 1 ? "s" : ""} Extracted
+      </p>
+      {tables.map((t, idx) => {
+        const isUploaded = uploadedToSystem.has(t.name);
+        const isActive = idx === selectedIdx;
+        const headers = t.rows.length > 0 ? Object.keys(t.rows[0]) : [];
+        return (
+          <button
+            key={idx}
+            onClick={() => onSelect(idx)}
+            className={`w-full flex flex-col px-3 py-2.5 rounded-xl text-left transition-all
+              ${isActive ? "bg-rose-600/20 border border-rose-500/30" : "hover:bg-slate-100 border border-transparent"}`}
+          >
+            <div className="flex items-center gap-2">
+              <Table2 className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-rose-500" : "text-slate-400"}`} />
+              <span className={`font-mono text-xs font-bold truncate flex-1 ${isActive ? "text-rose-700" : "text-slate-700"}`}>{t.name}</span>
+              {isUploaded && <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />}
+            </div>
+            <div className="flex gap-1.5 mt-1 ml-5">
+              <Badge className="bg-slate-100 text-slate-500 text-[9px] px-1.5">{t.rows.length} rows</Badge>
+              <Badge className="bg-slate-100 text-slate-500 text-[9px] px-1.5">{headers.length} cols</Badge>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Column / row selection inside a table ─────────────────────────────────
+function TableDataSelector({ table, onUpload, onDownload, isUploaded }) {
+  const [hiddenCols, setHiddenCols] = useState(new Set());
+  const [selectedRows, setSelectedRows] = useState(null); // null = all
+
+  const schema = useMemo(() => getSchema(table.rows), [table]);
+  const visibleCols = schema.filter(({ col }) => !hiddenCols.has(col));
+  const displayRows = table.rows.slice(0, 200);
+
+  const toggleCol = (col) => setHiddenCols((prev) => {
+    const next = new Set(prev); next.has(col) ? next.delete(col) : next.add(col); return next;
+  });
+
+  const handleUpload = () => {
+    const cols = visibleCols.map((c) => c.col);
+    const rows = table.rows.map((r) => {
+      const o = {}; cols.forEach((c) => { o[c] = r[c]; }); return o;
+    });
+    onUpload({ rows, columns: cols });
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50 shrink-0">
+        <div className="flex items-center gap-2">
+          <Table2 className="w-4 h-4 text-rose-500" />
+          <span className="font-mono text-sm font-bold text-slate-800">{table.name}</span>
+          <Badge className="bg-slate-200 text-slate-600 text-[10px]">{table.rows.length} rows</Badge>
+          <Badge className="bg-slate-200 text-slate-600 text-[10px]">{schema.length} cols</Badge>
+          {isUploaded && (
+            <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] flex items-center gap-1">
+              <CheckCircle2 className="w-2.5 h-2.5" /> In Query Builder
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={onDownload} className="gap-1.5 h-7 px-3 text-xs">
+            <Download className="w-3 h-3" /> CSV
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleUpload}
+            disabled={isUploaded}
+            className={`gap-1.5 h-7 px-3 text-xs ${isUploaded ? "bg-emerald-100 text-emerald-500 cursor-default" : "bg-indigo-600 hover:bg-indigo-700 text-white"}`}
+          >
+            <Database className="w-3 h-3" />
+            {isUploaded ? "Uploaded" : `Upload ${visibleCols.length < schema.length ? `(${visibleCols.length} cols)` : "to System"}`}
+          </Button>
+        </div>
+      </div>
+
+      {/* Column toggles */}
+      <div className="flex flex-wrap gap-1.5 px-4 py-2 border-b border-slate-100 bg-white overflow-y-auto max-h-[64px] shrink-0">
+        {schema.map(({ col, type }) => {
+          const active = !hiddenCols.has(col);
+          return (
+            <button
+              key={col}
+              onClick={() => toggleCol(col)}
+              title={active ? "Click to exclude column" : "Click to include column"}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
+                active ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-slate-100 border-slate-200 text-slate-400 line-through"
+              }`}
+            >
+              <span className={`font-mono ${type === "INT" || type === "FLOAT" ? "text-blue-500" : type === "DATE" ? "text-amber-500" : ""}`}>{type}</span>
+              · {col}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Data table */}
+      <div className="flex-1 overflow-auto">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-slate-50">
+              <th className="text-left px-3 py-2 text-slate-400 font-mono font-semibold border-b border-slate-200 w-8">#</th>
+              {visibleCols.map(({ col, type }) => (
+                <th key={col} className="text-left px-3 py-2.5 border-b border-slate-200 whitespace-nowrap">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-slate-700">{col}</span>
+                    <span className={`text-[9px] font-bold px-1 rounded ${
+                      type === "INT" ? "bg-blue-100 text-blue-600" :
+                      type === "FLOAT" ? "bg-purple-100 text-purple-600" :
+                      type === "DATE" ? "bg-amber-100 text-amber-600" :
+                      "bg-slate-100 text-slate-400"
+                    }`}>{type}</span>
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {displayRows.map((row, i) => (
+              <tr key={i} className={`border-b border-slate-50 hover:bg-slate-50/60 ${i % 2 === 0 ? "" : "bg-slate-50/30"}`}>
+                <td className="px-3 py-1.5 text-slate-300 font-mono">{i + 1}</td>
+                {visibleCols.map(({ col }) => {
+                  const val = row[col];
+                  const isEmpty = val === null || val === undefined || String(val).trim() === "";
+                  return (
+                    <td key={col} className={`px-3 py-1.5 whitespace-nowrap max-w-[200px] overflow-hidden text-ellipsis font-mono ${isEmpty ? "text-slate-300 italic" : "text-slate-700"}`}>
+                      {isEmpty ? "NULL" : String(val)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {table.rows.length > 200 && (
+          <p className="text-center text-xs text-slate-400 py-3 border-t border-slate-100">
+            Showing 200 of {table.rows.length} rows
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────
 export default function PdfToExcel() {
   const [file, setFile] = useState(null);
+  const [fileUrl, setFileUrl] = useState(null); // for PDF preview
+  const [localFileUrl, setLocalFileUrl] = useState(null); // blob URL for iframe
   const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState("");
   const [error, setError] = useState(null);
   const [tables, setTables] = useState(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [uploadedToSystem, setUploadedToSystem] = useState(new Set());
   const [dragging, setDragging] = useState(false);
+  const [viewMode, setViewMode] = useState("split"); // "split" | "pdf" | "data"
 
   const handleFile = (f) => {
     if (!f || !f.name.match(/\.pdf$/i)) { setError("Please upload a valid PDF file."); return; }
-    setFile(f); setTables(null); setError(null); setUploadedToSystem(new Set());
+    setFile(f);
+    // Create local blob URL for iframe preview
+    setLocalFileUrl(URL.createObjectURL(f));
+    setTables(null); setError(null); setUploadedToSystem(new Set());
   };
 
   const extractTables = async () => {
     if (!file) return;
     setLoading(true); setError(null); setTables(null);
     try {
+      setLoadingStep("Uploading PDF…");
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      setFileUrl(file_url);
+
+      setLoadingStep("Extracting tables with AI…");
       const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are a data extraction assistant. Analyze this PDF and extract ALL tabular data you find.
-For each table found, give it a short descriptive snake_case name, and extract all rows as flat objects with column headers as keys.
+        prompt: `You are a data extraction assistant. Analyze this PDF document carefully and extract ALL tabular data you find.
+For each table found:
+- Give it a short descriptive snake_case name (e.g. sales_summary, employee_list)
+- Extract ALL rows as flat objects with the column headers as keys
+- Include every row, do not summarize or truncate
 If there are no tables, return an empty tables array.
 Be thorough — extract every table in the document.`,
         file_urls: [file_url],
@@ -93,31 +271,34 @@ Be thorough — extract every table in the document.`,
     } catch (e) {
       setError(e.message);
     } finally {
-      setLoading(false);
+      setLoading(false); setLoadingStep("");
     }
   };
 
-  const uploadToSystem = (table) => {
+  const uploadToSystem = (table, { rows, columns }) => {
     const tableName = table.name.toLowerCase().replace(/[^a-z0-9_]/g, "_");
-    const headers = table.rows.length > 0 ? Object.keys(table.rows[0]) : [];
-    UploadedDataStore.set(tableName, { rows: table.rows, columns: headers, uploadedAt: new Date().toISOString() });
+    UploadedDataStore.set(tableName, { rows, columns, uploadedAt: new Date().toISOString() });
     setUploadedToSystem((prev) => new Set([...prev, table.name]));
   };
 
-  const reset = () => { setFile(null); setTables(null); setError(null); setUploadedToSystem(new Set()); };
+  const reset = () => {
+    setFile(null);
+    if (localFileUrl) URL.revokeObjectURL(localFileUrl);
+    setLocalFileUrl(null); setFileUrl(null); setTables(null);
+    setError(null); setUploadedToSystem(new Set()); setViewMode("split");
+  };
 
   const activeTable = tables?.[selectedIdx];
-  const schema = useMemo(() => activeTable ? getSchema(activeTable.rows) : [], [activeTable]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-[1400px] mx-auto space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
             <FileText className="w-6 h-6 text-rose-500" /> PDF to Excel
           </h1>
-          <p className="text-sm text-slate-400 mt-1">Extract tables from PDFs — preview, download CSV, or push to Query Builder</p>
+          <p className="text-sm text-slate-400 mt-1">Upload a PDF — view the document, select which data to extract, then download CSV or push to Query Builder</p>
         </div>
         {tables && (
           <Button size="sm" variant="ghost" onClick={reset} className="gap-1.5 text-slate-400 hover:text-slate-700">
@@ -126,15 +307,15 @@ Be thorough — extract every table in the document.`,
         )}
       </div>
 
-      {/* Upload zone */}
-      {!tables && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm space-y-4">
+      {/* Upload zone — shown if no file yet */}
+      {!file && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
           <label
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
-            className={`flex flex-col items-center justify-center gap-4 border-2 border-dashed rounded-xl p-10 cursor-pointer transition-all
-              ${dragging ? "border-rose-400 bg-rose-50" : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100"}`}
+            className={`flex flex-col items-center justify-center gap-4 border-2 border-dashed rounded-xl p-12 cursor-pointer transition-all
+              ${dragging ? "border-rose-400 bg-rose-50" : "border-slate-200 bg-slate-50 hover:border-rose-300 hover:bg-rose-50/40"}`}
           >
             <input type="file" accept=".pdf" className="hidden"
               onChange={(e) => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ""; }} />
@@ -146,175 +327,152 @@ Be thorough — extract every table in the document.`,
               <p className="text-xs text-slate-400 mt-1">PDF files only</p>
             </div>
           </label>
+        </div>
+      )}
 
-          {file && (
-            <div className="flex items-center justify-between bg-rose-50 border border-rose-100 rounded-xl px-4 py-3">
-              <div className="flex items-center gap-3">
-                <FileText className="w-5 h-5 text-rose-500 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-slate-700">{file.name}</p>
-                  <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(1)} KB</p>
-                </div>
+      {/* File selected but not yet extracted */}
+      {file && !tables && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* PDF preview */}
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden" style={{ height: "600px" }}>
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50">
+              <FileText className="w-4 h-4 text-rose-500" />
+              <span className="text-sm font-semibold text-slate-700 truncate">{file.name}</span>
+              <span className="text-xs text-slate-400 ml-auto">{(file.size / 1024).toFixed(1)} KB</span>
+              <button onClick={() => { reset(); }} className="text-slate-300 hover:text-rose-500 transition-colors ml-2">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-2 h-[calc(100%-53px)]">
+              <PdfViewer fileUrl={localFileUrl} />
+            </div>
+          </div>
+
+          {/* Extract panel */}
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col justify-center gap-5">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-rose-50 flex items-center justify-center">
+                <Table2 className="w-7 h-7 text-rose-400" />
               </div>
-              <button onClick={() => setFile(null)} className="text-slate-300 hover:text-rose-500 transition-colors"><X className="w-4 h-4" /></button>
+              <div>
+                <p className="font-semibold text-slate-800">Extract Tables from PDF</p>
+                <p className="text-sm text-slate-400 mt-1">AI will scan the document and extract all tabular data it finds. You can then preview each table and choose which data to use.</p>
+              </div>
             </div>
-          )}
 
-          {error && (
-            <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-sm text-rose-700">
-              <AlertCircle className="w-4 h-4 shrink-0" />{error}
-            </div>
-          )}
+            {error && (
+              <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-sm text-rose-700">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />{error}
+              </div>
+            )}
 
-          <div className="flex justify-end">
-            <Button onClick={extractTables} disabled={!file || loading} className="bg-rose-600 hover:bg-rose-700 text-white gap-2">
+            {loading && (
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="w-8 h-8 text-rose-400 animate-spin" />
+                <p className="text-sm text-slate-500">{loadingStep}</p>
+              </div>
+            )}
+
+            <Button
+              onClick={extractTables}
+              disabled={loading}
+              className="bg-rose-600 hover:bg-rose-700 text-white gap-2 w-full"
+              size="lg"
+            >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-              {loading ? "Extracting tables…" : "Extract Tables"}
+              {loading ? loadingStep : "Extract Tables"}
             </Button>
           </div>
         </div>
       )}
 
-      {/* Results: two-panel layout */}
-      {tables && (
-        <div className="flex gap-4 min-h-[600px]">
-          {/* Left: table list */}
-          <aside className="w-56 shrink-0 bg-slate-900 rounded-2xl p-3 flex flex-col gap-1 overflow-y-auto">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2 py-1">
-              {tables.length} Table{tables.length !== 1 ? "s" : ""} Found
-            </p>
-            {tables.map((t, idx) => {
-              const isUploaded = uploadedToSystem.has(t.name);
-              const isActive = idx === selectedIdx;
-              return (
+      {/* Results: PDF + table explorer */}
+      {tables && activeTable && (
+        <>
+          {/* View mode toggle */}
+          <div className="flex items-center gap-2">
+            <div className="flex bg-slate-100 rounded-xl p-1 gap-1">
+              {[
+                { key: "split", label: "Split View" },
+                { key: "pdf",   label: "PDF Only" },
+                { key: "data",  label: "Data Only" },
+              ].map(({ key, label }) => (
                 <button
-                  key={idx}
-                  onClick={() => setSelectedIdx(idx)}
-                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition-all text-xs
-                    ${isActive ? "bg-rose-600/20 text-rose-300 border border-rose-500/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
-                >
-                  <Table2 className="w-3.5 h-3.5 shrink-0" />
-                  <span className="font-mono truncate flex-1">{t.name}</span>
-                  {isUploaded && <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />}
-                </button>
-              );
-            })}
-          </aside>
+                  key={key}
+                  onClick={() => setViewMode(key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    viewMode === key ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >{label}</button>
+              ))}
+            </div>
+            <div className="text-sm text-slate-500 ml-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 inline mr-1" />
+              {tables.length} table{tables.length !== 1 ? "s" : ""} found in <strong>{file?.name}</strong>
+            </div>
+          </div>
 
-          {/* Right: table detail */}
-          {activeTable && (
-            <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
-              {/* Table toolbar */}
-              <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-100 bg-slate-50 shrink-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Table2 className="w-4 h-4 text-rose-500 shrink-0" />
-                  <span className="font-mono text-sm font-bold text-slate-800">{activeTable.name}</span>
-                  <Badge className="bg-slate-200 text-slate-600 text-[10px]">{activeTable.rows.length} rows</Badge>
-                  <Badge className="bg-slate-200 text-slate-600 text-[10px]">{schema.length} cols</Badge>
-                  {uploadedToSystem.has(activeTable.name) && (
-                    <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] flex items-center gap-1">
-                      <CheckCircle2 className="w-2.5 h-2.5" /> In Query Builder
-                    </Badge>
-                  )}
+          <div className="flex gap-4" style={{ height: "calc(100vh - 260px)", minHeight: "560px" }}>
+            {/* Table list sidebar */}
+            <aside className="w-52 shrink-0 bg-white border border-slate-200 rounded-2xl p-3 overflow-y-auto shadow-sm">
+              <TableSelector
+                tables={tables}
+                selectedIdx={selectedIdx}
+                uploadedToSystem={uploadedToSystem}
+                onSelect={setSelectedIdx}
+              />
+            </aside>
+
+            {/* PDF panel */}
+            {(viewMode === "split" || viewMode === "pdf") && (
+              <div className={`${viewMode === "split" ? "flex-1" : "flex-[2]"} bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm`}>
+                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 bg-slate-50">
+                  <FileText className="w-3.5 h-3.5 text-rose-400" />
+                  <span className="text-xs font-semibold text-slate-600 truncate">{file?.name}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="outline" onClick={() => downloadCSV(activeTable)} className="gap-1.5 h-7 px-3 text-xs">
-                    <Download className="w-3 h-3" /> Download CSV
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => uploadToSystem(activeTable)}
-                    disabled={uploadedToSystem.has(activeTable.name)}
-                    className={`gap-1.5 h-7 px-3 text-xs ${uploadedToSystem.has(activeTable.name) ? "bg-emerald-100 text-emerald-500 cursor-default" : "bg-indigo-600 hover:bg-indigo-700 text-white"}`}
-                  >
-                    <Database className="w-3 h-3" />
-                    {uploadedToSystem.has(activeTable.name) ? "Uploaded" : "Upload to System"}
-                  </Button>
+                <div className="p-2" style={{ height: "calc(100% - 44px)" }}>
+                  <PdfViewer fileUrl={localFileUrl} />
                 </div>
               </div>
+            )}
 
-              {/* Schema strip */}
-              <div className="flex gap-2 px-5 py-2 border-b border-slate-100 bg-white overflow-x-auto shrink-0">
-                {schema.map(({ col, type }) => (
-                  <div key={col} className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg whitespace-nowrap">
-                    <span className="font-mono text-[10px] font-bold text-slate-700">{col}</span>
-                    <span className={`text-[9px] font-bold px-1 rounded ${
-                      type === "INT" ? "bg-blue-100 text-blue-600" :
-                      type === "FLOAT" ? "bg-purple-100 text-purple-600" :
-                      type === "DATE" ? "bg-amber-100 text-amber-600" :
-                      "bg-slate-100 text-slate-500"
-                    }`}>{type}</span>
-                  </div>
-                ))}
+            {/* Data panel */}
+            {(viewMode === "split" || viewMode === "data") && (
+              <div className={`${viewMode === "split" ? "flex-1" : "flex-[2]"} bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col`}>
+                <TableDataSelector
+                  key={selectedIdx}
+                  table={activeTable}
+                  isUploaded={uploadedToSystem.has(activeTable.name)}
+                  onDownload={() => downloadCSV(activeTable)}
+                  onUpload={({ rows, columns }) => uploadToSystem(activeTable, { rows, columns })}
+                />
               </div>
+            )}
+          </div>
 
-              {/* Data table */}
-              <div className="flex-1 overflow-auto">
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-slate-50 z-10">
-                    <tr>
-                      <th className="text-left px-3 py-2.5 text-slate-400 font-semibold border-b border-slate-200 w-10 font-mono">#</th>
-                      {schema.map(({ col, type }) => (
-                        <th key={col} className="text-left px-4 py-2.5 border-b border-slate-200 whitespace-nowrap">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-bold text-slate-700">{col}</span>
-                            <span className={`text-[9px] font-bold px-1 rounded ${
-                              type === "INT" ? "bg-blue-100 text-blue-600" :
-                              type === "FLOAT" ? "bg-purple-100 text-purple-600" :
-                              type === "DATE" ? "bg-amber-100 text-amber-600" :
-                              "bg-slate-100 text-slate-400"
-                            }`}>{type}</span>
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeTable.rows.slice(0, 200).map((row, i) => (
-                      <tr key={i} className={`border-b border-slate-50 hover:bg-slate-50/60 transition-colors ${i % 2 === 0 ? "" : "bg-slate-50/30"}`}>
-                        <td className="px-3 py-2 text-slate-300 font-mono">{i + 1}</td>
-                        {schema.map(({ col }) => {
-                          const val = row[col];
-                          const isEmpty = val === null || val === undefined || String(val).trim() === "";
-                          return (
-                            <td key={col} className={`px-4 py-2 whitespace-nowrap max-w-[220px] overflow-hidden text-ellipsis font-mono ${isEmpty ? "text-slate-300 italic" : "text-slate-700"}`}>
-                              {isEmpty ? "NULL" : String(val)}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {activeTable.rows.length > 200 && (
-                  <p className="text-center text-xs text-slate-400 py-3 border-t border-slate-100">
-                    Showing 200 of {activeTable.rows.length} rows
-                  </p>
-                )}
-              </div>
+          {/* Bulk upload bar */}
+          {tables.some((t) => !uploadedToSystem.has(t.name)) && (
+            <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-xl px-5 py-3">
+              <span className="text-sm text-indigo-700 flex items-center gap-2">
+                <Database className="w-4 h-4" />
+                Upload all {tables.length} tables to Query Builder at once
+              </span>
+              <Button size="sm" onClick={() => tables.forEach((t) => {
+                const cols = t.rows.length > 0 ? Object.keys(t.rows[0]) : [];
+                uploadToSystem(t, { rows: t.rows, columns: cols });
+              })} className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 text-xs">
+                <Database className="w-3 h-3" /> Upload All
+              </Button>
             </div>
           )}
-        </div>
-      )}
 
-      {/* Upload all shortcut */}
-      {tables && tables.some((t) => !uploadedToSystem.has(t.name)) && (
-        <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-xl px-5 py-3">
-          <div className="flex items-center gap-2 text-sm text-indigo-700">
-            <Database className="w-4 h-4" />
-            Upload all {tables.length} tables to Query Builder at once
-          </div>
-          <Button size="sm" onClick={() => tables.forEach((t) => uploadToSystem(t))} className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 text-xs">
-            <Database className="w-3 h-3" /> Upload All
-          </Button>
-        </div>
-      )}
-
-      {uploadedToSystem.size > 0 && (
-        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-3 text-sm text-emerald-700">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          {uploadedToSystem.size} table{uploadedToSystem.size !== 1 ? "s" : ""} are now in the Query Builder — go to <strong className="mx-1">Phase 2 → Query Builder</strong> to query and insert into master tables.
-        </div>
+          {uploadedToSystem.size > 0 && (
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-3 text-sm text-emerald-700">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              {uploadedToSystem.size} table{uploadedToSystem.size !== 1 ? "s" : ""} loaded into Query Builder — go to <strong className="mx-1">Phase 2 → Query Builder</strong> to query and insert into master tables.
+            </div>
+          )}
+        </>
       )}
     </div>
   );
