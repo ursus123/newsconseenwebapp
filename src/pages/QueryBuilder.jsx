@@ -7,7 +7,7 @@ import {
   Database, Table2, Upload, CheckCircle2, AlertCircle,
   Hash, Type, Calendar, ToggleLeft, Layers, RefreshCw,
 } from "lucide-react";
-import UploadPanel from "../components/querybuilder/UploadPanel.jsx";
+import UploadPanel from "../components/querybuilder/UploadPanel";
 import { UploadedDataStore } from "../components/querybuilder/UploadedDataStore";
 
 // ── Entity → column schema map ─────────────────────────────────────────────
