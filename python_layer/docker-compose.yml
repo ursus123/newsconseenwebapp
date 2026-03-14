@@ -2,12 +2,13 @@ version: "3.9"
 
 services:
   fastapi:
-    build: ./fastapi
+    build: .
     container_name: newsconseen_fastapi
+    command: uvicorn app:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     volumes:
-      - ./fastapi:/app
+      - .:/app
     depends_on:
       - postgres
     environment:
@@ -38,7 +39,8 @@ services:
       - "8080:8080"
     command: webserver
     volumes:
-      - ./airflow:/opt/airflow
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
 
   airflow-scheduler:
     image: apache/airflow:2.9.0
@@ -50,7 +52,8 @@ services:
       AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen
     command: scheduler
     volumes:
-      - ./airflow:/opt/airflow
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
 
   superset:
     image: apache/superset:latest
