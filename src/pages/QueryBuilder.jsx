@@ -576,6 +576,46 @@ export default function QueryBuilder() {
                 <UploadPanel uploadedTables={uploadedTables} onTablesChange={setUploadedTables} />
               </div>
             )}
+
+            {bottomTab === "history" && (
+              <div className="p-3">
+                {queryHistory.length === 0 ? (
+                  <div className="flex items-center justify-center h-24 text-slate-600 text-xs font-mono">No queries run yet</div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between mb-2 px-1">
+                      <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{queryHistory.length} queries</span>
+                      <button
+                        onClick={() => { setQueryHistory([]); localStorage.removeItem("qb_history"); }}
+                        className="flex items-center gap-1 text-[10px] text-slate-600 hover:text-rose-400 transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" /> Clear
+                      </button>
+                    </div>
+                    <div className="space-y-1">
+                      {queryHistory.map((entry, i) => (
+                        <div
+                          key={i}
+                          onClick={() => setSql(entry.sql)}
+                          className="group flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 cursor-pointer transition-all border border-white/5"
+                        >
+                          <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${entry.status === "ok" ? "bg-emerald-400" : "bg-rose-400"}`} />
+                          <div className="flex-1 min-w-0">
+                            <pre className="font-mono text-[11px] text-slate-300 whitespace-pre-wrap line-clamp-2 leading-4">{entry.sql}</pre>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[9px] text-slate-600">{new Date(entry.ts).toLocaleTimeString()}</span>
+                              {entry.status === "ok" && <span className="text-[9px] text-emerald-600">{entry.rows} rows · {entry.ms}ms</span>}
+                              {entry.status === "error" && <span className="text-[9px] text-rose-500 truncate">{entry.message}</span>}
+                            </div>
+                          </div>
+                          <span className="text-[9px] text-slate-600 opacity-0 group-hover:opacity-100 shrink-0 mt-1">click to load</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
