@@ -1,17 +1,9 @@
 import React, { useState } from "react";
 import {
-  Database, Upload, Globe, Code2, ChevronDown, ChevronRight,
-  Eye, Zap, Plus, Building2, Users, Package, Wrench, MapPin,
-  ArrowLeftRight, ClipboardList, Link2, CheckCircle2,
+  Upload, Globe, Code2, ChevronDown, ChevronRight,
+  Zap, Plus,
 } from "lucide-react";
-import { MASTER_TABLES } from "./sqlEngine";
 import UploadPanel from "./UploadPanel";
-
-const ENTITY_ICONS = {
-  enterprises: Building2, people: Users, products: Package,
-  services: Wrench, addresses: MapPin, tasks: ClipboardList,
-  transactions: ArrowLeftRight, relationships: Link2,
-};
 
 const EXTERNAL_APIS = [
   { key: "python_analytics", name: "Python Analytics", endpoint: "/analytics/run", method: "POST", color: "text-amber-400", bg: "bg-amber-500/10" },
