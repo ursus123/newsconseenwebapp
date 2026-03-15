@@ -341,11 +341,14 @@ export default function QueryBuilder() {
     loadingRef.current = true;
     setLoading(true); setError(null); setResults(null); setMessage(null);
     const currentUploaded = UploadedDataStore.getAll();
+    const startTime = Date.now();
     try {
       const result = await executeSQL(sql, currentUploaded);
       if (result.type === "select") setResults(result.rows);
       setMessage(result.message);
       setBottomTab("output");
+      const entry = { sql, status: "ok", message: result.message, rows: result.rows?.length ?? 0, ts: new Date().toISOString(), ms: Date.now() - startTime };
+      setQueryHistory((prev) => { const next = [entry, ...prev].slice(0, 50); localStorage.setItem("qb_history", JSON.stringify(next)); return next; });
     } catch (e) {
       setError(e.message);
       setBottomTab("output");
