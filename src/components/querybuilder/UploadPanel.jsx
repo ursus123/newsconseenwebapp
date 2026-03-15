@@ -57,31 +57,20 @@ export default function UploadPanel({ uploadedTables, onTablesChange }) {
       if (file.name.match(/\.(xlsx|xls)$/i)) {
         setLoadingMsg("Uploading file…");
         const { file_url } = await base44.integrations.Core.UploadFile({ file });
-        setLoadingMsg("Extracting sheets with AI…");
-        const llmResult = await base44.integrations.Core.InvokeLLM({
-          prompt: `Extract ALL sheets from this Excel workbook. For each sheet return its exact name and ALL rows as an array of flat objects using the first row as column headers. Include every row. File: ${file_url}`,
-          file_urls: [file_url],
-          response_json_schema: {
+        setLoadingMsg("Extracting data from Excel…");
+        const result = await base44.integrations.Core.ExtractDataFromUploadedFile({
+          file_url,
+          json_schema: {
             type: "object",
-            properties: {
-              sheets: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string" },
-                    rows: { type: "array", items: { type: "object", additionalProperties: true } },
-                  },
-                },
-              },
-            },
+            additionalProperties: true,
           },
         });
-        const sheets = llmResult?.sheets;
-        if (!sheets || !sheets.length) throw new Error("Could not parse any sheets from the file.");
-        const validSheets = sheets.filter((s) => s.rows && s.rows.length > 0);
-        if (!validSheets.length) throw new Error("No data found in the file.");
-        setPreviewData({ tableName, fileData: { sheets: validSheets } });
+        if (result.status !== "success" || !result.output) {
+          throw new Error(result.details || "Could not extract data from the Excel file.");
+        }
+        const rawData = Array.isArray(result.output) ? result.output : [result.output];
+        if (!rawData.length) throw new Error("No data found in the file.");
+        setPreviewData({ tableName, fileData: { rows: rawData } });
       } else {
         setLoadingMsg("Reading CSV…");
         const text = await file.text();
