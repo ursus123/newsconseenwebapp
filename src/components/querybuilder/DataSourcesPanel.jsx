@@ -33,37 +33,6 @@ export default function DataSourcesPanel({ uploadedTables, onTablesChange, onUse
   return (
     <div className="flex flex-col h-full overflow-y-auto text-sm">
 
-      {/* Base44 Entities */}
-      <Section title="Base44 Entities" icon={Database} iconColor="text-emerald-400">
-        <div className="space-y-0.5 px-2">
-          {Object.entries(MASTER_TABLES).map(([key, { label }]) => {
-            const Icon = ENTITY_ICONS[key] || Database;
-            return (
-              <div key={key} className="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-all">
-                <Icon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                <span className="font-mono text-xs text-slate-300 flex-1 truncate">{label}</span>
-                <div className="hidden group-hover:flex items-center gap-1">
-                  <button
-                    onClick={() => onPreview(key)}
-                    title="Preview"
-                    className="p-1 rounded hover:bg-white/10 text-slate-500 hover:text-slate-300 transition-colors"
-                  >
-                    <Eye className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={() => onUseInQuery(`SELECT * FROM ${key}`)}
-                    title="Use in Query"
-                    className="p-1 rounded hover:bg-emerald-500/20 text-slate-500 hover:text-emerald-400 transition-colors"
-                  >
-                    <Zap className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </Section>
-
       {/* Uploaded CSV/Excel */}
       <Section title="Uploaded Files" icon={Upload} iconColor="text-indigo-400">
         <div className="px-2 space-y-0.5">
