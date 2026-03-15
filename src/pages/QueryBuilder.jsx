@@ -352,6 +352,8 @@ export default function QueryBuilder() {
     } catch (e) {
       setError(e.message);
       setBottomTab("output");
+      const entry = { sql, status: "error", message: e.message, rows: 0, ts: new Date().toISOString(), ms: Date.now() - startTime };
+      setQueryHistory((prev) => { const next = [entry, ...prev].slice(0, 50); localStorage.setItem("qb_history", JSON.stringify(next)); return next; });
     } finally {
       loadingRef.current = false;
       setLoading(false);
