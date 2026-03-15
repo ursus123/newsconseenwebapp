@@ -1,97 +1,20 @@
 import React, { useState, useEffect, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import {
+  PlayCircle, CheckCircle2, RefreshCw, History, Trash2,
+  Database, ChevronDown, ChevronRight, Table2, Upload,
+  Hash, Type, Calendar, ToggleLeft, Layers, Wand2, Code2,
+  AlignLeft,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  PlayCircle, Download, ChevronDown, ChevronRight, ChevronUp,
-  Database, Table2, Upload, CheckCircle2, AlertCircle,
-  Hash, Type, Calendar, ToggleLeft, Layers, RefreshCw, History, Trash2,
-} from "lucide-react";
-import UploadPanel from "../components/querybuilder/UploadPanel";
+
 import { UploadedDataStore } from "../components/querybuilder/UploadedDataStore";
+import { executeSQL, MASTER_TABLES, MASTER_SCHEMA, PROTECTED_TABLES, getUploadedSchema } from "../components/querybuilder/sqlEngine";
+import DataSourcesPanel from "../components/querybuilder/DataSourcesPanel";
+import VisualQueryBuilder from "../components/querybuilder/VisualQueryBuilder";
+import OutputPanel from "../components/querybuilder/OutputPanel";
 
-// ── Entity → column schema map ─────────────────────────────────────────────
-const MASTER_TABLES = {
-  enterprises:   { entity: "Enterprise",   label: "Enterprises" },
-  people:        { entity: "Person",        label: "People" },
-  products:      { entity: "Product",       label: "Products" },
-  services:      { entity: "Service",       label: "Services" },
-  addresses:     { entity: "Address",       label: "Addresses" },
-  relationships: { entity: "Relationship",  label: "Relationships" },
-  tasks:         { entity: "Task",          label: "Tasks" },
-  transactions:  { entity: "Transaction",   label: "Transactions" },
-};
-
-const PROTECTED_TABLES = new Set(["enterprises", "people", "products", "services", "addresses"]);
-
-const MASTER_SCHEMA = {
-  enterprises:   [
-    { col: "id", type: "VARCHAR" }, { col: "enterprise_name", type: "VARCHAR" },
-    { col: "short_name", type: "VARCHAR" }, { col: "status", type: "ENUM" },
-    { col: "enterprise_type", type: "ENUM" }, { col: "city", type: "VARCHAR" },
-    { col: "country", type: "VARCHAR" }, { col: "phone", type: "VARCHAR" },
-    { col: "email", type: "VARCHAR" }, { col: "created_date", type: "DATETIME" },
-  ],
-  people: [
-    { col: "id", type: "VARCHAR" }, { col: "first_name", type: "VARCHAR" },
-    { col: "last_name", type: "VARCHAR" }, { col: "person_type", type: "ENUM" },
-    { col: "status", type: "ENUM" }, { col: "primary_role", type: "VARCHAR" },
-    { col: "email", type: "VARCHAR" }, { col: "phone", type: "VARCHAR" },
-    { col: "start_date", type: "DATE" }, { col: "created_date", type: "DATETIME" },
-  ],
-  products: [
-    { col: "id", type: "VARCHAR" }, { col: "name", type: "VARCHAR" },
-    { col: "sku", type: "VARCHAR" }, { col: "status", type: "ENUM" },
-    { col: "item_type", type: "ENUM" }, { col: "stock_quantity", type: "INT" },
-    { col: "unit_price", type: "FLOAT" }, { col: "cost_price", type: "FLOAT" },
-    { col: "category", type: "ENUM" }, { col: "created_date", type: "DATETIME" },
-  ],
-  services: [
-    { col: "id", type: "VARCHAR" }, { col: "name", type: "VARCHAR" },
-    { col: "status", type: "ENUM" }, { col: "category", type: "ENUM" },
-    { col: "price", type: "FLOAT" }, { col: "pricing_model", type: "ENUM" },
-    { col: "created_date", type: "DATETIME" },
-  ],
-  addresses: [
-    { col: "id", type: "VARCHAR" }, { col: "label", type: "VARCHAR" },
-    { col: "address_line1", type: "VARCHAR" }, { col: "city", type: "VARCHAR" },
-    { col: "country", type: "VARCHAR" }, { col: "status", type: "ENUM" },
-    { col: "created_date", type: "DATETIME" },
-  ],
-  relationships: [
-    { col: "id", type: "VARCHAR" }, { col: "relationship_type", type: "ENUM" },
-    { col: "person_name", type: "VARCHAR" }, { col: "enterprise_name", type: "VARCHAR" },
-    { col: "status", type: "ENUM" }, { col: "start_date", type: "DATE" },
-    { col: "created_date", type: "DATETIME" },
-  ],
-  tasks: [
-    { col: "id", type: "VARCHAR" }, { col: "title", type: "VARCHAR" },
-    { col: "task_type", type: "ENUM" }, { col: "status", type: "ENUM" },
-    { col: "priority", type: "ENUM" }, { col: "assigned_to_email", type: "VARCHAR" },
-    { col: "scheduled_date", type: "DATE" }, { col: "due_date", type: "DATE" },
-    { col: "created_date", type: "DATETIME" },
-  ],
-  transactions: [
-    { col: "id", type: "VARCHAR" }, { col: "transaction_type", type: "ENUM" },
-    { col: "status", type: "ENUM" }, { col: "date", type: "DATE" },
-    { col: "amount", type: "FLOAT" }, { col: "payment_status", type: "ENUM" },
-    { col: "primary_person", type: "VARCHAR" }, { col: "enterprise", type: "VARCHAR" },
-    { col: "created_date", type: "DATETIME" },
-  ],
-};
-
-const SAMPLES = [
-  { label: "Active enterprises",    query: "SELECT * FROM enterprises WHERE status = 'active'" },
-  { label: "Active people",         query: "SELECT * FROM people WHERE status = 'active'" },
-  { label: "Low-stock products",    query: "SELECT * FROM products WHERE stock_quantity < min_stock_level" },
-  { label: "Open tasks",            query: "SELECT * FROM tasks WHERE status = 'open'" },
-  { label: "Posted transactions",   query: "SELECT * FROM transactions WHERE status = 'posted'" },
-  { label: "INSERT into master",    query: "INSERT INTO enterprises (enterprise_name, status) VALUES ('New Co', 'active')" },
-  { label: "UPDATE master",         query: "UPDATE tasks SET status = 'completed' WHERE id = 'REPLACE_WITH_ID'" },
-  { label: "INSERT uploaded → master", query: "INSERT INTO people SELECT first_name, last_name, person_type FROM my_uploaded_table" },
-];
-
-// ── Type icon helper ──────────────────────────────────────────────────────
+// ── Type display helpers ──────────────────────────────────────────────────
 function TypeIcon({ type }) {
   const cls = "w-3 h-3 shrink-0";
   if (type === "INT" || type === "FLOAT") return <Hash className={`${cls} text-blue-400`} />;
@@ -99,187 +22,16 @@ function TypeIcon({ type }) {
   if (type === "ENUM") return <ToggleLeft className={`${cls} text-violet-400`} />;
   return <Type className={`${cls} text-slate-400`} />;
 }
-
 function TypeBadge({ type }) {
-  const color = type === "INT" || type === "FLOAT" ? "text-blue-400" :
-    type === "DATE" || type === "DATETIME" ? "text-amber-400" :
-    type === "ENUM" ? "text-violet-400" : "text-slate-500";
+  const color = type === "INT" || type === "FLOAT" ? "text-blue-400"
+    : type === "DATE" || type === "DATETIME" ? "text-amber-400"
+    : type === "ENUM" ? "text-violet-400"
+    : "text-slate-500";
   return <span className={`font-mono text-[9px] font-bold ${color}`}>{type}</span>;
 }
 
-function inferType(values) {
-  const nonEmpty = values.filter((v) => v !== null && v !== undefined && String(v).trim() !== "");
-  if (!nonEmpty.length) return "TEXT";
-  if (nonEmpty.every((v) => !isNaN(Number(v)) && !isNaN(parseFloat(v)))) {
-    return nonEmpty.every((v) => Number.isInteger(Number(v))) ? "INT" : "FLOAT";
-  }
-  if (nonEmpty.every((v) => /^\d{4}-\d{2}-\d{2}/.test(String(v)))) return "DATE";
-  return "TEXT";
-}
-
-function getUploadedSchema(rows) {
-  if (!rows.length) return [];
-  return Object.keys(rows[0]).map((col) => ({ col, type: inferType(rows.map((r) => r[col])) }));
-}
-
-// ── SQL Executor ──────────────────────────────────────────────────────────
-async function executeSQL(sql, uploadedTables) {
-  const s = sql.trim().replace(/\s+/g, " ");
-  const upper = s.toUpperCase();
-
-  if (upper.startsWith("SELECT")) {
-    const fromMatch = s.match(/FROM\s+(\w+)/i);
-    if (!fromMatch) throw new Error("Missing FROM clause.");
-    const tableName = fromMatch[1].toLowerCase();
-    let rows;
-    if (Object.prototype.hasOwnProperty.call(uploadedTables, tableName)) {
-      rows = uploadedTables[tableName].rows.map((r) => ({ ...r }));
-    } else if (MASTER_TABLES[tableName]) {
-      rows = await base44.entities[MASTER_TABLES[tableName].entity].list("-created_date", 2000);
-    } else {
-      throw new Error(`Unknown table "${tableName}".`);
-    }
-    const colsMatch = s.match(/SELECT\s+(.+?)\s+FROM/i);
-    const colStr = colsMatch ? colsMatch[1].trim() : "*";
-    if (colStr !== "*") {
-      const cols = colStr.split(",").map((c) => c.trim());
-      rows = rows.map((r) => { const o = {}; cols.forEach((c) => { o[c] = r[c]; }); return o; });
-    }
-    rows = applyWhere(rows, s);
-    return { type: "select", rows, message: `${rows.length} row(s) returned.` };
-  }
-
-  if (upper.startsWith("INSERT") && upper.includes("SELECT")) {
-    const m = s.match(/INSERT\s+INTO\s+(\w+)\s+SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
-    if (!m) throw new Error("Invalid INSERT...SELECT syntax.");
-    const [, destTable, colStr, srcTable, whereClause] = m;
-    const dest = destTable.toLowerCase(), src = srcTable.toLowerCase();
-    if (!MASTER_TABLES[dest]) throw new Error(`INSERT destination must be a master table.`);
-    if (!uploadedTables[src]) throw new Error(`Source table "${src}" not found.`);
-    const cols = colStr.trim() === "*" ? uploadedTables[src].columns : colStr.split(",").map((c) => c.trim());
-    let srcRows = [...uploadedTables[src].rows];
-    if (whereClause) srcRows = applyWhere(srcRows, `SELECT * FROM x WHERE ${whereClause}`);
-    const entity = base44.entities[MASTER_TABLES[dest].entity];
-    let inserted = 0;
-    for (const row of srcRows) {
-      const payload = {};
-      cols.forEach((c) => { if (row[c] !== undefined) payload[c] = row[c]; });
-      await entity.create(payload);
-      inserted++;
-    }
-    return { type: "mutation", rows: [], message: `✓ Inserted ${inserted} row(s) into ${dest}.` };
-  }
-
-  if (upper.startsWith("INSERT")) {
-    const m = s.match(/INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i);
-    if (!m) throw new Error("Invalid INSERT syntax.");
-    const [, tableName, colsStr, valsStr] = m;
-    const dest = tableName.toLowerCase();
-    const cols = colsStr.split(",").map((c) => c.trim());
-    const vals = valsStr.split(",").map((v) => v.trim().replace(/^['"]|['"]$/g, ""));
-    const payload = {}; cols.forEach((c, i) => { payload[c] = vals[i] ?? ""; });
-    if (MASTER_TABLES[dest]) {
-      const created = await base44.entities[MASTER_TABLES[dest].entity].create(payload);
-      return { type: "mutation", rows: [created], message: `✓ Inserted 1 row into ${dest}.` };
-    } else {
-      UploadedDataStore.addRow(dest, payload);
-      return { type: "mutation", rows: [], message: `✓ Inserted 1 row into "${dest}".` };
-    }
-  }
-
-  if (upper.startsWith("UPDATE")) {
-    const m = s.match(/UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(.+)$/i);
-    if (!m) throw new Error("Invalid UPDATE syntax.");
-    const [, tableName, setStr, whereStr] = m;
-    const tbl = tableName.toLowerCase();
-    const updates = {};
-    setStr.split(",").forEach((part) => {
-      const eq = part.match(/^\s*(\w+)\s*=\s*'?([^']*)'?\s*$/);
-      if (eq) updates[eq[1].trim()] = eq[2].trim();
-    });
-    if (MASTER_TABLES[tbl]) {
-      const entity = base44.entities[MASTER_TABLES[tbl].entity];
-      const allRows = await entity.list("-created_date", 2000);
-      const matched = applyWhere(allRows, `SELECT * FROM x WHERE ${whereStr}`);
-      if (!matched.length) return { type: "mutation", rows: [], message: "No rows matched." };
-      for (const row of matched) await entity.update(row.id, updates);
-      return { type: "mutation", rows: [], message: `✓ Updated ${matched.length} row(s) in ${tbl}.` };
-    } else if (uploadedTables[tbl]) {
-      const rows = uploadedTables[tbl].rows;
-      const matched = applyWhere(rows.map((r, i) => ({ ...r, _idx: i })), `SELECT * FROM x WHERE ${whereStr}`);
-      matched.forEach((r) => UploadedDataStore.updateRow(tbl, r._idx, updates));
-      return { type: "mutation", rows: [], message: `✓ Updated ${matched.length} row(s) in "${tbl}".` };
-    }
-    throw new Error(`Unknown table "${tbl}".`);
-  }
-
-  if (upper.startsWith("DELETE")) {
-    const m = s.match(/DELETE\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
-    if (!m) throw new Error("Invalid DELETE syntax.");
-    const [, tableName, whereStr] = m;
-    const tbl = tableName.toLowerCase();
-    if (PROTECTED_TABLES.has(tbl)) throw new Error(`❌ DELETE blocked on protected table "${tbl}".`);
-    if (MASTER_TABLES[tbl]) {
-      const entity = base44.entities[MASTER_TABLES[tbl].entity];
-      const allRows = await entity.list("-created_date", 2000);
-      const matched = whereStr ? applyWhere(allRows, `SELECT * FROM x WHERE ${whereStr}`) : allRows;
-      for (const row of matched) await entity.delete(row.id);
-      return { type: "mutation", rows: [], message: `✓ Deleted ${matched.length} row(s) from ${tbl}.` };
-    } else if (uploadedTables[tbl]) {
-      if (whereStr) {
-        const rows = uploadedTables[tbl].rows;
-        const matched = applyWhere(rows.map((r, i) => ({ ...r, _idx: i })), `SELECT * FROM x WHERE ${whereStr}`);
-        matched.reverse().forEach((r) => UploadedDataStore.deleteRow(tbl, r._idx));
-        return { type: "mutation", rows: [], message: `✓ Deleted ${matched.length} row(s) from "${tbl}".` };
-      } else {
-        const count = uploadedTables[tbl].rows.length;
-        UploadedDataStore.set(tbl, { ...uploadedTables[tbl], rows: [] });
-        return { type: "mutation", rows: [], message: `✓ Deleted all ${count} row(s) from "${tbl}".` };
-      }
-    }
-    throw new Error(`Unknown table "${tbl}".`);
-  }
-
-  throw new Error("Unsupported SQL. Supported: SELECT, INSERT, UPDATE, DELETE.");
-}
-
-function applyWhere(rows, sql) {
-  const whereMatch = sql.match(/WHERE\s+(.+)$/i);
-  if (!whereMatch) return rows;
-  const conditions = whereMatch[1].split(/\s+AND\s+/i);
-  return rows.filter((row) =>
-    conditions.every((cond) => {
-      const m = cond.trim().match(/^(\w+)\s*(=|!=|<>|<=|>=|<|>|LIKE)\s*'?([^']*)'?$/i);
-      if (!m) return true;
-      const [, field, op, val] = m;
-      const rowVal = row[field];
-      const numVal = parseFloat(val), rowNum = parseFloat(rowVal);
-      switch (op.toUpperCase()) {
-        case "=":    return String(rowVal ?? "").toLowerCase() === val.toLowerCase();
-        case "!=": case "<>": return String(rowVal ?? "").toLowerCase() !== val.toLowerCase();
-        case "<":   return !isNaN(rowNum) && rowNum < numVal;
-        case ">":   return !isNaN(rowNum) && rowNum > numVal;
-        case "<=":  return !isNaN(rowNum) && rowNum <= numVal;
-        case ">=":  return !isNaN(rowNum) && rowNum >= numVal;
-        case "LIKE": return String(rowVal ?? "").toLowerCase().includes(val.replace(/%/g, "").toLowerCase());
-        default:    return true;
-      }
-    })
-  );
-}
-
-function exportCSV(rows) {
-  if (!rows.length) return;
-  const keys = Object.keys(rows[0]);
-  const csv = [keys.join(","), ...rows.map((r) => keys.map((k) => JSON.stringify(r[k] ?? "")).join(","))].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = "query_results.csv"; a.click();
-  URL.revokeObjectURL(url);
-}
-
-// ── Schema Tree Item ──────────────────────────────────────────────────────
-function TableTreeItem({ name, schema, isUploaded, onSelect, isActive, onQueryClick }) {
+// ── Schema tree item ──────────────────────────────────────────────────────
+function TableTreeItem({ name, schema, isUploaded, isActive, onSelect, onQueryClick }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -294,16 +46,13 @@ function TableTreeItem({ name, schema, isUploaded, onSelect, isActive, onQueryCl
         {PROTECTED_TABLES.has(name) && <span className="text-[8px] text-slate-600">RO</span>}
         <button
           onClick={(e) => { e.stopPropagation(); onQueryClick(name); }}
-          className="opacity-0 group-hover:opacity-100 text-[9px] text-emerald-400 hover:text-emerald-300 font-bold transition-opacity px-1 rounded"
-          title="SELECT * FROM this table"
-        >
-          ▶
-        </button>
+          className="opacity-0 group-hover:opacity-100 text-[9px] text-emerald-400 font-bold px-1 rounded transition-opacity"
+        >▶</button>
       </div>
       {open && (
-        <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/5 pl-2">
+        <div className="ml-4 mt-0.5 border-l border-white/5 pl-2 space-y-0.5">
           {schema.map(({ col, type }) => (
-            <div key={col} className="flex items-center gap-2 px-2 py-1 rounded text-[10px] text-slate-500 hover:text-slate-300 hover:bg-white/5 cursor-default">
+            <div key={col} className="flex items-center gap-2 px-2 py-1 text-[10px] text-slate-500 hover:text-slate-300 hover:bg-white/5 rounded cursor-default">
               <TypeIcon type={type} />
               <span className="font-mono flex-1 truncate">{col}</span>
               <TypeBadge type={type} />
@@ -315,7 +64,21 @@ function TableTreeItem({ name, schema, isUploaded, onSelect, isActive, onQueryCl
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────
+const SAMPLES = [
+  { label: "Active enterprises", query: "SELECT * FROM enterprises WHERE status = 'active'" },
+  { label: "Active people",      query: "SELECT * FROM people WHERE status = 'active'" },
+  { label: "Low stock",          query: "SELECT * FROM products WHERE stock_quantity < min_stock_level" },
+  { label: "Open tasks",         query: "SELECT * FROM tasks WHERE status = 'open'" },
+  { label: "Posted transactions",query: "SELECT * FROM transactions WHERE status = 'posted'" },
+];
+
+// ── Middle panel tabs ─────────────────────────────────────────────────────
+const MID_TABS = [
+  { key: "visual",  label: "Visual Builder", icon: Wand2 },
+  { key: "script",  label: "Script Editor",  icon: Code2 },
+  { key: "history", label: "History",         icon: History },
+];
+
 export default function QueryBuilder() {
   const [sql, setSql] = useState("SELECT * FROM enterprises WHERE status = 'active'");
   const [results, setResults] = useState(null);
@@ -324,12 +87,11 @@ export default function QueryBuilder() {
   const [loading, setLoading] = useState(false);
   const [activeTable, setActiveTable] = useState(null);
   const [uploadedTables, setUploadedTables] = useState(() => UploadedDataStore.getAll());
-  const [bottomTab, setBottomTab] = useState("output"); // "output" | "upload" | "history"
+  const [midTab, setMidTab] = useState("script");
   const [queryHistory, setQueryHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem("qb_history") || "[]"); } catch { return []; }
   });
   const loadingRef = useRef(false);
-  const textareaRef = useRef(null);
 
   useEffect(() => {
     return UploadedDataStore.subscribe((all) => {
@@ -338,20 +100,19 @@ export default function QueryBuilder() {
   }, []);
 
   const runQuery = async () => {
+    if (loading) return;
     loadingRef.current = true;
     setLoading(true); setError(null); setResults(null); setMessage(null);
-    const currentUploaded = UploadedDataStore.getAll();
     const startTime = Date.now();
+    const currentUploaded = UploadedDataStore.getAll();
     try {
       const result = await executeSQL(sql, currentUploaded);
       if (result.type === "select") setResults(result.rows);
       setMessage(result.message);
-      setBottomTab("output");
       const entry = { sql, status: "ok", message: result.message, rows: result.rows?.length ?? 0, ts: new Date().toISOString(), ms: Date.now() - startTime };
       setQueryHistory((prev) => { const next = [entry, ...prev].slice(0, 50); localStorage.setItem("qb_history", JSON.stringify(next)); return next; });
     } catch (e) {
       setError(e.message);
-      setBottomTab("output");
       const entry = { sql, status: "error", message: e.message, rows: 0, ts: new Date().toISOString(), ms: Date.now() - startTime };
       setQueryHistory((prev) => { const next = [entry, ...prev].slice(0, 50); localStorage.setItem("qb_history", JSON.stringify(next)); return next; });
     } finally {
@@ -361,93 +122,108 @@ export default function QueryBuilder() {
     }
   };
 
-  const columns = results?.length > 0
-    ? Object.keys(results[0]).filter((k) => !["attachment_urls", "image_url", "photo_url", "attachment_url"].includes(k))
-    : [];
-
   const uploadedNames = Object.keys(uploadedTables);
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-0 bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700">
+    <div className="flex h-[calc(100vh-7rem)] gap-0 bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700">
 
-      {/* ── Schema sidebar ──────────────────────────────────────────────── */}
-      <aside className="w-60 shrink-0 flex flex-col border-r border-white/5 overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center gap-2 px-3 py-3 border-b border-white/5">
+      {/* ── LEFT — Data Sources ──────────────────────────────────────── */}
+      <aside className="w-64 shrink-0 flex flex-col border-r border-white/5 overflow-hidden">
+        <div className="flex items-center gap-2 px-3 py-3 border-b border-white/5 shrink-0">
           <Database className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">Schema</span>
+          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Data Sources</span>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-4">
-          {/* Master tables */}
-          <div>
-            <div className="flex items-center gap-1.5 px-2 py-1 mb-1">
-              <Layers className="w-3 h-3 text-slate-600" />
-              <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">Master</span>
+        {/* Schema tree */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-2 py-2 space-y-1">
+            {/* Master tables */}
+            <div className="px-2 py-1">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Layers className="w-3 h-3 text-slate-600" />
+                <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">Master Tables</span>
+              </div>
+              {Object.keys(MASTER_TABLES).map((name) => (
+                <TableTreeItem
+                  key={name}
+                  name={name}
+                  schema={MASTER_SCHEMA[name] || []}
+                  isUploaded={false}
+                  isActive={activeTable === name}
+                  onSelect={setActiveTable}
+                  onQueryClick={(n) => { setSql(`SELECT * FROM ${n}`); setMidTab("script"); }}
+                />
+              ))}
             </div>
-            {Object.keys(MASTER_TABLES).map((name) => (
-              <TableTreeItem
-                key={name}
-                name={name}
-                schema={MASTER_SCHEMA[name] || []}
-                isUploaded={false}
-                isActive={activeTable === name}
-                onSelect={setActiveTable}
-                onQueryClick={(n) => setSql(`SELECT * FROM ${n}`)}
-              />
-            ))}
+
+            {/* Uploaded tables */}
+            {uploadedNames.length > 0 && (
+              <div className="px-2 py-1">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Upload className="w-3 h-3 text-indigo-500" />
+                  <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest">Uploaded</span>
+                </div>
+                {uploadedNames.map((name) => {
+                  const tbl = uploadedTables[name];
+                  const schema = getUploadedSchema(tbl.rows || []);
+                  return (
+                    <TableTreeItem
+                      key={name}
+                      name={name}
+                      schema={schema}
+                      isUploaded
+                      isActive={activeTable === name}
+                      onSelect={setActiveTable}
+                      onQueryClick={(n) => { setSql(`SELECT * FROM ${n}`); setMidTab("script"); }}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {/* Uploaded tables */}
-          {uploadedNames.length > 0 && (
-            <div>
-              <div className="flex items-center gap-1.5 px-2 py-1 mb-1">
-                <Upload className="w-3 h-3 text-indigo-500" />
-                <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest">Uploaded</span>
-              </div>
-              {uploadedNames.map((name) => {
-                const tbl = uploadedTables[name];
-                const schema = getUploadedSchema(tbl.rows || []);
-                return (
-                  <TableTreeItem
-                    key={name}
-                    name={name}
-                    schema={schema}
-                    isUploaded={true}
-                    isActive={activeTable === name}
-                    onSelect={setActiveTable}
-                    onQueryClick={(n) => setSql(`SELECT * FROM ${n}`)}
-                  />
-                );
-              })}
-            </div>
-          )}
+          {/* Divider + Data source connectors */}
+          <div className="border-t border-white/5 mt-1">
+            <DataSourcesPanel
+              uploadedTables={uploadedTables}
+              onTablesChange={setUploadedTables}
+              onUseInQuery={(q) => { setSql(q); setMidTab("script"); }}
+              onPreview={(table) => { setSql(`SELECT * FROM ${table}`); runQuery(); }}
+            />
+          </div>
         </div>
       </aside>
 
-      {/* ── Main area ───────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* ── MIDDLE — Query Builder ───────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden border-r border-white/5">
 
-        {/* ── Toolbar ─────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 bg-slate-900 shrink-0">
+        {/* Toolbar */}
+        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/5 shrink-0">
           <Button
             size="sm"
             onClick={runQuery}
             disabled={loading}
             className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 h-7 px-3 text-xs rounded-lg"
           >
-            {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
-            {loading ? "Running…" : "Run"}
+            {loading
+              ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              : <PlayCircle className="w-3.5 h-3.5" />}
+            {loading ? "Running…" : "Run Query"}
           </Button>
-          <span className="text-[10px] text-slate-600 font-mono">Ctrl+Enter to run</span>
+          <button
+            onClick={() => {/* validate */}}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors h-7"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" /> Validate
+          </button>
+          <span className="text-[10px] text-slate-600 font-mono hidden md:block">Ctrl+Enter to run</span>
           <div className="flex-1" />
-          {/* Sample queries */}
-          <div className="flex items-center gap-1 overflow-x-auto max-w-[500px]">
-            {SAMPLES.slice(0, 5).map((s) => (
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {SAMPLES.map((s) => (
               <button
                 key={s.label}
-                onClick={() => setSql(s.query)}
-                className="text-[10px] px-2.5 py-1 rounded-full border border-white/10 bg-white/5 text-slate-500 hover:text-slate-300 hover:bg-white/10 whitespace-nowrap transition-all"
+                onClick={() => { setSql(s.query); setMidTab("script"); }}
+                className="text-[9px] px-2 py-1 rounded-full border border-white/10 bg-white/5 text-slate-500 hover:text-slate-300 hover:bg-white/10 whitespace-nowrap transition-all"
               >
                 {s.label}
               </button>
@@ -455,170 +231,116 @@ export default function QueryBuilder() {
           </div>
         </div>
 
-        {/* ── SQL Editor ──────────────────────────────────────────────── */}
-        <div className="shrink-0 border-b border-white/5 relative">
-          <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-800/50 border-b border-white/5">
-            <span className="text-[10px] text-slate-600 font-mono">query.sql</span>
-          </div>
-          <div className="flex">
-            {/* Line numbers */}
-            <div className="select-none px-3 py-4 text-right font-mono text-[12px] text-slate-700 bg-slate-900/50 min-w-[40px] leading-5">
-              {sql.split("\n").map((_, i) => <div key={i}>{i + 1}</div>)}
-            </div>
-            <textarea
-              ref={textareaRef}
-              value={sql}
-              onChange={(e) => setSql(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) runQuery(); }}
-              className="flex-1 bg-transparent text-emerald-300 font-mono text-[13px] px-4 py-4 outline-none resize-none leading-5 min-h-[120px] max-h-[240px]"
-              spellCheck={false}
-            />
-          </div>
+        {/* Tab bar */}
+        <div className="flex items-center border-b border-white/5 bg-slate-800/30 shrink-0">
+          {MID_TABS.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setMidTab(key)}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium border-b-2 transition-colors ${
+                midTab === key
+                  ? "border-emerald-400 text-emerald-300"
+                  : "border-transparent text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              <Icon className="w-3 h-3" />
+              {label}
+              {key === "history" && queryHistory.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 bg-slate-500/20 text-slate-400 text-[9px] rounded-full font-bold">{queryHistory.length}</span>
+              )}
+            </button>
+          ))}
         </div>
 
-        {/* ── Bottom panel ────────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Tab bar */}
-          <div className="flex items-center gap-0 border-b border-white/5 bg-slate-800/30 shrink-0">
-            {[
-              { key: "output", label: "Output" },
-              { key: "upload", label: "Upload Table" },
-              { key: "history", label: "History" },
-            ].map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setBottomTab(key)}
-                className={`px-4 py-2 text-xs font-medium border-b-2 transition-colors ${
-                  bottomTab === key
-                    ? "border-emerald-400 text-emerald-300"
-                    : "border-transparent text-slate-500 hover:text-slate-300"
-                }`}
-              >
-                {label}
-                {key === "upload" && uploadedNames.length > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 bg-indigo-500/20 text-indigo-400 text-[9px] rounded-full font-bold">{uploadedNames.length}</span>
-                )}
-                {key === "history" && queryHistory.length > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 bg-slate-500/20 text-slate-400 text-[9px] rounded-full font-bold">{queryHistory.length}</span>
-                )}
-              </button>
-            ))}
-            {/* Right: status info */}
-            <div className="ml-auto px-4 text-[10px] text-slate-600 font-mono">
-              {message && !error && <span className="text-emerald-500">{message}</span>}
-              {error && <span className="text-rose-400 truncate max-w-[300px] block">{error}</span>}
+        {/* Tab content */}
+        <div className="flex-1 overflow-auto">
+
+          {/* Visual Builder */}
+          {midTab === "visual" && (
+            <VisualQueryBuilder onGenerate={(q) => { setSql(q); setMidTab("script"); }} />
+          )}
+
+          {/* Script Editor */}
+          {midTab === "script" && (
+            <div className="flex flex-col h-full">
+              <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-800/50 border-b border-white/5 shrink-0">
+                <AlignLeft className="w-3 h-3 text-slate-600" />
+                <span className="text-[10px] text-slate-600 font-mono">query.sql</span>
+              </div>
+              <div className="flex flex-1">
+                {/* Line numbers */}
+                <div className="select-none px-3 py-4 text-right font-mono text-[12px] text-slate-700 bg-slate-900/50 min-w-[36px] leading-5">
+                  {sql.split("\n").map((_, i) => <div key={i}>{i + 1}</div>)}
+                </div>
+                <textarea
+                  value={sql}
+                  onChange={(e) => setSql(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) runQuery(); }}
+                  className="flex-1 bg-transparent text-emerald-300 font-mono text-[13px] px-4 py-4 outline-none resize-none leading-5"
+                  spellCheck={false}
+                  style={{ minHeight: "300px" }}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Tab content */}
-          <div className="flex-1 overflow-auto">
-            {bottomTab === "output" && (
-              <>
-                {!results && !error && !message && (
-                  <div className="flex items-center justify-center h-full text-slate-600 text-sm font-mono">
-                    Run a query to see results
+          {/* History */}
+          {midTab === "history" && (
+            <div className="p-3">
+              {queryHistory.length === 0 ? (
+                <div className="flex items-center justify-center h-32 text-slate-600 text-xs font-mono">No queries run yet</div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-2 px-1">
+                    <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{queryHistory.length} queries</span>
+                    <button
+                      onClick={() => { setQueryHistory([]); localStorage.removeItem("qb_history"); }}
+                      className="flex items-center gap-1 text-[10px] text-slate-600 hover:text-rose-400 transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" /> Clear
+                    </button>
                   </div>
-                )}
-                {error && (
-                  <div className="flex items-start gap-2 px-4 py-4 text-sm text-rose-400">
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <pre className="font-mono text-xs whitespace-pre-wrap">{error}</pre>
-                  </div>
-                )}
-                {results !== null && results.length === 0 && !error && (
-                  <div className="flex items-center justify-center h-full text-slate-500 text-sm font-mono">No rows matched.</div>
-                )}
-                {results !== null && results.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-slate-800/20 sticky top-0 z-10">
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px]">{results.length} rows</Badge>
-                      </div>
-                      <Button size="sm" variant="ghost" onClick={() => exportCSV(results)} className="gap-1.5 h-6 px-2 text-[10px] text-slate-400 hover:text-white">
-                        <Download className="w-3 h-3" /> Export CSV
-                      </Button>
-                    </div>
-                    <table className="w-full text-xs">
-                      <thead className="sticky top-10 z-10">
-                        <tr className="bg-slate-800">
-                          <th className="text-left px-3 py-2 text-slate-500 font-mono font-semibold border-b border-white/5 w-10">#</th>
-                          {columns.map((c) => (
-                            <th key={c} className="text-left px-4 py-2 text-slate-400 font-mono font-semibold border-b border-white/5 whitespace-nowrap">{c}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {results.map((row, i) => (
-                          <tr key={row.id || i} className={`border-b border-white/3 hover:bg-white/3 transition-colors ${i % 2 === 0 ? "" : "bg-white/[0.02]"}`}>
-                            <td className="px-3 py-2 text-slate-600 font-mono">{i + 1}</td>
-                            {columns.map((c) => {
-                              const val = row[c];
-                              const display = Array.isArray(val) ? `[${val.length}]` :
-                                typeof val === "object" && val !== null ? JSON.stringify(val).slice(0, 60) :
-                                String(val ?? "");
-                              return (
-                                <td key={c} className="px-4 py-2 text-slate-300 whitespace-nowrap max-w-[200px] overflow-hidden text-ellipsis font-mono">
-                                  {display || <span className="text-slate-600">NULL</span>}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </>
-            )}
-
-            {bottomTab === "upload" && (
-              <div className="p-4">
-                <UploadPanel uploadedTables={uploadedTables} onTablesChange={setUploadedTables} />
-              </div>
-            )}
-
-            {bottomTab === "history" && (
-              <div className="p-3">
-                {queryHistory.length === 0 ? (
-                  <div className="flex items-center justify-center h-24 text-slate-600 text-xs font-mono">No queries run yet</div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between mb-2 px-1">
-                      <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{queryHistory.length} queries</span>
-                      <button
-                        onClick={() => { setQueryHistory([]); localStorage.removeItem("qb_history"); }}
-                        className="flex items-center gap-1 text-[10px] text-slate-600 hover:text-rose-400 transition-colors"
+                  <div className="space-y-1">
+                    {queryHistory.map((entry, i) => (
+                      <div
+                        key={i}
+                        onClick={() => { setSql(entry.sql); setMidTab("script"); }}
+                        className="group flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 cursor-pointer border border-white/5 transition-all"
                       >
-                        <Trash2 className="w-3 h-3" /> Clear
-                      </button>
-                    </div>
-                    <div className="space-y-1">
-                      {queryHistory.map((entry, i) => (
-                        <div
-                          key={i}
-                          onClick={() => setSql(entry.sql)}
-                          className="group flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 cursor-pointer transition-all border border-white/5"
-                        >
-                          <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${entry.status === "ok" ? "bg-emerald-400" : "bg-rose-400"}`} />
-                          <div className="flex-1 min-w-0">
-                            <pre className="font-mono text-[11px] text-slate-300 whitespace-pre-wrap line-clamp-2 leading-4">{entry.sql}</pre>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[9px] text-slate-600">{new Date(entry.ts).toLocaleTimeString()}</span>
-                              {entry.status === "ok" && <span className="text-[9px] text-emerald-600">{entry.rows} rows · {entry.ms}ms</span>}
-                              {entry.status === "error" && <span className="text-[9px] text-rose-500 truncate">{entry.message}</span>}
-                            </div>
+                        <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${entry.status === "ok" ? "bg-emerald-400" : "bg-rose-400"}`} />
+                        <div className="flex-1 min-w-0">
+                          <pre className="font-mono text-[11px] text-slate-300 whitespace-pre-wrap line-clamp-2 leading-4">{entry.sql}</pre>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[9px] text-slate-600">{new Date(entry.ts).toLocaleTimeString()}</span>
+                            {entry.status === "ok" && <span className="text-[9px] text-emerald-600">{entry.rows} rows · {entry.ms}ms</span>}
+                            {entry.status === "error" && <span className="text-[9px] text-rose-500 truncate">{entry.message}</span>}
                           </div>
-                          <span className="text-[9px] text-slate-600 opacity-0 group-hover:opacity-100 shrink-0 mt-1">click to load</span>
                         </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+                        <span className="text-[9px] text-slate-600 opacity-0 group-hover:opacity-100 shrink-0 mt-1">load →</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* ── RIGHT — Output & Actions ─────────────────────────────────── */}
+      <aside className="w-72 shrink-0 flex flex-col overflow-hidden">
+        <div className="flex items-center gap-2 px-3 py-3 border-b border-white/5 shrink-0">
+          <AlignLeft className="w-3.5 h-3.5 text-amber-400" />
+          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Output & Actions</span>
+        </div>
+        <OutputPanel
+          results={results}
+          error={error}
+          message={message}
+          loading={loading}
+          sql={sql}
+        />
+      </aside>
     </div>
   );
 }
