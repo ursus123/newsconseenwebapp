@@ -324,7 +324,10 @@ export default function QueryBuilder() {
   const [loading, setLoading] = useState(false);
   const [activeTable, setActiveTable] = useState(null);
   const [uploadedTables, setUploadedTables] = useState(() => UploadedDataStore.getAll());
-  const [bottomTab, setBottomTab] = useState("output"); // "output" | "upload"
+  const [bottomTab, setBottomTab] = useState("output"); // "output" | "upload" | "history"
+  const [queryHistory, setQueryHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("qb_history") || "[]"); } catch { return []; }
+  });
   const loadingRef = useRef(false);
   const textareaRef = useRef(null);
 
