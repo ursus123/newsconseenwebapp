@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   PlayCircle, Download, ChevronDown, ChevronRight, ChevronUp,
   Database, Table2, Upload, CheckCircle2, AlertCircle,
-  Hash, Type, Calendar, ToggleLeft, Layers, RefreshCw,
+  Hash, Type, Calendar, ToggleLeft, Layers, RefreshCw, History, Trash2,
 } from "lucide-react";
 import UploadPanel from "../components/querybuilder/UploadPanel";
 import { UploadedDataStore } from "../components/querybuilder/UploadedDataStore";
