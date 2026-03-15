@@ -498,6 +498,9 @@ export default function QueryBuilder() {
                 {key === "upload" && uploadedNames.length > 0 && (
                   <span className="ml-1.5 px-1.5 py-0.5 bg-indigo-500/20 text-indigo-400 text-[9px] rounded-full font-bold">{uploadedNames.length}</span>
                 )}
+                {key === "history" && queryHistory.length > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 bg-slate-500/20 text-slate-400 text-[9px] rounded-full font-bold">{queryHistory.length}</span>
+                )}
               </button>
             ))}
             {/* Right: status info */}
