@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Download, Code2, AlertCircle, Save, Layers, Network, Link2, Badge } from "lucide-react";
+import { Download, Code2, AlertCircle, Save, Layers, Network } from "lucide-react";
 import { exportCSV } from "./sqlEngine";
 import SaveQueryModal from "./SaveQueryModal";
 import SaveDataModelModal from "./SaveDataModelModal";
