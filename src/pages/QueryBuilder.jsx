@@ -483,6 +483,7 @@ export default function QueryBuilder() {
             {[
               { key: "output", label: "Output" },
               { key: "upload", label: "Upload Table" },
+              { key: "history", label: "History" },
             ].map(({ key, label }) => (
               <button
                 key={key}
