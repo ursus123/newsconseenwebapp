@@ -1,0 +1,241 @@
+import { base44 } from "@/api/base44Client";
+import { UploadedDataStore } from "./UploadedDataStore";
+
+export const MASTER_TABLES = {
+  enterprises:   { entity: "Enterprise",   label: "Enterprises" },
+  people:        { entity: "Person",        label: "People" },
+  products:      { entity: "Product",       label: "Products" },
+  services:      { entity: "Service",       label: "Services" },
+  addresses:     { entity: "Address",       label: "Addresses" },
+  relationships: { entity: "Relationship",  label: "Relationships" },
+  tasks:         { entity: "Task",          label: "Tasks" },
+  transactions:  { entity: "Transaction",   label: "Transactions" },
+};
+
+export const PROTECTED_TABLES = new Set(["enterprises", "people", "products", "services", "addresses"]);
+
+export const MASTER_SCHEMA = {
+  enterprises: [
+    { col: "id", type: "VARCHAR" }, { col: "enterprise_name", type: "VARCHAR" },
+    { col: "short_name", type: "VARCHAR" }, { col: "status", type: "ENUM" },
+    { col: "enterprise_type", type: "ENUM" }, { col: "city", type: "VARCHAR" },
+    { col: "country", type: "VARCHAR" }, { col: "phone", type: "VARCHAR" },
+    { col: "email", type: "VARCHAR" }, { col: "created_date", type: "DATETIME" },
+  ],
+  people: [
+    { col: "id", type: "VARCHAR" }, { col: "first_name", type: "VARCHAR" },
+    { col: "last_name", type: "VARCHAR" }, { col: "person_type", type: "ENUM" },
+    { col: "status", type: "ENUM" }, { col: "primary_role", type: "VARCHAR" },
+    { col: "email", type: "VARCHAR" }, { col: "phone", type: "VARCHAR" },
+    { col: "start_date", type: "DATE" }, { col: "created_date", type: "DATETIME" },
+  ],
+  products: [
+    { col: "id", type: "VARCHAR" }, { col: "name", type: "VARCHAR" },
+    { col: "sku", type: "VARCHAR" }, { col: "status", type: "ENUM" },
+    { col: "item_type", type: "ENUM" }, { col: "stock_quantity", type: "INT" },
+    { col: "unit_price", type: "FLOAT" }, { col: "cost_price", type: "FLOAT" },
+    { col: "category", type: "ENUM" }, { col: "created_date", type: "DATETIME" },
+  ],
+  services: [
+    { col: "id", type: "VARCHAR" }, { col: "name", type: "VARCHAR" },
+    { col: "status", type: "ENUM" }, { col: "category", type: "ENUM" },
+    { col: "price", type: "FLOAT" }, { col: "pricing_model", type: "ENUM" },
+    { col: "created_date", type: "DATETIME" },
+  ],
+  addresses: [
+    { col: "id", type: "VARCHAR" }, { col: "label", type: "VARCHAR" },
+    { col: "address_line1", type: "VARCHAR" }, { col: "city", type: "VARCHAR" },
+    { col: "country", type: "VARCHAR" }, { col: "status", type: "ENUM" },
+    { col: "created_date", type: "DATETIME" },
+  ],
+  relationships: [
+    { col: "id", type: "VARCHAR" }, { col: "relationship_type", type: "ENUM" },
+    { col: "person_name", type: "VARCHAR" }, { col: "enterprise_name", type: "VARCHAR" },
+    { col: "status", type: "ENUM" }, { col: "start_date", type: "DATE" },
+    { col: "created_date", type: "DATETIME" },
+  ],
+  tasks: [
+    { col: "id", type: "VARCHAR" }, { col: "title", type: "VARCHAR" },
+    { col: "task_type", type: "ENUM" }, { col: "status", type: "ENUM" },
+    { col: "priority", type: "ENUM" }, { col: "assigned_to_email", type: "VARCHAR" },
+    { col: "scheduled_date", type: "DATE" }, { col: "due_date", type: "DATE" },
+    { col: "created_date", type: "DATETIME" },
+  ],
+  transactions: [
+    { col: "id", type: "VARCHAR" }, { col: "transaction_type", type: "ENUM" },
+    { col: "status", type: "ENUM" }, { col: "date", type: "DATE" },
+    { col: "amount", type: "FLOAT" }, { col: "payment_status", type: "ENUM" },
+    { col: "primary_person", type: "VARCHAR" }, { col: "enterprise", type: "VARCHAR" },
+    { col: "created_date", type: "DATETIME" },
+  ],
+};
+
+function applyWhere(rows, sql) {
+  const whereMatch = sql.match(/WHERE\s+(.+)$/i);
+  if (!whereMatch) return rows;
+  const conditions = whereMatch[1].split(/\s+AND\s+/i);
+  return rows.filter((row) =>
+    conditions.every((cond) => {
+      const m = cond.trim().match(/^(\w+)\s*(=|!=|<>|<=|>=|<|>|LIKE)\s*'?([^']*)'?$/i);
+      if (!m) return true;
+      const [, field, op, val] = m;
+      const rowVal = row[field];
+      const numVal = parseFloat(val), rowNum = parseFloat(rowVal);
+      switch (op.toUpperCase()) {
+        case "=":    return String(rowVal ?? "").toLowerCase() === val.toLowerCase();
+        case "!=": case "<>": return String(rowVal ?? "").toLowerCase() !== val.toLowerCase();
+        case "<":   return !isNaN(rowNum) && rowNum < numVal;
+        case ">":   return !isNaN(rowNum) && rowNum > numVal;
+        case "<=":  return !isNaN(rowNum) && rowNum <= numVal;
+        case ">=":  return !isNaN(rowNum) && rowNum >= numVal;
+        case "LIKE": return String(rowVal ?? "").toLowerCase().includes(val.replace(/%/g, "").toLowerCase());
+        default:    return true;
+      }
+    })
+  );
+}
+
+export async function executeSQL(sql, uploadedTables) {
+  const s = sql.trim().replace(/\s+/g, " ");
+  const upper = s.toUpperCase();
+
+  if (upper.startsWith("SELECT")) {
+    const fromMatch = s.match(/FROM\s+(\w+)/i);
+    if (!fromMatch) throw new Error("Missing FROM clause.");
+    const tableName = fromMatch[1].toLowerCase();
+    let rows;
+    if (Object.prototype.hasOwnProperty.call(uploadedTables, tableName)) {
+      rows = uploadedTables[tableName].rows.map((r) => ({ ...r }));
+    } else if (MASTER_TABLES[tableName]) {
+      rows = await base44.entities[MASTER_TABLES[tableName].entity].list("-created_date", 2000);
+    } else {
+      throw new Error(`Unknown table "${tableName}".`);
+    }
+    const colsMatch = s.match(/SELECT\s+(.+?)\s+FROM/i);
+    const colStr = colsMatch ? colsMatch[1].trim() : "*";
+    if (colStr !== "*") {
+      const cols = colStr.split(",").map((c) => c.trim());
+      rows = rows.map((r) => { const o = {}; cols.forEach((c) => { o[c] = r[c]; }); return o; });
+    }
+    rows = applyWhere(rows, s);
+    return { type: "select", rows, message: `${rows.length} row(s) returned.` };
+  }
+
+  if (upper.startsWith("INSERT") && upper.includes("SELECT")) {
+    const m = s.match(/INSERT\s+INTO\s+(\w+)\s+SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
+    if (!m) throw new Error("Invalid INSERT...SELECT syntax.");
+    const [, destTable, colStr, srcTable, whereClause] = m;
+    const dest = destTable.toLowerCase(), src = srcTable.toLowerCase();
+    if (!MASTER_TABLES[dest]) throw new Error("INSERT destination must be a master table.");
+    if (!uploadedTables[src]) throw new Error(`Source table "${src}" not found.`);
+    const cols = colStr.trim() === "*" ? uploadedTables[src].columns : colStr.split(",").map((c) => c.trim());
+    let srcRows = [...uploadedTables[src].rows];
+    if (whereClause) srcRows = applyWhere(srcRows, `SELECT * FROM x WHERE ${whereClause}`);
+    const entity = base44.entities[MASTER_TABLES[dest].entity];
+    let inserted = 0;
+    for (const row of srcRows) {
+      const payload = {};
+      cols.forEach((c) => { if (row[c] !== undefined) payload[c] = row[c]; });
+      await entity.create(payload);
+      inserted++;
+    }
+    return { type: "mutation", rows: [], message: `✓ Inserted ${inserted} row(s) into ${dest}.` };
+  }
+
+  if (upper.startsWith("INSERT")) {
+    const m = s.match(/INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i);
+    if (!m) throw new Error("Invalid INSERT syntax.");
+    const [, tableName, colsStr, valsStr] = m;
+    const dest = tableName.toLowerCase();
+    const cols = colsStr.split(",").map((c) => c.trim());
+    const vals = valsStr.split(",").map((v) => v.trim().replace(/^['"]|['"]$/g, ""));
+    const payload = {}; cols.forEach((c, i) => { payload[c] = vals[i] ?? ""; });
+    if (MASTER_TABLES[dest]) {
+      const created = await base44.entities[MASTER_TABLES[dest].entity].create(payload);
+      return { type: "mutation", rows: [created], message: `✓ Inserted 1 row into ${dest}.` };
+    } else {
+      UploadedDataStore.addRow(dest, payload);
+      return { type: "mutation", rows: [], message: `✓ Inserted 1 row into "${dest}".` };
+    }
+  }
+
+  if (upper.startsWith("UPDATE")) {
+    const m = s.match(/UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(.+)$/i);
+    if (!m) throw new Error("Invalid UPDATE syntax.");
+    const [, tableName, setStr, whereStr] = m;
+    const tbl = tableName.toLowerCase();
+    const updates = {};
+    setStr.split(",").forEach((part) => {
+      const eq = part.match(/^\s*(\w+)\s*=\s*'?([^']*)'?\s*$/);
+      if (eq) updates[eq[1].trim()] = eq[2].trim();
+    });
+    if (MASTER_TABLES[tbl]) {
+      const entity = base44.entities[MASTER_TABLES[tbl].entity];
+      const allRows = await entity.list("-created_date", 2000);
+      const matched = applyWhere(allRows, `SELECT * FROM x WHERE ${whereStr}`);
+      if (!matched.length) return { type: "mutation", rows: [], message: "No rows matched." };
+      for (const row of matched) await entity.update(row.id, updates);
+      return { type: "mutation", rows: [], message: `✓ Updated ${matched.length} row(s) in ${tbl}.` };
+    } else if (uploadedTables[tbl]) {
+      const rows = uploadedTables[tbl].rows;
+      const matched = applyWhere(rows.map((r, i) => ({ ...r, _idx: i })), `SELECT * FROM x WHERE ${whereStr}`);
+      matched.forEach((r) => UploadedDataStore.updateRow(tbl, r._idx, updates));
+      return { type: "mutation", rows: [], message: `✓ Updated ${matched.length} row(s) in "${tbl}".` };
+    }
+    throw new Error(`Unknown table "${tbl}".`);
+  }
+
+  if (upper.startsWith("DELETE")) {
+    const m = s.match(/DELETE\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
+    if (!m) throw new Error("Invalid DELETE syntax.");
+    const [, tableName, whereStr] = m;
+    const tbl = tableName.toLowerCase();
+    if (PROTECTED_TABLES.has(tbl)) throw new Error(`❌ DELETE blocked on protected table "${tbl}".`);
+    if (MASTER_TABLES[tbl]) {
+      const entity = base44.entities[MASTER_TABLES[tbl].entity];
+      const allRows = await entity.list("-created_date", 2000);
+      const matched = whereStr ? applyWhere(allRows, `SELECT * FROM x WHERE ${whereStr}`) : allRows;
+      for (const row of matched) await entity.delete(row.id);
+      return { type: "mutation", rows: [], message: `✓ Deleted ${matched.length} row(s) from ${tbl}.` };
+    } else if (uploadedTables[tbl]) {
+      if (whereStr) {
+        const rows = uploadedTables[tbl].rows;
+        const matched = applyWhere(rows.map((r, i) => ({ ...r, _idx: i })), `SELECT * FROM x WHERE ${whereStr}`);
+        matched.reverse().forEach((r) => UploadedDataStore.deleteRow(tbl, r._idx));
+        return { type: "mutation", rows: [], message: `✓ Deleted ${matched.length} row(s) from "${tbl}".` };
+      } else {
+        const count = uploadedTables[tbl].rows.length;
+        UploadedDataStore.set(tbl, { ...uploadedTables[tbl], rows: [] });
+        return { type: "mutation", rows: [], message: `✓ Deleted all ${count} row(s) from "${tbl}".` };
+      }
+    }
+    throw new Error(`Unknown table "${tbl}".`);
+  }
+
+  throw new Error("Unsupported SQL. Supported: SELECT, INSERT, UPDATE, DELETE.");
+}
+
+export function exportCSV(rows) {
+  if (!rows.length) return;
+  const keys = Object.keys(rows[0]);
+  const csv = [keys.join(","), ...rows.map((r) => keys.map((k) => JSON.stringify(r[k] ?? "")).join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = "query_results.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function inferType(values) {
+  const nonEmpty = values.filter((v) => v !== null && v !== undefined && String(v).trim() !== "");
+  if (!nonEmpty.length) return "TEXT";
+  if (nonEmpty.every((v) => !isNaN(Number(v)) && !isNaN(parseFloat(v)))) {
+    return nonEmpty.every((v) => Number.isInteger(Number(v))) ? "INT" : "FLOAT";
+  }
+  if (nonEmpty.every((v) => /^\d{4}-\d{2}-\d{2}/.test(String(v)))) return "DATE";
+  return "TEXT";
+}
+
+export function getUploadedSchema(rows) {
+  if (!rows.length) return [];
+  return Object.keys(rows[0]).map((col) => ({ col, type: inferType(rows.map((r) => r[col])) }));
+}
