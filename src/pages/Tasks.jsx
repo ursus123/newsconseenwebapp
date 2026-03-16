@@ -230,14 +230,12 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const openEdit = (t) => { setEditing(t); setFormOpen(true); };
   const overdueCount = tasks.filter(isDuePast).length;
 
-  const onDragEnd = (result) => {
-    const { destination, source, draggableId } = result;
-    if (!destination) return;
-    if (destination.droppableId === source.droppableId) return;
-    const newStatus = destination.droppableId;
-    const task = tasks.find((t) => t.id === draggableId);
-    if (!task) return;
-    updateMut.mutate({ id: draggableId, data: { ...task, status: newStatus } });
+  const onDragOver = (e) => e.preventDefault();
+  const onDrop = (e, newStatus) => {
+    const taskId = e.dataTransfer.getData("taskId");
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task || task.status === newStatus) return;
+    updateMut.mutate({ id: taskId, data: { ...task, status: newStatus } });
   };
 
   return (
