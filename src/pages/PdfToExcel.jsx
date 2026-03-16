@@ -243,7 +243,8 @@ export default function PdfToExcel() {
         prompt: `You are a data extraction assistant. Analyze this PDF document carefully and extract ALL tabular data you find.
 For each table found:
 - Give it a short descriptive snake_case name (e.g. sales_summary, employee_list)
-- Extract ALL rows as flat objects with the column headers as keys
+- List the column headers in a "columns" array
+- For each data row, output a "values" array with values in the same order as columns
 - Include every row, do not summarize or truncate
 If there are no tables, return an empty tables array.
 Be thorough — extract every table in the document.`,
