@@ -13,7 +13,8 @@ import { Card } from "@/components/ui/card";
 import { Pencil, Trash2, Calendar, User, Building2, CheckCircle, AlertCircle, Clock, ShieldCheck, Filter, LayoutGrid, List } from "lucide-react";
 import { format, isToday, isPast, parseISO } from "date-fns";
 import { motion } from "framer-motion";
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import dnd from "@hello-pangea/dnd";
+const { DragDropContext, Droppable, Draggable } = dnd;
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
