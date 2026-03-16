@@ -335,59 +335,47 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
       </div>
 
       {viewMode === "kanban" ? (
-        <DragDropContext onDragEnd={onDragEnd}>
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             {grouped.map((col) => {
               const style = COLUMN_STYLES[col.key] || COLUMN_STYLES.open;
               return (
-                <div key={col.key} className="flex flex-col min-h-[300px]">
+                <div
+                  key={col.key}
+                  className="flex flex-col min-h-[300px]"
+                  onDragOver={onDragOver}
+                  onDrop={(e) => onDrop(e, col.key)}
+                >
                   <div className={`flex items-center gap-2 px-3 py-2.5 rounded-t-xl border ${style.header} mb-0`}>
                     <span className={`w-2 h-2 rounded-full ${style.dot}`} />
                     <h3 className="text-sm font-semibold text-slate-700 flex-1">{col.label}</h3>
                     <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${style.count}`}>{col.items.length}</span>
                   </div>
-                  <Droppable droppableId={col.key}>
-                    {(provided, snapshot) => (
+                  <div className="flex-1 p-2 rounded-b-xl border border-t-0 bg-slate-50/50 border-slate-100 min-h-[200px] space-y-2">
+                    {col.items.map((task) => (
                       <div
-                        ref={provided.innerRef}
-                        {...provided.droppableProps}
-                        className={`flex-1 p-2 rounded-b-xl border border-t-0 transition-colors min-h-[200px] space-y-2 ${
-                          snapshot.isDraggingOver ? "bg-slate-100 border-slate-300" : "bg-slate-50/50 border-slate-100"
-                        }`}
+                        key={task.id}
+                        draggable={!!perms.l3_create}
+                        onDragStart={(e) => e.dataTransfer.setData("taskId", task.id)}
+                        className="cursor-grab active:cursor-grabbing"
                       >
-                        {col.items.map((task, index) => (
-                          <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={!perms.l3_create}>
-                            {(prov, snap) => (
-                              <div
-                                ref={prov.innerRef}
-                                {...prov.draggableProps}
-                                {...prov.dragHandleProps}
-                                className={snap.isDragging ? "opacity-80 rotate-1 scale-[1.02]" : ""}
-                              >
-                                <TaskCard
-                                  task={task}
-                                  onEdit={perms.l3_create ? openEdit : undefined}
-                                  onDelete={perms.can_delete ? (t) => setDeleting(t) : undefined}
-                                  isAdmin={perms.l3_create}
-                                />
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
-                        {provided.placeholder}
-                        {col.items.length === 0 && !snapshot.isDraggingOver && (
-                          <div className="flex flex-col items-center justify-center py-8 rounded-xl border-2 border-dashed border-slate-100">
-                            <p className="text-xs text-slate-300">Drop here</p>
-                          </div>
-                        )}
+                        <TaskCard
+                          task={task}
+                          onEdit={perms.l3_create ? openEdit : undefined}
+                          onDelete={perms.can_delete ? (t) => setDeleting(t) : undefined}
+                          isAdmin={perms.l3_create}
+                        />
+                      </div>
+                    ))}
+                    {col.items.length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-8 rounded-xl border-2 border-dashed border-slate-100">
+                        <p className="text-xs text-slate-300">Drop here</p>
                       </div>
                     )}
-                  </Droppable>
+                  </div>
                 </div>
               );
             })}
           </div>
-        </DragDropContext>
       ) : (
         <div className="space-y-3">
           {filtered.length === 0 ? (
