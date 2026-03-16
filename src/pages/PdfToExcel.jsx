@@ -257,7 +257,16 @@ Be thorough — extract every table in the document.`,
                 type: "object",
                 properties: {
                   name: { type: "string" },
-                  rows: { type: "array", items: { type: "object", additionalProperties: true } },
+                  columns: { type: "array", items: { type: "string" } },
+                  rows: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        values: { type: "array", items: { type: "string" } },
+                      },
+                    },
+                  },
                 },
               },
             },
