@@ -274,7 +274,17 @@ Be thorough — extract every table in the document.`,
           },
         },
       });
-      const extracted = (result?.tables || []).filter((t) => t.rows && t.rows.length > 0);
+      const extracted = (result?.tables || [])
+        .filter((t) => t.columns?.length && t.rows?.length)
+        .map((t) => ({
+          name: t.name,
+          rows: t.rows.map((r) => {
+            const obj = {};
+            t.columns.forEach((col, i) => { obj[col] = r.values?.[i] ?? ""; });
+            return obj;
+          }),
+        }))
+        .filter((t) => t.rows.length > 0);
       if (!extracted.length) throw new Error("No tables found in this PDF.");
       setTables(extracted);
       setSelectedIdx(0);
