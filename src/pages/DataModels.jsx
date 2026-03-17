@@ -417,7 +417,7 @@ export default function DataModels() {
 
       {/* Layer legend */}
       <div className="flex flex-wrap gap-1.5 mb-3 shrink-0">
-        {Object.entries(LAYER_COLORS).map(([layer, cls]) => (
+        {Object.entries({ ...LAYER_COLORS, "External Sources": "bg-sky-50 text-sky-700 border-sky-200" }).map(([layer, cls]) => (
           <span key={layer} className={`text-[11px] px-2.5 py-0.5 rounded-full border font-medium ${cls}`}>{layer}</span>
         ))}
         <span className="text-[11px] px-2.5 py-0.5 rounded-full border bg-white text-slate-400 border-slate-200 ml-2 flex items-center gap-1">
