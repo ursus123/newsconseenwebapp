@@ -16,6 +16,5 @@ def get_engine() -> Engine:
     return engine
 
 
-# Optional: create a module-level engine instance
-# This avoids recreating engines repeatedly across the app.
+# Module-level singleton — import this directly rather than calling get_engine()
 engine = get_engine()
