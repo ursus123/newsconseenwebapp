@@ -71,6 +71,25 @@ export const MASTER_SCHEMA = {
     { col: "primary_person", type: "VARCHAR" }, { col: "enterprise", type: "VARCHAR" },
     { col: "created_date", type: "DATETIME" },
   ],
+  medication_profiles: [
+    { col: "id", type: "VARCHAR" }, { col: "client_name", type: "VARCHAR" },
+    { col: "medication_name", type: "VARCHAR" }, { col: "strength", type: "VARCHAR" },
+    { col: "route", type: "ENUM" }, { col: "frequency", type: "VARCHAR" },
+    { col: "status", type: "ENUM" }, { col: "prescriber", type: "VARCHAR" },
+    { col: "start_date", type: "DATE" }, { col: "created_date", type: "DATETIME" },
+  ],
+  reports: [
+    { col: "id", type: "VARCHAR" }, { col: "title", type: "VARCHAR" },
+    { col: "type", type: "ENUM" }, { col: "status", type: "ENUM" },
+    { col: "date_range_start", type: "DATE" }, { col: "date_range_end", type: "DATE" },
+    { col: "created_date", type: "DATETIME" },
+  ],
+  clients: [
+    { col: "id", type: "VARCHAR" }, { col: "business_name", type: "VARCHAR" },
+    { col: "contact_person", type: "VARCHAR" }, { col: "email", type: "VARCHAR" },
+    { col: "industry", type: "ENUM" }, { col: "status", type: "ENUM" },
+    { col: "monthly_revenue", type: "FLOAT" }, { col: "created_date", type: "DATETIME" },
+  ],
 };
 
 function applyWhere(rows, sql) {
