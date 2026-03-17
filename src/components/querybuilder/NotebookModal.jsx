@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   X, Play, Plus, Trash2, Globe, Code2, CheckCircle, AlertCircle,
-  Loader2, Link2, Database, ChevronDown, ChevronRight, Upload,
+  Loader2, Link2, Database, ChevronDown, ChevronRight, Upload, Save,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotebookStore } from "./NotebookStore";
