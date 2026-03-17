@@ -24,7 +24,7 @@ function Section({ title, icon: Icon, iconColor, defaultOpen = true, children })
   );
 }
 
-export default function DataSourcesPanel({ uploadedTables, onTablesChange, onUseInQuery }) {
+export default function DataSourcesPanel({ uploadedTables, onTablesChange, onUseInQuery, masterDataSnapshot }) {
   const [showUpload, setShowUpload] = useState(false);
   const [notebooks, setNotebooks] = useState(NotebookStore.getAll());
   const [notebookModal, setNotebookModal] = useState(null); // null | { type, edit }
