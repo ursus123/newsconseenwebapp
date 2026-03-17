@@ -352,7 +352,7 @@ export default function DataModels() {
   ];
 
   const CANVAS_W = 1420;
-  const CANVAS_H = 840;
+  const CANVAS_H = 1200;
 
   // Canvas pan starts only on background clicks
   const handleCanvasMouseDown = (e) => {
