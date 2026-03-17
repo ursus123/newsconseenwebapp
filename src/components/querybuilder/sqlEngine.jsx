@@ -122,9 +122,19 @@ export async function executeSQL(sql, uploadedTables) {
   const upper = s.toUpperCase();
 
   if (upper.startsWith("SELECT")) {
+    // Extract table name (support optional alias: FROM table t)
     const fromMatch = s.match(/FROM\s+(\w+)/i);
     if (!fromMatch) throw new Error("Missing FROM clause.");
     const tableName = fromMatch[1].toLowerCase();
+
+    // Extract ORDER BY before stripping for WHERE
+    const orderMatch = s.match(/ORDER\s+BY\s+(.+?)(?:\s+LIMIT\s+\d+)?$/i);
+    const orderBy = orderMatch ? orderMatch[1].trim() : null;
+
+    // Extract LIMIT
+    const limitMatch = s.match(/LIMIT\s+(\d+)/i);
+    const limitN = limitMatch ? parseInt(limitMatch[1], 10) : null;
+
     let rows;
     if (Object.prototype.hasOwnProperty.call(uploadedTables, tableName)) {
       rows = uploadedTables[tableName].rows.map((r) => ({ ...r }));
@@ -133,13 +143,73 @@ export async function executeSQL(sql, uploadedTables) {
     } else {
       throw new Error(`Unknown table "${tableName}".`);
     }
-    const colsMatch = s.match(/SELECT\s+(.+?)\s+FROM/i);
+
+    // Parse SELECT columns with AS alias support
+    // Strip ORDER BY / LIMIT from the SQL before matching cols
+    const sqlForCols = s.replace(/\s+ORDER\s+BY\s+.+$/i, "").replace(/\s+LIMIT\s+\d+/i, "");
+    const colsMatch = sqlForCols.match(/SELECT\s+(.+?)\s+FROM/i);
     const colStr = colsMatch ? colsMatch[1].trim() : "*";
+
     if (colStr !== "*") {
-      const cols = colStr.split(",").map((c) => c.trim());
-      rows = rows.map((r) => { const o = {}; cols.forEach((c) => { o[c] = r[c]; }); return o; });
+      // Parse each col segment: could be "field AS alias", "field alias", or just "field"
+      const colDefs = colStr.split(",").map((c) => {
+        const asMatch = c.trim().match(/^(\S+)\s+AS\s+(\S+)$/i);
+        if (asMatch) return { field: asMatch[1].trim(), alias: asMatch[2].trim() };
+        // handle unquoted alias (field alias)
+        const spaceMatch = c.trim().match(/^(\S+)\s+(\S+)$/);
+        if (spaceMatch) return { field: spaceMatch[1].trim(), alias: spaceMatch[2].trim() };
+        return { field: c.trim(), alias: c.trim() };
+      });
+      rows = rows.map((r) => {
+        const o = {};
+        colDefs.forEach(({ field, alias }) => {
+          // Support COUNT(*), COUNT(field) aggregates on single-row level (applied after)
+          if (/^COUNT\s*\(/i.test(field)) { o[alias] = 1; return; }
+          o[alias] = r[field] !== undefined ? r[field] : r[field.toLowerCase()] ?? null;
+        });
+        return o;
+      });
+
+      // Handle simple aggregates: COUNT(*), SUM(field), AVG(field), MAX(field), MIN(field)
+      const hasAggregate = colDefs.some(({ field }) => /^(COUNT|SUM|AVG|MAX|MIN)\s*\(/i.test(field));
+      if (hasAggregate) {
+        // Apply WHERE first, then aggregate
+        rows = applyWhere(rows, s);
+        const aggRow = {};
+        colDefs.forEach(({ field, alias }) => {
+          const aggMatch = field.match(/^(COUNT|SUM|AVG|MAX|MIN)\s*\(\s*\*?\s*(\w+)?\s*\)/i);
+          if (!aggMatch) { aggRow[alias] = null; return; }
+          const [, fn, col] = aggMatch;
+          const allRaw = rows;
+          switch (fn.toUpperCase()) {
+            case "COUNT": aggRow[alias] = allRaw.length; break;
+            case "SUM":   aggRow[alias] = allRaw.reduce((s, r) => s + (parseFloat(r[alias] ?? r[col]) || 0), 0); break;
+            case "AVG":   aggRow[alias] = allRaw.length ? allRaw.reduce((s, r) => s + (parseFloat(r[alias] ?? r[col]) || 0), 0) / allRaw.length : 0; break;
+            case "MAX":   aggRow[alias] = Math.max(...allRaw.map((r) => parseFloat(r[alias] ?? r[col]) || 0)); break;
+            case "MIN":   aggRow[alias] = Math.min(...allRaw.map((r) => parseFloat(r[alias] ?? r[col]) || 0)); break;
+          }
+        });
+        return { type: "select", rows: [aggRow], message: `1 row(s) returned.` };
+      }
     }
+
     rows = applyWhere(rows, s);
+
+    // ORDER BY
+    if (orderBy) {
+      const [obCol, obDir] = orderBy.split(/\s+/);
+      const desc = obDir && obDir.toUpperCase() === "DESC";
+      rows.sort((a, b) => {
+        const av = a[obCol], bv = b[obCol];
+        if (av == null) return 1; if (bv == null) return -1;
+        const n = parseFloat(av), m = parseFloat(bv);
+        const cmp = !isNaN(n) && !isNaN(m) ? n - m : String(av).localeCompare(String(bv));
+        return desc ? -cmp : cmp;
+      });
+    }
+
+    if (limitN !== null) rows = rows.slice(0, limitN);
+
     return { type: "select", rows, message: `${rows.length} row(s) returned.` };
   }
 
