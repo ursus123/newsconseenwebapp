@@ -448,6 +448,10 @@ Return ONLY valid JSON, no explanation.`;
             <button onClick={onClose} className="text-sm text-white/30 hover:text-white/60 transition-colors px-3 py-1.5">
               Cancel
             </button>
+            <Button onClick={handleSave} disabled={!nbName.trim()} variant="outline" className="border-white/20 text-white/70 hover:text-white hover:bg-white/10 gap-2 text-sm bg-transparent">
+              <Save className="w-4 h-4" />
+              {saved ? "Saved!" : "Save Script"}
+            </Button>
             <Button onClick={handleConnect} disabled={!nbName.trim()} className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2 text-sm">
               <Link2 className="w-4 h-4" />
               {connected ? "Update Connection" : "Connect to Master"}
