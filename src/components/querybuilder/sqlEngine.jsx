@@ -209,20 +209,72 @@ export async function executeSQL(sql, uploadedTables) {
   }
 
   if (upper.startsWith("INSERT") && upper.includes("SELECT")) {
-    const m = s.match(/INSERT\s+INTO\s+(\w+)\s+SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
-    if (!m) throw new Error("Invalid INSERT...SELECT syntax.");
-    const [, destTable, colStr, srcTable, whereClause] = m;
-    const dest = destTable.toLowerCase(), src = srcTable.toLowerCase();
-    if (!MASTER_TABLES[dest]) throw new Error("INSERT destination must be a master table.");
-    if (!uploadedTables[src]) throw new Error(`Source table "${src}" not found.`);
-    const cols = colStr.trim() === "*" ? uploadedTables[src].columns : colStr.split(",").map((c) => c.trim());
-    let srcRows = [...uploadedTables[src].rows];
+    // Support: INSERT INTO dest (col1, col2, ...) SELECT expr1 AS col1, expr2 AS col2 FROM src
+    // Also support without the column list: INSERT INTO dest SELECT ...
+    const mWithCols = s.match(/INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
+    const mNoCols   = s.match(/INSERT\s+INTO\s+(\w+)\s+SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
+    if (!mWithCols && !mNoCols) throw new Error("Invalid INSERT...SELECT syntax.");
+
+    let destTable, destCols, selectStr, srcTable, whereClause;
+    if (mWithCols) {
+      [, destTable, destCols, selectStr, srcTable, whereClause] = mWithCols;
+      destCols = destCols.split(",").map((c) => c.trim());
+    } else {
+      [, destTable, selectStr, srcTable, whereClause] = mNoCols;
+      destCols = null;
+    }
+
+    const dest = destTable.toLowerCase();
+    const src  = srcTable.toLowerCase();
+    if (!MASTER_TABLES[dest]) throw new Error(`INSERT destination "${dest}" must be a known master table.`);
+
+    // Resolve source rows (master table or uploaded file)
+    let srcRows;
+    if (MASTER_TABLES[src]) {
+      srcRows = await base44.entities[MASTER_TABLES[src].entity].list("-created_date", 2000);
+    } else if (uploadedTables[src]) {
+      srcRows = [...uploadedTables[src].rows];
+    } else {
+      throw new Error(`Source table "${src}" not found in master tables or uploaded files.`);
+    }
     if (whereClause) srcRows = applyWhere(srcRows, `SELECT * FROM x WHERE ${whereClause}`);
+
+    // Parse SELECT expressions: each can be:
+    //   column_name AS alias
+    //   'string_literal' AS alias
+    //   numeric_literal AS alias
+    //   column_name  (no alias → use destCols[i] or col name)
+    const exprDefs = selectStr.split(",").map((e, i) => {
+      const t = e.trim();
+      // 'literal' AS alias  or  "literal" AS alias
+      const litStr = t.match(/^'([^']*)'\s+AS\s+(\w+)$/i) || t.match(/^"([^"]*)"\s+AS\s+(\w+)$/i);
+      if (litStr) return { type: "literal", value: litStr[1], alias: litStr[2] };
+      // numeric AS alias
+      const litNum = t.match(/^(-?[\d.]+)\s+AS\s+(\w+)$/i);
+      if (litNum) return { type: "literal", value: parseFloat(litNum[1]), alias: litNum[2] };
+      // column AS alias
+      const colAs = t.match(/^(\w+)\s+AS\s+(\w+)$/i);
+      if (colAs) return { type: "column", field: colAs[1], alias: colAs[2] };
+      // plain column (no alias) — use destCols[i] if provided, else column name
+      return { type: "column", field: t, alias: (destCols && destCols[i]) ? destCols[i] : t };
+    });
+
     const entity = base44.entities[MASTER_TABLES[dest].entity];
     let inserted = 0;
     for (const row of srcRows) {
       const payload = {};
-      cols.forEach((c) => { if (row[c] !== undefined) payload[c] = row[c]; });
+      exprDefs.forEach(({ type: exprType, field, value, alias }) => {
+        const destKey = destCols
+          ? alias  // alias matches the dest column list
+          : alias;
+        if (exprType === "literal") {
+          payload[destKey] = value;
+        } else {
+          // Try exact match, then lowercase
+          const v = row[field] !== undefined ? row[field] : row[field.toLowerCase()];
+          if (v !== undefined) payload[destKey] = v;
+        }
+      });
       await entity.create(payload);
       inserted++;
     }
