@@ -633,10 +633,10 @@ export default function DataModels() {
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Schema Stats</p>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { label: "Tables", value: TABLES.length },
-                { label: "Edges", value: EDGES.length },
-                { label: "FK Fields", value: TABLES.reduce((s, t) => s + t.fields.filter((f) => f.fk).length, 0) },
-                { label: "Layers", value: [...new Set(TABLES.map((t) => t.layer))].length },
+                { label: "Tables", value: allTables.length },
+                { label: "Edges", value: allEdges.length },
+                { label: "External", value: externalNodes.length },
+                { label: "Layers", value: [...new Set(allTables.map((t) => t.layer))].length },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-slate-50 rounded-xl px-3 py-2 text-center">
                   <p className="text-lg font-bold text-slate-700">{value}</p>
