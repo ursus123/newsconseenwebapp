@@ -2,14 +2,17 @@ import { base44 } from "@/api/base44Client";
 import { UploadedDataStore } from "./UploadedDataStore";
 
 export const MASTER_TABLES = {
-  enterprises:   { entity: "Enterprise",   label: "Enterprises" },
-  people:        { entity: "Person",        label: "People" },
-  products:      { entity: "Product",       label: "Products" },
-  services:      { entity: "Service",       label: "Services" },
-  addresses:     { entity: "Address",       label: "Addresses" },
-  relationships: { entity: "Relationship",  label: "Relationships" },
-  tasks:         { entity: "Task",          label: "Tasks" },
-  transactions:  { entity: "Transaction",   label: "Transactions" },
+  enterprises:        { entity: "Enterprise",        label: "Enterprises" },
+  people:             { entity: "Person",             label: "People" },
+  products:           { entity: "Product",            label: "Products" },
+  services:           { entity: "Service",            label: "Services" },
+  addresses:          { entity: "Address",            label: "Addresses" },
+  relationships:      { entity: "Relationship",       label: "Relationships" },
+  tasks:              { entity: "Task",               label: "Tasks" },
+  transactions:       { entity: "Transaction",        label: "Transactions" },
+  medication_profiles:{ entity: "MedicationProfile",  label: "Medication Profiles" },
+  reports:            { entity: "Report",             label: "Reports" },
+  clients:            { entity: "Client",             label: "Clients" },
 };
 
 export const PROTECTED_TABLES = new Set(["enterprises", "people", "products", "services", "addresses"]);
