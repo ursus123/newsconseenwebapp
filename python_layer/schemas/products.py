@@ -1,27 +1,35 @@
-# python_layer/etl/products.py
+# python_layer/schemas/products.py
 
-import pandas as pd
-from sqlalchemy import text
-from ..database import engine
-
-
-def extract_products() -> pd.DataFrame:
-    """
-    Extract raw product data from the database.
-    """
-    query = text("SELECT * FROM products")
-    df = pd.read_sql(query, engine)
-    return df
+from pydantic import BaseModel
+from typing import Optional
 
 
-def transform_products(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Transform product data into a summary table.
-    """
-    summary = df.groupby("item_type").agg(
-        total_products=("id", "count"),
-        total_stock=("stock_quantity", "sum"),
-        avg_price=("unit_price", "mean"),
-    ).reset_index()
+class ProductBase(BaseModel):
+    name: str
+    sku: str
+    item_type: str
+    stock_quantity: int
+    unit_price: float
+    cost_price: float
+    status: str
 
-    return summary
+
+class ProductCreate(ProductBase):
+    pass
+
+
+class ProductUpdate(BaseModel):
+    name: Optional[str] = None
+    sku: Optional[str] = None
+    item_type: Optional[str] = None
+    stock_quantity: Optional[int] = None
+    unit_price: Optional[float] = None
+    cost_price: Optional[float] = None
+    status: Optional[str] = None
+
+
+class Product(ProductBase):
+    id: int
+
+    class Config:
+        orm_mode = True
