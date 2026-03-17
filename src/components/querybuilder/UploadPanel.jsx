@@ -29,13 +29,38 @@ function parseCSV(text) {
   }
 
   const headers = parseLine(lines[0]);
-  const rows = lines.slice(1).filter(l => l.trim()).map((line) => {
+  const rows = lines.slice(1).filter((l) => l.trim()).map((line) => {
     const values = parseLine(line);
     const obj = {};
     headers.forEach((h, i) => { obj[h] = values[i] ?? ""; });
     return obj;
   });
   return { headers, rows };
+}
+
+// Parse Excel binary using raw approach - extract sheets
+async function parseExcel(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        // Use SheetJS via CDN dynamic import
+        const XLSX = await import("https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs");
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array", cellDates: true });
+        const sheets = workbook.SheetNames.map((name) => {
+          const ws = workbook.Sheets[name];
+          const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+          return { name, rows };
+        });
+        resolve(sheets);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error("Failed to read file."));
+    reader.readAsArrayBuffer(file);
+  });
 }
 
 export default function UploadPanel({ uploadedTables, onTablesChange }) {
@@ -55,22 +80,16 @@ export default function UploadPanel({ uploadedTables, onTablesChange }) {
         .replace(/[^a-z0-9_]/g, "_");
 
       if (file.name.match(/\.(xlsx|xls)$/i)) {
-        setLoadingMsg("Uploading file…");
-        const { file_url } = await base44.integrations.Core.UploadFile({ file });
-        setLoadingMsg("Extracting data from Excel…");
-        const result = await base44.integrations.Core.ExtractDataFromUploadedFile({
-          file_url,
-          json_schema: {
-            type: "object",
-            additionalProperties: true,
-          },
-        });
-        if (result.status !== "success" || !result.output) {
-          throw new Error(result.details || "Could not extract data from the Excel file.");
+        setLoadingMsg("Parsing Excel file…");
+        const sheets = await parseExcel(file);
+        if (!sheets.length || !sheets[0].rows.length) throw new Error("No data found in Excel file.");
+        if (sheets.length === 1) {
+          // Single sheet - pass as flat rows
+          setPreviewData({ tableName, fileData: { rows: sheets[0].rows } });
+        } else {
+          // Multiple sheets
+          setPreviewData({ tableName, fileData: { sheets } });
         }
-        const rawData = Array.isArray(result.output) ? result.output : [result.output];
-        if (!rawData.length) throw new Error("No data found in the file.");
-        setPreviewData({ tableName, fileData: { rows: rawData } });
       } else {
         setLoadingMsg("Reading CSV…");
         const text = await file.text();
@@ -99,9 +118,9 @@ export default function UploadPanel({ uploadedTables, onTablesChange }) {
     e.target.value = "";
   };
 
-  const handleConfirmImport = ({ rows, columns }) => {
+  const handleConfirmImport = ({ rows, columns, schema }) => {
     const { tableName } = previewData;
-    UploadedDataStore.set(tableName, { rows, columns, uploadedAt: new Date().toISOString() });
+    UploadedDataStore.set(tableName, { rows, columns, schema, uploadedAt: new Date().toISOString() });
     onTablesChange(UploadedDataStore.getAll());
     setPreviewData(null);
   };
