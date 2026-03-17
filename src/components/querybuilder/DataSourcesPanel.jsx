@@ -170,6 +170,8 @@ export default function DataSourcesPanel({ uploadedTables, onTablesChange, onUse
         <NotebookModal
           initialType={notebookModal.type}
           editNotebook={notebookModal.edit}
+          uploadedTables={uploadedTables}
+          masterDataSnapshot={masterDataSnapshot}
           onClose={() => setNotebookModal(null)}
           onSaved={() => {
             setNotebooks(NotebookStore.getAll());
