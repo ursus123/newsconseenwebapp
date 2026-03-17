@@ -234,9 +234,20 @@ Return ONLY valid JSON, no explanation.`;
     }
   };
 
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = () => {
+    if (!nbName.trim()) { alert("Please give this notebook a name first."); return; }
+    const id = editNotebook?.id || nbName.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+    const notebook = { id, name: nbName.trim(), type: nbType, cells, connected: false, outputSchema: outputSchema || [], updatedAt: new Date().toISOString() };
+    NotebookStore.set(id, notebook);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
   const handleConnect = () => {
     if (!nbName.trim()) { alert("Please give this notebook a name first."); return; }
-    const id = nbName.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+    const id = editNotebook?.id || nbName.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
     const notebook = { id, name: nbName.trim(), type: nbType, cells, connected: true, outputSchema: outputSchema || [], updatedAt: new Date().toISOString() };
     NotebookStore.set(id, notebook);
     setConnected(true);
