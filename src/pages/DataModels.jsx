@@ -471,6 +471,9 @@ export default function DataModels() {
                 <marker id="arrow-green-h" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
                   <path d="M0,0 L0,6 L8,3 z" fill="#6366f1" />
                 </marker>
+                <marker id="arrow-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L8,3 z" fill="#0ea5e9" />
+                </marker>
               </defs>
               {allEdges.map((edge, i) => {
                 if (!fullPositions[edge.from] || !fullPositions[edge.to]) return null;
