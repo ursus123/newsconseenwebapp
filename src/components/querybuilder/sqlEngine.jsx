@@ -215,6 +215,67 @@ export async function executeSQL(sql, uploadedTables) {
   throw new Error("Unsupported SQL. Supported: SELECT, INSERT, UPDATE, DELETE.");
 }
 
+// ── Mutation detector ─────────────────────────────────────────────────────
+// Returns null for SELECT, or { type, tableName, cols } for write ops
+export function detectMutation(sql) {
+  const s = sql.trim().replace(/\s+/g, " ");
+  const upper = s.toUpperCase();
+  if (upper.startsWith("INSERT") && upper.includes("SELECT")) {
+    const m = s.match(/INSERT\s+INTO\s+(\w+)\s+SELECT/i);
+    return m ? { type: "INSERT_SELECT", tableName: m[1].toLowerCase(), cols: [] } : null;
+  }
+  if (upper.startsWith("INSERT")) {
+    const m = s.match(/INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)/i);
+    return m ? { type: "INSERT", tableName: m[1].toLowerCase(), cols: m[2].split(",").map((c) => c.trim()) } : null;
+  }
+  if (upper.startsWith("UPDATE")) {
+    const m = s.match(/UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE/i);
+    if (!m) return null;
+    const setCols = m[2].split(",").map((p) => { const eq = p.match(/(\w+)\s*=/); return eq ? eq[1].trim() : ""; }).filter(Boolean);
+    return { type: "UPDATE", tableName: m[1].toLowerCase(), cols: setCols };
+  }
+  if (upper.startsWith("DELETE")) {
+    const m = s.match(/DELETE\s+FROM\s+(\w+)/i);
+    return m ? { type: "DELETE", tableName: m[1].toLowerCase(), cols: [] } : null;
+  }
+  return null;
+}
+
+// ── Column validation ─────────────────────────────────────────────────────
+// Returns array of error strings (empty = valid)
+export function validateMutation(sql, uploadedTables) {
+  const mutation = detectMutation(sql);
+  if (!mutation) return [];
+  const { type, tableName, cols } = mutation;
+  const errors = [];
+
+  // Check table exists
+  const isKnownMaster = !!MASTER_TABLES[tableName];
+  const isKnownUploaded = !!uploadedTables[tableName];
+  if (!isKnownMaster && !isKnownUploaded && type !== "INSERT") {
+    errors.push(`Table "${tableName}" does not exist. Create it first with INSERT or upload a file.`);
+    return errors;
+  }
+
+  // For INSERT into master, validate columns against schema
+  if ((type === "INSERT" || type === "UPDATE") && isKnownMaster) {
+    const knownCols = new Set((MASTER_SCHEMA[tableName] || []).map((f) => f.col));
+    // Add all entity fields (schema may not list all)
+    cols.forEach((col) => {
+      if (col && !knownCols.has(col) && knownCols.size > 0) {
+        errors.push(`Column "${col}" does not exist on table "${tableName}". Known columns: ${[...knownCols].join(", ")}.`);
+      }
+    });
+  }
+
+  // DELETE on protected tables
+  if (type === "DELETE" && PROTECTED_TABLES.has(tableName)) {
+    errors.push(`DELETE is blocked on protected table "${tableName}" (master data). Use UPDATE status='archived' instead.`);
+  }
+
+  return errors;
+}
+
 export function exportCSV(rows) {
   if (!rows.length) return;
   const keys = Object.keys(rows[0]);
