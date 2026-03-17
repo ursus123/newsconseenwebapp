@@ -297,12 +297,59 @@ const LAYER_COLORS = {
 export default function DataModels() {
   const [zoom, setZoom] = useState(0.85);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [panDrag, setPanDrag] = useState(null);       // canvas panning
-  const [nodeDrag, setNodeDrag] = useState(null);     // { id, startMouseX, startMouseY, startNodeX, startNodeY }
+  const [panDrag, setPanDrag] = useState(null);
+  const [nodeDrag, setNodeDrag] = useState(null);
   const [positions, setPositions] = useState(DEFAULT_POSITIONS);
   const [selectedTable, setSelectedTable] = useState(null);
   const [hoveredEdge, setHoveredEdge] = useState(null);
+  const [notebooks, setNotebooks] = useState(NotebookStore.getAll());
   const containerRef = useRef(null);
+
+  useEffect(() => {
+    const unsub = NotebookStore.subscribe(setNotebooks);
+    return unsub;
+  }, []);
+
+  // Build external nodes from notebooks
+  const externalNodes = Object.values(notebooks).filter((n) => n.connected);
+  const allTables = [
+    ...TABLES,
+    ...externalNodes.map((nb, i) => ({
+      id: nb.id,
+      label: nb.name,
+      color: nb.type === "api" ? "#0ea5e9" : "#f59e0b",
+      bg: nb.type === "api" ? "#f0f9ff" : "#fffbeb",
+      border: nb.type === "api" ? "#bae6fd" : "#fde68a",
+      icon: nb.type === "api" ? "🌐" : "🐍",
+      layer: "External Sources",
+      description: nb.type === "api" ? "API Connector" : "Python Script",
+      fields: [
+        { name: "id", type: "PK", pk: true },
+        ...(nb.outputSchema || []).map((col) => ({ name: col.name, type: col.type })),
+      ],
+      isExternal: true,
+      nbType: nb.type,
+    })),
+  ];
+
+  // Place external nodes below the canvas automatically if no position exists
+  const fullPositions = { ...positions };
+  externalNodes.forEach((nb, i) => {
+    if (!fullPositions[nb.id]) {
+      fullPositions[nb.id] = { x: 60 + i * 280, y: 980 };
+    }
+  });
+
+  // ETL edges from external sources point to Master Data tables
+  const allEdges = [
+    ...EDGES,
+    ...externalNodes.map((nb) => ({
+      from: nb.id,
+      to: "Enterprise",
+      label: "feeds →",
+      isExternal: true,
+    })),
+  ];
 
   const CANVAS_W = 1420;
   const CANVAS_H = 840;
