@@ -272,7 +272,7 @@ function getEdgePoint(fromId, toId, positions, tables) {
   const h = tableHeight(t);
   const cx = p.x + TABLE_W / 2;
   const cy = p.y + h / 2;
-  const tc = getTableCenter(toId, positions);
+  const tc = getTableCenter(toId, positions, tables);
 
   const dx = tc.x - cx;
   const dy = tc.y - cy;
