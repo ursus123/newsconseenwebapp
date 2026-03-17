@@ -170,30 +170,37 @@ export async function executeSQL(sql, uploadedTables) {
         return o;
       });
 
+      // Apply WHERE on raw rows BEFORE projection (so original field names work)
+      rows = applyWhere(rows, s);
+
       // Handle simple aggregates: COUNT(*), SUM(field), AVG(field), MAX(field), MIN(field)
       const hasAggregate = colDefs.some(({ field }) => /^(COUNT|SUM|AVG|MAX|MIN)\s*\(/i.test(field));
       if (hasAggregate) {
-        // Apply WHERE first, then aggregate
-        rows = applyWhere(rows, s);
         const aggRow = {};
         colDefs.forEach(({ field, alias }) => {
           const aggMatch = field.match(/^(COUNT|SUM|AVG|MAX|MIN)\s*\(\s*\*?\s*(\w+)?\s*\)/i);
           if (!aggMatch) { aggRow[alias] = null; return; }
           const [, fn, col] = aggMatch;
-          const allRaw = rows;
           switch (fn.toUpperCase()) {
-            case "COUNT": aggRow[alias] = allRaw.length; break;
-            case "SUM":   aggRow[alias] = allRaw.reduce((s, r) => s + (parseFloat(r[alias] ?? r[col]) || 0), 0); break;
-            case "AVG":   aggRow[alias] = allRaw.length ? allRaw.reduce((s, r) => s + (parseFloat(r[alias] ?? r[col]) || 0), 0) / allRaw.length : 0; break;
-            case "MAX":   aggRow[alias] = Math.max(...allRaw.map((r) => parseFloat(r[alias] ?? r[col]) || 0)); break;
-            case "MIN":   aggRow[alias] = Math.min(...allRaw.map((r) => parseFloat(r[alias] ?? r[col]) || 0)); break;
+            case "COUNT": aggRow[alias] = rows.length; break;
+            case "SUM":   aggRow[alias] = rows.reduce((s, r) => s + (parseFloat(r[col]) || 0), 0); break;
+            case "AVG":   aggRow[alias] = rows.length ? rows.reduce((s, r) => s + (parseFloat(r[col]) || 0), 0) / rows.length : 0; break;
+            case "MAX":   aggRow[alias] = Math.max(...rows.map((r) => parseFloat(r[col]) || 0)); break;
+            case "MIN":   aggRow[alias] = Math.min(...rows.map((r) => parseFloat(r[col]) || 0)); break;
           }
         });
         return { type: "select", rows: [aggRow], message: `1 row(s) returned.` };
       }
-    }
 
-    rows = applyWhere(rows, s);
+      // Project columns (after WHERE so raw field names resolve correctly)
+      rows = rows.map((r) => {
+        const o = {};
+        colDefs.forEach(({ field, alias }) => { o[alias] = r[field] !== undefined ? r[field] : r[field.toLowerCase()] ?? null; });
+        return o;
+      });
+    } else {
+      rows = applyWhere(rows, s);
+    }
 
     // ORDER BY
     if (orderBy) {
