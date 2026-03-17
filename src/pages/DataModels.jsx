@@ -482,8 +482,8 @@ export default function DataModels() {
                 const isHovered = hoveredEdge === i;
                 const mx = (from.x + to.x) / 2;
                 const my = (from.y + to.y) / 2;
-                const color = isTrigger ? "#f97316" : "#10b981";
-                const markerId = isTrigger ? "arrow-orange" : "arrow-green";
+                const color = isTrigger ? "#f97316" : isExternal ? "#0ea5e9" : "#10b981";
+                const markerId = isTrigger ? "arrow-orange" : isExternal ? "arrow-blue" : "arrow-green";
                 return (
                   <g key={i}>
                     <path
