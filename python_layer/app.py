@@ -4,6 +4,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from etl import tasks, transactions, services, enterprises, people
 from etl.load import load_dataframe
 
+from etl import (
+    tasks,
+    transactions,
+    services,
+    enterprises,
+    people,
+    products,
+)
+from etl.load import load_dataframe
+
 app = FastAPI(
     title="Newsconseen Analytics Layer",
     description="Python ETL + Analytics microservice for Newsconseen",
@@ -145,6 +155,29 @@ def load_people_summary():
         df = people.extract_people()
         summary = people.transform_people(df)
         result = load_dataframe(summary, "people_summary")
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# -------------------------------------------------
+# PRODUCTS
+# -------------------------------------------------
+@app.get("/product-summary")
+def get_product_summary():
+    try:
+        df = products.extract_products()
+        summary = products.transform_products(df)
+        return summary.to_dict(orient="records")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/load/product-summary")
+def load_product_summary():
+    try:
+        df = products.extract_products()
+        summary = products.transform_products(df)
+        result = load_dataframe(summary, "product_summary")
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
