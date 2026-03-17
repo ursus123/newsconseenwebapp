@@ -649,6 +649,7 @@ export default function DataModels() {
           <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2">
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">ETL Flow</p>
             {[
+              { step: "0. Extract", desc: `External APIs & Python scripts feed raw data (${externalNodes.length} connected)` },
               { step: "1. Ingest", desc: "People, Enterprises, Products, Services — Master Data created" },
               { step: "2. Connect", desc: "Relationships link entities: Person↔Enterprise, Item↔Enterprise" },
               { step: "3. Operate", desc: "Tasks assigned per enterprise — operational execution layer" },
