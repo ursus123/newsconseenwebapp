@@ -521,8 +521,9 @@ export default function DataModels() {
             </svg>
 
             {/* Table nodes */}
-            {TABLES.map((table) => {
-              const pos = positions[table.id];
+            {allTables.map((table) => {
+              const pos = fullPositions[table.id];
+              if (!pos) return null;
               const h = tableHeight(table);
               const isSelected = selectedTable === table.id;
               const isDraggingThis = nodeDrag?.id === table.id;
