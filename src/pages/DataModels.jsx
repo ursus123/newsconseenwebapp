@@ -615,7 +615,7 @@ export default function DataModels() {
                       <span className="text-slate-300 text-[10px] truncate">({e.label})</span>
                     </div>
                   ))}
-                  {EDGES.filter((e) => e.from === selected.id || e.to === selected.id).length === 0 && (
+                  {allEdges.filter((e) => e.from === selected.id || e.to === selected.id).length === 0 && (
                     <p className="text-[11px] text-slate-400">No direct edges</p>
                   )}
                 </div>
