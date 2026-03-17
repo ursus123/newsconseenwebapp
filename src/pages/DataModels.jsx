@@ -1,7 +1,8 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ZoomIn, ZoomOut, Maximize2, Info, GitBranch, Database, ArrowRight } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, GitBranch, Database, ArrowRight, Globe, Code2, Plug } from "lucide-react";
+import { NotebookStore } from "@/components/querybuilder/NotebookStore";
 
 // ─── Schema Definition ────────────────────────────────────────────────────────
 const TABLES = [
