@@ -472,10 +472,13 @@ export default function DataModels() {
                   <path d="M0,0 L0,6 L8,3 z" fill="#6366f1" />
                 </marker>
               </defs>
-              {EDGES.map((edge, i) => {
-                const from = getEdgePoint(edge.from, edge.to, positions);
-                const to = getEdgePoint(edge.to, edge.from, positions);
+              {allEdges.map((edge, i) => {
+                if (!fullPositions[edge.from] || !fullPositions[edge.to]) return null;
+                if (!allTables.find((t) => t.id === edge.from) || !allTables.find((t) => t.id === edge.to)) return null;
+                const from = getEdgePoint(edge.from, edge.to, fullPositions, allTables);
+                const to = getEdgePoint(edge.to, edge.from, fullPositions, allTables);
                 const isTrigger = edge.label === "triggers →";
+                const isExternal = edge.isExternal;
                 const isHovered = hoveredEdge === i;
                 const mx = (from.x + to.x) / 2;
                 const my = (from.y + to.y) / 2;
