@@ -397,6 +397,7 @@ export default function QueryBuilder() {
             </div>
             <div className="border-t border-white/5 mt-1">
               <DataSourcesPanel uploadedTables={uploadedTables} onTablesChange={setUploadedTables}
+                masterDataSnapshot={masterDataSnapshot}
                 onUseInQuery={(q) => { setSql(q); setMidTab("script"); }}
                 onPreview={(table) => { setSql(`SELECT * FROM ${table}`); doExecute(`SELECT * FROM ${table}`); }}
               />
