@@ -606,7 +606,7 @@ export default function DataModels() {
               <div className="px-4 pb-3">
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Relationships</p>
                 <div className="space-y-1">
-                  {EDGES.filter((e) => e.from === selected.id || e.to === selected.id).map((e, i) => (
+                  {allEdges.filter((e) => e.from === selected.id || e.to === selected.id).map((e, i) => (
                     <div key={i} className="flex items-center gap-1.5 text-[11px] text-slate-600">
                       <ArrowRight className="w-3 h-3 text-emerald-500 shrink-0" />
                       <span className={e.from === selected.id ? "font-medium" : "text-slate-400"}>
