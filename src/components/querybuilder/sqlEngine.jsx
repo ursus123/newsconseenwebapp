@@ -150,28 +150,16 @@ export async function executeSQL(sql, uploadedTables) {
     const colsMatch = sqlForCols.match(/SELECT\s+(.+?)\s+FROM/i);
     const colStr = colsMatch ? colsMatch[1].trim() : "*";
 
+    // Always apply WHERE on raw rows first (original field names work)
+    rows = applyWhere(rows, s);
+
     if (colStr !== "*") {
-      // Parse each col segment: could be "field AS alias", "field alias", or just "field"
+      // Parse each col segment: "field AS alias", or just "field"
       const colDefs = colStr.split(",").map((c) => {
         const asMatch = c.trim().match(/^(\S+)\s+AS\s+(\S+)$/i);
         if (asMatch) return { field: asMatch[1].trim(), alias: asMatch[2].trim() };
-        // handle unquoted alias (field alias)
-        const spaceMatch = c.trim().match(/^(\S+)\s+(\S+)$/);
-        if (spaceMatch) return { field: spaceMatch[1].trim(), alias: spaceMatch[2].trim() };
         return { field: c.trim(), alias: c.trim() };
       });
-      rows = rows.map((r) => {
-        const o = {};
-        colDefs.forEach(({ field, alias }) => {
-          // Support COUNT(*), COUNT(field) aggregates on single-row level (applied after)
-          if (/^COUNT\s*\(/i.test(field)) { o[alias] = 1; return; }
-          o[alias] = r[field] !== undefined ? r[field] : r[field.toLowerCase()] ?? null;
-        });
-        return o;
-      });
-
-      // Apply WHERE on raw rows BEFORE projection (so original field names work)
-      rows = applyWhere(rows, s);
 
       // Handle simple aggregates: COUNT(*), SUM(field), AVG(field), MAX(field), MIN(field)
       const hasAggregate = colDefs.some(({ field }) => /^(COUNT|SUM|AVG|MAX|MIN)\s*\(/i.test(field));
@@ -183,8 +171,8 @@ export async function executeSQL(sql, uploadedTables) {
           const [, fn, col] = aggMatch;
           switch (fn.toUpperCase()) {
             case "COUNT": aggRow[alias] = rows.length; break;
-            case "SUM":   aggRow[alias] = rows.reduce((s, r) => s + (parseFloat(r[col]) || 0), 0); break;
-            case "AVG":   aggRow[alias] = rows.length ? rows.reduce((s, r) => s + (parseFloat(r[col]) || 0), 0) / rows.length : 0; break;
+            case "SUM":   aggRow[alias] = rows.reduce((acc, r) => acc + (parseFloat(r[col]) || 0), 0); break;
+            case "AVG":   aggRow[alias] = rows.length ? rows.reduce((acc, r) => acc + (parseFloat(r[col]) || 0), 0) / rows.length : 0; break;
             case "MAX":   aggRow[alias] = Math.max(...rows.map((r) => parseFloat(r[col]) || 0)); break;
             case "MIN":   aggRow[alias] = Math.min(...rows.map((r) => parseFloat(r[col]) || 0)); break;
           }
@@ -192,14 +180,14 @@ export async function executeSQL(sql, uploadedTables) {
         return { type: "select", rows: [aggRow], message: `1 row(s) returned.` };
       }
 
-      // Project columns (after WHERE so raw field names resolve correctly)
+      // Project columns with alias renaming
       rows = rows.map((r) => {
         const o = {};
-        colDefs.forEach(({ field, alias }) => { o[alias] = r[field] !== undefined ? r[field] : r[field.toLowerCase()] ?? null; });
+        colDefs.forEach(({ field, alias }) => {
+          o[alias] = r[field] !== undefined ? r[field] : (r[field.toLowerCase()] ?? null);
+        });
         return o;
       });
-    } else {
-      rows = applyWhere(rows, s);
     }
 
     // ORDER BY
