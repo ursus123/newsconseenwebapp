@@ -385,7 +385,7 @@ export default function DataModels() {
 
   const dragging = panDrag || nodeDrag;
 
-  const selected = selectedTable ? TABLES.find((t) => t.id === selectedTable) : null;
+  const selected = selectedTable ? allTables.find((t) => t.id === selectedTable) : null;
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-0 overflow-hidden">
