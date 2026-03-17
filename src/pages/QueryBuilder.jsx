@@ -250,6 +250,23 @@ export default function QueryBuilder() {
     queryFn: () => base44.entities.DataModel.list("-created_date", 200),
   });
 
+  // ── Master data snapshot for Python scripts ───────────────────────────
+  const { data: enterprisesSnap = [] } = useQuery({ queryKey: ["snap_enterprises"], queryFn: () => base44.entities.Enterprise.list("-created_date", 500) });
+  const { data: peopleSnap = [] } = useQuery({ queryKey: ["snap_people"], queryFn: () => base44.entities.Person.list("-created_date", 500) });
+  const { data: productsSnap = [] } = useQuery({ queryKey: ["snap_products"], queryFn: () => base44.entities.Product.list("-created_date", 500) });
+  const { data: tasksSnap = [] } = useQuery({ queryKey: ["snap_tasks"], queryFn: () => base44.entities.Task.list("-created_date", 500) });
+  const { data: transactionsSnap = [] } = useQuery({ queryKey: ["snap_transactions"], queryFn: () => base44.entities.Transaction.list("-created_date", 500) });
+  const { data: medicationsSnap = [] } = useQuery({ queryKey: ["snap_medications"], queryFn: () => base44.entities.MedicationProfile.list("-created_date", 500) });
+
+  const masterDataSnapshot = {
+    enterprises: enterprisesSnap,
+    people: peopleSnap,
+    products: productsSnap,
+    tasks: tasksSnap,
+    transactions: transactionsSnap,
+    medication_profiles: medicationsSnap,
+  };
+
   const qc = useQueryClient();
 
   useEffect(() => {
