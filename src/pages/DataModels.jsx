@@ -366,7 +366,7 @@ export default function DataModels() {
   // Node drag start
   const handleNodeMouseDown = (e, id) => {
     e.stopPropagation();
-    const pos = positions[id];
+    const pos = fullPositions[id];
     setNodeDrag({ id, startMouseX: e.clientX, startMouseY: e.clientY, startNodeX: pos.x, startNodeY: pos.y });
   };
 
@@ -374,10 +374,8 @@ export default function DataModels() {
     if (nodeDrag) {
       const dx = (e.clientX - nodeDrag.startMouseX) / zoom;
       const dy = (e.clientY - nodeDrag.startMouseY) / zoom;
-      setPositions((prev) => ({
-        ...prev,
-        [nodeDrag.id]: { x: Math.max(0, nodeDrag.startNodeX + dx), y: Math.max(0, nodeDrag.startNodeY + dy) },
-      }));
+      const newPos = { x: Math.max(0, nodeDrag.startNodeX + dx), y: Math.max(0, nodeDrag.startNodeY + dy) };
+      setPositions((prev) => ({ ...prev, [nodeDrag.id]: newPos }));
     } else if (panDrag) {
       setPan({ x: e.clientX - panDrag.startX, y: e.clientY - panDrag.startY });
     }
