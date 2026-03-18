@@ -486,7 +486,7 @@ export default function ProductImportDialog({ open, onClose, onImport, currentUs
                 </div>
               )}
 
-              <Button variant="outline" className="w-full rounded-xl border-slate-200" onClick={() => downloadImportReport({ imported: importResult.imported, failed: importResult.failed, currentUser })}>
+              <Button variant="outline" className="w-full rounded-xl border-slate-200" onClick={() => downloadImportReport({ imported: importResult.imported, failed: importResult.failed, currentUser, XLSX })} disabled={!XLSX}>
                 <Download className="w-4 h-4 mr-2" /> Download Import Report (.xlsx)
               </Button>
             </div>
