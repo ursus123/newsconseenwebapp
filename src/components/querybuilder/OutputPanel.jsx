@@ -169,7 +169,6 @@ export default function OutputPanel({ results, error, message, loading, sql, onP
 
 function ReportModal({ sql, onClose }) {
   const [saving, setSaving] = useState(false);
-  const [base44Module] = useState(() => { try { return require("@/api/base44Client").base44; } catch { return null; } });
   const [saved, setSaved] = useState(false);
 
   const handleSave = async () => {
