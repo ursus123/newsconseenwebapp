@@ -13,13 +13,23 @@ import MedicationAutocomplete from "@/components/products/MedicationAutocomplete
 
 const TABS = [
   { id: "basic", label: "Basic Info", icon: Package },
-  { id: "classification", label: "Classification", icon: Tag },
   { id: "stock", label: "Stock & Pricing", icon: BarChart2 },
   { id: "assignment", label: "Assignment", icon: Link2 },
   { id: "lifecycle", label: "Lifecycle & Condition", icon: Clock },
   { id: "compliance", label: "Compliance & Tracking", icon: Shield },
   { id: "notes", label: "Notes & Files", icon: FileText },
   { id: "relationships", label: "Relationships", icon: Link2 },
+];
+
+const ITEM_TYPE_OPTIONS = [
+  { value: "medication", label: "💊 Medication" },
+  { value: "inventory_item", label: "📦 Inventory Item" },
+  { value: "fixed_asset", label: "🔧 Fixed Asset" },
+  { value: "consumable", label: "🧴 Consumable / Supply" },
+  { value: "service_item", label: "⚙️ Service Item" },
+  { value: "digital_item", label: "💻 Digital Item" },
+  { value: "raw_material", label: "🪨 Raw Material" },
+  { value: "other", label: "📁 Other" },
 ];
 
 const ITEM_CLASSES = ["asset", "inventory", "service", "digital"];
