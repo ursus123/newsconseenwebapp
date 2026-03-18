@@ -41,6 +41,8 @@ export default function AdministerModal({ task, user, onClose, onSuccess }) {
 
       // Only post a stock-out transaction when the medication was actually administered
       if (outcome === "completed" || outcome === "partially_done") {
+        const doseQty = outcome === "partially_done" ? 0.5 : 1;
+
         await base44.entities.Transaction.create({
           transaction_type: "stock_out",
           status: "posted",
@@ -51,12 +53,24 @@ export default function AdministerModal({ task, user, onClose, onSuccess }) {
           assigned_person: task.related_person || null,
           line_items: [{
             item_name: task.title,
-            quantity: outcome === "partially_done" ? 0.5 : 1,
+            quantity: doseQty,
             unit: "piece",
             unit_price: 0,
           }],
           internal_notes: `Admin: ${user?.full_name || user?.email} | Outcome: ${outcome} | Task ref: ${task.id}`,
         });
+
+        // Reduce stock_quantity on the matching Product record
+        if (task.related_item) {
+          try {
+            const products = await base44.entities.Product.filter({ name: task.related_item });
+            if (products.length > 0) {
+              const product = products[0];
+              const newQty = Math.max(0, (product.stock_quantity || 0) - doseQty);
+              await base44.entities.Product.update(product.id, { stock_quantity: newQty });
+            }
+          } catch {}
+        }
       }
     },
     onSuccess,
