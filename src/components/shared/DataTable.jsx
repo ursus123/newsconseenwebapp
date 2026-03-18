@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const PAGE_SIZE = 10;
 
-export default function DataTable({ columns, data, onEdit, onDelete, searchField }) {
+export default function DataTable({ columns, data, onEdit, onDelete, searchField, onRowClick }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
 
@@ -63,7 +63,8 @@ export default function DataTable({ columns, data, onEdit, onDelete, searchField
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
+                      className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${onRowClick ? "cursor-pointer" : ""}`}
+                      onClick={onRowClick ? () => onRowClick(row) : undefined}
                     >
                       {columns.map((col) => (
                         <TableCell key={col.key} className="text-sm text-slate-700">
@@ -79,7 +80,7 @@ export default function DataTable({ columns, data, onEdit, onDelete, searchField
                         </TableCell>
                       ))}
                       {(onEdit || onDelete) && (
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
                             {onEdit && (
                               <Button variant="ghost" size="icon" onClick={() => onEdit(row)} className="h-8 w-8 text-slate-400 hover:text-emerald-600">
