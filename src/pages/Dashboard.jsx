@@ -20,6 +20,7 @@ import WorkerMyStats from "../components/dashboard/WorkerMyStats";
 import OutcomeDialog from "../components/tasks/OutcomeDialog";
 import { taskTypeLabel } from "../components/tasks/TaskForm";
 import { useToast } from "@/components/ui/use-toast";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -212,9 +213,8 @@ function HealthBadge({ score }) {
 
 // ── Admin Dashboard ───────────────────────────────────────────────────────────
 function AdminDashboard({ user }) {
-  const isSuperAdmin = user?.role === "super_admin";
+  const listFn = useEntityListFn(user);
   const companyId = user?.company_id;
-  const listFn = (entity) => isSuperAdmin || !companyId ? entity.list() : entity.filter({ company_id: companyId });
 
   const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person) });
   const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId], queryFn: () => listFn(base44.entities.Enterprise) });
@@ -222,7 +222,7 @@ function AdminDashboard({ user }) {
   const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service) });
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks-dash", companyId], queryFn: () => listFn(base44.entities.Task) });
   const { data: transactions = [] } = useQuery({ queryKey: ["transactions-dash", companyId], queryFn: () => listFn(base44.entities.Transaction) });
-  const { data: relationships = [] } = useQuery({ queryKey: ["relationships-dash", companyId], queryFn: () => base44.entities.Relationship.list("-created_date", 1000) });
+  const { data: relationships = [] } = useQuery({ queryKey: ["relationships-dash", companyId], queryFn: () => listFn(base44.entities.Relationship) });
 
   const overdueCount = tasks.filter((t) => t.due_date && t.status !== "completed" && t.status !== "cancelled" && isPast(parseISO(t.due_date))).length;
   const draftTxCount = transactions.filter((t) => !t.status || t.status === "draft").length;
