@@ -124,8 +124,26 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
       case "basic":
         return (
           <div className="space-y-4">
+            {recallWarning && (
+              <div className="flex items-start gap-2 bg-red-50 border border-red-300 rounded-xl px-4 py-3">
+                <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-black text-red-700">⚠️ FDA RECALL ALERT</p>
+                  <p className="text-xs text-red-600 mt-0.5">This medication has an active recall. Check recalls before dispensing.</p>
+                </div>
+              </div>
+            )}
             <Field label="Item Name" required>
-              <Input value={form.name || ""} onChange={(e) => set("name", e.target.value)} className="rounded-xl" required />
+              {form.item_type === "medication" ? (
+                <MedicationAutocomplete
+                  value={form.name || ""}
+                  onChange={(v) => set("name", v)}
+                  onMedicationSelected={handleMedicationSelected}
+                  onRecallWarning={setRecallWarning}
+                />
+              ) : (
+                <Input value={form.name || ""} onChange={(e) => set("name", e.target.value)} className="rounded-xl" required />
+              )}
             </Field>
             <Field label="SKU / Code">
               <Input value={form.sku || ""} onChange={(e) => set("sku", e.target.value)} className="rounded-xl" placeholder="Optional" />
