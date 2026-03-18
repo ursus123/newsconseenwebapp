@@ -5,9 +5,12 @@ import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import ProductForm from "../components/products/ProductForm";
+import ProductImportDialog from "../components/products/ProductImportDialog";
 import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
 
 const statusColor = (s) => {
   const map = { active: "bg-emerald-50 text-emerald-700", discontinued: "bg-slate-100 text-slate-600", out_of_stock: "bg-rose-50 text-rose-700", archived: "bg-slate-100 text-slate-400" };
