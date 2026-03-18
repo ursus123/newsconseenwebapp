@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
 import { Network, RefreshCw, Search, X, Download, ChevronDown } from "lucide-react";
 import { buildGraph, NODE_CONFIG, VIEW_PRESETS } from "@/components/entitygraph/graphConfig";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
 import Graph2D from "@/components/entitygraph/Graph2D";
 import GraphSidePanel from "@/components/entitygraph/GraphSidePanel";
 
@@ -51,6 +53,13 @@ function exportAsPNG() {
 }
 
 export default function EntityGraph() {
+  // Current user (for tenant isolation)
+  const { data: currentUser } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+  });
+  const listFn = useEntityListFn(currentUser);
+
   // Data
   const [enterprises,  setEnterprises]  = useState([]);
   const [people,       setPeople]       = useState([]);
@@ -83,15 +92,16 @@ export default function EntityGraph() {
 
   const setLoad = (key, state) => setLoadStates(prev => ({ ...prev, [key]: state }));
 
-  // Phase 1: Load core data (enterprises, people, services, relationships)
+  // Phase 1: Load core data — SCOPED TO TENANT
   useEffect(() => {
+    if (!currentUser) return;
     const loadCore = async () => {
       setLoad("core", LOAD_STATES.loading);
       const [ents, ppl, svcs, rels] = await Promise.all([
-        base44.entities.Enterprise.list("-created_date", 500),
-        base44.entities.Person.list("-created_date", 500),
-        base44.entities.Service.list("-created_date", 500),
-        base44.entities.Relationship.list("-created_date", 1000),
+        listFn(base44.entities.Enterprise),
+        listFn(base44.entities.Person),
+        listFn(base44.entities.Service),
+        listFn(base44.entities.Relationship),
       ]);
       setEnterprises(ents);
       setPeople(ppl);
@@ -100,41 +110,41 @@ export default function EntityGraph() {
       setLoad("core", LOAD_STATES.loaded);
     };
     loadCore();
-  }, []);
+  }, [currentUser]);
 
   // Phase 2: Load secondary data after core is loaded
   useEffect(() => {
-    if (loadStates.core !== LOAD_STATES.loaded) return;
+    if (loadStates.core !== LOAD_STATES.loaded || !currentUser) return;
     const loadSecondary = async () => {
       setLoad("products", LOAD_STATES.loading);
-      const prds = await base44.entities.Product.list("-created_date", 300);
+      const prds = await listFn(base44.entities.Product);
       setProducts(prds);
       setLoad("products", LOAD_STATES.loaded);
 
       setLoad("addresses", LOAD_STATES.loading);
-      const adrs = await base44.entities.Address.list("-created_date", 200);
+      const adrs = await listFn(base44.entities.Address);
       setAddresses(adrs);
       setLoad("addresses", LOAD_STATES.loaded);
     };
     loadSecondary();
-  }, [loadStates.core]);
+  }, [loadStates.core, currentUser]);
 
   // Phase 3: Load heavy data (tasks, transactions) last
   useEffect(() => {
-    if (loadStates.products !== LOAD_STATES.loaded) return;
+    if (loadStates.products !== LOAD_STATES.loaded || !currentUser) return;
     const loadHeavy = async () => {
       setLoad("tasks", LOAD_STATES.loading);
-      const tsks = await base44.entities.Task.list("-created_date", 300);
+      const tsks = await listFn(base44.entities.Task);
       setTasks(tsks);
       setLoad("tasks", LOAD_STATES.loaded);
 
       setLoad("transactions", LOAD_STATES.loading);
-      const txns = await base44.entities.Transaction.list("-created_date", 200);
+      const txns = await listFn(base44.entities.Transaction);
       setTransactions(txns);
       setLoad("transactions", LOAD_STATES.loaded);
     };
     loadHeavy();
-  }, [loadStates.products]);
+  }, [loadStates.products, currentUser]);
 
   const isLoading = loadStates.core === LOAD_STATES.loading || loadStates.core === LOAD_STATES.idle;
 
