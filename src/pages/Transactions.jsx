@@ -85,8 +85,8 @@ export default function Transactions() {
   });
 
   const { data: products = [] } = useQuery({
-    queryKey: ["tx-products-page"],
-    queryFn: () => base44.entities.Product.filter({ status: "active" }, "name"),
+    queryKey: ["tx-products-page", companyId],
+    queryFn: () => listFn(base44.entities.Product),
     enabled: currentUser !== null,
   });
 
