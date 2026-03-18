@@ -7,6 +7,13 @@ import DeleteDialog from "../components/shared/DeleteDialog";
 import AddressForm from "../components/addresses/AddressForm";
 import { Badge } from "@/components/ui/badge";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import BulkImportDialog from "../components/shared/BulkImportDialog";
+import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
+import {
+  ADDRESS_FIELDS, ADDRESS_MAPPING_RULES, ADDRESS_TEMPLATE_EXAMPLE,
+  ADDRESS_TEMPLATE_INSTRUCTIONS, validateAddress, transformAddress,
+} from "@/components/shared/importConfigs";
 
 const statusColor = (s) => ({
   active: "bg-emerald-50 text-emerald-700",
