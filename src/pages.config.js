@@ -57,6 +57,7 @@ import Enterprises from './pages/Enterprises';
 import EntityGraph from './pages/EntityGraph';
 import InviteUser from './pages/InviteUser';
 import MedAdmin from './pages/MedAdmin';
+import PdfToExcel from './pages/PdfToExcel';
 import People from './pages/People';
 import Permissions from './pages/Permissions';
 import Products from './pages/Products';
@@ -81,6 +82,7 @@ export const PAGES = {
     "EntityGraph": EntityGraph,
     "InviteUser": InviteUser,
     "MedAdmin": MedAdmin,
+    "PdfToExcel": PdfToExcel,
     "People": People,
     "Permissions": Permissions,
     "Products": Products,
