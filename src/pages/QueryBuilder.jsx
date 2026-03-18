@@ -434,21 +434,26 @@ export default function QueryBuilder() {
         {leftTab === "saved" && (
           <div className="flex flex-col flex-1 overflow-hidden">
             {/* Dashboard widgets sub-section */}
-            <div className="shrink-0 px-2 pt-2 pb-1 border-b border-white/5">
-              <p className="text-[9px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-1 px-1 mb-1">
-                <Pin className="w-3 h-3" /> Dashboard
-              </p>
-              <DashboardWidgetsPanel
-                onEditWidget={(w) => loadSql(w.sql)}
+            <div className="shrink-0 border-b border-white/5">
+              <div className="px-3 pt-2 pb-1 flex items-center gap-1">
+                <Pin className="w-3 h-3 text-amber-500" />
+                <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest">Dashboard Widgets</span>
+              </div>
+              <DashboardWidgetsPanel onEditWidget={(w) => loadSql(w.sql)} />
+            </div>
+            {/* Saved queries */}
+            <div className="flex-1 overflow-hidden">
+              <div className="px-3 pt-2 pb-1">
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Saved Queries</span>
+              </div>
+              <SavedQueriesPanel
+                onLoadQuery={(querySql, queryName) => {
+                  setSql(querySql);
+                  setMidTab("script");
+                  if (queryName) updateTab(activeTabId, { name: queryName + ".sql", sql: querySql });
+                }}
               />
             </div>
-            <SavedQueriesPanel
-              onLoadQuery={(querySql, queryName) => {
-                setSql(querySql);
-                setMidTab("script");
-                if (queryName) updateTab(activeTabId, { name: queryName + ".sql", sql: querySql });
-              }}
-            />
           </div>
         )}
       </aside>
