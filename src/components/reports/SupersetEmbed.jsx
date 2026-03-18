@@ -1,69 +1,50 @@
-import React, { useState, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, ExternalLink, AlertCircle } from "lucide-react";
+import { ExternalLink, Info, BarChart2 } from "lucide-react";
 
-const SUPERSET_URL = "http://localhost:8089/superset/dashboard/1/?standalone=true";
+const SUPERSET_LOCAL = "http://localhost:8089";
+const API_DOCS = "https://newsconseenwebapp-production.up.railway.app/docs";
 
 export default function SupersetEmbed() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const iframeRef = useRef(null);
-
-  const handleLoad = () => {
-    setLoading(false);
-    setError(false);
-  };
-
-  const handleError = () => {
-    setLoading(false);
-    setError(true);
-  };
-
   return (
-    <Card className="border border-slate-100 rounded-2xl mb-8">
-      <CardHeader className="flex flex-row items-center justify-between pb-3">
-        <CardTitle className="text-base font-bold text-slate-800">Live Analytics Dashboard</CardTitle>
-        <Button size="sm" variant="outline" onClick={() => window.open(SUPERSET_URL, "_blank")}>
-          <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-          Open Full Screen
-        </Button>
-      </CardHeader>
-      <CardContent className="p-0 pb-0 rounded-b-2xl overflow-hidden">
-        <div className="relative w-full" style={{ height: 800 }}>
-          {loading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-50 z-10">
-              <div className="flex flex-col items-center gap-3 text-slate-400">
-                <Loader2 className="w-8 h-8 animate-spin" />
-                <span className="text-sm">Loading analytics dashboard…</span>
-              </div>
+    <Card className="border border-indigo-100 bg-indigo-50/40 rounded-2xl mb-8">
+      <CardContent className="pt-6 pb-6 px-6">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0 mt-0.5">
+            <BarChart2 className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-bold text-indigo-900 mb-1">Advanced Analytics (Superset)</h3>
+            <p className="text-sm text-indigo-700 mb-1">
+              Superset is your business intelligence layer with advanced drill-down dashboards powered by your analytics database.
+            </p>
+            <div className="flex items-start gap-1.5 mt-3 mb-5 bg-indigo-100/60 rounded-xl px-3 py-2.5">
+              <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-indigo-600 leading-relaxed">
+                Superset analytics runs locally alongside your Newsconseen python layer. To access full dashboards, open Superset on your local machine.
+              </p>
             </div>
-          )}
-          {error && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-50 z-10">
-              <div className="flex flex-col items-center gap-3 text-center px-8">
-                <AlertCircle className="w-8 h-8 text-rose-400" />
-                <p className="text-sm text-slate-600 max-w-sm">
-                  Analytics dashboard unavailable. Make sure the analytics service is running.
-                </p>
-                <Button size="sm" variant="outline" onClick={() => window.open(SUPERSET_URL, "_blank")}>
-                  <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                  Try Opening Directly
-                </Button>
-              </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                onClick={() => window.open(SUPERSET_LOCAL, "_blank")}
+              >
+                <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                Open Superset Locally
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                onClick={() => window.open(API_DOCS, "_blank")}
+              >
+                <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                Open API Docs
+              </Button>
             </div>
-          )}
-          <iframe
-            ref={iframeRef}
-            src={SUPERSET_URL}
-            width="100%"
-            height="800"
-            style={{ border: "none", display: "block" }}
-            onLoad={handleLoad}
-            onError={handleError}
-            title="Superset Analytics Dashboard"
-            allow="fullscreen"
-          />
+          </div>
         </div>
       </CardContent>
     </Card>
