@@ -74,8 +74,17 @@ const QUICK_ADDS = [
   { type: "enterprise_service", icon: Link2,      label: "Enterprise → Service",cls: "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/20" },
 ];
 
+const REL_PREVIEW_COLS = [
+  { label: "Type", render: (r) => r.relationship_type || <span className="text-rose-500">MISSING</span> },
+  { label: "Person", render: (r) => r.person_name || "—" },
+  { label: "Enterprise", render: (r) => r.enterprise_name || "—" },
+  { label: "Item", render: (r) => r.item_name || "—" },
+  { label: "Start Date", render: (r) => r.start_date || "—" },
+];
+
 export default function Relationships() {
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [formType, setFormType] = useState("person_enterprise");
   const [formPrefill, setFormPrefill] = useState(null);
   const [editing, setEditing] = useState(null);
