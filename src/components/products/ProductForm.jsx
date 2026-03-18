@@ -65,11 +65,13 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
   const [form, setForm] = useState({});
   const [uploading, setUploading] = useState(false);
   const [recallWarning, setRecallWarning] = useState(false);
+  const [medicationSelected, setMedicationSelected] = useState(false);
 
   useEffect(() => {
     if (open) {
       setActiveTab("basic");
       setRecallWarning(false);
+      setMedicationSelected(false);
       setForm(initialData || {
         status: "active",
         unit: "piece",
