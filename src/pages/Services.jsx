@@ -34,8 +34,17 @@ const columns = [
   { key: "status", label: "Status", render: (val) => <Badge className={statusColor(val)}>{val || "active"}</Badge> },
 ];
 
+const SVC_PREVIEW_COLS = [
+  { label: "Name", render: (r) => r.name || <span className="text-rose-500">MISSING</span> },
+  { label: "Category", render: (r) => r.category || "—" },
+  { label: "Type", render: (r) => r.service_type || "—" },
+  { label: "Price", render: (r) => r.price ? `$${r.price}` : "—" },
+  { label: "Status", render: (r) => r.status || "active" },
+];
+
 export default function Services() {
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
