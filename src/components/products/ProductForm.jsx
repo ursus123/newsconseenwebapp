@@ -101,6 +101,7 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
       status: "active",
       item_type: "medication",
     }));
+    setMedicationSelected(true);
   };
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
