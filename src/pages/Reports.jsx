@@ -6,7 +6,6 @@ import EntityForm from "../components/shared/EntityForm";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import SupersetEmbed from "../components/reports/SupersetEmbed";
 import AirflowSection from "../components/reports/AirflowSection";
-import AirflowSection from "../components/reports/AirflowSection";
 import LiveChartsSection from "../components/reports/LiveChartsSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
