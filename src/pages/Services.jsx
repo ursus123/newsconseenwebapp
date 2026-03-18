@@ -7,6 +7,13 @@ import DeleteDialog from "../components/shared/DeleteDialog";
 import ServiceForm from "../components/services/ServiceForm";
 import { Badge } from "@/components/ui/badge";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import BulkImportDialog from "../components/shared/BulkImportDialog";
+import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
+import {
+  SERVICE_FIELDS, SERVICE_MAPPING_RULES, SERVICE_TEMPLATE_EXAMPLE,
+  SERVICE_TEMPLATE_INSTRUCTIONS, validateService, transformService,
+} from "@/components/shared/importConfigs";
 
 const statusColor = (s) => ({
   active: "bg-emerald-50 text-emerald-700",
