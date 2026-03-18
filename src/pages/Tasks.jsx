@@ -1,19 +1,28 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import PageHeader from "../components/shared/PageHeader";
 import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { triggerTaskTransaction } from "../components/shared/triggerTaskTransaction";
 import TaskForm, { taskTypeLabel } from "../components/tasks/TaskForm";
 import DeleteDialog from "../components/shared/DeleteDialog";
+import TaskSummaryCards from "../components/tasks/TaskSummaryCards";
+import TaskPerformanceMetrics from "../components/tasks/TaskPerformanceMetrics";
+import TaskDetailPanel from "../components/tasks/TaskDetailPanel";
+import OutcomeDialog from "../components/tasks/OutcomeDialog";
+import TaskTimelineView from "../components/tasks/TaskTimelineView";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Pencil, Trash2, Calendar, User, Building2, CheckCircle, AlertCircle, Clock, ShieldCheck, Filter, LayoutGrid, List } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pencil, Trash2, Calendar, User, Building2, CheckCircle, AlertCircle, Clock, ShieldCheck, Filter, LayoutGrid, List, CalendarDays, X } from "lucide-react";
 import { format, isToday, isPast, parseISO } from "date-fns";
 import { motion } from "framer-motion";
-
+import { useToast } from "@/components/ui/use-toast";
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -27,6 +36,12 @@ const STATUS_BORDER = {
   completed: "border-l-emerald-400",
   cancelled: "border-l-rose-300",
 };
+const APP_SOURCE_BADGE = {
+  med_admin: { label: "Med Admin", cls: "bg-purple-50 text-purple-700" },
+  clock: { label: "Attendance", cls: "bg-blue-50 text-blue-700" },
+  delivery: { label: "Delivery", cls: "bg-amber-50 text-amber-700" },
+  maintenance: { label: "Maintenance", cls: "bg-orange-50 text-orange-700" },
+};
 const STATUS_GROUPS = [
   { key: "open", label: "Open" },
   { key: "in_progress", label: "In Progress" },
@@ -39,19 +54,39 @@ const FILTERS = [
   { key: "today", label: "Due Today" },
   { key: "completed", label: "Completed" },
 ];
+const COLUMN_STYLES = {
+  open: { header: "bg-slate-50 border-slate-200", dot: "bg-slate-400", count: "bg-slate-100 text-slate-500" },
+  in_progress: { header: "bg-blue-50 border-blue-200", dot: "bg-blue-400", count: "bg-blue-100 text-blue-600" },
+  completed: { header: "bg-emerald-50 border-emerald-200", dot: "bg-emerald-400", count: "bg-emerald-100 text-emerald-600" },
+  cancelled: { header: "bg-rose-50 border-rose-200", dot: "bg-rose-400", count: "bg-rose-100 text-rose-600" },
+};
+const KANBAN_COLUMNS = [
+  { key: "open", label: "Open" },
+  { key: "in_progress", label: "In Progress" },
+  { key: "completed", label: "Completed" },
+  { key: "cancelled", label: "Cancelled" },
+];
 
 function isDuePast(task) {
   if (!task.due_date) return false;
   return isPast(parseISO(task.due_date)) && task.status !== "completed" && task.status !== "cancelled";
 }
 
-function TaskCard({ task, onEdit, onDelete, isAdmin }) {
+function TaskCard({ task, onEdit, onDelete, isAdmin, selectable, selected, onSelect, onOpen }) {
   const overdue = isDuePast(task);
+  const srcBadge = task.app_source ? APP_SOURCE_BADGE[task.app_source] : null;
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
       <Card className={`p-4 border-l-4 ${STATUS_BORDER[task.status] || "border-l-slate-300"} hover:shadow-md transition-shadow`}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
+        <div className="flex items-start gap-2">
+          {selectable && (
+            <Checkbox
+              checked={!!selected}
+              onCheckedChange={() => onSelect(task.id)}
+              className="mt-0.5 shrink-0"
+            />
+          )}
+          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onOpen && onOpen(task)}>
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">
               {taskTypeLabel(task.task_type)}
             </p>
@@ -59,18 +94,12 @@ function TaskCard({ task, onEdit, onDelete, isAdmin }) {
               {task.title}
             </h4>
             <div className="flex flex-wrap gap-1.5 mt-2.5">
-              <Badge className={PRIORITY_COLOR[task.priority] || PRIORITY_COLOR.normal}>
-                {task.priority || "normal"}
-              </Badge>
+              <Badge className={PRIORITY_COLOR[task.priority] || PRIORITY_COLOR.normal}>{task.priority || "normal"}</Badge>
               {task.assigned_to_name && (
-                <Badge variant="outline" className="text-xs gap-1">
-                  <User className="w-3 h-3" />{task.assigned_to_name}
-                </Badge>
+                <Badge variant="outline" className="text-xs gap-1"><User className="w-3 h-3" />{task.assigned_to_name}</Badge>
               )}
               {task.enterprise && (
-                <Badge variant="outline" className="text-xs gap-1">
-                  <Building2 className="w-3 h-3" />{task.enterprise}
-                </Badge>
+                <Badge variant="outline" className="text-xs gap-1"><Building2 className="w-3 h-3" />{task.enterprise}</Badge>
               )}
               {task.due_date && (
                 <Badge variant="outline" className={`text-xs gap-1 ${overdue ? "border-rose-300 text-rose-600 bg-rose-50" : ""}`}>
@@ -82,19 +111,22 @@ function TaskCard({ task, onEdit, onDelete, isAdmin }) {
               {task.trigger_transaction && (
                 <Badge className="bg-violet-50 text-violet-700 text-xs">→ Transaction</Badge>
               )}
+              {srcBadge && <Badge className={`${srcBadge.cls} text-xs`}>{srcBadge.label}</Badge>}
             </div>
             {task.outcome_notes && (
               <p className="text-xs text-slate-400 mt-2 line-clamp-1 italic">{task.outcome_notes}</p>
             )}
           </div>
           {isAdmin && (
-            <div className="flex gap-1 shrink-0">
+            <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
               <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-emerald-600" onClick={() => onEdit(task)}>
                 <Pencil className="w-3.5 h-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-rose-600" onClick={() => onDelete(task)}>
-                <Trash2 className="w-3.5 h-3.5" />
-              </Button>
+              {onDelete && (
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-rose-600" onClick={() => onDelete(task)}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -103,7 +135,6 @@ function TaskCard({ task, onEdit, onDelete, isAdmin }) {
   );
 }
 
-// User view: flat list of tasks assigned to the current user
 function MyTasksList({ tasks }) {
   const [filter, setFilter] = useState("open");
   const filtered = tasks.filter((t) => {
@@ -112,7 +143,6 @@ function MyTasksList({ tasks }) {
     if (filter === "overdue") return isDuePast(t);
     return true;
   });
-
   return (
     <div>
       <div className="flex items-center gap-2 mb-6">
@@ -124,94 +154,88 @@ function MyTasksList({ tasks }) {
           <p className="text-xs text-slate-400">Tasks assigned to you</p>
         </div>
       </div>
-
       <div className="flex flex-wrap gap-2 mb-5">
         {[{ key: "open", label: "Open" }, { key: "overdue", label: "Overdue" }, { key: "completed", label: "Done" }, { key: "all", label: "All" }].map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setFilter(f.key)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors border ${
-              filter === f.key
-                ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
-            }`}
-          >
+          <button key={f.key} onClick={() => setFilter(f.key)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors border ${filter === f.key ? "bg-emerald-600 text-white border-emerald-600 shadow-sm" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
             {f.label}
           </button>
         ))}
       </div>
-
       <div className="space-y-3">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
             <CheckCircle className="w-8 h-8 text-emerald-200 mb-2" />
-            <p className="text-sm text-slate-400 font-medium">All clear!</p>
-            <p className="text-xs text-slate-300">No tasks here</p>
+            <p className="text-sm text-slate-400 font-medium">All clear! No tasks here.</p>
           </div>
-        ) : (
-          filtered.map((task) => (
-            <TaskCard key={task.id} task={task} isAdmin={false} />
-          ))
-        )}
+        ) : filtered.map((task) => <TaskCard key={task.id} task={task} isAdmin={false} />)}
       </div>
     </div>
   );
 }
 
-const COLUMN_STYLES = {
-  open: { header: "bg-slate-50 border-slate-200", dot: "bg-slate-400", count: "bg-slate-100 text-slate-500" },
-  in_progress: { header: "bg-blue-50 border-blue-200", dot: "bg-blue-400", count: "bg-blue-100 text-blue-600" },
-  completed: { header: "bg-emerald-50 border-emerald-200", dot: "bg-emerald-400", count: "bg-emerald-100 text-emerald-600" },
-  cancelled: { header: "bg-rose-50 border-rose-200", dot: "bg-rose-400", count: "bg-rose-100 text-rose-600" },
-};
-
-const KANBAN_COLUMNS = [
-  { key: "open", label: "Open" },
-  { key: "in_progress", label: "In Progress" },
-  { key: "completed", label: "Completed" },
-  { key: "cancelled", label: "Cancelled" },
-];
-
-// Admin view: kanban + filters + full CRUD
 function AdminTasksView({ tasks, appUsers, enterprises, products, services, people, addresses, companyId, isSuperAdmin, currentUser }) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [detailTask, setDetailTask] = useState(null);
+  const [outcomeTask, setOutcomeTask] = useState(null);
   const [filter, setFilter] = useState("all");
-  const [viewMode, setViewMode] = useState("kanban"); // "kanban" | "list"
+  const [viewMode, setViewMode] = useState("kanban");
   const [filterPerson, setFilterPerson] = useState("");
   const [filterEnterprise, setFilterEnterprise] = useState("");
-  const [filterAddress, setFilterAddress] = useState("");
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkAssignee, setBulkAssignee] = useState("");
   const qc = useQueryClient();
   const perms = usePermissions(currentUser);
   const withScope = useWithScope(currentUser);
-
-  const withCompany = withScope;
+  const { toast } = useToast();
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
 
-  const afterSave = async (task) => {
-    if (task.status === "completed" && task.trigger_transaction) {
-      await triggerTaskTransaction(task, null);
+  const completeTask = async (task, outcomeData) => {
+    const updated = await base44.entities.Task.update(task.id, {
+      ...task,
+      status: "completed",
+      outcome: outcomeData.outcome,
+      outcome_notes: outcomeData.outcome_notes,
+      scheduled_time: outcomeData.completed_time || task.scheduled_time,
+    });
+    if (task.trigger_transaction) {
+      const tx = await triggerTaskTransaction(updated, currentUser);
+      if (tx) {
+        toast({
+          title: "Task completed — draft transaction created",
+          description: (
+            <span>
+              <Link to={createPageUrl("Transactions")} className="underline font-medium">View Transaction →</Link>
+            </span>
+          ),
+        });
+      }
     }
     invalidate();
   };
 
   const createMut = useMutation({
-    mutationFn: async (d) => {
-      const task = await base44.entities.Task.create(withCompany(d));
-      await afterSave(task);
-      return task;
-    },
-    onSuccess: () => { setFormOpen(false); },
+    mutationFn: async (d) => base44.entities.Task.create(withScope({ ...d, app_source: d.app_source || "manual" })),
+    onSuccess: () => { setFormOpen(false); invalidate(); },
   });
   const updateMut = useMutation({
     mutationFn: async ({ id, data }) => {
       const task = await base44.entities.Task.update(id, data);
-      await afterSave(task);
+      if (task.status === "completed" && task.trigger_transaction) {
+        const tx = await triggerTaskTransaction(task, currentUser);
+        if (tx) {
+          toast({
+            title: "Task completed — draft transaction created",
+            description: <Link to={createPageUrl("Transactions")} className="underline font-medium text-sm">View Transaction →</Link>,
+          });
+        }
+      }
       return task;
     },
-    onSuccess: () => { setFormOpen(false); setEditing(null); },
+    onSuccess: () => { setFormOpen(false); setEditing(null); invalidate(); },
   });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Task.delete(id), onSuccess: () => { invalidate(); setDeleting(null); } });
 
@@ -220,14 +244,12 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
     if (filter === "overdue" && !isDuePast(t)) return false;
     if (filter === "today" && !(t.due_date && isToday(parseISO(t.due_date)))) return false;
     if (filter === "completed" && t.status !== "completed") return false;
-    if (filterPerson && t.related_person !== filterPerson) return false;
+    if (filterPerson && t.assigned_to_name !== filterPerson && t.assigned_to_email !== filterPerson) return false;
     if (filterEnterprise && t.enterprise !== filterEnterprise) return false;
-    if (filterAddress && !((t.outcome_notes || "").includes(filterAddress) || (t.title || "").includes(filterAddress))) return false;
     return true;
   });
 
   const grouped = KANBAN_COLUMNS.map((s) => ({ ...s, items: filtered.filter((t) => t.status === s.key) }));
-  const openEdit = (t) => { setEditing(t); setFormOpen(true); };
   const overdueCount = tasks.filter(isDuePast).length;
 
   const onDragOver = (e) => e.preventDefault();
@@ -235,8 +257,72 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
     const taskId = e.dataTransfer.getData("taskId");
     const task = tasks.find((t) => t.id === taskId);
     if (!task || task.status === newStatus) return;
-    updateMut.mutate({ id: taskId, data: { ...task, status: newStatus } });
+    if (newStatus === "completed") {
+      setOutcomeTask({ ...task, _pendingStatus: "completed" });
+    } else {
+      updateMut.mutate({ id: taskId, data: { ...task, status: newStatus } });
+    }
   };
+
+  const toggleSelect = (id) => setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  const clearSelection = () => setSelectedIds([]);
+
+  const bulkComplete = async () => {
+    const selected = tasks.filter((t) => selectedIds.includes(t.id));
+    setOutcomeTask({ _bulk: selected });
+  };
+
+  const handleOutcomeConfirm = async (outcomeData) => {
+    if (outcomeTask._bulk) {
+      for (const task of outcomeTask._bulk) {
+        await completeTask(task, outcomeData);
+      }
+    } else {
+      await completeTask(outcomeTask, outcomeData);
+    }
+    setOutcomeTask(null);
+    clearSelection();
+  };
+
+  const bulkReassign = async () => {
+    if (!bulkAssignee) return;
+    const user = appUsers.find((u) => u.email === bulkAssignee);
+    for (const id of selectedIds) {
+      const task = tasks.find((t) => t.id === id);
+      if (task) {
+        await base44.entities.Task.update(id, {
+          ...task,
+          assigned_to_email: bulkAssignee,
+          assigned_to_name: user ? (user.full_name || user.email) : bulkAssignee,
+        });
+      }
+    }
+    invalidate();
+    clearSelection();
+    setBulkAssignee("");
+    toast({ title: `${selectedIds.length} tasks reassigned` });
+  };
+
+  const bulkDelete = async () => {
+    for (const id of selectedIds) await base44.entities.Task.delete(id);
+    invalidate();
+    clearSelection();
+    toast({ title: `${selectedIds.length} tasks deleted` });
+  };
+
+  const renderCard = (task, selectable = false) => (
+    <TaskCard
+      key={task.id}
+      task={task}
+      onEdit={perms.l3_create ? (t) => { setEditing(t); setFormOpen(true); } : undefined}
+      onDelete={perms.can_delete ? (t) => setDeleting(t) : undefined}
+      isAdmin={perms.l3_create}
+      selectable={selectable}
+      selected={selectedIds.includes(task.id)}
+      onSelect={toggleSelect}
+      onOpen={(t) => setDetailTask(t)}
+    />
+  );
 
   return (
     <div>
@@ -246,149 +332,114 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-        <div>
-          <PageHeader
-            title="Tasks"
-            subtitle="Assign and manage tasks for app users"
-            onAdd={perms.l3_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
-            addLabel="Assign Task"
-          />
-        </div>
+        <PageHeader
+          title="Tasks"
+          subtitle="Assign and manage tasks for app users"
+          onAdd={perms.l3_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
+          addLabel="Assign Task"
+        />
         <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-          <button
-            onClick={() => setViewMode("kanban")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === "kanban" ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700"}`}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" /> Kanban
-          </button>
-          <button
-            onClick={() => setViewMode("list")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === "list" ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700"}`}
-          >
-            <List className="w-3.5 h-3.5" /> List
-          </button>
+          {[{ key: "kanban", icon: LayoutGrid, label: "Kanban" }, { key: "list", icon: List, label: "List" }, { key: "timeline", icon: CalendarDays, label: "Timeline" }].map(({ key, icon: Icon, label }) => (
+            <button key={key} onClick={() => setViewMode(key)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === key ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700"}`}>
+              <Icon className="w-3.5 h-3.5" /> {label}
+            </button>
+          ))}
         </div>
       </div>
 
+      <TaskSummaryCards tasks={tasks} />
+      <TaskPerformanceMetrics tasks={tasks} />
+
       <div className="flex flex-wrap gap-2 mb-3">
         {FILTERS.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setFilter(f.key)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors border ${
-              filter === f.key
-                ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
-            }`}
-          >
+          <button key={f.key} onClick={() => setFilter(f.key)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors border ${filter === f.key ? "bg-emerald-600 text-white border-emerald-600 shadow-sm" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
             {f.label}
             {f.key === "overdue" && overdueCount > 0 && (
-              <span className="ml-1.5 bg-rose-100 text-rose-600 text-[10px] font-semibold rounded-full px-1.5 py-0.5">
-                {overdueCount}
-              </span>
+              <span className="ml-1.5 bg-rose-100 text-rose-600 text-[10px] font-semibold rounded-full px-1.5 py-0.5">{overdueCount}</span>
             )}
           </button>
         ))}
       </div>
 
-      {/* Secondary filters */}
       <div className="flex flex-wrap gap-2 mb-6 items-center">
         <Filter className="w-3.5 h-3.5 text-slate-400" />
-        <select
-          value={filterPerson}
-          onChange={(e) => setFilterPerson(e.target.value)}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-        >
+        <select value={filterPerson} onChange={(e) => setFilterPerson(e.target.value)}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400">
           <option value="">All People</option>
-          {people.map((p) => (
-            <option key={p.id} value={`${p.first_name} ${p.last_name}`}>{p.first_name} {p.last_name}</option>
-          ))}
+          {people.map((p) => <option key={p.id} value={`${p.first_name} ${p.last_name}`}>{p.first_name} {p.last_name}</option>)}
         </select>
-        <select
-          value={filterEnterprise}
-          onChange={(e) => setFilterEnterprise(e.target.value)}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-        >
+        <select value={filterEnterprise} onChange={(e) => setFilterEnterprise(e.target.value)}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400">
           <option value="">All Enterprises</option>
-          {enterprises.map((e) => (
-            <option key={e.id} value={e.enterprise_name}>{e.enterprise_name}</option>
-          ))}
+          {enterprises.map((e) => <option key={e.id} value={e.enterprise_name}>{e.enterprise_name}</option>)}
         </select>
-        <select
-          value={filterAddress}
-          onChange={(e) => setFilterAddress(e.target.value)}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-        >
-          <option value="">All Addresses</option>
-          {addresses.map((a) => (
-            <option key={a.id} value={a.address_line1}>{a.label ? `${a.label} – ` : ""}{a.address_line1}{a.city ? `, ${a.city}` : ""}</option>
-          ))}
-        </select>
-        {(filterPerson || filterEnterprise || filterAddress) && (
-          <button
-            onClick={() => { setFilterPerson(""); setFilterEnterprise(""); setFilterAddress(""); }}
-            className="text-xs text-slate-400 hover:text-rose-500 underline"
-          >
-            Clear
-          </button>
+        {(filterPerson || filterEnterprise) && (
+          <button onClick={() => { setFilterPerson(""); setFilterEnterprise(""); }} className="text-xs text-slate-400 hover:text-rose-500 underline">Clear</button>
         )}
       </div>
 
-      {viewMode === "kanban" ? (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-            {grouped.map((col) => {
-              const style = COLUMN_STYLES[col.key] || COLUMN_STYLES.open;
-              return (
-                <div
-                  key={col.key}
-                  className="flex flex-col min-h-[300px]"
-                  onDragOver={onDragOver}
-                  onDrop={(e) => onDrop(e, col.key)}
-                >
-                  <div className={`flex items-center gap-2 px-3 py-2.5 rounded-t-xl border ${style.header} mb-0`}>
-                    <span className={`w-2 h-2 rounded-full ${style.dot}`} />
-                    <h3 className="text-sm font-semibold text-slate-700 flex-1">{col.label}</h3>
-                    <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${style.count}`}>{col.items.length}</span>
-                  </div>
-                  <div className="flex-1 p-2 rounded-b-xl border border-t-0 bg-slate-50/50 border-slate-100 min-h-[200px] space-y-2">
-                    {col.items.map((task) => (
-                      <div
-                        key={task.id}
-                        draggable={!!perms.l3_create}
-                        onDragStart={(e) => e.dataTransfer.setData("taskId", task.id)}
-                        className="cursor-grab active:cursor-grabbing"
-                      >
-                        <TaskCard
-                          task={task}
-                          onEdit={perms.l3_create ? openEdit : undefined}
-                          onDelete={perms.can_delete ? (t) => setDeleting(t) : undefined}
-                          isAdmin={perms.l3_create}
-                        />
-                      </div>
-                    ))}
-                    {col.items.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-8 rounded-xl border-2 border-dashed border-slate-100">
-                        <p className="text-xs text-slate-300">Drop here</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+      {/* Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 bg-slate-800 text-white rounded-2xl px-5 py-3 mb-5">
+          <span className="text-sm font-medium">{selectedIds.length} selected</span>
+          <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white h-7" onClick={bulkComplete}>Mark Completed</Button>
+          <div className="flex items-center gap-2">
+            <select value={bulkAssignee} onChange={(e) => setBulkAssignee(e.target.value)}
+              className="text-sm border border-white/20 rounded-lg px-2 py-1 bg-slate-700 text-white focus:outline-none h-7">
+              <option value="">Reassign to...</option>
+              {appUsers.map((u) => <option key={u.id} value={u.email}>{u.full_name || u.email}</option>)}
+            </select>
+            {bulkAssignee && <Button size="sm" variant="outline" className="h-7 text-white border-white/30 hover:bg-white/10" onClick={bulkReassign}>Apply</Button>}
           </div>
-      ) : (
+          {perms.can_delete && <Button size="sm" variant="outline" className="h-7 border-rose-400 text-rose-300 hover:bg-rose-500/20" onClick={bulkDelete}>Delete</Button>}
+          <Button size="sm" variant="ghost" className="h-7 text-slate-300 hover:text-white ml-auto" onClick={clearSelection}><X className="w-3.5 h-3.5" /></Button>
+        </div>
+      )}
+
+      {viewMode === "kanban" && (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          {grouped.map((col) => {
+            const style = COLUMN_STYLES[col.key] || COLUMN_STYLES.open;
+            return (
+              <div key={col.key} className="flex flex-col min-h-[300px]" onDragOver={onDragOver} onDrop={(e) => onDrop(e, col.key)}>
+                <div className={`flex items-center gap-2 px-3 py-2.5 rounded-t-xl border ${style.header}`}>
+                  <span className={`w-2 h-2 rounded-full ${style.dot}`} />
+                  <h3 className="text-sm font-semibold text-slate-700 flex-1">{col.label}</h3>
+                  <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${style.count}`}>{col.items.length}</span>
+                </div>
+                <div className="flex-1 p-2 rounded-b-xl border border-t-0 bg-slate-50/50 border-slate-100 min-h-[200px] space-y-2">
+                  {col.items.map((task) => (
+                    <div key={task.id} draggable={!!perms.l3_create} onDragStart={(e) => e.dataTransfer.setData("taskId", task.id)} className="cursor-grab active:cursor-grabbing">
+                      {renderCard(task, false)}
+                    </div>
+                  ))}
+                  {col.items.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-8 rounded-xl border-2 border-dashed border-slate-100">
+                      <p className="text-xs text-slate-300">Drop here</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {viewMode === "list" && (
         <div className="space-y-3">
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
               <Clock className="w-8 h-8 text-slate-200 mb-2" />
               <p className="text-sm text-slate-300">No tasks match this filter</p>
             </div>
-          ) : (
-            filtered.map((task) => (
-              <TaskCard key={task.id} task={task} onEdit={perms.l3_create ? openEdit : undefined} onDelete={perms.can_delete ? (t) => setDeleting(t) : undefined} isAdmin={perms.l3_create} />
-            ))
-          )}
+          ) : filtered.map((task) => renderCard(task, true))}
         </div>
+      )}
+
+      {viewMode === "timeline" && (
+        <TaskTimelineView tasks={filtered} renderCard={(task) => renderCard(task, true)} />
       )}
 
       <TaskForm
@@ -405,7 +456,23 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         services={services}
         people={people}
       />
+
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.title} />
+
+      <TaskDetailPanel
+        task={detailTask}
+        open={!!detailTask}
+        onClose={() => setDetailTask(null)}
+        products={products}
+        services={services}
+      />
+
+      <OutcomeDialog
+        open={!!outcomeTask}
+        onClose={() => setOutcomeTask(null)}
+        taskTitle={outcomeTask?._bulk ? `${outcomeTask._bulk.length} tasks` : outcomeTask?.title}
+        onConfirm={handleOutcomeConfirm}
+      />
     </div>
   );
 }
@@ -422,23 +489,20 @@ export default function Tasks() {
   const isSuperAdmin = currentUser?.role === "super_admin";
   const companyId = currentUser?.company_id;
   const listFn = useEntityListFn(currentUser);
+  const qcRoot = useQueryClient();
 
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Task), enabled: currentUser !== null });
   const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.User.list() : base44.entities.User.filter({ company_id: companyId }), enabled: isAdmin });
-  const qcRoot = useQueryClient();
   const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Enterprise), enabled: isAdmin });
-
-  // Refresh enterprise list in real-time when new enterprises are added
-  useEffect(() => {
-    const unsub = base44.entities.Enterprise.subscribe(() => {
-      qcRoot.invalidateQueries({ queryKey: ["enterprises"] });
-    });
-    return unsub;
-  }, []);
   const { data: products = [] } = useQuery({ queryKey: ["products", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Product), enabled: isAdmin });
   const { data: services = [] } = useQuery({ queryKey: ["services", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Service), enabled: isAdmin });
   const { data: people = [] } = useQuery({ queryKey: ["people", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Person), enabled: isAdmin });
   const { data: addresses = [] } = useQuery({ queryKey: ["addresses", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Address), enabled: isAdmin });
+
+  useEffect(() => {
+    const unsub = base44.entities.Enterprise.subscribe(() => qcRoot.invalidateQueries({ queryKey: ["enterprises"] }));
+    return unsub;
+  }, []);
 
   if (loadingUser) {
     return (
@@ -451,21 +515,14 @@ export default function Tasks() {
   if (isAdmin) {
     return (
       <AdminTasksView
-        tasks={tasks}
-        appUsers={appUsers}
-        enterprises={enterprises}
-        products={products}
-        services={services}
-        people={people}
-        addresses={addresses}
-        companyId={companyId}
-        isSuperAdmin={isSuperAdmin}
-        currentUser={currentUser}
+        tasks={tasks} appUsers={appUsers} enterprises={enterprises}
+        products={products} services={services} people={people}
+        addresses={addresses} companyId={companyId}
+        isSuperAdmin={isSuperAdmin} currentUser={currentUser}
       />
     );
   }
 
-  // Regular user: see only tasks assigned to their email
   const myTasks = tasks.filter((t) => t.assigned_to_email === currentUser?.email);
   return <MyTasksList tasks={myTasks} />;
 }
