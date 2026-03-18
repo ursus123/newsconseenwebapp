@@ -10,6 +10,13 @@ import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Badge } from "@/components/ui/badge";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
+import BulkImportDialog from "../components/shared/BulkImportDialog";
+import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
+import {
+  ENTERPRISE_FIELDS, ENTERPRISE_MAPPING_RULES, ENTERPRISE_TEMPLATE_EXAMPLE,
+  ENTERPRISE_TEMPLATE_INSTRUCTIONS, validateEnterprise, transformEnterprise,
+} from "@/components/shared/importConfigs";
 
 const statusColor = (s) => {
   const map = { active: "bg-emerald-50 text-emerald-700", inactive: "bg-slate-100 text-slate-600", prospect: "bg-blue-50 text-blue-700", archived: "bg-slate-100 text-slate-400" };
