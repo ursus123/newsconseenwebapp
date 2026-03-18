@@ -1,7 +1,8 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ZoomIn, ZoomOut, Maximize2, Info, GitBranch, Database, ArrowRight } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, GitBranch, Database, ArrowRight, Globe, Code2, Plug } from "lucide-react";
+import { NotebookStore } from "@/components/querybuilder/NotebookStore";
 
 // ─── Schema Definition ────────────────────────────────────────────────────────
 const TABLES = [
@@ -257,19 +258,21 @@ function tableHeight(t) {
   return TABLE_H_BASE + t.fields.length * FIELD_H + 10;
 }
 
-function getTableCenter(id, positions) {
+function getTableCenter(id, positions, tables) {
   const p = positions[id];
-  const t = TABLES.find((x) => x.id === id);
+  const t = (tables || TABLES).find((x) => x.id === id);
+  if (!p || !t) return { x: 0, y: 0 };
   return { x: p.x + TABLE_W / 2, y: p.y + tableHeight(t) / 2 };
 }
 
-function getEdgePoint(fromId, toId, positions) {
+function getEdgePoint(fromId, toId, positions, tables) {
   const p = positions[fromId];
-  const t = TABLES.find((x) => x.id === fromId);
+  const t = (tables || TABLES).find((x) => x.id === fromId);
+  if (!p || !t) return { x: 0, y: 0 };
   const h = tableHeight(t);
   const cx = p.x + TABLE_W / 2;
   const cy = p.y + h / 2;
-  const tc = getTableCenter(toId, positions);
+  const tc = getTableCenter(toId, positions, tables);
 
   const dx = tc.x - cx;
   const dy = tc.y - cy;
@@ -296,15 +299,62 @@ const LAYER_COLORS = {
 export default function DataModels() {
   const [zoom, setZoom] = useState(0.85);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [panDrag, setPanDrag] = useState(null);       // canvas panning
-  const [nodeDrag, setNodeDrag] = useState(null);     // { id, startMouseX, startMouseY, startNodeX, startNodeY }
+  const [panDrag, setPanDrag] = useState(null);
+  const [nodeDrag, setNodeDrag] = useState(null);
   const [positions, setPositions] = useState(DEFAULT_POSITIONS);
   const [selectedTable, setSelectedTable] = useState(null);
   const [hoveredEdge, setHoveredEdge] = useState(null);
+  const [notebooks, setNotebooks] = useState(NotebookStore.getAll());
   const containerRef = useRef(null);
 
+  useEffect(() => {
+    const unsub = NotebookStore.subscribe(setNotebooks);
+    return unsub;
+  }, []);
+
+  // Build external nodes from notebooks
+  const externalNodes = Object.values(notebooks).filter((n) => n.connected);
+  const allTables = [
+    ...TABLES,
+    ...externalNodes.map((nb, i) => ({
+      id: nb.id,
+      label: nb.name,
+      color: nb.type === "api" ? "#0ea5e9" : "#f59e0b",
+      bg: nb.type === "api" ? "#f0f9ff" : "#fffbeb",
+      border: nb.type === "api" ? "#bae6fd" : "#fde68a",
+      icon: nb.type === "api" ? "🌐" : "🐍",
+      layer: "External Sources",
+      description: nb.type === "api" ? "API Connector" : "Python Script",
+      fields: [
+        { name: "id", type: "PK", pk: true },
+        ...(nb.outputSchema || []).map((col) => ({ name: col.name, type: col.type })),
+      ],
+      isExternal: true,
+      nbType: nb.type,
+    })),
+  ];
+
+  // Place external nodes below the canvas automatically if no position exists
+  const fullPositions = { ...positions };
+  externalNodes.forEach((nb, i) => {
+    if (!fullPositions[nb.id]) {
+      fullPositions[nb.id] = { x: 60 + i * 280, y: 980 };
+    }
+  });
+
+  // ETL edges from external sources point to Master Data tables
+  const allEdges = [
+    ...EDGES,
+    ...externalNodes.map((nb) => ({
+      from: nb.id,
+      to: "Enterprise",
+      label: "feeds →",
+      isExternal: true,
+    })),
+  ];
+
   const CANVAS_W = 1420;
-  const CANVAS_H = 840;
+  const CANVAS_H = 1200;
 
   // Canvas pan starts only on background clicks
   const handleCanvasMouseDown = (e) => {
@@ -316,7 +366,7 @@ export default function DataModels() {
   // Node drag start
   const handleNodeMouseDown = (e, id) => {
     e.stopPropagation();
-    const pos = positions[id];
+    const pos = fullPositions[id];
     setNodeDrag({ id, startMouseX: e.clientX, startMouseY: e.clientY, startNodeX: pos.x, startNodeY: pos.y });
   };
 
@@ -324,10 +374,8 @@ export default function DataModels() {
     if (nodeDrag) {
       const dx = (e.clientX - nodeDrag.startMouseX) / zoom;
       const dy = (e.clientY - nodeDrag.startMouseY) / zoom;
-      setPositions((prev) => ({
-        ...prev,
-        [nodeDrag.id]: { x: Math.max(0, nodeDrag.startNodeX + dx), y: Math.max(0, nodeDrag.startNodeY + dy) },
-      }));
+      const newPos = { x: Math.max(0, nodeDrag.startNodeX + dx), y: Math.max(0, nodeDrag.startNodeY + dy) };
+      setPositions((prev) => ({ ...prev, [nodeDrag.id]: newPos }));
     } else if (panDrag) {
       setPan({ x: e.clientX - panDrag.startX, y: e.clientY - panDrag.startY });
     }
@@ -337,7 +385,7 @@ export default function DataModels() {
 
   const dragging = panDrag || nodeDrag;
 
-  const selected = selectedTable ? TABLES.find((t) => t.id === selectedTable) : null;
+  const selected = selectedTable ? allTables.find((t) => t.id === selectedTable) : null;
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-0 overflow-hidden">
@@ -369,7 +417,7 @@ export default function DataModels() {
 
       {/* Layer legend */}
       <div className="flex flex-wrap gap-1.5 mb-3 shrink-0">
-        {Object.entries(LAYER_COLORS).map(([layer, cls]) => (
+        {Object.entries({ ...LAYER_COLORS, "External Sources": "bg-sky-50 text-sky-700 border-sky-200" }).map(([layer, cls]) => (
           <span key={layer} className={`text-[11px] px-2.5 py-0.5 rounded-full border font-medium ${cls}`}>{layer}</span>
         ))}
         <span className="text-[11px] px-2.5 py-0.5 rounded-full border bg-white text-slate-400 border-slate-200 ml-2 flex items-center gap-1">
@@ -423,16 +471,22 @@ export default function DataModels() {
                 <marker id="arrow-green-h" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
                   <path d="M0,0 L0,6 L8,3 z" fill="#6366f1" />
                 </marker>
+                <marker id="arrow-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L8,3 z" fill="#0ea5e9" />
+                </marker>
               </defs>
-              {EDGES.map((edge, i) => {
-                const from = getEdgePoint(edge.from, edge.to, positions);
-                const to = getEdgePoint(edge.to, edge.from, positions);
+              {allEdges.map((edge, i) => {
+                if (!fullPositions[edge.from] || !fullPositions[edge.to]) return null;
+                if (!allTables.find((t) => t.id === edge.from) || !allTables.find((t) => t.id === edge.to)) return null;
+                const from = getEdgePoint(edge.from, edge.to, fullPositions, allTables);
+                const to = getEdgePoint(edge.to, edge.from, fullPositions, allTables);
                 const isTrigger = edge.label === "triggers →";
+                const isExternal = edge.isExternal;
                 const isHovered = hoveredEdge === i;
                 const mx = (from.x + to.x) / 2;
                 const my = (from.y + to.y) / 2;
-                const color = isTrigger ? "#f97316" : "#10b981";
-                const markerId = isTrigger ? "arrow-orange" : "arrow-green";
+                const color = isTrigger ? "#f97316" : isExternal ? "#0ea5e9" : "#10b981";
+                const markerId = isTrigger ? "arrow-orange" : isExternal ? "arrow-blue" : "arrow-green";
                 return (
                   <g key={i}>
                     <path
@@ -465,8 +519,9 @@ export default function DataModels() {
             </svg>
 
             {/* Table nodes */}
-            {TABLES.map((table) => {
-              const pos = positions[table.id];
+            {allTables.map((table) => {
+              const pos = fullPositions[table.id];
+              if (!pos) return null;
               const h = tableHeight(table);
               const isSelected = selectedTable === table.id;
               const isDraggingThis = nodeDrag?.id === table.id;
@@ -551,7 +606,7 @@ export default function DataModels() {
               <div className="px-4 pb-3">
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Relationships</p>
                 <div className="space-y-1">
-                  {EDGES.filter((e) => e.from === selected.id || e.to === selected.id).map((e, i) => (
+                  {allEdges.filter((e) => e.from === selected.id || e.to === selected.id).map((e, i) => (
                     <div key={i} className="flex items-center gap-1.5 text-[11px] text-slate-600">
                       <ArrowRight className="w-3 h-3 text-emerald-500 shrink-0" />
                       <span className={e.from === selected.id ? "font-medium" : "text-slate-400"}>
@@ -560,7 +615,7 @@ export default function DataModels() {
                       <span className="text-slate-300 text-[10px] truncate">({e.label})</span>
                     </div>
                   ))}
-                  {EDGES.filter((e) => e.from === selected.id || e.to === selected.id).length === 0 && (
+                  {allEdges.filter((e) => e.from === selected.id || e.to === selected.id).length === 0 && (
                     <p className="text-[11px] text-slate-400">No direct edges</p>
                   )}
                 </div>
@@ -578,10 +633,10 @@ export default function DataModels() {
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Schema Stats</p>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { label: "Tables", value: TABLES.length },
-                { label: "Edges", value: EDGES.length },
-                { label: "FK Fields", value: TABLES.reduce((s, t) => s + t.fields.filter((f) => f.fk).length, 0) },
-                { label: "Layers", value: [...new Set(TABLES.map((t) => t.layer))].length },
+                { label: "Tables", value: allTables.length },
+                { label: "Edges", value: allEdges.length },
+                { label: "External", value: externalNodes.length },
+                { label: "Layers", value: [...new Set(allTables.map((t) => t.layer))].length },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-slate-50 rounded-xl px-3 py-2 text-center">
                   <p className="text-lg font-bold text-slate-700">{value}</p>
@@ -594,6 +649,7 @@ export default function DataModels() {
           <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2">
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">ETL Flow</p>
             {[
+              { step: "0. Extract", desc: `External APIs & Python scripts feed raw data (${externalNodes.length} connected)` },
               { step: "1. Ingest", desc: "People, Enterprises, Products, Services — Master Data created" },
               { step: "2. Connect", desc: "Relationships link entities: Person↔Enterprise, Item↔Enterprise" },
               { step: "3. Operate", desc: "Tasks assigned per enterprise — operational execution layer" },

@@ -1,487 +1,681 @@
-import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  PlayCircle, Download, ChevronDown, ChevronUp, Info,
-  Database, Table2, Upload, CheckCircle2, AlertCircle,
+  PlayCircle, CheckCircle2, RefreshCw, History, Trash2,
+  Database, ChevronDown, ChevronRight, Table2, Upload,
+  Hash, Type, Calendar, ToggleLeft, Layers, Wand2, Code2,
+  AlignLeft, GitBranch, AlertCircle, XCircle, Plus, X,
+  Save, FolderOpen, BarChart2, Download,
 } from "lucide-react";
-import UploadPanel from "../components/querybuilder/UploadPanel";
+import { Button } from "@/components/ui/button";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
+
 import { UploadedDataStore } from "../components/querybuilder/UploadedDataStore";
+import {
+  executeSQL, MASTER_TABLES, MASTER_SCHEMA, PROTECTED_TABLES,
+  getUploadedSchema, detectMutation, validateMutation, exportCSV,
+} from "../components/querybuilder/sqlEngine";
+import DataSourcesPanel from "../components/querybuilder/DataSourcesPanel";
+import VisualQueryBuilder from "../components/querybuilder/VisualQueryBuilder";
+import OutputPanel from "../components/querybuilder/OutputPanel";
+import MutationConfirmDialog from "../components/querybuilder/MutationConfirmDialog";
+import ResultChart from "../components/querybuilder/ResultChart";
+import SqlAutocomplete from "../components/querybuilder/SqlAutocomplete";
+import SavedQueriesPanel from "../components/querybuilder/SavedQueriesPanel";
+import SaveQueryModal from "../components/querybuilder/SaveQueryModal";
+import { TabStore } from "../components/querybuilder/TabStore";
 
-// ── Master table → SDK entity map ─────────────────────────────────────────────
-const MASTER_TABLES = {
-  enterprises:   { entity: "Enterprise",   label: "Enterprises",   readOnly: false },
-  people:        { entity: "Person",        label: "People",        readOnly: false },
-  products:      { entity: "Product",       label: "Products",      readOnly: false },
-  services:      { entity: "Service",       label: "Services",      readOnly: false },
-  addresses:     { entity: "Address",       label: "Addresses",     readOnly: false },
-  relationships: { entity: "Relationship",  label: "Relationships", readOnly: false },
-  tasks:         { entity: "Task",          label: "Tasks",         readOnly: false },
-  transactions:  { entity: "Transaction",   label: "Transactions",  readOnly: false },
-};
-
-const PROTECTED_TABLES = new Set(["enterprises", "people", "products", "services", "addresses"]);
-
-const MASTER_SCHEMA = [
-  { t: "enterprises",   fields: "enterprise_name, status, enterprise_type, city, country" },
-  { t: "people",        fields: "first_name, last_name, person_type, status, primary_role" },
-  { t: "products",      fields: "name, sku, status, stock_quantity, unit_price, category" },
-  { t: "services",      fields: "name, status, category, price, pricing_model" },
-  { t: "addresses",     fields: "label, city, country, status" },
-  { t: "relationships", fields: "relationship_type, person_name, enterprise_name, status" },
-  { t: "tasks",         fields: "title, task_type, status, priority, scheduled_date" },
-  { t: "transactions",  fields: "transaction_type, status, date, amount, payment_status" },
-];
-
-const SAMPLES = [
-  { label: "Active enterprises",    query: "SELECT * FROM enterprises WHERE status = 'active'" },
-  { label: "Active people",         query: "SELECT * FROM people WHERE status = 'active'" },
-  { label: "Low-stock products",    query: "SELECT * FROM products WHERE stock_quantity < min_stock_level" },
-  { label: "Open tasks",            query: "SELECT * FROM tasks WHERE status = 'open'" },
-  { label: "Posted transactions",   query: "SELECT * FROM transactions WHERE status = 'posted'" },
-  { label: "INSERT into master",    query: "INSERT INTO enterprises (enterprise_name, status) VALUES ('New Co', 'active')" },
-  { label: "UPDATE master",         query: "UPDATE tasks SET status = 'completed' WHERE id = 'REPLACE_WITH_ID'" },
-  { label: "DELETE uploaded row",   query: "DELETE FROM my_uploaded_table WHERE row_index = 0" },
-  { label: "INSERT uploaded → master", query: "INSERT INTO people SELECT first_name, last_name, person_type FROM my_uploaded_table" },
-];
-
-// ── SQL Parser / Executor ─────────────────────────────────────────────────────
-async function executeSQL(sql, uploadedTables) {
-  const s = sql.trim().replace(/\s+/g, " ");
-  const upper = s.toUpperCase();
-
-  // ── SELECT ────────────────────────────────────────────────────────────────
-  if (upper.startsWith("SELECT")) {
-    const fromMatch = s.match(/FROM\s+(\w+)/i);
-    if (!fromMatch) throw new Error("Missing FROM clause.");
-    const tableName = fromMatch[1].toLowerCase();
-
-    let rows;
-    const isUploaded = Object.prototype.hasOwnProperty.call(uploadedTables, tableName);
-    if (isUploaded) {
-      rows = uploadedTables[tableName].rows.map((r) => ({ ...r }));
-    } else if (MASTER_TABLES[tableName]) {
-      const entity = base44.entities[MASTER_TABLES[tableName].entity];
-      rows = await entity.list("-created_date", 2000);
-    } else {
-      const uploadedList = Object.keys(uploadedTables).join(", ") || "none";
-      throw new Error(`Unknown table "${tableName}". Master tables: ${Object.keys(MASTER_TABLES).join(", ")}. Uploaded: ${uploadedList}`);
-    }
-
-    // SELECT columns
-    const colsMatch = s.match(/SELECT\s+(.+?)\s+FROM/i);
-    const colStr = colsMatch ? colsMatch[1].trim() : "*";
-    if (colStr !== "*") {
-      const cols = colStr.split(",").map((c) => c.trim());
-      rows = rows.map((r) => {
-        const obj = {};
-        cols.forEach((c) => { obj[c] = r[c]; });
-        return obj;
-      });
-    }
-
-    // WHERE
-    rows = applyWhere(rows, s);
-    return { type: "select", rows, message: `${rows.length} row(s) returned.` };
-  }
-
-  // ── INSERT INTO … SELECT (copy uploaded → master) ─────────────────────────
-  if (upper.startsWith("INSERT") && upper.includes("SELECT")) {
-    const m = s.match(/INSERT\s+INTO\s+(\w+)\s+SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
-    if (!m) throw new Error("Invalid INSERT...SELECT syntax. Example: INSERT INTO people SELECT first_name, last_name FROM my_table");
-    const [, destTable, colStr, srcTable, whereClause] = m;
-    const dest = destTable.toLowerCase();
-    const src = srcTable.toLowerCase();
-
-    if (!MASTER_TABLES[dest]) throw new Error(`INSERT destination must be a master table. Got: "${dest}"`);
-    if (!uploadedTables[src]) throw new Error(`Source table "${src}" not found in uploaded tables.`);
-
-    const cols = colStr.trim() === "*"
-      ? uploadedTables[src].columns
-      : colStr.split(",").map((c) => c.trim());
-
-    let srcRows = [...uploadedTables[src].rows];
-    if (whereClause) srcRows = applyWhere(srcRows, `SELECT * FROM x WHERE ${whereClause}`);
-
-    const entity = base44.entities[MASTER_TABLES[dest].entity];
-    let inserted = 0;
-    for (const row of srcRows) {
-      const payload = {};
-      cols.forEach((c) => { if (row[c] !== undefined) payload[c] = row[c]; });
-      await entity.create(payload);
-      inserted++;
-    }
-    return { type: "mutation", rows: [], message: `✓ Inserted ${inserted} row(s) into ${dest}.` };
-  }
-
-  // ── INSERT INTO … VALUES ───────────────────────────────────────────────────
-  if (upper.startsWith("INSERT")) {
-    const m = s.match(/INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i);
-    if (!m) throw new Error("Invalid INSERT syntax. Example: INSERT INTO enterprises (enterprise_name, status) VALUES ('Acme', 'active')");
-    const [, tableName, colsStr, valsStr] = m;
-    const dest = tableName.toLowerCase();
-    if (!MASTER_TABLES[dest] && !uploadedTables[dest]) throw new Error(`Unknown table "${dest}".`);
-
-    const cols = colsStr.split(",").map((c) => c.trim());
-    const vals = valsStr.split(",").map((v) => v.trim().replace(/^['"]|['"]$/g, ""));
-    const payload = {};
-    cols.forEach((c, i) => { payload[c] = vals[i] ?? ""; });
-
-    if (MASTER_TABLES[dest]) {
-      const entity = base44.entities[MASTER_TABLES[dest].entity];
-      const created = await entity.create(payload);
-      return { type: "mutation", rows: [created], message: `✓ Inserted 1 row into ${dest}.` };
-    } else {
-      UploadedDataStore.addRow(dest, payload);
-      return { type: "mutation", rows: [], message: `✓ Inserted 1 row into uploaded table "${dest}".` };
-    }
-  }
-
-  // ── UPDATE ─────────────────────────────────────────────────────────────────
-  if (upper.startsWith("UPDATE")) {
-    const m = s.match(/UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(.+)$/i);
-    if (!m) throw new Error("Invalid UPDATE syntax. Example: UPDATE tasks SET status = 'completed' WHERE id = 'abc'");
-    const [, tableName, setStr, whereStr] = m;
-    const tbl = tableName.toLowerCase();
-
-    const updates = {};
-    setStr.split(",").forEach((part) => {
-      const eq = part.match(/^\s*(\w+)\s*=\s*'?([^']*)'?\s*$/);
-      if (eq) updates[eq[1].trim()] = eq[2].trim();
-    });
-
-    if (MASTER_TABLES[tbl]) {
-      // Fetch matching rows then update each
-      const entity = base44.entities[MASTER_TABLES[tbl].entity];
-      const allRows = await entity.list("-created_date", 2000);
-      const matched = applyWhere(allRows, `SELECT * FROM x WHERE ${whereStr}`);
-      if (!matched.length) return { type: "mutation", rows: [], message: "No rows matched the WHERE clause." };
-      for (const row of matched) await entity.update(row.id, updates);
-      return { type: "mutation", rows: [], message: `✓ Updated ${matched.length} row(s) in ${tbl}.` };
-    } else if (uploadedTables[tbl]) {
-      const rows = uploadedTables[tbl].rows;
-      const matched = applyWhere(rows.map((r, i) => ({ ...r, _idx: i })), `SELECT * FROM x WHERE ${whereStr}`);
-      matched.forEach((r) => UploadedDataStore.updateRow(tbl, r._idx, updates));
-      return { type: "mutation", rows: [], message: `✓ Updated ${matched.length} row(s) in uploaded table "${tbl}".` };
-    } else {
-      throw new Error(`Unknown table "${tbl}".`);
-    }
-  }
-
-  // ── DELETE ─────────────────────────────────────────────────────────────────
-  if (upper.startsWith("DELETE")) {
-    const m = s.match(/DELETE\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
-    if (!m) throw new Error("Invalid DELETE syntax.");
-    const [, tableName, whereStr] = m;
-    const tbl = tableName.toLowerCase();
-
-    if (PROTECTED_TABLES.has(tbl)) throw new Error(`❌ DELETE is not allowed on master table "${tbl}" to protect data integrity. Use the app pages to archive records instead.`);
-
-    if (MASTER_TABLES[tbl]) {
-      const entity = base44.entities[MASTER_TABLES[tbl].entity];
-      const allRows = await entity.list("-created_date", 2000);
-      const matched = whereStr ? applyWhere(allRows, `SELECT * FROM x WHERE ${whereStr}`) : allRows;
-      if (!matched.length) return { type: "mutation", rows: [], message: "No rows matched." };
-      for (const row of matched) await entity.delete(row.id);
-      return { type: "mutation", rows: [], message: `✓ Deleted ${matched.length} row(s) from ${tbl}.` };
-    } else if (uploadedTables[tbl]) {
-      if (whereStr) {
-        const rows = uploadedTables[tbl].rows;
-        const matched = applyWhere(rows.map((r, i) => ({ ...r, _idx: i })), `SELECT * FROM x WHERE ${whereStr}`);
-        // delete in reverse to keep indices valid
-        matched.reverse().forEach((r) => UploadedDataStore.deleteRow(tbl, r._idx));
-        return { type: "mutation", rows: [], message: `✓ Deleted ${matched.length} row(s) from "${tbl}".` };
-      } else {
-        const count = uploadedTables[tbl].rows.length;
-        UploadedDataStore.set(tbl, { ...uploadedTables[tbl], rows: [] });
-        return { type: "mutation", rows: [], message: `✓ Deleted all ${count} row(s) from "${tbl}".` };
-      }
-    } else {
-      throw new Error(`Unknown table "${tbl}".`);
-    }
-  }
-
-  throw new Error("Unsupported SQL. Supported: SELECT, INSERT, UPDATE, DELETE.");
+// ── Type helpers ─────────────────────────────────────────────────────────
+function TypeIcon({ type }) {
+  const cls = "w-3 h-3 shrink-0";
+  if (type === "INT" || type === "FLOAT") return <Hash className={`${cls} text-blue-400`} />;
+  if (type === "DATE" || type === "DATETIME") return <Calendar className={`${cls} text-amber-400`} />;
+  if (type === "ENUM") return <ToggleLeft className={`${cls} text-violet-400`} />;
+  return <Type className={`${cls} text-slate-400`} />;
+}
+function TypeBadge({ type }) {
+  const color = type === "INT" || type === "FLOAT" ? "text-blue-400"
+    : type === "DATE" || type === "DATETIME" ? "text-amber-400"
+    : type === "ENUM" ? "text-violet-400" : "text-slate-500";
+  return <span className={`font-mono text-[9px] font-bold ${color}`}>{type}</span>;
 }
 
-function applyWhere(rows, sql) {
-  const whereMatch = sql.match(/WHERE\s+(.+)$/i);
-  if (!whereMatch) return rows;
-  const conditions = whereMatch[1].split(/\s+AND\s+/i);
-  return rows.filter((row) =>
-    conditions.every((cond) => {
-      const m = cond.trim().match(/^(\w+)\s*(=|!=|<>|<=|>=|<|>|LIKE)\s*'?([^']*)'?$/i);
-      if (!m) return true;
-      const [, field, op, val] = m;
-      const rowVal = row[field];
-      const numVal = parseFloat(val);
-      const rowNum = parseFloat(rowVal);
-      switch (op.toUpperCase()) {
-        case "=":    return String(rowVal ?? "").toLowerCase() === val.toLowerCase();
-        case "!=": case "<>": return String(rowVal ?? "").toLowerCase() !== val.toLowerCase();
-        case "<":   return !isNaN(rowNum) && rowNum < numVal;
-        case ">":   return !isNaN(rowNum) && rowNum > numVal;
-        case "<=":  return !isNaN(rowNum) && rowNum <= numVal;
-        case ">=":  return !isNaN(rowNum) && rowNum >= numVal;
-        case "LIKE": return String(rowVal ?? "").toLowerCase().includes(val.replace(/%/g, "").toLowerCase());
-        default:    return true;
-      }
-    })
+function TableTreeItem({ name, schema, isUploaded, isDataModel, isActive, onSelect, onQueryClick }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <div
+        className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all text-xs select-none
+          ${isActive ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+        onClick={() => { setOpen((v) => !v); onSelect(name); }}
+      >
+        {open ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
+        <Table2 className={`w-3 h-3 shrink-0 ${isUploaded ? "text-indigo-400" : isDataModel ? "text-violet-400" : "text-slate-500"}`} />
+        <span className="font-mono truncate flex-1">{name}</span>
+        {PROTECTED_TABLES.has(name) && <span className="text-[8px] text-slate-600">RO</span>}
+        <button
+          onClick={(e) => { e.stopPropagation(); onQueryClick(name); }}
+          className="opacity-0 group-hover:opacity-100 text-[9px] text-emerald-400 font-bold px-1 rounded transition-opacity"
+        >▶</button>
+      </div>
+      {open && schema.length > 0 && (
+        <div className="ml-4 mt-0.5 border-l border-white/5 pl-2 space-y-0.5">
+          {schema.map(({ col, type }) => (
+            <div key={col} className="flex items-center gap-2 px-2 py-1 text-[10px] text-slate-500 hover:text-slate-300 hover:bg-white/5 rounded cursor-default">
+              <TypeIcon type={type} />
+              <span className="font-mono flex-1 truncate">{col}</span>
+              <TypeBadge type={type} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
-function exportCSV(rows) {
-  if (!rows.length) return;
-  const keys = Object.keys(rows[0]);
-  const csv = [keys.join(","), ...rows.map((r) => keys.map((k) => JSON.stringify(r[k] ?? "")).join(","))].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = "query_results.csv"; a.click();
-  URL.revokeObjectURL(url);
+const SAMPLES = [
+  { label: "Active enterprises", query: "SELECT * FROM enterprises WHERE status = 'active'" },
+  { label: "Active people",      query: "SELECT * FROM people WHERE status = 'active'" },
+  { label: "Low stock",          query: "SELECT * FROM products WHERE stock_quantity < min_stock_level" },
+  { label: "Open tasks",         query: "SELECT * FROM tasks WHERE status = 'open'" },
+  { label: "Medications",        query: "SELECT * FROM medication_profiles WHERE status = 'active'" },
+];
+
+function ResizeDivider({ onMouseDown }) {
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      className="w-1.5 shrink-0 cursor-col-resize bg-white/5 hover:bg-emerald-500/40 active:bg-emerald-500/60 transition-colors group flex items-center justify-center relative z-10"
+    >
+      <div className="w-0.5 h-8 rounded-full bg-white/10 group-hover:bg-emerald-400/50 transition-colors" />
+    </div>
+  );
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+function ValidationErrors({ errors, onDismiss }) {
+  if (!errors.length) return null;
+  return (
+    <div className="shrink-0 mx-3 mt-2 mb-1 bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 space-y-1.5">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <XCircle className="w-4 h-4 text-rose-400" />
+          <span className="text-xs font-semibold text-rose-400">Validation Errors</span>
+        </div>
+        <button onClick={onDismiss} className="text-slate-500 hover:text-white transition-colors">
+          <XCircle className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {errors.map((e, i) => (
+        <div key={i} className="flex items-start gap-2 text-xs text-rose-300 font-mono">
+          <AlertCircle className="w-3 h-3 shrink-0 mt-0.5 text-rose-400" />
+          <span>{e}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Left panel tabs ───────────────────────────────────────────────────────
+const LEFT_TABS = [
+  { key: "tables", label: "Tables", icon: Database },
+  { key: "saved",  label: "Saved",  icon: FolderOpen },
+];
+
+// ── Generate unique tab id ────────────────────────────────────────────────
+let _tabIdCounter = Date.now();
+const newTabId = () => String(++_tabIdCounter);
+
 export default function QueryBuilder() {
-  const [sql, setSql] = useState("SELECT * FROM enterprises WHERE status = 'active'");
+  // ── Tabs state ───────────────────────────────────────────────────────
+  const [tabs, setTabs] = useState(() => TabStore.getTabs());
+  const [activeTabId, setActiveTabId] = useState(() => TabStore.getActiveId());
+
+  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+  const sql = activeTab?.sql || "";
+  const setSql = (val) => updateTab(activeTabId, { sql: val });
+
+  const updateTab = (id, patch) => {
+    setTabs((prev) => {
+      const next = prev.map((t) => t.id === id ? { ...t, ...patch } : t);
+      TabStore.setTabs(next);
+      return next;
+    });
+  };
+
+  const addTab = () => {
+    const id = newTabId();
+    const name = `query_${tabs.length + 1}.sql`;
+    const newTab = { id, name, sql: "SELECT * FROM enterprises", savedQueryId: null };
+    setTabs((prev) => { const next = [...prev, newTab]; TabStore.setTabs(next); return next; });
+    setActiveTabId(id);
+    TabStore.setActiveId(id);
+  };
+
+  const closeTab = (id) => {
+    if (tabs.length === 1) return;
+    const idx = tabs.findIndex((t) => t.id === id);
+    const next = tabs.filter((t) => t.id !== id);
+    TabStore.setTabs(next);
+    setTabs(next);
+    if (activeTabId === id) {
+      const newActive = next[Math.max(0, idx - 1)]?.id;
+      setActiveTabId(newActive);
+      TabStore.setActiveId(newActive);
+    }
+  };
+
+  const renameTab = (id, name) => updateTab(id, { name });
+
+  const [renamingTab, setRenamingTab] = useState(null);
+  const [renameVal, setRenameVal] = useState("");
+
+  // ── Query execution ───────────────────────────────────────────────────
   const [results, setResults] = useState(null);
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [showSchema, setShowSchema] = useState(false);
+  const [activeTable, setActiveTable] = useState(null);
   const [uploadedTables, setUploadedTables] = useState(() => UploadedDataStore.getAll());
+  const [leftTab, setLeftTab] = useState("tables");
+  const [midTab, setMidTab] = useState("script");
+  const [showChart, setShowChart] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [queryHistory, setQueryHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("qb_history") || "[]"); } catch { return []; }
+  });
+  const [confirmState, setConfirmState] = useState(null);
+  const [validationErrors, setValidationErrors] = useState([]);
 
-  // Sync store changes to local state (skip during active query to avoid re-render cascade)
-  const loadingRef = React.useRef(false);
+  // ── SQL Autocomplete ──────────────────────────────────────────────────
+  const textareaRef = useRef(null);
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [cursorPos, setCursorPos] = useState(0);
+
+  const allTableNames = [
+    ...Object.keys(MASTER_TABLES),
+    ...Object.keys(uploadedTables),
+  ];
+  const allColumns = [
+    ...Object.values(MASTER_SCHEMA).flat().map((f) => f.col),
+  ];
+
+  const handleAutocompleteSelect = (label, wordLen) => {
+    const before = sql.slice(0, cursorPos - wordLen);
+    const after = sql.slice(cursorPos);
+    const newSql = before + label + " " + after;
+    setSql(newSql);
+    setShowAutocomplete(false);
+    setTimeout(() => {
+      if (textareaRef.current) {
+        const newPos = before.length + label.length + 1;
+        textareaRef.current.setSelectionRange(newPos, newPos);
+        textareaRef.current.focus();
+      }
+    }, 0);
+  };
+
+  // ── Panel resize ──────────────────────────────────────────────────────
+  const containerRef = useRef(null);
+  const [leftWidth, setLeftWidth] = useState(256);
+  const [rightWidth, setRightWidth] = useState(288);
+  const dragRef = useRef(null);
+
+  const onDividerMouseDown = useCallback((divider) => (e) => {
+    e.preventDefault();
+    dragRef.current = { divider, startX: e.clientX, startLeft: leftWidth, startRight: rightWidth };
+  }, [leftWidth, rightWidth]);
+
   useEffect(() => {
-    return UploadedDataStore.subscribe((all) => {
-      if (!loadingRef.current) setUploadedTables({ ...all });
-    });
+    const onMove = (e) => {
+      if (!dragRef.current || !containerRef.current) return;
+      const { divider, startX, startLeft, startRight } = dragRef.current;
+      const dx = e.clientX - startX;
+      const containerW = containerRef.current.offsetWidth;
+      const minPanel = 180;
+      if (divider === "left") {
+        setLeftWidth(Math.min(Math.max(minPanel, startLeft + dx), containerW - rightWidth - 300));
+      } else {
+        setRightWidth(Math.min(Math.max(minPanel, startRight - dx), containerW - leftWidth - 300));
+      }
+    };
+    const onUp = () => { dragRef.current = null; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, [leftWidth, rightWidth]);
+
+  // ── Data Models ───────────────────────────────────────────────────────
+  const { data: dataModels = [] } = useQuery({
+    queryKey: ["dataModels_qb"],
+    queryFn: () => base44.entities.DataModel.list("-created_date", 200),
+  });
+
+  // ── Master data snapshot for Python scripts ───────────────────────────
+  const { data: enterprisesSnap = [] } = useQuery({ queryKey: ["snap_enterprises"], queryFn: () => base44.entities.Enterprise.list("-created_date", 500) });
+  const { data: peopleSnap = [] } = useQuery({ queryKey: ["snap_people"], queryFn: () => base44.entities.Person.list("-created_date", 500) });
+  const { data: productsSnap = [] } = useQuery({ queryKey: ["snap_products"], queryFn: () => base44.entities.Product.list("-created_date", 500) });
+  const { data: tasksSnap = [] } = useQuery({ queryKey: ["snap_tasks"], queryFn: () => base44.entities.Task.list("-created_date", 500) });
+  const { data: transactionsSnap = [] } = useQuery({ queryKey: ["snap_transactions"], queryFn: () => base44.entities.Transaction.list("-created_date", 500) });
+  const { data: medicationsSnap = [] } = useQuery({ queryKey: ["snap_medications"], queryFn: () => base44.entities.MedicationProfile.list("-created_date", 500) });
+
+  const masterDataSnapshot = {
+    enterprises: enterprisesSnap,
+    people: peopleSnap,
+    products: productsSnap,
+    tasks: tasksSnap,
+    transactions: transactionsSnap,
+    medication_profiles: medicationsSnap,
+  };
+
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    return UploadedDataStore.subscribe((all) => { setUploadedTables({ ...all }); });
   }, []);
 
-  const runQuery = async () => {
+  // ── Execute ───────────────────────────────────────────────────────────
+  const loadingRef = useRef(false);
+
+  const doExecute = async (sqlOverride) => {
+    const runSql = sqlOverride || sql;
+    if (loading) return;
     loadingRef.current = true;
-    setLoading(true);
-    setError(null);
-    setResults(null);
-    setMessage(null);
-    // Always get the freshest snapshot right before executing
+    setLoading(true); setError(null); setResults(null); setMessage(null); setValidationErrors([]);
+    const startTime = Date.now();
     const currentUploaded = UploadedDataStore.getAll();
     try {
-      const result = await executeSQL(sql, currentUploaded);
-      if (result.type === "select") setResults(result.rows);
+      const result = await executeSQL(runSql, currentUploaded);
+      if (result.type === "select") { setResults(result.rows); if (result.rows.length > 0) setShowChart(false); }
       setMessage(result.message);
+      const entry = { sql: runSql, status: "ok", message: result.message, rows: result.rows?.length ?? 0, ts: new Date().toISOString(), ms: Date.now() - startTime };
+      setQueryHistory((prev) => { const next = [entry, ...prev].slice(0, 50); localStorage.setItem("qb_history", JSON.stringify(next)); return next; });
     } catch (e) {
       setError(e.message);
+      const entry = { sql: runSql, status: "error", message: e.message, rows: 0, ts: new Date().toISOString(), ms: Date.now() - startTime };
+      setQueryHistory((prev) => { const next = [entry, ...prev].slice(0, 50); localStorage.setItem("qb_history", JSON.stringify(next)); return next; });
     } finally {
       loadingRef.current = false;
       setLoading(false);
-      // Sync any store mutations that happened during query
       setUploadedTables(UploadedDataStore.getAll());
     }
   };
 
-  const columns = results?.length > 0
-    ? Object.keys(results[0]).filter((k) => !["attachment_urls", "image_url", "photo_url", "attachment_url"].includes(k))
-    : [];
+  const runQuery = async () => {
+    const mutation = detectMutation(sql);
+    if (mutation) {
+      const errors = validateMutation(sql, UploadedDataStore.getAll());
+      if (errors.length) { setValidationErrors(errors); return; }
+      const previewMap = {
+        INSERT: "Inserts a new row into the database.",
+        INSERT_SELECT: "Inserts rows from a source into a master table.",
+        UPDATE: "Updates existing rows matching the WHERE clause.",
+        DELETE: "Permanently deletes matching rows.",
+      };
+      setConfirmState({ mutationType: mutation.type, preview: previewMap[mutation.type] || "" });
+      return;
+    }
+    await doExecute();
+  };
+
+  const uploadedNames = Object.keys(uploadedTables);
 
   return (
-    <div className="flex gap-6 min-h-0">
-      {/* ── Left sidebar ──────────────────────────────────────────────────── */}
-      <aside className="w-64 shrink-0 space-y-5">
-        {/* Master tables */}
-        <div>
-          <div className="flex items-center gap-2 mb-2.5">
-            <Database className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Master Tables</span>
-          </div>
-          <div className="space-y-1">
-            {Object.entries(MASTER_TABLES).map(([name, conf]) => (
-              <button
-                key={name}
-                onClick={() => setSql(`SELECT * FROM ${name}`)}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors group text-left"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <Table2 className="w-3 h-3 text-slate-400 shrink-0" />
-                  <span className="font-mono text-xs text-slate-700 truncate">{name}</span>
+    <div
+      ref={containerRef}
+      className="flex h-[calc(100vh-7rem)] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 select-none"
+    >
+
+      {/* ── LEFT ─────────────────────────────────────────────────────── */}
+      <aside style={{ width: leftWidth, minWidth: 180 }} className="shrink-0 flex flex-col border-r border-white/5 overflow-hidden">
+        {/* Left tab bar */}
+        <div className="flex items-center border-b border-white/5 shrink-0 bg-slate-800/30">
+          {LEFT_TABS.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setLeftTab(key)}
+              className={`flex items-center gap-1.5 flex-1 justify-center py-2.5 text-[10px] font-bold uppercase tracking-widest border-b-2 transition-colors ${
+                leftTab === key ? "border-emerald-400 text-emerald-300" : "border-transparent text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              <Icon className="w-3 h-3" />{label}
+            </button>
+          ))}
+        </div>
+
+        {leftTab === "tables" && (
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-2 py-2 space-y-1">
+              {/* Master tables */}
+              <div className="px-2 py-1">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Layers className="w-3 h-3 text-slate-600" />
+                  <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">Master Tables</span>
                 </div>
-                {PROTECTED_TABLES.has(name) && (
-                  <span className="text-[9px] text-slate-300 font-medium">no DELETE</span>
-                )}
+                {Object.keys(MASTER_TABLES).map((name) => (
+                  <TableTreeItem key={name} name={name} schema={MASTER_SCHEMA[name] || []}
+                    isActive={activeTable === name} onSelect={setActiveTable}
+                    onQueryClick={(n) => { setSql(`SELECT * FROM ${n}`); setMidTab("script"); }}
+                  />
+                ))}
+              </div>
+
+              {/* Data Models */}
+              {dataModels.length > 0 && (
+                <div className="px-2 py-1">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <GitBranch className="w-3 h-3 text-violet-500" />
+                    <span className="text-[9px] font-bold text-violet-500 uppercase tracking-widest">Data Models</span>
+                  </div>
+                  {dataModels.map((dm) => {
+                    const schemaFields = (dm.fields || []).map((f) => ({ col: f.name, type: (f.type || "TEXT").toUpperCase() }));
+                    return (
+                      <TableTreeItem key={dm.id} name={dm.name}
+                        schema={dm.sample_rows?.length ? getUploadedSchema(dm.sample_rows) : schemaFields}
+                        isDataModel isActive={activeTable === dm.name} onSelect={setActiveTable}
+                        onQueryClick={(n) => { setSql(`SELECT * FROM ${n}`); setMidTab("script"); }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Uploaded tables */}
+              {uploadedNames.length > 0 && (
+                <div className="px-2 py-1">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Upload className="w-3 h-3 text-indigo-500" />
+                    <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest">Uploaded</span>
+                  </div>
+                  {uploadedNames.map((name) => (
+                    <TableTreeItem key={name} name={name} schema={getUploadedSchema(uploadedTables[name].rows || [])}
+                      isUploaded isActive={activeTable === name} onSelect={setActiveTable}
+                      onQueryClick={(n) => { setSql(`SELECT * FROM ${n}`); setMidTab("script"); }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="border-t border-white/5 mt-1">
+              <DataSourcesPanel uploadedTables={uploadedTables} onTablesChange={setUploadedTables}
+                masterDataSnapshot={masterDataSnapshot}
+                onUseInQuery={(q) => { setSql(q); setMidTab("script"); }}
+                onPreview={(table) => { setSql(`SELECT * FROM ${table}`); doExecute(`SELECT * FROM ${table}`); }}
+              />
+            </div>
+          </div>
+        )}
+
+        {leftTab === "saved" && (
+          <SavedQueriesPanel
+            onLoadQuery={(querySql, queryName) => {
+              setSql(querySql);
+              setMidTab("script");
+              if (queryName) updateTab(activeTabId, { name: queryName + ".sql", sql: querySql });
+            }}
+          />
+        )}
+      </aside>
+
+      {/* Left resize divider */}
+      <ResizeDivider onMouseDown={onDividerMouseDown("left")} />
+
+      {/* ── MIDDLE ───────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden border-r border-white/5 min-w-[240px]">
+
+        {/* SQL File Tabs */}
+        <div className="flex items-center border-b border-white/5 bg-slate-950/60 shrink-0 overflow-x-auto">
+          {tabs.map((tab) => (
+            <div
+              key={tab.id}
+              className={`group flex items-center gap-1 px-3 py-2 border-r border-white/5 cursor-pointer shrink-0 transition-colors ${
+                tab.id === activeTabId ? "bg-slate-800/60 text-slate-200" : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
+              }`}
+              onClick={() => { setActiveTabId(tab.id); TabStore.setActiveId(tab.id); }}
+            >
+              {renamingTab === tab.id ? (
+                <input
+                  autoFocus
+                  value={renameVal}
+                  onChange={(e) => setRenameVal(e.target.value)}
+                  onBlur={() => { renameTab(tab.id, renameVal || tab.name); setRenamingTab(null); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { renameTab(tab.id, renameVal || tab.name); setRenamingTab(null); } e.stopPropagation(); }}
+                  className="bg-transparent outline-none text-xs text-white w-24 border-b border-emerald-400"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span
+                  className="text-[11px] font-mono max-w-[120px] truncate"
+                  onDoubleClick={(e) => { e.stopPropagation(); setRenamingTab(tab.id); setRenameVal(tab.name); }}
+                  title="Double-click to rename"
+                >
+                  {tab.name}
+                </span>
+              )}
+              {tabs.length > 1 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/10 text-slate-500 hover:text-white transition-all ml-1"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            onClick={addTab}
+            className="flex items-center justify-center px-3 py-2 text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0"
+            title="New tab"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Toolbar */}
+        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/5 shrink-0">
+          <Button size="sm" onClick={runQuery} disabled={loading}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 h-7 px-3 text-xs rounded-lg">
+            {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
+            {loading ? "Running…" : "Run"}
+          </Button>
+          <button
+            onClick={() => {
+              const errors = validateMutation(sql, UploadedDataStore.getAll());
+              if (errors.length) setValidationErrors(errors); else { setValidationErrors([]); setMessage("✓ SQL looks valid."); }
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors h-7"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" /> Validate
+          </button>
+          <button
+            onClick={() => setShowSaveModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-white/10 text-slate-400 hover:text-emerald-400 hover:bg-white/5 transition-colors h-7"
+            title="Save query"
+          >
+            <Save className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => results?.length && exportCSV(results)}
+            disabled={!results?.length}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-white/10 text-slate-400 hover:text-amber-400 hover:bg-white/5 transition-colors h-7 disabled:opacity-30"
+            title="Export CSV"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+          <span className="text-[10px] text-slate-600 font-mono hidden md:block">Ctrl+Enter to run</span>
+          <div className="flex-1" />
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {SAMPLES.map((s) => (
+              <button key={s.label} onClick={() => { setSql(s.query); setMidTab("script"); }}
+                className="text-[9px] px-2 py-1 rounded-full border border-white/10 bg-white/5 text-slate-500 hover:text-slate-300 hover:bg-white/10 whitespace-nowrap transition-all">
+                {s.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Uploaded tables */}
-        <div>
-          <div className="flex items-center gap-2 mb-2.5">
-            <Upload className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="text-xs font-bold text-indigo-500 uppercase tracking-wider">Uploaded Tables</span>
-          </div>
-          <UploadPanel uploadedTables={uploadedTables} onTablesChange={setUploadedTables} />
-          {Object.keys(uploadedTables).length > 0 && (
-            <div className="mt-2 space-y-1">
-              {Object.entries(uploadedTables).map(([name, t]) => (
-                <button
-                  key={name}
-                  onClick={() => setSql(`SELECT * FROM ${name}`)}
-                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-indigo-50 transition-colors text-left"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Table2 className="w-3 h-3 text-indigo-400 shrink-0" />
-                    <span className="font-mono text-xs text-indigo-700 truncate">{name}</span>
+        {/* Inner tab bar (Visual / Script / History) */}
+        <div className="flex items-center border-b border-white/5 bg-slate-800/30 shrink-0">
+          {[
+            { key: "visual", label: "Visual", icon: Wand2 },
+            { key: "script", label: "Script", icon: Code2 },
+            { key: "history", label: "History", icon: History },
+          ].map(({ key, label, icon: Icon }) => (
+            <button key={key} onClick={() => setMidTab(key)}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium border-b-2 transition-colors ${
+                midTab === key ? "border-emerald-400 text-emerald-300" : "border-transparent text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              <Icon className="w-3 h-3" />{label}
+              {key === "history" && queryHistory.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 bg-slate-500/20 text-slate-400 text-[9px] rounded-full font-bold">{queryHistory.length}</span>
+              )}
+            </button>
+          ))}
+          {results?.length > 0 && (
+            <button onClick={() => setShowChart((v) => !v)}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium border-b-2 transition-colors ml-auto ${
+                showChart ? "border-amber-400 text-amber-300" : "border-transparent text-slate-500 hover:text-amber-300"
+              }`}
+            >
+              <BarChart2 className="w-3 h-3" /> Chart
+            </button>
+          )}
+        </div>
+
+        {/* Validation errors */}
+        <ValidationErrors errors={validationErrors} onDismiss={() => setValidationErrors([])} />
+
+        {/* Content area */}
+        <div className="flex-1 overflow-auto">
+
+          {midTab === "visual" && (
+            <VisualQueryBuilder onGenerate={(q) => { setSql(q); setMidTab("script"); }} />
+          )}
+
+          {midTab === "script" && !showChart && (
+            <div className="flex flex-col h-full">
+              <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-800/50 border-b border-white/5 shrink-0">
+                <AlignLeft className="w-3 h-3 text-slate-600" />
+                <span className="text-[10px] text-slate-600 font-mono">{activeTab?.name || "query.sql"}</span>
+              </div>
+              <div className="flex flex-1 relative">
+                {/* Line numbers */}
+                <div className="select-none px-3 py-4 text-right font-mono text-[12px] text-slate-700 bg-slate-900/50 min-w-[36px] leading-5">
+                  {sql.split("\n").map((_, i) => <div key={i}>{i + 1}</div>)}
+                </div>
+                {/* Editor */}
+                <div className="flex-1 relative">
+                  <textarea
+                    ref={textareaRef}
+                    value={sql}
+                    onChange={(e) => {
+                      setSql(e.target.value);
+                      setValidationErrors([]);
+                      setCursorPos(e.target.selectionStart);
+                      setShowAutocomplete(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { runQuery(); return; }
+                      if (e.key === "Escape") setShowAutocomplete(false);
+                    }}
+                    onSelect={(e) => setCursorPos(e.target.selectionStart)}
+                    onClick={(e) => setCursorPos(e.target.selectionStart)}
+                    onBlur={() => setTimeout(() => setShowAutocomplete(false), 150)}
+                    className="w-full h-full bg-transparent text-emerald-300 font-mono text-[13px] px-4 py-4 outline-none resize-none leading-5"
+                    spellCheck={false}
+                    style={{ minHeight: "300px" }}
+                  />
+                  {/* Autocomplete dropdown */}
+                  {showAutocomplete && (
+                    <div className="absolute bottom-full left-4 mb-1">
+                      <SqlAutocomplete
+                        sql={sql}
+                        cursorPos={cursorPos}
+                        allTableNames={allTableNames}
+                        allColumns={allColumns}
+                        onSelect={handleAutocompleteSelect}
+                        onClose={() => setShowAutocomplete(false)}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {midTab === "script" && showChart && results?.length > 0 && (
+            <ResultChart results={results} onClose={() => setShowChart(false)} />
+          )}
+
+          {midTab === "history" && (
+            <div className="p-3">
+              {queryHistory.length === 0 ? (
+                <div className="flex items-center justify-center h-32 text-slate-600 text-xs font-mono">No queries run yet</div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-2 px-1">
+                    <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{queryHistory.length} queries</span>
+                    <button onClick={() => { setQueryHistory([]); localStorage.removeItem("qb_history"); }}
+                      className="flex items-center gap-1 text-[10px] text-slate-600 hover:text-rose-400 transition-colors">
+                      <Trash2 className="w-3 h-3" /> Clear
+                    </button>
                   </div>
-                  <Badge className="bg-indigo-50 text-indigo-500 text-[9px] px-1.5">{t.rows.length}</Badge>
-                </button>
-              ))}
+                  <div className="space-y-1">
+                    {queryHistory.map((entry, i) => (
+                      <div key={i} onClick={() => { setSql(entry.sql); setMidTab("script"); }}
+                        className="group flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 cursor-pointer border border-white/5 transition-all">
+                        <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${entry.status === "ok" ? "bg-emerald-400" : "bg-rose-400"}`} />
+                        <div className="flex-1 min-w-0">
+                          <pre className="font-mono text-[11px] text-slate-300 whitespace-pre-wrap line-clamp-2 leading-4">{entry.sql}</pre>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[9px] text-slate-600">{new Date(entry.ts).toLocaleTimeString()}</span>
+                            {entry.status === "ok" && <span className="text-[9px] text-emerald-600">{entry.rows} rows · {entry.ms}ms</span>}
+                            {entry.status === "error" && <span className="text-[9px] text-rose-500 truncate">{entry.message}</span>}
+                          </div>
+                        </div>
+                        <span className="text-[9px] text-slate-600 opacity-0 group-hover:opacity-100 shrink-0 mt-1">load →</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
+      </div>
+
+      {/* Right resize divider */}
+      <ResizeDivider onMouseDown={onDividerMouseDown("right")} />
+
+      {/* ── RIGHT ────────────────────────────────────────────────────── */}
+      <aside style={{ width: rightWidth, minWidth: 180 }} className="shrink-0 flex flex-col overflow-hidden">
+        <div className="flex items-center gap-2 px-3 py-3 border-b border-white/5 shrink-0">
+          <AlignLeft className="w-3.5 h-3.5 text-amber-400" />
+          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Output & Actions</span>
+        </div>
+        <OutputPanel results={results} error={error} message={message} loading={loading} sql={sql} />
       </aside>
 
-      {/* ── Main area ─────────────────────────────────────────────────────── */}
-      <div className="flex-1 space-y-5 min-w-0">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">Query Builder</h1>
-          <p className="text-sm text-slate-400 mt-1">Run SQL queries — SELECT, INSERT, UPDATE, DELETE across master &amp; uploaded tables</p>
-        </div>
+      {/* Mutation Confirm */}
+      {confirmState && (
+        <MutationConfirmDialog
+          mutationType={confirmState.mutationType}
+          sql={sql}
+          preview={confirmState.preview}
+          onConfirm={() => { setConfirmState(null); doExecute(); }}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
 
-        {/* Sample queries */}
-        <div className="flex flex-wrap gap-2">
-          {SAMPLES.map((s) => (
-            <button
-              key={s.label}
-              onClick={() => setSql(s.query)}
-              className="text-xs px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all"
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-
-        {/* SQL Editor */}
-        <div className="bg-slate-950 rounded-2xl overflow-hidden shadow-xl">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
-            <div className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-full bg-rose-500/80" />
-              <span className="w-3 h-3 rounded-full bg-amber-500/80" />
-              <span className="w-3 h-3 rounded-full bg-emerald-500/80" />
-              <span className="ml-3 text-xs text-slate-500 font-mono">query.sql</span>
-            </div>
-            <Button
-              size="sm"
-              onClick={runQuery}
-              disabled={loading}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2 rounded-lg h-7 px-3 text-xs"
-            >
-              <PlayCircle className="w-3.5 h-3.5" />
-              {loading ? "Running…" : "Run Query"}
-            </Button>
-          </div>
-          <textarea
-            value={sql}
-            onChange={(e) => setSql(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) runQuery(); }}
-            className="w-full bg-transparent text-emerald-300 font-mono text-sm p-4 outline-none resize-none min-h-[120px] placeholder-slate-600"
-            spellCheck={false}
-          />
-          <div className="px-4 py-2 border-t border-white/5 flex items-center gap-2">
-            <Info className="w-3 h-3 text-slate-600" />
-            <span className="text-[11px] text-slate-600 font-mono">
-              Ctrl+Enter to run &nbsp;·&nbsp; SELECT, INSERT, UPDATE, DELETE &nbsp;·&nbsp; DELETE blocked on master data tables
-            </span>
-          </div>
-        </div>
-
-        {/* Schema reference */}
-        <button
-          onClick={() => setShowSchema((v) => !v)}
-          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
-        >
-          {showSchema ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          {showSchema ? "Hide" : "Show"} master table fields
-        </button>
-
-        {showSchema && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-            {MASTER_SCHEMA.map(({ t, fields }) => (
-              <div key={t} className="bg-white border border-slate-200 rounded-xl p-3">
-                <p className="font-mono text-xs font-bold text-slate-700 mb-1">{t}</p>
-                <p className="text-[10px] text-slate-400 leading-relaxed">{fields}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Success message */}
-        {message && !error && (
-          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            {message}
-          </div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-sm text-rose-700">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            {error}
-          </div>
-        )}
-
-        {/* Results */}
-        {results !== null && results.length >= 0 && (
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-slate-700">Results</span>
-                <Badge className="bg-slate-100 text-slate-600">{results.length} rows</Badge>
-              </div>
-              {results.length > 0 && (
-                <Button size="sm" variant="outline" onClick={() => exportCSV(results)} className="gap-1.5 h-7 px-3 text-xs">
-                  <Download className="w-3.5 h-3.5" /> Export CSV
-                </Button>
-              )}
-            </div>
-            {results.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 text-sm">No rows matched your query.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      {columns.map((c) => (
-                        <th key={c} className="text-left px-4 py-2.5 text-slate-500 font-semibold whitespace-nowrap font-mono">{c}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {results.map((row, i) => (
-                      <tr key={row.id || i} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                        {columns.map((c) => {
-                          const val = row[c];
-                          const display = Array.isArray(val)
-                            ? `[${val.length} items]`
-                            : typeof val === "object" && val !== null
-                            ? JSON.stringify(val).slice(0, 60)
-                            : String(val ?? "");
-                          return (
-                            <td key={c} className="px-4 py-2.5 text-slate-700 whitespace-nowrap max-w-[200px] overflow-hidden text-ellipsis font-mono">
-                              {display || <span className="text-slate-300">—</span>}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {/* Save Query Modal */}
+      {showSaveModal && (
+        <SaveQueryModal
+          sql={sql}
+          results={results}
+          onClose={() => setShowSaveModal(false)}
+          onSaved={() => { setShowSaveModal(false); qc.invalidateQueries({ queryKey: ["savedQueries"] }); }}
+        />
+      )}
     </div>
   );
 }

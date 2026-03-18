@@ -3,9 +3,15 @@ uvicorn[standard]
 pandas
 requests
 pydantic
+pydantic-settings
 python-dotenv
 
-# Optional but aligned with your architecture
+# Database
 sqlalchemy
+
+# Geospatial
 geopandas
 shapely
+
+# Machine learning (used by geospatial.cluster_enterprises)
+scikit-learn

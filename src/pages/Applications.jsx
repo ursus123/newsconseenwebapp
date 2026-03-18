@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Clock, ChevronRight, Pill, UserPlus } from "lucide-react";
+import { Clock, ChevronRight, Pill, UserPlus, FileSpreadsheet } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 
@@ -34,6 +34,16 @@ const ALL_APPS = [
     color: "from-violet-700 to-violet-900",
     accent: "bg-violet-300",
     page: "AddClient",
+    status: "live",
+  },
+  {
+    id: "pdftoexcel",
+    title: "PDF to Excel",
+    subtitle: "Extract tables from PDFs — download CSV or push to Query Builder",
+    icon: FileSpreadsheet,
+    color: "from-rose-700 to-rose-900",
+    accent: "bg-rose-300",
+    page: "PdfToExcel",
     status: "live",
   },
 ];
