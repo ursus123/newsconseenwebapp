@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
 
 import { UploadedDataStore } from "../components/querybuilder/UploadedDataStore";
 import {
@@ -260,19 +261,52 @@ export default function QueryBuilder() {
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
   }, [leftWidth, rightWidth]);
 
+  // ── Current user (for tenant isolation) ───────────────────────────────
+  const { data: currentUser } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+  });
+  
+  const listFn = useEntityListFn(currentUser);
+
   // ── Data Models ───────────────────────────────────────────────────────
   const { data: dataModels = [] } = useQuery({
-    queryKey: ["dataModels_qb"],
-    queryFn: () => base44.entities.DataModel.list("-created_date", 200),
+    queryKey: ["dataModels_qb", currentUser?.company_id],
+    queryFn: () => listFn(base44.entities.DataModel),
+    enabled: !!currentUser,
   });
 
-  // ── Master data snapshot ───────────────────────────────────────────────
-  const { data: enterprisesSnap = [] } = useQuery({ queryKey: ["snap_enterprises"], queryFn: () => base44.entities.Enterprise.list("-created_date", 500) });
-  const { data: peopleSnap = [] } = useQuery({ queryKey: ["snap_people"], queryFn: () => base44.entities.Person.list("-created_date", 500) });
-  const { data: productsSnap = [] } = useQuery({ queryKey: ["snap_products"], queryFn: () => base44.entities.Product.list("-created_date", 500) });
-  const { data: tasksSnap = [] } = useQuery({ queryKey: ["snap_tasks"], queryFn: () => base44.entities.Task.list("-created_date", 500) });
-  const { data: transactionsSnap = [] } = useQuery({ queryKey: ["snap_transactions"], queryFn: () => base44.entities.Transaction.list("-created_date", 500) });
-  const { data: medicationsSnap = [] } = useQuery({ queryKey: ["snap_medications"], queryFn: () => base44.entities.MedicationProfile.list("-created_date", 500) });
+  // ── Master data snapshot ─ SCOPED TO TENANT ─────────────────────────
+  const { data: enterprisesSnap = [] } = useQuery({
+    queryKey: ["snap_enterprises", currentUser?.company_id],
+    queryFn: () => listFn(base44.entities.Enterprise),
+    enabled: !!currentUser,
+  });
+  const { data: peopleSnap = [] } = useQuery({
+    queryKey: ["snap_people", currentUser?.company_id],
+    queryFn: () => listFn(base44.entities.Person),
+    enabled: !!currentUser,
+  });
+  const { data: productsSnap = [] } = useQuery({
+    queryKey: ["snap_products", currentUser?.company_id],
+    queryFn: () => listFn(base44.entities.Product),
+    enabled: !!currentUser,
+  });
+  const { data: tasksSnap = [] } = useQuery({
+    queryKey: ["snap_tasks", currentUser?.company_id],
+    queryFn: () => listFn(base44.entities.Task),
+    enabled: !!currentUser,
+  });
+  const { data: transactionsSnap = [] } = useQuery({
+    queryKey: ["snap_transactions", currentUser?.company_id],
+    queryFn: () => listFn(base44.entities.Transaction),
+    enabled: !!currentUser,
+  });
+  const { data: medicationsSnap = [] } = useQuery({
+    queryKey: ["snap_medications", currentUser?.company_id],
+    queryFn: () => listFn(base44.entities.MedicationProfile),
+    enabled: !!currentUser,
+  });
 
   const masterDataSnapshot = {
     enterprises: enterprisesSnap, people: peopleSnap, products: productsSnap,
