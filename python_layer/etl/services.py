@@ -8,12 +8,13 @@ def extract_services() -> pd.DataFrame:
 
 
 def transform_services(df: pd.DataFrame) -> pd.DataFrame:
-    df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce")
+    if df.empty:
+        return pd.DataFrame(columns=["service_type", "status", "category", "service_count"])
 
     summary = (
-        df.groupby(["service_type", "status"])
+        df.groupby(["service_type", "status", "category"])
         .agg(
-            service_count=("_id", "count"),
+            service_count=("id", "count"),
         )
         .reset_index()
     )

@@ -8,13 +8,16 @@ def extract_products() -> pd.DataFrame:
 
 
 def transform_products(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame(columns=["item_type", "status", "total_products", "total_stock", "avg_price"])
+
     df["stock_quantity"] = pd.to_numeric(df["stock_quantity"], errors="coerce").fillna(0)
     df["unit_price"] = pd.to_numeric(df["unit_price"], errors="coerce").fillna(0)
-    df["cost_price"] = pd.to_numeric(df["cost_price"], errors="coerce").fillna(0)
 
-    summary = df.groupby("item_type").agg(
-        total_products=("_id", "count"),
+    summary = df.groupby(["item_type", "status"]).agg(
+        total_products=("id", "count"),
         total_stock=("stock_quantity", "sum"),
         avg_price=("unit_price", "mean"),
     ).reset_index()
+
     return summary

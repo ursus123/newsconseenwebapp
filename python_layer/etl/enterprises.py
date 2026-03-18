@@ -8,7 +8,11 @@ def extract_enterprises() -> pd.DataFrame:
 
 
 def transform_enterprises(df: pd.DataFrame) -> pd.DataFrame:
-    summary = df.groupby("status").agg(
-        enterprise_count=("_id", "count")
+    if df.empty:
+        return pd.DataFrame(columns=["status", "enterprise_type", "enterprise_count"])
+
+    summary = df.groupby(["status", "enterprise_type"]).agg(
+        enterprise_count=("id", "count")
     ).reset_index()
+
     return summary

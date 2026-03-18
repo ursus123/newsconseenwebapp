@@ -8,12 +8,13 @@ def extract_people() -> pd.DataFrame:
 
 
 def transform_people(df: pd.DataFrame) -> pd.DataFrame:
-    df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce")
+    if df.empty:
+        return pd.DataFrame(columns=["person_type", "status", "primary_role", "people_count"])
 
     summary = (
-        df.groupby(["primary_role", "status"])
+        df.groupby(["person_type", "status"])
         .agg(
-            people_count=("_id", "count"),
+            people_count=("id", "count"),
         )
         .reset_index()
     )
