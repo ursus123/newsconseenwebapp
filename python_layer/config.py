@@ -1,4 +1,3 @@
-import os
 from pydantic_settings import BaseSettings
 
 
@@ -22,4 +21,3 @@ HEADERS = {
     "Authorization": f"Bearer {settings.base44_api_key}",
     "Content-Type": "application/json",
 }
-
