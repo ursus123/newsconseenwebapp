@@ -84,7 +84,11 @@ export default function Addresses() {
 
   return (
     <div>
-      <PageHeader title="Addresses" subtitle="Master address records linked to people, enterprises & transactions" onAdd={() => { setEditing(null); setFormOpen(true); }} addLabel="New Address" />
+      <PageHeader title="Addresses" subtitle="Master address records linked to people, enterprises & transactions" onAdd={() => { setEditing(null); setFormOpen(true); }} addLabel="New Address">
+        <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
+          <Upload className="w-4 h-4 mr-2" /> Import
+        </Button>
+      </PageHeader>
       <DataTable columns={columns} data={addresses} searchField="label" onEdit={(row) => { setEditing(row); setFormOpen(true); }} onDelete={(row) => setDeleting(row)} />
       <AddressForm
         open={formOpen}
