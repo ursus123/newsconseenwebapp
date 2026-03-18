@@ -1,10 +1,17 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import RelationshipForm from "../components/relationships/RelationshipForm";
+import BulkImportDialog from "../components/shared/BulkImportDialog";
+import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
+import {
+  RELATIONSHIP_FIELDS, RELATIONSHIP_MAPPING_RULES, RELATIONSHIP_TEMPLATE_EXAMPLE,
+  RELATIONSHIP_TEMPLATE_INSTRUCTIONS, validateRelationship,
+} from "@/components/shared/importConfigs";
 import RelationshipSummaryCards from "../components/relationships/RelationshipSummaryCards";
 import RelationshipHealthAlerts from "../components/relationships/RelationshipHealthAlerts";
 import RelationshipAnalytics from "../components/relationships/RelationshipAnalytics";
