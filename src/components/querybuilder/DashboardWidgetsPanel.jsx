@@ -124,20 +124,20 @@ export default function DashboardWidgetsPanel({ onEditWidget }) {
     qc.invalidateQueries({ queryKey: ["dashboardWidgets"] });
   };
 
-  if (isLoading) return <div className="flex items-center justify-center flex-1 text-slate-600 text-xs font-mono">Loading…</div>;
+  if (isLoading) return <div className="text-center py-3 text-slate-600 text-[10px] font-mono">Loading…</div>;
 
   if (!widgets.length) return (
-    <div className="flex flex-col items-center justify-center flex-1 gap-3 px-6 text-center">
-      <Pin className="w-8 h-8 text-slate-700" />
-      <p className="text-xs text-slate-600 font-mono leading-relaxed">
-        No dashboard widgets yet.<br />Run a query and click 📌 to pin it.
+    <div className="flex flex-col items-center gap-2 py-4 px-2 text-center">
+      <Pin className="w-5 h-5 text-slate-700" />
+      <p className="text-[10px] text-slate-600 font-mono leading-relaxed">
+        No widgets yet. Pin a query result.
       </p>
     </div>
   );
 
   return (
-    <div className="flex-1 overflow-y-auto p-3">
-      <div className="grid grid-cols-1 gap-3">
+    <div className="overflow-y-auto max-h-64 p-2">
+      <div className="space-y-2">
         {widgets.map((w) => (
           <WidgetCard key={w.id} widget={w} onEdit={onEditWidget} onUnpin={handleUnpin} qc={qc} />
         ))}
