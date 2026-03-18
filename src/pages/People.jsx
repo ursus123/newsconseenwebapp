@@ -48,8 +48,17 @@ const columns = [
   )},
 ];
 
+const PEOPLE_PREVIEW_COLS = [
+  { label: "First Name", render: (r) => r.first_name || <span className="text-rose-500">MISSING</span> },
+  { label: "Last Name", render: (r) => r.last_name || <span className="text-rose-500">MISSING</span> },
+  { label: "Role", render: (r) => r.primary_role || "—" },
+  { label: "Type", render: (r) => r.person_type || "—" },
+  { label: "Email", render: (r) => r.email || "—" },
+];
+
 export default function People() {
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [search, setSearch] = useState("");
