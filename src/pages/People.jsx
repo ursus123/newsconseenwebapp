@@ -122,7 +122,13 @@ export default function People() {
         subtitle="Manage your team members, contractors and staff"
         onAdd={perms.l1_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
         addLabel="Add Person"
-      />
+      >
+        {perms.l1_create && (
+          <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" /> Import
+          </Button>
+        )}
+      </PageHeader>
 
       <PeopleToolbar search={search} setSearch={setSearch} groupBy={groupBy} setGroupBy={setGroupBy} sortBy={sortBy} setSortBy={setSortBy} filters={filters} setFilters={setFilters} />
 
