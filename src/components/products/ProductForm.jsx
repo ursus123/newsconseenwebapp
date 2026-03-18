@@ -164,10 +164,14 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
         return (
           <div className="space-y-5">
             <Field label="Item Type">
-              <Sel value={form.item_type} onChange={(v) => set("item_type", v)} options={[
+              <Sel value={form.item_type} onChange={(v) => {
+                set("item_type", v);
+                if (v !== "medication") setRecallWarning(false);
+              }} options={[
                 { value: "inventory_item", label: "Inventory Item" }, { value: "fixed_asset", label: "Fixed Asset" },
                 { value: "service_item", label: "Service Item" }, { value: "digital_item", label: "Digital Item" },
                 { value: "consumable", label: "Consumable" }, { value: "raw_material", label: "Raw Material" },
+                { value: "medication", label: "💊 Medication" },
                 { value: "other", label: "Other" },
               ]} />
             </Field>
