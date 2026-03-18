@@ -12,6 +12,7 @@ from etl import (
     products,
 )
 from etl.load import load_dataframe
+from open_data.medication_routes import router as medication_router
 
 app = FastAPI(
     title="Newsconseen Analytics Layer",
@@ -27,9 +28,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# -------------------------------------------------
+# Open Data Routers
+# -------------------------------------------------
+app.include_router(medication_router)
+
 
 def safe_sample(df: pd.DataFrame) -> dict:
-    """Returns columns and a JSON-safe sample of the dataframe."""
     sample = df.head(2).replace({np.nan: None}).to_dict(orient="records")
     return {"columns": list(df.columns), "row_count": len(df), "sample": sample}
 
@@ -43,7 +48,7 @@ def root():
 
 
 # -------------------------------------------------
-# DEBUG endpoints — remove after fixing field names
+# DEBUG endpoints
 # -------------------------------------------------
 @app.get("/debug/enterprises")
 def debug_enterprises():
