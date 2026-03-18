@@ -532,7 +532,7 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
         <form onSubmit={handleSubmit}>
           <div className="flex overflow-hidden">
             {/* Tab Nav */}
-            <div className="bg-slate-50/60 px-3 py-4 shrink-0 border-r border-slate-100 min-h-[460px]">
+            <div className="bg-slate-50/60 px-3 py-4 shrink-0 border-r border-slate-100 min-h-[520px]">
               {TABS.map((t) => {
                 const Icon = t.icon;
                 const active = activeTab === t.id;
