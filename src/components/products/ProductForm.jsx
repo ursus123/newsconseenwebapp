@@ -13,6 +13,7 @@ import MedicationAutocomplete from "@/components/products/MedicationAutocomplete
 
 const TABS = [
   { id: "basic", label: "Basic Info", icon: Package },
+  { id: "classification", label: "Classification", icon: Tag },
   { id: "stock", label: "Stock & Pricing", icon: BarChart2 },
   { id: "assignment", label: "Assignment", icon: Link2 },
   { id: "lifecycle", label: "Lifecycle & Condition", icon: Clock },
