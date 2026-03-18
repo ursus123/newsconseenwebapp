@@ -179,6 +179,7 @@ function downloadImportReport({ imported, failed, currentUser, XLSX }) {
 const STEPS = ["upload", "mapping", "preview", "done"];
 
 export default function ProductImportDialog({ open, onClose, onImport, currentUser }) {
+  const XLSX = useXLSX();
   const [step, setStep] = useState("upload");
   const [file, setFile] = useState(null);
   const [sheets, setSheets] = useState([]);
