@@ -163,6 +163,22 @@ export default function People() {
         onConfirm={() => deleteMut.mutate(deleting.id)}
         itemName={deleting ? `${deleting.first_name} ${deleting.last_name}` : ""}
       />
+      <BulkImportDialog
+        open={importOpen}
+        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["people"] }); }}
+        entityName="People"
+        fields={PEOPLE_FIELDS}
+        mappingRules={PEOPLE_MAPPING_RULES}
+        templateFileName="newsconseen_people_import_template.xlsx"
+        templateExample={PEOPLE_TEMPLATE_EXAMPLE}
+        templateInstructions={PEOPLE_TEMPLATE_INSTRUCTIONS}
+        validateRow={validatePerson}
+        transformRow={transformPerson}
+        onImport={(row) => base44.entities.Person.create(withScope(row))}
+        currentUser={currentUser}
+        previewColumns={PEOPLE_PREVIEW_COLS}
+        requiredField="first_name"
+      />
     </div>
   );
 }
