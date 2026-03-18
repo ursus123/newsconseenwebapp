@@ -548,7 +548,7 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
             </div>
 
             {/* Content */}
-            <div className="flex-1 px-6 py-5 overflow-y-auto max-h-[460px]">
+            <div className="flex-1 px-6 py-5 overflow-y-auto max-h-[520px]">
               <div className="mb-4">
                 <h3 className="text-sm font-semibold text-slate-700">{TABS.find((t) => t.id === activeTab)?.label}</h3>
                 <div className="h-px bg-slate-100 mt-2" />
