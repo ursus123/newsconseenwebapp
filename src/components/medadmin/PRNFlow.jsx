@@ -127,6 +127,14 @@ export default function PRNFlow({ user, selectedClient, people, products, enterp
         internal_notes: `Admin: ${adminName} | Route: ${route} | Indication: ${symptom} | Task ref: ${mainTask.id}`,
       });
 
+      // Reduce stock_quantity on the Product record
+      if (medication?.id) {
+        try {
+          const newQty = Math.max(0, (medication.stock_quantity || 0) - 1);
+          await base44.entities.Product.update(medication.id, { stock_quantity: newQty });
+        } catch {}
+      }
+
       // Follow-up task if requested
       if (scheduleFollowup) {
         await base44.entities.Task.create({
