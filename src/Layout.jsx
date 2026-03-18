@@ -62,7 +62,8 @@ const ALL_NAV_PHASES = [
 {
   label: "Phase 5 — Intelligence",
   items: [
-  { name: "Reports", icon: FileBarChart, page: "Reports" }]
+  { name: "Reports", icon: FileBarChart, page: "Reports" },
+  { name: "Pipelines", icon: GitBranch, page: "Pipelines" }]
 
 },
 {

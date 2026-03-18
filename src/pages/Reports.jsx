@@ -184,9 +184,6 @@ export default function Reports() {
       {/* Superset Embed */}
       <SupersetEmbed />
 
-      {/* Airflow Section */}
-      <AirflowSection />
-
       {/* Reports Table */}
       <h3 className="text-sm font-semibold text-slate-600 mb-4">Saved Reports</h3>
       <DataTable
