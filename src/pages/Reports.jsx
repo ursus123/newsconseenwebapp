@@ -138,6 +138,8 @@ export default function Reports() {
         )}
       </div>
 
+      <AnalyticsDashboard />
+
       {/* Quick Insights */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <Card className="border border-slate-100 rounded-2xl">
