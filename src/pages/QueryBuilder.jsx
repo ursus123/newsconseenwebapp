@@ -423,7 +423,11 @@ export default function QueryBuilder() {
           <AnalyticsPanel
             activeTable={activeTable}
             onSelect={setActiveTable}
-            onQueryClick={(n) => { loadSql(`SELECT * FROM ${n}`); doExecute(`SELECT * FROM ${n}`); }}
+            onQueryClick={(n, customSql) => {
+              const q = customSql || `SELECT * FROM ${n}`;
+              loadSql(q);
+              doExecute(q);
+            }}
           />
         )}
 
