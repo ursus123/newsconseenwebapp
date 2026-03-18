@@ -3,6 +3,7 @@ uvicorn[standard]
 pandas
 requests
 pydantic
+pydantic-settings
 python-dotenv
 
 # Database
