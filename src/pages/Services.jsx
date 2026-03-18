@@ -96,6 +96,22 @@ export default function Services() {
         initialData={editing}
       />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name} />
+      <BulkImportDialog
+        open={importOpen}
+        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["services"] }); }}
+        entityName="Services"
+        fields={SERVICE_FIELDS}
+        mappingRules={SERVICE_MAPPING_RULES}
+        templateFileName="newsconseen_services_import_template.xlsx"
+        templateExample={SERVICE_TEMPLATE_EXAMPLE}
+        templateInstructions={SERVICE_TEMPLATE_INSTRUCTIONS}
+        validateRow={validateService}
+        transformRow={transformService}
+        onImport={(row) => base44.entities.Service.create(withScope(row))}
+        currentUser={currentUser}
+        previewColumns={SVC_PREVIEW_COLS}
+        requiredField="name"
+      />
     </div>
   );
 }
