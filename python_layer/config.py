@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"  # ignore extra env vars like API_HOST, DEBUG etc.
 
 
 settings = Settings()
