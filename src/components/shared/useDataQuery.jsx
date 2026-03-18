@@ -10,35 +10,50 @@
 export function useEntityListFn(currentUser) {
   return (entity, sort = "-created_date") => {
     if (!currentUser) return Promise.resolve([]);
-    if (currentUser.role === "super_admin") return entity.list(sort);
-    if (currentUser.company_id) {
-      // Return records scoped to this company OR created by this user
-      return Promise.all([
-        entity.filter({ company_id: currentUser.company_id }, sort),
-        entity.filter({ created_by: currentUser.email }, sort),
-      ]).then(([byCompany, byUser]) => {
-        const seen = new Set();
-        return [...byCompany, ...byUser].filter((r) => {
-          if (seen.has(r.id)) return false;
-          seen.add(r.id);
-          return true;
-        });
-      });
+    
+    // super_admin sees everything
+    if (currentUser.role === "super_admin") {
+      return entity.list(sort);
     }
-    // Fallback: no enterprise assigned yet — show only own records
-    return entity.filter({ created_by: currentUser.email }, sort);
+    
+    // All other roles MUST have company_id to see any data
+    if (!currentUser.company_id) {
+      // User has no enterprise assigned — show empty
+      // This prevents data leaks for unassigned users
+      console.warn("User has no company_id — returning empty dataset");
+      return Promise.resolve([]);
+    }
+    
+    // Strict company_id filter only — no created_by fallback
+    return entity.filter({ company_id: currentUser.company_id }, sort);
   };
 }
 
 /**
  * Stamps new records with the enterprise (company_id) of the creating user.
  * super_admin records are NOT stamped — they are platform-level.
+ * CRITICAL: Throws error if user has no company_id — blocks unassigned users.
  */
 export function useWithScope(currentUser) {
   return (data) => {
-    if (!currentUser || currentUser.role === "super_admin") return data;
-    if (currentUser.company_id) return { ...data, company_id: currentUser.company_id };
-    return data;
+    // super_admin records are platform-level, not stamped
+    if (!currentUser || currentUser.role === "super_admin") {
+      return data;
+    }
+    
+    // Block writes if user has no company_id
+    if (!currentUser.company_id) {
+      throw new Error(
+        "Cannot create records: your account is not assigned to an enterprise. Contact your administrator."
+      );
+    }
+    
+    // Always stamp with company_id
+    return { 
+      ...data, 
+      company_id: currentUser.company_id,
+      created_by: currentUser.email,
+    };
   };
 }
 
