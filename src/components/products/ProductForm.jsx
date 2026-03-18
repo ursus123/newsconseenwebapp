@@ -136,98 +136,138 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
     switch (activeTab) {
       case "basic":
         return (
-          <div className="space-y-4">
-            {recallWarning && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-300 rounded-xl px-4 py-3">
-                <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-black text-red-700">⚠️ FDA RECALL ALERT</p>
-                  <p className="text-xs text-red-600 mt-0.5">This medication has an active recall. Check recalls before dispensing.</p>
-                </div>
-              </div>
-            )}
-            <Field label="Item Name" required>
-              {form.item_type === "medication" ? (
-                <MedicationAutocomplete
-                  value={form.name || ""}
-                  onChange={(v) => set("name", v)}
-                  onMedicationSelected={handleMedicationSelected}
-                  onRecallWarning={setRecallWarning}
-                />
-              ) : (
-                <Input value={form.name || ""} onChange={(e) => set("name", e.target.value)} className="rounded-xl" required />
-              )}
-            </Field>
-            <Field label="SKU / Code">
-              <Input value={form.sku || ""} onChange={(e) => set("sku", e.target.value)} className="rounded-xl" placeholder="Optional" />
-            </Field>
-            <Field label="Description">
-              <Textarea value={form.description || ""} onChange={(e) => set("description", e.target.value)} className="rounded-xl resize-none" rows={3} />
-            </Field>
-            <Field label="Item Status">
-              <Sel value={form.status} onChange={(v) => set("status", v)} options={[
-                { value: "active", label: "Active" }, { value: "discontinued", label: "Discontinued" },
-                { value: "out_of_stock", label: "Out of Stock" }, { value: "archived", label: "Archived" },
-              ]} />
-            </Field>
-          </div>
-        );
-
-      case "classification":
-        return (
           <div className="space-y-5">
-            <Field label="Item Type">
-              <Sel value={form.item_type} onChange={(v) => {
-                set("item_type", v);
-                if (v !== "medication") setRecallWarning(false);
-              }} options={[
-                { value: "inventory_item", label: "Inventory Item" }, { value: "fixed_asset", label: "Fixed Asset" },
-                { value: "service_item", label: "Service Item" }, { value: "digital_item", label: "Digital Item" },
-                { value: "consumable", label: "Consumable" }, { value: "raw_material", label: "Raw Material" },
-                { value: "medication", label: "💊 Medication" },
-                { value: "other", label: "Other" },
-              ]} />
-            </Field>
-            <Field label="Item Category">
-              <Sel value={form.category} onChange={(v) => set("category", v)} options={[
-                { value: "electronics", label: "Electronics" }, { value: "food_beverage", label: "Food & Beverage" },
-                { value: "clothing", label: "Clothing" }, { value: "office_supplies", label: "Office Supplies" },
-                { value: "raw_materials", label: "Raw Materials" }, { value: "tools_equipment", label: "Tools & Equipment" },
-                { value: "health_beauty", label: "Health & Beauty" }, { value: "household", label: "Household" },
-                { value: "vehicles", label: "Vehicles" }, { value: "equipment", label: "Equipment" },
-                { value: "other", label: "Other" },
-              ]} />
-            </Field>
-            <Field label="Item Class (select all that apply)">
-              <div className="flex flex-wrap gap-2 mt-1">
-                {ITEM_CLASSES.map((c) => {
-                  const active = (form.item_class || []).includes(c);
+            {/* STEP 1: Item Type — always shown first */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Step 1 — Select Item Type</p>
+              <div className="grid grid-cols-2 gap-2">
+                {ITEM_TYPE_OPTIONS.map((opt) => {
+                  const active = form.item_type === opt.value;
                   return (
-                    <button key={c} type="button" onClick={() => toggleClass(c)}
-                      className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all capitalize
-                        ${active ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-emerald-400"}`}>
-                      {c}
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        set("item_type", opt.value);
+                        if (opt.value !== "medication") {
+                          setRecallWarning(false);
+                          setMedicationSelected(false);
+                        }
+                      }}
+                      className={`px-3 py-2.5 rounded-xl text-sm font-medium border text-left transition-all
+                        ${active
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50"}`}
+                    >
+                      {opt.label}
                     </button>
                   );
                 })}
               </div>
-            </Field>
+            </div>
 
-            {form.item_type === "medication" && (
-              <div className="border border-blue-100 rounded-xl p-4 space-y-4 bg-blue-50/40">
-                <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">💊 Medication Details</p>
-                <Field label="Dosage Instructions">
-                  <Textarea value={form.dosage_instructions || ""} onChange={(e) => set("dosage_instructions", e.target.value)} className="rounded-xl resize-none" rows={3} placeholder="e.g. Take 1 tablet orally twice daily with food" />
-                </Field>
-                <Field label="Side Effects">
-                  <Textarea value={form.side_effects || ""} onChange={(e) => set("side_effects", e.target.value)} className="rounded-xl resize-none" rows={2} placeholder="Common adverse reactions…" />
-                </Field>
-                <Field label="Contraindications">
-                  <Textarea value={form.contraindications || ""} onChange={(e) => set("contraindications", e.target.value)} className="rounded-xl resize-none" rows={2} placeholder="Contraindications and warnings…" />
-                </Field>
-                <Field label="Storage Instructions">
-                  <Input value={form.storage_instructions || ""} onChange={(e) => set("storage_instructions", e.target.value)} className="rounded-xl" placeholder="e.g. Store at room temperature, keep dry" />
-                </Field>
+            {/* STEP 2: Name field — only shown after item_type is chosen */}
+            {form.item_type && (
+              <div className="space-y-4">
+                {form.item_type === "medication" ? (
+                  <>
+                    {recallWarning && (
+                      <div className="flex items-start gap-2 bg-red-50 border border-red-300 rounded-xl px-4 py-3">
+                        <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-black text-red-700">⚠️ FDA RECALL ALERT</p>
+                          <p className="text-xs text-red-600 mt-0.5">This medication has an active recall. Check recalls before dispensing.</p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 space-y-3">
+                      <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Step 2 — Search Medication</p>
+                      <Field label="Medication Name" required>
+                        <MedicationAutocomplete
+                          value={form.name || ""}
+                          onChange={(v) => { set("name", v); if (!v) setMedicationSelected(false); }}
+                          onMedicationSelected={handleMedicationSelected}
+                          onRecallWarning={setRecallWarning}
+                        />
+                      </Field>
+                      <p className="text-xs text-blue-500">Search by medication name, generic or brand. Fields will auto-fill once selected.</p>
+                    </div>
+
+                    {/* Fields only shown after a medication is picked from dropdown */}
+                    {medicationSelected && (
+                      <div className="space-y-4 border-t border-slate-100 pt-4">
+                        <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">✅ Auto-filled from FDA data</p>
+                        <Field label="SKU / Code">
+                          <Input value={form.sku || ""} onChange={(e) => set("sku", e.target.value)} className="rounded-xl" placeholder="Optional" />
+                        </Field>
+                        <Field label="Description">
+                          <Textarea value={form.description || ""} onChange={(e) => set("description", e.target.value)} className="rounded-xl resize-none" rows={3} />
+                        </Field>
+                        <Field label="Dosage Instructions">
+                          <Textarea value={form.dosage_instructions || ""} onChange={(e) => set("dosage_instructions", e.target.value)} className="rounded-xl resize-none" rows={3} placeholder="e.g. Take 1 tablet orally twice daily with food" />
+                        </Field>
+                        <Field label="Side Effects">
+                          <Textarea value={form.side_effects || ""} onChange={(e) => set("side_effects", e.target.value)} className="rounded-xl resize-none" rows={2} placeholder="Common adverse reactions…" />
+                        </Field>
+                        <Field label="Contraindications">
+                          <Textarea value={form.contraindications || ""} onChange={(e) => set("contraindications", e.target.value)} className="rounded-xl resize-none" rows={2} placeholder="Contraindications and warnings…" />
+                        </Field>
+                        <Field label="Storage Instructions">
+                          <Input value={form.storage_instructions || ""} onChange={(e) => set("storage_instructions", e.target.value)} className="rounded-xl" placeholder="e.g. Store at room temperature, keep dry" />
+                        </Field>
+                        <Field label="Item Status">
+                          <Sel value={form.status} onChange={(v) => set("status", v)} options={[
+                            { value: "active", label: "Active" }, { value: "discontinued", label: "Discontinued" },
+                            { value: "out_of_stock", label: "Out of Stock" }, { value: "archived", label: "Archived" },
+                          ]} />
+                        </Field>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* Non-medication: show standard fields */
+                  <>
+                    <Field label="Item Name" required>
+                      <Input value={form.name || ""} onChange={(e) => set("name", e.target.value)} className="rounded-xl" required />
+                    </Field>
+                    <Field label="SKU / Code">
+                      <Input value={form.sku || ""} onChange={(e) => set("sku", e.target.value)} className="rounded-xl" placeholder="Optional" />
+                    </Field>
+                    <Field label="Description">
+                      <Textarea value={form.description || ""} onChange={(e) => set("description", e.target.value)} className="rounded-xl resize-none" rows={3} />
+                    </Field>
+                    <Field label="Item Category">
+                      <Sel value={form.category} onChange={(v) => set("category", v)} options={[
+                        { value: "electronics", label: "Electronics" }, { value: "food_beverage", label: "Food & Beverage" },
+                        { value: "clothing", label: "Clothing" }, { value: "office_supplies", label: "Office Supplies" },
+                        { value: "raw_materials", label: "Raw Materials" }, { value: "tools_equipment", label: "Tools & Equipment" },
+                        { value: "health_beauty", label: "Health & Beauty" }, { value: "household", label: "Household" },
+                        { value: "vehicles", label: "Vehicles" }, { value: "equipment", label: "Equipment" },
+                        { value: "other", label: "Other" },
+                      ]} />
+                    </Field>
+                    <Field label="Item Class (select all that apply)">
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {ITEM_CLASSES.map((c) => {
+                          const active = (form.item_class || []).includes(c);
+                          return (
+                            <button key={c} type="button" onClick={() => toggleClass(c)}
+                              className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all capitalize
+                                ${active ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-emerald-400"}`}>
+                              {c}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </Field>
+                    <Field label="Item Status">
+                      <Sel value={form.status} onChange={(v) => set("status", v)} options={[
+                        { value: "active", label: "Active" }, { value: "discontinued", label: "Discontinued" },
+                        { value: "out_of_stock", label: "Out of Stock" }, { value: "archived", label: "Archived" },
+                      ]} />
+                    </Field>
+                  </>
+                )}
               </div>
             )}
           </div>
