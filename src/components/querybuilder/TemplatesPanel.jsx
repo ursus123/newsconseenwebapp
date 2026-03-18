@@ -170,10 +170,64 @@ ORDER BY total_revenue DESC`,
     ],
   },
   {
-    category: "External APIs",
+    category: "Geospatial",
     items: [
+      { label: "Find pharmacies near location", sql: "SELECT * FROM osm_nearby\nWHERE lat = 44.8 AND lon = -68.7\nAND type = 'pharmacy' AND radius_km = 5" },
+      { label: "Search hospitals in city", sql: "SELECT * FROM osm_places\nWHERE query = 'hospital' AND city = 'Bangor'" },
+      { label: "Find schools near enterprise", sql: "SELECT * FROM osm_places\nWHERE query = 'school' AND city = 'Bugesera'" },
+    ],
+  },
+  {
+    category: "Weather",
+    items: [
+      { label: "Current weather", sql: "SELECT * FROM weather_current WHERE city = 'Bangor'" },
+      { label: "7 day forecast", sql: "SELECT * FROM weather_forecast\nWHERE city = 'Kigali' AND days = 7" },
+      { label: "Weather for enterprise cities", sql: "SELECT e.enterprise_name, e.city,\n  w.temperature_c, w.weather_description\nFROM enterprises e\nJOIN weather_current w ON w.city = e.city\nWHERE e.status = 'active'" },
+    ],
+  },
+  {
+    category: "Healthcare APIs",
+    items: [
+      { label: "Drug interaction check", sql: "SELECT * FROM medications_interactions\nWHERE drug1 = 'metformin' AND drug2 = 'ibuprofen'" },
+      { label: "Medication label / warnings", sql: "SELECT * FROM medications_label WHERE name = 'metformin'" },
       { label: "Search medication", sql: "SELECT * FROM medications_api WHERE name = 'metformin'" },
       { label: "Check recalls", sql: "SELECT * FROM medications_recalls WHERE name = 'metformin'" },
+      { label: "Cross-check inventory recalls", sql: "SELECT p.name, p.stock_quantity, r.reason_for_recall,\n  r.recalling_firm, r.recall_initiation_date\nFROM products p\nJOIN medications_recalls r ON r.name = p.name\nWHERE p.item_type = 'medication'" },
+      { label: "FDA device recalls", sql: "SELECT * FROM fda_devices WHERE product = 'wheelchair'" },
+      { label: "FDA food safety alerts", sql: "SELECT * FROM fda_food_recalls WHERE product = 'milk'" },
+    ],
+  },
+  {
+    category: "Demographics",
+    items: [
+      { label: "Rwanda population trend", sql: "SELECT year, value as population\nFROM worldbank_indicators\nWHERE country = 'RW'\nAND indicator = 'SP.POP.TOTL'\nAND year_from = 2015 AND year_to = 2023" },
+      { label: "Healthcare spending comparison", sql: "SELECT country_name, year, value as health_spend_per_capita\nFROM worldbank_indicators\nWHERE indicator = 'SH.XPD.CHEX.PC.CD'\nAND year_from = 2020 AND year_to = 2023" },
+      { label: "East African countries", sql: "SELECT name, capital, population, currency\nFROM countries\nWHERE subregion = 'Eastern Africa'\nORDER BY population DESC" },
+      { label: "Enrich enterprises with country data", sql: "SELECT e.enterprise_name, e.country,\n  c.capital, c.population, c.currency\nFROM enterprises e\nJOIN countries c ON c.name = e.country\nWHERE e.status = 'active'" },
+    ],
+  },
+  {
+    category: "Finance & FX",
+    items: [
+      { label: "USD exchange rates", sql: "SELECT currency, rate FROM exchange_rates\nWHERE base = 'USD'\nORDER BY currency ASC" },
+      { label: "Convert transaction amounts to RWF", sql: "SELECT t.enterprise, t.amount as amount_usd,\n  t.amount * r.rate as amount_rwf\nFROM transactions t\nJOIN exchange_rates r ON r.base = 'USD' AND r.currency = 'RWF'\nWHERE t.status = 'posted'" },
+    ],
+  },
+  {
+    category: "Advanced (Cross-API)",
+    items: [
+      { label: "Enterprises with weather", sql: "SELECT e.enterprise_name, e.city, e.country,\n  w.temperature_c, w.weather_description\nFROM enterprises e\nJOIN weather_current w ON w.city = e.city\nWHERE e.status = 'active'" },
+      { label: "Enterprise locations on map", sql: "SELECT e.enterprise_name, e.enterprise_type,\n  o.lat, o.lon, o.display_name\nFROM enterprises e\nJOIN osm_places o ON o.query = e.enterprise_name\nWHERE e.status = 'active'" },
+      { label: "Medication recalls in inventory", sql: "SELECT p.name, p.stock_quantity,\n  r.reason_for_recall, r.is_active\nFROM products p\nJOIN medications_recalls r ON r.name = p.name\nWHERE p.item_type = 'medication'" },
+      { label: "Transactions in local currency", sql: "SELECT t.enterprise, t.amount as usd_amount,\n  t.amount * fx.rate as local_amount,\n  fx.currency, c.name as country_name\nFROM transactions t\nJOIN enterprises e ON e.enterprise_name = t.enterprise\nJOIN countries c ON c.name = e.country\nJOIN exchange_rates fx ON fx.base = 'USD' AND fx.currency = c.currency\nWHERE t.status = 'posted'" },
+      { label: "Nearby healthcare per enterprise", sql: "SELECT e.enterprise_name, e.city,\n  n.name as facility_name, n.amenity, n.distance_km\nFROM enterprises e\nJOIN osm_nearby n ON n.city = e.city\nWHERE n.amenity IN ('pharmacy', 'hospital', 'clinic')\nAND n.distance_km < 5\nORDER BY e.enterprise_name, n.distance_km" },
+    ],
+  },
+  {
+    category: "External APIs (Legacy)",
+    items: [
+      { label: "Search medication (Railway)", sql: "SELECT * FROM medications_api WHERE name = 'metformin'" },
+      { label: "Check recalls (Railway)", sql: "SELECT * FROM medications_recalls WHERE name = 'metformin'" },
     ],
   },
 ];
