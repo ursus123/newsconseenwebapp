@@ -82,6 +82,10 @@ export default function Products() {
     setEditing(null);
   };
 
+  const handleImportRow = async (rowData) => {
+    return base44.entities.Product.create(withCompany(rowData));
+  };
+
   return (
     <div>
       <PageHeader
@@ -89,7 +93,13 @@ export default function Products() {
         subtitle="Manage inventory, assets, and items"
         onAdd={perms.can_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
         addLabel="New Item"
-      />
+      >
+        {perms.can_create && (
+          <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" /> Import
+          </Button>
+        )}
+      </PageHeader>
       <DataTable
         columns={columns}
         data={products}
