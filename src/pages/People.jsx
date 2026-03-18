@@ -11,6 +11,13 @@ import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Badge } from "@/components/ui/badge";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
+import BulkImportDialog from "../components/shared/BulkImportDialog";
+import { Upload } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  PEOPLE_FIELDS, PEOPLE_MAPPING_RULES, PEOPLE_TEMPLATE_EXAMPLE,
+  PEOPLE_TEMPLATE_INSTRUCTIONS, validatePerson, transformPerson,
+} from "@/components/shared/importConfigs";
 
 const statusColor = (s) => {
   const map = { active: "bg-emerald-50 text-emerald-700", inactive: "bg-slate-100 text-slate-600", on_leave: "bg-amber-50 text-amber-700" };
