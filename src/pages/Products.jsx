@@ -36,6 +36,7 @@ const columns = [
 
 export default function Products() {
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
