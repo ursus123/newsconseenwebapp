@@ -119,7 +119,13 @@ export default function Enterprises() {
         subtitle="Manage business entities and enterprise records"
         onAdd={perms.can_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
         addLabel="New Enterprise"
-      />
+      >
+        {perms.can_create && (
+          <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" /> Import
+          </Button>
+        )}
+      </PageHeader>
       <EnterpriseToolbar search={search} setSearch={setSearch} filters={filters} setFilters={setFilters} sortBy={sortBy} setSortBy={setSortBy} />
       <DataTable
         columns={columns}
