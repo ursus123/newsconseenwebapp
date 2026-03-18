@@ -37,6 +37,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen
       AIRFLOW__WEBSERVER__RBAC: "True"
+      _PIP_ADDITIONAL_REQUIREMENTS: "pydantic-settings requests pandas sqlalchemy psycopg2-binary"
     env_file:
       - .env
     ports:
@@ -57,6 +58,7 @@ services:
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen
+      _PIP_ADDITIONAL_REQUIREMENTS: "pydantic-settings requests pandas sqlalchemy psycopg2-binary"
     env_file:
       - .env
     command: scheduler
