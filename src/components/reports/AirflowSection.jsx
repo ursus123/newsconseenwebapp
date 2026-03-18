@@ -2,28 +2,28 @@ import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, RefreshCw, Wind, Calendar, CheckCircle2 } from "lucide-react";
+import { ExternalLink, RefreshCw, Wind, Calendar } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
 const API_BASE = "https://newsconseenwebapp-production.up.railway.app";
 
 const LOAD_ENDPOINTS = [
   { key: "enterprise_summary", path: "/load/enterprise-summary" },
-  { key: "task_summary", path: "/load/task-summary" },
-  { key: "people_summary", path: "/load/people-summary" },
-  { key: "transaction_summary", path: "/load/transaction-summary" },
-  { key: "service_summary", path: "/load/service-summary" },
-  { key: "product_summary", path: "/load/product-summary" },
+  { key: "task_summary",       path: "/load/task-summary" },
+  { key: "people_summary",     path: "/load/people-summary" },
+  { key: "transaction_summary",path: "/load/transaction-summary" },
+  { key: "service_summary",    path: "/load/service-summary" },
+  { key: "product_summary",    path: "/load/product-summary" },
 ];
 
 const PIPELINES = [
-  { name: "tasks_etl", description: "Syncs task summaries from Base44" },
+  { name: "tasks_etl",        description: "Syncs task summaries from Base44" },
   { name: "transactions_etl", description: "Syncs transaction summaries from Base44" },
-  { name: "services_etl", description: "Syncs service summaries from Base44" },
-  { name: "enterprises_etl", description: "Syncs enterprise summaries from Base44" },
-  { name: "people_etl", description: "Syncs people summaries from Base44" },
-  { name: "products_etl", description: "Syncs product summaries from Base44" },
-  { name: "geospatial_etl", description: "Geocodes enterprise addresses and clusters locations" },
+  { name: "services_etl",     description: "Syncs service summaries from Base44" },
+  { name: "enterprises_etl",  description: "Syncs enterprise summaries from Base44" },
+  { name: "people_etl",       description: "Syncs people summaries from Base44" },
+  { name: "products_etl",     description: "Syncs product summaries from Base44" },
+  { name: "geospatial_etl",   description: "Geocodes enterprise addresses and clusters locations" },
 ];
 
 export default function AirflowSection() {
@@ -38,20 +38,21 @@ export default function AirflowSection() {
       )
     );
 
+    setRefreshing(false);
+
     const failed = [];
     const lines = [];
 
     results.forEach((result, i) => {
       const { key } = LOAD_ENDPOINTS[i];
       if (result.status === "fulfilled") {
-        const rows = result.value?.rows_loaded ?? result.value?.count ?? result.value?.inserted ?? "?";
+        const data = result.value;
+        const rows = data?.rows_loaded ?? data?.count ?? data?.inserted ?? data?.rows ?? "?";
         lines.push(`${key}: ${rows} row${rows === 1 ? "" : "s"}`);
       } else {
         failed.push(key);
       }
     });
-
-    setRefreshing(false);
 
     if (failed.length === 0) {
       toast({
@@ -91,8 +92,8 @@ export default function AirflowSection() {
                   <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
                   Open Airflow Dashboard
                 </Button>
-                <p className="text-[11px] text-blue-500 max-w-[220px]">
-                  Run <code className="bg-blue-100 px-1 rounded">docker-compose up</code> in your python_layer folder to start Airflow locally
+                <p className="text-[11px] text-blue-500 max-w-[240px]">
+                  Run <code className="bg-blue-100 px-1 rounded font-mono">docker-compose up</code> in your python_layer folder to start Airflow locally
                 </p>
               </div>
 
