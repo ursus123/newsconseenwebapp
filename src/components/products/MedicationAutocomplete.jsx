@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Loader2, Search, AlertTriangle } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 
 const API_BASE = "https://newsconseenwebapp-production.up.railway.app";
 
