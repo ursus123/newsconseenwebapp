@@ -182,12 +182,11 @@ export default function PRNFlow({ user, selectedClient, people, products, enterp
               </div>
               <div>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Medication *</p>
-                <SearchSelect
-                  items={products}
-                  labelFn={(p) => p.name + (p.batch_number ? ` (Batch: ${p.batch_number})` : "")}
+                <MedMedicationPicker
+                  products={products}
                   value={medication}
                   onChange={setMedication}
-                  placeholder="Select from inventory…"
+                  placeholder="Select medication from inventory…"
                 />
                 {medication?.expiry_date && (
                   <p className="text-xs text-orange-600 mt-1 font-semibold">Expiry: {medication.expiry_date}</p>
