@@ -207,6 +207,21 @@ export default function Relationships() {
         onConfirm={() => deleteMut.mutate(deleting.id)}
         itemName="this assignment"
       />
+      <BulkImportDialog
+        open={importOpen}
+        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["relationships"] }); }}
+        entityName="Relationships"
+        fields={RELATIONSHIP_FIELDS}
+        mappingRules={RELATIONSHIP_MAPPING_RULES}
+        templateFileName="newsconseen_relationships_import_template.xlsx"
+        templateExample={RELATIONSHIP_TEMPLATE_EXAMPLE}
+        templateInstructions={RELATIONSHIP_TEMPLATE_INSTRUCTIONS}
+        validateRow={(row) => validateRelationship(row, { people, enterprises, products, services })}
+        onImport={(row) => base44.entities.Relationship.create(withScope(row))}
+        currentUser={currentUser}
+        previewColumns={REL_PREVIEW_COLS}
+        requiredField="relationship_type"
+      />
     </div>
   );
 }
