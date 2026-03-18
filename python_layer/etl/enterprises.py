@@ -1,6 +1,6 @@
 import pandas as pd
-from .base import fetch_json_to_df
-from ..config import settings
+from etl.base import fetch_json_to_df
+from config import settings
 
 
 def extract_enterprises() -> pd.DataFrame:
@@ -8,12 +8,7 @@ def extract_enterprises() -> pd.DataFrame:
 
 
 def transform_enterprises(df: pd.DataFrame) -> pd.DataFrame:
-    df["created_at"] = pd.to_datetime(df["created_at"])
-
-    summary = df.assign(
-        is_active=df["status"].str.lower().eq("active")
-    ).groupby("status").agg(
-        enterprise_count=("enterprise_id", "count")
+    summary = df.groupby("status").agg(
+        enterprise_count=("_id", "count")
     ).reset_index()
-
     return summary

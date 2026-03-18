@@ -1,6 +1,6 @@
 import requests
 import pandas as pd
-from ..config import HEADERS
+from config import HEADERS
 
 
 def fetch_json_to_df(url: str) -> pd.DataFrame:

@@ -59,7 +59,7 @@ services:
     image: apache/superset:latest
     container_name: newsconseen_superset
     ports:
-      - "8088:8088"
+      - "8089:8088"
     environment:
       SUPERSET_SECRET_KEY: "supersecret"
     depends_on:
