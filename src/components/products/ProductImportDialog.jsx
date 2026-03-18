@@ -348,7 +348,7 @@ export default function ProductImportDialog({ open, onClose, onImport, currentUs
                   <p className="text-sm font-medium text-slate-700">Need a template?</p>
                   <p className="text-xs text-slate-400">Download the Excel template with instructions and data validation.</p>
                 </div>
-                <Button variant="outline" size="sm" className="rounded-xl shrink-0" onClick={downloadTemplate}>
+                <Button variant="outline" size="sm" className="rounded-xl shrink-0" onClick={() => downloadTemplate(XLSX)} disabled={!XLSX}>
                   <Download className="w-4 h-4 mr-2" /> Excel Template
                 </Button>
               </div>
