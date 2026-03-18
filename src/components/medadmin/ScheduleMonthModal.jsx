@@ -7,7 +7,9 @@ import { X, Plus, Trash2, CalendarDays, Loader2, CheckCircle2, Search } from "lu
 function MedSearchInput({ products, value, onChange }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState(value || "");
-  const filtered = products.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
+  // Only show active medications
+  const meds = products.filter((p) => p.item_type === "medication" && p.status === "active");
+  const filtered = meds.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
 
   const handleSelect = (p) => {
     setQ(p.name);
