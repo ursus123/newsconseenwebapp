@@ -6,6 +6,7 @@ import DataTable from "../components/shared/DataTable";
 import EntityForm from "../components/shared/EntityForm";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import ChartBuilder from "../components/reports/ChartBuilder";
+import AnalyticsDashboard from "../components/reports/AnalyticsDashboard";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
