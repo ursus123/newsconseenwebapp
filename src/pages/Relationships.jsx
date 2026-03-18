@@ -7,7 +7,7 @@ import DeleteDialog from "../components/shared/DeleteDialog";
 import RelationshipForm from "../components/relationships/RelationshipForm";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
-import { Upload } from "lucide-react";
+import { Upload, Users, Building2, Package, Wrench, MapPin, Link2 } from "lucide-react";
 import {
   RELATIONSHIP_FIELDS, RELATIONSHIP_MAPPING_RULES, RELATIONSHIP_TEMPLATE_EXAMPLE,
   RELATIONSHIP_TEMPLATE_INSTRUCTIONS, validateRelationship,
@@ -18,8 +18,6 @@ import RelationshipAnalytics from "../components/relationships/RelationshipAnaly
 import EndRelationshipDialog from "../components/relationships/EndRelationshipDialog";
 import RelationshipDetailPanel from "../components/relationships/RelationshipDetailPanel";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Users, Building2, Package, Wrench, MapPin, Link2 } from "lucide-react";
 import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 
