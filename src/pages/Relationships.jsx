@@ -133,7 +133,13 @@ export default function Relationships() {
 
   return (
     <div>
-      <PageHeader title="Relationships" subtitle="Assign people, items and enterprises — preserve history" />
+      <PageHeader title="Relationships" subtitle="Assign people, items and enterprises — preserve history">
+        {perms.l2_assign && (
+          <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" /> Import
+          </Button>
+        )}
+      </PageHeader>
 
       <RelationshipSummaryCards relationships={relationships} people={people} />
       <RelationshipHealthAlerts relationships={relationships} people={people} products={products} onEdit={(r) => { setEditing(r); setFormType(r.relationship_type); setFormOpen(true); }} onOpenNew={openNew} />
