@@ -1,7 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 
-export default function StatCard({ title, value, icon: Icon, color, subtitle }) {
+export default function StatCard({ title, value, icon: Icon, color, subtitle, subtitleColor }) {
   const colorMap = {
     emerald: "from-emerald-500 to-emerald-600 shadow-emerald-500/20",
     blue: "from-blue-500 to-blue-600 shadow-blue-500/20",
@@ -9,6 +9,7 @@ export default function StatCard({ title, value, icon: Icon, color, subtitle }) 
     purple: "from-purple-500 to-purple-600 shadow-purple-500/20",
     rose: "from-rose-500 to-rose-600 shadow-rose-500/20",
     cyan: "from-cyan-500 to-cyan-600 shadow-cyan-500/20",
+    teal: "from-teal-500 to-teal-600 shadow-teal-500/20",
   };
 
   return (
@@ -21,7 +22,7 @@ export default function StatCard({ title, value, icon: Icon, color, subtitle }) 
         <div>
           <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">{title}</p>
           <p className="text-3xl font-bold text-slate-800 mt-2">{value}</p>
-          {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
+          {subtitle && <p className={`text-xs mt-1 ${subtitleColor || "text-slate-400"}`}>{subtitle}</p>}
         </div>
         <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${colorMap[color] || colorMap.emerald} flex items-center justify-center shadow-lg`}>
           <Icon className="w-6 h-6 text-white" />
