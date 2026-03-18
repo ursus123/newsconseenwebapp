@@ -146,6 +146,22 @@ export default function Enterprises() {
         onConfirm={() => deleteMut.mutate(deleting.id)}
         itemName={deleting?.enterprise_name}
       />
+      <BulkImportDialog
+        open={importOpen}
+        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["enterprises"] }); }}
+        entityName="Enterprises"
+        fields={ENTERPRISE_FIELDS}
+        mappingRules={ENTERPRISE_MAPPING_RULES}
+        templateFileName="newsconseen_enterprises_import_template.xlsx"
+        templateExample={ENTERPRISE_TEMPLATE_EXAMPLE}
+        templateInstructions={ENTERPRISE_TEMPLATE_INSTRUCTIONS}
+        validateRow={validateEnterprise}
+        transformRow={transformEnterprise}
+        onImport={(row) => base44.entities.Enterprise.create(withScope(row))}
+        currentUser={currentUser}
+        previewColumns={ENT_PREVIEW_COLS}
+        requiredField="enterprise_name"
+      />
     </div>
   );
 }
