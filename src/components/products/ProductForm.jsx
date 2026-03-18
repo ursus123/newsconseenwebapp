@@ -59,6 +59,7 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
   useEffect(() => {
     if (open) {
       setActiveTab("basic");
+      setRecallWarning(false);
       setForm(initialData || {
         status: "active",
         unit: "piece",
@@ -70,6 +71,25 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
       });
     }
   }, [open, initialData]);
+
+  const handleMedicationSelected = (data) => {
+    const detail = data.detail || {};
+    const label = data.label || {};
+    const trim300 = (s) => s ? s.slice(0, 300) : "";
+    setForm((f) => ({
+      ...f,
+      name: detail.name || f.name,
+      description: trim300(label.dosage_and_admin),
+      internal_notes: trim300(label.warnings),
+      contraindications: trim300(label.contraindications),
+      dosage_instructions: label.dosage_and_admin || "",
+      storage_instructions: label.storage_conditions || "",
+      side_effects: trim300(label.adverse_reactions),
+      regulatory_status: "compliant",
+      status: "active",
+      item_type: "medication",
+    }));
+  };
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
   const addItem = (key, item) => set(key, [...(form[key] || []), item]);
