@@ -98,6 +98,22 @@ export default function Addresses() {
         initialData={editing}
       />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.label || "this address"} />
+      <BulkImportDialog
+        open={importOpen}
+        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["addresses"] }); }}
+        entityName="Addresses"
+        fields={ADDRESS_FIELDS}
+        mappingRules={ADDRESS_MAPPING_RULES}
+        templateFileName="newsconseen_addresses_import_template.xlsx"
+        templateExample={ADDRESS_TEMPLATE_EXAMPLE}
+        templateInstructions={ADDRESS_TEMPLATE_INSTRUCTIONS}
+        validateRow={validateAddress}
+        transformRow={transformAddress}
+        onImport={(row) => base44.entities.Address.create(withScope(row))}
+        currentUser={currentUser}
+        previewColumns={ADDR_PREVIEW_COLS}
+        requiredField="address_line1"
+      />
     </div>
   );
 }
