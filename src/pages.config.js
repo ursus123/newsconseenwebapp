@@ -68,6 +68,7 @@ import Services from './pages/Services';
 import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';
 import UserManagement from './pages/UserManagement';
+import Pipelines from './pages/Pipelines';
 import __Layout from './Layout.jsx';
 
 
@@ -93,6 +94,7 @@ export const PAGES = {
     "Tasks": Tasks,
     "Transactions": Transactions,
     "UserManagement": UserManagement,
+    "Pipelines": Pipelines,
 }
 
 export const pagesConfig = {
