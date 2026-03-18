@@ -25,6 +25,7 @@ import {
 import { base44 } from "@/api/base44Client";
 import { usePermissions, DEFAULT_PAGES } from "@/components/shared/usePermissions";
 import { useQuery } from "@tanstack/react-query";
+import TenantGuard from "@/components/shared/TenantGuard";
 
 // All nav items
 const ALL_NAV_PHASES = [
@@ -206,7 +207,9 @@ export default function Layout({ children, currentPageName }) {
 
         <div className="flex-1 overflow-y-auto">
           <div className="p-4 lg:p-8 max-w-[1600px] mx-auto w-full">
-            {children}
+            <TenantGuard currentUser={currentUser}>
+              {children}
+            </TenantGuard>
           </div>
         </div>
       </main>
