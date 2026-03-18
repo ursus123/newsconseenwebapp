@@ -33,3 +33,14 @@ class Product(ProductBase):
 
     class Config:
         orm_mode = True
+
+
+class ProductSummary(BaseModel):
+    """
+    Output schema for /product-summary.
+    Matches the shape produced by etl/products.transform_products().
+    """
+    item_type: str
+    total_products: int
+    total_stock: int
+    avg_price: float
