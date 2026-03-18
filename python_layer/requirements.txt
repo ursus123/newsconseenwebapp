@@ -8,6 +8,7 @@ python-dotenv
 
 # Database
 sqlalchemy
+psycopg2-binary
 
 # Geospatial
 geopandas
