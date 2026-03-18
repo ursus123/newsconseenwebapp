@@ -54,6 +54,7 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
   const [activeTab, setActiveTab] = useState("basic");
   const [form, setForm] = useState({});
   const [uploading, setUploading] = useState(false);
+  const [recallWarning, setRecallWarning] = useState(false);
 
   useEffect(() => {
     if (open) {
