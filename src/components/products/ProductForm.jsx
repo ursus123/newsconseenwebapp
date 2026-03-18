@@ -199,6 +199,24 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
                 })}
               </div>
             </Field>
+
+            {form.item_type === "medication" && (
+              <div className="border border-blue-100 rounded-xl p-4 space-y-4 bg-blue-50/40">
+                <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">💊 Medication Details</p>
+                <Field label="Dosage Instructions">
+                  <Textarea value={form.dosage_instructions || ""} onChange={(e) => set("dosage_instructions", e.target.value)} className="rounded-xl resize-none" rows={3} placeholder="e.g. Take 1 tablet orally twice daily with food" />
+                </Field>
+                <Field label="Side Effects">
+                  <Textarea value={form.side_effects || ""} onChange={(e) => set("side_effects", e.target.value)} className="rounded-xl resize-none" rows={2} placeholder="Common adverse reactions…" />
+                </Field>
+                <Field label="Contraindications">
+                  <Textarea value={form.contraindications || ""} onChange={(e) => set("contraindications", e.target.value)} className="rounded-xl resize-none" rows={2} placeholder="Contraindications and warnings…" />
+                </Field>
+                <Field label="Storage Instructions">
+                  <Input value={form.storage_instructions || ""} onChange={(e) => set("storage_instructions", e.target.value)} className="rounded-xl" placeholder="e.g. Store at room temperature, keep dry" />
+                </Field>
+              </div>
+            )}
           </div>
         );
 
