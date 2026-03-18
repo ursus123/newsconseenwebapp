@@ -1,5 +1,17 @@
-import React, { useState, useRef, useCallback } from "react";
-import * as XLSX from "xlsx";
+import React, { useState, useRef, useCallback, useEffect } from "react";
+
+// Load SheetJS from CDN dynamically
+function useXLSX() {
+  const [XLSX, setXLSX] = useState(null);
+  useEffect(() => {
+    if (window.XLSX) { setXLSX(window.XLSX); return; }
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+    script.onload = () => setXLSX(window.XLSX);
+    document.head.appendChild(script);
+  }, []);
+  return XLSX;
+}
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
