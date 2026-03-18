@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { X, CheckCircle2, Search, Pill, ChevronDown } from "lucide-react";
+import MedMedicationPicker from "@/components/medadmin/MedMedicationPicker";
 
 const ROUTES = ["Oral", "Sublingual", "IV", "IM", "Topical", "Inhalation", "Patch", "Other"];
 const SYMPTOMS = ["Pain", "Anxiety", "Agitation", "Seizure risk", "Nausea", "Headache", "Behavioral", "Other"];
