@@ -7,9 +7,9 @@ class Settings(BaseSettings):
     base44_services_url: str
     base44_enterprises_url: str
     base44_people_url: str
+    base44_products_url: str
     base44_api_key: str
 
-    # For Airflow / Superset / OSM if needed later
     database_url: str | None = None
 
     class Config:
@@ -17,7 +17,9 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Base44 uses 'api_key' header — not 'Authorization: Bearer'
 HEADERS = {
-    "Authorization": f"Bearer {settings.base44_api_key}",
+    "api_key": settings.base44_api_key,
     "Content-Type": "application/json",
 }
