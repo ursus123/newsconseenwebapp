@@ -4,7 +4,7 @@ import {
   Database, ChevronDown, ChevronRight, Table2, Upload,
   Hash, Type, Calendar, ToggleLeft, Layers, Wand2, Code2,
   AlignLeft, GitBranch, AlertCircle, XCircle, Plus, X,
-  Save, FolderOpen, BarChart2, Download,
+  Save, FolderOpen, BarChart2, Pin, Keyboard, FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -24,6 +24,12 @@ import SqlAutocomplete from "../components/querybuilder/SqlAutocomplete";
 import SavedQueriesPanel from "../components/querybuilder/SavedQueriesPanel";
 import SaveQueryModal from "../components/querybuilder/SaveQueryModal";
 import { TabStore } from "../components/querybuilder/TabStore";
+import AnalyticsPanel from "../components/querybuilder/AnalyticsPanel";
+import TemplatesPanel from "../components/querybuilder/TemplatesPanel";
+import DashboardWidgetsPanel from "../components/querybuilder/DashboardWidgetsPanel";
+import ExportMenu from "../components/querybuilder/ExportMenu";
+import PinWidgetModal from "../components/querybuilder/PinWidgetModal";
+import ShortcutsModal from "../components/querybuilder/ShortcutsModal";
 
 // ── Type helpers ─────────────────────────────────────────────────────────
 function TypeIcon({ type }) {
@@ -73,12 +79,18 @@ function TableTreeItem({ name, schema, isUploaded, isDataModel, isActive, onSele
   );
 }
 
+// ── Sample queries ─────────────────────────────────────────────────────────
 const SAMPLES = [
   { label: "Active enterprises", query: "SELECT * FROM enterprises WHERE status = 'active'" },
   { label: "Active people",      query: "SELECT * FROM people WHERE status = 'active'" },
-  { label: "Low stock",          query: "SELECT * FROM products WHERE stock_quantity < min_stock_level" },
+  { label: "Low stock",          query: "SELECT name, stock_quantity, min_stock_level FROM products WHERE stock_quantity < min_stock_level ORDER BY stock_quantity ASC" },
   { label: "Open tasks",         query: "SELECT * FROM tasks WHERE status = 'open'" },
-  { label: "Medications",        query: "SELECT * FROM medication_profiles WHERE status = 'active'" },
+  { label: "Enterprise breakdown", query: "SELECT * FROM analytics_enterprises" },
+  { label: "Task completion",    query: "SELECT task_type, total_tasks, completed_tasks FROM analytics_tasks" },
+  { label: "Revenue by type",    query: "SELECT transaction_type, total_amount FROM analytics_transactions ORDER BY total_amount DESC" },
+  { label: "Stock levels",       query: "SELECT item_type, total_stock FROM analytics_products ORDER BY total_stock ASC" },
+  { label: "Search medication",  query: "SELECT * FROM medications_api WHERE name = 'metformin'" },
+  { label: "Check recalls",      query: "SELECT * FROM medications_recalls WHERE name = 'metformin'" },
 ];
 
 function ResizeDivider({ onMouseDown }) {
@@ -117,8 +129,10 @@ function ValidationErrors({ errors, onDismiss }) {
 
 // ── Left panel tabs ───────────────────────────────────────────────────────
 const LEFT_TABS = [
-  { key: "tables", label: "Tables", icon: Database },
-  { key: "saved",  label: "Saved",  icon: FolderOpen },
+  { key: "tables",    label: "Tables",    icon: Database },
+  { key: "analytics", label: "Analytics", icon: BarChart2 },
+  { key: "templates", label: "Templates", icon: FileText },
+  { key: "saved",     label: "Saved",     icon: FolderOpen },
 ];
 
 // ── Generate unique tab id ────────────────────────────────────────────────
@@ -180,6 +194,8 @@ export default function QueryBuilder() {
   const [midTab, setMidTab] = useState("script");
   const [showChart, setShowChart] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [queryHistory, setQueryHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem("qb_history") || "[]"); } catch { return []; }
   });
@@ -250,7 +266,7 @@ export default function QueryBuilder() {
     queryFn: () => base44.entities.DataModel.list("-created_date", 200),
   });
 
-  // ── Master data snapshot for Python scripts ───────────────────────────
+  // ── Master data snapshot ───────────────────────────────────────────────
   const { data: enterprisesSnap = [] } = useQuery({ queryKey: ["snap_enterprises"], queryFn: () => base44.entities.Enterprise.list("-created_date", 500) });
   const { data: peopleSnap = [] } = useQuery({ queryKey: ["snap_people"], queryFn: () => base44.entities.Person.list("-created_date", 500) });
   const { data: productsSnap = [] } = useQuery({ queryKey: ["snap_products"], queryFn: () => base44.entities.Product.list("-created_date", 500) });
@@ -259,12 +275,8 @@ export default function QueryBuilder() {
   const { data: medicationsSnap = [] } = useQuery({ queryKey: ["snap_medications"], queryFn: () => base44.entities.MedicationProfile.list("-created_date", 500) });
 
   const masterDataSnapshot = {
-    enterprises: enterprisesSnap,
-    people: peopleSnap,
-    products: productsSnap,
-    tasks: tasksSnap,
-    transactions: transactionsSnap,
-    medication_profiles: medicationsSnap,
+    enterprises: enterprisesSnap, people: peopleSnap, products: productsSnap,
+    tasks: tasksSnap, transactions: transactionsSnap, medication_profiles: medicationsSnap,
   };
 
   const qc = useQueryClient();
@@ -319,6 +331,12 @@ export default function QueryBuilder() {
 
   const uploadedNames = Object.keys(uploadedTables);
 
+  const loadSql = (newSql) => {
+    setSql(newSql);
+    setMidTab("script");
+    setShowChart(false);
+  };
+
   return (
     <div
       ref={containerRef}
@@ -328,16 +346,17 @@ export default function QueryBuilder() {
       {/* ── LEFT ─────────────────────────────────────────────────────── */}
       <aside style={{ width: leftWidth, minWidth: 180 }} className="shrink-0 flex flex-col border-r border-white/5 overflow-hidden">
         {/* Left tab bar */}
-        <div className="flex items-center border-b border-white/5 shrink-0 bg-slate-800/30">
+        <div className="flex items-center border-b border-white/5 shrink-0 bg-slate-800/30 overflow-x-auto">
           {LEFT_TABS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => setLeftTab(key)}
-              className={`flex items-center gap-1.5 flex-1 justify-center py-2.5 text-[10px] font-bold uppercase tracking-widest border-b-2 transition-colors ${
+              className={`flex items-center gap-1 flex-1 justify-center py-2.5 text-[9px] font-bold uppercase tracking-widest border-b-2 transition-colors whitespace-nowrap min-w-0 px-1 ${
                 leftTab === key ? "border-emerald-400 text-emerald-300" : "border-transparent text-slate-500 hover:text-slate-300"
               }`}
             >
-              <Icon className="w-3 h-3" />{label}
+              <Icon className="w-3 h-3 shrink-0" />
+              <span className="hidden sm:inline">{label}</span>
             </button>
           ))}
         </div>
@@ -345,7 +364,6 @@ export default function QueryBuilder() {
         {leftTab === "tables" && (
           <div className="flex-1 overflow-y-auto">
             <div className="px-2 py-2 space-y-1">
-              {/* Master tables */}
               <div className="px-2 py-1">
                 <div className="flex items-center gap-1.5 mb-1">
                   <Layers className="w-3 h-3 text-slate-600" />
@@ -354,12 +372,10 @@ export default function QueryBuilder() {
                 {Object.keys(MASTER_TABLES).map((name) => (
                   <TableTreeItem key={name} name={name} schema={MASTER_SCHEMA[name] || []}
                     isActive={activeTable === name} onSelect={setActiveTable}
-                    onQueryClick={(n) => { setSql(`SELECT * FROM ${n}`); setMidTab("script"); }}
+                    onQueryClick={(n) => loadSql(`SELECT * FROM ${n}`)}
                   />
                 ))}
               </div>
-
-              {/* Data Models */}
               {dataModels.length > 0 && (
                 <div className="px-2 py-1">
                   <div className="flex items-center gap-1.5 mb-1">
@@ -372,14 +388,12 @@ export default function QueryBuilder() {
                       <TableTreeItem key={dm.id} name={dm.name}
                         schema={dm.sample_rows?.length ? getUploadedSchema(dm.sample_rows) : schemaFields}
                         isDataModel isActive={activeTable === dm.name} onSelect={setActiveTable}
-                        onQueryClick={(n) => { setSql(`SELECT * FROM ${n}`); setMidTab("script"); }}
+                        onQueryClick={(n) => loadSql(`SELECT * FROM ${n}`)}
                       />
                     );
                   })}
                 </div>
               )}
-
-              {/* Uploaded tables */}
               {uploadedNames.length > 0 && (
                 <div className="px-2 py-1">
                   <div className="flex items-center gap-1.5 mb-1">
@@ -389,7 +403,7 @@ export default function QueryBuilder() {
                   {uploadedNames.map((name) => (
                     <TableTreeItem key={name} name={name} schema={getUploadedSchema(uploadedTables[name].rows || [])}
                       isUploaded isActive={activeTable === name} onSelect={setActiveTable}
-                      onQueryClick={(n) => { setSql(`SELECT * FROM ${n}`); setMidTab("script"); }}
+                      onQueryClick={(n) => loadSql(`SELECT * FROM ${n}`)}
                     />
                   ))}
                 </div>
@@ -398,21 +412,44 @@ export default function QueryBuilder() {
             <div className="border-t border-white/5 mt-1">
               <DataSourcesPanel uploadedTables={uploadedTables} onTablesChange={setUploadedTables}
                 masterDataSnapshot={masterDataSnapshot}
-                onUseInQuery={(q) => { setSql(q); setMidTab("script"); }}
-                onPreview={(table) => { setSql(`SELECT * FROM ${table}`); doExecute(`SELECT * FROM ${table}`); }}
+                onUseInQuery={(q) => loadSql(q)}
+                onPreview={(table) => { loadSql(`SELECT * FROM ${table}`); doExecute(`SELECT * FROM ${table}`); }}
               />
             </div>
           </div>
         )}
 
-        {leftTab === "saved" && (
-          <SavedQueriesPanel
-            onLoadQuery={(querySql, queryName) => {
-              setSql(querySql);
-              setMidTab("script");
-              if (queryName) updateTab(activeTabId, { name: queryName + ".sql", sql: querySql });
-            }}
+        {leftTab === "analytics" && (
+          <AnalyticsPanel
+            activeTable={activeTable}
+            onSelect={setActiveTable}
+            onQueryClick={(n) => { loadSql(`SELECT * FROM ${n}`); doExecute(`SELECT * FROM ${n}`); }}
           />
+        )}
+
+        {leftTab === "templates" && (
+          <TemplatesPanel onLoad={(tmplSql) => loadSql(tmplSql)} />
+        )}
+
+        {leftTab === "saved" && (
+          <div className="flex flex-col flex-1 overflow-hidden">
+            {/* Dashboard widgets sub-section */}
+            <div className="shrink-0 px-2 pt-2 pb-1 border-b border-white/5">
+              <p className="text-[9px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-1 px-1 mb-1">
+                <Pin className="w-3 h-3" /> Dashboard
+              </p>
+              <DashboardWidgetsPanel
+                onEditWidget={(w) => loadSql(w.sql)}
+              />
+            </div>
+            <SavedQueriesPanel
+              onLoadQuery={(querySql, queryName) => {
+                setSql(querySql);
+                setMidTab("script");
+                if (queryName) updateTab(activeTabId, { name: queryName + ".sql", sql: querySql });
+              }}
+            />
+          </div>
         )}
       </aside>
 
@@ -434,20 +471,16 @@ export default function QueryBuilder() {
             >
               {renamingTab === tab.id ? (
                 <input
-                  autoFocus
-                  value={renameVal}
-                  onChange={(e) => setRenameVal(e.target.value)}
+                  autoFocus value={renameVal} onChange={(e) => setRenameVal(e.target.value)}
                   onBlur={() => { renameTab(tab.id, renameVal || tab.name); setRenamingTab(null); }}
                   onKeyDown={(e) => { if (e.key === "Enter") { renameTab(tab.id, renameVal || tab.name); setRenamingTab(null); } e.stopPropagation(); }}
                   className="bg-transparent outline-none text-xs text-white w-24 border-b border-emerald-400"
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
-                <span
-                  className="text-[11px] font-mono max-w-[120px] truncate"
+                <span className="text-[11px] font-mono max-w-[120px] truncate"
                   onDoubleClick={(e) => { e.stopPropagation(); setRenamingTab(tab.id); setRenameVal(tab.name); }}
-                  title="Double-click to rename"
-                >
+                  title="Double-click to rename">
                   {tab.name}
                 </span>
               )}
@@ -461,17 +494,15 @@ export default function QueryBuilder() {
               )}
             </div>
           ))}
-          <button
-            onClick={addTab}
+          <button onClick={addTab}
             className="flex items-center justify-center px-3 py-2 text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0"
-            title="New tab"
-          >
+            title="New tab">
             <Plus className="w-3.5 h-3.5" />
           </button>
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/5 shrink-0">
+        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/5 shrink-0 flex-wrap">
           <Button size="sm" onClick={runQuery} disabled={loading}
             className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 h-7 px-3 text-xs rounded-lg">
             {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
@@ -489,23 +520,34 @@ export default function QueryBuilder() {
           <button
             onClick={() => setShowSaveModal(true)}
             className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-white/10 text-slate-400 hover:text-emerald-400 hover:bg-white/5 transition-colors h-7"
-            title="Save query"
+            title="Save query (Ctrl+S)"
           >
             <Save className="w-3.5 h-3.5" />
           </button>
+          {/* Pin to dashboard */}
           <button
-            onClick={() => results?.length && exportCSV(results)}
+            onClick={() => results?.length && setShowPinModal(true)}
             disabled={!results?.length}
             className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-white/10 text-slate-400 hover:text-amber-400 hover:bg-white/5 transition-colors h-7 disabled:opacity-30"
-            title="Export CSV"
+            title="Pin to Dashboard"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Pin className="w-3.5 h-3.5" />
           </button>
-          <span className="text-[10px] text-slate-600 font-mono hidden md:block">Ctrl+Enter to run</span>
+          {/* Export */}
+          <ExportMenu results={results} sql={sql} />
+          {/* Shortcuts help */}
+          <button
+            onClick={() => setShowShortcuts(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-white/10 text-slate-400 hover:text-blue-400 hover:bg-white/5 transition-colors h-7"
+            title="Keyboard shortcuts"
+          >
+            <Keyboard className="w-3.5 h-3.5" />
+          </button>
+          <span className="text-[10px] text-slate-600 font-mono hidden lg:block">Ctrl+Enter to run</span>
           <div className="flex-1" />
-          <div className="flex items-center gap-1 overflow-x-auto">
-            {SAMPLES.map((s) => (
-              <button key={s.label} onClick={() => { setSql(s.query); setMidTab("script"); }}
+          <div className="flex items-center gap-1 overflow-x-auto max-w-[400px]">
+            {SAMPLES.slice(0, 6).map((s) => (
+              <button key={s.label} onClick={() => loadSql(s.query)}
                 className="text-[9px] px-2 py-1 rounded-full border border-white/10 bg-white/5 text-slate-500 hover:text-slate-300 hover:bg-white/10 whitespace-nowrap transition-all">
                 {s.label}
               </button>
@@ -549,7 +591,7 @@ export default function QueryBuilder() {
         <div className="flex-1 overflow-auto">
 
           {midTab === "visual" && (
-            <VisualQueryBuilder onGenerate={(q) => { setSql(q); setMidTab("script"); }} />
+            <VisualQueryBuilder onGenerate={(q) => loadSql(q)} />
           )}
 
           {midTab === "script" && !showChart && (
@@ -559,11 +601,9 @@ export default function QueryBuilder() {
                 <span className="text-[10px] text-slate-600 font-mono">{activeTab?.name || "query.sql"}</span>
               </div>
               <div className="flex flex-1 relative">
-                {/* Line numbers */}
                 <div className="select-none px-3 py-4 text-right font-mono text-[12px] text-slate-700 bg-slate-900/50 min-w-[36px] leading-5">
                   {sql.split("\n").map((_, i) => <div key={i}>{i + 1}</div>)}
                 </div>
-                {/* Editor */}
                 <div className="flex-1 relative">
                   <textarea
                     ref={textareaRef}
@@ -576,6 +616,8 @@ export default function QueryBuilder() {
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { runQuery(); return; }
+                      if (e.key === "s" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setShowSaveModal(true); return; }
+                      if (e.key === "F5") { e.preventDefault(); return; }
                       if (e.key === "Escape") setShowAutocomplete(false);
                     }}
                     onSelect={(e) => setCursorPos(e.target.selectionStart)}
@@ -585,14 +627,11 @@ export default function QueryBuilder() {
                     spellCheck={false}
                     style={{ minHeight: "300px" }}
                   />
-                  {/* Autocomplete dropdown */}
                   {showAutocomplete && (
                     <div className="absolute bottom-full left-4 mb-1">
                       <SqlAutocomplete
-                        sql={sql}
-                        cursorPos={cursorPos}
-                        allTableNames={allTableNames}
-                        allColumns={allColumns}
+                        sql={sql} cursorPos={cursorPos}
+                        allTableNames={allTableNames} allColumns={allColumns}
                         onSelect={handleAutocompleteSelect}
                         onClose={() => setShowAutocomplete(false)}
                       />
@@ -622,7 +661,7 @@ export default function QueryBuilder() {
                   </div>
                   <div className="space-y-1">
                     {queryHistory.map((entry, i) => (
-                      <div key={i} onClick={() => { setSql(entry.sql); setMidTab("script"); }}
+                      <div key={i} onClick={() => loadSql(entry.sql)}
                         className="group flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 cursor-pointer border border-white/5 transition-all">
                         <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${entry.status === "ok" ? "bg-emerald-400" : "bg-rose-400"}`} />
                         <div className="flex-1 min-w-0">
@@ -653,7 +692,11 @@ export default function QueryBuilder() {
           <AlignLeft className="w-3.5 h-3.5 text-amber-400" />
           <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Output & Actions</span>
         </div>
-        <OutputPanel results={results} error={error} message={message} loading={loading} sql={sql} />
+        <OutputPanel
+          results={results} error={error} message={message} loading={loading} sql={sql}
+          onPinWidget={() => setShowPinModal(true)}
+          onOpenChart={() => { setMidTab("script"); setShowChart(true); }}
+        />
       </aside>
 
       {/* Mutation Confirm */}
@@ -670,12 +713,23 @@ export default function QueryBuilder() {
       {/* Save Query Modal */}
       {showSaveModal && (
         <SaveQueryModal
-          sql={sql}
-          results={results}
+          sql={sql} results={results}
           onClose={() => setShowSaveModal(false)}
           onSaved={() => { setShowSaveModal(false); qc.invalidateQueries({ queryKey: ["savedQueries"] }); }}
         />
       )}
+
+      {/* Pin Widget Modal */}
+      {showPinModal && (
+        <PinWidgetModal
+          sql={sql}
+          onClose={() => setShowPinModal(false)}
+          onPinned={() => { qc.invalidateQueries({ queryKey: ["dashboardWidgets"] }); }}
+        />
+      )}
+
+      {/* Shortcuts Modal */}
+      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </div>
   );
 }
