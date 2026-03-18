@@ -90,7 +90,8 @@ function detectItemType(name = "", category = "") {
 }
 
 // ── Template generation ────────────────────────────────────────────────────
-function downloadTemplate() {
+function downloadTemplate(XLSX) {
+  if (!XLSX) return;
   const wb = XLSX.utils.book_new();
 
   // Sheet 1: Products
