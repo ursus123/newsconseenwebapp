@@ -82,7 +82,11 @@ export default function Services() {
 
   return (
     <div>
-      <PageHeader title="Services" subtitle="Define reusable service offerings and pricing" onAdd={() => { setEditing(null); setFormOpen(true); }} addLabel="New Service" />
+      <PageHeader title="Services" subtitle="Define reusable service offerings and pricing" onAdd={() => { setEditing(null); setFormOpen(true); }} addLabel="New Service">
+        <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
+          <Upload className="w-4 h-4 mr-2" /> Import
+        </Button>
+      </PageHeader>
       <DataTable columns={columns} data={services} searchField="name" onEdit={(row) => { setEditing(row); setFormOpen(true); }} onDelete={(row) => setDeleting(row)} />
       <ServiceForm
         open={formOpen}
