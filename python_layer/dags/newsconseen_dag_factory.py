@@ -1,21 +1,24 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime
-from python_layer.etl import tasks, transactions, services, enterprises, people
-from python_layer.etl.load import load_dataframe
+from python_layer.etl import tasks, transactions, services, enterprises, people, products
 from python_layer.etl import geospatial
+from python_layer.etl.load import load_dataframe
 
 
 # -----------------------------------------
 # ENTITY CONFIGURATION
+# Each entry: "table_name": (extract_fn, transform_fn)
+# Adding a new entity = one new line here.
 # -----------------------------------------
 ENTITY_CONFIG = {
-    "tasks": (tasks.extract_tasks, tasks.transform_tasks),
-    "transactions": (transactions.extract_transactions, transactions.transform_transactions),
-    "services": (services.extract_services, services.transform_services),
-    "enterprises": (enterprises.extract_enterprises, enterprises.transform_enterprises),
-    "people": (people.extract_people, people.transform_people),
-    "geospatial": (geospatial.extract, geospatial.transform),
+    "tasks":        (tasks.extract_tasks,               tasks.transform_tasks),
+    "transactions": (transactions.extract_transactions,  transactions.transform_transactions),
+    "services":     (services.extract_services,          services.transform_services),
+    "enterprises":  (enterprises.extract_enterprises,    enterprises.transform_enterprises),
+    "people":       (people.extract_people,              people.transform_people),
+    "products":     (products.extract_products,          products.transform_products),
+    "geospatial":   (geospatial.extract,                 geospatial.transform),
 }
 
 
@@ -24,7 +27,8 @@ ENTITY_CONFIG = {
 # -----------------------------------------
 def make_etl_callable(extract_fn, transform_fn, table_name):
     """
-    Returns a callable function that Airflow can run.
+    Returns a callable that Airflow can run as a PythonOperator.
+    Closes over extract_fn, transform_fn, and table_name.
     """
     def _etl():
         df = extract_fn()
@@ -35,6 +39,12 @@ def make_etl_callable(extract_fn, transform_fn, table_name):
 
 # -----------------------------------------
 # DAG FACTORY
+# Generates one independent DAG per entity:
+#   tasks_etl, transactions_etl, services_etl,
+#   enterprises_etl, people_etl, products_etl,
+#   geospatial_etl
+# Each can be triggered, monitored, and retried
+# independently in the Airflow UI.
 # -----------------------------------------
 for entity, (extract_fn, transform_fn) in ENTITY_CONFIG.items():
 
@@ -51,10 +61,9 @@ for entity, (extract_fn, transform_fn) in ENTITY_CONFIG.items():
         python_callable=make_etl_callable(
             extract_fn,
             transform_fn,
-            f"{entity}_summary"
+            f"{entity}_summary",
         ),
         dag=dag,
     )
 
-    # Register DAG in Airflow
     globals()[f"{entity}_etl"] = dag
