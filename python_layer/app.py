@@ -1,9 +1,19 @@
+import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from etl import tasks, transactions, services, enterprises, people
 from etl.load import load_dataframe
 
+# -------------------------------------------------
+# Logging
+# -------------------------------------------------
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
+# -------------------------------------------------
+# FastAPI app
+# -------------------------------------------------
 app = FastAPI(
     title="Newsconseen Analytics Layer",
     description="Python ETL + Analytics microservice for Newsconseen",
@@ -20,7 +30,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # -------------------------------------------------
 # Health check
@@ -40,6 +49,7 @@ def get_task_summary():
         summary = tasks.transform_tasks(df)
         return summary.to_dict(orient="records")
     except Exception as e:
+        logger.exception("Error in GET /task-summary")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -51,6 +61,7 @@ def load_task_summary():
         result = load_dataframe(summary, "task_summary")
         return result
     except Exception as e:
+        logger.exception("Error in POST /load/task-summary")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -64,6 +75,7 @@ def get_transaction_summary():
         summary = transactions.transform_transactions(df)
         return summary.to_dict(orient="records")
     except Exception as e:
+        logger.exception("Error in GET /transaction-summary")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -75,6 +87,7 @@ def load_transaction_summary():
         result = load_dataframe(summary, "transaction_summary")
         return result
     except Exception as e:
+        logger.exception("Error in POST /load/transaction-summary")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -88,6 +101,7 @@ def get_service_summary():
         summary = services.transform_services(df)
         return summary.to_dict(orient="records")
     except Exception as e:
+        logger.exception("Error in GET /service-summary")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -99,6 +113,7 @@ def load_service_summary():
         result = load_dataframe(summary, "service_summary")
         return result
     except Exception as e:
+        logger.exception("Error in POST /load/service-summary")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -112,6 +127,7 @@ def get_enterprise_summary():
         summary = enterprises.transform_enterprises(df)
         return summary.to_dict(orient="records")
     except Exception as e:
+        logger.exception("Error in GET /enterprise-summary")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -123,6 +139,7 @@ def load_enterprise_summary():
         result = load_dataframe(summary, "enterprise_summary")
         return result
     except Exception as e:
+        logger.exception("Error in POST /load/enterprise-summary")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -136,6 +153,7 @@ def get_people_summary():
         summary = people.transform_people(df)
         return summary.to_dict(orient="records")
     except Exception as e:
+        logger.exception("Error in GET /people-summary")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -147,4 +165,5 @@ def load_people_summary():
         result = load_dataframe(summary, "people_summary")
         return result
     except Exception as e:
+        logger.exception("Error in POST /load/people-summary")
         raise HTTPException(status_code=500, detail=str(e))

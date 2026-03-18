@@ -12,7 +12,7 @@ services:
     depends_on:
       - postgres
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/newsconseen
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/newsconseen"
 
   postgres:
     image: postgres:15
@@ -33,7 +33,7 @@ services:
       - postgres
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen"
       AIRFLOW__WEBSERVER__RBAC: "True"
     ports:
       - "8080:8080"
@@ -49,7 +49,7 @@ services:
       - airflow-webserver
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen"
     command: scheduler
     volumes:
       - ./dags:/opt/airflow/dags

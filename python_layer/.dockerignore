@@ -4,3 +4,7 @@ __pycache__/
 .env.*
 .git
 .gitignore
+logs/scheduler/
+logs/webserver/
+logs/*
+
