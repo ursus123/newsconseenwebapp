@@ -115,6 +115,12 @@ export default function Products() {
         initialData={editing}
       />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name} />
+      <ProductImportDialog
+        open={importOpen}
+        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["products"] }); }}
+        onImport={handleImportRow}
+        currentUser={currentUser}
+      />
     </div>
   );
 }
