@@ -45,8 +45,17 @@ const columns = [
   )},
 ];
 
+const ENT_PREVIEW_COLS = [
+  { label: "Enterprise Name", render: (r) => r.enterprise_name || <span className="text-rose-500">MISSING</span> },
+  { label: "Type", render: (r) => r.enterprise_type || "—" },
+  { label: "City", render: (r) => r.city || "—" },
+  { label: "Email", render: (r) => r.email || "—" },
+  { label: "Status", render: (r) => r.status || "active" },
+];
+
 export default function Enterprises() {
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
