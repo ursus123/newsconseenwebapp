@@ -33,8 +33,17 @@ const columns = [
   { key: "status", label: "Status", render: (val) => <Badge className={statusColor(val)}>{val || "active"}</Badge> },
 ];
 
+const ADDR_PREVIEW_COLS = [
+  { label: "Address Line 1", render: (r) => r.address_line1 || <span className="text-rose-500">MISSING</span> },
+  { label: "City", render: (r) => r.city || <span className="text-rose-500">MISSING</span> },
+  { label: "Region", render: (r) => r.state_region || "—" },
+  { label: "Country", render: (r) => r.country || <span className="text-rose-500">MISSING</span> },
+  { label: "Label", render: (r) => r.label || "—" },
+];
+
 export default function Addresses() {
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
