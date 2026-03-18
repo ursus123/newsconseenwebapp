@@ -1,6 +1,8 @@
 import { base44 } from "@/api/base44Client";
 import { UploadedDataStore } from "./UploadedDataStore";
 
+const RAILWAY_BASE = "https://newsconseenwebapp-production.up.railway.app";
+
 export const MASTER_TABLES = {
   enterprises:        { entity: "Enterprise",        label: "Enterprises" },
   people:             { entity: "Person",             label: "People" },
@@ -16,6 +18,171 @@ export const MASTER_TABLES = {
 };
 
 export const PROTECTED_TABLES = new Set(["enterprises", "people", "products", "services", "addresses"]);
+
+// ── Analytics virtual tables ───────────────────────────────────────────────
+export const ANALYTICS_TABLES = {
+  analytics_enterprises: {
+    endpoint: "/enterprise-summary",
+    columns: [
+      { col: "status", type: "ENUM" },
+      { col: "enterprise_type", type: "ENUM" },
+      { col: "enterprise_count", type: "INT" },
+    ],
+  },
+  analytics_tasks: {
+    endpoint: "/task-summary",
+    columns: [
+      { col: "task_type", type: "ENUM" },
+      { col: "status", type: "ENUM" },
+      { col: "total_tasks", type: "INT" },
+      { col: "completed_tasks", type: "INT" },
+    ],
+  },
+  analytics_transactions: {
+    endpoint: "/transaction-summary",
+    columns: [
+      { col: "transaction_type", type: "ENUM" },
+      { col: "status", type: "ENUM" },
+      { col: "total_transactions", type: "INT" },
+      { col: "total_amount", type: "FLOAT" },
+      { col: "avg_amount", type: "FLOAT" },
+    ],
+  },
+  analytics_people: {
+    endpoint: "/people-summary",
+    columns: [
+      { col: "person_type", type: "ENUM" },
+      { col: "status", type: "ENUM" },
+      { col: "people_count", type: "INT" },
+    ],
+  },
+  analytics_services: {
+    endpoint: "/service-summary",
+    columns: [
+      { col: "service_type", type: "ENUM" },
+      { col: "status", type: "ENUM" },
+      { col: "category", type: "ENUM" },
+      { col: "service_count", type: "INT" },
+    ],
+  },
+  analytics_products: {
+    endpoint: "/product-summary",
+    columns: [
+      { col: "item_type", type: "ENUM" },
+      { col: "status", type: "ENUM" },
+      { col: "total_products", type: "INT" },
+      { col: "total_stock", type: "INT" },
+      { col: "avg_price", type: "FLOAT" },
+    ],
+  },
+};
+
+// ── External API virtual tables ────────────────────────────────────────────
+export const EXTERNAL_TABLES = {
+  medications_api: {
+    label: "Medication Search",
+    columns: [
+      { col: "rxcui", type: "VARCHAR" },
+      { col: "name", type: "VARCHAR" },
+      { col: "synonym", type: "VARCHAR" },
+      { col: "tty_label", type: "VARCHAR" },
+      { col: "is_generic", type: "VARCHAR" },
+      { col: "is_branded", type: "VARCHAR" },
+    ],
+  },
+  medications_recalls: {
+    label: "Medication Recalls",
+    columns: [
+      { col: "product_description", type: "VARCHAR" },
+      { col: "reason_for_recall", type: "VARCHAR" },
+      { col: "status", type: "VARCHAR" },
+      { col: "recall_initiation_date", type: "DATE" },
+      { col: "recalling_firm", type: "VARCHAR" },
+      { col: "is_active", type: "VARCHAR" },
+    ],
+  },
+};
+
+// In-memory analytics cache
+let analyticsCache = {};
+
+export async function fetchAllAnalytics() {
+  const results = {};
+  await Promise.all(
+    Object.entries(ANALYTICS_TABLES).map(async ([key, cfg]) => {
+      try {
+        const res = await fetch(`${RAILWAY_BASE}${cfg.endpoint}`);
+        if (res.ok) {
+          const data = await res.json();
+          results[key] = Array.isArray(data) ? data : (data.data || data.results || []);
+        } else {
+          results[key] = [];
+        }
+      } catch {
+        results[key] = [];
+      }
+    })
+  );
+  analyticsCache = results;
+  return results;
+}
+
+async function fetchAnalyticsTable(name) {
+  if (analyticsCache[name]) return analyticsCache[name];
+  const cfg = ANALYTICS_TABLES[name];
+  if (!cfg) return [];
+  try {
+    const res = await fetch(`${RAILWAY_BASE}${cfg.endpoint}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const rows = Array.isArray(data) ? data : (data.data || data.results || []);
+    analyticsCache[name] = rows;
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+async function fetchMedicationsAPI(sql) {
+  const nameEqMatch = sql.match(/medications_api\s+WHERE\s+name\s*=\s*'([^']+)'/i);
+  const nameLikeMatch = sql.match(/medications_api\s+WHERE\s+name\s+LIKE\s+'%([^%]+)%'/i);
+  const recallMatch = sql.match(/medications_recalls\s+WHERE\s+name\s*=\s*'([^']+)'/i);
+
+  if (recallMatch) {
+    const q = recallMatch[1];
+    try {
+      const res = await fetch(`${RAILWAY_BASE}/medications/recalls?name=${encodeURIComponent(q)}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : (data.results || data.data || []);
+    } catch { return []; }
+  }
+  if (nameEqMatch) {
+    const q = nameEqMatch[1];
+    try {
+      const res = await fetch(`${RAILWAY_BASE}/medications/search?q=${encodeURIComponent(q)}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : (data.results || data.data || []);
+    } catch { return []; }
+  }
+  if (nameLikeMatch) {
+    const q = nameLikeMatch[1];
+    try {
+      const res = await fetch(`${RAILWAY_BASE}/medications/approximate?q=${encodeURIComponent(q)}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : (data.results || data.data || []);
+    } catch { return []; }
+  }
+  // SELECT * with no filter
+  try {
+    const res = await fetch(`${RAILWAY_BASE}/medications/search?q=a`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : (data.results || data.data || []);
+  } catch { return []; }
+}
 
 export const MASTER_SCHEMA = {
   enterprises: [
@@ -37,7 +204,9 @@ export const MASTER_SCHEMA = {
     { col: "sku", type: "VARCHAR" }, { col: "status", type: "ENUM" },
     { col: "item_type", type: "ENUM" }, { col: "stock_quantity", type: "INT" },
     { col: "unit_price", type: "FLOAT" }, { col: "cost_price", type: "FLOAT" },
-    { col: "category", type: "ENUM" }, { col: "created_date", type: "DATETIME" },
+    { col: "min_stock_level", type: "INT" }, { col: "expiry_date", type: "DATE" },
+    { col: "regulatory_status", type: "ENUM" }, { col: "category", type: "ENUM" },
+    { col: "created_date", type: "DATETIME" },
   ],
   services: [
     { col: "id", type: "VARCHAR" }, { col: "name", type: "VARCHAR" },
@@ -54,21 +223,24 @@ export const MASTER_SCHEMA = {
   relationships: [
     { col: "id", type: "VARCHAR" }, { col: "relationship_type", type: "ENUM" },
     { col: "person_name", type: "VARCHAR" }, { col: "enterprise_name", type: "VARCHAR" },
-    { col: "status", type: "ENUM" }, { col: "start_date", type: "DATE" },
-    { col: "created_date", type: "DATETIME" },
+    { col: "item_name", type: "VARCHAR" }, { col: "service_name", type: "VARCHAR" },
+    { col: "role", type: "VARCHAR" }, { col: "status", type: "ENUM" },
+    { col: "start_date", type: "DATE" }, { col: "created_date", type: "DATETIME" },
   ],
   tasks: [
     { col: "id", type: "VARCHAR" }, { col: "title", type: "VARCHAR" },
     { col: "task_type", type: "ENUM" }, { col: "status", type: "ENUM" },
     { col: "priority", type: "ENUM" }, { col: "assigned_to_email", type: "VARCHAR" },
-    { col: "scheduled_date", type: "DATE" }, { col: "due_date", type: "DATE" },
-    { col: "created_date", type: "DATETIME" },
+    { col: "assigned_to_name", type: "VARCHAR" }, { col: "enterprise", type: "VARCHAR" },
+    { col: "outcome", type: "ENUM" }, { col: "scheduled_date", type: "DATE" },
+    { col: "due_date", type: "DATE" }, { col: "created_date", type: "DATETIME" },
   ],
   transactions: [
     { col: "id", type: "VARCHAR" }, { col: "transaction_type", type: "ENUM" },
     { col: "status", type: "ENUM" }, { col: "date", type: "DATE" },
     { col: "amount", type: "FLOAT" }, { col: "payment_status", type: "ENUM" },
     { col: "primary_person", type: "VARCHAR" }, { col: "enterprise", type: "VARCHAR" },
+    { col: "description", type: "VARCHAR" }, { col: "due_date", type: "DATE" },
     { col: "created_date", type: "DATETIME" },
   ],
   medication_profiles: [
@@ -92,18 +264,86 @@ export const MASTER_SCHEMA = {
   ],
 };
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function evalCaseExpr(expr, row) {
+  // CASE WHEN condition THEN value ... ELSE default END
+  const whenMatches = [...expr.matchAll(/WHEN\s+(.+?)\s+THEN\s+(.+?)(?=\s+WHEN|\s+ELSE|\s+END)/gi)];
+  const elseMatch = expr.match(/ELSE\s+(.+?)\s+END/i);
+  for (const [, cond, val] of whenMatches) {
+    if (evalCondition(cond.trim(), row)) {
+      return evalValue(val.trim(), row);
+    }
+  }
+  return elseMatch ? evalValue(elseMatch[1].trim(), row) : null;
+}
+
+function evalCondition(cond, row) {
+  const m = cond.match(/^(\w+)\s*(=|!=|<>|<=|>=|<|>)\s*'?([^']*)'?$/i);
+  if (!m) return false;
+  const [, field, op, val] = m;
+  const rowVal = String(row[field] ?? "").toLowerCase();
+  const cmpVal = val.toLowerCase();
+  const numRow = parseFloat(row[field]), numVal = parseFloat(val);
+  switch (op) {
+    case "=": return rowVal === cmpVal;
+    case "!=": case "<>": return rowVal !== cmpVal;
+    case "<": return !isNaN(numRow) && numRow < numVal;
+    case ">": return !isNaN(numRow) && numRow > numVal;
+    case "<=": return !isNaN(numRow) && numRow <= numVal;
+    case ">=": return !isNaN(numRow) && numRow >= numVal;
+    default: return false;
+  }
+}
+
+function evalValue(val, row) {
+  if (/^-?\d+(\.\d+)?$/.test(val)) return parseFloat(val);
+  if (val.startsWith("'") && val.endsWith("'")) return val.slice(1, -1);
+  return row[val] ?? null;
+}
+
 function applyWhere(rows, sql) {
-  const whereMatch = sql.match(/WHERE\s+(.+)$/i);
+  const whereMatch = sql.match(/WHERE\s+(.+?)(?:\s+GROUP\s+BY|\s+ORDER\s+BY|\s+LIMIT\s+|$)/i);
   if (!whereMatch) return rows;
   const conditions = whereMatch[1].split(/\s+AND\s+/i);
   return rows.filter((row) =>
     conditions.every((cond) => {
-      const m = cond.trim().match(/^(\w+)\s*(=|!=|<>|<=|>=|<|>|LIKE)\s*'?([^']*)'?$/i);
+      const trimmed = cond.trim();
+      // Handle IN subquery check: id NOT IN (SELECT ... FROM ...)
+      const notInMatch = trimmed.match(/^(\w+)\s+NOT\s+IN\s*\((.+)\)$/i);
+      if (notInMatch) {
+        // Simple: treat the inner as a value list if it's not a SELECT
+        const inner = notInMatch[2].trim();
+        if (!inner.toUpperCase().startsWith("SELECT")) {
+          const vals = inner.split(",").map((v) => v.trim().replace(/^'|'$/g, "").toLowerCase());
+          return !vals.includes(String(row[notInMatch[1]] ?? "").toLowerCase());
+        }
+        return true; // subquery in filter — skip for now (handled at caller level)
+      }
+      const inMatch = trimmed.match(/^(\w+)\s+IN\s*\((.+)\)$/i);
+      if (inMatch) {
+        const inner = inMatch[2].trim();
+        if (!inner.toUpperCase().startsWith("SELECT")) {
+          const vals = inner.split(",").map((v) => v.trim().replace(/^'|'$/g, "").toLowerCase());
+          return vals.includes(String(row[inMatch[1]] ?? "").toLowerCase());
+        }
+        return true;
+      }
+      // IS NULL / IS NOT NULL
+      const isNullMatch = trimmed.match(/^(\w+)\s+IS\s+(NOT\s+)?NULL$/i);
+      if (isNullMatch) {
+        const v = row[isNullMatch[1]];
+        const isNull = v === null || v === undefined || v === "";
+        return isNullMatch[2] ? !isNull : isNull;
+      }
+      const m = trimmed.match(/^(\w+(?:\.\w+)?)\s*(=|!=|<>|<=|>=|<|>|LIKE|NOT\s+LIKE)\s*'?([^']*)'?$/i);
       if (!m) return true;
-      const [, field, op, val] = m;
+      let [, field, op, val] = m;
+      // Support table.column notation
+      if (field.includes(".")) field = field.split(".")[1];
       const rowVal = row[field];
       const numVal = parseFloat(val), rowNum = parseFloat(rowVal);
-      switch (op.toUpperCase()) {
+      switch (op.toUpperCase().replace(/\s+/g, " ")) {
         case "=":    return String(rowVal ?? "").toLowerCase() === val.toLowerCase();
         case "!=": case "<>": return String(rowVal ?? "").toLowerCase() !== val.toLowerCase();
         case "<":   return !isNaN(rowNum) && rowNum < numVal;
@@ -111,110 +351,331 @@ function applyWhere(rows, sql) {
         case "<=":  return !isNaN(rowNum) && rowNum <= numVal;
         case ">=":  return !isNaN(rowNum) && rowNum >= numVal;
         case "LIKE": return String(rowVal ?? "").toLowerCase().includes(val.replace(/%/g, "").toLowerCase());
+        case "NOT LIKE": return !String(rowVal ?? "").toLowerCase().includes(val.replace(/%/g, "").toLowerCase());
         default:    return true;
       }
     })
   );
 }
 
+// Evaluate a select expression (field, aggregate, CASE, arithmetic) on a row
+function evalExpr(expr, row) {
+  const e = expr.trim();
+  if (e === "*") return null;
+  // CASE expression
+  if (/^CASE\s+WHEN/i.test(e)) return evalCaseExpr(e, row);
+  // String literal
+  if (e.startsWith("'") && e.endsWith("'")) return e.slice(1, -1);
+  // Numeric literal
+  if (/^-?\d+(\.\d+)?$/.test(e)) return parseFloat(e);
+  // simple field (possibly table.field)
+  if (/^\w+(\.\w+)?$/.test(e)) {
+    if (e.includes(".")) {
+      const parts = e.split(".");
+      return row[parts[1]] ?? row[e] ?? null;
+    }
+    return row[e] !== undefined ? row[e] : null;
+  }
+  // arithmetic: field op number
+  const arithMatch = e.match(/^(\w+(?:\.\w+)?)\s*([\+\-\*\/])\s*(\w+(?:\.\w+)?)$/);
+  if (arithMatch) {
+    const [, a, op, b] = arithMatch;
+    const av = parseFloat(a.includes(".") ? row[a.split(".")[1]] : row[a]) || 0;
+    const bv = parseFloat(b.includes(".") ? row[b.split(".")[1]] : (row[b] !== undefined ? row[b] : b)) || 0;
+    if (op === "+") return av + bv;
+    if (op === "-") return av - bv;
+    if (op === "*") return av * bv;
+    if (op === "/") return bv !== 0 ? av / bv : null;
+  }
+  // fallback: treat as column name
+  return row[e] !== undefined ? row[e] : null;
+}
+
+// Apply GROUP BY + aggregates
+function applyGroupBy(rows, colDefs, groupByStr) {
+  const groupKeys = groupByStr.split(",").map((g) => g.trim().replace(/^\w+\./, ""));
+  const groups = {};
+  rows.forEach((row) => {
+    const key = groupKeys.map((k) => String(row[k] ?? "")).join("|__|");
+    if (!groups[key]) groups[key] = { rows: [], repr: row };
+    groups[key].rows.push(row);
+  });
+
+  return Object.values(groups).map(({ rows: gRows, repr }) => {
+    const result = {};
+    colDefs.forEach(({ expr, alias }) => {
+      const e = expr.trim();
+      const aggMatch = e.match(/^(COUNT|SUM|AVG|MAX|MIN)\s*\(\s*(DISTINCT\s+)?(.+?)\s*\)/i);
+      if (aggMatch) {
+        const [, fn, , col] = aggMatch;
+        const vals = gRows.map((r) => col === "*" ? 1 : r[col.includes(".") ? col.split(".")[1] : col]);
+        switch (fn.toUpperCase()) {
+          case "COUNT": result[alias] = col === "*" ? gRows.length : vals.filter((v) => v != null && v !== "").length; break;
+          case "SUM":   result[alias] = vals.reduce((acc, v) => acc + (parseFloat(v) || 0), 0); break;
+          case "AVG":   result[alias] = vals.length ? vals.reduce((acc, v) => acc + (parseFloat(v) || 0), 0) / vals.length : 0; break;
+          case "MAX":   result[alias] = Math.max(...vals.map((v) => parseFloat(v) || 0)); break;
+          case "MIN":   result[alias] = Math.min(...vals.map((v) => parseFloat(v) || 0)); break;
+          default: result[alias] = null;
+        }
+      } else if (/^CASE\s+WHEN/i.test(e)) {
+        // CASE in GROUP BY context: aggregate after evaluation
+        const sumCase = expr.trim().match(/^SUM\s*\(\s*(CASE.+?END)\s*\)$/i);
+        if (sumCase) {
+          result[alias] = gRows.reduce((acc, r) => acc + (parseFloat(evalCaseExpr(sumCase[1], r)) || 0), 0);
+        } else {
+          result[alias] = evalCaseExpr(e, repr);
+        }
+      } else {
+        // Plain field or GROUP BY key
+        result[alias] = repr[e.includes(".") ? e.split(".")[1] : e] !== undefined
+          ? repr[e.includes(".") ? e.split(".")[1] : e]
+          : evalExpr(e, repr);
+      }
+    });
+    return result;
+  });
+}
+
+// Parse column definitions from SELECT clause (handles nested parens like CASE WHEN ... END)
+function parseColDefs(colStr) {
+  const defs = [];
+  let depth = 0, current = "", i = 0;
+  while (i < colStr.length) {
+    const ch = colStr[i];
+    if (ch === "(") { depth++; current += ch; }
+    else if (ch === ")") { depth--; current += ch; }
+    else if (ch === "," && depth === 0) {
+      defs.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+    i++;
+  }
+  if (current.trim()) defs.push(current.trim());
+
+  return defs.map((seg) => {
+    // Handle: SUM(CASE WHEN ... END) AS alias
+    const asMatch = seg.match(/^(.+)\s+AS\s+(\w+)$/i);
+    if (asMatch) return { expr: asMatch[1].trim(), alias: asMatch[2].trim() };
+    // plain field
+    return { expr: seg, alias: seg.includes(".") ? seg.split(".")[1] : seg };
+  });
+}
+
+// Load rows for a table name
+async function loadTable(name, uploadedTables) {
+  const lower = name.toLowerCase();
+  if (uploadedTables && Object.prototype.hasOwnProperty.call(uploadedTables, lower)) {
+    return uploadedTables[lower].rows.map((r) => ({ ...r }));
+  }
+  if (MASTER_TABLES[lower]) {
+    return base44.entities[MASTER_TABLES[lower].entity].list("-created_date", 2000);
+  }
+  if (ANALYTICS_TABLES[lower]) {
+    return fetchAnalyticsTable(lower);
+  }
+  return null;
+}
+
+// ── Main executeSQL ────────────────────────────────────────────────────────
 export async function executeSQL(sql, uploadedTables) {
   const s = sql.trim().replace(/\s+/g, " ");
   const upper = s.toUpperCase();
 
   if (upper.startsWith("SELECT")) {
-    // Extract table name (support optional alias: FROM table t)
-    const fromMatch = s.match(/FROM\s+(\w+)/i);
-    if (!fromMatch) throw new Error("Missing FROM clause.");
-    const tableName = fromMatch[1].toLowerCase();
-
-    // Extract ORDER BY before stripping for WHERE
-    const orderMatch = s.match(/ORDER\s+BY\s+(.+?)(?:\s+LIMIT\s+\d+)?$/i);
-    const orderBy = orderMatch ? orderMatch[1].trim() : null;
-
-    // Extract LIMIT
-    const limitMatch = s.match(/LIMIT\s+(\d+)/i);
-    const limitN = limitMatch ? parseInt(limitMatch[1], 10) : null;
-
-    let rows;
-    if (Object.prototype.hasOwnProperty.call(uploadedTables, tableName)) {
-      rows = uploadedTables[tableName].rows.map((r) => ({ ...r }));
-    } else if (MASTER_TABLES[tableName]) {
-      rows = await base44.entities[MASTER_TABLES[tableName].entity].list("-created_date", 2000);
-    } else {
-      throw new Error(`Unknown table "${tableName}".`);
+    // ── Handle external API virtual tables ────────────────────────────────
+    if (/medications_api|medications_recalls/i.test(s)) {
+      const rows = await fetchMedicationsAPI(s);
+      return { type: "select", rows, message: `${rows.length} row(s) returned.` };
     }
 
-    // Parse SELECT columns with AS alias support
-    // Strip ORDER BY / LIMIT from the SQL before matching cols
-    const sqlForCols = s.replace(/\s+ORDER\s+BY\s+.+$/i, "").replace(/\s+LIMIT\s+\d+/i, "");
+    // ── Extract clauses ───────────────────────────────────────────────────
+    // Strip trailing semicolon
+    const cleanSql = s.replace(/;$/, "");
+
+    // ORDER BY (last)
+    const orderMatch = cleanSql.match(/ORDER\s+BY\s+(.+?)(?:\s+LIMIT\s+\d+)?$/i);
+    const orderBy = orderMatch ? orderMatch[1].trim() : null;
+
+    // LIMIT
+    const limitMatch = cleanSql.match(/LIMIT\s+(\d+)/i);
+    const limitN = limitMatch ? parseInt(limitMatch[1], 10) : null;
+
+    // GROUP BY
+    const groupByMatch = cleanSql.match(/GROUP\s+BY\s+(.+?)(?:\s+ORDER\s+BY|\s+LIMIT|\s+HAVING|$)/i);
+    const groupByStr = groupByMatch ? groupByMatch[1].trim() : null;
+
+    // HAVING
+    const havingMatch = cleanSql.match(/HAVING\s+(.+?)(?:\s+ORDER\s+BY|\s+LIMIT|$)/i);
+    const havingStr = havingMatch ? havingMatch[1].trim() : null;
+
+    // FROM + optional alias + optional JOIN
+    const fromMatch = cleanSql.match(/FROM\s+(\w+)(?:\s+(?:AS\s+)?(\w+))?/i);
+    if (!fromMatch) throw new Error("Missing FROM clause.");
+    const mainTable = fromMatch[1].toLowerCase();
+    const mainAlias = fromMatch[2] ? fromMatch[2].toLowerCase() : mainTable;
+
+    // Detect JOINs
+    const joinMatches = [...cleanSql.matchAll(/(?:LEFT\s+|INNER\s+|RIGHT\s+)?JOIN\s+(\w+)(?:\s+(?:AS\s+)?(\w+))?\s+ON\s+(.+?)(?=\s+(?:LEFT\s+|INNER\s+|RIGHT\s+)?JOIN\s+|\s+WHERE\s+|\s+GROUP\s+BY\s+|\s+ORDER\s+BY\s+|\s+LIMIT\s+|$)/gi)];
+
+    // SELECT columns
+    const sqlForCols = cleanSql
+      .replace(/\s+ORDER\s+BY\s+.+$/i, "")
+      .replace(/\s+LIMIT\s+\d+/i, "")
+      .replace(/\s+GROUP\s+BY\s+.+$/i, "")
+      .replace(/\s+HAVING\s+.+$/i, "");
     const colsMatch = sqlForCols.match(/SELECT\s+(.+?)\s+FROM/i);
     const colStr = colsMatch ? colsMatch[1].trim() : "*";
 
-    // Always apply WHERE on raw rows first (original field names work)
-    rows = applyWhere(rows, s);
+    // ── Load main table ───────────────────────────────────────────────────
+    let rows = await loadTable(mainTable, uploadedTables);
+    if (rows === null) throw new Error(`Unknown table "${mainTable}".`);
 
-    if (colStr !== "*") {
-      // Parse each col segment: "field AS alias", or just "field"
-      const colDefs = colStr.split(",").map((c) => {
-        const asMatch = c.trim().match(/^(\S+)\s+AS\s+(\S+)$/i);
-        if (asMatch) return { field: asMatch[1].trim(), alias: asMatch[2].trim() };
-        return { field: c.trim(), alias: c.trim() };
+    // Tag with alias for JOIN disambiguation
+    if (joinMatches.length > 0) {
+      rows = rows.map((r) => {
+        const tagged = {};
+        Object.entries(r).forEach(([k, v]) => { tagged[`${mainAlias}.${k}`] = v; tagged[k] = v; });
+        return tagged;
+      });
+    }
+
+    // ── Process JOINs ─────────────────────────────────────────────────────
+    for (const jm of joinMatches) {
+      const [, joinTableName, joinAlias, onClause] = jm;
+      const jName = joinTableName.toLowerCase();
+      const jAlias = joinAlias ? joinAlias.toLowerCase() : jName;
+      let joinRows = await loadTable(jName, uploadedTables);
+      if (!joinRows) joinRows = [];
+
+      // Parse ON: left = right
+      const onMatch = onClause.trim().match(/(\w+(?:\.\w+)?)\s*=\s*(\w+(?:\.\w+)?)/i);
+      if (!onMatch) continue;
+      const [, leftKey, rightKey] = onMatch;
+      const lk = leftKey.includes(".") ? leftKey : `${mainAlias}.${leftKey}`;
+      const rk = rightKey.includes(".") ? rightKey : `${jAlias}.${rightKey}`;
+      const lField = lk.split(".")[1] || lk;
+      const rField = rk.split(".")[1] || rk;
+
+      // Build join map
+      const joinMap = {};
+      joinRows.forEach((jr) => {
+        const key = String(jr[rField] ?? "").toLowerCase();
+        if (!joinMap[key]) joinMap[key] = [];
+        joinMap[key].push(jr);
       });
 
-      // Handle simple aggregates: COUNT(*), SUM(field), AVG(field), MAX(field), MIN(field)
-      const hasAggregate = colDefs.some(({ field }) => /^(COUNT|SUM|AVG|MAX|MIN)\s*\(/i.test(field));
-      if (hasAggregate) {
+      const joined = [];
+      rows.forEach((mainRow) => {
+        const mainVal = String(mainRow[lField] ?? mainRow[lk] ?? "").toLowerCase();
+        const matches = joinMap[mainVal] || [];
+        if (matches.length > 0) {
+          matches.forEach((jr) => {
+            const merged = { ...mainRow };
+            Object.entries(jr).forEach(([k, v]) => {
+              merged[`${jAlias}.${k}`] = v;
+              if (!merged[k]) merged[k] = v;
+            });
+            joined.push(merged);
+          });
+        } else {
+          joined.push({ ...mainRow }); // LEFT JOIN behavior
+        }
+      });
+      rows = joined;
+    }
+
+    // ── WHERE ─────────────────────────────────────────────────────────────
+    rows = applyWhere(rows, cleanSql);
+
+    // ── Parse column defs & apply GROUP BY / aggregate ────────────────────
+    if (colStr === "*") {
+      // No grouping needed for SELECT *
+      if (groupByStr) rows = applyGroupBy(rows, parseColDefs("*"), groupByStr);
+    } else {
+      const colDefs = parseColDefs(colStr);
+      const hasAggregate = colDefs.some(({ expr }) => /^(COUNT|SUM|AVG|MAX|MIN)\s*\(/i.test(expr) || /^SUM\s*\(\s*CASE/i.test(expr));
+
+      if (hasAggregate && groupByStr) {
+        rows = applyGroupBy(rows, colDefs, groupByStr);
+      } else if (hasAggregate) {
+        // Global aggregates (no GROUP BY)
         const aggRow = {};
-        colDefs.forEach(({ field, alias }) => {
-          const aggMatch = field.match(/^(COUNT|SUM|AVG|MAX|MIN)\s*\(\s*\*?\s*(\w+)?\s*\)/i);
-          if (!aggMatch) { aggRow[alias] = null; return; }
-          const [, fn, col] = aggMatch;
-          switch (fn.toUpperCase()) {
-            case "COUNT": aggRow[alias] = rows.length; break;
-            case "SUM":   aggRow[alias] = rows.reduce((acc, r) => acc + (parseFloat(r[col]) || 0), 0); break;
-            case "AVG":   aggRow[alias] = rows.length ? rows.reduce((acc, r) => acc + (parseFloat(r[col]) || 0), 0) / rows.length : 0; break;
-            case "MAX":   aggRow[alias] = Math.max(...rows.map((r) => parseFloat(r[col]) || 0)); break;
-            case "MIN":   aggRow[alias] = Math.min(...rows.map((r) => parseFloat(r[col]) || 0)); break;
+        colDefs.forEach(({ expr, alias }) => {
+          const aggMatch = expr.trim().match(/^(COUNT|SUM|AVG|MAX|MIN)\s*\(\s*(DISTINCT\s+)?(.+?)\s*\)/i);
+          const caseSum = expr.trim().match(/^SUM\s*\(\s*(CASE.+?END)\s*\)$/i);
+          if (caseSum) {
+            aggRow[alias] = rows.reduce((acc, r) => acc + (parseFloat(evalCaseExpr(caseSum[1], r)) || 0), 0);
+          } else if (aggMatch) {
+            const [, fn, , col] = aggMatch;
+            const vals = rows.map((r) => col === "*" ? 1 : r[col.includes(".") ? col.split(".")[1] : col]);
+            switch (fn.toUpperCase()) {
+              case "COUNT": aggRow[alias] = col === "*" ? rows.length : vals.filter((v) => v != null && v !== "").length; break;
+              case "SUM":   aggRow[alias] = vals.reduce((acc, v) => acc + (parseFloat(v) || 0), 0); break;
+              case "AVG":   aggRow[alias] = vals.length ? vals.reduce((acc, v) => acc + (parseFloat(v) || 0), 0) / vals.length : 0; break;
+              case "MAX":   aggRow[alias] = Math.max(...vals.map((v) => parseFloat(v) || 0)); break;
+              case "MIN":   aggRow[alias] = Math.min(...vals.map((v) => parseFloat(v) || 0)); break;
+              default: aggRow[alias] = null;
+            }
+          } else {
+            aggRow[alias] = rows.length ? evalExpr(expr, rows[0]) : null;
           }
         });
-        return { type: "select", rows: [aggRow], message: `1 row(s) returned.` };
-      }
-
-      // Project columns with alias renaming
-      rows = rows.map((r) => {
-        const o = {};
-        colDefs.forEach(({ field, alias }) => {
-          o[alias] = r[field] !== undefined ? r[field] : (r[field.toLowerCase()] ?? null);
+        return { type: "select", rows: [aggRow], message: "1 row(s) returned." };
+      } else {
+        // Plain projection
+        rows = rows.map((r) => {
+          const out = {};
+          colDefs.forEach(({ expr, alias }) => {
+            const e = expr.trim();
+            if (/^CASE\s+WHEN/i.test(e)) {
+              out[alias] = evalCaseExpr(e, r);
+            } else {
+              out[alias] = evalExpr(e, r);
+            }
+          });
+          return out;
         });
-        return o;
-      });
+      }
     }
 
-    // ORDER BY
+    // ── HAVING ────────────────────────────────────────────────────────────
+    if (havingStr) {
+      rows = applyWhere(rows, `SELECT * FROM x WHERE ${havingStr}`);
+    }
+
+    // ── ORDER BY ──────────────────────────────────────────────────────────
     if (orderBy) {
-      const [obCol, obDir] = orderBy.split(/\s+/);
-      const desc = obDir && obDir.toUpperCase() === "DESC";
+      const parts = orderBy.split(",").map((p) => {
+        const [col, dir] = p.trim().split(/\s+/);
+        return { col: col.includes(".") ? col.split(".")[1] : col, desc: dir?.toUpperCase() === "DESC" };
+      });
       rows.sort((a, b) => {
-        const av = a[obCol], bv = b[obCol];
-        if (av == null) return 1; if (bv == null) return -1;
-        const n = parseFloat(av), m = parseFloat(bv);
-        const cmp = !isNaN(n) && !isNaN(m) ? n - m : String(av).localeCompare(String(bv));
-        return desc ? -cmp : cmp;
+        for (const { col, desc } of parts) {
+          const av = a[col], bv = b[col];
+          if (av == null && bv == null) continue;
+          if (av == null) return desc ? -1 : 1;
+          if (bv == null) return desc ? 1 : -1;
+          const n = parseFloat(av), m = parseFloat(bv);
+          const cmp = !isNaN(n) && !isNaN(m) ? n - m : String(av).localeCompare(String(bv));
+          if (cmp !== 0) return desc ? -cmp : cmp;
+        }
+        return 0;
       });
     }
 
+    // ── LIMIT ─────────────────────────────────────────────────────────────
     if (limitN !== null) rows = rows.slice(0, limitN);
 
     return { type: "select", rows, message: `${rows.length} row(s) returned.` };
   }
 
+  // ── INSERT … SELECT ───────────────────────────────────────────────────────
   if (upper.startsWith("INSERT") && upper.includes("SELECT")) {
-    // Support: INSERT INTO dest (col1, col2, ...) SELECT expr1 AS col1, expr2 AS col2 FROM src
-    // Also support without the column list: INSERT INTO dest SELECT ...
     const mWithCols = s.match(/INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
     const mNoCols   = s.match(/INSERT\s+INTO\s+(\w+)\s+SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
     if (!mWithCols && !mNoCols) throw new Error("Invalid INSERT...SELECT syntax.");
-
     let destTable, destCols, selectStr, srcTable, whereClause;
     if (mWithCols) {
       [, destTable, destCols, selectStr, srcTable, whereClause] = mWithCols;
@@ -223,57 +684,28 @@ export async function executeSQL(sql, uploadedTables) {
       [, destTable, selectStr, srcTable, whereClause] = mNoCols;
       destCols = null;
     }
-
     const dest = destTable.toLowerCase();
     const src  = srcTable.toLowerCase();
     if (!MASTER_TABLES[dest]) throw new Error(`INSERT destination "${dest}" must be a known master table.`);
-
-    // Resolve source rows (master table or uploaded file)
-    let srcRows;
-    if (MASTER_TABLES[src]) {
-      srcRows = await base44.entities[MASTER_TABLES[src].entity].list("-created_date", 2000);
-    } else if (uploadedTables[src]) {
-      srcRows = [...uploadedTables[src].rows];
-    } else {
-      throw new Error(`Source table "${src}" not found in master tables or uploaded files.`);
-    }
+    let srcRows = await loadTable(src, uploadedTables);
+    if (!srcRows) throw new Error(`Source table "${src}" not found.`);
     if (whereClause) srcRows = applyWhere(srcRows, `SELECT * FROM x WHERE ${whereClause}`);
-
-    // Parse SELECT expressions: each can be:
-    //   column_name AS alias
-    //   'string_literal' AS alias
-    //   numeric_literal AS alias
-    //   column_name  (no alias → use destCols[i] or col name)
     const exprDefs = selectStr.split(",").map((e, i) => {
       const t = e.trim();
-      // 'literal' AS alias  or  "literal" AS alias
-      const litStr = t.match(/^'([^']*)'\s+AS\s+(\w+)$/i) || t.match(/^"([^"]*)"\s+AS\s+(\w+)$/i);
+      const litStr = t.match(/^'([^']*)'\s+AS\s+(\w+)$/i);
       if (litStr) return { type: "literal", value: litStr[1], alias: litStr[2] };
-      // numeric AS alias
       const litNum = t.match(/^(-?[\d.]+)\s+AS\s+(\w+)$/i);
       if (litNum) return { type: "literal", value: parseFloat(litNum[1]), alias: litNum[2] };
-      // column AS alias
       const colAs = t.match(/^(\w+)\s+AS\s+(\w+)$/i);
       if (colAs) return { type: "column", field: colAs[1], alias: colAs[2] };
-      // plain column (no alias) — use destCols[i] if provided, else column name
       return { type: "column", field: t, alias: (destCols && destCols[i]) ? destCols[i] : t };
     });
-
     const entity = base44.entities[MASTER_TABLES[dest].entity];
     let inserted = 0;
     for (const row of srcRows) {
       const payload = {};
       exprDefs.forEach(({ type: exprType, field, value, alias }) => {
-        const destKey = destCols
-          ? alias  // alias matches the dest column list
-          : alias;
-        if (exprType === "literal") {
-          payload[destKey] = value;
-        } else {
-          // Try exact match, then lowercase
-          const v = row[field] !== undefined ? row[field] : row[field.toLowerCase()];
-          if (v !== undefined) payload[destKey] = v;
-        }
+        payload[alias] = exprType === "literal" ? value : (row[field] !== undefined ? row[field] : row[field?.toLowerCase()]);
       });
       await entity.create(payload);
       inserted++;
@@ -281,6 +713,7 @@ export async function executeSQL(sql, uploadedTables) {
     return { type: "mutation", rows: [], message: `✓ Inserted ${inserted} row(s) into ${dest}.` };
   }
 
+  // ── INSERT VALUES ─────────────────────────────────────────────────────────
   if (upper.startsWith("INSERT")) {
     const m = s.match(/INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i);
     if (!m) throw new Error("Invalid INSERT syntax.");
@@ -298,6 +731,7 @@ export async function executeSQL(sql, uploadedTables) {
     }
   }
 
+  // ── UPDATE ────────────────────────────────────────────────────────────────
   if (upper.startsWith("UPDATE")) {
     const m = s.match(/UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(.+)$/i);
     if (!m) throw new Error("Invalid UPDATE syntax.");
@@ -324,6 +758,7 @@ export async function executeSQL(sql, uploadedTables) {
     throw new Error(`Unknown table "${tbl}".`);
   }
 
+  // ── DELETE ────────────────────────────────────────────────────────────────
   if (upper.startsWith("DELETE")) {
     const m = s.match(/DELETE\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
     if (!m) throw new Error("Invalid DELETE syntax.");
@@ -355,7 +790,6 @@ export async function executeSQL(sql, uploadedTables) {
 }
 
 // ── Mutation detector ─────────────────────────────────────────────────────
-// Returns null for SELECT, or { type, tableName, cols } for write ops
 export function detectMutation(sql) {
   const s = sql.trim().replace(/\s+/g, " ");
   const upper = s.toUpperCase();
@@ -381,48 +815,58 @@ export function detectMutation(sql) {
 }
 
 // ── Column validation ─────────────────────────────────────────────────────
-// Returns array of error strings (empty = valid)
 export function validateMutation(sql, uploadedTables) {
   const mutation = detectMutation(sql);
   if (!mutation) return [];
   const { type, tableName, cols } = mutation;
   const errors = [];
-
-  // Check table exists
   const isKnownMaster = !!MASTER_TABLES[tableName];
   const isKnownUploaded = !!uploadedTables[tableName];
   if (!isKnownMaster && !isKnownUploaded && type !== "INSERT") {
-    errors.push(`Table "${tableName}" does not exist. Create it first with INSERT or upload a file.`);
+    errors.push(`Table "${tableName}" does not exist.`);
     return errors;
   }
-
-  // For INSERT into master, validate columns against schema
   if ((type === "INSERT" || type === "UPDATE") && isKnownMaster) {
     const knownCols = new Set((MASTER_SCHEMA[tableName] || []).map((f) => f.col));
-    // Add all entity fields (schema may not list all)
     cols.forEach((col) => {
       if (col && !knownCols.has(col) && knownCols.size > 0) {
-        errors.push(`Column "${col}" does not exist on table "${tableName}". Known columns: ${[...knownCols].join(", ")}.`);
+        errors.push(`Column "${col}" does not exist on table "${tableName}".`);
       }
     });
   }
-
-  // DELETE on protected tables
   if (type === "DELETE" && PROTECTED_TABLES.has(tableName)) {
-    errors.push(`DELETE is blocked on protected table "${tableName}" (master data). Use UPDATE status='archived' instead.`);
+    errors.push(`DELETE is blocked on protected table "${tableName}".`);
   }
-
   return errors;
 }
 
-export function exportCSV(rows) {
+// ── Export helpers ────────────────────────────────────────────────────────
+export function exportCSV(rows, filename) {
   if (!rows.length) return;
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const fname = filename || `newsconseen_query_${ts}.csv`;
   const keys = Object.keys(rows[0]);
   const csv = [keys.join(","), ...rows.map((r) => keys.map((k) => JSON.stringify(r[k] ?? "")).join(","))].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = "query_results.csv"; a.click();
+  const a = document.createElement("a"); a.href = url; a.download = fname; a.click();
   URL.revokeObjectURL(url);
+}
+
+export function exportJSON(rows) {
+  if (!rows.length) return;
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = `newsconseen_query_${ts}.json`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function copyToClipboard(rows) {
+  if (!rows.length) return;
+  const keys = Object.keys(rows[0]);
+  const tsv = [keys.join("\t"), ...rows.map((r) => keys.map((k) => String(r[k] ?? "")).join("\t"))].join("\n");
+  navigator.clipboard.writeText(tsv);
 }
 
 export function inferType(values) {
