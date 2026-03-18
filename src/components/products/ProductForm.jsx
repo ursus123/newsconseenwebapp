@@ -71,7 +71,8 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
     if (open) {
       setActiveTab("basic");
       setRecallWarning(false);
-      setMedicationSelected(false);
+      // If editing an existing medication, treat it as already selected
+      setMedicationSelected(!!(initialData?.item_type === "medication" && initialData?.name));
       setForm(initialData || {
         status: "active",
         unit: "piece",
