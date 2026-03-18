@@ -1,5 +1,6 @@
 import { base44 } from "@/api/base44Client";
 import { UploadedDataStore } from "./UploadedDataStore";
+import { fetchOpenDataTable, OPEN_DATA_TABLES } from "./openDataAPIs";
 
 const RAILWAY_BASE = "https://newsconseenwebapp-production.up.railway.app";
 
