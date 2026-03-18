@@ -1,14 +1,15 @@
+import sys
+
+# Make etl modules importable inside Airflow container
+sys.path.insert(0, '/opt/airflow/dags')
+
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime
-from python_layer.etl import tasks, transactions, services, enterprises, people, products
-from python_layer.etl import geospatial
-from python_layer.etl.load import load_dataframe
+from etl import tasks, transactions, services, enterprises, people, products
+from etl import geospatial
+from etl.load import load_dataframe
 
-
-# -------------------------------------------------
-# ETL callables
-# -------------------------------------------------
 
 def run_task_summary():
     df = tasks.extract_tasks()
@@ -52,10 +53,6 @@ def run_geospatial_summary():
     load_dataframe(summary, "geospatial_summary")
 
 
-# -------------------------------------------------
-# DAG
-# -------------------------------------------------
-
 with DAG(
     dag_id="newsconseen_etl_master",
     start_date=datetime(2024, 1, 1),
@@ -63,53 +60,12 @@ with DAG(
     catchup=False,
     tags=["newsconseen", "etl"],
 ):
+    t1 = PythonOperator(task_id="task_summary", python_callable=run_task_summary)
+    t2 = PythonOperator(task_id="transaction_summary", python_callable=run_transaction_summary)
+    t3 = PythonOperator(task_id="service_summary", python_callable=run_service_summary)
+    t4 = PythonOperator(task_id="enterprise_summary", python_callable=run_enterprise_summary)
+    t5 = PythonOperator(task_id="people_summary", python_callable=run_people_summary)
+    t6 = PythonOperator(task_id="product_summary", python_callable=run_product_summary)
+    t7 = PythonOperator(task_id="geospatial_summary", python_callable=run_geospatial_summary)
 
-    task_summary = PythonOperator(
-        task_id="task_summary",
-        python_callable=run_task_summary,
-    )
-
-    transaction_summary = PythonOperator(
-        task_id="transaction_summary",
-        python_callable=run_transaction_summary,
-    )
-
-    service_summary = PythonOperator(
-        task_id="service_summary",
-        python_callable=run_service_summary,
-    )
-
-    enterprise_summary = PythonOperator(
-        task_id="enterprise_summary",
-        python_callable=run_enterprise_summary,
-    )
-
-    people_summary = PythonOperator(
-        task_id="people_summary",
-        python_callable=run_people_summary,
-    )
-
-    product_summary = PythonOperator(
-        task_id="product_summary",
-        python_callable=run_product_summary,
-    )
-
-    geospatial_summary = PythonOperator(
-        task_id="geospatial_summary",
-        python_callable=run_geospatial_summary,
-    )
-
-    # -------------------------------------------------
-    # Pipeline order:
-    # - Independent entity summaries run first in parallel groups
-    # - enterprise_summary gates people, geospatial (depend on enterprise data)
-    # - product_summary is independent, runs alongside transactions
-    # -------------------------------------------------
-
-    task_summary >> transaction_summary
-
-    transaction_summary >> [service_summary, product_summary]
-
-    service_summary >> enterprise_summary
-
-    enterprise_summary >> [people_summary, geospatial_summary]
+    t1 >> t2 >> t3 >> t4 >> [t5, t6, t7]

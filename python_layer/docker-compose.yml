@@ -14,7 +14,7 @@ services:
     depends_on:
       - postgres
     environment:
-      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/newsconseen"
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/newsconseen
 
   postgres:
     image: postgres:15
@@ -35,13 +35,18 @@ services:
       - postgres
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen"
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen
       AIRFLOW__WEBSERVER__RBAC: "True"
+    env_file:
+      - .env
     ports:
       - "8080:8080"
     command: webserver
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./etl:/opt/airflow/dags/etl
+      - ./config.py:/opt/airflow/dags/config.py
+      - ./database.py:/opt/airflow/dags/database.py
       - ./logs:/opt/airflow/logs
 
   airflow-scheduler:
@@ -51,10 +56,15 @@ services:
       - airflow-webserver
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen"
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen
+    env_file:
+      - .env
     command: scheduler
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./etl:/opt/airflow/dags/etl
+      - ./config.py:/opt/airflow/dags/config.py
+      - ./database.py:/opt/airflow/dags/database.py
       - ./logs:/opt/airflow/logs
 
   superset:
