@@ -275,6 +275,42 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
           </div>
         );
 
+      case "classification":
+        return (
+          <div className="space-y-5">
+            <Field label="Item Type">
+              <Sel value={form.item_type} onChange={(v) => {
+                set("item_type", v);
+                if (v !== "medication") { setRecallWarning(false); setMedicationSelected(false); }
+              }} options={ITEM_TYPE_OPTIONS} />
+            </Field>
+            <Field label="Item Category">
+              <Sel value={form.category} onChange={(v) => set("category", v)} options={[
+                { value: "electronics", label: "Electronics" }, { value: "food_beverage", label: "Food & Beverage" },
+                { value: "clothing", label: "Clothing" }, { value: "office_supplies", label: "Office Supplies" },
+                { value: "raw_materials", label: "Raw Materials" }, { value: "tools_equipment", label: "Tools & Equipment" },
+                { value: "health_beauty", label: "Health & Beauty" }, { value: "household", label: "Household" },
+                { value: "vehicles", label: "Vehicles" }, { value: "equipment", label: "Equipment" },
+                { value: "other", label: "Other" },
+              ]} />
+            </Field>
+            <Field label="Item Class (select all that apply)">
+              <div className="flex flex-wrap gap-2 mt-1">
+                {ITEM_CLASSES.map((c) => {
+                  const active = (form.item_class || []).includes(c);
+                  return (
+                    <button key={c} type="button" onClick={() => toggleClass(c)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all capitalize
+                        ${active ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-emerald-400"}`}>
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+          </div>
+        );
+
       case "stock":
         return (
           <div className="space-y-4">
