@@ -12,7 +12,9 @@ export default function DataTable({ columns, data, onEdit, onDelete, searchField
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
 
-  const filtered = data.filter((row) => {
+  const safeData = data || [];
+
+  const filtered = safeData.filter((row) => {
     if (!search || !searchField) return true;
     const val = row[searchField];
     return val && val.toString().toLowerCase().includes(search.toLowerCase());
@@ -20,6 +22,108 @@ export default function DataTable({ columns, data, onEdit, onDelete, searchField
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const renderBody = () => {
+    if (isLoading) {
+      return (
+        <div className="divide-y divide-slate-50">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4 px-4 py-3 animate-pulse">
+              <div className="h-3 bg-slate-100 rounded w-1/4" />
+              <div className="h-3 bg-slate-100 rounded w-1/3" />
+              <div className="h-3 bg-slate-100 rounded w-1/5" />
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="flex flex-col items-center justify-center py-14 gap-3">
+          <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center">
+            <AlertTriangle className="w-5 h-5 text-rose-400" />
+          </div>
+          <p className="text-sm font-semibold text-slate-700">Failed to load data</p>
+          <p className="text-xs text-slate-400">Could not connect to the server.</p>
+          {onRetry && (
+            <Button size="sm" variant="outline" onClick={onRetry} className="rounded-xl gap-1.5 mt-1">
+              <RefreshCw className="w-3.5 h-3.5" /> Try Again
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50/50">
+              {columns.map((col) => (
+                <TableHead key={col.key} className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  {col.label}
+                </TableHead>
+              ))}
+              {(onEdit || onDelete) && <TableHead className="w-24" />}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <AnimatePresence>
+              {paginated.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={columns.length + 1} className="text-center py-12 text-slate-400">
+                    No records found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginated.map((row) => (
+                  <motion.tr
+                    key={row.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${onRowClick ? "cursor-pointer" : ""}`}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  >
+                    {columns.map((col) => (
+                      <TableCell key={col.key} className="text-sm text-slate-700">
+                        {col.render ? col.render(row[col.key], row) : (
+                          col.badge ? (
+                            <Badge variant="secondary" className={col.badgeColor?.(row[col.key]) || "bg-slate-100 text-slate-600"}>
+                              {(row[col.key] || "—").toString().replace(/_/g, " ")}
+                            </Badge>
+                          ) : (
+                            row[col.key] || "—"
+                          )
+                        )}
+                      </TableCell>
+                    ))}
+                    {(onEdit || onDelete) && (
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          {onEdit && (
+                            <Button variant="ghost" size="icon" onClick={() => onEdit(row)} className="h-8 w-8 text-slate-400 hover:text-emerald-600">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          {onDelete && (
+                            <Button variant="ghost" size="icon" onClick={() => onDelete(row)} className="h-8 w-8 text-slate-400 hover:text-rose-600">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
+                  </motion.tr>
+                ))
+              )}
+            </AnimatePresence>
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -36,99 +140,7 @@ export default function DataTable({ columns, data, onEdit, onDelete, searchField
       )}
 
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-        {isLoading && (
-          <div className="divide-y divide-slate-50">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-4 px-4 py-3 animate-pulse">
-                <div className="h-3 bg-slate-100 rounded w-1/4" />
-                <div className="h-3 bg-slate-100 rounded w-1/3" />
-                <div className="h-3 bg-slate-100 rounded w-1/5" />
-              </div>
-            ))}
-          </div>
-        )}
-        {!isLoading && error && (
-          <div className="flex flex-col items-center justify-center py-14 gap-3">
-            <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center">
-              <AlertTriangle className="w-5 h-5 text-rose-400" />
-            </div>
-            <p className="text-sm font-semibold text-slate-700">Failed to load data</p>
-            <p className="text-xs text-slate-400">Could not connect to the server.</p>
-            {onRetry && (
-              <Button size="sm" variant="outline" onClick={onRetry} className="rounded-xl gap-1.5 mt-1">
-                <RefreshCw className="w-3.5 h-3.5" /> Try Again
-              </Button>
-            )}
-          </div>
-        )}
-        {!isLoading && !error && (
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50/50">
-                {columns.map((col) => (
-                  <TableHead key={col.key} className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    {col.label}
-                  </TableHead>
-                ))}
-                {(onEdit || onDelete) && <TableHead className="w-24" />}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <AnimatePresence>
-                {paginated.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={columns.length + 1} className="text-center py-12 text-slate-400">
-                      No records found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginated.map((row) => (
-                    <motion.tr
-                      key={row.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${onRowClick ? "cursor-pointer" : ""}`}
-                      onClick={onRowClick ? () => onRowClick(row) : undefined}
-                    >
-                      {columns.map((col) => (
-                        <TableCell key={col.key} className="text-sm text-slate-700">
-                          {col.render ? col.render(row[col.key], row) : (
-                            col.badge ? (
-                              <Badge variant="secondary" className={col.badgeColor?.(row[col.key]) || "bg-slate-100 text-slate-600"}>
-                                {(row[col.key] || "—").toString().replace(/_/g, " ")}
-                              </Badge>
-                            ) : (
-                              row[col.key] || "—"
-                            )
-                          )}
-                        </TableCell>
-                      ))}
-                      {(onEdit || onDelete) && (
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-1">
-                            {onEdit && (
-                              <Button variant="ghost" size="icon" onClick={() => onEdit(row)} className="h-8 w-8 text-slate-400 hover:text-emerald-600">
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
-                            {onDelete && (
-                              <Button variant="ghost" size="icon" onClick={() => onDelete(row)} className="h-8 w-8 text-slate-400 hover:text-rose-600">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      )}
-                    </motion.tr>
-                  ))
-                )}
-              </AnimatePresence>
-            </TableBody>
-          </Table>
-        </div>
-        )}
+        {renderBody()}
       </div>
 
       {!isLoading && !error && totalPages > 1 && (
