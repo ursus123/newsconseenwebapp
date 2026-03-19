@@ -40,17 +40,20 @@ export default function ActivityLog({ log, onUndo }) {
   const exportXlsx = () => {
     const rows = log.map((e) => ({
       Time: format(e.time, "HH:mm:ss"),
+      Date: format(e.time, "yyyy-MM-dd"),
       Product: e.product?.name,
-      SKU: e.product?.sku || "",
-      Direction: e.dir.toUpperCase(),
-      Quantity: e.qty,
-      "Old Stock": e.oldQty,
-      "New Stock": e.newQty,
+      SKU: e.product?.sku || "—",
+      Direction: e.dir === "in" ? "Stock IN" : e.dir === "out" ? "Stock OUT" : "Check",
+      Quantity: e.dir === "check" ? 0 : e.qty,
+      "Stock Before": e.oldQty,
+      "Stock After": e.newQty,
+      "Unit Price": e.product?.unit_price || 0,
+      "Total Value": (e.qty || 0) * (e.product?.unit_price || 0),
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Session");
-    XLSX.writeFile(wb, `scan_session_${format(new Date(), "yyyy-MM-dd_HH-mm")}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Session Log");
+    XLSX.writeFile(wb, `scan_session_${format(new Date(), "yyyy-MM-dd_HHmm")}.xlsx`);
   };
 
   return (
