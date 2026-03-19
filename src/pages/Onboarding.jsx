@@ -23,6 +23,7 @@ const OPTIONAL_STEPS = [1, 2, 3, 4]; // 0-indexed
 
 export default function Onboarding() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [completing, setCompleting] = useState(false);
