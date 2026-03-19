@@ -7,7 +7,8 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
   ShieldCheck, Users, Settings, Save, AlertCircle, Eye,
-  Database, Link2, ClipboardList, ArrowLeftRight, LayoutDashboard
+  Database, Link2, ClipboardList, ArrowLeftRight, LayoutDashboard,
+  Wrench, RefreshCw, CheckCircle2, Loader2
 } from "lucide-react";
 import { ALL_ADMIN_PAGES } from "@/components/shared/usePermissions";
 import LayerCard from "@/components/permissions/LayerCard";
