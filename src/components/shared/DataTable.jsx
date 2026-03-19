@@ -36,6 +36,32 @@ export default function DataTable({ columns, data, onEdit, onDelete, searchField
       )}
 
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+        {isLoading && (
+          <div className="divide-y divide-slate-50">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 px-4 py-3 animate-pulse">
+                <div className="h-3 bg-slate-100 rounded w-1/4" />
+                <div className="h-3 bg-slate-100 rounded w-1/3" />
+                <div className="h-3 bg-slate-100 rounded w-1/5" />
+              </div>
+            ))}
+          </div>
+        )}
+        {!isLoading && error && (
+          <div className="flex flex-col items-center justify-center py-14 gap-3">
+            <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center">
+              <AlertTriangle className="w-5 h-5 text-rose-400" />
+            </div>
+            <p className="text-sm font-semibold text-slate-700">Failed to load data</p>
+            <p className="text-xs text-slate-400">Could not connect to the server.</p>
+            {onRetry && (
+              <Button size="sm" variant="outline" onClick={onRetry} className="rounded-xl gap-1.5 mt-1">
+                <RefreshCw className="w-3.5 h-3.5" /> Try Again
+              </Button>
+            )}
+          </div>
+        )}
+        {!isLoading && !error && (
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
