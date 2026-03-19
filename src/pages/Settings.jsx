@@ -164,6 +164,7 @@ export default function Settings() {
           {activeTab === "password"      && <PasswordSection />}
           {activeTab === "notifications" && <NotificationsSection user={user} />}
           {activeTab === "sessions"      && <SessionsSection />}
+          {activeTab === "branding"      && <BrandingSection user={user} enterprise={myEnterprise} />}
           {activeTab === "danger"        && <DangerSection user={user} />}
         </div>
       </div>
