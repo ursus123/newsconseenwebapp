@@ -4,8 +4,7 @@ import { format } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
-  ChevronLeft, Building2, Zap, Package, AlertTriangle,
-  Minus, Plus, Keyboard, X, Download, List, Camera
+  ChevronLeft, Building2, Zap, X, List, Camera
 } from "lucide-react";
 import ScannerViewfinder from "@/components/barcodescanner/ScannerViewfinder";
 import ProductCard from "@/components/barcodescanner/ProductCard";
