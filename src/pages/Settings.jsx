@@ -2,16 +2,12 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
-<parameter name="content">import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  User, Lock, Bell, Monitor, AlertTriangle, Settings as SettingsIcon,
-  Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X,
+  User, Lock, Bell, Monitor, AlertTriangle,
+  Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X, Settings as SettingsIcon,
 } from "lucide-react";
 
 function passwordStrength(pw) {
@@ -267,7 +263,7 @@ function PasswordSection() {
     setSaving(true);
     try {
       await base44.auth.updatePassword({ currentPassword: current, newPassword: next });
-      setBanner({ type: "success", msg: "Password updated successfully. You will be signed out of other devices." });
+      setBanner({ type: "success", msg: "Password updated successfully." });
       setCurrent(""); setNext(""); setConfirm("");
     } catch {
       setBanner({ type: "error", msg: "Current password is incorrect. Please try again." });
@@ -338,7 +334,7 @@ function NotificationsSection({ user }) {
           <ToggleRow label="Medication recall detected"    checked={prefs.med_recall}          onChange={(v) => set("med_recall", v)} />
           <ToggleRow label="Stock below minimum level"     checked={prefs.low_stock}           onChange={(v) => set("low_stock", v)} />
           <ToggleRow label="Transaction needs posting"     checked={prefs.transaction_posting} onChange={(v) => set("transaction_posting", v)} />
-          <ToggleRow label="License expiring in 30 days"   checked={prefs.license_expiry}     onChange={(v) => set("license_expiry", v)} />
+          <ToggleRow label="License expiring in 30 days"  checked={prefs.license_expiry}      onChange={(v) => set("license_expiry", v)} />
         </div>
       </div>
 
