@@ -13,9 +13,7 @@ def transform_services(df: pd.DataFrame) -> pd.DataFrame:
 
     summary = (
         df.groupby(["service_type", "status", "category"])
-        .agg(
-            service_count=("id", "count"),
-        )
+        .agg(service_count=("id", "count"))
         .reset_index()
     )
     return summary
