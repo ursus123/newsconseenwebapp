@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   User, Lock, Bell, Monitor, AlertTriangle,
-  Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X, Settings as SettingsIcon,
+  Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X, Settings as SettingsIcon, Palette,
 } from "lucide-react";
+import BrandingSection from "@/components/settings/BrandingSection";
 
 function passwordStrength(pw) {
   if (!pw) return null;
@@ -85,12 +86,13 @@ function PasswordField({ label, value, onChange, placeholder }) {
   );
 }
 
-const TABS = [
-  { id: "profile",       label: "Profile",       icon: User },
-  { id: "password",      label: "Password",      icon: Lock },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "sessions",      label: "Sessions",      icon: Monitor },
-  { id: "danger",        label: "Danger Zone",   icon: AlertTriangle },
+const ALL_TABS = [
+  { id: "profile",       label: "Profile",       icon: User,          adminOnly: false },
+  { id: "password",      label: "Password",      icon: Lock,          adminOnly: false },
+  { id: "notifications", label: "Notifications", icon: Bell,          adminOnly: false },
+  { id: "sessions",      label: "Sessions",      icon: Monitor,       adminOnly: false },
+  { id: "branding",      label: "Branding",      icon: Palette,       adminOnly: true  },
+  { id: "danger",        label: "Danger Zone",   icon: AlertTriangle, adminOnly: false },
 ];
 
 const DEFAULT_NOTIF = {
