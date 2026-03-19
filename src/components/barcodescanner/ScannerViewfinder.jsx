@@ -64,38 +64,9 @@ export default function ScannerViewfinder({ onScan, isProcessing }) {
 
   return (
     <div className="bg-slate-900 px-4 pt-4 pb-2">
-      {/* Viewfinder wrapper */}
-      <div className="relative mx-auto max-w-[480px] rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: "4/3" }}>
-        {/* html5-qrcode mounts here */}
-        <div id="qr-reader" className="w-full h-full [&>*]:border-0 [&_video]:w-full [&_video]:h-full [&_video]:object-cover" />
-
-        {/* Scanning overlay */}
-        <div className="absolute inset-0 pointer-events-none">
-          {/* Corner brackets */}
-          {[
-            "top-4 left-4 border-t-4 border-l-4 rounded-tl-lg",
-            "top-4 right-4 border-t-4 border-r-4 rounded-tr-lg",
-            "bottom-4 left-4 border-b-4 border-l-4 rounded-bl-lg",
-            "bottom-4 right-4 border-b-4 border-r-4 rounded-br-lg",
-          ].map((cls, i) => (
-            <div key={i} className={`absolute w-8 h-8 border-white/80 ${cls}`} />
-          ))}
-
-          {/* Scanning line */}
-          {status === "ready" && (
-            <div
-              className="absolute left-[10%] right-[10%] h-0.5 bg-red-500 shadow-[0_0_8px_2px_rgba(239,68,68,0.6)]"
-              style={{ animation: "scan 2s ease-in-out infinite", position: "absolute" }}
-            />
-          )}
-
-          {/* Detected flash */}
-          {status === "detected" && (
-            <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
-              <div className="text-4xl">✅</div>
-            </div>
-          )}
-        </div>
+      {/* Let html5-qrcode control its own layout — no clipping */}
+      <div className="mx-auto max-w-[480px] rounded-2xl overflow-hidden bg-black">
+        <div id="qr-reader" style={{ width: "100%" }} />
       </div>
 
       {/* Status message */}
