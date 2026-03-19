@@ -31,6 +31,7 @@ import { base44 } from "@/api/base44Client";
 import { usePermissions, DEFAULT_PAGES } from "@/components/shared/usePermissions";
 import TenantGuard from "@/components/shared/TenantGuard";
 import { useBranding } from "@/hooks/useBranding";
+import NetworkBanner from "@/components/shared/NetworkBanner";
 
 // All nav items
 const ALL_NAV_PHASES = [
