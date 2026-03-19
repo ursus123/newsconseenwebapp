@@ -3,12 +3,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const PAGE_SIZE = 10;
 
-export default function DataTable({ columns, data, onEdit, onDelete, searchField, onRowClick }) {
+export default function DataTable({ columns, data, onEdit, onDelete, searchField, onRowClick, isLoading, error, onRetry }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
 
