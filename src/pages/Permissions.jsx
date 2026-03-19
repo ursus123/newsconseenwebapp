@@ -198,9 +198,9 @@ function PermissionCard({ title, subtitle, icon: Icon, roleKey, perm, onSave, av
         </div>
         <div className="flex gap-2 flex-wrap">
           {[
-            { val: "own",  label: "Own only", desc: "Only their own records" },
-            { val: "team", label: "Team",      desc: "Their enterprise/team" },
-            { val: "all",  label: "All data",  desc: "Full system data" },
+            { val: "own",  label: "Own only",       desc: "Only their own records" },
+            { val: "team", label: "Team (Company)",  desc: "All records in their enterprise" },
+            ...(isSuper ? [{ val: "all", label: "All companies", desc: "Super admin use only" }] : []),
           ].map(({ val, label, desc }) => (
             <button
               key={val}
