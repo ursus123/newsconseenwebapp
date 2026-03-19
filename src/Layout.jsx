@@ -98,6 +98,22 @@ export default function Layout({ children, currentPageName }) {
     base44.auth.me().then(setCurrentUser).catch(() => {});
   }, []);
 
+  // Auto-assign admin to their enterprise if company_id is missing
+  useEffect(() => {
+    if (!currentUser) return;
+    if (currentUser.role === "super_admin") return;
+    if (currentUser.company_id || currentUser.role !== "admin") return;
+
+    base44.entities.Enterprise.filter({ created_by: currentUser.email })
+      .then(async (enterprises) => {
+        if (enterprises.length > 0) {
+          await base44.auth.updateMe({ company_id: enterprises[0].id });
+          window.location.reload();
+        }
+      })
+      .catch(() => {});
+  }, [currentUser?.id]);
+
   const branding = useBranding(currentUser);
 
   useEffect(() => {
