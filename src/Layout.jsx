@@ -27,7 +27,6 @@ import TrialBanner from "@/components/shared/TrialBanner";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { usePermissions, DEFAULT_PAGES } from "@/components/shared/usePermissions";
-import { useQuery } from "@tanstack/react-query";
 import TenantGuard from "@/components/shared/TenantGuard";
 
 // All nav items
