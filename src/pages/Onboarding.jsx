@@ -85,11 +85,19 @@ export default function Onboarding() {
         subscription_status: "trial",
         trial_ends_at: trialEndsAt,
       });
-      setCreatedEnterprise(enterprise);
+      
+      // Stamp enterprise's own id as company_id
+      await base44.entities.Enterprise.update(enterprise.id, {
+        company_id: enterprise.id
+      });
+      
+      // Update admin user with this company_id
       await base44.auth.updateMe({
-        company_id: enterprise.enterprise_name,
+        company_id: enterprise.id,
         full_name: workspaceData.full_name,
       });
+      
+      setCreatedEnterprise({ ...enterprise, company_id: enterprise.id });
       return true;
     } catch (e) {
       console.error(e);

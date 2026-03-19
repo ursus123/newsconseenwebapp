@@ -115,6 +115,24 @@ export default function Layout({ children, currentPageName }) {
       .catch(() => {});
   }, [currentUser?.id]);
 
+  // Auto-repair enterprise company_id if empty
+  useEffect(() => {
+    if (!currentUser) return;
+    if (currentUser.role === "super_admin") return;
+    if (!currentUser.company_id) return;
+
+    base44.entities.Enterprise.filter({ id: currentUser.company_id })
+      .then(async (results) => {
+        if (results.length > 0 && !results[0].company_id) {
+          await base44.entities.Enterprise.update(currentUser.company_id, {
+            company_id: currentUser.company_id
+          });
+          window.location.reload();
+        }
+      })
+      .catch(() => {});
+  }, [currentUser?.company_id]);
+
   const branding = useBranding(currentUser);
 
   useEffect(() => {

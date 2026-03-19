@@ -80,7 +80,29 @@ export default function Enterprises() {
 
   const withCompany = withScope;
 
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Enterprise.create(withCompany(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); setFormOpen(false); } });
+  const createMut = useMutation({
+    mutationFn: async (d) => {
+      const newEnterprise = await base44.entities.Enterprise.create(withCompany(d));
+      
+      // If company_id is empty, stamp enterprise's own id
+      if (!newEnterprise.company_id) {
+        await base44.entities.Enterprise.update(newEnterprise.id, {
+          company_id: newEnterprise.id
+        });
+        
+        // Also update current user's company_id if not set
+        const currentUserData = await base44.auth.me();
+        if (!currentUserData.company_id) {
+          await base44.auth.updateMe({ company_id: newEnterprise.id });
+        }
+        
+        return { ...newEnterprise, company_id: newEnterprise.id };
+      }
+      
+      return newEnterprise;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); setFormOpen(false); }
+  });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Enterprise.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); setFormOpen(false); setEditing(null); } });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Enterprise.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); setDeleting(null); } });
 
