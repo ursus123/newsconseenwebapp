@@ -93,6 +93,7 @@ const ALL_TABS = [
   { id: "notifications", label: "Notifications", icon: Bell,          adminOnly: false },
   { id: "sessions",      label: "Sessions",      icon: Monitor,       adminOnly: false },
   { id: "branding",      label: "Branding",      icon: Palette,       adminOnly: true  },
+  { id: "error_log",     label: "Error Log",     icon: Bug,           adminOnly: true  },
   { id: "danger",        label: "Danger Zone",   icon: AlertTriangle, adminOnly: false },
 ];
 
