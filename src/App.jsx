@@ -2,12 +2,13 @@ import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import EntityGraph from './pages/EntityGraph';
 import PdfToExcel from './pages/PdfToExcel';
 import Pipelines from './pages/Pipelines';
 import QueryBuilder from './pages/QueryBuilder';
+import Onboarding from './pages/Onboarding';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
