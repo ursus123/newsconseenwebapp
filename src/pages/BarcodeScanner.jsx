@@ -47,8 +47,10 @@ export default function BarcodeScanner() {
 
   const [activityLog, setActivityLog] = useState([]);
   const [bulkQueue, setBulkQueue] = useState([]);
+  const [lowStockFilter, setLowStockFilter] = useState("low"); // "low" | "zero"
 
   const barcodeInputRef = useRef(null);
+  const productCardRef = useRef(null);
   const [manualBarcode, setManualBarcode] = useState("");
 
   useEffect(() => {
@@ -58,8 +60,8 @@ export default function BarcodeScanner() {
   useEffect(() => {
     if (!user) return;
     Promise.all([
-      base44.entities.Product.filter({ status: "active" }, "name", 500),
-      base44.entities.Enterprise.filter({ status: "active" }),
+      base44.entities.Product.filter({ status: "active", company_id: user.company_id }, "name", 500),
+      base44.entities.Enterprise.filter({ status: "active", company_id: user.company_id }),
     ]).then(([prods, ents]) => {
       setProducts(prods);
       setEnterprises(ents);
