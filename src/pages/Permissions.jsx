@@ -123,7 +123,7 @@ const LAYERS = [
   },
 ];
 
-function PermissionCard({ title, subtitle, icon: Icon, roleKey, perm, onSave, availablePages, isSaving }) {
+function PermissionCard({ title, subtitle, icon: Icon, roleKey, perm, onSave, availablePages, isSaving, isSuperAdmin: isSuper }) {
   const defaults = DEFAULT_PERMS[roleKey];
   const [local, setLocal] = useState(null);
 
