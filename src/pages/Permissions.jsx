@@ -25,7 +25,7 @@ const USER_FORBIDDEN_PAGES = ["InviteUser", "Permissions", "UserManagement"];
 const DEFAULT_PERMS = {
   admin: {
     allowed_pages: ALL_ADMIN_PAGES,
-    data_scope: "all",
+    data_scope: "team",
     layer1_master_data:  { can_view: true, can_create: true,  can_edit: true,  can_archive: true },
     layer2_relationships:{ can_view: true, can_assign: true,  can_unassign: true },
     layer3_tasks:        { can_view: true, can_create: true,  can_assign: true,  can_update_status: true, can_complete: true },
