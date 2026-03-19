@@ -149,14 +149,15 @@ export default function People() {
       )}
 
       <PeopleForm
-        open={formOpen}
-        onClose={() => { setFormOpen(false); setEditing(null); }}
-        onSubmit={(d) => editing
-        ? base44.entities.Person.update(editing.id, d).then(() => { qc.invalidateQueries({ queryKey: ["people"] }); setFormOpen(false); setEditing(null); })
-        : base44.entities.Person.create(withCompany(d)).then((res) => { qc.invalidateQueries({ queryKey: ["people"] }); qc.invalidateQueries({ queryKey: ["addresses"] }); qc.invalidateQueries({ queryKey: ["relationships"] }); return res; })
-      }
-        initialData={editing}
-      />
+         open={formOpen}
+         onClose={() => { setFormOpen(false); setEditing(null); }}
+         onSubmit={(d) => editing
+         ? base44.entities.Person.update(editing.id, d).then(() => { qc.invalidateQueries({ queryKey: ["people"] }); setFormOpen(false); setEditing(null); })
+         : base44.entities.Person.create(withCompany(d)).then((res) => { qc.invalidateQueries({ queryKey: ["people"] }); qc.invalidateQueries({ queryKey: ["addresses"] }); qc.invalidateQueries({ queryKey: ["relationships"] }); return res; })
+       }
+         initialData={editing}
+         currentUser={currentUser}
+       />
       <DeleteDialog
         open={!!deleting}
         onClose={() => setDeleting(null)}
