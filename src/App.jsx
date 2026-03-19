@@ -20,9 +20,17 @@ const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 
-const LayoutWrapper = ({ children, currentPageName }) => Layout ?
-  <Layout currentPageName={currentPageName}>{children}</Layout>
-  : <>{children}</>;
+const LayoutWrapper = ({ children, currentPageName }) => Layout ? (
+  <Layout currentPageName={currentPageName}>
+    <ErrorBoundary pageName={currentPageName}>
+      {children}
+    </ErrorBoundary>
+  </Layout>
+) : (
+  <ErrorBoundary pageName={currentPageName}>
+    {children}
+  </ErrorBoundary>
+);
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, user } = useAuth();
