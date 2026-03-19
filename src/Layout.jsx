@@ -24,7 +24,6 @@ import {
   CreditCard,
   Settings,
   ChevronDown,
-  Wrench,
 } from "lucide-react";
 import TrialBanner from "@/components/shared/TrialBanner";
 import { useQuery } from "@tanstack/react-query";
