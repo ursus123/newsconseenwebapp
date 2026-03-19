@@ -161,7 +161,7 @@ export default function BarcodeScanner() {
     });
 
     const task = await base44.entities.Task.create({
-      task_type: "stock_counting_task",
+      task_type: "stock_counting",
       title: `${dir === "in" ? "Stock IN" : "Stock OUT"}: ${prod.name} x${qty}`,
       status: "completed",
       outcome: "completed",
