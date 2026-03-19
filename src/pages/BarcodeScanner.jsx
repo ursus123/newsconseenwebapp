@@ -124,6 +124,7 @@ export default function BarcodeScanner() {
 
     playBeep(false);
     if (navigator.vibrate) navigator.vibrate(50);
+    pushScanHistory(val);
 
     const found = products.find(
       (p) => p.sku === val || p.barcode === val || p.name?.toLowerCase() === val.toLowerCase()
