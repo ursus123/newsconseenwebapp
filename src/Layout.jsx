@@ -30,6 +30,7 @@ import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { usePermissions, DEFAULT_PAGES } from "@/components/shared/usePermissions";
 import TenantGuard from "@/components/shared/TenantGuard";
+import { useBranding } from "@/hooks/useBranding";
 
 // All nav items
 const ALL_NAV_PHASES = [
@@ -95,6 +96,15 @@ export default function Layout({ children, currentPageName }) {
   useEffect(() => {
     base44.auth.me().then(setCurrentUser).catch(() => {});
   }, []);
+
+  const branding = useBranding(currentUser);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--brand-primary",   branding.primaryColor);
+    root.style.setProperty("--brand-secondary", branding.secondaryColor);
+    root.style.setProperty("--brand-accent",    branding.accentColor);
+  }, [branding.primaryColor, branding.secondaryColor, branding.accentColor]);
 
   const { allowedPages } = usePermissions(currentUser);
 
