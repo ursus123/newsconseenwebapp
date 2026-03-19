@@ -66,6 +66,20 @@ export default function Enterprises() {
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
+  // One-time fix for BrightStar Care LLC
+  useEffect(() => {
+    const fixed = localStorage.getItem("bs_fix_done");
+    if (fixed) return;
+    
+    base44.entities.Enterprise.update(
+      "69bc8553af5d08936d75e94f",
+      { company_id: "69bc8553af5d08936d75e94f" }
+    ).then(() => {
+      localStorage.setItem("bs_fix_done", "true");
+      qc.invalidateQueries({ queryKey: ["enterprises"] });
+    }).catch(() => {});
+  }, []);
+
   const isSuperAdmin = currentUser?.role === "super_admin";
   const companyId = currentUser?.company_id;
   const perms = usePermissions(currentUser);
