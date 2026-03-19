@@ -131,6 +131,7 @@ export function usePermissions(user) {
     isUser: role === "user",
     companyId,
     isTenantScoped: true,
+    dataScope: myPerm?.data_scope ?? (role === "admin" ? "team" : "own"),
     ...flattenLayers(myPerm, roleDefaults),
   };
 }
