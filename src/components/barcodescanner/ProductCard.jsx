@@ -124,7 +124,7 @@ export default function ProductCard({ product, mode, modeConfig, quantity, onQua
         {/* Confirm button */}
         <button
           onClick={onConfirm}
-          disabled={isProcessing || recallBlocked || (isOutMode && quantity > stock)}
+          disabled={isProcessing || recallBlocked || showFlash}
           className={`w-full py-4 rounded-xl font-black text-base transition-all disabled:opacity-40 ${cfg.btn}`}
         >
           {isProcessing ? "Processing…" : `${cfg.emoji} Confirm ${cfg.label} (${quantity > 0 ? (mode === "in" ? "+" : mode === "out" ? "-" : "") : ""}${quantity})`}
