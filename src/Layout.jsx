@@ -96,6 +96,13 @@ export default function Layout({ children, currentPageName }) {
 
   const { allowedPages } = usePermissions(currentUser);
 
+  const { data: trialEnterprises = [] } = useQuery({
+    queryKey: ["trial_enterprise", currentUser?.company_id],
+    queryFn: () => base44.entities.Enterprise.filter({ enterprise_name: currentUser.company_id }),
+    enabled: !!currentUser?.company_id && currentUser?.role !== "super_admin",
+  });
+  const trialEnterprise = trialEnterprises.find((e) => e.enterprise_name === currentUser?.company_id) || trialEnterprises[0];
+
   // While user hasn't loaded yet, show nothing (avoid flash of empty sidebar)
   const userLoaded = currentUser !== null;
 
