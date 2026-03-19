@@ -9,6 +9,7 @@ export const ALL_ADMIN_PAGES = [
 ];
 
 export const ALL_APP_PAGES = ["Applications", "ClockInOut", "MedAdmin", "StaffSchedule"];
+// StaffSchedule is already included above
 
 export const DEFAULT_PAGES = {
   super_admin: null,
