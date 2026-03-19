@@ -161,7 +161,7 @@ export default function BarcodeScanner() {
     });
 
     const task = await base44.entities.Task.create({
-      task_type: "stock_counting",
+      task_type: "stock_counting_task",
       title: `${dir === "in" ? "Stock IN" : "Stock OUT"}: ${prod.name} x${qty}`,
       status: "completed",
       outcome: "completed",
@@ -269,12 +269,14 @@ export default function BarcodeScanner() {
 
       {/* Mobile tab bar */}
       <div className="lg:hidden flex bg-slate-900 border-b border-slate-800 shrink-0">
-        {[["scanner", Camera, "Scanner"], ["activity", List, "Activity"]].map(([tab, Icon, label]) => (
-          <button key={tab} onClick={() => setMobileTab(tab)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-bold transition-all ${mobileTab === tab ? "text-white border-b-2 border-indigo-500" : "text-slate-500"}`}>
-            <Icon className="w-4 h-4" /> {label}
-          </button>
-        ))}
+        <button onClick={() => setMobileTab("scanner")}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-bold transition-all ${mobileTab === "scanner" ? "text-white border-b-2 border-indigo-500" : "text-slate-500"}`}>
+          <Camera className="w-4 h-4" /> Scanner
+        </button>
+        <button onClick={() => setMobileTab("activity")}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-bold transition-all ${mobileTab === "activity" ? "text-white border-b-2 border-indigo-500" : "text-slate-500"}`}>
+          <List className="w-4 h-4" /> Activity
+        </button>
       </div>
 
       {/* Main layout */}
