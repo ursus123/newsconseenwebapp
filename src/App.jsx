@@ -80,6 +80,7 @@ const AuthenticatedApp = () => {
       <Route path="/QueryBuilder" element={<LayoutWrapper currentPageName="Query Builder"><QueryBuilder /></LayoutWrapper>} />
       <Route path="/PdfToExcel" element={<LayoutWrapper currentPageName="PDF to Excel"><PdfToExcel /></LayoutWrapper>} />
       <Route path="/Pipelines" element={<LayoutWrapper currentPageName="Pipelines"><Pipelines /></LayoutWrapper>} />
+      <Route path="/Billing" element={<LayoutWrapper currentPageName="Billing"><Billing /></LayoutWrapper>} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

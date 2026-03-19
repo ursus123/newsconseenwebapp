@@ -96,6 +96,7 @@ export const PAGES = {
     "Transactions": Transactions,
     "UserManagement": UserManagement,
     "Pipelines": Pipelines,
+    "Billing": Billing,
 }
 
 export const pagesConfig = {
