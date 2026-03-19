@@ -1,105 +1,83 @@
 import React from "react";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isToday, isSameMonth } from "date-fns";
-import { SHIFT_TYPES, parseShiftMeta } from "./shiftUtils";
+import { format, startOfMonth, endOfMonth, startOfWeek, eachDayOfInterval, isSameMonth } from "date-fns";
+import { parseShiftMeta, SHIFT_COLORS, getShiftTypeDef } from "./shiftUtils";
 
-const TYPE_DOTS = {
-  morning:   "bg-blue-400",
-  afternoon: "bg-amber-400",
-  night:     "bg-indigo-600",
-  full_day:  "bg-emerald-500",
-  half_am:   "bg-cyan-400",
-  half_pm:   "bg-teal-500",
-  on_call:   "bg-purple-400",
-  holiday:   "bg-pink-400",
-  sick:      "bg-red-400",
-};
-
-const MIN_STAFF = 2;
+const todayStr = format(new Date(), "yyyy-MM-dd");
 
 export default function MonthView({ baseDate, shifts, onDayClick }) {
   const monthStart = startOfMonth(baseDate);
   const monthEnd = endOfMonth(baseDate);
-  const calStart = startOfWeek(monthStart, { weekStartsOn: 1 });
-  const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
-  const days = eachDayOfInterval({ start: calStart, end: calEnd });
+  const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+  const days = eachDayOfInterval({ start: gridStart, end: endOfMonth(monthEnd) });
+  // Pad to full weeks
+  while (days.length % 7 !== 0) {
+    const last = days[days.length - 1];
+    const next = new Date(last); next.setDate(next.getDate() + 1);
+    days.push(next);
+  }
 
-  // Build map: date -> { count, types[] }
-  const dayMap = {};
-  shifts.forEach((s) => {
-    const d = s.scheduled_date;
-    if (!d) return;
-    if (!dayMap[d]) dayMap[d] = { count: 0, types: new Set() };
-    dayMap[d].count++;
-    const meta = parseShiftMeta(s);
-    if (meta.shift_type) dayMap[d].types.add(meta.shift_type);
-  });
+  const shiftsByDay = {};
+  for (const s of shifts) {
+    if (!shiftsByDay[s.scheduled_date]) shiftsByDay[s.scheduled_date] = [];
+    shiftsByDay[s.scheduled_date].push(s);
+  }
+
+  const weeks = [];
+  for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+
+  const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   return (
     <div className="p-4">
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Day headers */}
-        <div className="grid grid-cols-7 border-b border-gray-100">
-          {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d) => (
-            <div key={d} className="py-2 text-center text-xs font-bold text-gray-500 border-r border-gray-50 last:border-0">{d}</div>
-          ))}
-        </div>
-        {/* Calendar grid */}
-        <div className="grid grid-cols-7">
-          {days.map((day) => {
-            const ds = format(day, "yyyy-MM-dd");
-            const isCurrentMonth = isSameMonth(day, baseDate);
-            const info = dayMap[ds] || { count: 0, types: new Set() };
-            const isTodayDay = isToday(day);
-            const lowCoverage = isCurrentMonth && info.count > 0 && info.count < MIN_STAFF;
-            const noCoverage = isCurrentMonth && info.count === 0 && day <= new Date();
-            const types = Array.from(info.types).slice(0, 4);
-
-            return (
-              <button
-                key={ds}
-                onClick={() => isCurrentMonth && onDayClick(day)}
-                className={`min-h-[80px] p-2 border-r border-b border-gray-50 last-col:border-r-0 text-left transition-colors hover:bg-gray-50
-                  ${!isCurrentMonth ? "opacity-30 cursor-default" : "cursor-pointer"}
-                  ${isTodayDay ? "ring-2 ring-inset ring-emerald-400 bg-emerald-50/30" : ""}
-                  ${noCoverage && isCurrentMonth ? "bg-red-50/30" : ""}
-                  ${lowCoverage ? "bg-amber-50/30" : ""}`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`text-sm font-black ${isTodayDay ? "text-emerald-700" : isCurrentMonth ? "text-gray-800" : "text-gray-300"}`}>
-                    {format(day, "d")}
-                  </span>
-                  {info.count > 0 && isCurrentMonth && (
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${lowCoverage ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"}`}>
-                      {info.count}
-                    </span>
-                  )}
-                </div>
-                {/* Type dots */}
-                <div className="flex flex-wrap gap-0.5 mt-1">
-                  {types.map((t, i) => (
-                    <span key={i} className={`w-2 h-2 rounded-full ${TYPE_DOTS[t] || "bg-gray-300"}`} title={SHIFT_TYPES[t]?.label} />
-                  ))}
-                </div>
-                {noCoverage && (
-                  <p className="text-[9px] text-red-500 font-bold mt-1">No staff</p>
-                )}
-              </button>
-            );
-          })}
-        </div>
+      {/* Day headers */}
+      <div className="grid grid-cols-7 gap-1 mb-1">
+        {DAY_NAMES.map((d) => (
+          <div key={d} className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest py-1">{d}</div>
+        ))}
       </div>
 
-      {/* Legend */}
-      <div className="mt-4 bg-white rounded-xl border border-gray-100 p-3">
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Shift Types</p>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(SHIFT_TYPES).filter(([k]) => !["day_off"].includes(k)).map(([key, cfg]) => (
-            <span key={key} className="flex items-center gap-1 text-xs text-gray-600">
-              <span className={`w-2.5 h-2.5 rounded-full ${TYPE_DOTS[key] || "bg-gray-300"}`} />
-              {cfg.label}
-            </span>
-          ))}
-        </div>
+      {/* Calendar grid */}
+      <div className="space-y-1">
+        {weeks.map((week, wi) => (
+          <div key={wi} className="grid grid-cols-7 gap-1">
+            {week.map((day) => {
+              const d = format(day, "yyyy-MM-dd");
+              const isToday = d === todayStr;
+              const inMonth = isSameMonth(day, baseDate);
+              const dayShifts = shiftsByDay[d] || [];
+              const staffCount = dayShifts.length;
+
+              return (
+                <div
+                  key={d}
+                  onClick={() => onDayClick?.(day)}
+                  className={`min-h-[80px] rounded-xl border cursor-pointer p-1.5 transition-all hover:shadow-sm
+                    ${isToday ? "border-emerald-400 bg-emerald-50" : inMonth ? "border-gray-200 bg-white hover:bg-gray-50" : "border-gray-100 bg-gray-50"}
+                    ${staffCount === 0 && inMonth ? "bg-red-50/30" : ""}
+                  `}
+                >
+                  <p className={`text-xs font-black mb-1 ${isToday ? "text-emerald-700" : inMonth ? "text-gray-800" : "text-gray-300"}`}>
+                    {format(day, "d")}
+                  </p>
+                  {staffCount > 0 && (
+                    <>
+                      <div className="flex flex-wrap gap-0.5 mb-1">
+                        {dayShifts.slice(0, 5).map((s) => {
+                          const meta = parseShiftMeta(s);
+                          const def = getShiftTypeDef(meta.shift_type);
+                          const colors = SHIFT_COLORS[def?.color || "slate"];
+                          return <span key={s.id} className={`w-2 h-2 rounded-full ${colors.dot}`} />;
+                        })}
+                        {dayShifts.length > 5 && <span className="text-[9px] text-gray-400">+{dayShifts.length - 5}</span>}
+                      </div>
+                      <p className="text-[10px] font-bold text-gray-500">{staffCount} staff</p>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );
