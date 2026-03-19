@@ -69,6 +69,7 @@ import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';
 import UserManagement from './pages/UserManagement';
 import Pipelines from './pages/Pipelines';
+import Billing from './pages/Billing';
 import __Layout from './Layout.jsx';
 
 
