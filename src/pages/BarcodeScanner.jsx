@@ -423,6 +423,7 @@ export default function BarcodeScanner() {
 
             {/* Product found */}
             {scannedProduct && !bulkMode && (
+              <div ref={productCardRef}>
               <ProductCard
                 product={scannedProduct}
                 mode={mode}
