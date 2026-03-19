@@ -1,48 +1,84 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { CheckCircle2, XCircle, AlertCircle, X } from "lucide-react";
-
-const REFUSED_REASONS = ["Client declined", "Side effects concern", "Unable to swallow", "Behavioral", "Asleep/unavailable", "Other"];
-const MISSED_REASONS = ["Client unavailable", "Medication not available", "Order changed", "Staff error", "Other"];
+import { CheckCircle2, AlertCircle, X, AlertTriangle, Package } from "lucide-react";
+import RefusalCaptureForm from "./RefusalCaptureForm";
+import PINConfirmModal from "./PINConfirmModal";
+import VitalsCheckModal from "./VitalsCheckModal";
 
 const OUTCOMES = [
-  { value: "completed", label: "Administered", color: "bg-emerald-600 text-white", border: "border-emerald-600" },
-  { value: "refused",   label: "Refused",      color: "bg-orange-500 text-white",  border: "border-orange-500" },
-  { value: "missed",    label: "Missed",        color: "bg-gray-400 text-white",    border: "border-gray-400" },
-  { value: "partially_done", label: "Partial", color: "bg-yellow-500 text-white",  border: "border-yellow-500" },
+  { value: "completed",      label: "Administered",  color: "bg-emerald-600 text-white",   border: "border-emerald-600" },
+  { value: "refused",        label: "Refused",        color: "bg-orange-500 text-white",    border: "border-orange-500" },
+  { value: "missed",         label: "Missed",         color: "bg-gray-400 text-white",      border: "border-gray-400" },
+  { value: "partially_done", label: "Partial",        color: "bg-yellow-500 text-white",    border: "border-yellow-500" },
 ];
+
+const MISSED_REASONS = ["Client unavailable", "Medication not available", "Order changed", "Staff error", "Other"];
 
 function nowTimeStr() { return format(new Date(), "HH:mm"); }
 function todayStr()   { return format(new Date(), "yyyy-MM-dd"); }
 
-export default function AdministerModal({ task, user, onClose, onSuccess }) {
+const PIN_KEY = (email) => `medadmin_pin_${email}`;
+
+export default function AdministerModal({ task, user, products = [], onClose, onSuccess, darkMode }) {
   const [outcome, setOutcome] = useState("completed");
   const [notes, setNotes] = useState("");
-  const [reason, setReason] = useState("");
+  const [missedReason, setMissedReason] = useState("");
   const [time, setTime] = useState(nowTimeStr());
-  const [confirmed, setConfirmed] = useState(false);
 
-  const needsReason = outcome === "refused" || outcome === "missed";
-  const reasonOptions = outcome === "refused" ? REFUSED_REASONS : MISSED_REASONS;
+  // Refusal state
+  const [refusalData, setRefusalData] = useState({ structured: "", isComplete: false });
+
+  // Stock state
+  const [productRecord, setProductRecord] = useState(null);
+  const [stockLoading, setStockLoading] = useState(false);
+  const [stockBlocked, setStockBlocked] = useState(false);
+  const [reorderCreated, setReorderCreated] = useState(false);
+
+  // Flow state
+  const [step, setStep] = useState("main"); // main | vitals | pin | outofstock
+  const [vitalsNote, setVitalsNote] = useState("");
+
+  // Check if medication profile says controlled / requires vitals
+  const medProfile = task.medProfile || null;
+  const isControlled = medProfile?.is_controlled || task.regulatory_status === "controlled";
+  const requiresVitals = medProfile?.requires_vitals_check;
+  const storedPin = user?.email ? localStorage.getItem(PIN_KEY(user.email)) : null;
+
+  // Load product stock on mount
+  useEffect(() => {
+    if (!task.related_item && !task.title) return;
+    const medName = task.related_item || task.title;
+    setStockLoading(true);
+    base44.entities.Product.filter({ name: medName }).then((prods) => {
+      if (prods.length > 0) {
+        setProductRecord(prods[0]);
+        if ((prods[0].stock_quantity || 0) <= 0) setStockBlocked(true);
+      }
+      setStockLoading(false);
+    }).catch(() => setStockLoading(false));
+  }, [task.title, task.related_item]);
+
+  const needsRefusal = outcome === "refused";
+  const needsMissedReason = outcome === "missed";
+  const doseQty = outcome === "partially_done" ? 0.5 : 1;
 
   const saveMut = useMutation({
     mutationFn: async () => {
+      let finalNotes = notes;
+      if (needsRefusal && refusalData.structured) finalNotes = refusalData.structured + (notes ? ` | Notes: ${notes}` : "");
+      if (needsMissedReason && missedReason) finalNotes = `MISSED: ${missedReason}` + (notes ? ` | ${notes}` : "");
+      if (vitalsNote) finalNotes = (finalNotes ? `${finalNotes} | ` : "") + `Vitals: ${vitalsNote}`;
+      finalNotes = (finalNotes ? `${finalNotes} | ` : "") + `Recorded at ${time} by ${user?.full_name || user?.email}`;
+
       await base44.entities.Task.update(task.id, {
         status: "completed",
         outcome,
-        outcome_notes: [
-          notes,
-          reason ? `Reason: ${reason}` : "",
-          `Recorded at ${time} by ${user?.full_name || user?.email}`,
-        ].filter(Boolean).join(" | "),
+        outcome_notes: finalNotes,
       });
 
-      // Only post a stock-out transaction when the medication was actually administered
       if (outcome === "completed" || outcome === "partially_done") {
-        const doseQty = outcome === "partially_done" ? 0.5 : 1;
-
         await base44.entities.Transaction.create({
           transaction_type: "stock_out",
           status: "posted",
@@ -51,51 +87,153 @@ export default function AdministerModal({ task, user, onClose, onSuccess }) {
           enterprise: task.enterprise || null,
           description: `Medication Administration — ${task.title} for ${task.related_person || "patient"}`,
           assigned_person: task.related_person || null,
-          line_items: [{
-            item_name: task.title,
-            quantity: doseQty,
-            unit: "piece",
-            unit_price: 0,
-          }],
-          internal_notes: `Admin: ${user?.full_name || user?.email} | Outcome: ${outcome} | Task ref: ${task.id}`,
+          line_items: [{ item_name: task.title, quantity: doseQty, unit: "piece", unit_price: 0 }],
+          internal_notes: `Admin: ${user?.full_name || user?.email} | Outcome: ${outcome} | Task: ${task.id}`,
         });
 
-        // Reduce stock_quantity on the matching Product record
-        if (task.related_item) {
-          try {
-            const products = await base44.entities.Product.filter({ name: task.related_item });
-            if (products.length > 0) {
-              const product = products[0];
-              const newQty = Math.max(0, (product.stock_quantity || 0) - doseQty);
-              await base44.entities.Product.update(product.id, { stock_quantity: newQty });
-            }
-          } catch {}
+        if (productRecord) {
+          const newQty = Math.max(0, (productRecord.stock_quantity || 0) - doseQty);
+          await base44.entities.Product.update(productRecord.id, { stock_quantity: newQty });
         }
       }
     },
     onSuccess,
   });
 
-  const canSubmit = !needsReason || (reason && notes.length >= 3);
+  const handlePrimaryAction = () => {
+    if (outcome === "completed" || outcome === "partially_done") {
+      if (stockBlocked) { setStep("outofstock"); return; }
+      if (requiresVitals && !vitalsNote) { setStep("vitals"); return; }
+      if (isControlled) { setStep("pin"); return; }
+    }
+    saveMut.mutate();
+  };
+
+  const canSubmit = () => {
+    if (needsRefusal) return refusalData.isComplete;
+    if (needsMissedReason) return !!missedReason;
+    return true;
+  };
+
+  const bg = darkMode ? "bg-slate-800 text-slate-100" : "bg-white";
+  const inputCls = `w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${darkMode ? "bg-slate-700 border-slate-600 text-slate-100" : "border-gray-200 text-gray-800"}`;
+
+  // Out of stock blocking screen
+  if (step === "outofstock") {
+    return (
+      <div className="fixed inset-0 bg-black/60 z-50 flex items-end">
+        <div className={`w-full max-w-lg mx-auto ${bg} rounded-t-3xl shadow-2xl p-6 space-y-5`}>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+              <Package className="w-6 h-6 text-red-600" />
+            </div>
+            <div>
+              <p className="font-black text-red-700">❌ Out of Stock</p>
+              <p className="text-sm text-gray-600">{task.title}</p>
+            </div>
+          </div>
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+            <p className="text-sm font-bold text-red-800">Current stock: 0 units</p>
+            <p className="text-xs text-red-700 mt-1">Administration cannot proceed. Please contact your supervisor to reorder.</p>
+          </div>
+          <button
+            onClick={async () => {
+              await base44.entities.Task.create({
+                task_type: "stock_counting",
+                title: `URGENT: Reorder ${task.title}`,
+                priority: "urgent",
+                status: "open",
+                scheduled_date: todayStr(),
+                internal_notes: `Auto-generated from MedAdmin out-of-stock check. Medication: ${task.title}`,
+              });
+              setReorderCreated(true);
+            }}
+            disabled={reorderCreated}
+            className={`w-full py-3.5 rounded-2xl font-bold text-sm ${reorderCreated ? "bg-emerald-100 text-emerald-700" : "bg-red-600 text-white hover:bg-red-700"}`}
+          >
+            {reorderCreated ? "✓ Reorder Task Created" : "Create Reorder Task"}
+          </button>
+          <button onClick={onClose} className="w-full py-3 rounded-2xl border-2 border-gray-200 text-gray-600 font-bold text-sm">Close</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Vitals step
+  if (step === "vitals") {
+    return (
+      <VitalsCheckModal
+        medName={task.title}
+        clientName={task.related_person || "client"}
+        darkMode={darkMode}
+        onProceed={(vs) => {
+          setVitalsNote(vs);
+          if (isControlled) { setStep("pin"); } else { setStep("main"); setTimeout(() => saveMut.mutate(), 100); }
+        }}
+        onHold={() => setStep("main")}
+      />
+    );
+  }
+
+  // PIN step
+  if (step === "pin") {
+    return (
+      <PINConfirmModal
+        medName={task.title}
+        clientName={task.related_person || "client"}
+        userEmail={user?.email}
+        storedPin={storedPin || "0000"}
+        darkMode={darkMode}
+        onSuccess={() => { setStep("main"); setTimeout(() => saveMut.mutate(), 100); }}
+        onCancel={() => setStep("main")}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-end">
-      <div className="w-full max-w-lg mx-auto bg-white rounded-t-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
+      <div className={`w-full max-w-lg mx-auto ${bg} rounded-t-3xl shadow-2xl max-h-[92vh] overflow-y-auto`}>
         {/* Header */}
         <div className="flex items-start justify-between px-5 pt-5 pb-4 border-b border-gray-100">
           <div>
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Recording Medication</p>
             <p className="text-xl font-black text-gray-900 mt-0.5">{task.title?.toUpperCase()}</p>
-            {task.scheduled_time && (
-              <p className="text-sm text-gray-400 mt-0.5">Scheduled: {task.scheduled_time}</p>
-            )}
+            {task.scheduled_time && <p className="text-sm text-gray-400 mt-0.5">Scheduled: {task.scheduled_time}</p>}
+            <div className="flex gap-2 mt-1">
+              {isControlled && <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">CONTROLLED</span>}
+              {requiresVitals && <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">VITALS REQUIRED</span>}
+            </div>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl text-gray-400 hover:bg-gray-100">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="px-5 py-5 space-y-6">
+        <div className="px-5 py-5 space-y-5">
+          {/* Stock status */}
+          {productRecord && (outcome === "completed" || outcome === "partially_done") && (
+            <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 ${
+              (productRecord.stock_quantity || 0) <= 0
+                ? "bg-red-50 border border-red-200"
+                : (productRecord.stock_quantity || 0) <= (productRecord.min_stock_level || 0)
+                  ? "bg-amber-50 border border-amber-200"
+                  : "bg-green-50 border border-green-200"
+            }`}>
+              <Package className="w-4 h-4 shrink-0" />
+              <p className={`text-xs font-semibold ${
+                (productRecord.stock_quantity || 0) <= 0 ? "text-red-700"
+                  : (productRecord.stock_quantity || 0) <= (productRecord.min_stock_level || 0) ? "text-amber-700"
+                  : "text-green-700"
+              }`}>
+                {(productRecord.stock_quantity || 0) <= 0
+                  ? `❌ Out of Stock: 0 units — Administration blocked`
+                  : (productRecord.stock_quantity || 0) <= (productRecord.min_stock_level || 0)
+                    ? `⚠️ Low stock: ${productRecord.stock_quantity} units remaining — Consider reordering`
+                    : `Stock: ${productRecord.stock_quantity} units`}
+              </p>
+            </div>
+          )}
+
           {/* Outcome selector */}
           <div>
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Outcome *</p>
@@ -103,7 +241,7 @@ export default function AdministerModal({ task, user, onClose, onSuccess }) {
               {OUTCOMES.map((o) => (
                 <button
                   key={o.value}
-                  onClick={() => { setOutcome(o.value); setReason(""); }}
+                  onClick={() => { setOutcome(o.value); setRefusalData({ structured: "", isComplete: false }); setMissedReason(""); }}
                   className={`py-4 rounded-2xl text-sm font-bold border-2 transition-all active:scale-95
                     ${outcome === o.value ? `${o.color} ${o.border}` : "bg-white text-gray-500 border-gray-200"}`}
                 >
@@ -116,28 +254,28 @@ export default function AdministerModal({ task, user, onClose, onSuccess }) {
           {/* Time */}
           <div>
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Administration Time</p>
-            <input
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-lg font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
+            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={inputCls} />
           </div>
 
-          {/* Reason (required for refused/missed) */}
-          {needsReason && (
+          {/* Refusal capture */}
+          {needsRefusal && (
+            <RefusalCaptureForm
+              isControlled={isControlled}
+              onChange={setRefusalData}
+              darkMode={darkMode}
+            />
+          )}
+
+          {/* Missed reason */}
+          {needsMissedReason && (
             <div>
               <p className="text-xs font-bold text-red-600 uppercase tracking-wider mb-2">Reason * (required)</p>
-              <div className="grid grid-cols-1 gap-2">
-                {reasonOptions.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setReason(r)}
-                    className={`px-4 py-3 rounded-xl text-sm font-semibold border-2 text-left transition-all
-                      ${reason === r ? "bg-red-50 border-red-400 text-red-700" : "bg-white border-gray-200 text-gray-600"}`}
-                  >
-                    {r}
-                  </button>
+              <div className="space-y-2">
+                {MISSED_REASONS.map((r) => (
+                  <button key={r} onClick={() => setMissedReason(r)}
+                    className={`w-full px-4 py-3 rounded-xl text-sm font-semibold border-2 text-left transition-all
+                      ${missedReason === r ? "bg-gray-100 border-gray-400 text-gray-800" : "bg-white border-gray-200 text-gray-600"}`}
+                  >{r}</button>
                 ))}
               </div>
             </div>
@@ -146,15 +284,14 @@ export default function AdministerModal({ task, user, onClose, onSuccess }) {
           {/* Notes */}
           <div>
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-              Notes {needsReason ? "* (required)" : "(optional)"}
+              Notes {needsRefusal ? "(optional — details captured above)" : "(optional)"}
             </p>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder={needsReason ? "Describe situation, client's response, follow-up actions…" : "Any observations, side effects, or notes…"}
-              rows={3}
-              className={`w-full px-4 py-3 rounded-xl border text-sm text-gray-700 placeholder-gray-300 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400
-                ${needsReason && notes.length < 3 ? "border-red-300" : "border-gray-200"}`}
+              placeholder="Any observations, side effects, or additional notes…"
+              rows={2}
+              className={`${inputCls} resize-none`}
             />
           </div>
 
@@ -164,34 +301,27 @@ export default function AdministerModal({ task, user, onClose, onSuccess }) {
             <p className="text-xs text-blue-500 mt-0.5">Date: {todayStr()} · Time: {time}</p>
           </div>
 
-          {/* Warning for non-admin outcomes */}
-          {needsReason && (
+          {needsRefusal && (
             <div className="flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-2xl px-4 py-3">
               <AlertCircle className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
-              <p className="text-xs font-semibold text-orange-700">
-                Non-administration events are logged for audit. Supervisor may be notified.
-              </p>
+              <p className="text-xs font-semibold text-orange-700">Non-administration events are logged for audit. Supervisor may be notified.</p>
             </div>
           )}
         </div>
 
-        {/* Footer actions */}
+        {/* Footer */}
         <div className="sticky bottom-0 bg-white border-t border-gray-100 px-5 py-4 flex gap-3">
+          <button onClick={onClose} className="flex-1 py-4 rounded-2xl border-2 border-gray-200 text-gray-600 font-bold text-sm">Cancel</button>
           <button
-            onClick={onClose}
-            className="flex-1 py-4 rounded-2xl border-2 border-gray-200 text-gray-600 font-bold text-sm"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => saveMut.mutate()}
-            disabled={!canSubmit || saveMut.isPending}
+            onClick={handlePrimaryAction}
+            disabled={!canSubmit() || saveMut.isPending || (stockBlocked && (outcome === "completed" || outcome === "partially_done"))}
             className={`flex-1 py-4 rounded-2xl text-white font-black text-sm transition-all active:scale-95
-              ${!canSubmit ? "bg-gray-300 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"}`}
+              ${!canSubmit() || stockBlocked ? "bg-gray-300 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"}`}
           >
             {saveMut.isPending ? "Saving…" : (
               <span className="flex items-center justify-center gap-2">
-                <CheckCircle2 className="w-5 h-5" /> Confirm & Record
+                <CheckCircle2 className="w-5 h-5" />
+                {isControlled && (outcome === "completed" || outcome === "partially_done") ? "Enter PIN →" : "Confirm & Record"}
               </span>
             )}
           </button>
