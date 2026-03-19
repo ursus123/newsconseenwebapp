@@ -10,6 +10,7 @@ import {
   Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X, Settings as SettingsIcon, Palette,
 } from "lucide-react";
 import BrandingSection from "@/components/settings/BrandingSection";
+import ErrorLogSection from "@/components/settings/ErrorLogSection";
 
 function passwordStrength(pw) {
   if (!pw) return null;
