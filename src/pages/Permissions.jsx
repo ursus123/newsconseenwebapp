@@ -374,6 +374,7 @@ export default function Permissions() {
             perm={adminPerm}
             availablePages={ALL_PAGES}
             isSaving={saveMut.isPending}
+            isSuperAdmin={isSuperAdmin}
             onSave={(data) => saveMut.mutate({ target_role: "admin", data })}
           />
         )}
@@ -387,9 +388,140 @@ export default function Permissions() {
           perm={userPerm}
           availablePages={userAvailablePages}
           isSaving={saveMut.isPending}
+          isSuperAdmin={isSuperAdmin}
           onSave={(data) => saveMut.mutate({ target_role: "user", data })}
         />
       </div>
+
+      {/* Repair Tool — visible to admins with a company_id */}
+      {isAdmin && companyId && <RepairTool currentUser={currentUser} />}
+    </div>
+  );
+}
+
+const REPAIRABLE_ENTITIES = [
+  { key: "Enterprise", entity: () => base44.entities.Enterprise },
+  { key: "Person",     entity: () => base44.entities.Person },
+  { key: "Product",    entity: () => base44.entities.Product },
+  { key: "Service",    entity: () => base44.entities.Service },
+  { key: "Address",    entity: () => base44.entities.Address },
+  { key: "Relationship", entity: () => base44.entities.Relationship },
+  { key: "Task",       entity: () => base44.entities.Task },
+  { key: "Transaction", entity: () => base44.entities.Transaction },
+];
+
+function RepairTool({ currentUser }) {
+  const [scanning, setScanning] = useState(false);
+  const [fixing, setFixing] = useState(false);
+  const [found, setFound] = useState(null);   // { EntityKey: [records...] }
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [done, setDone] = useState(false);
+
+  const totalWrong = found ? Object.values(found).reduce((s, arr) => s + arr.length, 0) : 0;
+
+  const handleScan = async () => {
+    setScanning(true); setFound(null); setDone(false);
+    const result = {};
+    for (const { key, entity } of REPAIRABLE_ENTITIES) {
+      const all = await entity().list();
+      result[key] = all.filter(
+        (r) => r.created_by === currentUser.email && r.company_id !== currentUser.company_id
+      );
+    }
+    setFound(result);
+    setScanning(false);
+  };
+
+  const handleFix = async () => {
+    setFixing(true);
+    const allWrong = REPAIRABLE_ENTITIES.flatMap(({ key, entity }) =>
+      (found[key] || []).map((r) => ({ entity: entity(), id: r.id }))
+    );
+    setProgress({ current: 0, total: allWrong.length });
+    for (let i = 0; i < allWrong.length; i++) {
+      const { entity, id } = allWrong[i];
+      await entity.update(id, { company_id: currentUser.company_id });
+      setProgress({ current: i + 1, total: allWrong.length });
+    }
+    setFixing(false); setDone(true);
+  };
+
+  return (
+    <div className="border border-amber-200 bg-amber-50 rounded-2xl p-6 space-y-4">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+          <Wrench className="w-5 h-5 text-amber-600" />
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-slate-800">Fix Imported Records</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            If you imported data before your account was fully set up, some records may have the wrong workspace ID and won't appear in your views.
+          </p>
+        </div>
+      </div>
+
+      {done && (
+        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          Fixed {progress.total} records — your data should now be visible.
+          <Button size="sm" variant="outline" className="ml-auto rounded-xl" onClick={() => window.location.reload()}>
+            <RefreshCw className="w-3.5 h-3.5 mr-1" /> Refresh
+          </Button>
+        </div>
+      )}
+
+      {fixing && (
+        <div className="space-y-2">
+          <div className="flex justify-between text-xs text-slate-500">
+            <span>Fixing records…</span>
+            <span>{progress.current} / {progress.total}</span>
+          </div>
+          <div className="w-full bg-slate-200 rounded-full h-2">
+            <div
+              className="bg-amber-500 h-2 rounded-full transition-all duration-200"
+              style={{ width: progress.total ? `${(progress.current / progress.total) * 100}%` : "0%" }}
+            />
+          </div>
+        </div>
+      )}
+
+      {found && !done && !fixing && (
+        <div className="space-y-3">
+          {totalWrong === 0 ? (
+            <p className="text-sm text-emerald-700 font-medium">✅ No broken records found — your data looks healthy.</p>
+          ) : (
+            <>
+              <p className="text-sm text-slate-700">
+                Found <strong className="text-amber-700">{totalWrong} records</strong> created by you that are not linked to your workspace:
+              </p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {REPAIRABLE_ENTITIES.map(({ key }) =>
+                  found[key]?.length > 0 && (
+                    <div key={key} className="flex justify-between bg-white rounded-lg px-3 py-2 border border-amber-100">
+                      <span className="text-slate-600">{key}</span>
+                      <span className="font-bold text-amber-700">{found[key].length}</span>
+                    </div>
+                  )
+                )}
+              </div>
+              <Button onClick={handleFix} className="bg-amber-600 hover:bg-amber-700 rounded-xl w-full text-sm">
+                <Wrench className="w-4 h-4 mr-2" /> Fix All {totalWrong} Records
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
+      {!found && !done && (
+        <Button variant="outline" onClick={handleScan} disabled={scanning} className="rounded-xl border-amber-300 text-amber-700 hover:bg-amber-100">
+          {scanning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scanning…</> : "Scan for Unlinked Records"}
+        </Button>
+      )}
+      {found && !done && (
+        <Button variant="ghost" size="sm" onClick={handleScan} disabled={scanning} className="text-slate-400 text-xs">
+          Re-scan
+        </Button>
+      )}
     </div>
   );
 }
