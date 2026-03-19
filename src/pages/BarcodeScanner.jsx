@@ -438,6 +438,7 @@ export default function BarcodeScanner() {
                 onConfirm={() => handleConfirm()}
                 onClear={() => { setScannedProduct(null); setNotFound(null); setRecall(null); setTimeout(() => barcodeInputRef.current?.focus(), 100); }}
               />
+              </div>
             )}
 
             {/* Low stock panel */}
