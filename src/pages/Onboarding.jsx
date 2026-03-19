@@ -71,12 +71,19 @@ export default function Onboarding() {
     if (!validateWorkspace()) return false;
     setSaving(true);
     try {
+      const trialEnd = new Date();
+      trialEnd.setDate(trialEnd.getDate() + 14);
+      const trialEndsAt = trialEnd.toISOString().split("T")[0];
+
       const enterprise = await base44.entities.Enterprise.create({
         enterprise_name: workspaceData.org_name,
         enterprise_type: workspaceData.industry,
         country: workspaceData.country,
         status: "active",
         operating_status: "open",
+        subscription_tier: "professional",
+        subscription_status: "trial",
+        trial_ends_at: trialEndsAt,
       });
       setCreatedEnterprise(enterprise);
       await base44.auth.updateMe({
