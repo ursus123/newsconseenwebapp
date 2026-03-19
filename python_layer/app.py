@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 import pandas as pd
 import numpy as np
 
@@ -39,6 +40,19 @@ def safe_sample(df: pd.DataFrame) -> dict:
     return {"columns": list(df.columns), "row_count": len(df), "sample": sample}
 
 
+def filter_by_company(df: pd.DataFrame, company_id: Optional[str]) -> pd.DataFrame:
+    """
+    Filter a DataFrame by company_id if provided.
+    If company_id is None or not in columns, return df unchanged.
+    Super admin passes no company_id and gets all data.
+    """
+    if not company_id:
+        return df
+    if "company_id" not in df.columns:
+        return df
+    return df[df["company_id"] == company_id].copy()
+
+
 # -------------------------------------------------
 # Health check
 # -------------------------------------------------
@@ -51,44 +65,56 @@ def root():
 # DEBUG endpoints
 # -------------------------------------------------
 @app.get("/debug/enterprises")
-def debug_enterprises():
+def debug_enterprises(company_id: Optional[str] = Query(None)):
     try:
-        return safe_sample(enterprises.extract_enterprises())
+        df = enterprises.extract_enterprises()
+        df = filter_by_company(df, company_id)
+        return safe_sample(df)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/debug/tasks")
-def debug_tasks():
+def debug_tasks(company_id: Optional[str] = Query(None)):
     try:
-        return safe_sample(tasks.extract_tasks())
+        df = tasks.extract_tasks()
+        df = filter_by_company(df, company_id)
+        return safe_sample(df)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/debug/people")
-def debug_people():
+def debug_people(company_id: Optional[str] = Query(None)):
     try:
-        return safe_sample(people.extract_people())
+        df = people.extract_people()
+        df = filter_by_company(df, company_id)
+        return safe_sample(df)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/debug/transactions")
-def debug_transactions():
+def debug_transactions(company_id: Optional[str] = Query(None)):
     try:
-        return safe_sample(transactions.extract_transactions())
+        df = transactions.extract_transactions()
+        df = filter_by_company(df, company_id)
+        return safe_sample(df)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/debug/services")
-def debug_services():
+def debug_services(company_id: Optional[str] = Query(None)):
     try:
-        return safe_sample(services.extract_services())
+        df = services.extract_services()
+        df = filter_by_company(df, company_id)
+        return safe_sample(df)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/debug/products")
-def debug_products():
+def debug_products(company_id: Optional[str] = Query(None)):
     try:
-        return safe_sample(products.extract_products())
+        df = products.extract_products()
+        df = filter_by_company(df, company_id)
+        return safe_sample(df)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -97,20 +123,25 @@ def debug_products():
 # TASKS
 # -------------------------------------------------
 @app.get("/task-summary")
-def get_task_summary():
+def get_task_summary(company_id: Optional[str] = Query(None)):
     try:
         df = tasks.extract_tasks()
+        df = filter_by_company(df, company_id)
         summary = tasks.transform_tasks(df)
         return summary.to_dict(orient="records")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/load/task-summary")
-def load_task_summary():
+def load_task_summary(company_id: Optional[str] = Query(None)):
     try:
         df = tasks.extract_tasks()
+        df = filter_by_company(df, company_id)
         summary = tasks.transform_tasks(df)
-        return load_dataframe(summary, "task_summary")
+        table = f"task_summary_{company_id}" if company_id else "task_summary"
+        result = load_dataframe(summary, table)
+        result["company_id"] = company_id
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -119,20 +150,25 @@ def load_task_summary():
 # TRANSACTIONS
 # -------------------------------------------------
 @app.get("/transaction-summary")
-def get_transaction_summary():
+def get_transaction_summary(company_id: Optional[str] = Query(None)):
     try:
         df = transactions.extract_transactions()
+        df = filter_by_company(df, company_id)
         summary = transactions.transform_transactions(df)
         return summary.to_dict(orient="records")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/load/transaction-summary")
-def load_transaction_summary():
+def load_transaction_summary(company_id: Optional[str] = Query(None)):
     try:
         df = transactions.extract_transactions()
+        df = filter_by_company(df, company_id)
         summary = transactions.transform_transactions(df)
-        return load_dataframe(summary, "transaction_summary")
+        table = f"transaction_summary_{company_id}" if company_id else "transaction_summary"
+        result = load_dataframe(summary, table)
+        result["company_id"] = company_id
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -141,20 +177,25 @@ def load_transaction_summary():
 # SERVICES
 # -------------------------------------------------
 @app.get("/service-summary")
-def get_service_summary():
+def get_service_summary(company_id: Optional[str] = Query(None)):
     try:
         df = services.extract_services()
+        df = filter_by_company(df, company_id)
         summary = services.transform_services(df)
         return summary.to_dict(orient="records")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/load/service-summary")
-def load_service_summary():
+def load_service_summary(company_id: Optional[str] = Query(None)):
     try:
         df = services.extract_services()
+        df = filter_by_company(df, company_id)
         summary = services.transform_services(df)
-        return load_dataframe(summary, "service_summary")
+        table = f"service_summary_{company_id}" if company_id else "service_summary"
+        result = load_dataframe(summary, table)
+        result["company_id"] = company_id
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -163,20 +204,25 @@ def load_service_summary():
 # ENTERPRISES
 # -------------------------------------------------
 @app.get("/enterprise-summary")
-def get_enterprise_summary():
+def get_enterprise_summary(company_id: Optional[str] = Query(None)):
     try:
         df = enterprises.extract_enterprises()
+        df = filter_by_company(df, company_id)
         summary = enterprises.transform_enterprises(df)
         return summary.to_dict(orient="records")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/load/enterprise-summary")
-def load_enterprise_summary():
+def load_enterprise_summary(company_id: Optional[str] = Query(None)):
     try:
         df = enterprises.extract_enterprises()
+        df = filter_by_company(df, company_id)
         summary = enterprises.transform_enterprises(df)
-        return load_dataframe(summary, "enterprise_summary")
+        table = f"enterprise_summary_{company_id}" if company_id else "enterprise_summary"
+        result = load_dataframe(summary, table)
+        result["company_id"] = company_id
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -185,20 +231,25 @@ def load_enterprise_summary():
 # PEOPLE
 # -------------------------------------------------
 @app.get("/people-summary")
-def get_people_summary():
+def get_people_summary(company_id: Optional[str] = Query(None)):
     try:
         df = people.extract_people()
+        df = filter_by_company(df, company_id)
         summary = people.transform_people(df)
         return summary.to_dict(orient="records")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/load/people-summary")
-def load_people_summary():
+def load_people_summary(company_id: Optional[str] = Query(None)):
     try:
         df = people.extract_people()
+        df = filter_by_company(df, company_id)
         summary = people.transform_people(df)
-        return load_dataframe(summary, "people_summary")
+        table = f"people_summary_{company_id}" if company_id else "people_summary"
+        result = load_dataframe(summary, table)
+        result["company_id"] = company_id
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -207,19 +258,24 @@ def load_people_summary():
 # PRODUCTS
 # -------------------------------------------------
 @app.get("/product-summary")
-def get_product_summary():
+def get_product_summary(company_id: Optional[str] = Query(None)):
     try:
         df = products.extract_products()
+        df = filter_by_company(df, company_id)
         summary = products.transform_products(df)
         return summary.to_dict(orient="records")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/load/product-summary")
-def load_product_summary():
+def load_product_summary(company_id: Optional[str] = Query(None)):
     try:
         df = products.extract_products()
+        df = filter_by_company(df, company_id)
         summary = products.transform_products(df)
-        return load_dataframe(summary, "product_summary")
+        table = f"product_summary_{company_id}" if company_id else "product_summary"
+        result = load_dataframe(summary, table)
+        result["company_id"] = company_id
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
