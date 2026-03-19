@@ -1,6 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from "html5-qrcode";
 
+// Style overrides for the html5-qrcode UI to fit dark theme
+const scannerStyles = `
+  #qr-reader { background: #0f172a !important; border: none !important; }
+  #qr-reader__scan_region { background: #000 !important; }
+  #qr-reader__dashboard { background: #1e293b !important; padding: 8px !important; }
+  #qr-reader__dashboard button { background: #4f46e5 !important; color: white !important; border: none !important; border-radius: 8px !important; padding: 6px 12px !important; cursor: pointer !important; }
+  #qr-reader__dashboard select { background: #334155 !important; color: white !important; border: 1px solid #475569 !important; border-radius: 6px !important; padding: 4px 8px !important; }
+  #qr-reader__status_span { color: #94a3b8 !important; font-size: 12px !important; }
+  #qr-reader img { display: none !important; }
+`;
+
 export default function ScannerViewfinder({ onScan, isProcessing }) {
   const [status, setStatus] = useState("init"); // init | ready | detected | denied
   const scannerRef = useRef(null);
