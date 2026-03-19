@@ -9,7 +9,10 @@ def extract_transactions() -> pd.DataFrame:
 
 def transform_transactions(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
-        return pd.DataFrame(columns=["transaction_type", "status", "total_transactions", "total_amount", "avg_amount"])
+        return pd.DataFrame(columns=[
+            "transaction_type", "status",
+            "total_transactions", "total_amount", "avg_amount"
+        ])
 
     df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
 
