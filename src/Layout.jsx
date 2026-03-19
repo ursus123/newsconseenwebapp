@@ -84,9 +84,14 @@ const ALL_NAV_PHASES = [
   items: [
   { name: "User Management", icon: Users, page: "UserManagement" },
   { name: "Permissions", icon: ShieldCheck, page: "Permissions" },
-  { name: "Billing", icon: CreditCard, page: "Billing" },
-  { name: "Data Repair", icon: Wrench, page: "DataRepair" }]
-
+  { name: "Billing", icon: CreditCard, page: "Billing" }],
+  superAdminOnly: true
+},
+{
+  label: "Super Admin",
+  items: [
+  { name: "Data Repair", icon: Wrench, page: "DataRepair" }],
+  superAdminOnly: true
 }];
 
 
@@ -158,7 +163,11 @@ export default function Layout({ children, currentPageName }) {
   const filteredPhases = userLoaded ?
   ALL_NAV_PHASES.map((phase) => ({
     ...phase,
-    items: phase.items.filter((item) => allowedPages === null || allowedPages.includes(item.page))
+    items: phase.items.filter((item) => {
+      // Super admin only sections
+      if (phase.superAdminOnly && currentUser?.role !== "super_admin") return false;
+      return allowedPages === null || allowedPages.includes(item.page);
+    })
   })).filter((p) => p.items.length > 0) :
   [];
 
