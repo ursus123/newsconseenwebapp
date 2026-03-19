@@ -163,16 +163,26 @@ export default function AddressForm({ open, onClose, onSubmit, onArchive, initia
                   {geocoding ? (
                     <>
                       <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
-                      Geocoding...
+                      Verifying...
                     </>
                   ) : (
                     <>
                       <Search className="w-3 h-3 mr-1.5" />
-                      Auto-fill from Address
+                      Verify Address
                     </>
                   )}
                 </Button>
               </div>
+              {geocodeNote && form.latitude && form.longitude && (
+                <div className="mb-3 rounded-xl overflow-hidden border border-emerald-200">
+                  <img
+                    src={`https://staticmap.openstreetmap.de/staticmap.php?center=${form.latitude},${form.longitude}&zoom=15&size=400x120&markers=${form.latitude},${form.longitude},red-pushpin`}
+                    alt="Map preview"
+                    className="w-full h-24 object-cover"
+                    onError={(e) => { e.target.style.display = "none"; }}
+                  />
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Latitude">
                   <Input type="number" step="any" value={form.latitude ?? ""} onChange={(e) => set("latitude", e.target.value ? parseFloat(e.target.value) : undefined)} className="rounded-xl" placeholder="0.0000" />
