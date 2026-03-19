@@ -11,6 +11,7 @@ import QueryBuilder from './pages/QueryBuilder';
 import Onboarding from './pages/Onboarding';
 import Pricing from './pages/Pricing';
 import Billing from './pages/Billing';
+import Settings from './pages/Settings';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 

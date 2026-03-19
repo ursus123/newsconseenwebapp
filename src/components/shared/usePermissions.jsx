@@ -5,7 +5,7 @@ export const ALL_ADMIN_PAGES = [
   "Dashboard", "Tasks", "Enterprises", "People", "Products",
   "Services", "Addresses", "Relationships", "Transactions",
   "Reports", "Applications", "ClockInOut", "MedAdmin", "StaffSchedule", "BarcodeScanner",
-  "InviteUser", "UserManagement", "Permissions", "Billing",
+  "InviteUser", "UserManagement", "Permissions", "Billing", "Settings",
 ];
 
 export const ALL_APP_PAGES = ["Applications", "ClockInOut", "MedAdmin", "StaffSchedule", "BarcodeScanner"];
