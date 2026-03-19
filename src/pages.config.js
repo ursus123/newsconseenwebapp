@@ -70,6 +70,7 @@ import Transactions from './pages/Transactions';
 import UserManagement from './pages/UserManagement';
 import Pipelines from './pages/Pipelines';
 import Billing from './pages/Billing';
+import StaffSchedule from './pages/StaffSchedule';
 import __Layout from './Layout.jsx';
 
 
@@ -97,6 +98,7 @@ export const PAGES = {
     "UserManagement": UserManagement,
     "Pipelines": Pipelines,
     "Billing": Billing,
+    "StaffSchedule": StaffSchedule,
 }
 
 export const pagesConfig = {
