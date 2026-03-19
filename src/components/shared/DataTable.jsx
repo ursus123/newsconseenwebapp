@@ -128,9 +128,10 @@ export default function DataTable({ columns, data, onEdit, onDelete, searchField
             </TableBody>
           </Table>
         </div>
+        )}
       </div>
 
-      {totalPages > 1 && (
+      {!isLoading && !error && totalPages > 1 && (
         <div className="flex items-center justify-between mt-4">
           <p className="text-sm text-slate-400">{filtered.length} records</p>
           <div className="flex items-center gap-2">
