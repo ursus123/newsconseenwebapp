@@ -362,8 +362,15 @@ export default function BarcodeScanner() {
               queue={bulkQueue}
               onUpdateQueue={setBulkQueue}
               onProcessAll={async (queue) => {
+                const stockMap = {};
+                products.forEach((p) => { stockMap[p.id] = p.stock_quantity ?? 0; });
                 for (const row of queue) {
-                  await handleConfirm(row.product, row.qty, row.direction);
+                  const currentStock = stockMap[row.product.id] ?? 0;
+                  const newQty = row.direction === "in"
+                    ? currentStock + row.qty
+                    : Math.max(0, currentStock - row.qty);
+                  stockMap[row.product.id] = newQty;
+                  await handleConfirm({ ...row.product, stock_quantity: currentStock }, row.qty, row.direction);
                 }
                 setBulkQueue([]);
               }}
