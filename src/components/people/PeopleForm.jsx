@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Save, X, User, Briefcase, Phone, MapPin, Calendar, Clock, Star, FileText, Upload, Link2, Search, Loader2, Building2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
+import { useWithScope } from "@/components/shared/useDataQuery";
 import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
 
 const SECTIONS = [
@@ -116,7 +117,7 @@ function MultiSelectBadges({ value = [], options, onChange }) {
   );
 }
 
-export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
+export default function PeopleForm({ open, onClose, onSubmit, initialData, currentUser }) {
   const [activeSection, setActiveSection] = useState("identity");
   const [form, setForm] = useState({});
   const [uploading, setUploading] = useState(false);
@@ -124,6 +125,7 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
   const [geocodeNote, setGeocodeNote] = useState(null);
   const [geocodeError, setGeocodeError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const withScope = useWithScope(currentUser);
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["enterprises-list"],
@@ -187,7 +189,7 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
 
       // 2. If address data, create Address record with linked person
       if (form.country || form.address || form.city) {
-        await base44.entities.Address.create({
+        await base44.entities.Address.create(withScope({
           label: `${personName} – Home`,
           status: "active",
           address_line1: form.address || "",
@@ -197,19 +199,19 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData }) {
           latitude: form.latitude,
           longitude: form.longitude,
           linked_people: [{ person_name: personName, address_type: "Home", active: true }],
-        });
+        }));
       }
 
       // 3. If enterprise selected, create Relationship
       if (_enterprise_name && _enterprise_name !== "__none__") {
-        await base44.entities.Relationship.create({
+        await base44.entities.Relationship.create(withScope({
           relationship_type: "person_enterprise",
           status: "active",
           person_name: personName,
           enterprise_name: _enterprise_name,
           role: form.primary_role || "",
           start_date: form.start_date || new Date().toISOString().split("T")[0],
-        });
+        }));
       }
     } finally {
       setSaving(false);
