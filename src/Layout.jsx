@@ -21,8 +21,10 @@ import {
   Database,
   GitBranch,
   Network,
-  CreditCard } from
-"lucide-react";
+  CreditCard,
+  Settings,
+  ChevronDown,
+} from "lucide-react";
 import TrialBanner from "@/components/shared/TrialBanner";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
@@ -180,11 +182,17 @@ export default function Layout({ children, currentPageName }) {
           </nav>
 
           {/* Footer */}
-          <div className="px-4 py-4 border-t border-white/5">
+          <div className="px-4 py-4 border-t border-white/5 space-y-1">
+            <Link
+              to={createPageUrl("Settings")}
+              onClick={() => setSidebarOpen(false)}
+              className="flex items-center gap-3 px-4 py-2.5 w-full rounded-xl text-sm text-slate-500 hover:text-slate-200 hover:bg-white/5 transition-all">
+              <Settings className="w-4 h-4" />
+              <span>Settings</span>
+            </Link>
             <button
               onClick={() => base44.auth.logout()}
               className="flex items-center gap-3 px-4 py-2.5 w-full rounded-xl text-sm text-slate-500 hover:text-red-400 hover:bg-red-500/5 transition-all">
-
               <LogOut className="w-4 h-4" />
               <span>Sign Out</span>
             </button>
