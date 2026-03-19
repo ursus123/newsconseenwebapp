@@ -325,6 +325,15 @@ export default function AddressForm({ open, onClose, onSubmit, onArchive, initia
                 {initialData ? "Edit Address" : "New Address"}
               </DialogTitle>
               {initialData?.id && <p className="text-xs text-slate-400 mt-0.5">ID: {initialData.id.slice(0, 8).toUpperCase()}</p>}
+              {initialData?.latitude && initialData?.longitude && (
+                <a
+                  href={`https://www.openstreetmap.org/?mlat=${initialData.latitude}&mlon=${initialData.longitude}&zoom=16`}
+                  target="_blank" rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline mt-1"
+                >
+                  <ExternalLink className="w-3 h-3" /> View on OpenStreetMap
+                </a>
+              )}
             </div>
             <Badge className={statusColors[form.status] || "bg-slate-100 text-slate-500"}>
               ● {(form.status || "active")}
