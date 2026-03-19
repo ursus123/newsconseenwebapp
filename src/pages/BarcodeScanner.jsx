@@ -163,9 +163,19 @@ export default function BarcodeScanner() {
       return;
     }
 
+    // Stock OUT validation
+    let effectiveQty = qty;
+    if (dir === "out" && qty > (prod.stock_quantity || 0)) {
+      const confirmed = window.confirm(
+        `⚠️ Only ${prod.stock_quantity || 0} units in stock.\nYou are trying to remove ${qty} units.\nThis will result in 0 stock.\nProceed anyway?`
+      );
+      if (!confirmed) return;
+      effectiveQty = prod.stock_quantity || 0;
+    }
+
     setIsProcessing(true);
     const oldQty = prod.stock_quantity || 0;
-    const newQty = dir === "in" ? oldQty + qty : Math.max(0, oldQty - qty);
+    const newQty = dir === "in" ? oldQty + effectiveQty : Math.max(0, oldQty - effectiveQty);
 
     await base44.entities.Product.update(prod.id, { stock_quantity: newQty });
 
@@ -174,24 +184,43 @@ export default function BarcodeScanner() {
       status: "posted",
       date: format(new Date(), "yyyy-MM-dd"),
       enterprise: selectedEnterprise,
-      description: `${dir === "in" ? "Stock IN" : "Stock OUT"}: ${prod.name} x${qty}`,
-      line_items: [{ item_name: prod.name, quantity: qty, unit_price: prod.unit_price || 0 }],
-      amount: qty * (prod.unit_price || 0),
+      company_id: user?.company_id,
+      description: `${dir === "in" ? "Stock IN" : "Stock OUT"}: ${prod.name} x${effectiveQty}`,
+      line_items: [{ item_name: prod.name, quantity: effectiveQty, unit_price: prod.unit_price || 0 }],
+      amount: effectiveQty * (prod.unit_price || 0),
       payment_status: "na",
       internal_notes: notes || "",
     });
 
     const task = await base44.entities.Task.create({
       task_type: "stock_counting",
-      title: `${dir === "in" ? "Stock IN" : "Stock OUT"}: ${prod.name} x${qty}`,
+      title: `${dir === "in" ? "Stock IN" : "Stock OUT"}: ${prod.name} x${effectiveQty}`,
       status: "completed",
       outcome: "completed",
+      company_id: user?.company_id,
       enterprise: selectedEnterprise,
       related_item: prod.name,
       assigned_to_name: user?.full_name || user?.email,
       assigned_to_email: user?.email,
-      outcome_notes: `Barcode: ${prod.sku || "—"} | Qty: ${qty} | New stock: ${newQty} | Notes: ${notes || "none"}`,
+      outcome_notes: `Barcode: ${prod.sku || "—"} | Qty: ${effectiveQty} | New stock: ${newQty} | Notes: ${notes || "none"}`,
     });
+
+    // Auto-create reorder task if stock hits zero
+    let reorderCreated = false;
+    if (dir === "out" && newQty === 0) {
+      reorderCreated = true;
+      await base44.entities.Task.create({
+        task_type: "stock_counting",
+        title: `URGENT: Reorder ${prod.name} — OUT OF STOCK`,
+        status: "open",
+        priority: "urgent",
+        company_id: user?.company_id,
+        enterprise: selectedEnterprise,
+        related_item: prod.name,
+        assigned_to_email: user?.email,
+        outcome_notes: `${prod.name} (SKU: ${prod.sku || "—"}) reached zero stock after scan by ${user?.full_name || user?.email} at ${format(new Date(), "HH:mm on MMM d")}`,
+      });
+    }
 
     // Update local products cache
     setProducts((ps) => ps.map((p) => p.id === prod.id ? { ...p, stock_quantity: newQty } : p));
@@ -199,8 +228,8 @@ export default function BarcodeScanner() {
     playBeep(false);
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
 
-    setSuccessFlash({ product: prod, oldQty, newQty, dir });
-    addToLog(prod, qty, dir, oldQty, newQty, txn.id, task.id);
+    setSuccessFlash({ product: prod, oldQty, newQty, dir, reorderCreated });
+    addToLog(prod, effectiveQty, dir, oldQty, newQty, txn.id, task.id);
 
     setIsProcessing(false);
     setTimeout(() => {
@@ -208,7 +237,7 @@ export default function BarcodeScanner() {
       setScannedProduct(null);
       setNotes("");
       setTimeout(() => barcodeInputRef.current?.focus(), 100);
-    }, 1500);
+    }, 2000);
   };
 
   const addToLog = (prod, qty, dir, oldQty, newQty, txnId, taskId) => {
