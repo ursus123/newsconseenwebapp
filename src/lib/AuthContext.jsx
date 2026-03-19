@@ -128,6 +128,14 @@ export const AuthProvider = ({ children }) => {
     base44.auth.redirectToLogin(window.location.href);
   };
 
+  // Refresh user data (e.g. after onboarding_complete is set)
+  const refreshUser = async () => {
+    try {
+      const u = await base44.auth.me();
+      setUser(u);
+    } catch (_) {}
+  };
+
   return (
     <AuthContext.Provider value={{ 
       user, 
@@ -138,7 +146,8 @@ export const AuthProvider = ({ children }) => {
       appPublicSettings,
       logout,
       navigateToLogin,
-      checkAppState
+      checkAppState,
+      refreshUser,
     }}>
       {children}
     </AuthContext.Provider>
