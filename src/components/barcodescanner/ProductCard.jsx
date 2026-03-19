@@ -22,20 +22,23 @@ export default function ProductCard({ product, mode, modeConfig, quantity, onQua
     onQuantityChange(n);
   };
 
-  if (successFlash?.product?.id === product.id) {
-    return (
-      <div className="bg-emerald-900 border-2 border-emerald-500 rounded-2xl p-6 text-center animate-pulse">
-        <p className="text-4xl mb-2">✅</p>
-        <p className="text-emerald-300 font-black text-lg">{product.name}</p>
-        <p className="text-emerald-400 text-sm mt-1">
-          {successFlash.oldQty} → <span className="font-black text-white text-xl">{successFlash.newQty}</span> units
-        </p>
-      </div>
-    );
-  }
+  const showFlash = successFlash?.product?.id === product.id;
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
+    <div className="relative bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
+      {/* Success overlay */}
+      {showFlash && (
+        <div className="absolute inset-0 bg-emerald-600/95 rounded-2xl flex flex-col items-center justify-center z-10 animate-pulse">
+          <span className="text-5xl mb-2">✅</span>
+          <p className="text-white font-black text-lg">{product.name}</p>
+          <p className="text-emerald-100 text-sm font-mono mt-1">
+            {successFlash.oldQty} → {successFlash.newQty} units
+          </p>
+          {successFlash.reorderCreated && (
+            <p className="text-amber-200 text-xs font-bold mt-2">⚠️ Reorder task created — stock is now 0</p>
+          )}
+        </div>
+      )}
       {/* Header */}
       <div className="px-4 py-3 flex items-start justify-between gap-3 border-b border-slate-700">
         <div className="flex items-start gap-3 min-w-0">
