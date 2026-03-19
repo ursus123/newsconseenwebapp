@@ -84,7 +84,7 @@ export default function ProductCard({ product, mode, modeConfig, quantity, onQua
           <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">Quantity</p>
           {/* +/- */}
           <div className="flex items-center gap-3 mb-2">
-            <button onClick={() => clampQty(quantity - 1)} className="w-12 h-12 rounded-xl bg-slate-700 text-white font-black text-xl hover:bg-slate-600 flex items-center justify-center transition-colors">
+            <button onClick={() => clampQty(quantity - 1)} className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-slate-700 text-white font-black text-xl hover:bg-slate-600 flex items-center justify-center transition-colors">
               <Minus className="w-5 h-5" />
             </button>
             <input
@@ -95,7 +95,7 @@ export default function ProductCard({ product, mode, modeConfig, quantity, onQua
               onChange={(e) => clampQty(Number(e.target.value))}
               className="flex-1 text-center text-white text-2xl font-black bg-slate-700 border border-slate-600 rounded-xl py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
-            <button onClick={() => clampQty(quantity + 1)} className="w-12 h-12 rounded-xl bg-slate-700 text-white font-black text-xl hover:bg-slate-600 flex items-center justify-center transition-colors">
+            <button onClick={() => clampQty(quantity + 1)} className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-slate-700 text-white font-black text-xl hover:bg-slate-600 flex items-center justify-center transition-colors">
               <Plus className="w-5 h-5" />
             </button>
           </div>
