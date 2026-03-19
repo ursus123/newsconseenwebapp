@@ -214,6 +214,7 @@ export default function Onboarding() {
     setCompleting(true);
     try {
       await base44.auth.updateMe({ onboarding_complete: true });
+      await refreshUser();
       navigate("/Dashboard");
     } catch (e) {
       console.error(e);
