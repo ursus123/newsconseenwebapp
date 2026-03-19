@@ -82,6 +82,7 @@ const AuthenticatedApp = () => {
       <Route path="/PdfToExcel" element={<LayoutWrapper currentPageName="PDF to Excel"><PdfToExcel /></LayoutWrapper>} />
       <Route path="/Pipelines" element={<LayoutWrapper currentPageName="Pipelines"><Pipelines /></LayoutWrapper>} />
       <Route path="/Billing" element={<LayoutWrapper currentPageName="Billing"><Billing /></LayoutWrapper>} />
+      <Route path="/Settings" element={<LayoutWrapper currentPageName="Settings"><Settings /></LayoutWrapper>} />
 
       <Route path="*" element={<PageNotFound />} />
     </Routes>

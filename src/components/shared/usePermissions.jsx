@@ -14,7 +14,7 @@ export const ALL_APP_PAGES = ["Applications", "ClockInOut", "MedAdmin", "StaffSc
 export const DEFAULT_PAGES = {
   super_admin: null,
   admin: ALL_ADMIN_PAGES,
-  user: ["Dashboard", "Tasks", "Applications", "Reports"],
+  user: ["Dashboard", "Tasks", "Applications", "Reports", "Settings"],
 };
 
 const SUPER_ADMIN_PERMS = {
