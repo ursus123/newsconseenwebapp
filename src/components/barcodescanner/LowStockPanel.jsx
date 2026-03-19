@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
-export default function LowStockPanel({ products, onSelectProduct }) {
+export default function LowStockPanel({ products, onSelectProduct, filterZero = false }) {
   const [open, setOpen] = useState(true);
 
   const lowStock = products.filter(
-    (p) => p.min_stock_level > 0 && (p.stock_quantity ?? 0) <= p.min_stock_level
+    (p) => filterZero
+      ? (p.stock_quantity ?? 0) === 0
+      : (p.min_stock_level > 0 && (p.stock_quantity ?? 0) <= p.min_stock_level)
   );
 
   return (

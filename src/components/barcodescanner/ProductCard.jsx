@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Minus, Plus, X } from "lucide-react";
 
 const QUICK_QTYS = [1, 5, 10, 20];

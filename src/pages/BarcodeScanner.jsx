@@ -6,6 +6,7 @@ import { createPageUrl } from "@/utils";
 import {
   ChevronLeft, Building2, Zap, X, List, Camera
 } from "lucide-react";
+import StockSummaryCards from "@/components/barcodescanner/StockSummaryCards";
 import ScannerViewfinder from "@/components/barcodescanner/ScannerViewfinder";
 import ProductCard from "@/components/barcodescanner/ProductCard";
 import ActivityLog from "@/components/barcodescanner/ActivityLog";
