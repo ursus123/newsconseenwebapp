@@ -75,6 +75,7 @@ export default function ScannerViewfinder({ onScan, isProcessing }) {
 
   return (
     <div className="bg-slate-900 px-4 pt-4 pb-2">
+      <style>{scannerStyles}</style>
       {/* Let html5-qrcode control its own layout — no clipping */}
       <div className="mx-auto max-w-[480px] rounded-2xl overflow-hidden bg-black">
         <div id="qr-reader" style={{ width: "100%" }} />
