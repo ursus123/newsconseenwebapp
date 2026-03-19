@@ -84,7 +84,8 @@ const ALL_NAV_PHASES = [
   items: [
   { name: "User Management", icon: Users, page: "UserManagement" },
   { name: "Permissions", icon: ShieldCheck, page: "Permissions" },
-  { name: "Billing", icon: CreditCard, page: "Billing" }]
+  { name: "Billing", icon: CreditCard, page: "Billing" },
+  { name: "Data Repair", icon: Wrench, page: "DataRepair" }]
 
 }];
 
