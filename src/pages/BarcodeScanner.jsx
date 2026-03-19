@@ -74,6 +74,24 @@ export default function BarcodeScanner() {
     setTimeout(() => barcodeInputRef.current?.focus(), 500);
   }, []);
 
+  // Auto-scroll to product card on mobile when product found
+  useEffect(() => {
+    if (scannedProduct && productCardRef.current) {
+      productCardRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [scannedProduct]);
+
+  // Scan history helpers
+  const getScanHistory = () => {
+    try { return JSON.parse(localStorage.getItem(`scanner_history_${user?.email}`) || "[]"); } catch { return []; }
+  };
+  const pushScanHistory = (val) => {
+    if (!user?.email) return;
+    const hist = getScanHistory().filter((v) => v !== val);
+    hist.unshift(val);
+    localStorage.setItem(`scanner_history_${user.email}`, JSON.stringify(hist.slice(0, 10)));
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e) => {
