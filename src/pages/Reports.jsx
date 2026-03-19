@@ -20,19 +20,27 @@ import {
 const API_BASE = "https://newsconseenwebapp-production.up.railway.app";
 
 const ENDPOINTS = {
-  enterprises: "/enterprise-summary",
-  people: "/people-summary",
-  tasks: "/task-summary",
+  enterprises:  "/enterprise-summary",
+  people:       "/people-summary",
+  tasks:        "/task-summary",
   transactions: "/transaction-summary",
-  services: "/service-summary",
-  products: "/product-summary",
+  services:     "/service-summary",
+  products:     "/product-summary",
 };
 
 const sumField = (arr, field) =>
   (arr || []).reduce((acc, r) => acc + (Number(r[field]) || 0), 0);
 
-async function fetchEndpoint(key) {
-  const res = await fetch(`${API_BASE}${ENDPOINTS[key]}`);
+// Build scoped URL — appends ?company_id=X when available
+function scopedUrl(path, companyId) {
+  if (!companyId) return `${API_BASE}${path}`;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${API_BASE}${path}${sep}company_id=${encodeURIComponent(companyId)}`;
+}
+
+async function fetchEndpoint(key, companyId) {
+  const url = scopedUrl(ENDPOINTS[key], companyId);
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const json = await res.json();
   const data = Array.isArray(json) ? json : (json.data || json.results || []);
@@ -50,11 +58,11 @@ const reportTypes = [
 
 const formFields = [
   { key: "title", label: "Report Title", required: true },
-  { key: "type", label: "Type", type: "select", required: true, options: reportTypes },
+  { key: "type",  label: "Type", type: "select", required: true, options: reportTypes },
   { key: "date_range_start", label: "Start Date", type: "date" },
-  { key: "date_range_end", label: "End Date", type: "date" },
+  { key: "date_range_end",   label: "End Date",   type: "date" },
   { key: "content", label: "Notes / Content", type: "textarea" },
-  { key: "status", label: "Status", type: "select", default: "draft", options: [
+  { key: "status",  label: "Status", type: "select", default: "draft", options: [
     { value: "draft",     label: "Draft" },
     { value: "published", label: "Published" },
   ]},
@@ -69,8 +77,7 @@ const typeColor = (t) => ({
   custom:      "bg-slate-100 text-slate-600",
 }[t] || "bg-slate-100 text-slate-600");
 
-// ── KPI Card ──────────────────────────────────────────────────────────────────
-function KpiCard({ icon: Icon, label, value, loading, iconBg, iconColor, valueColor, trend }) {
+function KpiCard({ icon: Icon, label, value, loading, iconBg, iconColor, valueColor }) {
   return (
     <Card className="border border-slate-100 rounded-2xl">
       <CardContent className="pt-5 pb-4 px-5">
@@ -79,18 +86,12 @@ function KpiCard({ icon: Icon, label, value, loading, iconBg, iconColor, valueCo
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
               {label}
             </p>
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin text-slate-300 mt-1" />
-            ) : (
-              <p className={`text-3xl font-black ${valueColor}`}>
-                {value?.toLocaleString() ?? "—"}
-              </p>
-            )}
-            {trend && !loading && (
-              <p className="text-[11px] text-emerald-600 flex items-center gap-1 mt-1">
-                <TrendingUp className="w-3 h-3" /> {trend}
-              </p>
-            )}
+            {loading
+              ? <Loader2 className="w-5 h-5 animate-spin text-slate-300 mt-1" />
+              : <p className={`text-3xl font-black ${valueColor}`}>
+                  {value?.toLocaleString() ?? "—"}
+                </p>
+            }
           </div>
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
             <Icon className={`w-5 h-5 ${iconColor}`} />
@@ -101,16 +102,15 @@ function KpiCard({ icon: Icon, label, value, loading, iconBg, iconColor, valueCo
   );
 }
 
-// ── Airflow Section ───────────────────────────────────────────────────────────
-function AirflowSection({ onManualRefresh, refreshing }) {
+function AirflowSection({ onManualRefresh, refreshing, etlResult }) {
   const pipelines = [
-    { name: "tasks_etl",        desc: "Syncs task summaries from Base44",             schedule: "@daily" },
-    { name: "transactions_etl", desc: "Syncs transaction summaries from Base44",       schedule: "@daily" },
-    { name: "services_etl",     desc: "Syncs service summaries from Base44",           schedule: "@daily" },
-    { name: "enterprises_etl",  desc: "Syncs enterprise summaries from Base44",        schedule: "@daily" },
-    { name: "people_etl",       desc: "Syncs people summaries from Base44",            schedule: "@daily" },
-    { name: "products_etl",     desc: "Syncs product summaries from Base44",           schedule: "@daily" },
-    { name: "geospatial_etl",   desc: "Geocodes enterprise addresses and clusters",    schedule: "@daily" },
+    { name: "tasks_etl",        desc: "Syncs task summaries",        schedule: "@daily" },
+    { name: "transactions_etl", desc: "Syncs transaction summaries",  schedule: "@daily" },
+    { name: "services_etl",     desc: "Syncs service summaries",      schedule: "@daily" },
+    { name: "enterprises_etl",  desc: "Syncs enterprise summaries",   schedule: "@daily" },
+    { name: "people_etl",       desc: "Syncs people summaries",       schedule: "@daily" },
+    { name: "products_etl",     desc: "Syncs product summaries",      schedule: "@daily" },
+    { name: "geospatial_etl",   desc: "Geocodes enterprise addresses", schedule: "@daily" },
   ];
 
   return (
@@ -124,7 +124,7 @@ function AirflowSection({ onManualRefresh, refreshing }) {
             <div>
               <h3 className="text-sm font-bold text-slate-800">Data Pipeline (Airflow)</h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Schedules and runs ETL pipelines to keep analytics fresh
+                Schedules ETL pipelines to keep analytics fresh
               </p>
             </div>
           </div>
@@ -154,6 +154,28 @@ function AirflowSection({ onManualRefresh, refreshing }) {
         </div>
       </div>
       <CardContent className="p-6">
+        {/* ETL result */}
+        {etlResult && (
+          <div className="mb-4 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+            <p className="text-xs font-semibold text-emerald-700 mb-2">
+              ✅ Analytics tables refreshed
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {etlResult.map(({ key, rows, ok }) => (
+                <span
+                  key={key}
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                    ok
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-rose-100 text-rose-600"
+                  }`}
+                >
+                  {key}: {ok ? `${rows} rows` : "failed"}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {pipelines.map((p) => (
             <div
@@ -176,7 +198,6 @@ function AirflowSection({ onManualRefresh, refreshing }) {
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Reports() {
   const [formOpen, setFormOpen]   = useState(false);
   const [editing, setEditing]     = useState(null);
@@ -202,7 +223,10 @@ export default function Reports() {
     base44.auth.me().then(setCurrentUser).catch(() => {});
   }, []);
 
-  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+  const isAdmin    = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+  const isSuperAdmin = currentUser?.role === "super_admin";
+  // super_admin passes no company_id — sees all data
+  const companyId  = isSuperAdmin ? null : currentUser?.company_id;
 
   const { data: reports = [] } = useQuery({
     queryKey: ["reports"],
@@ -212,7 +236,9 @@ export default function Reports() {
   const { data: accessRecord } = useQuery({
     queryKey: ["myAccess", currentUser?.email],
     queryFn: async () => {
-      const r = await base44.entities.UserAppAccess.filter({ user_email: currentUser.email });
+      const r = await base44.entities.UserAppAccess.filter({
+        user_email: currentUser.email,
+      });
       return r[0] || null;
     },
     enabled: !!currentUser && !isAdmin,
@@ -236,21 +262,24 @@ export default function Reports() {
   });
   const deleteMut = useMutation({
     mutationFn: (id) => base44.entities.Report.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["reports"] }); setDeleting(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reports"] });
+      setDeleting(null);
+    },
   });
 
   const loadOne = useCallback(async (key) => {
     setLoadingMap((p) => ({ ...p, [key]: true }));
     setErrorMap((p) => ({ ...p, [key]: null }));
     try {
-      const result = await fetchEndpoint(key);
+      const result = await fetchEndpoint(key, companyId);
       setAllData((p) => ({ ...p, [key]: result }));
     } catch (e) {
       setErrorMap((p) => ({ ...p, [key]: e.message || "Failed to load" }));
     } finally {
       setLoadingMap((p) => ({ ...p, [key]: false }));
     }
-  }, []);
+  }, [companyId]);
 
   const loadAll = useCallback(async () => {
     setLastRefreshed(null);
@@ -260,9 +289,12 @@ export default function Reports() {
     setLastRefreshed(new Date());
   }, [loadOne]);
 
-  React.useEffect(() => { loadAll(); }, [loadAll]);
+  // Reload when user/companyId becomes available
+  React.useEffect(() => {
+    if (currentUser) loadAll();
+  }, [currentUser?.company_id]);
 
-  // Manual ETL trigger — calls all POST /load endpoints
+  // Manual ETL trigger — scoped to company_id
   const handleManualETL = async () => {
     setEtlRefreshing(true);
     setEtlResult(null);
@@ -276,23 +308,22 @@ export default function Reports() {
     ];
     const results = await Promise.allSettled(
       loadEndpoints.map(async ({ key, path }) => {
-        const res = await fetch(`${API_BASE}${path}`, { method: "POST" });
+        const url = scopedUrl(path, companyId);
+        const res = await fetch(url, { method: "POST" });
         const json = await res.json();
         return { key, rows: json.rows_loaded ?? 0, status: json.status };
       })
     );
     const summary = results.map((r, i) => ({
-      key: loadEndpoints[i].key,
+      key:  loadEndpoints[i].key,
       rows: r.status === "fulfilled" ? r.value.rows : 0,
-      ok: r.status === "fulfilled",
+      ok:   r.status === "fulfilled",
     }));
     setEtlResult(summary);
     setEtlRefreshing(false);
-    // Reload charts after ETL
     await loadAll();
   };
 
-  // KPI values
   const kpiEnterprises  = allData.enterprises?.data  ? sumField(allData.enterprises.data,  "enterprise_count")   : null;
   const kpiPeople       = allData.people?.data        ? sumField(allData.people.data,        "people_count")       : null;
   const kpiTasks        = allData.tasks?.data         ? sumField(allData.tasks.data,         "total_tasks")        : null;
@@ -302,11 +333,11 @@ export default function Reports() {
 
   const tableColumns = [
     { key: "title", label: "Title" },
-    { key: "type", label: "Type", render: (val) => (
+    { key: "type",  label: "Type", render: (val) => (
       <Badge className={typeColor(val)}>{(val || "custom").replace(/_/g, " ")}</Badge>
     )},
-    { key: "date_range_start", label: "Start",  render: (v) => v ? format(new Date(v), "MMM d, yyyy") : "—" },
-    { key: "date_range_end",   label: "End",    render: (v) => v ? format(new Date(v), "MMM d, yyyy") : "—" },
+    { key: "date_range_start", label: "Start", render: (v) => v ? format(new Date(v), "MMM d, yyyy") : "—" },
+    { key: "date_range_end",   label: "End",   render: (v) => v ? format(new Date(v), "MMM d, yyyy") : "—" },
     { key: "status", label: "Status", render: (val) => (
       <Badge className={val === "published" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}>
         {val || "draft"}
@@ -316,13 +347,17 @@ export default function Reports() {
 
   return (
     <div>
-      {/* Page Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
           <h1 className="text-3xl font-black text-slate-800">Analytics & Reports</h1>
           <p className="text-slate-400 text-sm mt-1">Live data from Newsconseen operations</p>
+          {companyId && (
+            <p className="text-[11px] text-emerald-600 mt-0.5 font-medium">
+              Scoped to your workspace
+            </p>
+          )}
           {lastRefreshed && (
-            <p className="text-[11px] text-slate-400 mt-1">
+            <p className="text-[11px] text-slate-400 mt-0.5">
               Last refreshed: {format(lastRefreshed, "MMM d, h:mm:ss a")}
             </p>
           )}
@@ -332,9 +367,12 @@ export default function Reports() {
             <RefreshCw className={`w-4 h-4 mr-2 ${anyLoading ? "animate-spin" : ""}`} />
             Refresh Charts
           </Button>
-          <ReportExporter />
+          <ReportExporter companyId={companyId} />
           {isAdmin && (
-            <Button variant="outline" onClick={() => { setEditing(null); setFormOpen(true); }}>
+            <Button
+              variant="outline"
+              onClick={() => { setEditing(null); setFormOpen(true); }}
+            >
               <Plus className="w-4 h-4 mr-2" /> Create Report
             </Button>
           )}
@@ -360,39 +398,14 @@ export default function Reports() {
         />
       </div>
 
-      {/* ETL Result Toast */}
-      {etlResult && (
-        <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-4">
-          <p className="text-sm font-semibold text-emerald-700 mb-2">
-            ✅ Analytics tables refreshed successfully
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {etlResult.map(({ key, rows, ok }) => (
-              <span
-                key={key}
-                className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                  ok
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-rose-100 text-rose-600"
-                }`}
-              >
-                {key}: {ok ? `${rows} rows` : "failed"}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Superset */}
       <SupersetEmbed />
 
-      {/* Airflow */}
       <AirflowSection
         onManualRefresh={handleManualETL}
         refreshing={etlRefreshing}
+        etlResult={etlResult}
       />
 
-      {/* Saved Reports Table */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-slate-600">Saved Reports</h3>
         <span className="text-xs text-slate-400">{visibleReports.length} reports</span>
