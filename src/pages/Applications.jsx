@@ -233,13 +233,11 @@ export default function Applications() {
         onClose={() => setComingSoonApp(null)}
       />
 
-      {upgradeApp && (
-        <UpgradeModal
-          isOpen={!!upgradeApp}
-          onClose={() => setUpgradeApp(null)}
-          message={`${upgradeApp.name} requires the ${upgradeApp.plan} plan or higher.`}
-        />
-      )}
+      <UpgradeModal
+        open={!!upgradeApp}
+        onClose={() => setUpgradeApp(null)}
+        reason={upgradeApp ? `${upgradeApp.name} requires the ${upgradeApp.plan} plan or higher.` : ""}
+      />
     </div>
   );
 }
