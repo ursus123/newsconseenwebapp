@@ -245,8 +245,11 @@ export default function BulkImportDialog({
       const raw = { ...preview[i] };
       const rowNum = i + 2;
 
-      // Strip internal markers
-      const row = Object.fromEntries(Object.entries(raw).filter(([k]) => !k.startsWith("_")));
+      // Strip internal markers and any company_id/created_by from the file
+      // (withScope in onImport will stamp the correct values)
+      const row = Object.fromEntries(
+        Object.entries(raw).filter(([k]) => !k.startsWith("_") && k !== "company_id" && k !== "created_by")
+      );
 
       // Required check
       if (!row[requiredField]) {
