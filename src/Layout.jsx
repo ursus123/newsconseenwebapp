@@ -207,10 +207,9 @@ export default function Layout({ children, currentPageName }) {
           <button
             onClick={() => setSidebarOpen(true)}
             className="lg:hidden p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors">
-
             <Menu className="w-5 h-5" />
           </button>
-          <div className="ml-2 lg:ml-0 flex items-center gap-3">
+          <div className="ml-2 lg:ml-0 flex items-center gap-3 flex-1">
             <h2 className="text-lg font-semibold text-slate-800">{currentPageName}</h2>
             {currentUser && (
             currentUser.role === "super_admin" ?
@@ -224,6 +223,53 @@ export default function Layout({ children, currentPageName }) {
             null)
             }
           </div>
+
+          {/* User menu */}
+          {currentUser && (
+            <div className="relative">
+              <button
+                onClick={() => setUserMenuOpen((o) => !o)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-slate-50 transition-colors">
+                <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                  {(currentUser.full_name || currentUser.email || "?")[0].toUpperCase()}
+                </div>
+                <div className="hidden sm:block text-left">
+                  <p className="text-xs font-semibold text-slate-700 leading-none">{currentUser.full_name || "Account"}</p>
+                  <p className="text-[10px] text-slate-400 leading-none mt-0.5">{currentUser.email}</p>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
+              </button>
+
+              {userMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1.5 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-100">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{currentUser.full_name || "—"}</p>
+                      <p className="text-xs text-slate-400 truncate">{currentUser.email}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{currentUser.role} {currentUser.company_id ? `· ${currentUser.company_id}` : ""}</p>
+                    </div>
+                    <div className="py-1.5">
+                      <Link to={createPageUrl("Settings")} onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                        <Settings className="w-4 h-4 text-slate-400" /> Account Settings
+                      </Link>
+                      <Link to={`${createPageUrl("Settings")}#password`} onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                        <ShieldCheck className="w-4 h-4 text-slate-400" /> Change Password
+                      </Link>
+                    </div>
+                    <div className="border-t border-slate-100 py-1.5">
+                      <button onClick={() => base44.auth.logout()}
+                        className="flex items-center gap-2.5 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors w-full text-left">
+                        <LogOut className="w-4 h-4" /> Sign Out
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </header>
 
         <div className="flex-1 overflow-y-auto">
