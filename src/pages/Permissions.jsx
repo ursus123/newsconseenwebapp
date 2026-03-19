@@ -272,6 +272,9 @@ export default function Permissions() {
 
   const saveMut = useMutation({
     mutationFn: async ({ target_role, data }) => {
+      if (!isSuperAdmin && !companyId) {
+        throw new Error("Cannot save permissions: your account has no enterprise assigned. Contact your administrator.");
+      }
       const existing = perms.find(
         (p) => p.target_role === target_role &&
           (isSuperAdmin ? !p.company_id : p.company_id === companyId)
@@ -289,6 +292,10 @@ export default function Permissions() {
       qc.invalidateQueries({ queryKey: ["permissions"] });
       setSavedMsg(`${target_role === "admin" ? "Admin" : "User"} permissions saved.`);
       setTimeout(() => setSavedMsg(null), 3000);
+    },
+    onError: (error) => {
+      setSavedMsg("Error: " + error.message);
+      setTimeout(() => setSavedMsg(null), 5000);
     },
   });
 
