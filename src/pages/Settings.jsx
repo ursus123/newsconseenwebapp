@@ -167,6 +167,7 @@ export default function Settings() {
           {activeTab === "notifications" && <NotificationsSection user={user} />}
           {activeTab === "sessions"      && <SessionsSection />}
           {activeTab === "branding"      && <BrandingSection user={user} enterprise={myEnterprise} />}
+          {activeTab === "error_log"     && <ErrorLogSection user={user} />}
           {activeTab === "danger"        && <DangerSection user={user} />}
         </div>
       </div>
