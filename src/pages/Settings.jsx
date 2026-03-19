@@ -2,6 +2,10 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
+<parameter name="content">import React, { useState, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -9,8 +13,6 @@ import {
   User, Lock, Bell, Monitor, AlertTriangle, Settings as SettingsIcon,
   Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X,
 } from "lucide-react";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function passwordStrength(pw) {
   if (!pw) return null;
@@ -37,8 +39,6 @@ function getBrowser() {
   return "Browser";
 }
 
-// ─── Flash Banner ─────────────────────────────────────────────────────────────
-
 function Banner({ type, message, onDismiss }) {
   if (!message) return null;
   const ok = type === "success";
@@ -53,8 +53,6 @@ function Banner({ type, message, onDismiss }) {
   );
 }
 
-// ─── Toggle Row ───────────────────────────────────────────────────────────────
-
 function ToggleRow({ label, checked, onChange }) {
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
@@ -68,8 +66,6 @@ function ToggleRow({ label, checked, onChange }) {
     </div>
   );
 }
-
-// ─── Password Field ───────────────────────────────────────────────────────────
 
 function PasswordField({ label, value, onChange, placeholder }) {
   const [show, setShow] = useState(false);
@@ -93,8 +89,6 @@ function PasswordField({ label, value, onChange, placeholder }) {
   );
 }
 
-// ─── Tabs ─────────────────────────────────────────────────────────────────────
-
 const TABS = [
   { id: "profile",       label: "Profile",       icon: User },
   { id: "password",      label: "Password",      icon: Lock },
@@ -109,8 +103,6 @@ const DEFAULT_NOTIF = {
   email_daily: true, email_weekly: true, email_urgent: true,
   daily_time: "08:00", weekly_day: "Monday",
 };
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Settings() {
   const [user, setUser] = useState(null);
@@ -148,7 +140,6 @@ export default function Settings() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Sidebar tabs */}
         <div className="lg:w-48 shrink-0">
           <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
             {TABS.map(({ id, label, icon: Icon }) => (
@@ -166,7 +157,6 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 min-w-0">
           {activeTab === "profile"       && <ProfileSection user={user} myEnterprise={myEnterprise} onUserUpdated={setUser} />}
           {activeTab === "password"      && <PasswordSection />}
@@ -178,8 +168,6 @@ export default function Settings() {
     </div>
   );
 }
-
-// ─── Profile ──────────────────────────────────────────────────────────────────
 
 function ProfileSection({ user, myEnterprise, onUserUpdated }) {
   const [name, setName] = useState(user.full_name || "");
@@ -264,8 +252,6 @@ function ProfileSection({ user, myEnterprise, onUserUpdated }) {
   );
 }
 
-// ─── Password ─────────────────────────────────────────────────────────────────
-
 function PasswordSection() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -296,7 +282,6 @@ function PasswordSection() {
         <p className="text-xs text-slate-400 mt-0.5">Choose a strong password at least 8 characters long.</p>
       </div>
       {banner && <Banner type={banner.type} message={banner.msg} onDismiss={() => setBanner(null)} />}
-
       <PasswordField label="Current Password" value={current} onChange={setCurrent} placeholder="••••••••" />
       <div className="space-y-1.5">
         <PasswordField label="New Password" value={next} onChange={setNext} placeholder="••••••••" />
@@ -314,15 +299,12 @@ function PasswordSection() {
         <PasswordField label="Confirm New Password" value={confirm} onChange={setConfirm} placeholder="••••••••" />
         {mismatch && <p className="text-xs text-rose-500">Passwords do not match</p>}
       </div>
-
       <Button onClick={handleSubmit} disabled={saving || !canSubmit} className="w-full bg-emerald-600 hover:bg-emerald-700 rounded-xl">
         {saving ? "Updating..." : <><Lock className="w-4 h-4 mr-2" /> Update Password</>}
       </Button>
     </Card>
   );
 }
-
-// ─── Notifications ────────────────────────────────────────────────────────────
 
 function NotificationsSection({ user }) {
   const key = `notification_prefs_${user.email}`;
@@ -351,12 +333,12 @@ function NotificationsSection({ user }) {
       <div>
         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">In-App Notifications</p>
         <div className="rounded-xl border border-slate-100 px-4">
-          <ToggleRow label="Task assigned to me"          checked={prefs.task_assigned}        onChange={(v) => set("task_assigned", v)} />
-          <ToggleRow label="Task overdue (daily 9am)"     checked={prefs.task_overdue}         onChange={(v) => set("task_overdue", v)} />
-          <ToggleRow label="Medication recall detected"   checked={prefs.med_recall}           onChange={(v) => set("med_recall", v)} />
-          <ToggleRow label="Stock below minimum level"    checked={prefs.low_stock}            onChange={(v) => set("low_stock", v)} />
-          <ToggleRow label="Transaction needs posting"    checked={prefs.transaction_posting}  onChange={(v) => set("transaction_posting", v)} />
-          <ToggleRow label="License expiring in 30 days"  checked={prefs.license_expiry}      onChange={(v) => set("license_expiry", v)} />
+          <ToggleRow label="Task assigned to me"           checked={prefs.task_assigned}       onChange={(v) => set("task_assigned", v)} />
+          <ToggleRow label="Task overdue (daily 9am)"      checked={prefs.task_overdue}        onChange={(v) => set("task_overdue", v)} />
+          <ToggleRow label="Medication recall detected"    checked={prefs.med_recall}          onChange={(v) => set("med_recall", v)} />
+          <ToggleRow label="Stock below minimum level"     checked={prefs.low_stock}           onChange={(v) => set("low_stock", v)} />
+          <ToggleRow label="Transaction needs posting"     checked={prefs.transaction_posting} onChange={(v) => set("transaction_posting", v)} />
+          <ToggleRow label="License expiring in 30 days"   checked={prefs.license_expiry}     onChange={(v) => set("license_expiry", v)} />
         </div>
       </div>
 
@@ -392,8 +374,6 @@ function NotificationsSection({ user }) {
   );
 }
 
-// ─── Sessions ─────────────────────────────────────────────────────────────────
-
 function SessionsSection() {
   return (
     <Card className="p-6 space-y-5">
@@ -420,8 +400,6 @@ function SessionsSection() {
     </Card>
   );
 }
-
-// ─── Danger Zone ──────────────────────────────────────────────────────────────
 
 function DangerSection({ user }) {
   const [confirmText, setConfirmText] = useState("");
@@ -460,9 +438,7 @@ function DangerSection({ user }) {
         <div className="rounded-xl border border-rose-200 p-4 space-y-4">
           <div>
             <p className="text-sm font-semibold text-slate-800">Delete My Account</p>
-            <p className="text-xs text-slate-500 mt-1">
-              This cannot be undone. Your personal data will be removed but enterprise records you created will be retained.
-            </p>
+            <p className="text-xs text-slate-500 mt-1">This cannot be undone. Your personal data will be removed but enterprise records you created will be retained.</p>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-slate-600">Type <strong>DELETE</strong> to confirm</label>
