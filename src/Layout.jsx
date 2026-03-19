@@ -146,14 +146,26 @@ export default function Layout({ children, currentPageName }) {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-between px-6 h-20 border-b border-white/5">
-            <Link to={createPageUrl("Dashboard")} className="flex items-center gap-3">
-              <div className="bg-[#e089fa] rounded-xl w-10 h-10 from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                <span className="text-white font-bold text-lg">N</span>
-              </div>
-              <div>
-                <h1 className="text-white font-semibold text-lg tracking-tight">Newsconseen</h1>
-                <p className="text-slate-500 text-[10px] uppercase tracking-[0.2em]">Business Manager</p>
-              </div>
+            <Link to={createPageUrl("Dashboard")} className="flex items-center gap-3 min-w-0">
+              {branding.logoUrl ? (
+                <img src={branding.logoUrl} alt={branding.appName} className="h-8 w-auto object-contain max-w-[160px]" />
+              ) : (
+                <>
+                  <div className="rounded-xl w-10 h-10 flex items-center justify-center shadow-lg shrink-0"
+                    style={{ backgroundColor: branding.primaryColor }}>
+                    <span className="text-white font-bold text-lg">{branding.appName.charAt(0).toUpperCase()}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <h1 className="text-white font-semibold text-lg tracking-tight truncate">{branding.appName}</h1>
+                    {!branding.hideNewsconseen && branding.appName !== "Newsconseen" && (
+                      <p className="text-slate-500 text-[10px] uppercase tracking-[0.2em]">Powered by Newsconseen</p>
+                    )}
+                    {branding.appName === "Newsconseen" && (
+                      <p className="text-slate-500 text-[10px] uppercase tracking-[0.2em]">Business Manager</p>
+                    )}
+                  </div>
+                </>
+              )}
             </Link>
             <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white transition-colors">
               <X className="w-5 h-5" />
