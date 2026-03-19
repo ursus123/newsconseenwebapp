@@ -388,6 +388,12 @@ export default function BulkImportDialog({
           {/* ── Preview ── */}
           {step === "preview" && (
             <div className="p-6 space-y-4">
+              {rawHeaders.includes("company_id") && (
+                <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                  Your file contains a <strong className="mx-1">company_id</strong> column. It will be ignored — all records will be assigned to your workspace automatically.
+                </div>
+              )}
               <p className="text-sm text-slate-600">
                 <span className="font-semibold text-slate-800">{preview.length}</span> records ready · {" "}
                 <span className="text-rose-600">{preview.filter((r) => !r[requiredField]).length} missing {requiredField}</span>
