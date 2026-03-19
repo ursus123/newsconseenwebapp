@@ -1,128 +1,245 @@
-import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Clock, ChevronRight, Pill, UserPlus, FileSpreadsheet } from "lucide-react";
+import { Search, LayoutGrid } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
+import { APP_REGISTRY, CATEGORIES, PLAN_ORDER } from "@/components/applications/appRegistry";
+import AppCard from "@/components/applications/AppCard";
+import ComingSoonModal from "@/components/applications/ComingSoonModal";
+import RecentlyUsed from "@/components/applications/RecentlyUsed";
+import UpgradeModal from "@/components/shared/UpgradeModal";
 
-const ALL_APPS = [
-  {
-    id: "clockinout",
-    title: "Clock In / Out",
-    subtitle: "Attendance tracking — fast, no friction",
-    icon: Clock,
-    color: "from-slate-800 to-slate-900",
-    accent: "bg-emerald-400",
-    page: "ClockInOut",
-    status: "live",
-  },
-  {
-    id: "medadmin",
-    title: "Medication Administration",
-    subtitle: "eMAR — point-of-care recording, IDD-ready",
-    icon: Pill,
-    color: "from-blue-700 to-blue-900",
-    accent: "bg-blue-300",
-    page: "MedAdmin",
-    status: "live",
-  },
-  {
-    id: "addclient",
-    title: "Add Client",
-    subtitle: "Guided intake — People, Enterprises & Addresses",
-    icon: UserPlus,
-    color: "from-violet-700 to-violet-900",
-    accent: "bg-violet-300",
-    page: "AddClient",
-    status: "live",
-  },
-  {
-    id: "pdftoexcel",
-    title: "PDF to Excel",
-    subtitle: "Extract tables from PDFs — download CSV or push to Query Builder",
-    icon: FileSpreadsheet,
-    color: "from-rose-700 to-rose-900",
-    accent: "bg-rose-300",
-    page: "PdfToExcel",
-    status: "live",
-  },
-];
+const RECENTLY_USED_KEY = (email) => `recently_used_apps_${email}`;
+const MAX_RECENT = 4;
+
+function saveRecentApp(email, appId) {
+  if (!email) return;
+  const key = RECENTLY_USED_KEY(email);
+  const existing = JSON.parse(localStorage.getItem(key) || "[]");
+  const updated = [appId, ...existing.filter((id) => id !== appId)].slice(0, MAX_RECENT);
+  localStorage.setItem(key, JSON.stringify(updated));
+}
+
+function getRecentApps(email) {
+  if (!email) return [];
+  const key = RECENTLY_USED_KEY(email);
+  return JSON.parse(localStorage.getItem(key) || "[]");
+}
 
 export default function Applications() {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  useEffect(() => { base44.auth.me().then(setUser).catch(() => {}); }, []);
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
+  const [comingSoonApp, setComingSoonApp] = useState(null);
+  const [upgradeApp, setUpgradeApp] = useState(null);
+  const [recentIds, setRecentIds] = useState([]);
 
-  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  useEffect(() => {
+    base44.auth.me().then((u) => {
+      setUser(u);
+      setRecentIds(getRecentApps(u?.email));
+    }).catch(() => {});
+  }, []);
 
-  const { data: accessRecords = [] } = useQuery({
-    queryKey: ["userAppAccess"],
-    queryFn: () => base44.entities.UserAppAccess.list(),
-    enabled: !!user && !isAdmin,
+  // Load enterprise to determine industry
+  const { data: enterprises = [] } = useQuery({
+    queryKey: ["enterprise_for_apps", user?.company_id],
+    queryFn: () => base44.entities.Enterprise.filter({ enterprise_name: user.company_id }),
+    enabled: !!user?.company_id && user?.role !== "super_admin",
   });
+  const enterprise = enterprises[0];
+  const industry = enterprise?.enterprise_type || "";
 
-  // Admins see all apps; regular users see only their assigned apps
-  const myRecord = accessRecords.find((r) => r.user_email === user?.email);
-  const APPS = isAdmin
-    ? ALL_APPS
-    : myRecord
-    ? ALL_APPS.filter((a) => myRecord.allowed_apps?.includes(a.page))
-    : [];
+  const isEducation = industry === "education";
+  const isSuperAdmin = user?.role === "super_admin";
+  const isAdmin = user?.role === "admin" || isSuperAdmin;
+
+  // Determine current plan tier
+  const planTier = isSuperAdmin ? "consultant" : (enterprise?.subscription_tier || "starter");
+
+  // Filter visible apps
+  const visibleApps = useMemo(() => {
+    return APP_REGISTRY.filter((app) => {
+      // Education-only apps
+      if (app.educationOnly && !isEducation && !isSuperAdmin) return false;
+      // Admin-only apps
+      if (app.roles === "admin_only" && !isAdmin) return false;
+      return true;
+    });
+  }, [isAdmin, isEducation, isSuperAdmin]);
+
+  // Industry-based category ordering
+  const orderedCategories = useMemo(() => {
+    const cats = CATEGORIES.filter((c) => {
+      if (c === "Education" && !isEducation && !isSuperAdmin) return false;
+      return true;
+    });
+    // Reorder based on industry
+    const priority = [];
+    if (industry === "healthcare" || industry === "other") priority.push("Healthcare");
+    if (industry === "retail" || industry === "logistics") priority.push("Inventory");
+    const rest = cats.filter((c) => c !== "All" && !priority.includes(c));
+    return ["All", ...priority, ...rest.filter((c) => !priority.includes(c))];
+  }, [industry, isEducation, isSuperAdmin]);
+
+  // Filtered apps for display
+  const filteredApps = useMemo(() => {
+    return visibleApps.filter((app) => {
+      const matchCat = activeCategory === "All" || app.category === activeCategory;
+      const matchSearch = !search || app.name.toLowerCase().includes(search.toLowerCase()) || app.category.toLowerCase().includes(search.toLowerCase()) || app.description.toLowerCase().includes(search.toLowerCase());
+      return matchCat && matchSearch;
+    });
+  }, [visibleApps, activeCategory, search]);
+
+  // Group by category for section headers
+  const groupedByCategory = useMemo(() => {
+    if (activeCategory !== "All" || search) return null;
+    const groups = {};
+    orderedCategories.filter((c) => c !== "All").forEach((cat) => {
+      const apps = filteredApps.filter((a) => a.category === cat);
+      if (apps.length > 0) groups[cat] = apps;
+    });
+    return groups;
+  }, [filteredApps, activeCategory, search, orderedCategories]);
+
+  const recentApps = useMemo(() => {
+    return recentIds.map((id) => visibleApps.find((a) => a.id === id)).filter(Boolean);
+  }, [recentIds, visibleApps]);
+
+  const isLocked = (app) => {
+    if (isSuperAdmin) return false;
+    return PLAN_ORDER[app.plan] > PLAN_ORDER[planTier];
+  };
+
+  const handleLaunch = (app) => {
+    if (!app.exists) {
+      setComingSoonApp(app);
+      return;
+    }
+    saveRecentApp(user?.email, app.id);
+    setRecentIds(getRecentApps(user?.email));
+    navigate(createPageUrl(app.route));
+  };
+
+  const handleCardClick = (app) => {
+    if (isLocked(app)) {
+      setUpgradeApp(app);
+      return;
+    }
+    handleLaunch(app);
+  };
+
+  const categoryEmojis = { HR: "👥", Inventory: "📦", Healthcare: "🏥", Field: "🚀", Finance: "💼", Compliance: "📋", Education: "🎓" };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Applications</h1>
-        <p className="text-sm text-slate-400 mt-1">Standalone tools built on top of your data</p>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        {APPS.length === 0 && !isAdmin && (
-          <div className="col-span-2 flex flex-col items-center justify-center py-16 text-slate-400">
-            <p className="font-medium">No apps assigned to your account yet.</p>
-            <p className="text-sm mt-1">Contact your administrator.</p>
-          </div>
-        )}
-        {APPS.map((app) => {
-          const Icon = app.icon;
-          return (
-            <Link
-              key={app.id}
-              to={createPageUrl(app.page)}
-              className={`group relative flex flex-col justify-between p-6 rounded-2xl bg-gradient-to-br ${app.color} shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5 min-h-[180px] overflow-hidden`}
-            >
-              {/* Background orb */}
-              <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-white/5" />
-              <div className="absolute -right-2 -bottom-2 w-20 h-20 rounded-full bg-white/5" />
-
-              <div className="flex items-start justify-between">
-                <div className={`w-12 h-12 rounded-xl ${app.accent} flex items-center justify-center shadow-lg`}>
-                  <Icon className="w-6 h-6 text-slate-900" />
-                </div>
-                {app.status === "live" && (
-                  <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Live
-                  </span>
-                )}
-              </div>
-
-              <div className="mt-auto">
-                <h2 className="text-lg font-bold text-white">{app.title}</h2>
-                <p className="text-sm text-white/50 mt-0.5">{app.subtitle}</p>
-                <div className="flex items-center gap-1 mt-4 text-white/40 text-xs font-medium group-hover:text-white/70 transition-colors">
-                  Open app <ChevronRight className="w-3.5 h-3.5" />
-                </div>
-              </div>
-            </Link>
-          );
-        })}
-
-        {/* Placeholder slots */}
-        <div className="flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-dashed border-slate-200 min-h-[180px] text-slate-300">
-          <span className="text-3xl font-light">+</span>
-          <span className="text-xs mt-2">More apps coming soon</span>
+    <div className="max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Applications</h1>
+          <p className="text-sm text-slate-500 mt-0.5">All your operational tools in one place</p>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-slate-400 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+          <LayoutGrid className="w-4 h-4" />
+          <span>{visibleApps.length} applications available</span>
         </div>
       </div>
+
+      {/* Search */}
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search apps by name or category..."
+          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+        />
+      </div>
+
+      {/* Category Tabs */}
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-6 scrollbar-hide">
+        {orderedCategories.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setActiveCategory(cat)}
+            className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              activeCategory === cat
+                ? "bg-slate-800 text-white"
+                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            {cat !== "All" && categoryEmojis[cat] ? `${categoryEmojis[cat]} ` : ""}{cat}
+          </button>
+        ))}
+      </div>
+
+      {/* Recently Used */}
+      {!search && activeCategory === "All" && (
+        <RecentlyUsed apps={recentApps} onLaunch={handleCardClick} />
+      )}
+
+      {/* Empty state */}
+      {filteredApps.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+          <span className="text-4xl mb-3">🔍</span>
+          <p className="font-medium text-slate-600">No apps found for "{search}"</p>
+          <p className="text-sm mt-1">Try a different search term</p>
+        </div>
+      )}
+
+      {/* Grouped by category (All view) */}
+      {groupedByCategory && Object.keys(groupedByCategory).map((cat) => (
+        <div key={cat} className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-lg">{categoryEmojis[cat]}</span>
+            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">{cat}</h2>
+            <span className="text-xs text-slate-400 font-medium">({groupedByCategory[cat].length} app{groupedByCategory[cat].length !== 1 ? "s" : ""})</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {groupedByCategory[cat].map((app) => (
+              <AppCard
+                key={app.id}
+                app={app}
+                isLocked={isLocked(app)}
+                onLaunch={handleCardClick}
+                onUpgrade={() => setUpgradeApp(app)}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* Flat grid (search or category filter active) */}
+      {!groupedByCategory && filteredApps.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredApps.map((app) => (
+            <AppCard
+              key={app.id}
+              app={app}
+              isLocked={isLocked(app)}
+              onLaunch={handleCardClick}
+              onUpgrade={() => setUpgradeApp(app)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Modals */}
+      <ComingSoonModal
+        app={comingSoonApp}
+        userEmail={user?.email}
+        onClose={() => setComingSoonApp(null)}
+      />
+
+      {upgradeApp && (
+        <UpgradeModal
+          isOpen={!!upgradeApp}
+          onClose={() => setUpgradeApp(null)}
+          message={`${upgradeApp.name} requires the ${upgradeApp.plan} plan or higher.`}
+        />
+      )}
     </div>
   );
 }
