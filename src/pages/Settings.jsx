@@ -106,7 +106,7 @@ export default function Settings() {
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState(() => {
     const h = window.location.hash.replace("#", "");
-    return TABS.find((t) => t.id === h)?.id || "profile";
+    return ALL_TABS.find((t) => t.id === h)?.id || "profile";
   });
 
   useEffect(() => { base44.auth.me().then(setUser).catch(() => {}); }, []);
@@ -117,7 +117,11 @@ export default function Settings() {
     enabled: !!user,
   });
 
-  const myEnterprise = enterprises.find((e) => e.id === user?.company_id);
+  const myEnterprise = enterprises.find((e) => e.id === user?.company_id) ||
+    (user?.company_id ? enterprises.find((e) => e.enterprise_name === user.company_id) : null);
+
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const TABS = ALL_TABS.filter((t) => !t.adminOnly || isAdmin);
 
   if (!user) return (
     <div className="flex items-center justify-center h-64">
