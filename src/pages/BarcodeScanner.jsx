@@ -354,6 +354,24 @@ export default function BarcodeScanner() {
                 Go
               </button>
             </div>
+            {/* Recent scan history */}
+            {!scannedProduct && user && (() => {
+              const hist = getScanHistory().slice(0, 5);
+              if (!hist.length) return null;
+              return (
+                <div className="mt-2">
+                  <p className="text-slate-600 text-[10px] uppercase font-bold tracking-widest mb-1.5">Recently scanned</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {hist.map((v) => (
+                      <button key={v} onClick={() => handleScan(v)}
+                        className="px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 text-xs font-mono hover:bg-slate-700 hover:border-indigo-500 transition-colors">
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Bulk queue */}
