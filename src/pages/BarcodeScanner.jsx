@@ -443,10 +443,18 @@ export default function BarcodeScanner() {
 
             {/* Low stock panel */}
             {!scannedProduct && !notFound && (
-              <LowStockPanel
-                products={products}
-                onSelectProduct={(p) => { setScannedProduct(p); setMode("in"); setQuantity(1); }}
-              />
+              <>
+                <StockSummaryCards
+                  products={products}
+                  activeFilter={lowStockFilter}
+                  onFilterChange={setLowStockFilter}
+                />
+                <LowStockPanel
+                  products={products}
+                  onSelectProduct={(p) => { setScannedProduct(p); setMode("in"); setQuantity(1); }}
+                  filterZero={lowStockFilter === "zero"}
+                />
+              </>
             )}
           </div>
 
