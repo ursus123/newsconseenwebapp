@@ -4,11 +4,11 @@ import { base44 } from "@/api/base44Client";
 export const ALL_ADMIN_PAGES = [
   "Dashboard", "Tasks", "Enterprises", "People", "Products",
   "Services", "Addresses", "Relationships", "Transactions",
-  "Reports", "Applications", "ClockInOut", "MedAdmin",
+  "Reports", "Applications", "ClockInOut", "MedAdmin", "StaffSchedule",
   "InviteUser", "UserManagement", "Permissions", "Billing",
 ];
 
-export const ALL_APP_PAGES = ["Applications", "ClockInOut", "MedAdmin"];
+export const ALL_APP_PAGES = ["Applications", "ClockInOut", "MedAdmin", "StaffSchedule"];
 
 export const DEFAULT_PAGES = {
   super_admin: null,

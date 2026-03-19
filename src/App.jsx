@@ -11,6 +11,7 @@ import QueryBuilder from './pages/QueryBuilder';
 import Onboarding from './pages/Onboarding';
 import Pricing from './pages/Pricing';
 import Billing from './pages/Billing';
+import StaffSchedule from './pages/StaffSchedule';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
@@ -81,6 +82,7 @@ const AuthenticatedApp = () => {
       <Route path="/PdfToExcel" element={<LayoutWrapper currentPageName="PDF to Excel"><PdfToExcel /></LayoutWrapper>} />
       <Route path="/Pipelines" element={<LayoutWrapper currentPageName="Pipelines"><Pipelines /></LayoutWrapper>} />
       <Route path="/Billing" element={<LayoutWrapper currentPageName="Billing"><Billing /></LayoutWrapper>} />
+      <Route path="/StaffSchedule" element={<LayoutWrapper currentPageName="Staff Scheduler"><StaffSchedule /></LayoutWrapper>} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

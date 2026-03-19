@@ -2,7 +2,7 @@ export const APP_REGISTRY = [
   // HR & PEOPLE
   { id: "clockinout", name: "Clock In/Out", emoji: "🕐", description: "Staff attendance tracking with timestamps", category: "HR", route: "ClockInOut", color: "blue", roles: "all", plan: "starter", exists: true },
   { id: "leaverequest", name: "Leave Request", emoji: "🏖️", description: "Submit and approve annual, sick and emergency leave", category: "HR", route: "LeaveRequest", color: "cyan", roles: "all", plan: "starter", exists: false },
-  { id: "staffschedule", name: "Staff Schedule", emoji: "📅", description: "Weekly shift planner and rota management", category: "HR", route: "StaffSchedule", color: "indigo", roles: "admin_only", plan: "professional", exists: false },
+  { id: "staffschedule", name: "Staff Scheduler", emoji: "📅", description: "Weekly shift planner and rota management", category: "HR", route: "StaffSchedule", color: "indigo", roles: "all", plan: "professional", exists: true },
   { id: "expenseclaim", name: "Expense Claim", emoji: "💸", description: "Submit and approve staff expense reimbursements", category: "HR", route: "ExpenseClaim", color: "emerald", roles: "all", plan: "starter", exists: false },
   { id: "performancereview", name: "Performance Review", emoji: "⭐", description: "Quarterly staff appraisal forms and goal tracking", category: "HR", route: "PerformanceReview", color: "amber", roles: "admin_only", plan: "professional", exists: false },
   { id: "trainingtracker", name: "Training Tracker", emoji: "🎓", description: "Log completed training and track certification expiry dates", category: "HR", route: "TrainingTracker", color: "violet", roles: "all", plan: "starter", exists: false },
