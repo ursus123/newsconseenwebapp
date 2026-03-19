@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { useAuth } from "@/lib/AuthContext";
 import StepWorkspace from "@/components/onboarding/StepWorkspace";
 import StepTeam from "@/components/onboarding/StepTeam";
 import StepOfferings from "@/components/onboarding/StepOfferings";
