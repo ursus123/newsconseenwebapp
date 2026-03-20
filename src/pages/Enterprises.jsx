@@ -66,6 +66,29 @@ export default function Enterprises() {
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
+  useEffect(() => {
+    const debug = async () => {
+      const user = await base44.auth.me()
+      console.log("=== DEBUG ===")
+      console.log("User:", JSON.stringify(user))
+      console.log("company_id:", user.company_id)
+      
+      const allEnterprises = await base44.entities.Enterprise.list()
+      console.log("All enterprises (unfiltered):", allEnterprises.length)
+      console.log("Enterprise data:", JSON.stringify(allEnterprises))
+      
+      if (user.company_id) {
+        const filtered = await base44.entities.Enterprise.filter({
+          company_id: user.company_id
+        })
+        console.log("Filtered by company_id:", filtered.length)
+      } else {
+        console.log("WARNING: user has no company_id")
+      }
+    }
+    debug()
+  }, [])
+
   // One-time fix for BrightStar Care LLC
   useEffect(() => {
     const fixed = localStorage.getItem("bs_fix_done");
