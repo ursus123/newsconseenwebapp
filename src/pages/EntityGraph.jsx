@@ -315,18 +315,18 @@ export default function EntityGraph() {
     return counts;
   }, [rawNodes]);
 
-  // Max nodes cap
+  // Max nodes cap (applied after collapse)
   const MAX_NODES = 300;
-  const isCapped = nodes.length > MAX_NODES;
+  const isCapped = collapsedNodes.length > MAX_NODES;
   const displayNodes = useMemo(() => {
-    if (!isCapped) return nodes;
+    if (!isCapped) return collapsedNodes;
     const degreeMap = {};
-    links.forEach(l => { degreeMap[l.source] = (degreeMap[l.source] || 0) + 1; degreeMap[l.target] = (degreeMap[l.target] || 0) + 1; });
-    return [...nodes].sort((a, b) => (degreeMap[b.id] || 0) - (degreeMap[a.id] || 0)).slice(0, MAX_NODES);
-  }, [nodes, links, isCapped]);
+    collapsedLinks.forEach(l => { degreeMap[l.source] = (degreeMap[l.source] || 0) + 1; degreeMap[l.target] = (degreeMap[l.target] || 0) + 1; });
+    return [...collapsedNodes].sort((a, b) => (degreeMap[b.id] || 0) - (degreeMap[a.id] || 0)).slice(0, MAX_NODES);
+  }, [collapsedNodes, collapsedLinks, isCapped]);
 
   const displayNodeIds = useMemo(() => new Set(displayNodes.map(n => n.id)), [displayNodes]);
-  const displayLinks = useMemo(() => links.filter(l => displayNodeIds.has(l.source) && displayNodeIds.has(l.target)), [links, displayNodeIds]);
+  const displayLinks = useMemo(() => collapsedLinks.filter(l => displayNodeIds.has(l.source) && displayNodeIds.has(l.target)), [collapsedLinks, displayNodeIds]);
 
   const applyPreset = (presetName) => {
     setFilter(VIEW_PRESETS[presetName] || INITIAL_FILTER);
