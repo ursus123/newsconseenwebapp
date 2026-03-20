@@ -84,7 +84,7 @@ export default function StockCounter() {
 
   const { data: countHistory = [] } = useQuery({
     queryKey: ["sc_history", currentUser?.company_id],
-    queryFn: () => base44.entities.Task.filter({ company_id: currentUser.company_id, task_type: "stock_counting", status: "completed" }),
+    queryFn: () => base44.entities.Task.filter({ company_id: currentUser.company_id, task_type: "stock_count", status: "completed" }),
     enabled: !!currentUser?.company_id,
   });
 
@@ -180,7 +180,7 @@ export default function StockCounter() {
           company_id: currentUser.company_id,
           description: `Stock Count Adjustment: ${count.product_name} ${count.system_count} → ${count.physical_count}`,
           amount: Math.abs(diff) * (count.cost_price || 0),
-          payment_status: "na",
+          payment_status: "not_applicable",
           internal_notes: `Physical count by ${session.counted_by} at ${session.location}. ${count.notes || ""}`,
         });
         results.updated++;
@@ -191,7 +191,7 @@ export default function StockCounter() {
     }
 
     await base44.entities.Task.create({
-      task_type: "stock_counting",
+      task_type: "stock_count",
       title: `Stock Count — ${session.enterprise} — ${new Date().toLocaleDateString()}`,
       status: "completed",
       outcome: "completed",
@@ -276,6 +276,52 @@ export default function StockCounter() {
               </button>
             ))}
           </div>
+
+          {/* Category filter pills — only on sheet tab with active session */}
+          {session && activeTab === "sheet" && (() => {
+            const sessionCategories = ["All", ...new Set(
+              Object.values(session.counts).map(c => c.category).filter(Boolean)
+            )];
+            return (
+              <div className="flex gap-1 flex-wrap mt-2">
+                {sessionCategories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setCategoryFilter(cat)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${
+                      categoryFilter === cat
+                        ? "bg-orange-500 text-white"
+                        : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
+
+          {/* Progress bar — only when session is active */}
+          {session && (() => {
+            const counts = Object.values(session.counts);
+            const counted = counts.filter(c => c.counted).length;
+            const total = counts.length;
+            const pct = total > 0 ? Math.round((counted / total) * 100) : 0;
+            return (
+              <div className="mt-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-slate-500">{counted} of {total} items counted</span>
+                  <span className="text-xs font-bold text-orange-600">{pct}%</span>
+                </div>
+                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-orange-500 rounded-full transition-all duration-300"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -322,7 +368,7 @@ export default function StockCounter() {
           addresses={addresses}
           onStart={handleStartSession}
           onClose={() => setShowNewSession(false)}
-          defaultEnterprise={currentUser?.company_id}
+          defaultEnterprise={enterprises.find(e => e.id === currentUser?.company_id || e.company_id === currentUser?.company_id)?.enterprise_name || ""}
         />
       )}
 
