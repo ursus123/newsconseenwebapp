@@ -118,25 +118,27 @@ export default function Enterprises() {
   const withCompany = withScope;
 
   const createMut = useMutation({
-    mutationFn: async (d) => {
-      const newEnterprise = await base44.entities.Enterprise.create(withCompany(d));
-      
-      // If company_id is empty, stamp enterprise's own id
-      if (!newEnterprise.company_id) {
-        await base44.entities.Enterprise.update(newEnterprise.id, {
-          company_id: newEnterprise.id
-        });
-        
-        // Also update current user's company_id if not set
-        const currentUserData = await base44.auth.me();
-        if (!currentUserData.company_id) {
-          await base44.auth.updateMe({ company_id: newEnterprise.id });
-        }
-        
-        return { ...newEnterprise, company_id: newEnterprise.id };
+    mutationFn: async (data) => {
+      // Strip company_id — we set it explicitly after creation
+      const { company_id: _, ...cleanData } = data;
+
+      const created = await base44.entities.Enterprise.create({
+        ...cleanData,
+        created_by: currentUser?.email,
+      });
+
+      // The enterprise's own id IS the workspace root (company_id)
+      const workspaceId = created.id;
+
+      await base44.entities.Enterprise.update(created.id, { company_id: workspaceId });
+
+      // If user has no company_id yet, assign them to this new workspace
+      if (!currentUser?.company_id) {
+        await base44.auth.updateMe({ company_id: workspaceId });
+        setTimeout(() => window.location.reload(), 500);
       }
-      
-      return newEnterprise;
+
+      return { ...created, company_id: workspaceId };
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); setFormOpen(false); }
   });

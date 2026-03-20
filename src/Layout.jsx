@@ -115,20 +115,27 @@ export default function Layout({ children, currentPageName }) {
       .catch(() => {});
   }, [currentUser?.id]);
 
-  // Auto-repair enterprise company_id if empty
+  // Silent background fix: repair enterprises created by this user with null company_id
   useEffect(() => {
     if (!currentUser) return;
     if (currentUser.role === "super_admin") return;
     if (!currentUser.company_id) return;
 
-    base44.entities.Enterprise.filter({ id: currentUser.company_id })
-      .then(async (results) => {
-        if (results.length > 0 && !results[0].company_id) {
-          await base44.entities.Enterprise.update(currentUser.company_id, {
-            company_id: currentUser.company_id
-          });
-          window.location.reload();
+    const fixKey = `fixed_${currentUser.company_id}`;
+    if (localStorage.getItem(fixKey)) return;
+
+    base44.entities.Enterprise.filter({ created_by: currentUser.email })
+      .then(async (enterprises) => {
+        let fixed = 0;
+        for (const e of enterprises) {
+          if (!e.company_id) {
+            await base44.entities.Enterprise.update(e.id, { company_id: currentUser.company_id });
+            fixed++;
+            await new Promise(r => setTimeout(r, 300));
+          }
         }
+        localStorage.setItem(fixKey, "true");
+        if (fixed > 0) window.location.reload();
       })
       .catch(() => {});
   }, [currentUser?.company_id]);

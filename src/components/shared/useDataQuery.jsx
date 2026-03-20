@@ -21,18 +21,35 @@ export function useEntityListFn(currentUser) {
       return entity.list(sort);
     }
 
-    // All other roles MUST have company_id
-    // If not set, return empty — never leak other tenants' data
     if (!currentUser.company_id) {
-      console.warn(
-        `[Isolation] User ${currentUser.email} has no company_id — ` +
-        `returning empty dataset to prevent data leak.`
-      );
+      console.warn(`[Isolation] User ${currentUser.email} has no company_id — returning empty.`);
       return Promise.resolve([]);
     }
 
-    // Strict company_id filter only
-    return entity.filter({ company_id: currentUser.company_id }, sort);
+    // Primary: filter by company_id
+    // Fallback: also fetch records created by this user that may have null company_id (pre-fix records)
+    return Promise.all([
+      entity.filter({ company_id: currentUser.company_id }, sort),
+      entity.filter({ created_by: currentUser.email }, sort),
+    ]).then(([byCompany, byCreator]) => {
+      // Merge and deduplicate
+      const seen = new Set();
+      const merged = [...byCompany, ...byCreator].filter(r => {
+        if (seen.has(r.id)) return false;
+        seen.add(r.id);
+        return true;
+      });
+
+      // Silently fix any records missing the correct company_id
+      const toFix = byCreator.filter(r => r.company_id !== currentUser.company_id);
+      if (toFix.length > 0) {
+        toFix.forEach(r => {
+          entity.update(r.id, { company_id: currentUser.company_id }).catch(() => {});
+        });
+      }
+
+      return merged;
+    });
   };
 }
 
@@ -48,19 +65,19 @@ export function useWithScope(currentUser) {
       return data;
     }
 
-    // Hard block — cannot write without a tenant
-    if (!currentUser.company_id) {
-      throw new Error(
-        "Your account is not assigned to an enterprise workspace. " +
-        "Contact your administrator before creating records."
-      );
-    }
-
-    return {
+    // Always stamp created_by
+    const scoped = {
       ...data,
-      company_id: currentUser.company_id,
       created_by: currentUser.email,
     };
+
+    // Only stamp company_id if it exists —
+    // first enterprise creation won't have it yet; createMut handles that case
+    if (currentUser.company_id) {
+      scoped.company_id = currentUser.company_id;
+    }
+
+    return scoped;
   };
 }
 
