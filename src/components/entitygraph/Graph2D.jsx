@@ -229,10 +229,10 @@ export default function Graph2D({ nodes, links, selected, onSelect, colorBy = "d
                   width: r * 2, height: r * 2,
                   zIndex: isDraggingThis ? 50 : isSelected ? 20 : 5,
                   opacity: isDimmed ? 0.12 : 1,
-                  backgroundColor: hexColor + "22",
+                  backgroundColor: node.isCluster ? hexColor + "33" : hexColor + "22",
                   borderColor: isSelected || isOnPath ? hexColor : (isMatch ? "#f59e0b" : cfg.border || hexColor + "55"),
-                  borderWidth: isSelected || isOnPath || isMatch ? 2.5 : 1.5,
-                  borderStyle: "solid",
+                  borderWidth: isSelected || isOnPath || isMatch ? 2.5 : node.isCluster ? 2 : 1.5,
+                  borderStyle: node.isCluster ? "dashed" : "solid",
                   borderRadius: "50%",
                   boxShadow: isSelected ? `0 0 0 4px ${hexColor}44` : isOnPath ? `0 0 0 3px #f59e0b44` : isMatch ? `0 0 0 3px #f59e0b66` : "",
                   transition: isDraggingThis ? "none" : "opacity 0.2s",
@@ -241,17 +241,27 @@ export default function Graph2D({ nodes, links, selected, onSelect, colorBy = "d
                   userSelect: "none",
                 }}
                 onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-                onClick={() => { if (!nodeDrag) onSelect(selected === node.id ? null : node.id); }}
+                onClick={() => {
+                  if (nodeDrag) return;
+                  if (node.isCluster && onClusterClick) { onClusterClick(node.clusterId); return; }
+                  onSelect(selected === node.id ? null : node.id);
+                }}
               >
                 <span style={{ fontSize: Math.max(12, r * 0.55), lineHeight: 1 }}>{cfg.icon}</span>
-                <span style={{
-                  fontSize: Math.max(7, Math.min(10, r * 0.28)),
-                  fontWeight: 600, color: hexColor, textAlign: "center",
-                  padding: "0 2px", lineHeight: 1.2, marginTop: 2, width: "100%",
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}>
-                  {node.label.length > 12 ? node.label.slice(0, 11) + "…" : node.label}
-                </span>
+                {node.isCluster ? (
+                  <span style={{ fontSize: Math.max(8, r * 0.28), fontWeight: 700, color: hexColor, textAlign: "center", lineHeight: 1.2, marginTop: 1 }}>
+                    {node.clusterCount}
+                  </span>
+                ) : (
+                  <span style={{
+                    fontSize: Math.max(7, Math.min(10, r * 0.28)),
+                    fontWeight: 600, color: hexColor, textAlign: "center",
+                    padding: "0 2px", lineHeight: 1.2, marginTop: 2, width: "100%",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    {node.label.length > 12 ? node.label.slice(0, 11) + "…" : node.label}
+                  </span>
+                )}
               </div>
             );
           })}
