@@ -134,12 +134,13 @@ export function computeEnterpriseHealth(e) {
 }
 
 export const VIEW_PRESETS = {
-  "Full Network":     { enterprise: true, person: true, service: true, product: true, task: true, transaction: true, address: true },
-  "Operations View":  { enterprise: true, person: true, service: false, product: false, task: true, transaction: false, address: false },
-  "Financial View":   { enterprise: true, person: false, service: false, product: false, task: false, transaction: true, address: false },
-  "Inventory View":   { enterprise: true, person: false, service: false, product: true, task: false, transaction: false, address: false },
-  "Healthcare View":  { enterprise: true, person: true, service: false, product: true, task: false, transaction: false, address: false },
-  "At Risk":          { enterprise: true, person: true, service: false, product: true, task: true, transaction: false, address: false },
+  "Enterprise Overview": { enterprise: true,  person: false, service: false, product: false, task: false, transaction: false, address: false },
+  "Staff Network":       { enterprise: true,  person: true,  service: false, product: false, task: false, transaction: false, address: false },
+  "Operations View":     { enterprise: true,  person: true,  service: false, product: false, task: true,  transaction: false, address: false },
+  "Inventory View":      { enterprise: true,  person: false, service: false, product: true,  task: false, transaction: false, address: false },
+  "Financial View":      { enterprise: true,  person: false, service: false, product: false, task: false, transaction: true,  address: false },
+  "Healthcare View":     { enterprise: true,  person: true,  service: false, product: true,  task: false, transaction: false, address: false },
+  "Full Network":        { enterprise: true,  person: true,  service: true,  product: true,  task: true,  transaction: false, address: false },
 };
 
 export function buildGraph(enterprises, people, services, products, tasks, transactions, addresses, relationships, filter, colorBy = "default") {

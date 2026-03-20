@@ -88,7 +88,7 @@ function getLinkStyle(link) {
   return { color, width, dashArr };
 }
 
-export default function Graph2D({ nodes, links, selected, onSelect, colorBy = "default", searchQuery = "", highlightPath = null }) {
+export default function Graph2D({ nodes, links, selected, onSelect, colorBy = "default", searchQuery = "", highlightPath = null, onClusterClick = null }) {
   const forcePos = useForceLayout(nodes, links);
   const [manualPositions, setManualPositions] = useState({});
   const [zoom, setZoom] = useState(1);
@@ -192,7 +192,7 @@ export default function Graph2D({ nodes, links, selected, onSelect, colorBy = "d
                     stroke={isOnPath ? "#f59e0b" : color}
                     strokeWidth={isOnPath ? 3 : isHighlighted ? 2.5 : width}
                     strokeDasharray={dashArr}
-                    opacity={isDimmed ? 0.08 : isHighlighted || isOnPath ? 1 : 0.4}
+                    opacity={isDimmed ? 0.05 : isHighlighted || isOnPath ? 1 : 0.18}
                     markerEnd="url(#arr2d)"
                   />
                   {(isHighlighted || isOnPath) && (
@@ -256,15 +256,20 @@ export default function Graph2D({ nodes, links, selected, onSelect, colorBy = "d
             );
           })}
 
-          {/* Labels */}
+          {/* Labels — only enterprises always, others on select/hover/search */}
           <svg style={{ position: "absolute", top: 0, left: 0, width: W, height: H, overflow: "visible", pointerEvents: "none" }}>
             {nodes.map((node) => {
               const pos = positions[node.id];
               if (!pos) return null;
-              const r = getNodeRadius(node, nodes, links);
+              // Only show label for: enterprises, clusters, selected, path nodes, search matches
               const isMatch = matchingIds?.has(node.id);
               const isOnPath = pathSet?.has(node.id);
-              const isDimmed = (selected && selected !== node.id && !connectedIds.has(node.id))
+              const isSelected = selected === node.id;
+              const isConnected = connectedIds.has(node.id);
+              const alwaysShow = node.type === "enterprise" || node.isCluster;
+              if (!alwaysShow && !isSelected && !isConnected && !isMatch && !isOnPath) return null;
+              const r = getNodeRadius(node, nodes, links);
+              const isDimmed = (selected && !isSelected && !isConnected)
                 || (matchingIds && !isMatch)
                 || (pathSet && !isOnPath);
               return (
@@ -272,7 +277,7 @@ export default function Graph2D({ nodes, links, selected, onSelect, colorBy = "d
                   key={`lbl-${node.id}`}
                   x={pos.x} y={pos.y + r + 14}
                   textAnchor="middle" fontSize="11" fontWeight="500" fill="#475569"
-                  opacity={isDimmed ? 0.1 : 0.85}
+                  opacity={isDimmed ? 0.1 : 0.9}
                 >
                   {node.label.length > 18 ? node.label.slice(0, 17) + "…" : node.label}
                 </text>
