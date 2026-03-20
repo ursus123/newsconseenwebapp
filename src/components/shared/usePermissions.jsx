@@ -18,7 +18,7 @@ export const DEFAULT_PAGES = {
 };
 
 const SUPER_ADMIN_PERMS = {
-  allowedPages: ["DataRepair"],
+  allowedPages: null,
   isSuperAdmin: true,
   isAdmin: false,
   isUser: false,

@@ -87,12 +87,7 @@ const ALL_NAV_PHASES = [
   { name: "Billing", icon: CreditCard, page: "Billing" }],
   superAdminOnly: true
 },
-{
-  label: "Super Admin",
-  items: [
-  { name: "Data Repair", icon: Wrench, page: "DataRepair" }],
-  superAdminOnly: true
-}];
+];
 
 
 export default function Layout({ children, currentPageName }) {
