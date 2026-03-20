@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { Network, RefreshCw, Search, X, Download, ChevronDown } from "lucide-react";
-import { buildGraph, NODE_CONFIG, VIEW_PRESETS } from "@/components/entitygraph/graphConfig";
+import { Network, RefreshCw, Search, X, Download, ChevronDown, Focus } from "lucide-react";
+import { buildGraph, NODE_CONFIG, VIEW_PRESETS, getNodeColor } from "@/components/entitygraph/graphConfig";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 import Graph2D from "@/components/entitygraph/Graph2D";
 import GraphSidePanel from "@/components/entitygraph/GraphSidePanel";
@@ -375,7 +375,7 @@ export default function EntityGraph() {
         </div>
       </div>
 
-      {/* Header row 2: filter toggles */}
+      {/* Header row 2: filter toggles + focus mode + depth + node count */}
       <div className="flex items-center gap-2 mb-3 shrink-0 flex-wrap">
         {Object.entries(NODE_CONFIG).map(([type, cfg]) => (
           <button
@@ -389,9 +389,40 @@ export default function EntityGraph() {
             <span>{cfg.icon}</span> {cfg.label}
           </button>
         ))}
+
+        <div className="h-4 w-px bg-slate-200 mx-1" />
+
+        {/* Focus Mode */}
+        <button
+          onClick={() => { setFocusMode(v => !v); setFocusedEnterprise(null); }}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium border transition-all ${
+            focusMode ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" : "bg-white text-slate-500 border-slate-200"
+          }`}
+          title="Focus Mode: click an enterprise to expand only its connections"
+        >
+          🎯 Focus
+        </button>
+
+        {/* Depth slider */}
+        <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1">
+          <span className="text-xs text-slate-500">Depth</span>
+          <input
+            type="range" min={1} max={3} value={depth}
+            onChange={e => setDepth(Number(e.target.value))}
+            className="w-16 accent-indigo-500"
+          />
+          <span className="text-xs font-mono text-slate-600 w-3">{depth}</span>
+        </div>
+
+        {/* Node count indicator */}
+        <span className={`text-xs px-2 py-1 rounded-xl border font-medium ${displayNodes.length > 100 ? "text-amber-600 bg-amber-50 border-amber-200" : "text-slate-400 bg-white border-slate-200"}`}>
+          {displayNodes.length} nodes · {displayLinks.length} links
+          {displayNodes.length > 100 && " · Use Focus Mode for clarity"}
+        </span>
+
         {isCapped && (
-          <span className="ml-2 text-[10px] text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2 py-1 rounded-xl">
-            ⚠ Showing top {MAX_NODES} of {nodes.length} nodes (most connected)
+          <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2 py-1 rounded-xl">
+            ⚠ Capped at {MAX_NODES} of {nodes.length}
           </span>
         )}
       </div>
@@ -417,10 +448,21 @@ export default function EntityGraph() {
             nodes={displayNodes}
             links={displayLinks}
             selected={selected}
-            onSelect={setSelected}
+            onSelect={(id) => {
+              // In focus mode, clicking an enterprise focuses it
+              if (focusMode) {
+                const n = displayNodes.find(x => x.id === id);
+                if (n?.type === "enterprise") {
+                  setFocusedEnterprise(prev => prev === id ? null : id);
+                  return;
+                }
+              }
+              setSelected(id);
+            }}
             colorBy={colorBy}
             searchQuery={searchQuery}
             highlightPath={highlightPath}
+            onClusterClick={handleClusterClick}
           />
           <GraphSidePanel
             nodes={displayNodes}
