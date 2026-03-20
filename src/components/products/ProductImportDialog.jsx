@@ -254,7 +254,7 @@ export default function ProductImportDialog({ open, onClose, onImport, currentUs
   }, [XLSX, processFile]);
 
   const handleSheetChange = (sheetName) => {
-    if (!XLSX) return;
+    if (!XLSX || !file) return;
     setSelectedSheet(sheetName);
     const reader = new FileReader();
     reader.onload = (e) => {
