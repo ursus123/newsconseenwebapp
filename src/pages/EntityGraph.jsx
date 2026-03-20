@@ -7,7 +7,8 @@ import { useEntityListFn } from "@/components/shared/useDataQuery";
 import Graph2D from "@/components/entitygraph/Graph2D";
 import GraphSidePanel from "@/components/entitygraph/GraphSidePanel";
 
-const INITIAL_FILTER = { enterprise: true, person: true, service: true, product: true, task: false, transaction: false, address: false };
+const INITIAL_FILTER = { enterprise: true, person: true, service: false, product: false, task: false, transaction: false, address: false };
+const CLUSTER_THRESHOLD = 5;
 
 const COLOR_BY_OPTIONS = [
   { value: "default", label: "Default Colors" },
@@ -80,14 +81,18 @@ export default function EntityGraph() {
   });
 
   // UI state
-  const [selected,       setSelected]       = useState(null);
-  const [filter,         setFilter]         = useState(INITIAL_FILTER);
-  const [colorBy,        setColorBy]        = useState("default");
-  const [mode,           setMode]           = useState("2d");
-  const [searchQuery,    setSearchQuery]    = useState("");
-  const [highlightPath,  setHighlightPath]  = useState(null);
-  const [showExport,     setShowExport]     = useState(false);
-  const [showPresets,    setShowPresets]    = useState(false);
+  const [selected,          setSelected]          = useState(null);
+  const [filter,            setFilter]            = useState(INITIAL_FILTER);
+  const [colorBy,           setColorBy]           = useState("default");
+  const [mode,              setMode]              = useState("2d");
+  const [searchQuery,       setSearchQuery]       = useState("");
+  const [highlightPath,     setHighlightPath]     = useState(null);
+  const [showExport,        setShowExport]        = useState(false);
+  const [showPresets,       setShowPresets]       = useState(false);
+  const [focusMode,         setFocusMode]         = useState(false);
+  const [focusedEnterprise, setFocusedEnterprise] = useState(null);
+  const [depth,             setDepth]             = useState(1);
+  const [expandedClusters,  setExpandedClusters]  = useState(new Set());
   const searchRef = useRef(null);
 
   const setLoad = (key, state) => setLoadStates(prev => ({ ...prev, [key]: state }));
@@ -148,10 +153,109 @@ export default function EntityGraph() {
 
   const isLoading = loadStates.core === LOAD_STATES.loading || loadStates.core === LOAD_STATES.idle;
 
-  const { nodes, links } = useMemo(
+  const { nodes: rawNodes, links: rawLinks } = useMemo(
     () => buildGraph(enterprises, people, services, products, tasks, transactions, addresses, relationships, filter, colorBy),
     [enterprises, people, services, products, tasks, transactions, addresses, relationships, filter, colorBy]
   );
+
+  // Focus mode: filter to focused enterprise + its direct connections only
+  const { nodes: focusedNodes, links: focusedLinks } = useMemo(() => {
+    if (!focusMode) return { nodes: rawNodes, links: rawLinks };
+    // Show all enterprises always; expand only the focused one
+    const entNodes = rawNodes.filter(n => n.type === "enterprise");
+    if (!focusedEnterprise) return { nodes: entNodes, links: [] };
+    const connectedLinks = rawLinks.filter(l => l.source === focusedEnterprise || l.target === focusedEnterprise);
+    const connectedIds = new Set(connectedLinks.flatMap(l => [l.source, l.target]));
+    const visibleNodes = rawNodes.filter(n => n.type === "enterprise" || connectedIds.has(n.id));
+    const visibleIds = new Set(visibleNodes.map(n => n.id));
+    return {
+      nodes: visibleNodes,
+      links: rawLinks.filter(l => visibleIds.has(l.source) && visibleIds.has(l.target)),
+    };
+  }, [focusMode, focusedEnterprise, rawNodes, rawLinks]);
+
+  // Depth filter: restrict to nodes within `depth` hops of any enterprise
+  const { nodes: depthNodes, links: depthLinks } = useMemo(() => {
+    if (depth >= 3) return { nodes: focusedNodes, links: focusedLinks };
+    const entIds = new Set(focusedNodes.filter(n => n.type === "enterprise").map(n => n.id));
+    const adj = {};
+    focusedLinks.forEach(l => {
+      if (!adj[l.source]) adj[l.source] = [];
+      if (!adj[l.target]) adj[l.target] = [];
+      adj[l.source].push(l.target);
+      adj[l.target].push(l.source);
+    });
+    const visited = new Set(entIds);
+    let frontier = [...entIds];
+    for (let d = 0; d < depth; d++) {
+      const next = [];
+      frontier.forEach(id => (adj[id] || []).forEach(nb => { if (!visited.has(nb)) { visited.add(nb); next.push(nb); } }));
+      frontier = next;
+    }
+    const dNodes = focusedNodes.filter(n => visited.has(n.id));
+    const dLinks = focusedLinks.filter(l => visited.has(l.source) && visited.has(l.target));
+    return { nodes: dNodes, links: dLinks };
+  }, [depth, focusedNodes, focusedLinks]);
+
+  // Clustering: replace large per-enterprise groups with cluster nodes
+  const { nodes, links } = useMemo(() => {
+    const CLUSTER_TYPES = ["person", "product", "task", "transaction"];
+    const entNodes = depthNodes.filter(n => n.type === "enterprise");
+    const clusterIcons = { person: "👥", product: "📦", task: "✅", transaction: "💳" };
+    const clusterColors = { person: NODE_CONFIG.person, product: NODE_CONFIG.product, task: NODE_CONFIG.task, transaction: NODE_CONFIG.transaction };
+    const removedIds = new Set();
+    const addedClusters = [];
+    const addedLinks = [];
+
+    entNodes.forEach(ent => {
+      CLUSTER_TYPES.forEach(type => {
+        const clusterId = `${ent.id}_${type}`;
+        if (expandedClusters.has(clusterId)) return;
+        const connectedOfType = depthLinks
+          .filter(l => (l.source === ent.id || l.target === ent.id))
+          .map(l => l.source === ent.id ? l.target : l.source)
+          .filter(nid => {
+            const n = depthNodes.find(x => x.id === nid);
+            return n?.type === type;
+          });
+        if (connectedOfType.length > CLUSTER_THRESHOLD) {
+          connectedOfType.forEach(id => removedIds.add(id));
+          const cfg = clusterColors[type];
+          addedClusters.push({
+            id: clusterId,
+            type,
+            isCluster: true,
+            clusterId,
+            clusterCount: connectedOfType.length,
+            label: `${connectedOfType.length} ${cfg.label}s`,
+            raw: null,
+          });
+          addedLinks.push({
+            id: `clust_link_${clusterId}`,
+            source: ent.id,
+            target: clusterId,
+            label: type,
+            edgeType: type,
+          });
+        }
+      });
+    });
+
+    const filteredNodes = depthNodes.filter(n => !removedIds.has(n.id));
+    const filteredLinks = depthLinks.filter(l => !removedIds.has(l.source) && !removedIds.has(l.target));
+    return {
+      nodes: [...filteredNodes, ...addedClusters],
+      links: [...filteredLinks, ...addedLinks],
+    };
+  }, [depthNodes, depthLinks, expandedClusters]);
+
+  const handleClusterClick = (clusterId) => {
+    setExpandedClusters(prev => {
+      const next = new Set(prev);
+      if (next.has(clusterId)) next.delete(clusterId); else next.add(clusterId);
+      return next;
+    });
+  };
 
   // Max nodes cap
   const MAX_NODES = 300;
