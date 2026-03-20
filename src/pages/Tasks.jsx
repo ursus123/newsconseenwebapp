@@ -493,6 +493,23 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         taskTitle={outcomeTask?._bulk ? `${outcomeTask._bulk.length} tasks` : outcomeTask?.title}
         onConfirm={handleOutcomeConfirm}
       />
+
+      <BulkImportDialog
+        open={importOpen}
+        onClose={() => { setImportOpen(false); invalidate(); }}
+        entityName="Tasks"
+        fields={TASK_FIELDS}
+        mappingRules={TASK_MAPPING_RULES}
+        templateFileName="newsconseen_tasks_import_template.xlsx"
+        templateExample={TASK_TEMPLATE_EXAMPLE}
+        templateInstructions={TASK_TEMPLATE_INSTRUCTIONS}
+        validateRow={validateTask}
+        transformRow={transformTask}
+        onImport={(row) => base44.entities.Task.create(withScope({ ...row, app_source: "import" }))}
+        currentUser={currentUser}
+        previewColumns={TASK_PREVIEW_COLS}
+        requiredField="title"
+      />
     </div>
   );
 }
