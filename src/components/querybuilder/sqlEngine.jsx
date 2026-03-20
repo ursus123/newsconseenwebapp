@@ -144,6 +144,179 @@ async function fetchAnalyticsTable(name) {
   }
 }
 
+// ── parseWhere helper for virtual tables ───────────────────────────────────
+function parseWhere(sql) {
+  const out = {};
+  const m = sql.match(/where\s+(.+?)(?:\s+order|\s+limit|$)/is);
+  if (!m) return out;
+  const clause = m[1];
+  const parts = clause.split(/\s+and\s+/i);
+  parts.forEach(part => {
+    const eq = part.match(/(\w+)\s*(?:=|like)\s*['"]([^'"]+)['"]/i);
+    if (eq) out[eq[1].toLowerCase()] = eq[2];
+    const num = part.match(/(\w+)\s*=\s*(\d+)/i);
+    if (num) out[num[1].toLowerCase()] = num[2];
+  });
+  return out;
+}
+
+// ── Virtual table executor ─────────────────────────────────────────────────
+async function executeVirtualTable(table, sql) {
+  const w = parseWhere(sql);
+  let rows = [];
+  let message = "";
+
+  try {
+    if (table === "osm_places") {
+      const q = [w.query, w.city, w.country].filter(Boolean).join(" ");
+      if (!q) return { type: "select", rows: [], message: "Usage: WHERE query = 'hospital' AND city = 'Portland'" };
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=20`,
+        { headers: { "User-Agent": "newsconseen/1.0" } }
+      );
+      const data = await res.json();
+      rows = data.map(r => ({
+        place_id: r.place_id, name: r.name || r.display_name?.split(",")[0] || "",
+        display_name: r.display_name, type: r.type,
+        lat: parseFloat(r.lat), lon: parseFloat(r.lon),
+        postcode: r.address?.postcode || "", country: r.address?.country || "",
+      }));
+      message = `${rows.length} places found`;
+    }
+
+    else if (table === "osm_nearby") {
+      const lat = w.lat || "44.8", lon = w.lon || "-68.7";
+      const type = w.type || "pharmacy";
+      const radius = parseInt(w.radius_km || w.radius || "5") * 1000;
+      const body = `[out:json];node["amenity"="${type}"](around:${radius},${lat},${lon});out body;`;
+      const res = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body });
+      const data = await res.json();
+      rows = (data.elements || []).map(r => ({
+        osm_id: r.id, name: r.tags?.name || "Unnamed", amenity: r.tags?.amenity || type,
+        lat: r.lat, lon: r.lon, phone: r.tags?.phone || "", opening_hours: r.tags?.opening_hours || "",
+      }));
+      message = `${rows.length} nearby ${type} locations found`;
+    }
+
+    else if (table === "weather_current") {
+      const city = w.city || w.q || "";
+      let lat = w.lat, lon = w.lon, cityName = city;
+      if (!lat && city) {
+        const geo = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`,
+          { headers: { "User-Agent": "newsconseen/1.0" } }
+        );
+        const gd = await geo.json();
+        if (!gd.length) return { type: "select", rows: [], message: `City not found: ${city}` };
+        lat = gd[0].lat; lon = gd[0].lon;
+        cityName = gd[0].display_name?.split(",")[0];
+      }
+      if (!lat) return { type: "select", rows: [], message: "Usage: WHERE city = 'Portland'" };
+      const res = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+        `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code,precipitation,apparent_temperature&timezone=auto`
+      );
+      const d = await res.json(); const c = d.current;
+      const codes = { 0:"Clear sky",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Foggy",61:"Slight rain",63:"Moderate rain",65:"Heavy rain",71:"Slight snow",73:"Moderate snow",80:"Rain showers",95:"Thunderstorm" };
+      rows = [{ city: cityName, lat: parseFloat(lat), lon: parseFloat(lon), temperature_c: c.temperature_2m, feels_like_c: c.apparent_temperature, humidity_pct: c.relative_humidity_2m, wind_speed_kmh: c.wind_speed_10m, precipitation_mm: c.precipitation, weather_description: codes[c.weather_code] || `Code ${c.weather_code}`, local_time: c.time }];
+      message = `Current weather for ${cityName}`;
+    }
+
+    else if (table === "weather_forecast") {
+      const city = w.city || "";
+      const days = parseInt(w.days) || 7;
+      if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Portland' AND days = 7" };
+      const geo = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const gd = await geo.json();
+      if (!gd.length) return { type: "select", rows: [], message: `City not found: ${city}` };
+      const res = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${gd[0].lat}&longitude=${gd[0].lon}` +
+        `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code&forecast_days=${days}&timezone=auto`
+      );
+      const d = await res.json();
+      const codes = { 0:"Clear sky",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",61:"Rain",71:"Snow",80:"Showers",95:"Thunderstorm" };
+      rows = d.daily.time.map((date, i) => ({ date, city, temp_max_c: d.daily.temperature_2m_max[i], temp_min_c: d.daily.temperature_2m_min[i], precipitation_mm: d.daily.precipitation_sum[i], weather_description: codes[d.daily.weather_code[i]] || `Code ${d.daily.weather_code[i]}` }));
+      message = `${days}-day forecast for ${city}`;
+    }
+
+    else if (table === "worldbank_indicators") {
+      const country = w.country || "US", indicator = w.indicator || "SP.POP.TOTL";
+      const yearFrom = w.year_from || "2018", yearTo = w.year_to || "2023";
+      const res = await fetch(`https://api.worldbank.org/v2/country/${country}/indicator/${indicator}?format=json&date=${yearFrom}:${yearTo}&per_page=100`);
+      const data = await res.json();
+      rows = (data[1] || []).filter(r => r.value !== null).map(r => ({ country_name: r.country?.value, country_code: r.countryiso3code, indicator_name: r.indicator?.value, indicator_code: r.indicator?.id, year: parseInt(r.date), value: r.value }));
+      message = `${rows.length} data points for ${indicator} in ${country}`;
+    }
+
+    else if (table === "exchange_rates") {
+      const base = w.base || "USD", currency = w.currency || null;
+      const res = await fetch(`https://open.er-api.com/v6/latest/${base}`);
+      const data = await res.json();
+      if (currency) {
+        rows = [{ base_currency: base, currency: currency.toUpperCase(), rate: data.rates[currency.toUpperCase()], last_updated: data.time_last_update_utc }];
+      } else {
+        rows = Object.entries(data.rates).map(([cur, rate]) => ({ base_currency: base, currency: cur, rate, last_updated: data.time_last_update_utc }));
+      }
+      message = `Exchange rates for ${base}: ${rows.length} currencies`;
+    }
+
+    else if (table === "countries") {
+      const name = w.name, region = w.region, subregion = w.subregion;
+      let url = "https://restcountries.com/v3.1/";
+      if (name) url += `name/${encodeURIComponent(name)}`;
+      else if (region) url += `region/${encodeURIComponent(region)}`;
+      else url += "all";
+      const res = await fetch(url);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [data];
+      rows = list
+        .filter(c => !subregion || c.subregion?.toLowerCase() === subregion.toLowerCase())
+        .map(c => ({ name: c.name?.common, official_name: c.name?.official, capital: c.capital?.[0] || "", region: c.region, subregion: c.subregion, population: c.population, area_km2: c.area, currency: Object.keys(c.currencies || {})[0] || "", language: Object.values(c.languages || {})[0] || "", flag: c.flag || "" }));
+      message = `${rows.length} countries`;
+    }
+
+    else if (table === "fda_devices") {
+      const product = w.product || w.manufacturer || "";
+      if (!product) return { type: "select", rows: [], message: "Usage: WHERE product = 'wheelchair'" };
+      const res = await fetch(`https://api.fda.gov/device/recall.json?search=product_description:${encodeURIComponent(product)}&limit=10`);
+      const data = await res.json();
+      rows = (data.results || []).map(r => ({ product_description: r.product_description, reason_for_recall: r.reason_for_recall, recall_initiation_date: r.recall_initiation_date, recalling_firm: r.recalling_firm, classification: r.classification, status: r.status }));
+      message = `${rows.length} device recalls found`;
+    }
+
+    else if (table === "fda_food_recalls") {
+      const product = w.product || "";
+      if (!product) return { type: "select", rows: [], message: "Usage: WHERE product = 'peanut butter'" };
+      const res = await fetch(`https://api.fda.gov/food/enforcement.json?search=product_description:${encodeURIComponent(product)}&limit=10`);
+      const data = await res.json();
+      rows = (data.results || []).map(r => ({ product_description: r.product_description, reason_for_recall: r.reason_for_recall, recall_initiation_date: r.recall_initiation_date, recalling_firm: r.recalling_firm, status: r.status }));
+      message = `${rows.length} food recalls found`;
+    }
+
+    else if (table === "medications_recalls") {
+      const name = w.name || "";
+      if (!name) return { type: "select", rows: [], message: "Usage: WHERE name = 'metformin'" };
+      const res = await fetch(`${RAILWAY_BASE}/medications/recalls?name=${encodeURIComponent(name)}`);
+      const data = await res.json();
+      rows = Array.isArray(data) ? data : (data.results || data.data || []);
+      message = `Recall info for ${name}`;
+    }
+
+    else if (table === "medications_label") {
+      const name = w.name || "";
+      if (!name) return { type: "select", rows: [], message: "Usage: WHERE name = 'metformin'" };
+      const res = await fetch(`https://api.fda.gov/drug/label.json?search=openfda.generic_name:${encodeURIComponent(name)}&limit=5`);
+      const data = await res.json();
+      rows = (data.results || []).map(r => ({ brand_name: r.openfda?.brand_name?.[0] || "", generic_name: r.openfda?.generic_name?.[0] || "", manufacturer: r.openfda?.manufacturer_name?.[0] || "", purpose: r.purpose?.[0] || "", warnings: r.warnings?.[0]?.slice(0, 200) || "", dosage: r.dosage_and_administration?.[0]?.slice(0, 200) || "" }));
+      message = `${rows.length} label results for ${name}`;
+    }
+
+    return { type: "select", rows: rows || [], message: message || `${rows?.length || 0} rows from ${table}` };
+  } catch (err) {
+    throw new Error(`API error for ${table}: ${err.message}`);
+  }
+}
+
 async function fetchMedicationsAPI(sql) {
   const nameEqMatch = sql.match(/medications_api\s+WHERE\s+name\s*=\s*'([^']+)'/i);
   const nameLikeMatch = sql.match(/medications_api\s+WHERE\s+name\s+LIKE\s+'%([^%]+)%'/i);
@@ -485,8 +658,19 @@ export async function executeSQL(sql, uploadedTables) {
   const upper = s.toUpperCase();
 
   if (upper.startsWith("SELECT")) {
-    // ── Handle external API virtual tables ────────────────────────────────
-    if (/medications_api|medications_recalls/i.test(s)) {
+    // ── Handle virtual tables (external APIs) ─────────────────────────────
+    const sqlLower = s.toLowerCase();
+    const VIRTUAL_TABLE_NAMES = [
+      "osm_places", "osm_nearby", "weather_current", "weather_forecast",
+      "worldbank_indicators", "exchange_rates", "countries",
+      "fda_devices", "fda_food_recalls", "medications_recalls", "medications_label",
+    ];
+    const matchedVirtual = VIRTUAL_TABLE_NAMES.find(t => sqlLower.includes(`from ${t}`));
+    if (matchedVirtual) {
+      return await executeVirtualTable(matchedVirtual, s);
+    }
+    // medications_api handled separately (supports LIKE pattern)
+    if (/medications_api/i.test(s)) {
       const rows = await fetchMedicationsAPI(s);
       return { type: "select", rows, message: `${rows.length} row(s) returned.` };
     }
