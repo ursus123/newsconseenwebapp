@@ -182,6 +182,7 @@ export default function ProductImportDialog({ open, onClose, onImport, currentUs
   const XLSX = useXLSX();
   const [step, setStep] = useState("upload");
   const [file, setFile] = useState(null);
+  const [pendingFile, setPendingFile] = useState(null); // file picked before XLSX loaded
   const [sheets, setSheets] = useState([]);
   const [selectedSheet, setSelectedSheet] = useState("");
   const [rawHeaders, setRawHeaders] = useState([]);
@@ -192,6 +193,14 @@ export default function ProductImportDialog({ open, onClose, onImport, currentUs
   const [importResult, setImportResult] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef();
+
+  // If user picked a file before XLSX finished loading, process it now
+  useEffect(() => {
+    if (XLSX && pendingFile) {
+      setPendingFile(null);
+      processFile(pendingFile, XLSX);
+    }
+  }, [XLSX, pendingFile]);
 
   const reset = () => {
     setStep("upload"); setFile(null); setSheets([]); setSelectedSheet("");
