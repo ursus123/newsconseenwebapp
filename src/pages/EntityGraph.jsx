@@ -252,6 +252,13 @@ export default function EntityGraph() {
   }, [depthNodes, depthLinks, expandedClusters]);
 
   const handleClusterClick = (clusterId) => {
+    // Global cluster (e.g. "global_cluster_person") → toggle collapsedTypes
+    if (clusterId.startsWith("global_cluster_")) {
+      const type = clusterId.replace("global_cluster_", "");
+      setCollapsedTypes(prev => { const s = new Set(prev); s.delete(type); return s; });
+      return;
+    }
+    // Per-enterprise cluster → toggle expandedClusters
     setExpandedClusters(prev => {
       const next = new Set(prev);
       if (next.has(clusterId)) next.delete(clusterId); else next.add(clusterId);
