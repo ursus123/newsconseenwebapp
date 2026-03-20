@@ -222,18 +222,17 @@ export default function ProductImportDialog({ open, onClose, onImport, currentUs
     return { headers, rows };
   }, [XLSX]);
 
-  const handleFile = useCallback((f) => {
-    if (!f || !XLSX) return;
+  const processFile = useCallback((f, xlsxLib) => {
     setFile(f);
     const reader = new FileReader();
     reader.onload = (e) => {
       const data = new Uint8Array(e.target.result);
-      const wb = XLSX.read(data, { type: "array" });
+      const wb = xlsxLib.read(data, { type: "array" });
       const sheetNames = wb.SheetNames;
       setSheets(sheetNames);
       const firstSheet = sheetNames[0];
       setSelectedSheet(firstSheet);
-      const { headers, rows } = parseSheet(wb, firstSheet, XLSX);
+      const { headers, rows } = parseSheet(wb, firstSheet, xlsxLib);
       setRawHeaders(headers);
       setRawRows(rows);
       const initMap = {};
@@ -242,7 +241,17 @@ export default function ProductImportDialog({ open, onClose, onImport, currentUs
       setStep("mapping");
     };
     reader.readAsArrayBuffer(f);
-  }, [XLSX, parseSheet]);
+  }, [parseSheet]);
+
+  const handleFile = useCallback((f) => {
+    if (!f) return;
+    if (!XLSX) {
+      // XLSX not loaded yet — queue the file, useEffect will process it when ready
+      setPendingFile(f);
+      return;
+    }
+    processFile(f, XLSX);
+  }, [XLSX, processFile]);
 
   const handleSheetChange = (sheetName) => {
     if (!XLSX) return;
