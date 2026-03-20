@@ -214,7 +214,7 @@ export default function ProductImportDialog({ open, onClose, onImport, currentUs
   }, [XLSX]);
 
   const handleFile = useCallback((f) => {
-    if (!f) return;
+    if (!f || !XLSX) return;
     setFile(f);
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -224,25 +224,25 @@ export default function ProductImportDialog({ open, onClose, onImport, currentUs
       setSheets(sheetNames);
       const firstSheet = sheetNames[0];
       setSelectedSheet(firstSheet);
-      const { headers, rows } = parseSheet(wb, firstSheet);
+      const { headers, rows } = parseSheet(wb, firstSheet, XLSX);
       setRawHeaders(headers);
       setRawRows(rows);
-      // Auto-map
       const initMap = {};
       headers.forEach((h) => { initMap[h] = autoMap(h); });
       setMapping(initMap);
       setStep("mapping");
     };
     reader.readAsArrayBuffer(f);
-  }, [parseSheet]);
+  }, [XLSX, parseSheet]);
 
   const handleSheetChange = (sheetName) => {
+    if (!XLSX) return;
     setSelectedSheet(sheetName);
     const reader = new FileReader();
     reader.onload = (e) => {
       const data = new Uint8Array(e.target.result);
       const wb = XLSX.read(data, { type: "array" });
-      const { headers, rows } = parseSheet(wb, sheetName);
+      const { headers, rows } = parseSheet(wb, sheetName, XLSX);
       setRawHeaders(headers);
       setRawRows(rows);
       const initMap = {};
