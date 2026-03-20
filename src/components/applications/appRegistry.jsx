@@ -9,7 +9,7 @@ export const APP_REGISTRY = [
 
   // INVENTORY & ASSETS
   { id: "barcodescanner", name: "Barcode Scanner", emoji: "📷", description: "Scan items in and out of inventory using camera or USB scanner", category: "Inventory", route: "BarcodeScanner", color: "slate", roles: "all", plan: "starter", exists: true, isNew: true },
-  { id: "stockcounter", name: "Stock Counter", emoji: "🔢", description: "Count and verify physical inventory against system records", category: "Inventory", route: "StockCounter", color: "orange", roles: "all", plan: "starter", exists: false },
+  { id: "stockcounter", name: "Stock Counter", emoji: "🔢", description: "Count and verify physical inventory against system records", category: "Inventory", route: "StockCounter", color: "orange", roles: "all", plan: "starter", exists: true, isNew: true },
   { id: "purchaseorder", name: "Purchase Order", emoji: "🛒", description: "Request and approve purchases with automatic transaction creation", category: "Inventory", route: "PurchaseOrder", color: "blue", roles: "all", plan: "starter", exists: false },
   { id: "assetregister", name: "Asset Register", emoji: "🏷️", description: "Track equipment serial numbers, location and maintenance history", category: "Inventory", route: "AssetRegister", color: "slate", roles: "all", plan: "professional", exists: false },
   { id: "goodsreceived", name: "Goods Received", emoji: "📬", description: "Confirm delivery of ordered goods and update stock automatically", category: "Inventory", route: "GoodsReceived", color: "green", roles: "all", plan: "starter", exists: false },

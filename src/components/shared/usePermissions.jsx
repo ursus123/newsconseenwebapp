@@ -9,7 +9,7 @@ export const ALL_ADMIN_PAGES = [
   "QueryBuilder", "DataModels", "EntityGraph",
 ];
 
-export const ALL_APP_PAGES = ["Applications", "ClockInOut", "MedAdmin", "StaffSchedule", "BarcodeScanner"];
+export const ALL_APP_PAGES = ["Applications", "ClockInOut", "MedAdmin", "StaffSchedule", "BarcodeScanner", "StockCounter"];
 // StaffSchedule is already included above
 
 export const DEFAULT_PAGES = {

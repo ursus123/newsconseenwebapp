@@ -14,6 +14,7 @@ import Pricing from './pages/Pricing';
 import Billing from './pages/Billing';
 import Settings from './pages/Settings';
 import DataRepair from './pages/DataRepair';
+import StockCounter from './pages/StockCounter';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
@@ -94,6 +95,7 @@ const AuthenticatedApp = () => {
       <Route path="/Billing" element={<LayoutWrapper currentPageName="Billing"><Billing /></LayoutWrapper>} />
       <Route path="/Settings" element={<LayoutWrapper currentPageName="Settings"><Settings /></LayoutWrapper>} />
       <Route path="/DataRepair" element={<LayoutWrapper currentPageName="Data Repair"><DataRepair /></LayoutWrapper>} />
+      <Route path="/StockCounter" element={<LayoutWrapper currentPageName="StockCounter"><StockCounter /></LayoutWrapper>} />
 
       <Route path="*" element={<PageNotFound />} />
     </Routes>
