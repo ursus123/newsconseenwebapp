@@ -26,6 +26,7 @@ export default function PinWidgetModal({ sql, onClose, onPinned }) {
         sql,
         chart_type: chartType,
         created_by: user?.email || "",
+        company_id: user?.company_id || "",
       });
       onPinned?.();
       onClose();

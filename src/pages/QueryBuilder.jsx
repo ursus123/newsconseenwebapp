@@ -319,6 +319,21 @@ export default function QueryBuilder() {
     return UploadedDataStore.subscribe((all) => { setUploadedTables({ ...all }); });
   }, []);
 
+  // Load SQL from Reports page "Edit in QueryBuilder" action
+  useEffect(() => {
+    const savedSql = sessionStorage.getItem("qb_load_sql");
+    const savedTitle = sessionStorage.getItem("qb_load_title");
+    if (savedSql) {
+      setSql(savedSql);
+      if (savedTitle) updateTab(activeTabId, { name: savedTitle + ".sql", sql: savedSql });
+      setMidTab("script");
+      setMessage(`✅ Loaded: "${savedTitle || "pinned chart"}"`);
+      sessionStorage.removeItem("qb_load_sql");
+      sessionStorage.removeItem("qb_load_title");
+      sessionStorage.removeItem("qb_source_widget_id");
+    }
+  }, []);
+
   // ── Execute ───────────────────────────────────────────────────────────
   const loadingRef = useRef(false);
 
