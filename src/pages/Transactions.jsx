@@ -187,7 +187,13 @@ export default function Transactions() {
         subtitle="Record what actually happened — auditable & reversible"
         onAdd={perms.l4_create_draft ? () => { setEditing(null); setFormOpen(true); } : undefined}
         addLabel="New Transaction"
-      />
+      >
+        {perms.l4_create_draft && (
+          <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" /> Import
+          </Button>
+        )}
+      </PageHeader>
 
       <TransactionSummaryCards transactions={transactions} />
       <TransactionFilters filters={filters} onChange={setFilters} />
