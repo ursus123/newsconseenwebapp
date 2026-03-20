@@ -351,7 +351,13 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
           subtitle="Assign and manage tasks for app users"
           onAdd={perms.l3_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
           addLabel="Assign Task"
-        />
+        >
+          {perms.l3_create && (
+            <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
+              <Upload className="w-4 h-4 mr-2" /> Import
+            </Button>
+          )}
+        </PageHeader>
         <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
           {[{ key: "kanban", icon: LayoutGrid, label: "Kanban" }, { key: "list", icon: List, label: "List" }, { key: "timeline", icon: CalendarDays, label: "Timeline" }].map(({ key, icon: Icon, label }) => (
             <button key={key} onClick={() => setViewMode(key)}
