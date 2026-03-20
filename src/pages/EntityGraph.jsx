@@ -433,57 +433,13 @@ export default function EntityGraph() {
         </div>
       </div>
 
-      {/* Header row 2: filter toggles + focus mode + depth + node count */}
-      <div className="flex items-center gap-2 mb-3 shrink-0 flex-wrap">
-        {Object.entries(NODE_CONFIG).map(([type, cfg]) => (
-          <button
-            key={type}
-            onClick={() => setFilter(f => ({ ...f, [type]: !f[type] }))}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium border transition-all ${
-              filter[type] ? "text-white border-transparent shadow-sm" : "bg-white text-slate-400 border-slate-200"
-            }`}
-            style={filter[type] ? { backgroundColor: cfg.hex, borderColor: cfg.hex } : {}}
-          >
-            <span>{cfg.icon}</span> {cfg.label}
-          </button>
-        ))}
-
-        <div className="h-4 w-px bg-slate-200 mx-1" />
-
-        {/* Focus Mode */}
-        <button
-          onClick={() => { setFocusMode(v => !v); setFocusedEnterprise(null); }}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium border transition-all ${
-            focusMode ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" : "bg-white text-slate-500 border-slate-200"
-          }`}
-          title="Focus Mode: click an enterprise to expand only its connections"
-        >
-          🎯 Focus
-        </button>
-
-        {/* Depth slider */}
-        <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1">
-          <span className="text-xs text-slate-500">Depth</span>
-          <input
-            type="range" min={1} max={3} value={depth}
-            onChange={e => setDepth(Number(e.target.value))}
-            className="w-16 accent-indigo-500"
-          />
-          <span className="text-xs font-mono text-slate-600 w-3">{depth}</span>
-        </div>
-
-        {/* Node count indicator */}
-        <span className={`text-xs px-2 py-1 rounded-xl border font-medium ${displayNodes.length > 100 ? "text-amber-600 bg-amber-50 border-amber-200" : "text-slate-400 bg-white border-slate-200"}`}>
-          {displayNodes.length} nodes · {displayLinks.length} links
-          {displayNodes.length > 100 && " · Use Focus Mode for clarity"}
-        </span>
-
-        {isCapped && (
+      {isCapped && (
+        <div className="mb-2 shrink-0">
           <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2 py-1 rounded-xl">
-            ⚠ Capped at {MAX_NODES} of {nodes.length}
+            ⚠ Capped at {MAX_NODES} of {collapsedNodes.length} nodes
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center">
@@ -492,36 +448,56 @@ export default function EntityGraph() {
             <p className="text-sm text-slate-400">Loading entity network…</p>
           </div>
         </div>
-      ) : displayNodes.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <Network className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-            <p className="text-slate-400 font-medium">No data to display</p>
-            <p className="text-slate-300 text-sm mt-1">Enable more entity types with the filter buttons above</p>
-          </div>
-        </div>
       ) : (
-        <div className="flex gap-4 flex-1 overflow-hidden min-h-0">
-          <Graph2D
-            nodes={displayNodes}
-            links={displayLinks}
-            selected={selected}
-            onSelect={(id) => {
-              // In focus mode, clicking an enterprise focuses it
-              if (focusMode) {
-                const n = displayNodes.find(x => x.id === id);
-                if (n?.type === "enterprise") {
-                  setFocusedEnterprise(prev => prev === id ? null : id);
-                  return;
-                }
-              }
-              setSelected(id);
-            }}
-            colorBy={colorBy}
-            searchQuery={searchQuery}
-            highlightPath={highlightPath}
-            onClusterClick={handleClusterClick}
+        <div className="flex gap-3 flex-1 overflow-hidden min-h-0">
+          {/* Left: Filter Panel */}
+          <GraphFilterPanel
+            filter={filter}
+            setFilter={setFilter}
+            collapsedTypes={collapsedTypes}
+            setCollapsedTypes={setCollapsedTypes}
+            counts={typeCounts}
+            focusMode={focusMode}
+            setFocusMode={setFocusMode}
+            setFocusedEnterprise={setFocusedEnterprise}
+            depth={depth}
+            setDepth={setDepth}
+            nodeCount={displayNodes.length}
+            linkCount={displayLinks.length}
           />
+
+          {/* Center: Graph */}
+          {displayNodes.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center border border-slate-200 rounded-2xl bg-slate-50">
+              <div className="text-center">
+                <Network className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                <p className="text-slate-400 font-medium">No data to display</p>
+                <p className="text-slate-300 text-sm mt-1">Enable entity types in the panel on the left</p>
+              </div>
+            </div>
+          ) : (
+            <Graph2D
+              nodes={displayNodes}
+              links={displayLinks}
+              selected={selected}
+              onSelect={(id) => {
+                if (focusMode) {
+                  const n = displayNodes.find(x => x.id === id);
+                  if (n?.type === "enterprise") {
+                    setFocusedEnterprise(prev => prev === id ? null : id);
+                    return;
+                  }
+                }
+                setSelected(id);
+              }}
+              colorBy={colorBy}
+              searchQuery={searchQuery}
+              highlightPath={highlightPath}
+              onClusterClick={handleClusterClick}
+            />
+          )}
+
+          {/* Right: Details Panel */}
           <GraphSidePanel
             nodes={displayNodes}
             links={displayLinks}
