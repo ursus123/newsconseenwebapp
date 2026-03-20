@@ -356,9 +356,23 @@ export default function ProductImportDialog({ open, onClose, onImport, currentUs
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
               >
-                <Upload className="w-10 h-10 mx-auto text-slate-300 mb-3" />
-                <p className="text-sm font-semibold text-slate-600 mb-1">Drag and drop your CSV or Excel file here</p>
-                <p className="text-xs text-slate-400">Supports .csv, .xlsx, .xls</p>
+                {!XLSX && !pendingFile ? (
+                  <>
+                    <div className="w-10 h-10 mx-auto border-4 border-slate-200 border-t-emerald-400 rounded-full animate-spin mb-3" />
+                    <p className="text-sm text-slate-400">Loading file parser…</p>
+                  </>
+                ) : pendingFile ? (
+                  <>
+                    <div className="w-10 h-10 mx-auto border-4 border-slate-200 border-t-emerald-400 rounded-full animate-spin mb-3" />
+                    <p className="text-sm text-slate-500">Processing <span className="font-semibold">{pendingFile.name}</span>…</p>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-10 h-10 mx-auto text-slate-300 mb-3" />
+                    <p className="text-sm font-semibold text-slate-600 mb-1">Drag and drop your CSV or Excel file here</p>
+                    <p className="text-xs text-slate-400">Supports .csv, .xlsx, .xls</p>
+                  </>
+                )}
                 <input ref={fileInputRef} type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={(e) => handleFile(e.target.files[0])} />
               </div>
 
