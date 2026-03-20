@@ -294,6 +294,29 @@ export default function Transactions() {
         onClose={() => setVoidTarget(null)}
         onConfirm={(reason) => handleVoid(voidTarget, reason)}
       />
+
+      <BulkImportDialog
+        open={importOpen}
+        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["transactions"] }); }}
+        entityName="Transactions"
+        fields={TRANSACTION_FIELDS}
+        mappingRules={TRANSACTION_MAPPING_RULES}
+        templateFileName="newsconseen_transactions_import_template.xlsx"
+        templateExample={TRANSACTION_TEMPLATE_EXAMPLE}
+        templateInstructions={TRANSACTION_TEMPLATE_INSTRUCTIONS}
+        validateRow={validateTransaction}
+        transformRow={transformTransaction}
+        onImport={(row) => base44.entities.Transaction.create(withScope(row))}
+        currentUser={currentUser}
+        previewColumns={[
+          { label: "Type", render: (r) => r.transaction_type || <span className="text-rose-500">MISSING</span> },
+          { label: "Date", render: (r) => r.date || <span className="text-rose-500">MISSING</span> },
+          { label: "Enterprise", render: (r) => r.enterprise || "—" },
+          { label: "Amount", render: (r) => r.amount != null ? `$${r.amount}` : "—" },
+          { label: "Status", render: (r) => r.status || "draft" },
+        ]}
+        requiredField="date"
+      />
     </div>
   );
 }
