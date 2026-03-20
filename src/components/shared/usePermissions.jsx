@@ -85,7 +85,7 @@ function flattenLayers(perm, roleDefaults) {
     l5_view: l5.can_view,
     can_create: l1.can_create,
     can_edit: l1.can_edit,
-    can_delete: perm?.can_delete ?? false,
+    can_delete: perm?.can_delete ?? (roleDefaults === ADMIN_DEFAULTS ? true : false),
   };
 }
 
