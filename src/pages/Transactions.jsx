@@ -12,7 +12,12 @@ import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Lock, ChevronDown, ChevronUp } from "lucide-react";
+import { Lock, ChevronDown, ChevronUp, Upload } from "lucide-react";
+import BulkImportDialog from "../components/shared/BulkImportDialog";
+import {
+  TRANSACTION_FIELDS, TRANSACTION_MAPPING_RULES, TRANSACTION_TEMPLATE_EXAMPLE,
+  TRANSACTION_TEMPLATE_INSTRUCTIONS, validateTransaction, transformTransaction,
+} from "@/components/shared/importConfigs";
 import { format, isAfter, parseISO } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 
