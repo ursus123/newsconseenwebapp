@@ -350,7 +350,7 @@ export default function EntityGraph() {
   }, [searchQuery, displayNodes]);
 
   return (
-    <div className="h-[calc(100vh-10rem)] flex flex-col gap-0 overflow-hidden" onKeyDown={handleKeyDown}>
+    <div className="flex flex-col overflow-hidden" style={{ height: "calc(100vh - 10rem)" }} onKeyDown={handleKeyDown}>
       {/* Header row 1: title + mode + search + export + presets */}
       <div className="flex items-center justify-between mb-2 shrink-0 flex-wrap gap-2">
         <div className="flex items-center gap-3">
