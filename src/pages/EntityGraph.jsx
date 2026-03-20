@@ -259,6 +259,62 @@ export default function EntityGraph() {
     });
   };
 
+  // Global collapse: if a type is in collapsedTypes, replace ALL its nodes with a single node
+  const { nodes: collapsedNodes, links: collapsedLinks } = useMemo(() => {
+    if (collapsedTypes.size === 0) return { nodes, links };
+
+    const removedIds = new Set();
+    const globalClusters = [];
+    const globalLinks = [];
+
+    collapsedTypes.forEach(type => {
+      const typeNodes = nodes.filter(n => n.type === type && !n.isCluster);
+      if (typeNodes.length <= 1) return;
+      const cfg = NODE_CONFIG[type];
+      const globalId = `global_cluster_${type}`;
+      typeNodes.forEach(n => removedIds.add(n.id));
+      globalClusters.push({
+        id: globalId,
+        type,
+        isCluster: true,
+        clusterId: globalId,
+        clusterCount: typeNodes.length,
+        label: `${typeNodes.length} ${cfg.label}s`,
+        raw: null,
+      });
+      // Reconnect links that pointed to removed nodes → point to global cluster
+      const targetIds = new Set(typeNodes.map(n => n.id));
+      const seenGlobalLinks = new Set();
+      links.forEach(l => {
+        const srcRemoved = removedIds.has(l.source) && targetIds.has(l.source);
+        const tgtRemoved = removedIds.has(l.target) && targetIds.has(l.target);
+        if (srcRemoved || tgtRemoved) {
+          const newSrc = srcRemoved ? globalId : l.source;
+          const newTgt = tgtRemoved ? globalId : l.target;
+          if (newSrc === newTgt) return;
+          const key = [newSrc, newTgt].sort().join("|");
+          if (seenGlobalLinks.has(key)) return;
+          seenGlobalLinks.add(key);
+          globalLinks.push({ ...l, id: `gcl_${key}`, source: newSrc, target: newTgt });
+        }
+      });
+    });
+
+    const keptNodes = nodes.filter(n => !removedIds.has(n.id));
+    const keptLinks = links.filter(l => !removedIds.has(l.source) && !removedIds.has(l.target));
+    return {
+      nodes: [...keptNodes, ...globalClusters],
+      links: [...keptLinks, ...globalLinks],
+    };
+  }, [nodes, links, collapsedTypes]);
+
+  // Counts per type (raw, before collapse)
+  const typeCounts = useMemo(() => {
+    const counts = {};
+    rawNodes.forEach(n => { counts[n.type] = (counts[n.type] || 0) + 1; });
+    return counts;
+  }, [rawNodes]);
+
   // Max nodes cap
   const MAX_NODES = 300;
   const isCapped = nodes.length > MAX_NODES;
