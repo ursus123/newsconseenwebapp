@@ -9,6 +9,11 @@ import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery"
 import { triggerTaskTransaction } from "../components/shared/triggerTaskTransaction";
 import TaskForm, { taskTypeLabel } from "../components/tasks/TaskForm";
 import DeleteDialog from "../components/shared/DeleteDialog";
+import BulkImportDialog from "../components/shared/BulkImportDialog";
+import {
+  TASK_FIELDS, TASK_MAPPING_RULES, TASK_TEMPLATE_EXAMPLE,
+  TASK_TEMPLATE_INSTRUCTIONS, validateTask, transformTask,
+} from "@/components/shared/importConfigs";
 import TaskSummaryCards from "../components/tasks/TaskSummaryCards";
 import TaskPerformanceMetrics from "../components/tasks/TaskPerformanceMetrics";
 import TaskDetailPanel from "../components/tasks/TaskDetailPanel";
