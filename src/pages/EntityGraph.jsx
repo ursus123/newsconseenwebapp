@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { Network, RefreshCw, Search, X, Download, ChevronDown, Focus } from "lucide-react";
-import { buildGraph, NODE_CONFIG, VIEW_PRESETS, getNodeColor } from "@/components/entitygraph/graphConfig";
+import { Network, RefreshCw, Search, X, Download, ChevronDown } from "lucide-react";
+import { buildGraph, NODE_CONFIG, VIEW_PRESETS } from "@/components/entitygraph/graphConfig";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 import Graph2D from "@/components/entitygraph/Graph2D";
 import GraphSidePanel from "@/components/entitygraph/GraphSidePanel";
+import GraphFilterPanel from "@/components/entitygraph/GraphFilterPanel";
 
 const INITIAL_FILTER = { enterprise: true, person: true, service: false, product: false, task: false, transaction: false, address: false };
 const CLUSTER_THRESHOLD = 5;
@@ -93,6 +94,7 @@ export default function EntityGraph() {
   const [focusedEnterprise, setFocusedEnterprise] = useState(null);
   const [depth,             setDepth]             = useState(1);
   const [expandedClusters,  setExpandedClusters]  = useState(new Set());
+  const [collapsedTypes,    setCollapsedTypes]    = useState(new Set()); // global collapse per type
   const searchRef = useRef(null);
 
   const setLoad = (key, state) => setLoadStates(prev => ({ ...prev, [key]: state }));
