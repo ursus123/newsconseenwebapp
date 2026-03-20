@@ -244,6 +244,12 @@ export default function Reports() {
     queryFn: () => base44.entities.Report.list("-created_date"),
   });
 
+  const { data: dashboardWidgets = [] } = useQuery({
+    queryKey: ["dashboardWidgets", currentUser?.company_id],
+    queryFn: () => base44.entities.SavedDashboardWidget.filter({ company_id: currentUser.company_id }),
+    enabled: !!currentUser?.company_id,
+  });
+
   const { data: accessRecord } = useQuery({
     queryKey: ["myAccess", currentUser?.email],
     queryFn: async () => {
@@ -380,6 +386,22 @@ export default function Reports() {
         <KpiCard icon={CheckCircle} label="Total Tasks"        value={kpiTasks}        loading={loadingMap.tasks}        iconBg="bg-purple-100" iconColor="text-purple-600" valueColor="text-purple-700" />
         <KpiCard icon={Receipt}     label="Total Transactions" value={kpiTransactions} loading={loadingMap.transactions} iconBg="bg-orange-100" iconColor="text-orange-600" valueColor="text-orange-700" />
       </div>
+
+      {/* My Dashboard Widgets */}
+      {dashboardWidgets.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-700">My Dashboard</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Charts pinned from QueryBuilder</p>
+            </div>
+            <Link to={createPageUrl("QueryBuilder")} className="text-xs text-emerald-600 hover:underline font-medium">
+              Open QueryBuilder →
+            </Link>
+          </div>
+          <DashboardWidgetsGrid widgets={dashboardWidgets} companyId={currentUser?.company_id} />
+        </div>
+      )}
 
       {/* Live Charts header + controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
