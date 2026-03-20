@@ -56,6 +56,7 @@ function applyFilters(transactions, filters) {
 
 export default function Transactions() {
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [postTarget, setPostTarget] = useState(null);
   const [voidTarget, setVoidTarget] = useState(null);
