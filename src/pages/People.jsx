@@ -12,111 +12,199 @@ import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery"
 import { Badge } from "@/components/ui/badge";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
-import { Upload } from "lucide-react";
+import { Upload, Users, CheckCircle, Clock, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   PEOPLE_FIELDS, PEOPLE_MAPPING_RULES, PEOPLE_TEMPLATE_EXAMPLE,
   PEOPLE_TEMPLATE_INSTRUCTIONS, validatePerson, transformPerson,
 } from "@/components/shared/importConfigs";
 
-const statusColor = (s) => {
-  const map = { active: "bg-emerald-50 text-emerald-700", inactive: "bg-slate-100 text-slate-600", on_leave: "bg-amber-50 text-amber-700" };
-  return map[s] || "bg-slate-100 text-slate-600";
-};
+// ── Color helpers ──────────────────────────────────────────────────
+const statusColor = (s) => ({
+  active:   "bg-emerald-50 text-emerald-700",
+  inactive: "bg-slate-100 text-slate-600",
+  on_leave: "bg-amber-50 text-amber-700",
+}[s] || "bg-slate-100 text-slate-600");
 
-const availColor = (s) => {
-  const map = { available: "bg-green-50 text-green-700", busy: "bg-amber-50 text-amber-700", on_leave: "bg-slate-100 text-slate-500", unavailable: "bg-rose-50 text-rose-700" };
-  return map[s] || "bg-slate-100 text-slate-600";
-};
+const availColor = (s) => ({
+  available:   "bg-green-50 text-green-700",
+  busy:        "bg-amber-50 text-amber-700",
+  on_leave:    "bg-slate-100 text-slate-500",
+  unavailable: "bg-rose-50 text-rose-700",
+}[s] || "bg-slate-100 text-slate-600");
 
+const personTypeColor = (t) => ({
+  employee:   "bg-blue-50 text-blue-700",
+  client:     "bg-rose-50 text-rose-700",
+  contractor: "bg-amber-50 text-amber-700",
+  vendor:     "bg-purple-50 text-purple-700",
+  volunteer:  "bg-green-50 text-green-700",
+}[t] || "bg-slate-100 text-slate-500");
+
+// ── Table columns ──────────────────────────────────────────────────
 const columns = [
-  { key: "first_name", label: "Name", render: (val, row) => (
-    <span className="font-medium text-slate-800">
-      {row.preferred_name || `${row.first_name || ""} ${row.last_name || ""}`.trim()}
-    </span>
-  )},
-  { key: "primary_role", label: "Role" },
-  { key: "role_category", label: "Category", render: (val) => val ? (
-    <span className="text-xs text-slate-500">{val.replace(/_/g, " ")}</span>
-  ) : "—" },
-  { key: "phone", label: "Phone" },
-  { key: "availability_status", label: "Availability", render: (val) => (
-    <Badge className={availColor(val)}>{(val || "available").replace(/_/g, " ")}</Badge>
-  )},
-  { key: "status", label: "Status", render: (val) => (
-    <Badge className={statusColor(val)}>{(val || "active").replace(/_/g, " ")}</Badge>
-  )},
+  {
+    key: "first_name", label: "Name",
+    render: (val, row) => (
+      <div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium text-slate-800">
+            {row.preferred_name || `${row.first_name || ""} ${row.last_name || ""}`.trim()}
+          </span>
+          <Badge className={personTypeColor(row.person_type)}>
+            {row.person_type || "employee"}
+          </Badge>
+        </div>
+        {row.email && (
+          <p className="text-xs text-slate-400 mt-0.5">{row.email}</p>
+        )}
+      </div>
+    ),
+  },
+  {
+    key: "primary_role", label: "Role",
+    render: (val, row) => (
+      <div>
+        <p className="text-sm text-slate-700">{val || "—"}</p>
+        {row.role_category && (
+          <p className="text-xs text-slate-400 capitalize">{row.role_category.replace(/_/g, " ")}</p>
+        )}
+      </div>
+    ),
+  },
+  {
+    key: "phone", label: "Contact",
+    render: (val) => val
+      ? <span className="text-sm text-slate-600">{val}</span>
+      : <span className="text-slate-300">—</span>,
+  },
+  {
+    key: "availability_status", label: "Availability",
+    render: (val) => (
+      <Badge className={availColor(val)}>{(val || "available").replace(/_/g, " ")}</Badge>
+    ),
+  },
+  {
+    key: "status", label: "Status",
+    render: (val) => (
+      <Badge className={statusColor(val)}>{(val || "active").replace(/_/g, " ")}</Badge>
+    ),
+  },
 ];
 
+// ── Type tabs ──────────────────────────────────────────────────────
+const TYPE_TABS = [
+  { id: "all",        label: "All People" },
+  { id: "employee",   label: "Staff" },
+  { id: "client",     label: "Clients" },
+  { id: "contractor", label: "Contractors" },
+  { id: "vendor",     label: "Vendors" },
+];
+
+// ── Preview cols for import ────────────────────────────────────────
 const PEOPLE_PREVIEW_COLS = [
   { label: "First Name", render: (r) => r.first_name || <span className="text-rose-500">MISSING</span> },
-  { label: "Last Name", render: (r) => r.last_name || <span className="text-rose-500">MISSING</span> },
-  { label: "Role", render: (r) => r.primary_role || "—" },
-  { label: "Type", render: (r) => r.person_type || "—" },
-  { label: "Email", render: (r) => r.email || "—" },
+  { label: "Last Name",  render: (r) => r.last_name || <span className="text-rose-500">MISSING</span> },
+  { label: "Role",       render: (r) => r.primary_role || "—" },
+  { label: "Type",       render: (r) => r.person_type || "—" },
+  { label: "Email",      render: (r) => r.email || "—" },
 ];
 
+// ── Stat card ──────────────────────────────────────────────────────
+function StatCard({ icon: Icon, iconClass, label, value }) {
+  return (
+    <div className="bg-white border border-slate-100 rounded-2xl px-4 py-3 flex items-center gap-3">
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${iconClass}`}>
+        <Icon className="w-4 h-4" />
+      </div>
+      <div>
+        <p className="text-xs text-slate-400">{label}</p>
+        <p className="text-lg font-bold text-slate-800 leading-tight">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────
 export default function People() {
-  const [formOpen, setFormOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [deleting, setDeleting] = useState(null);
-  const [search, setSearch] = useState("");
-  const [groupBy, setGroupBy] = useState("none");
-  const [sortBy, setSortBy] = useState("created_date_desc");
-  const [filters, setFilters] = useState({ status: "", availability_status: "", person_type: "", country: "", primary_role: "" });
+  const [formOpen, setFormOpen]       = useState(false);
+  const [importOpen, setImportOpen]   = useState(false);
+  const [editing, setEditing]         = useState(null);
+  const [deleting, setDeleting]       = useState(null);
+  const [search, setSearch]           = useState("");
+  const [groupBy, setGroupBy]         = useState("none");
+  const [sortBy, setSortBy]           = useState("created_date_desc");
+  const [filters, setFilters]         = useState({ status: "", availability_status: "", person_type: "", country: "", primary_role: "" });
+  const [activeTypeTab, setActiveTypeTab] = useState("all");
   const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
-  const isSuperAdmin = currentUser?.role === "super_admin";
-  const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
-  const companyId = currentUser?.company_id;
-  const perms = usePermissions(currentUser);
-  const listFn = useEntityListFn(currentUser);
-  const withScope = useWithScope(currentUser);
+  const companyId  = currentUser?.company_id;
+  const perms      = usePermissions(currentUser);
+  const listFn     = useEntityListFn(currentUser);
+  const withScope  = useWithScope(currentUser);
+  const withCompany = withScope;
 
-  const { data: people = [] } = useQuery({
+  const { data: people = [], isLoading } = useQuery({
     queryKey: ["people", companyId, currentUser?.email],
     queryFn: () => listFn(base44.entities.Person),
     enabled: currentUser !== null,
   });
 
-  const withCompany = withScope;
+  const createMut = useMutation({
+    mutationFn: (d) => base44.entities.Person.create(withCompany(d)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["people"] });
+      qc.invalidateQueries({ queryKey: ["addresses"] });
+      qc.invalidateQueries({ queryKey: ["relationships"] });
+      setFormOpen(false);
+    },
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Person.update(id, withScope(data)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setFormOpen(false); setEditing(null); },
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id) => base44.entities.Person.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setDeleting(null); },
+  });
 
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Person.create(withCompany(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); qc.invalidateQueries({ queryKey: ["addresses"] }); qc.invalidateQueries({ queryKey: ["relationships"] }); setFormOpen(false); } });
-  const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Person.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setFormOpen(false); setEditing(null); } });
-  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Person.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setDeleting(null); } });
+  // Type tab pre-filter
+  const typeFiltered = activeTypeTab === "all"
+    ? people
+    : people.filter(p => p.person_type === activeTypeTab);
 
   const processedPeople = useMemo(() => {
-    let list = [...people];
-
-    // Fuzzy search across name fields and address
+    let list = [...typeFiltered];
     if (search) {
       list = fuzzyFilter(list, search, ["first_name", "last_name", "preferred_name", "primary_role", "city", "country", "address", "email", "phone"]);
     }
-
-    // Advanced filters
     if (filters.status) list = list.filter((p) => p.status === filters.status);
     if (filters.availability_status) list = list.filter((p) => (p.availability_status || "available") === filters.availability_status);
     if (filters.person_type) list = list.filter((p) => p.person_type === filters.person_type);
     if (filters.primary_role) list = list.filter((p) => p.primary_role === filters.primary_role);
     if (filters.country) list = list.filter((p) => (p.country || "").toLowerCase().includes(filters.country.toLowerCase()));
-
-    // Sort (skip re-sort when search is active since fuzzy results are already ranked)
     if (!search) list.sort((a, b) => {
-      if (sortBy === "name_asc") return `${a.first_name}${a.last_name}`.localeCompare(`${b.first_name}${b.last_name}`);
-      if (sortBy === "name_desc") return `${b.first_name}${b.last_name}`.localeCompare(`${a.first_name}${a.last_name}`);
+      if (sortBy === "name_asc")         return `${a.first_name}${a.last_name}`.localeCompare(`${b.first_name}${b.last_name}`);
+      if (sortBy === "name_desc")        return `${b.first_name}${b.last_name}`.localeCompare(`${a.first_name}${a.last_name}`);
       if (sortBy === "created_date_asc") return new Date(a.created_date) - new Date(b.created_date);
       return new Date(b.created_date) - new Date(a.created_date);
     });
-
     return list;
-  }, [people, search, sortBy, filters]);
+  }, [typeFiltered, search, sortBy, filters]);
+
+  // Visible tabs (only where data exists)
+  const visibleTabs = TYPE_TABS.filter(
+    t => t.id === "all" || people.some(p => p.person_type === t.id)
+  );
+
+  const availableCount = people.filter(p => p.availability_status === "available" || !p.availability_status).length;
 
   return (
-    <div>
+    <div className="space-y-5">
+      {/* Header */}
       <PageHeader
         title="People"
         subtitle="Manage your team members, contractors and staff"
@@ -130,9 +218,57 @@ export default function People() {
         )}
       </PageHeader>
 
+      {/* Stats row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard icon={Users}        iconClass="bg-slate-100 text-slate-500"    label="Total People"    value={people.length} />
+        <StatCard icon={CheckCircle}  iconClass="bg-emerald-50 text-emerald-600" label="Active"           value={people.filter(p => p.status === "active").length} />
+        <StatCard icon={Clock}        iconClass="bg-blue-50 text-blue-600"       label="Available Now"    value={availableCount} />
+        <StatCard icon={Heart}        iconClass="bg-rose-50 text-rose-600"       label="Clients"          value={people.filter(p => p.person_type === "client").length} />
+      </div>
+
+      {/* Type filter tabs */}
+      {visibleTabs.length > 1 && (
+        <div className="bg-slate-100 rounded-xl p-1 flex flex-wrap gap-1">
+          {visibleTabs.map(tab => {
+            const count = tab.id === "all" ? people.length : people.filter(p => p.person_type === tab.id).length;
+            const isActive = activeTypeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTypeTab(tab.id)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5
+                  ${isActive ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                {tab.label}
+                <span className={`text-[11px] px-1.5 py-0.5 rounded-full
+                  ${isActive ? "bg-slate-100 text-slate-600" : "bg-slate-200 text-slate-500"}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Toolbar */}
       <PeopleToolbar search={search} setSearch={setSearch} groupBy={groupBy} setGroupBy={setGroupBy} sortBy={sortBy} setSortBy={setSortBy} filters={filters} setFilters={setFilters} />
 
-      {groupBy !== "none" ? (
+      {/* Empty state */}
+      {!isLoading && people.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
+          <Users className="w-10 h-10 text-slate-200 mb-3" />
+          <p className="text-slate-400 font-medium mb-1">No people yet</p>
+          <p className="text-slate-300 text-sm mb-4">Add your staff, clients and contractors</p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
+              Add Person
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="rounded-xl">
+              Import from Excel
+            </Button>
+          </div>
+        </div>
+      ) : groupBy !== "none" ? (
         <PeopleGroupedView
           people={processedPeople}
           groupBy={groupBy}
@@ -148,16 +284,20 @@ export default function People() {
         />
       )}
 
+      {/* Forms & dialogs */}
       <PeopleForm
-         open={formOpen}
-         onClose={() => { setFormOpen(false); setEditing(null); }}
-         onSubmit={(d) => editing
-         ? base44.entities.Person.update(editing.id, d).then(() => { qc.invalidateQueries({ queryKey: ["people"] }); setFormOpen(false); setEditing(null); })
-         : base44.entities.Person.create(withCompany(d)).then((res) => { qc.invalidateQueries({ queryKey: ["people"] }); qc.invalidateQueries({ queryKey: ["addresses"] }); qc.invalidateQueries({ queryKey: ["relationships"] }); return res; })
-       }
-         initialData={editing}
-         currentUser={currentUser}
-       />
+        open={formOpen}
+        onClose={() => { setFormOpen(false); setEditing(null); }}
+        onSubmit={(d) => {
+          if (editing) {
+            updateMut.mutate({ id: editing.id, data: d });
+          } else {
+            createMut.mutate(d);
+          }
+        }}
+        initialData={editing}
+        currentUser={currentUser}
+      />
       <DeleteDialog
         open={!!deleting}
         onClose={() => setDeleting(null)}
