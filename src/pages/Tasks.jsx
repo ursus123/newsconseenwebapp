@@ -179,8 +179,17 @@ function MyTasksList({ tasks }) {
   );
 }
 
+const TASK_PREVIEW_COLS = [
+  { label: "Title", render: (r) => r.title || <span className="text-rose-500">MISSING</span> },
+  { label: "Type", render: (r) => r.task_type || "—" },
+  { label: "Status", render: (r) => r.status || "open" },
+  { label: "Priority", render: (r) => r.priority || "normal" },
+  { label: "Assigned To", render: (r) => r.assigned_to_name || r.assigned_to_email || "—" },
+];
+
 function AdminTasksView({ tasks, appUsers, enterprises, products, services, people, addresses, companyId, isSuperAdmin, currentUser }) {
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [detailTask, setDetailTask] = useState(null);
