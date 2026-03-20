@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { X } from "lucide-react";
 
-export default function NewSessionDialog({ enterprises, addresses, onStart, onClose }) {
-  const [enterprise, setEnterprise] = useState("");
+export default function NewSessionDialog({ enterprises, addresses, onStart, onClose, defaultEnterprise = "" }) {
+  const [enterprise, setEnterprise] = useState(defaultEnterprise);
   const [location, setLocation] = useState("");
 
   return (
