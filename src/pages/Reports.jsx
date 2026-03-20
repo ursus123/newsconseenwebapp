@@ -245,10 +245,24 @@ export default function Reports() {
   });
 
   const { data: dashboardWidgets = [] } = useQuery({
-    queryKey: ["dashboardWidgets", currentUser?.company_id],
-    queryFn: () => base44.entities.SavedDashboardWidget.filter({ company_id: currentUser.company_id }),
-    enabled: !!currentUser?.company_id,
+    queryKey: ["dashboardWidgets", currentUser?.company_id, currentUser?.email],
+    queryFn: async () => {
+      if (currentUser?.company_id) {
+        const byCompany = await base44.entities.SavedDashboardWidget.filter({ company_id: currentUser.company_id });
+        if (byCompany.length > 0) return byCompany;
+      }
+      return base44.entities.SavedDashboardWidget.filter({ created_by: currentUser.email });
+    },
+    enabled: !!currentUser,
   });
+
+  // Silently backfill company_id on widgets that are missing it
+  React.useEffect(() => {
+    if (!dashboardWidgets.length || !currentUser?.company_id) return;
+    dashboardWidgets.filter(w => !w.company_id).forEach(w => {
+      base44.entities.SavedDashboardWidget.update(w.id, { company_id: currentUser.company_id }).catch(() => {});
+    });
+  }, [dashboardWidgets, currentUser?.company_id]);
 
   const { data: accessRecord } = useQuery({
     queryKey: ["myAccess", currentUser?.email],
@@ -387,21 +401,36 @@ export default function Reports() {
         <KpiCard icon={Receipt}     label="Total Transactions" value={kpiTransactions} loading={loadingMap.transactions} iconBg="bg-orange-100" iconColor="text-orange-600" valueColor="text-orange-700" />
       </div>
 
-      {/* My Dashboard Widgets */}
-      {dashboardWidgets.length > 0 && (
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-700">My Dashboard</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Charts pinned from QueryBuilder</p>
-            </div>
+      {/* My Pinned Charts */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-700 flex items-center gap-2">
+              📌 My Pinned Charts
+              {dashboardWidgets.length > 0 && (
+                <span className="text-xs font-normal text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {dashboardWidgets.length}
+                </span>
+              )}
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">Charts pinned from QueryBuilder — click any chart to edit</p>
+          </div>
+          <Link to={createPageUrl("QueryBuilder")} className="text-xs text-emerald-600 hover:underline font-medium flex items-center gap-1">
+            + Add Chart →
+          </Link>
+        </div>
+        {dashboardWidgets.length > 0 ? (
+          <DashboardWidgetsGrid widgets={dashboardWidgets} companyId={currentUser?.company_id} />
+        ) : (
+          <div className="border-2 border-dashed border-slate-100 rounded-2xl py-8 text-center">
+            <p className="text-slate-400 text-sm font-medium">No charts pinned yet</p>
+            <p className="text-slate-300 text-xs mt-1 mb-3">Run a query in QueryBuilder and click 📌 Pin to Dashboard</p>
             <Link to={createPageUrl("QueryBuilder")} className="text-xs text-emerald-600 hover:underline font-medium">
-              Open QueryBuilder →
+              Go to QueryBuilder →
             </Link>
           </div>
-          <DashboardWidgetsGrid widgets={dashboardWidgets} companyId={currentUser?.company_id} />
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Live Charts header + controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
