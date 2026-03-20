@@ -201,15 +201,17 @@ export default function ProductImportDialog({ open, onClose, onImport, currentUs
 
   const handleClose = () => { reset(); onClose(); };
 
-  // Parse workbook into rows
-  const parseSheet = useCallback((wb, sheetName) => {
+  // Parse workbook into rows — XLSX must be in deps so it's never stale
+  const parseSheet = useCallback((wb, sheetName, xlsxLib) => {
+    const lib = xlsxLib || XLSX;
+    if (!lib) return { headers: [], rows: [] };
     const ws = wb.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    const data = lib.utils.sheet_to_json(ws, { header: 1, defval: "" });
     if (!data.length) return { headers: [], rows: [] };
     const headers = data[0].map(String);
     const rows = data.slice(1).filter((r) => r.some((c) => c !== "" && c != null));
     return { headers, rows };
-  }, []);
+  }, [XLSX]);
 
   const handleFile = useCallback((f) => {
     if (!f) return;
