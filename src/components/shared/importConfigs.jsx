@@ -376,6 +376,163 @@ export function validateAddress(row) {
   return { errors, warnings };
 }
 
+// ── TASKS ─────────────────────────────────────────────────────────────────
+export const TASK_FIELDS = [
+  { key: "task_type", label: "Task Type *", required: true },
+  { key: "title", label: "Title *", required: true },
+  { key: "status", label: "Status" },
+  { key: "priority", label: "Priority" },
+  { key: "assigned_to_name", label: "Assigned To Name" },
+  { key: "assigned_to_email", label: "Assigned To Email" },
+  { key: "enterprise", label: "Enterprise" },
+  { key: "related_person", label: "Related Person" },
+  { key: "related_item", label: "Related Item" },
+  { key: "scheduled_date", label: "Scheduled Date" },
+  { key: "scheduled_time", label: "Scheduled Time" },
+  { key: "due_date", label: "Due Date" },
+  { key: "due_time", label: "Due Time" },
+  { key: "outcome", label: "Outcome" },
+  { key: "outcome_notes", label: "Outcome Notes" },
+  { key: "internal_notes", label: "Internal Notes" },
+];
+
+export const TASK_MAPPING_RULES = [
+  [/task.?type|^type$/i, "task_type"],
+  [/^title$|summary|description/i, "title"],
+  [/^status$/i, "status"],
+  [/priority/i, "priority"],
+  [/assigned.?to.?name|assignee.?name/i, "assigned_to_name"],
+  [/assigned.?to.?email|assignee.?email/i, "assigned_to_email"],
+  [/enterprise|company/i, "enterprise"],
+  [/person|client|patient/i, "related_person"],
+  [/item|product/i, "related_item"],
+  [/scheduled.?date|schedule.?date/i, "scheduled_date"],
+  [/scheduled.?time|schedule.?time/i, "scheduled_time"],
+  [/due.?date/i, "due_date"],
+  [/due.?time/i, "due_time"],
+  [/outcome.?notes|result.?notes/i, "outcome_notes"],
+  [/^outcome$|result/i, "outcome"],
+  [/notes/i, "internal_notes"],
+];
+
+export const TASK_TEMPLATE_EXAMPLE = {
+  task_type: "other", title: "Follow up with client",
+  status: "open", priority: "normal",
+  assigned_to_name: "Jane Smith", assigned_to_email: "jane@example.com",
+  enterprise: "Acme Corp", related_person: "", related_item: "",
+  scheduled_date: "2025-02-01", scheduled_time: "09:00",
+  due_date: "2025-02-05", due_time: "", outcome: "pending", outcome_notes: "", internal_notes: "",
+};
+
+export const TASK_TEMPLATE_INSTRUCTIONS = [
+  ["task_type","Yes","Task type","clock_in, clock_out, stock_counting, maintenance, medication_admin, other, etc."],
+  ["title","Yes","Short description of the task","Follow up with client"],
+  ["status","No","Status","open, in_progress, completed, cancelled"],
+  ["priority","No","Priority","low, normal, high, urgent"],
+  ["assigned_to_email","No","Email of the assigned app user","jane@example.com"],
+  ["scheduled_date","No","Scheduled date","YYYY-MM-DD"],
+  ["due_date","No","Due date","YYYY-MM-DD"],
+  ["enterprise","No","Enterprise name (must match existing record)","Acme Corp"],
+];
+
+export function validateTask(row) {
+  const errors = [], warnings = [];
+  if (!row.task_type) errors.push("task_type required");
+  if (!row.title) errors.push("title required");
+  const validStatuses = ["open","in_progress","completed","cancelled"];
+  if (row.status && !validStatuses.includes(row.status)) warnings.push(`Unknown status "${row.status}" — defaulting to open`);
+  const validPriorities = ["low","normal","high","urgent"];
+  if (row.priority && !validPriorities.includes(row.priority)) warnings.push(`Unknown priority "${row.priority}" — defaulting to normal`);
+  if (row.scheduled_date && isNaN(Date.parse(row.scheduled_date))) warnings.push("scheduled_date format unclear");
+  if (row.due_date && isNaN(Date.parse(row.due_date))) warnings.push("due_date format unclear");
+  return { errors, warnings };
+}
+
+export function transformTask(row) {
+  if (!row.status) row.status = "open";
+  if (!row.priority) row.priority = "normal";
+  if (!row.outcome) row.outcome = "pending";
+  return row;
+}
+
+// ── TRANSACTIONS ───────────────────────────────────────────────────────────
+export const TRANSACTION_FIELDS = [
+  { key: "transaction_type", label: "Transaction Type *", required: true },
+  { key: "date", label: "Date *", required: true },
+  { key: "status", label: "Status" },
+  { key: "enterprise", label: "Enterprise" },
+  { key: "primary_person", label: "Primary Person" },
+  { key: "counterparty", label: "Counterparty" },
+  { key: "description", label: "Description" },
+  { key: "amount", label: "Amount" },
+  { key: "tax_amount", label: "Tax Amount" },
+  { key: "payment_method", label: "Payment Method" },
+  { key: "payment_status", label: "Payment Status" },
+  { key: "amount_paid", label: "Amount Paid" },
+  { key: "due_date", label: "Due Date" },
+  { key: "reference_number", label: "Reference Number" },
+  { key: "internal_notes", label: "Internal Notes" },
+];
+
+export const TRANSACTION_MAPPING_RULES = [
+  [/transaction.?type|^type$/i, "transaction_type"],
+  [/^date$|transaction.?date|event.?date/i, "date"],
+  [/^status$/i, "status"],
+  [/enterprise|company|branch/i, "enterprise"],
+  [/primary.?person|staff|employee/i, "primary_person"],
+  [/counterparty|customer|supplier|vendor|patient/i, "counterparty"],
+  [/description|reason/i, "description"],
+  [/^amount$|total|gross/i, "amount"],
+  [/tax/i, "tax_amount"],
+  [/payment.?method|method/i, "payment_method"],
+  [/payment.?status/i, "payment_status"],
+  [/amount.?paid|paid/i, "amount_paid"],
+  [/due.?date/i, "due_date"],
+  [/reference|ref.?no|invoice.?no/i, "reference_number"],
+  [/notes/i, "internal_notes"],
+];
+
+export const TRANSACTION_TEMPLATE_EXAMPLE = {
+  transaction_type: "sale_service", date: "2025-01-15",
+  status: "draft", enterprise: "Acme Corp",
+  primary_person: "Jane Smith", counterparty: "Client A",
+  description: "Monthly service fee", amount: 500,
+  tax_amount: 50, payment_method: "bank_transfer",
+  payment_status: "unpaid", amount_paid: 0,
+  due_date: "2025-02-01", reference_number: "INV-001", internal_notes: "",
+};
+
+export const TRANSACTION_TEMPLATE_INSTRUCTIONS = [
+  ["transaction_type","Yes","Type","stock_in, stock_out, stock_transfer, item_assignment, item_return, sale_service, expense, adjustment, attendance"],
+  ["date","Yes","Transaction date","YYYY-MM-DD"],
+  ["status","No","Status","draft, posted, voided"],
+  ["amount","No","Total amount (numeric)","500.00"],
+  ["payment_method","No","Payment method","cash, bank_transfer, credit_card, mobile_money, check, other"],
+  ["payment_status","No","Payment status","paid, unpaid, partial, na"],
+  ["due_date","No","Payment due date","YYYY-MM-DD"],
+  ["enterprise","No","Enterprise name (must match existing record)","Acme Corp"],
+];
+
+export function validateTransaction(row) {
+  const errors = [], warnings = [];
+  if (!row.transaction_type) errors.push("transaction_type required");
+  if (!row.date) errors.push("date required");
+  if (row.date && isNaN(Date.parse(row.date))) errors.push("date format invalid — use YYYY-MM-DD");
+  const validTypes = ["stock_in","stock_out","stock_transfer","item_assignment","item_return","sale_service","expense","adjustment","attendance"];
+  if (row.transaction_type && !validTypes.includes(row.transaction_type)) errors.push(`Invalid transaction_type: ${row.transaction_type}`);
+  if (row.amount && isNaN(parseFloat(row.amount))) errors.push("amount must be numeric");
+  return { errors, warnings };
+}
+
+export function transformTransaction(row) {
+  if (!row.status) row.status = "draft";
+  if (!row.payment_status) row.payment_status = "na";
+  ["amount","tax_amount","amount_paid"].forEach((k) => {
+    if (row[k] != null && row[k] !== "") { const n = parseFloat(row[k]); row[k] = isNaN(n) ? undefined : n; }
+  });
+  return row;
+}
+
 // ── RELATIONSHIPS ─────────────────────────────────────────────────────────
 export const RELATIONSHIP_FIELDS = [
   { key: "relationship_type", label: "Relationship Type *", required: true },
