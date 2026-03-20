@@ -2,18 +2,26 @@ import React, { useMemo, useState } from "react";
 import { Search, ChevronDown, ChevronUp, Package } from "lucide-react";
 import CountRow from "./CountRow";
 
-function playBeep() {
+function playBeep(type = "success") {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.15);
+    if (type === "warning") {
+      osc.frequency.value = 440;
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+    } else {
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.15);
+    }
   } catch (_) {}
 }
 
@@ -69,7 +77,10 @@ export default function CountSheet({
     const isCounting = markCounted || physical_count !== null;
     onUpdateCount(productId, physical_count, notes, isCounting);
     if (isCounting && !session.counts[productId].counted) {
-      playBeep();
+      const systemCount = session.counts[productId].system_count;
+      const isLargeGap = physical_count !== null && systemCount > 0 &&
+        Math.abs(physical_count - systemCount) / systemCount > 0.2;
+      playBeep(isLargeGap ? "warning" : "success");
     }
   };
 
