@@ -266,7 +266,7 @@ export default function ChartBuilder({ chart, folders, currentUser, onClose }) {
               <div>
                 <h3 className="text-sm font-semibold text-slate-700 mb-3">Chart Type</h3>
                 <div className="grid grid-cols-4 gap-3">
-                  {CHART_TYPES.map(({ id, label, icon: Icon }) => (
+                  {CHART_TYPES.map(({ id, label, ChartIcon }) => (
                     <button
                       key={id}
                       onClick={() => setChartType(id)}
@@ -274,7 +274,7 @@ export default function ChartBuilder({ chart, folders, currentUser, onClose }) {
                         chartType === id ? "border-emerald-500 bg-emerald-50" : "border-slate-200 hover:border-slate-300"
                       }`}
                     >
-                      <Icon className={`w-6 h-6 ${chartType === id ? "text-emerald-600" : "text-slate-400"}`} />
+                      <ChartIcon className={`w-6 h-6 ${chartType === id ? "text-emerald-600" : "text-slate-400"}`} />
                       <span className="text-[11px] font-medium text-slate-600">{label}</span>
                     </button>
                   ))}

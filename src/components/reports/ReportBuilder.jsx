@@ -267,13 +267,13 @@ export default function ReportBuilder({ report, folders, charts, currentUser, on
             <div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Add Section</p>
               <div className="grid grid-cols-2 gap-1.5">
-                {SECTION_TYPES.map(({ type, label, icon: Icon }) => (
+                {SECTION_TYPES.map(({ type, label, SectionIcon }) => (
                   <button
                     key={type}
                     onClick={() => addSection(type)}
                     className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 transition-all text-xs font-medium text-slate-700"
                   >
-                    <Icon className="w-3.5 h-3.5 text-slate-400" />
+                    <SectionIcon className="w-3.5 h-3.5 text-slate-400" />
                     {label}
                   </button>
                 ))}
