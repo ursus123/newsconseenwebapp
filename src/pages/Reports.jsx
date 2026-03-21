@@ -30,6 +30,8 @@ export default function Reports() {
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [setupDone, setSetupDone] = useState(false);
+  const [etlLoading, setEtlLoading] = useState(false);
+  const [etlResult, setEtlResult] = useState(null);
 
   const qc = useQueryClient();
 
