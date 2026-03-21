@@ -320,7 +320,8 @@ export default function GraphSidePanel({ nodes, links, selected, enterprises, pe
   };
 
   return (
-    <div className="w-64 shrink-0 space-y-3 overflow-y-auto min-h-0">
+    <div className="w-64 shrink-0 flex flex-col overflow-hidden border border-slate-200 rounded-2xl bg-white min-h-0">
+    <div className="flex-1 overflow-y-auto p-3 space-y-3">
       {/* Stats */}
       <div className="bg-white border border-slate-200 rounded-2xl p-3 space-y-2">
         <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Graph Stats</p>
