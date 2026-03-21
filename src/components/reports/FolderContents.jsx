@@ -265,13 +265,14 @@ export default function FolderContents({
           </div>
         )}
 
-        {totalItems === 0 && (selected?.type !== "all-charts" || pinnedWidgets.length === 0) ? (
+        {totalItems === 0 && (selected?.type !== "all-charts" || pinnedWidgets.length === 0) && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <BarChart2 className="w-12 h-12 text-slate-200 mb-3" />
             <p className="text-slate-500 font-medium">No items here yet</p>
             <p className="text-slate-400 text-sm mt-1">Create a chart or report to get started</p>
           </div>
-        ) : viewMode === "grid" ? (
+        )}
+        {totalItems > 0 && viewMode === "grid" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {visibleCharts.map((chart) => (
               <ChartCard
