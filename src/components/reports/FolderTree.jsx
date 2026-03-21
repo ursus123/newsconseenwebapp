@@ -204,6 +204,27 @@ export default function FolderTree({
         {isAdmin && navItem(<Activity className="w-3.5 h-3.5" />, "Data Pipeline", "data-pipeline", "system")}
       </div>
 
+      {/* ETL Trigger — admin only */}
+      {isAdmin && onTriggerETL && (
+        <div className="p-3 border-t border-slate-100 shrink-0">
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Analytics Pipeline</p>
+          <button
+            onClick={onTriggerETL}
+            disabled={etlLoading}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium bg-slate-50 hover:bg-slate-100 text-slate-600 transition-all disabled:opacity-50"
+          >
+            {etlLoading
+              ? <Loader2 className="w-3 h-3 animate-spin" />
+              : <RefreshCw className="w-3 h-3" />
+            }
+            {etlLoading ? "Refreshing..." : "Refresh Analytics"}
+          </button>
+          {etlResult && (
+            <p className="text-[10px] text-emerald-600 mt-1.5 leading-relaxed">{etlResult}</p>
+          )}
+        </div>
+      )}
+
       {/* Rename modal */}
       {renamingFolder && (
         <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setRenamingFolder(null)}>
