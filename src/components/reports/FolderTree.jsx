@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import {
   Folder, FolderOpen, ChevronRight, ChevronDown, Plus,
   Search, BarChart2, FileText, Star, Activity, Database,
-  MoreHorizontal, Trash2, Edit2,
+  MoreHorizontal, Trash2, Edit2, RefreshCw, Loader2,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
