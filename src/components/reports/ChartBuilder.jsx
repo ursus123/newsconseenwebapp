@@ -436,8 +436,8 @@ export default function ChartBuilder({ chart, folders, currentUser, onClose, rea
               )}
             </div>
           </div>
-        </div>
-        }
+          </div>
+        )}
       </div>
     </div>
   );
