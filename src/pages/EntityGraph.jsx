@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { Network, RefreshCw, Search, X, Download, ChevronDown } from "lucide-react";
+import { Network, RefreshCw, Search, X, Download, ChevronDown, Target } from "lucide-react";
 import { buildGraph, NODE_CONFIG, VIEW_PRESETS } from "@/components/entitygraph/graphConfig";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 import Graph2D from "@/components/entitygraph/Graph2D";
@@ -350,10 +350,10 @@ export default function EntityGraph() {
   }, [searchQuery, displayNodes]);
 
   return (
-    <div className="flex flex-col overflow-hidden -mx-4 lg:-mx-8 -my-4 lg:-my-8 px-4 lg:px-6 py-4 lg:py-5" style={{ height: "calc(100vh - 4rem)" }} onKeyDown={handleKeyDown}>
+    <div className="flex flex-col h-full overflow-hidden gap-2" onKeyDown={handleKeyDown}>
       {/* Header row 1: title + mode + search + export + presets */}
-      <div className="flex items-center justify-between mb-2 shrink-0 flex-wrap gap-2">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between shrink-0 flex-wrap gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
             <Network className="w-5 h-5 text-indigo-500" />
             Entity Graph
@@ -362,6 +362,12 @@ export default function EntityGraph() {
           <div className="flex items-center gap-2 flex-wrap">
             {Object.entries(loadStates).map(([k, s]) => <LoadBadge key={k} type={k} state={s} />)}
           </div>
+          {/* Node count summary */}
+          <span className={`text-xs px-2.5 py-1 rounded-full ${
+            displayNodes.length > 100 ? "bg-amber-50 text-amber-600" : "bg-slate-100 text-slate-400"
+          }`}>
+            {displayNodes.length} nodes · {displayLinks.length} connections
+          </span>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
