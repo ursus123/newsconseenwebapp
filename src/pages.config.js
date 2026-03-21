@@ -63,7 +63,7 @@ import Permissions from './pages/Permissions';
 import Products from './pages/Products';
 import QueryBuilder from './pages/QueryBuilder';
 import Relationships from './pages/Relationships';
-import Reports from './pages/Reports';
+import Reports from './pages/Reports.jsx';
 import Services from './pages/Services';
 import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';

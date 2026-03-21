@@ -15,7 +15,7 @@ import Billing from './pages/Billing';
 import Settings from './pages/Settings';
 import DataRepair from './pages/DataRepair';
 import StockCounter from './pages/StockCounter';
-import Reports from './pages/Reports.jsx';
+import Reports from './pages/Reports';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
