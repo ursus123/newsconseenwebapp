@@ -119,8 +119,8 @@ function SectionEditor({ section, index, total, charts, onUpdate, onMove, onDele
               <div className="inline-flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200">
                 <span className="text-2xl">{section.icon || "📊"}</span>
                 <div>
-                  <p className="text-xl font-black text-slate-800">{section.value || "—"}</p>
-                  <p className="text-xs text-slate-500">{section.label || "Metric"}</p>
+                  <p className="text-xl font-black text-slate-800">{safeVal(section.value) || "—"}</p>
+                  <p className="text-xs text-slate-500">{safeVal(section.label) || "Metric"}</p>
                 </div>
               </div>
             </div>

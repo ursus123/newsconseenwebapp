@@ -18,11 +18,15 @@ export default function ChartSection({ chart, height = 250 }) {
     setError(null);
     executeSQL(sql, {})
       .then((result) => {
-        // Sanitize: flatten any object/array values to strings so React can render them
+        // Sanitize: flatten any object/array/boolean values so React can render them safely
         const rows = (result.rows || []).map((row) => {
           const clean = {};
           Object.entries(row).forEach(([k, v]) => {
-            clean[k] = v !== null && v !== undefined && typeof v === "object" ? JSON.stringify(v) : v;
+            if (v === null || v === undefined) clean[k] = null;
+            else if (typeof v === "boolean") clean[k] = v ? "Yes" : "No";
+            else if (Array.isArray(v)) clean[k] = v.map((i) => typeof i === "object" ? JSON.stringify(i) : String(i)).join(", ");
+            else if (typeof v === "object") clean[k] = JSON.stringify(v);
+            else clean[k] = v;
           });
           return clean;
         });

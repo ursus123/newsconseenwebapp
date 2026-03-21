@@ -62,15 +62,9 @@ export default function ChartRenderer({ chart, data, height = 320 }) {
           <tbody>
             {chartData.map((row, i) => (
               <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
-                {cols.map((c) => {
-                  const val = row[c];
-                  const display = val === null || val === undefined
-                    ? ""
-                    : typeof val === "object"
-                    ? JSON.stringify(val)
-                    : String(val);
-                  return <td key={c} className="py-2 px-3 text-slate-700">{display}</td>;
-                })}
+                {cols.map((c) => (
+                  <td key={c} className="py-2 px-3 text-slate-700">{safeVal(row[c])}</td>
+                ))}
               </tr>
             ))}
           </tbody>
