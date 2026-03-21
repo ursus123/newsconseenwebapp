@@ -17,7 +17,17 @@ export default function ChartSection({ chart, height = 250 }) {
     setLoading(true);
     setError(null);
     executeSQL(sql, {})
-      .then((result) => setData(result.rows || []))
+      .then((result) => {
+        // Sanitize: flatten any object/array values to strings so React can render them
+        const rows = (result.rows || []).map((row) => {
+          const clean = {};
+          Object.entries(row).forEach(([k, v]) => {
+            clean[k] = v !== null && v !== undefined && typeof v === "object" ? JSON.stringify(v) : v;
+          });
+          return clean;
+        });
+        setData(rows);
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [chart?.sql_query, chart?.sql]);
