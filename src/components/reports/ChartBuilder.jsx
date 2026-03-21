@@ -193,25 +193,31 @@ export default function ChartBuilder({ chart, folders, currentUser, onClose, rea
           <ArrowLeft className="w-4 h-4" /> Back
         </Button>
         <div className="flex-1">
-          <h2 className="text-base font-semibold text-slate-800">{chart ? "Edit Chart" : "New Chart"}</h2>
+          <h2 className="text-base font-semibold text-slate-800">
+            {readOnly ? chart?.title || "View Chart" : (chart ? "Edit Chart" : "New Chart")}
+          </h2>
         </div>
-        {/* Steps */}
-        <div className="flex items-center gap-1.5 text-xs">
-          {["Data", "Type", "Settings", "Sharing"].map((s, i) => (
-            <button
-              key={s}
-              onClick={() => setStep(i + 1)}
-              className={`px-3 py-1 rounded-full font-medium transition-all ${
-                step === i + 1 ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-              }`}
-            >
-              {i + 1}. {s}
-            </button>
-          ))}
-        </div>
-        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5" onClick={handleSave} disabled={saveMut.isPending}>
-          <Save className="w-3.5 h-3.5" /> {saveMut.isPending ? "Saving..." : "Save Chart"}
-        </Button>
+        {!readOnly && (
+          <>
+            {/* Steps */}
+            <div className="flex items-center gap-1.5 text-xs">
+              {["Data", "Type", "Settings", "Sharing"].map((s, i) => (
+                <button
+                  key={s}
+                  onClick={() => setStep(i + 1)}
+                  className={`px-3 py-1 rounded-full font-medium transition-all ${
+                    step === i + 1 ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  {i + 1}. {s}
+                </button>
+              ))}
+            </div>
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5" onClick={handleSave} disabled={saveMut.isPending}>
+              <Save className="w-3.5 h-3.5" /> {saveMut.isPending ? "Saving..." : "Save Chart"}
+            </Button>
+          </>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">
