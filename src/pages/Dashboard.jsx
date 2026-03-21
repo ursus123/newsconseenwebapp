@@ -340,8 +340,9 @@ function AdminDashboard({ user }) {
           )}
         </div>
 
-        {/* Right: Activity feed */}
+        {/* Right: Retention risk + Activity feed */}
         <div className="space-y-5">
+          <ClientRetentionRisk people={people} tasks={tasks} currentUser={user} />
           <RecentActivityFeed tasks={tasks.slice(0, 10)} transactions={transactions.slice(0, 10)} enterprises={enterprises.slice(0, 5)} people={people.slice(0, 5)} />
         </div>
       </div>
