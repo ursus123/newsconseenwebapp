@@ -468,8 +468,14 @@ export default function EntityGraph() {
         </div>
       </div>
 
+      {focusMode && (
+        <div className="text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl shrink-0">
+          👆 Click an enterprise node to focus on it{focusedEnterprise && " · Click again to unfocus"}
+        </div>
+      )}
+
       {isCapped && (
-        <div className="mb-2 shrink-0">
+        <div className="shrink-0">
           <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2 py-1 rounded-xl">
             ⚠ Capped at {MAX_NODES} of {collapsedNodes.length} nodes
           </span>
