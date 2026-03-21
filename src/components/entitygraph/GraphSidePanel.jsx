@@ -443,6 +443,5 @@ export default function GraphSidePanel({ nodes, links, selected, enterprises, pe
         </div>
       </div>
     </div>
-    </div>
   );
 }
