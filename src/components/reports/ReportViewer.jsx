@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer, MessageSquare, Send } from "lucide-react";
 import { format } from "date-fns";
-import ChartRenderer from "./ChartRenderer";
+import ChartSection from "./ChartSection";
 
 function SectionViewer({ section, charts }) {
   if (section.type === "heading") {
@@ -47,9 +47,9 @@ function SectionViewer({ section, charts }) {
     return (
       <div className={`mb-6 ${section.width === "half" ? "inline-block w-[48%] mr-4 align-top" : "block"}`}>
         <div className="bg-white border border-slate-200 rounded-2xl p-5">
-          <p className="text-sm font-semibold text-slate-800 mb-1">{chart.title}</p>
-          {chart.description && <p className="text-xs text-slate-400 mb-3">{chart.description}</p>}
-          <ChartRenderer chart={chart} height={280} />
+        <p className="text-sm font-semibold text-slate-800 mb-1">{chart.title}</p>
+        {chart.description && <p className="text-xs text-slate-400 mb-3">{chart.description}</p>}
+        <ChartSection chart={chart} height={280} />
         </div>
         {section.caption && <p className="text-xs text-slate-400 mt-1.5 text-center italic">{section.caption}</p>}
       </div>
