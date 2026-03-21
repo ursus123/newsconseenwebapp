@@ -1,20 +1,25 @@
 import React, { useState } from "react";
-import { X, Pin, BarChart2, PieChart, TrendingUp, Table2, Hash } from "lucide-react";
+import { X, Pin, BarChart2, PieChart, TrendingUp, Table2, Hash, Map } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
+import MapChart from "./MapChart";
 
 const CHART_TYPES = [
-  { key: "table", label: "Table", icon: Table2 },
-  { key: "bar", label: "Bar Chart", icon: BarChart2 },
-  { key: "pie", label: "Pie Chart", icon: PieChart },
-  { key: "line", label: "Line Chart", icon: TrendingUp },
-  { key: "number", label: "Single Number", icon: Hash },
+  { key: "table",  label: "Table",   icon: Table2 },
+  { key: "bar",    label: "Bar",     icon: BarChart2 },
+  { key: "pie",    label: "Pie",     icon: PieChart },
+  { key: "line",   label: "Line",    icon: TrendingUp },
+  { key: "number", label: "Number",  icon: Hash },
+  { key: "map",    label: "Map",     icon: Map },
 ];
 
-export default function PinWidgetModal({ sql, onClose, onPinned }) {
+export default function PinWidgetModal({ sql, chartType: initialChartType, data, onClose, onPinned }) {
   const [title, setTitle] = useState(sql.slice(0, 50).trim());
-  const [chartType, setChartType] = useState("table");
+  const [chartType, setChartType] = useState(initialChartType || "bar");
   const [saving, setSaving] = useState(false);
+
+  const hasLatLon = data?.length > 0 && "lat" in data[0] && "lon" in data[0];
+  const visibleTypes = CHART_TYPES.filter((t) => t.key !== "map" || hasLatLon);
 
   const handleSave = async () => {
     if (!title.trim()) return;
@@ -23,7 +28,6 @@ export default function PinWidgetModal({ sql, onClose, onPinned }) {
       const user = await base44.auth.me().catch(() => null);
       const companyId = user?.company_id || "";
 
-      // 1. Save to SavedDashboardWidget (dashboard pinned widgets)
       await base44.entities.SavedDashboardWidget.create({
         title: title.trim(),
         sql,
@@ -32,7 +36,6 @@ export default function PinWidgetModal({ sql, onClose, onPinned }) {
         company_id: companyId,
       });
 
-      // 2. Also save to ReportChart so it appears in Reports
       if (companyId) {
         const folders = await base44.entities.ChartFolder.filter({
           company_id: companyId,
@@ -70,7 +73,7 @@ export default function PinWidgetModal({ sql, onClose, onPinned }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-800 border border-white/10 rounded-2xl w-[420px] shadow-2xl">
+      <div className="bg-slate-800 border border-white/10 rounded-2xl w-[440px] shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
           <div className="flex items-center gap-2 text-slate-200">
             <Pin className="w-4 h-4 text-emerald-400" />
@@ -93,8 +96,8 @@ export default function PinWidgetModal({ sql, onClose, onPinned }) {
           </div>
           <div>
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Chart Type</label>
-            <div className="grid grid-cols-5 gap-1.5">
-              {CHART_TYPES.map(({ key, label, icon: Icon }) => (
+            <div className="grid grid-cols-3 gap-1.5">
+              {visibleTypes.map(({ key, label, icon: Icon }) => (
                 <button
                   key={key}
                   onClick={() => setChartType(key)}
@@ -109,7 +112,19 @@ export default function PinWidgetModal({ sql, onClose, onPinned }) {
                 </button>
               ))}
             </div>
+            {chartType === "map" && (
+              <p className="mt-2 text-[10px] text-slate-500">
+                Map charts show location pins on OpenStreetMap. Requires <code className="text-emerald-400">lat</code> and <code className="text-emerald-400">lon</code> columns.
+              </p>
+            )}
           </div>
+
+          {chartType === "map" && hasLatLon && (
+            <div className="rounded-xl overflow-hidden border border-white/10">
+              <MapChart data={data} height={180} />
+            </div>
+          )}
+
           <div className="bg-slate-900/50 rounded-lg px-3 py-2 border border-white/5">
             <p className="text-[9px] text-slate-600 font-mono uppercase tracking-widest mb-1">SQL</p>
             <p className="text-[11px] text-slate-400 font-mono line-clamp-3">{sql}</p>
