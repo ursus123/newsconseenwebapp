@@ -194,6 +194,7 @@ export default function QueryBuilder() {
   const [leftTab, setLeftTab] = useState("tables");
   const [midTab, setMidTab] = useState("script");
   const [showChart, setShowChart] = useState(false);
+  const [selectedChartType, setSelectedChartType] = useState("bar");
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
