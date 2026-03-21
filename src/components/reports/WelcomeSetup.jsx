@@ -102,6 +102,17 @@ export default function WelcomeSetup({ currentUser, onComplete }) {
   const qc = useQueryClient();
   const [creating, setCreating] = useState(false);
 
+  const { data: enterprises = [] } = useQuery({
+    queryKey: ["setup_enterprises", currentUser?.company_id],
+    queryFn: () => base44.entities.Enterprise.filter({ company_id: currentUser.company_id }),
+    enabled: !!currentUser?.company_id,
+  });
+
+  const orgName = enterprises[0]?.enterprise_name
+    || currentUser?.company_name
+    || currentUser?.email?.split("@")[0]
+    || "My Organization";
+
   const handleTemplate = async (templateId) => {
     setCreating(true);
     const companyId = currentUser?.company_id;
