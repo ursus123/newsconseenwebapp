@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Save, Plus, ChevronUp, ChevronDown, Trash2, MoreHorizontal, BarChart2, Type, AlignLeft, Minus, Space, Hash } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import ChartRenderer from "./ChartRenderer";
+import ChartSection from "./ChartSection";
 
 const SECTION_TYPES = [
   { type: "heading", label: "Heading", SectionIcon: Type },

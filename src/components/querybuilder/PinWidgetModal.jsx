@@ -21,13 +21,46 @@ export default function PinWidgetModal({ sql, onClose, onPinned }) {
     setSaving(true);
     try {
       const user = await base44.auth.me().catch(() => null);
+      const companyId = user?.company_id || "";
+
+      // 1. Save to SavedDashboardWidget (dashboard pinned widgets)
       await base44.entities.SavedDashboardWidget.create({
         title: title.trim(),
         sql,
         chart_type: chartType,
         created_by: user?.email || "",
-        company_id: user?.company_id || "",
+        company_id: companyId,
       });
+
+      // 2. Also save to ReportChart so it appears in Reports
+      if (companyId) {
+        const folders = await base44.entities.ChartFolder.filter({
+          company_id: companyId,
+          name: "From QueryBuilder",
+        });
+        let folderId = folders[0]?.id;
+        if (!folderId) {
+          const newFolder = await base44.entities.ChartFolder.create({
+            name: "From QueryBuilder",
+            company_id: companyId,
+            status: "active",
+            shared_with_roles: ["admin"],
+          });
+          folderId = newFolder.id;
+        }
+        await base44.entities.ReportChart.create({
+          title: title.trim(),
+          sql_query: sql,
+          chart_type: chartType,
+          company_id: companyId,
+          folder_id: folderId,
+          status: "active",
+          description: "Pinned from QueryBuilder",
+          shared_with_roles: ["admin"],
+          is_public: false,
+        });
+      }
+
       onPinned?.();
       onClose();
     } finally {
