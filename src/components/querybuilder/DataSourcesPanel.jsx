@@ -142,6 +142,46 @@ export default function DataSourcesPanel({ uploadedTables, onTablesChange, onUse
           </div>
         </Section>
 
+        {/* Geographic Research */}
+        <Section title="Geographic Research" icon={MapPin} iconColor="text-emerald-400" defaultOpen={false}>
+          <div className="px-2 space-y-0.5">
+            <p className="text-[9px] text-slate-500 px-2 pb-1 font-mono uppercase tracking-widest">Universal — any location</p>
+            {GEO_TABLES.map(({ table, label, desc, sample }) => (
+              <div key={table} className="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-emerald-500/5 transition-all">
+                <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[10px] text-slate-300 block truncate">{table}</span>
+                  <span className="text-[9px] text-slate-600">{desc}</span>
+                </div>
+                <button
+                  onClick={() => onUseInQuery(sample)}
+                  title="Use sample query"
+                  className="hidden group-hover:flex p-1 rounded hover:bg-emerald-500/20 text-slate-500 hover:text-emerald-400 transition-colors"
+                >
+                  <Zap className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+            <p className="text-[9px] text-slate-500 px-2 pb-1 pt-2 font-mono uppercase tracking-widest">US Specific</p>
+            {US_TABLES.map(({ table, label, desc, sample }) => (
+              <div key={table} className="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-blue-500/5 transition-all">
+                <MapPin className="w-3 h-3 text-blue-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[10px] text-slate-300 block truncate">{table}</span>
+                  <span className="text-[9px] text-slate-600">{desc}</span>
+                </div>
+                <button
+                  onClick={() => onUseInQuery(sample)}
+                  title="Use sample query"
+                  className="hidden group-hover:flex p-1 rounded hover:bg-blue-500/20 text-slate-500 hover:text-blue-400 transition-colors"
+                >
+                  <Zap className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Section>
+
         {/* Python Analytics */}
         <Section title="Python Scripts" icon={Code2} iconColor="text-amber-400" defaultOpen={false}>
           <div className="px-2 space-y-1">
