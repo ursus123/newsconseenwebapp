@@ -308,10 +308,16 @@ export default function QueryBuilder() {
     queryFn: () => listFn(base44.entities.MedicationProfile),
     enabled: !!currentUser,
   });
+  const { data: addressesSnap = [] } = useQuery({
+    queryKey: ["snap_addresses", currentUser?.company_id],
+    queryFn: () => listFn(base44.entities.Address),
+    enabled: !!currentUser,
+  });
 
   const masterDataSnapshot = {
     enterprises: enterprisesSnap, people: peopleSnap, products: productsSnap,
     tasks: tasksSnap, transactions: transactionsSnap, medication_profiles: medicationsSnap,
+    addresses: addressesSnap,
   };
 
   const qc = useQueryClient();
