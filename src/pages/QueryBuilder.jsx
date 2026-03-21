@@ -702,7 +702,12 @@ export default function QueryBuilder() {
           )}
 
           {midTab === "script" && showChart && results?.length > 0 && (
-            <ResultChart results={results} onClose={() => setShowChart(false)} />
+            <ResultChart
+              results={results}
+              chartType={selectedChartType}
+              onChartTypeChange={setSelectedChartType}
+              onClose={() => setShowChart(false)}
+            />
           )}
 
           {midTab === "history" && (
