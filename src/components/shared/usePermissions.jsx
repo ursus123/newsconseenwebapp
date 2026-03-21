@@ -20,7 +20,7 @@ export const DEFAULT_PAGES = {
     "Enterprises", "People", "Products",
     "Services", "Addresses", "Relationships",
     "Tasks", "Transactions",
-    "Reports", "QueryBuilder",
+    "Reports", "QueryBuilder", "MarketIntelligence",
     "Applications",
     "UserManagement", "Permissions",
     "EntityGraph", "DataModels", "Pipelines", "Billing",
