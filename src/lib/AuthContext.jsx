@@ -43,8 +43,10 @@ export const AuthProvider = ({ children }) => {
         console.error('App state check failed:', appError);
         
         // Handle app-level errors
-        if (appError.status === 403 && appError.data?.extra_data?.reason) {
-          const reason = appError.data.extra_data.reason;
+        const errStatus = appError.response?.status ?? appError.status;
+        const errReason = appError.response?.data?.extra_data?.reason ?? appError.data?.extra_data?.reason;
+        if (errStatus === 403 && errReason) {
+          const reason = errReason;
           if (reason === 'auth_required') {
             setAuthError({
               type: 'auth_required',
