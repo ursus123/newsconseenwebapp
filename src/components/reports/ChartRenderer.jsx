@@ -1,4 +1,13 @@
 import React from "react";
+
+function safeVal(val) {
+  if (val === null || val === undefined) return "—";
+  if (typeof val === "boolean") return val ? "Yes" : "No";
+  if (val instanceof Date) return val.toLocaleDateString();
+  if (Array.isArray(val)) return val.map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v))).join(", ");
+  if (typeof val === "object") return JSON.stringify(val);
+  return String(val);
+}
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,

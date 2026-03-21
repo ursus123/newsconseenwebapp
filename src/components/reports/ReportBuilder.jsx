@@ -7,6 +7,15 @@ import { ArrowLeft, Save, Plus, ChevronUp, ChevronDown, Trash2, MoreHorizontal, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import ChartSection from "./ChartSection";
 
+function safeVal(val) {
+  if (val === null || val === undefined) return "—";
+  if (typeof val === "boolean") return val ? "Yes" : "No";
+  if (val instanceof Date) return val.toLocaleDateString();
+  if (Array.isArray(val)) return val.map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v))).join(", ");
+  if (typeof val === "object") return JSON.stringify(val);
+  return String(val);
+}
+
 const SECTION_TYPES = [
   { type: "heading", label: "Heading", SectionIcon: Type },
   { type: "text", label: "Text Block", SectionIcon: AlignLeft },
