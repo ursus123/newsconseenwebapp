@@ -19,8 +19,11 @@ const GEO_TABLES = [
 ];
 
 const US_TABLES = [
-  { table: "us_state",  label: "US State Demographics", desc: "Census ACS data any US state",    sample: "SELECT * FROM us_state WHERE state = 'Iowa'" },
-  { table: "us_county", label: "US County Breakdown",   desc: "County-level data any US state",  sample: "SELECT * FROM us_county WHERE state = 'Texas' ORDER BY population DESC LIMIT 20" },
+  { table: "us_state",        label: "State Demographics",    desc: "Census ACS data any US state",      sample: "SELECT * FROM us_state WHERE state = 'Iowa'" },
+  { table: "us_county",       label: "County Breakdown",      desc: "County-level data any US state",    sample: "SELECT * FROM us_county WHERE state = 'Texas' ORDER BY population DESC LIMIT 20" },
+  { table: "us_zipcode",      label: "Zip Code Demographics", desc: "Neighborhood demographics by zip",  sample: "SELECT * FROM us_zipcode WHERE zipcode = '50301'" },
+  { table: "cms_healthcare",  label: "CMS Provider Ratings",  desc: "Medicare/Medicaid provider data",   sample: "SELECT * FROM cms_healthcare WHERE state = 'Iowa' AND provider_type = 'nursing_home'" },
+  { table: "usda_food_access",label: "Food Access & Deserts", desc: "Food access and food desert data",  sample: "SELECT * FROM usda_food_access WHERE state = 'Iowa'" },
 ];
 
 function Section({ title, icon: Icon, iconColor, defaultOpen = true, children }) {
