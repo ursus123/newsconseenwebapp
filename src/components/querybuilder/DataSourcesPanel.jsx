@@ -165,7 +165,7 @@ export default function DataSourcesPanel({ uploadedTables, onTablesChange, onUse
                 </button>
               </div>
             ))}
-            <p className="text-[9px] text-slate-500 px-2 pb-1 pt-2 font-mono uppercase tracking-widest">US Specific</p>
+            <p className="text-[9px] text-slate-500 px-2 pb-1 pt-2 font-mono uppercase tracking-widest">US Deep Research (5 tables)</p>
             {US_TABLES.map(({ table, label, desc, sample }) => (
               <div key={table} className="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-blue-500/5 transition-all">
                 <MapPin className="w-3 h-3 text-blue-400 shrink-0" />
