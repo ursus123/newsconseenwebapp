@@ -349,7 +349,7 @@ export default function FolderContents({
               </tbody>
             </table>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
