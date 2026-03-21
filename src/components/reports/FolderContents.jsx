@@ -295,7 +295,7 @@ export default function FolderContents({
               />
             ))}
           </div>
-        ) : (
+        ) : totalItems > 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
             <table className="w-full text-xs">
               <thead>
