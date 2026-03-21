@@ -64,8 +64,9 @@ const NAV_CONFIG = {
     {
       section: "Analytics",
       items: [
-        { name: "Reports",      icon: BarChart2 },
-        { name: "QueryBuilder", label: "Query Builder", icon: Code2 },
+        { name: "Reports",             icon: BarChart2 },
+        { name: "QueryBuilder",        label: "Query Builder",        icon: Code2 },
+        { name: "MarketIntelligence",  label: "Market Intelligence",  icon: TrendingUp },
       ],
     },
     {
