@@ -146,6 +146,7 @@ export default function GraphFilterPanel({
           {nodeCount > 100 && <div className="mt-0.5 text-amber-500">Use Focus / Collapse for clarity</div>}
         </div>
       </div>
+      </div>
     </div>
   );
 }
