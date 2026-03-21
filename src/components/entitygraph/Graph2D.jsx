@@ -140,7 +140,7 @@ export default function Graph2D({ nodes, links, selected, onSelect, colorBy = "d
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="w-full h-full flex flex-col min-h-0">
       <div className="flex items-center gap-1 mb-2 self-end bg-white border border-slate-200 rounded-xl px-1 py-1">
         <button onClick={() => setZoom(z => Math.max(0.2, z - 0.15))} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 text-xs">−</button>
         <span className="text-xs font-mono text-slate-500 w-10 text-center">{Math.round(zoom * 100)}%</span>
