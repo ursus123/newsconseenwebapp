@@ -212,6 +212,9 @@ export default function Reports() {
           onNewChart={() => { setEditingChart(null); setView("chart-builder"); }}
           onNewReport={() => { setEditingReport(null); setView("report-builder"); }}
           currentUser={currentUser}
+          onTriggerETL={handleTriggerETL}
+          etlLoading={etlLoading}
+          etlResult={etlResult}
         />
       </div>
 
