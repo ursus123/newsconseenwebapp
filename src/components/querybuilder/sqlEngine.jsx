@@ -313,6 +313,261 @@ async function executeVirtualTable(table, sql) {
       message = `${rows.length} label results for ${name}`;
     }
 
+    // ── geo_overview ──────────────────────────────────────────────────────
+    else if (table === "geo_overview") {
+      const place = w.place || w.city || w.country || "";
+      if (!place) return { type: "select", rows: [], message: "Usage: WHERE place = 'Lagos Nigeria'" };
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(place)}&format=json&limit=1&addressdetails=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoData = await geoRes.json();
+      if (!geoData.length) return { type: "select", rows: [], message: `Location not found: ${place}` };
+      const geo = geoData[0];
+      const lat = parseFloat(geo.lat), lon = parseFloat(geo.lon);
+      const countryCode = geo.address?.country_code?.toUpperCase();
+      const countryName = geo.address?.country || "";
+      const cityName = geo.address?.city || geo.address?.town || geo.address?.village || geo.display_name?.split(",")[0] || place;
+      const stateName = geo.address?.state || "";
+      let countryData = null;
+      if (countryCode) {
+        try {
+          const cRes = await fetch(`https://restcountries.com/v3.1/alpha/${countryCode}`);
+          const cData = await cRes.json();
+          countryData = Array.isArray(cData) ? cData[0] : cData;
+        } catch {}
+      }
+      let gdpPerCapita = null, population = null;
+      if (countryCode) {
+        try {
+          const [wbGdp, wbPop] = await Promise.all([
+            fetch(`https://api.worldbank.org/v2/country/${countryCode}/indicator/NY.GDP.PCAP.CD?format=json&mrv=1`).then(r => r.json()),
+            fetch(`https://api.worldbank.org/v2/country/${countryCode}/indicator/SP.POP.TOTL?format=json&mrv=1`).then(r => r.json()),
+          ]);
+          gdpPerCapita = wbGdp[1]?.[0]?.value || null;
+          population = wbPop[1]?.[0]?.value || null;
+        } catch {}
+      }
+      let weather = null;
+      try {
+        const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`);
+        const wData = await wRes.json();
+        weather = wData.current?.temperature_2m;
+      } catch {}
+      rows = [{ place, city: cityName, state_region: stateName, country: countryName, country_code: countryCode, lat, lon, continent: countryData?.region || "", subregion: countryData?.subregion || "", capital: countryData?.capital?.[0] || "", country_population: population ? Math.round(population).toLocaleString() : null, gdp_per_capita_usd: gdpPerCapita ? Math.round(gdpPerCapita).toLocaleString() : null, currency: Object.keys(countryData?.currencies || {})[0] || "", currency_name: Object.values(countryData?.currencies || {})[0]?.name || "", language: Object.values(countryData?.languages || {})[0] || "", calling_code: countryData?.idd?.root || "", timezone: countryData?.timezones?.[0] || "", current_temp_c: weather, flag: countryData?.flag || "" }];
+      message = `Overview for ${place}`;
+    }
+
+    // ── geo_economy ───────────────────────────────────────────────────────
+    else if (table === "geo_economy") {
+      const country = w.country || "";
+      const yearFrom = w.year_from || "2018", yearTo = w.year_to || "2023";
+      if (!country) return { type: "select", rows: [], message: "Usage: WHERE country = 'Nigeria'" };
+      const cRes = await fetch(`https://restcountries.com/v3.1/name/${encodeURIComponent(country)}?fields=cca2,name`);
+      const cData = await cRes.json();
+      const iso2 = cData[0]?.cca2;
+      if (!iso2) return { type: "select", rows: [], message: `Country not found: ${country}` };
+      const INDICATORS = { gdp_per_capita: "NY.GDP.PCAP.CD", gdp_growth_pct: "NY.GDP.MKTP.KD.ZG", inflation_pct: "FP.CPI.TOTL.ZG", unemployment_pct: "SL.UEM.TOTL.ZS", poverty_rate: "SI.POV.DDAY", population: "SP.POP.TOTL", urban_pop_pct: "SP.URB.TOTL.IN.ZS", pop_over_65_pct: "SP.POP.65UP.TO.ZS", life_expectancy: "SP.DYN.LE00.IN", internet_users_pct: "IT.NET.USER.ZS", mobile_subs: "IT.CEL.SETS.P2", healthcare_spend: "SH.XPD.CHEX.GD.ZS", education_spend: "SE.XPD.TOTL.GD.ZS", exports_gdp_pct: "NE.EXP.GNFS.ZS", fdi_inflows: "BX.KLT.DINV.WD.GD.ZS" };
+      const results = {};
+      await Promise.all(Object.entries(INDICATORS).map(async ([key, code]) => {
+        try {
+          const r = await fetch(`https://api.worldbank.org/v2/country/${iso2}/indicator/${code}?format=json&date=${yearFrom}:${yearTo}&per_page=10&mrv=5`);
+          const d = await r.json();
+          results[key] = (d[1] || []).filter(x => x.value !== null).map(x => ({ year: parseInt(x.date), value: x.value }));
+        } catch { results[key] = []; }
+      }));
+      const years = [...new Set(Object.values(results).flat().map(x => x.year))].sort((a, b) => b - a);
+      const get = (key, year) => results[key]?.find(x => x.year === year)?.value ?? null;
+      rows = years.map(year => ({ country, country_code: iso2, year, gdp_per_capita_usd: get("gdp_per_capita", year), gdp_growth_pct: get("gdp_growth_pct", year), inflation_pct: get("inflation_pct", year), unemployment_pct: get("unemployment_pct", year), poverty_rate_pct: get("poverty_rate", year), population: get("population", year), urban_population_pct: get("urban_pop_pct", year), population_over65_pct: get("pop_over_65_pct", year), life_expectancy_years: get("life_expectancy", year), internet_users_pct: get("internet_users_pct", year), mobile_subscriptions: get("mobile_subs", year), healthcare_spend_gdp_pct: get("healthcare_spend", year), education_spend_gdp_pct: get("education_spend", year), exports_gdp_pct: get("exports_gdp_pct", year), fdi_inflows_gdp_pct: get("fdi_inflows", year) }));
+      message = `Economic profile for ${country}: ${rows.length} years of data`;
+    }
+
+    // ── geo_population ────────────────────────────────────────────────────
+    else if (table === "geo_population") {
+      const country = w.country || "";
+      const yearFrom = w.year_from || "2010", yearTo = w.year_to || "2023";
+      if (!country) return { type: "select", rows: [], message: "Usage: WHERE country = 'Kenya'" };
+      const cRes = await fetch(`https://restcountries.com/v3.1/name/${encodeURIComponent(country)}?fields=cca2,name`);
+      const cData = await cRes.json();
+      const iso2 = cData[0]?.cca2;
+      if (!iso2) return { type: "select", rows: [], message: `Country not found: ${country}` };
+      const POP_INDICATORS = { population: "SP.POP.TOTL", urban_pct: "SP.URB.TOTL.IN.ZS", pop_growth_pct: "SP.POP.GROW", birth_rate: "SP.DYN.CBRT.IN", death_rate: "SP.DYN.CDRT.IN", fertility_rate: "SP.DYN.TFRT.IN", life_expectancy: "SP.DYN.LE00.IN", pop_density: "EN.POP.DNST", youth_pct: "SP.POP.0014.TO.ZS", elderly_pct: "SP.POP.65UP.TO.ZS" };
+      const results = {};
+      await Promise.all(Object.entries(POP_INDICATORS).map(async ([key, code]) => {
+        try {
+          const r = await fetch(`https://api.worldbank.org/v2/country/${iso2}/indicator/${code}?format=json&date=${yearFrom}:${yearTo}&per_page=20`);
+          const d = await r.json();
+          results[key] = (d[1] || []).filter(x => x.value !== null).map(x => ({ year: parseInt(x.date), value: x.value }));
+        } catch { results[key] = []; }
+      }));
+      const years = [...new Set(Object.values(results).flat().map(x => x.year))].sort((a, b) => b - a);
+      const get = (key, year) => results[key]?.find(x => x.year === year)?.value ?? null;
+      rows = years.map(year => ({ country, country_code: iso2, year, population: get("population", year), urban_population_pct: get("urban_pct", year), population_growth_pct: get("pop_growth_pct", year), birth_rate_per1000: get("birth_rate", year), death_rate_per1000: get("death_rate", year), fertility_rate: get("fertility_rate", year), life_expectancy: get("life_expectancy", year), population_density_km2: get("pop_density", year), youth_pct_under14: get("youth_pct", year), elderly_pct_over65: get("elderly_pct", year) }));
+      message = `Population data for ${country}: ${rows.length} years`;
+    }
+
+    // ── geo_competitors ───────────────────────────────────────────────────
+    else if (table === "geo_competitors") {
+      const city = w.city || w.place || "";
+      const businessType = w.business_type || w.type || "pharmacy";
+      const radiusKm = parseInt(w.radius_km || "10");
+      if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Lagos Nigeria' AND business_type = 'pharmacy' AND radius_km = 10" };
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoData = await geoRes.json();
+      if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
+      const lat = geoData[0].lat, lon = geoData[0].lon;
+      const radiusM = radiusKm * 1000;
+      const TYPE_MAP = { pharmacy: "pharmacy", hospital: "hospital", clinic: "clinic", school: "school", university: "university", restaurant: "restaurant", cafe: "cafe", hotel: "hotel", bank: "bank", supermarket: "supermarket", gym: "gym", nursing_home: "nursing_home", childcare: "kindergarten", veterinary: "veterinary", dentist: "dentist", physiotherapy: "physiotherapist", coworking: "coworking", fuel: "fuel", atm: "atm" };
+      const amenity = TYPE_MAP[businessType.toLowerCase()] || businessType;
+      const query = `[out:json][timeout:25];node["amenity"="${amenity}"](around:${radiusM},${lat},${lon});out body;`;
+      const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      const locations = data.elements || [];
+      const withDist = locations.map(r => ({ name: r.tags?.name || "Unnamed", business_type: businessType, lat: r.lat, lon: r.lon, address: [r.tags?.["addr:street"], r.tags?.["addr:city"]].filter(Boolean).join(", "), phone: r.tags?.phone || "", website: r.tags?.website || "", opening_hours: r.tags?.opening_hours || "", distance_km: +(Math.sqrt(Math.pow((r.lat - parseFloat(lat)) * 111, 2) + Math.pow((r.lon - parseFloat(lon)) * 111 * Math.cos(parseFloat(lat) * Math.PI / 180), 2))).toFixed(2) })).sort((a, b) => a.distance_km - b.distance_km);
+      rows = [{ name: `SUMMARY: ${locations.length} ${businessType}s within ${radiusKm}km of ${city}`, business_type: businessType, lat: parseFloat(lat), lon: parseFloat(lon), address: `Center: ${city}`, phone: "", website: "", opening_hours: "", distance_km: 0 }, ...withDist];
+      message = `Found ${locations.length} ${businessType} locations within ${radiusKm}km of ${city}`;
+    }
+
+    // ── geo_infrastructure ────────────────────────────────────────────────
+    else if (table === "geo_infrastructure") {
+      const city = w.city || w.place || "";
+      const radiusKm = parseInt(w.radius_km || "15");
+      if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Kigali Rwanda' AND radius_km = 15" };
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoData = await geoRes.json();
+      if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
+      const lat = geoData[0].lat, lon = geoData[0].lon;
+      const radiusM = radiusKm * 1000;
+      const SCAN_TYPES = ["hospital", "clinic", "pharmacy", "school", "university", "kindergarten", "supermarket", "restaurant", "bank", "hotel", "fuel", "atm", "nursing_home", "veterinary", "gym", "library", "post_office", "police", "fire_station"];
+      const query = `[out:json][timeout:30];(${SCAN_TYPES.map(t => `node["amenity"="${t}"](around:${radiusM},${lat},${lon});`).join("")});out body;`;
+      const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      const elements = data.elements || [];
+      const counts = {};
+      SCAN_TYPES.forEach(t => { counts[t] = 0; });
+      elements.forEach(el => { const t = el.tags?.amenity; if (t && counts[t] !== undefined) counts[t]++; });
+      const score = Math.min(counts.hospital * 10, 20) + Math.min(counts.clinic * 5, 15) + Math.min(counts.pharmacy * 3, 10) + Math.min(counts.school * 2, 10) + Math.min(counts.supermarket * 3, 10) + Math.min(counts.bank * 2, 10) + Math.min(counts.restaurant * 1, 10) + Math.min(counts.fuel * 2, 5) + Math.min(counts.atm * 1, 5) + Math.min(counts.university * 5, 5);
+      rows = [{ city, radius_km: radiusKm, infrastructure_type: "OVERALL SCORE", count: elements.length, density_per_100k: null, availability: `${score}/100`, investment_signal: score < 30 ? "🟢 Very underserved — high opportunity" : score < 60 ? "🟡 Partially served — selective opportunity" : "🔴 Well served — competitive market" }, ...SCAN_TYPES.map(type => ({ city, radius_km: radiusKm, infrastructure_type: type, count: counts[type], density_per_100k: null, availability: counts[type] === 0 ? "NONE — opportunity" : counts[type] < 3 ? "SCARCE — underserved" : counts[type] < 10 ? "MODERATE" : "WELL SERVED", investment_signal: counts[type] === 0 ? "🟢 High opportunity" : counts[type] < 3 ? "🟡 Some opportunity" : "🔴 Saturated" }))];
+      message = `Infrastructure scan for ${city} within ${radiusKm}km: ${elements.length} total facilities`;
+    }
+
+    // ── geo_weather_profile ───────────────────────────────────────────────
+    else if (table === "geo_weather_profile") {
+      const city = w.city || w.place || "";
+      if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Nairobi Kenya'" };
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoData = await geoRes.json();
+      if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
+      const lat = geoData[0].lat, lon = geoData[0].lon;
+      const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,weather_code&forecast_days=16&timezone=auto`);
+      const data = await res.json();
+      const daily = data.daily;
+      rows = daily.time.map((date, i) => ({ city, lat: parseFloat(lat), lon: parseFloat(lon), date, temp_max_c: daily.temperature_2m_max[i], temp_min_c: daily.temperature_2m_min[i], temp_avg_c: +((daily.temperature_2m_max[i] + daily.temperature_2m_min[i]) / 2).toFixed(1), precipitation_mm: daily.precipitation_sum[i], wind_max_kmh: daily.wind_speed_10m_max[i], weather_code: daily.weather_code[i], season_suitability: daily.precipitation_sum[i] > 20 ? "Heavy rain — logistics challenge" : daily.temperature_2m_max[i] > 35 ? "Very hot — cooling costs high" : daily.temperature_2m_min[i] < -10 ? "Very cold — heating costs high" : "Suitable conditions" }));
+      message = `16-day weather profile for ${city}`;
+    }
+
+    // ── geo_cost_of_living ────────────────────────────────────────────────
+    else if (table === "geo_cost_of_living") {
+      const country = w.country || "";
+      if (!country) return { type: "select", rows: [], message: "Usage: WHERE country = 'Rwanda'" };
+      const cRes = await fetch(`https://restcountries.com/v3.1/name/${encodeURIComponent(country)}?fields=cca2,name`);
+      const cData = await cRes.json();
+      const iso2 = cData[0]?.cca2;
+      if (!iso2) return { type: "select", rows: [], message: `Country not found: ${country}` };
+      const [gdpRes, wageRes, inflRes] = await Promise.all([
+        fetch(`https://api.worldbank.org/v2/country/${iso2}/indicator/NY.GDP.PCAP.CD?format=json&mrv=1`).then(r => r.json()),
+        fetch(`https://api.worldbank.org/v2/country/${iso2}/indicator/SL.GDP.PCAP.EM.KD?format=json&mrv=1`).then(r => r.json()),
+        fetch(`https://api.worldbank.org/v2/country/${iso2}/indicator/FP.CPI.TOTL.ZG?format=json&mrv=3`).then(r => r.json()),
+      ]);
+      const gdp = gdpRes[1]?.[0]?.value || null;
+      const inflation = inflRes[1]?.[0]?.value || null;
+      const gdpMonthly = gdp ? Math.round(gdp / 12) : null;
+      rows = [{ country, country_code: iso2, gdp_per_capita_usd: gdp ? Math.round(gdp) : null, estimated_monthly_income_usd: gdpMonthly, inflation_rate_pct: inflation, estimated_rent_usd: gdpMonthly ? Math.round(gdpMonthly * 0.25) : null, estimated_food_usd: gdpMonthly ? Math.round(gdpMonthly * 0.20) : null, estimated_transport_usd: gdpMonthly ? Math.round(gdpMonthly * 0.10) : null, estimated_utilities_usd: gdpMonthly ? Math.round(gdpMonthly * 0.05) : null, estimated_healthcare_usd: gdpMonthly ? Math.round(gdpMonthly * 0.08) : null, total_estimated_monthly_cost_usd: gdpMonthly ? Math.round(gdpMonthly * 0.68) : null, cost_index_vs_us: gdp ? +(gdp / 65000 * 100).toFixed(1) : null, note: "Estimates based on World Bank GDP data. Actual costs vary by city and lifestyle." }];
+      message = `Cost of living estimate for ${country}`;
+    }
+
+    // ── geo_market_size ───────────────────────────────────────────────────
+    else if (table === "geo_market_size") {
+      const city = w.city || w.place || "";
+      const businessType = w.business_type || "pharmacy";
+      const radiusKm = parseInt(w.radius_km || "15");
+      if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Kigali Rwanda' AND business_type = 'pharmacy'" };
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1&addressdetails=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoData = await geoRes.json();
+      if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
+      const lat = geoData[0].lat, lon = geoData[0].lon;
+      const countryCode = geoData[0].address?.country_code?.toUpperCase();
+      let gdpPerCapita = 5000;
+      try {
+        const wbRes = await fetch(`https://api.worldbank.org/v2/country/${countryCode}/indicator/NY.GDP.PCAP.CD?format=json&mrv=1`);
+        const wbData = await wbRes.json();
+        gdpPerCapita = wbData[1]?.[0]?.value || 5000;
+      } catch {}
+      const TYPE_MAP = { pharmacy: "pharmacy", home_healthcare: "nursing_home", hospital: "hospital", school: "school", restaurant: "restaurant", clinic: "clinic", gym: "gym", hotel: "hotel", childcare: "kindergarten", veterinary: "veterinary" };
+      const amenity = TYPE_MAP[businessType] || businessType;
+      const radiusM = radiusKm * 1000;
+      const query = `[out:json][timeout:20];node["amenity"="${amenity}"](around:${radiusM},${lat},${lon});out body;`;
+      let competitorCount = 0;
+      try {
+        const compRes = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+        const compData = await compRes.json();
+        competitorCount = compData.elements?.length || 0;
+      } catch {}
+      const densityByGDP = gdpPerCapita > 30000 ? 3000 : gdpPerCapita > 10000 ? 2000 : gdpPerCapita > 3000 ? 1500 : 1000;
+      const areaKm2 = Math.PI * radiusKm * radiusKm;
+      const estimatedPopulation = Math.round(areaKm2 * densityByGDP);
+      const MARKET_PARAMS = { pharmacy: { spend_pct_income: 0.03, ideal_pop_per_unit: 5000 }, home_healthcare: { spend_pct_income: 0.05, ideal_pop_per_unit: 15000 }, clinic: { spend_pct_income: 0.04, ideal_pop_per_unit: 8000 }, school: { spend_pct_income: 0.06, ideal_pop_per_unit: 3000 }, restaurant: { spend_pct_income: 0.08, ideal_pop_per_unit: 1000 }, gym: { spend_pct_income: 0.02, ideal_pop_per_unit: 8000 }, hotel: { spend_pct_income: 0.04, ideal_pop_per_unit: 20000 }, childcare: { spend_pct_income: 0.07, ideal_pop_per_unit: 4000 } };
+      const params = MARKET_PARAMS[businessType] || { spend_pct_income: 0.03, ideal_pop_per_unit: 5000 };
+      const annualMarket = Math.round(estimatedPopulation * gdpPerCapita * params.spend_pct_income);
+      const idealUnits = Math.round(estimatedPopulation / params.ideal_pop_per_unit);
+      const gap = Math.max(0, idealUnits - competitorCount);
+      const saturation = competitorCount >= idealUnits ? "SATURATED" : competitorCount >= idealUnits * 0.7 ? "COMPETITIVE" : competitorCount >= idealUnits * 0.3 ? "UNDERSERVED" : "SIGNIFICANT GAP";
+      rows = [{ city, country_code: countryCode, business_type: businessType, radius_km: radiusKm, estimated_population: estimatedPopulation, gdp_per_capita_usd: Math.round(gdpPerCapita), annual_market_usd: annualMarket, existing_competitors: competitorCount, ideal_market_units: idealUnits, supply_gap: gap, market_status: saturation, opportunity_score: Math.round((gap / Math.max(idealUnits, 1)) * 100), recommendation: saturation === "SIGNIFICANT GAP" ? `🟢 Strong opportunity — ${gap} more ${businessType} businesses needed` : saturation === "UNDERSERVED" ? `🟡 Good opportunity — market has room for ${gap} more units` : saturation === "COMPETITIVE" ? "🟠 Competitive — differentiation required" : "🔴 Saturated — consider different location or business type" }];
+      message = `Market size analysis for ${businessType} in ${city}: ${saturation}`;
+    }
+
+    // ── us_state ──────────────────────────────────────────────────────────
+    else if (table === "us_state" || table === "census_state") {
+      const STATE_FIPS = { alabama: "01", alaska: "02", arizona: "04", arkansas: "05", california: "06", colorado: "08", connecticut: "09", delaware: "10", florida: "12", georgia: "13", hawaii: "15", idaho: "16", illinois: "17", indiana: "18", iowa: "19", kansas: "20", kentucky: "21", louisiana: "22", maine: "23", maryland: "24", massachusetts: "25", michigan: "26", minnesota: "27", mississippi: "28", missouri: "29", montana: "30", nebraska: "31", nevada: "32", "new hampshire": "33", "new jersey": "34", "new mexico": "35", "new york": "36", "north carolina": "37", "north dakota": "38", ohio: "39", oklahoma: "40", oregon: "41", pennsylvania: "42", "rhode island": "44", "south carolina": "45", "south dakota": "46", tennessee: "47", texas: "48", utah: "49", vermont: "50", virginia: "51", washington: "53", "west virginia": "54", wisconsin: "55", wyoming: "56" };
+      const stateName = (w.state || "").toLowerCase().trim();
+      if (!stateName) return { type: "select", rows: [], message: "Usage: WHERE state = 'Iowa'" };
+      const fips = STATE_FIPS[stateName];
+      if (!fips) return { type: "select", rows: [], message: `State not found: ${w.state}. Use full name like 'Iowa', 'New York', 'California'` };
+      const vars = "B01003_001E,B19013_001E,B25077_001E,B01002_001E,B23025_005E,B23025_003E,B15003_022E,B15003_023E,B15003_025E,B01003_001E";
+      const res = await fetch(`https://api.census.gov/data/2022/acs/acs5?get=NAME,${vars}&for=state:${fips}`);
+      const data = await res.json();
+      const [headers, ...dataRows] = data;
+      rows = dataRows.map(row => {
+        const r = {};
+        headers.forEach((h, i) => r[h] = row[i]);
+        const pop = parseInt(r.B01003_001E) || 0;
+        const labor = parseInt(r.B23025_003E) || 1;
+        const unemployed = parseInt(r.B23025_005E) || 0;
+        const bach = (parseInt(r.B15003_022E) || 0) + (parseInt(r.B15003_023E) || 0) + (parseInt(r.B15003_025E) || 0);
+        return { state: r.NAME?.replace(", United States", "") || w.state, population: pop, median_household_income: parseInt(r.B19013_001E) || null, median_home_value: parseInt(r.B25077_001E) || null, median_age: parseFloat(r.B01002_001E) || null, unemployment_pct: labor ? +((unemployed / labor) * 100).toFixed(1) : null, bachelors_degree_pct: pop ? +((bach / pop) * 100).toFixed(1) : null };
+      });
+      message = `US state demographics for ${w.state}`;
+    }
+
+    // ── us_county ─────────────────────────────────────────────────────────
+    else if (table === "us_county" || table === "census_county") {
+      const STATE_FIPS = { alabama: "01", alaska: "02", arizona: "04", arkansas: "05", california: "06", colorado: "08", connecticut: "09", delaware: "10", florida: "12", georgia: "13", hawaii: "15", idaho: "16", illinois: "17", indiana: "18", iowa: "19", kansas: "20", kentucky: "21", louisiana: "22", maine: "23", maryland: "24", massachusetts: "25", michigan: "26", minnesota: "27", mississippi: "28", missouri: "29", montana: "30", nebraska: "31", nevada: "32", "new hampshire": "33", "new jersey": "34", "new mexico": "35", "new york": "36", "north carolina": "37", "north dakota": "38", ohio: "39", oklahoma: "40", oregon: "41", pennsylvania: "42", "rhode island": "44", "south carolina": "45", "south dakota": "46", tennessee: "47", texas: "48", utah: "49", vermont: "50", virginia: "51", washington: "53", "west virginia": "54", wisconsin: "55", wyoming: "56" };
+      const stateName = (w.state || "").toLowerCase().trim();
+      if (!stateName) return { type: "select", rows: [], message: "Usage: WHERE state = 'Iowa'" };
+      const fips = STATE_FIPS[stateName];
+      if (!fips) return { type: "select", rows: [], message: `State not found: ${w.state}` };
+      const vars = "NAME,B01003_001E,B19013_001E,B25077_001E,B01002_001E,B23025_005E,B23025_003E";
+      const res = await fetch(`https://api.census.gov/data/2022/acs/acs5?get=${vars}&for=county:*&in=state:${fips}`);
+      const data = await res.json();
+      const [headers, ...dataRows] = data;
+      rows = dataRows.map(row => {
+        const r = {};
+        headers.forEach((h, i) => r[h] = row[i]);
+        const pop = parseInt(r.B01003_001E) || 0;
+        const labor = parseInt(r.B23025_003E) || 1;
+        const unemployed = parseInt(r.B23025_005E) || 0;
+        return { county: r.NAME?.split(",")[0] || "", state: w.state, population: pop, median_household_income: parseInt(r.B19013_001E) || null, median_home_value: parseInt(r.B25077_001E) || null, median_age: parseFloat(r.B01002_001E) || null, unemployment_pct: labor ? +((unemployed / labor) * 100).toFixed(1) : null };
+      }).sort((a, b) => b.population - a.population);
+      message = `${rows.length} counties in ${w.state}`;
+    }
+
     return { type: "select", rows: rows || [], message: message || `${rows?.length || 0} rows from ${table}` };
   } catch (err) {
     throw new Error(`API error for ${table}: ${err.message}`);
