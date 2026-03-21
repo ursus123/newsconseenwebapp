@@ -8,12 +8,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import ChartRenderer from "./ChartRenderer";
 
 const SECTION_TYPES = [
-  { type: "heading", label: "Heading", icon: Type },
-  { type: "text", label: "Text Block", icon: AlignLeft },
-  { type: "divider", label: "Divider", icon: Minus },
-  { type: "spacer", label: "Spacer", icon: Space },
-  { type: "metric", label: "Metric Card", icon: Hash },
-  { type: "chart", label: "Chart", icon: BarChart2 },
+  { type: "heading", label: "Heading", SectionIcon: Type },
+  { type: "text", label: "Text Block", SectionIcon: AlignLeft },
+  { type: "divider", label: "Divider", SectionIcon: Minus },
+  { type: "spacer", label: "Spacer", SectionIcon: Space },
+  { type: "metric", label: "Metric Card", SectionIcon: Hash },
+  { type: "chart", label: "Chart", SectionIcon: BarChart2 },
 ];
 
 function SectionEditor({ section, index, total, charts, onUpdate, onMove, onDelete, onDuplicate }) {

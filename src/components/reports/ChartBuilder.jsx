@@ -10,14 +10,14 @@ import {
 } from "recharts";
 
 const CHART_TYPES = [
-  { id: "bar",     label: "Bar",     icon: BarChart2 },
-  { id: "line",    label: "Line",    icon: TrendingUp },
-  { id: "pie",     label: "Pie",     icon: PieChart },
-  { id: "area",    label: "Area",    icon: Activity },
-  { id: "number",  label: "Number",  icon: Hash },
-  { id: "table",   label: "Table",   icon: Table2 },
-  { id: "gauge",   label: "Gauge",   icon: Target },
-  { id: "scatter", label: "Scatter", icon: ScatterChart },
+  { id: "bar",     label: "Bar",     ChartIcon: BarChart2 },
+  { id: "line",    label: "Line",    ChartIcon: TrendingUp },
+  { id: "pie",     label: "Pie",     ChartIcon: PieChart },
+  { id: "area",    label: "Area",    ChartIcon: Activity },
+  { id: "number",  label: "Number",  ChartIcon: Hash },
+  { id: "table",   label: "Table",   ChartIcon: Table2 },
+  { id: "gauge",   label: "Gauge",   ChartIcon: Target },
+  { id: "scatter", label: "Scatter", ChartIcon: ScatterChart },
 ];
 
 const COLOR_SCHEMES = [
