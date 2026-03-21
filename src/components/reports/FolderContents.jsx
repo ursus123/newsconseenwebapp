@@ -221,7 +221,51 @@ export default function FolderContents({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
-        {totalItems === 0 ? (
+        {/* Pinned from QueryBuilder — only on All Charts view */}
+        {selected?.type === "all-charts" && pinnedWidgets.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Pin className="w-4 h-4 text-emerald-500" />
+                <h3 className="text-sm font-bold text-slate-700">Pinned from QueryBuilder</h3>
+                <span className="text-xs text-slate-400">({pinnedWidgets.length})</span>
+              </div>
+              <span className="text-xs text-slate-400 hidden sm:block">Charts pinned directly from SQL queries</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {pinnedWidgets.map((widget) => (
+                <PinnedWidgetCard
+                  key={widget.id}
+                  widget={widget}
+                  isAdmin={isAdmin}
+                  onDelete={async () => {
+                    await base44.entities.SavedDashboardWidget.delete(widget.id);
+                    qc.invalidateQueries({ queryKey: ["pinnedWidgets"] });
+                    if (onPinnedWidgetsChange) onPinnedWidgetsChange();
+                  }}
+                  onPromote={async () => {
+                    await base44.entities.ReportChart.create({
+                      title: widget.title,
+                      sql_query: widget.sql,
+                      chart_type: widget.chart_type || "bar",
+                      company_id: widget.company_id,
+                      status: "active",
+                      is_public: false,
+                      shared_with_roles: ["admin"],
+                    });
+                    await base44.entities.SavedDashboardWidget.delete(widget.id);
+                    qc.invalidateQueries({ queryKey: ["pinnedWidgets"] });
+                    qc.invalidateQueries({ queryKey: ["reportCharts"] });
+                    if (onPinnedWidgetsChange) onPinnedWidgetsChange();
+                  }}
+                />
+              ))}
+            </div>
+            {totalItems > 0 && <div className="border-t border-slate-100 mt-6 mb-2" />}
+          </div>
+        )}
+
+        {totalItems === 0 && (selected?.type !== "all-charts" || pinnedWidgets.length === 0) ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <BarChart2 className="w-12 h-12 text-slate-200 mb-3" />
             <p className="text-slate-500 font-medium">No items here yet</p>
