@@ -197,11 +197,6 @@ export default function FolderTree({
           </>
         )}
 
-        {/* System Charts */}
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2 pt-3 pb-1">System</p>
-        {navItem(<BarChart2 className="w-3.5 h-3.5" />, "Live Charts", "live-charts", "system")}
-        {navItem(<Database className="w-3.5 h-3.5" />, "Query Builder", "query-builder", "system")}
-        {isAdmin && navItem(<Activity className="w-3.5 h-3.5" />, "Data Pipeline", "data-pipeline", "system")}
       </div>
 
       {/* ETL Trigger — admin only */}
