@@ -1,11 +1,27 @@
 import React, { useState, useEffect } from "react";
 import {
   Upload, Globe, Code2, ChevronDown, ChevronRight,
-  Zap, Plus, CheckCircle, Trash2,
+  Zap, Plus, CheckCircle, Trash2, MapPin,
 } from "lucide-react";
 import UploadPanel from "./UploadPanel";
 import NotebookModal from "./NotebookModal";
 import { NotebookStore } from "./NotebookStore";
+
+const GEO_TABLES = [
+  { table: "geo_overview",       label: "Place Overview",       desc: "Quick summary of any location",         sample: "SELECT * FROM geo_overview WHERE place = 'Lagos Nigeria'" },
+  { table: "geo_economy",        label: "Country Economy",      desc: "Economic indicators any country",        sample: "SELECT * FROM geo_economy WHERE country = 'Nigeria'" },
+  { table: "geo_population",     label: "Population Data",      desc: "Population trends any country",          sample: "SELECT * FROM geo_population WHERE country = 'Kenya'" },
+  { table: "geo_competitors",    label: "Business Density",     desc: "Competitors near any city",              sample: "SELECT * FROM geo_competitors WHERE city = 'Kigali Rwanda' AND business_type = 'pharmacy' AND radius_km = 10" },
+  { table: "geo_infrastructure", label: "Infrastructure Scan",  desc: "Full facilities scan any city",          sample: "SELECT * FROM geo_infrastructure WHERE city = 'Nairobi Kenya' AND radius_km = 15" },
+  { table: "geo_weather_profile",label: "Weather Profile",      desc: "16-day climate profile any city",        sample: "SELECT * FROM geo_weather_profile WHERE city = 'Cape Town South Africa'" },
+  { table: "geo_cost_of_living", label: "Cost of Living",       desc: "Cost comparison any country",            sample: "SELECT * FROM geo_cost_of_living WHERE country = 'Rwanda'" },
+  { table: "geo_market_size",    label: "Market Opportunity",   desc: "Market size estimation any city",        sample: "SELECT * FROM geo_market_size WHERE city = 'Des Moines Iowa' AND business_type = 'home_healthcare'" },
+];
+
+const US_TABLES = [
+  { table: "us_state",  label: "US State Demographics", desc: "Census ACS data any US state",    sample: "SELECT * FROM us_state WHERE state = 'Iowa'" },
+  { table: "us_county", label: "US County Breakdown",   desc: "County-level data any US state",  sample: "SELECT * FROM us_county WHERE state = 'Texas' ORDER BY population DESC LIMIT 20" },
+];
 
 function Section({ title, icon: Icon, iconColor, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen);
