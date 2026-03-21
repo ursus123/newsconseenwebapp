@@ -391,7 +391,9 @@ export const MASTER_SCHEMA = {
   addresses: [
     { col: "id", type: "VARCHAR" }, { col: "label", type: "VARCHAR" },
     { col: "address_line1", type: "VARCHAR" }, { col: "city", type: "VARCHAR" },
-    { col: "country", type: "VARCHAR" }, { col: "status", type: "ENUM" },
+    { col: "state_region", type: "VARCHAR" }, { col: "country", type: "VARCHAR" },
+    { col: "postal_code", type: "VARCHAR" }, { col: "lat", type: "FLOAT" },
+    { col: "lon", type: "FLOAT" }, { col: "status", type: "ENUM" },
     { col: "created_date", type: "DATETIME" },
   ],
   relationships: [
