@@ -148,7 +148,7 @@ export default function WelcomeSetup({ currentUser, onComplete }) {
 
       // Create default report
       await base44.entities.Report.create({
-        title: "BrightStar Care — Operations Overview",
+        title: `${orgName} — Operations Overview`,
         status: "published",
         folder_id: folderMap["Revenue"] || null,
         shared_with_roles: ["admin", "executive"],
@@ -157,9 +157,9 @@ export default function WelcomeSetup({ currentUser, onComplete }) {
         company_id: companyId,
         published_at: new Date().toISOString(),
         sections: [
-          { type: "heading", content: "BrightStar Care LLC", level: "H1" },
+          { type: "heading", content: orgName, level: "H1" },
           { type: "heading", content: "Operations Overview Report", level: "H2" },
-          { type: "text", content: "This report provides an executive summary of operations across all three subsidiaries: Chiloh Residential Care LLC (Maine), Gracia Deus Care LLC (Indiana), and Bridges LLC (Minnesota)." },
+          { type: "text", content: "This report provides an executive summary of operations and key metrics." },
           { type: "divider" },
           { type: "heading", content: "Key Metrics", level: "H2" },
           { type: "metric", icon: "👥", value: "—", label: "Total Clients" },
