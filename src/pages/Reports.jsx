@@ -86,6 +86,47 @@ export default function Reports() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reports"] }),
   });
 
+  // Auto-create "From QueryBuilder" folder
+  useEffect(() => {
+    if (!currentUser?.company_id || !isAdmin) return;
+    if (myFolders.length === 0) return; // wait until folders loaded
+    const hasQBFolder = myFolders.some((f) => f.name === "From QueryBuilder");
+    if (!hasQBFolder) {
+      base44.entities.ChartFolder.create({
+        name: "From QueryBuilder",
+        company_id: currentUser.company_id,
+        status: "active",
+        shared_with_roles: ["admin"],
+        description: "Charts pinned from QueryBuilder",
+      }).then(() => qc.invalidateQueries({ queryKey: ["chartFolders"] }));
+    }
+  }, [myFolders.length, currentUser?.company_id, isAdmin]);
+
+  const handleTriggerETL = async () => {
+    setEtlLoading(true);
+    setEtlResult(null);
+    try {
+      const API = "https://newsconseenwebapp-production.up.railway.app";
+      const id = currentUser?.company_id;
+      const endpoints = [
+        "enterprise-summary", "task-summary", "people-summary",
+        "transaction-summary", "service-summary", "product-summary",
+      ];
+      const results = await Promise.all(
+        endpoints.map(async (ep) => {
+          const res = await fetch(`${API}/load/${ep}?company_id=${id}`, { method: "POST" });
+          const d = await res.json();
+          return `${ep}: ${d.rows_loaded || 0} rows`;
+        })
+      );
+      setEtlResult(results.join(" · "));
+    } catch (e) {
+      setEtlResult("Error: " + e.message);
+    } finally {
+      setEtlLoading(false);
+    }
+  };
+
   // Filter by company and visibility
   const charts = allCharts.filter((c) => {
     if (currentUser?.role === "super_admin") return true;
