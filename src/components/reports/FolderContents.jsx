@@ -1,8 +1,48 @@
 import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { BarChart2, FileText, LayoutGrid, List, Clock, Users, Trash2, Edit2, Eye } from "lucide-react";
+import { BarChart2, FileText, LayoutGrid, List, Clock, Trash2, Edit2, Eye, Pin, ArrowUpRight } from "lucide-react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+
+function PinnedWidgetCard({ widget, onDelete, onPromote, isAdmin }) {
+  return (
+    <div className="bg-white rounded-2xl border border-dashed border-emerald-200 hover:shadow-md transition-all overflow-hidden">
+      <div className="h-28 bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center border-b border-emerald-100">
+        <BarChart2 className="w-8 h-8 text-emerald-300" />
+      </div>
+      <div className="p-4">
+        <p className="text-sm font-semibold text-slate-800 truncate">{widget.title}</p>
+        <div className="flex items-center gap-2 mt-1">
+          <Badge className="text-[10px] bg-emerald-50 text-emerald-700 capitalize">{widget.chart_type || "table"}</Badge>
+          <span className="text-[10px] text-slate-400">From QueryBuilder</span>
+        </div>
+        {widget.sql && (
+          <p className="text-[10px] font-mono text-slate-400 mt-1.5 truncate bg-slate-50 px-2 py-1 rounded">
+            {widget.sql.substring(0, 60)}...
+          </p>
+        )}
+        {isAdmin && (
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={onPromote}
+              className="flex-1 flex items-center justify-center gap-1 h-7 text-[11px] bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all"
+            >
+              <ArrowUpRight className="w-3 h-3" /> Add to Reports
+            </button>
+            <button
+              onClick={onDelete}
+              className="h-7 px-2 text-[11px] border border-slate-200 text-rose-500 rounded-lg hover:bg-rose-50 transition-all"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const CHART_TYPE_LABELS = { bar: "Bar", line: "Line", pie: "Pie", area: "Area", number: "Number", table: "Table", gauge: "Gauge", scatter: "Scatter" };
 
