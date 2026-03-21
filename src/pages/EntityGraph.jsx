@@ -538,6 +538,7 @@ export default function EntityGraph() {
               onClusterClick={handleClusterClick}
             />
           )}
+          </div>
 
           {/* Right: Details Panel */}
           <GraphSidePanel
