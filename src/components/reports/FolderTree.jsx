@@ -93,7 +93,7 @@ function FolderNode({ folder, allFolders, charts, reports, depth = 0, selectedId
 export default function FolderTree({
   folders, charts, reports, selected, onSelect,
   onNewFolder, onNewChart, onNewReport,
-  currentUser,
+  currentUser, onTriggerETL, etlLoading, etlResult,
 }) {
   const [search, setSearch] = useState("");
   const [renamingFolder, setRenamingFolder] = useState(null);
