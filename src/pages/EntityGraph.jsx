@@ -393,6 +393,28 @@ export default function EntityGraph() {
             )}
           </div>
 
+          {/* Depth slider */}
+          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5">
+            <span className="text-xs text-slate-500 whitespace-nowrap">Depth</span>
+            <input
+              type="range" min={1} max={3} value={depth}
+              onChange={e => setDepth(Number(e.target.value))}
+              className="w-16 accent-indigo-500"
+            />
+            <span className="text-xs font-bold text-indigo-600 w-3">{depth}</span>
+          </div>
+
+          {/* Focus Mode */}
+          <button
+            onClick={() => { setFocusMode(v => !v); if (focusMode) setFocusedEnterprise(null); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border transition-all ${
+              focusMode ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <Target className="w-3.5 h-3.5" />
+            {focusMode ? "Focus ON" : "Focus"}
+          </button>
+
           {/* 2D/3D toggle */}
           <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 gap-1">
             <button onClick={() => { setMode("2d"); setSelected(null); }} className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${mode === "2d" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100"}`}>2D</button>
