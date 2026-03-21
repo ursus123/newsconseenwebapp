@@ -18,6 +18,7 @@ import TodaySchedule from "../components/dashboard/TodaySchedule";
 import NotificationsBell from "../components/dashboard/NotificationsBell";
 import WorkerMyStats from "../components/dashboard/WorkerMyStats";
 import ClientRetentionRisk from "../components/dashboard/ClientRetentionRisk";
+import StaffingIntelligence from "../components/dashboard/StaffingIntelligence";
 import OutcomeDialog from "../components/tasks/OutcomeDialog";
 import { taskTypeLabel } from "../components/tasks/TaskForm";
 import { useToast } from "@/components/ui/use-toast";
