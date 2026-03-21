@@ -251,6 +251,7 @@ export default function Reports() {
             folders={myFolders}
             currentUser={currentUser}
             onClose={handleBack}
+            readOnly={true}
           />
         ) : (
           <FolderContents
@@ -258,6 +259,7 @@ export default function Reports() {
             folders={myFolders}
             charts={charts}
             reports={reports}
+            pinnedWidgets={pinnedWidgets}
             currentUser={currentUser}
             onViewChart={handleViewChart}
             onEditChart={handleEditChart}
@@ -265,6 +267,7 @@ export default function Reports() {
             onViewReport={handleViewReport}
             onEditReport={handleEditReport}
             onDeleteReport={(r) => deleteReportMut.mutate(r.id)}
+            onPinnedWidgetsChange={() => qc.invalidateQueries({ queryKey: ["pinnedWidgets"] })}
           />
         )}
       </div>
