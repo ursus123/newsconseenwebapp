@@ -7,7 +7,7 @@ import ChartBuilder from "@/components/reports/ChartBuilder";
 import ReportBuilder from "@/components/reports/ReportBuilder";
 import ReportViewer from "@/components/reports/ReportViewer";
 import WelcomeSetup from "@/components/reports/WelcomeSetup";
-import ChartViewer from "@/components/reports/ChartViewer";
+import ChartViewer from "@/components/reports/ChartViewer.jsx";
 import { Loader2, RefreshCw } from "lucide-react";
 
 function canUserSee(item, currentUser) {
