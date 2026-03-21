@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import FolderTree from "@/components/reports/FolderTree";
@@ -7,6 +7,7 @@ import ChartBuilder from "@/components/reports/ChartBuilder";
 import ReportBuilder from "@/components/reports/ReportBuilder";
 import ReportViewer from "@/components/reports/ReportViewer";
 import WelcomeSetup from "@/components/reports/WelcomeSetup";
+import ChartViewer from "@/components/reports/ChartViewer";
 import { Loader2, RefreshCw } from "lucide-react";
 
 function canUserSee(item, currentUser) {
@@ -42,15 +43,19 @@ export default function Reports() {
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
 
   const { data: folders = [] } = useQuery({
-    queryKey: ["chartFolders"],
-    queryFn: () => base44.entities.ChartFolder.filter({ status: "active" }),
-    enabled: !!currentUser,
+    queryKey: ["chartFolders", currentUser?.company_id],
+    queryFn: () => currentUser?.role === "super_admin"
+      ? base44.entities.ChartFolder.filter({ status: "active" })
+      : base44.entities.ChartFolder.filter({ status: "active", company_id: currentUser.company_id }),
+    enabled: !!currentUser?.company_id,
   });
 
   const { data: allCharts = [] } = useQuery({
-    queryKey: ["reportCharts"],
-    queryFn: () => base44.entities.ReportChart.filter({ status: "active" }),
-    enabled: !!currentUser,
+    queryKey: ["reportCharts", currentUser?.company_id],
+    queryFn: () => currentUser?.role === "super_admin"
+      ? base44.entities.ReportChart.filter({ status: "active" })
+      : base44.entities.ReportChart.filter({ status: "active", company_id: currentUser.company_id }),
+    enabled: !!currentUser?.company_id,
   });
 
   const { data: allReports = [] } = useQuery({
@@ -106,19 +111,26 @@ export default function Reports() {
   });
   const showSetup = isAdmin && myFolders.length === 0 && charts.length === 0 && !setupDone;
 
-  // Auto-create "From QueryBuilder" folder
+  const qbFolderCreated = useRef(false);
+
   useEffect(() => {
     if (!currentUser?.company_id || !isAdmin) return;
     if (myFolders.length === 0) return;
+    if (qbFolderCreated.current) return;
+
     const hasQBFolder = myFolders.some((f) => f.name === "From QueryBuilder");
     if (!hasQBFolder) {
+      qbFolderCreated.current = true;
       base44.entities.ChartFolder.create({
         name: "From QueryBuilder",
         company_id: currentUser.company_id,
         status: "active",
         shared_with_roles: ["admin"],
         description: "Charts pinned from QueryBuilder",
-      }).then(() => qc.invalidateQueries({ queryKey: ["chartFolders"] }));
+      }).then(() => qc.invalidateQueries({ queryKey: ["chartFolders"] }))
+        .catch(() => { qbFolderCreated.current = false; });
+    } else {
+      qbFolderCreated.current = true;
     }
   }, [myFolders.length, currentUser?.company_id, isAdmin]);
 
@@ -199,7 +211,7 @@ export default function Reports() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+    <div className="flex h-full bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
       {/* Left Sidebar */}
       <div className="w-60 border-r border-slate-100 shrink-0 overflow-hidden">
         <FolderTree
@@ -246,12 +258,10 @@ export default function Reports() {
             onEdit={isAdmin ? handleEditReport : null}
           />
         ) : view === "chart-viewer" ? (
-          <ChartBuilder
+          <ChartViewer
             chart={editingChart}
-            folders={myFolders}
-            currentUser={currentUser}
             onClose={handleBack}
-            readOnly={true}
+            onEdit={isAdmin ? handleEditChart : null}
           />
         ) : (
           <FolderContents

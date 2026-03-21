@@ -1,4 +1,24 @@
 import React, { useState } from "react";
+
+function safeVal(val) {
+  if (val === null || val === undefined) return "—";
+  if (val instanceof Date) return val.toLocaleDateString();
+  if (Array.isArray(val)) return val.map((v) => typeof v === "object" ? JSON.stringify(v) : String(v)).join(", ");
+  if (typeof val === "object") return JSON.stringify(val);
+  if (typeof val === "boolean") return val ? "Yes" : "No";
+  return String(val);
+}
+
+function safeChartData(rawData) {
+  if (!Array.isArray(rawData)) return [];
+  return rawData.map((row) => {
+    const safeRow = {};
+    Object.entries(row).forEach(([k, v]) => {
+      safeRow[k] = typeof v === "object" && v !== null ? JSON.stringify(v) : v;
+    });
+    return safeRow;
+  });
+}
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -54,17 +74,18 @@ function MiniChartPreview({ chartType, data, xKey, yKey, colorScheme }) {
       <div className="overflow-auto h-full">
         <table className="text-[11px] w-full">
           <thead><tr>{cols.map(c => <th key={c} className="text-left py-1 px-2 bg-slate-100 font-semibold">{c}</th>)}</tr></thead>
-          <tbody>{data.slice(0, 5).map((row, i) => <tr key={i}>{cols.map(c => <td key={c} className="py-1 px-2 border-b border-slate-50">{row[c]}</td>)}</tr>)}</tbody>
+          <tbody>{data.slice(0, 5).map((row, i) => <tr key={i}>{cols.map(c => <td key={c} className="py-1 px-2 border-b border-slate-50">{safeVal(row[c])}</td>)}</tr>)}</tbody>
         </table>
       </div>
     );
   }
 
   if (chartType === "pie") {
+    const safeData = safeChartData(data);
     return (
       <ResponsiveContainer width="100%" height="100%">
         <RechartPie>
-          <Pie data={data} dataKey={yKey || Object.keys(data[0] || {})[1] || "value"} nameKey={xKey || Object.keys(data[0] || {})[0] || "name"} cx="50%" cy="50%" outerRadius={80}>
+          <Pie data={safeData} dataKey={yKey || Object.keys(data[0] || {})[1] || "value"} nameKey={xKey || Object.keys(data[0] || {})[0] || "name"} cx="50%" cy="50%" outerRadius={80}>
             {data.map((_, i) => <Cell key={i} fill={[color, "#94a3b8", "#64748b", "#cbd5e1", "#e2e8f0"][i % 5]} />)}
           </Pie>
           <Tooltip />
@@ -74,9 +95,10 @@ function MiniChartPreview({ chartType, data, xKey, yKey, colorScheme }) {
   }
 
   if (chartType === "area") {
+    const safeData = safeChartData(data);
     return (
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+        <AreaChart data={safeData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
           <XAxis dataKey={xKey} tick={{ fontSize: 10 }} />
           <YAxis tick={{ fontSize: 10 }} />
@@ -88,9 +110,10 @@ function MiniChartPreview({ chartType, data, xKey, yKey, colorScheme }) {
   }
 
   if (chartType === "line") {
+    const safeData = safeChartData(data);
     return (
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+        <LineChart data={safeData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
           <XAxis dataKey={xKey} tick={{ fontSize: 10 }} />
           <YAxis tick={{ fontSize: 10 }} />
@@ -101,9 +124,10 @@ function MiniChartPreview({ chartType, data, xKey, yKey, colorScheme }) {
     );
   }
 
+  const safeData = safeChartData(data);
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+      <BarChart data={safeData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
         <XAxis dataKey={xKey} tick={{ fontSize: 10 }} />
         <YAxis tick={{ fontSize: 10 }} />
@@ -285,7 +309,7 @@ export default function ChartBuilder({ chart, folders, currentUser, onClose, rea
                           {previewData.slice(0, 5).map((row, i) => (
                             <tr key={i} className="border-t border-slate-50">
                               {Object.values(row).map((v, j) => (
-                                <td key={j} className="py-1.5 px-3 text-slate-700">{String(v)}</td>
+                                <td key={j} className="py-1.5 px-3 text-slate-700">{safeVal(v)}</td>
                               ))}
                             </tr>
                           ))}
