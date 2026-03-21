@@ -546,6 +546,118 @@ async function executeVirtualTable(table, sql) {
       message = `US state demographics for ${w.state}`;
     }
 
+    // ── us_zipcode ────────────────────────────────────────────────────────
+    else if (table === "us_zipcode") {
+      const zipcode = w.zipcode || w.zip || "";
+      const year = w.year || "2022";
+      if (!zipcode) return { type: "select", rows: [], message: "Usage: WHERE zipcode = '50301'" };
+      const variables = ["B01003_001E","B19013_001E","B01002_001E","B17001_002E","B25001_001E","B25003_002E","B25003_003E","B23025_002E","B23025_005E","B15003_022E","B15003_023E","B08301_001E","B08301_010E","B11001_001E","B09001_001E","B01001_020E","B01001_044E","B19001_002E","B19001_017E","B25064_001E","B25077_001E"].join(",");
+      const url = `https://api.census.gov/data/${year}/acs/acs5?get=NAME,${variables}&for=zip%20code%20tabulation%20area:${zipcode}`;
+      let data;
+      try {
+        const res = await fetch(url);
+        data = await res.json();
+      } catch (e) {
+        return { type: "select", rows: [], message: `Census API error: ${e.message}` };
+      }
+      if (!data || data.length < 2) return { type: "select", rows: [], message: `No Census data found for zipcode ${zipcode}.` };
+      const headers = data[0], values = data[1];
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = values[i]; });
+      const pop = parseInt(obj["B01003_001E"]) || 0;
+      const poor = parseInt(obj["B17001_002E"]) || 0;
+      const unemployed = parseInt(obj["B23025_005E"]) || 0;
+      const laborForce = parseInt(obj["B23025_002E"]) || 1;
+      const households = parseInt(obj["B11001_001E"]) || 1;
+      const under18 = parseInt(obj["B09001_001E"]) || 0;
+      const elderly = ((parseInt(obj["B01001_020E"]) || 0) + (parseInt(obj["B01001_044E"]) || 0)) * 10;
+      const bachelor = parseInt(obj["B15003_022E"]) || 0;
+      const master = parseInt(obj["B15003_023E"]) || 0;
+      const highIncome = parseInt(obj["B19001_017E"]) || 0;
+      const lowIncome = parseInt(obj["B19001_002E"]) || 0;
+      const owners = parseInt(obj["B25003_002E"]) || 0;
+      const renters = parseInt(obj["B25003_003E"]) || 0;
+      let lat = null, lon = null;
+      try {
+        const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${zipcode}&country=US&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+        const geoData = await geoRes.json();
+        if (geoData.length) { lat = parseFloat(geoData[0].lat); lon = parseFloat(geoData[0].lon); }
+      } catch {}
+      const income = parseInt(obj["B19013_001E"]) || 0;
+      const povertyPct = pop > 0 ? (poor / pop) * 100 : 0;
+      const edPct = pop > 0 ? ((bachelor + master) / pop) * 100 : 0;
+      let score = 50;
+      if (income > 75000) score += 15; else if (income > 50000) score += 8; else if (income < 30000) score -= 10;
+      if (pop > 20000) score += 10; else if (pop < 2000) score -= 10;
+      if (povertyPct > 25) score -= 15; else if (povertyPct < 10) score += 10;
+      if (edPct > 30) score += 10;
+      rows = [{ zipcode, name: obj["NAME"] || "", year, lat, lon, total_population: pop, total_households: households, median_household_income: parseInt(obj["B19013_001E"]) || null, median_age: parseFloat(obj["B01002_001E"]) || null, poverty_rate_pct: pop > 0 ? +((poor / pop) * 100).toFixed(1) : null, unemployment_rate_pct: laborForce > 0 ? +((unemployed / laborForce) * 100).toFixed(1) : null, college_educated_pct: pop > 0 ? +(((bachelor + master) / pop) * 100).toFixed(1) : null, high_income_households_pct: households > 0 ? +((highIncome / households) * 100).toFixed(1) : null, low_income_households_pct: households > 0 ? +((lowIncome / households) * 100).toFixed(1) : null, homeownership_rate_pct: (owners + renters) > 0 ? +((owners / (owners + renters)) * 100).toFixed(1) : null, population_under18_pct: pop > 0 ? +((under18 / pop) * 100).toFixed(1) : null, population_over65_estimate: elderly, total_housing_units: parseInt(obj["B25001_001E"]) || null, median_gross_rent_usd: parseInt(obj["B25064_001E"]) || null, median_home_value_usd: parseInt(obj["B25077_001E"]) || null, public_transit_commuters_pct: parseInt(obj["B08301_001E"]) > 0 ? +((parseInt(obj["B08301_010E"]) / parseInt(obj["B08301_001E"])) * 100).toFixed(1) : null, business_opportunity_score: Math.min(Math.max(score, 0), 100) }];
+      message = `Census ACS data for zip code ${zipcode} (${obj["NAME"] || ""})`;
+    }
+
+    // ── cms_healthcare ────────────────────────────────────────────────────
+    else if (table === "cms_healthcare") {
+      const state = w.state || "Iowa";
+      const providerType = w.provider_type || "nursing_home";
+      const city = w.city || "";
+      const limit = parseInt(w.limit || "25");
+      const minRating = parseInt(w.min_rating || "1");
+      const ENDPOINTS = {
+        nursing_home: "https://data.cms.gov/resource/4pq5-n9py.json",
+        home_health:  "https://data.cms.gov/resource/6jpm-sxkc.json",
+        hospice:      "https://data.cms.gov/resource/252m-zog8.json",
+        hospital:     "https://data.cms.gov/resource/xubh-q36u.json",
+        physician:    "https://data.cms.gov/resource/mj5m-pzi6.json",
+      };
+      const endpoint = ENDPOINTS[providerType];
+      if (!endpoint) return { type: "select", rows: [], message: `Unknown provider type: ${providerType}. Options: nursing_home, home_health, hospice, hospital, physician` };
+      const conditions = [];
+      if (state) conditions.push(`state='${state.toUpperCase()}'`);
+      if (city) conditions.push(`upper(city)='${city.toUpperCase()}'`);
+      const whereClause = conditions.length > 0 ? conditions.join(" AND ") : "state IS NOT NULL";
+      const url = `${endpoint}?$limit=${limit}&$where=${encodeURIComponent(whereClause)}`;
+      let data;
+      try {
+        const res = await fetch(url);
+        data = await res.json();
+      } catch (e) {
+        return { type: "select", rows: [], message: `CMS API error: ${e.message}` };
+      }
+      if (!Array.isArray(data) || !data.length) return { type: "select", rows: [], message: `No CMS data found for ${providerType} in ${state}${city ? ", " + city : ""}` };
+      rows = data.map(r => ({ provider_name: r.provname || r.provider_name || r.facility_name || r.org_name || "", provider_type: providerType, address: r.address || r.provider_address || "", city: r.city || r.provider_city || "", state: r.state || r.provider_state || "", zipcode: r.zip || r.provider_zip_code || "", phone: r.phone_num || r.provider_phone_number || "", overall_rating: parseFloat(r.overall_rating || r.overall_star_rating || r.hcahps_base_score || 0) || null, staffing_rating: parseFloat(r.staffing_rating || 0) || null, quality_rating: parseFloat(r.quality_rating || r.quality_of_patient_care_star_rating || 0) || null, inspection_rating: parseFloat(r.inspection_rating || 0) || null, beds: parseInt(r.number_of_certified_beds || r.beds || 0) || null, ownership_type: r.ownership_type || r.type_of_ownership || "", in_hospital: r.located_in_hospital || "", certified_date: r.date_first_approved_to_provide_medicare || "", cms_certification: r.cms_certification_number || r.provider_id || "", lat: parseFloat(r.geocoded_coordinate?.latitude || r.lat || 0) || null, lon: parseFloat(r.geocoded_coordinate?.longitude || r.lng || 0) || null })).filter(r => !r.overall_rating || r.overall_rating >= minRating).sort((a, b) => (b.overall_rating || 0) - (a.overall_rating || 0));
+      message = `${rows.length} ${providerType} providers in ${state}${city ? ", " + city : ""} from CMS`;
+    }
+
+    // ── usda_food_access ──────────────────────────────────────────────────
+    else if (table === "usda_food_access") {
+      const state = w.state || "Iowa";
+      const county = w.county || "";
+      const radiusM = county ? 30000 : 50000;
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(county ? `${county} County, ${state}` : state)}&format=json&limit=1&addressdetails=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoData = await geoRes.json();
+      if (!geoData.length) return { type: "select", rows: [], message: `Location not found: ${county ? county + ", " : ""}${state}` };
+      const lat = parseFloat(geoData[0].lat), lon = parseFloat(geoData[0].lon);
+      const foodTypes = ["supermarket", "convenience", "fast_food", "restaurant", "farm", "marketplace"];
+      const query = `[out:json][timeout:25];(${foodTypes.map(t => `node["shop"="${t}"](around:${radiusM},${lat},${lon});node["amenity"="${t}"](around:${radiusM},${lat},${lon});`).join("")}node["amenity"="fast_food"](around:${radiusM},${lat},${lon});node["shop"="supermarket"](around:${radiusM},${lat},${lon});node["shop"="grocery"](around:${radiusM},${lat},${lon}););out body;`;
+      let elements = [];
+      try {
+        const foodRes = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+        const foodData = await foodRes.json();
+        elements = foodData.elements || [];
+      } catch {}
+      const supermarkets = elements.filter(e => e.tags?.shop === "supermarket" || e.tags?.shop === "grocery").length;
+      const fastFood = elements.filter(e => e.tags?.amenity === "fast_food").length;
+      const restaurants = elements.filter(e => e.tags?.amenity === "restaurant").length;
+      const convenience = elements.filter(e => e.tags?.shop === "convenience").length;
+      const farms = elements.filter(e => e.tags?.shop === "farm" || e.tags?.amenity === "marketplace").length;
+      const totalFood = supermarkets + fastFood + restaurants + convenience;
+      const accessScore = Math.min(100, Math.round((supermarkets * 20) + (restaurants * 2) + (farms * 10) + (convenience * 3) - (fastFood * 1)));
+      const foodDesert = supermarkets < 2;
+      const fastFoodDominant = fastFood > supermarkets * 3;
+      rows = [{ location: county ? `${county} County, ${state}` : state, state, county: county || "All counties", lat, lon, supermarkets_count: supermarkets, fast_food_count: fastFood, restaurants_count: restaurants, convenience_stores_count: convenience, farmers_markets_count: farms, total_food_outlets: totalFood, food_access_score: accessScore, is_food_desert: foodDesert ? "YES" : "NO", fast_food_dominant: fastFoodDominant ? "YES" : "NO", supermarket_to_fastfood_ratio: fastFood > 0 ? +(supermarkets / fastFood).toFixed(2) : supermarkets, food_environment_rating: accessScore > 70 ? "EXCELLENT — well served" : accessScore > 40 ? "MODERATE — some gaps" : accessScore > 20 ? "POOR — underserved" : "CRITICAL — food desert", business_opportunity: foodDesert ? "🟢 High — grocery/healthy food gap" : fastFoodDominant ? "🟡 Medium — healthy food alternatives needed" : "🔴 Low — market saturated", radius_km: Math.round(radiusM / 1000) }];
+      message = `Food access analysis for ${county ? county + " County, " : ""}${state}`;
+    }
+
     // ── us_county ─────────────────────────────────────────────────────────
     else if (table === "us_county" || table === "census_county") {
       const STATE_FIPS = { alabama: "01", alaska: "02", arizona: "04", arkansas: "05", california: "06", colorado: "08", connecticut: "09", delaware: "10", florida: "12", georgia: "13", hawaii: "15", idaho: "16", illinois: "17", indiana: "18", iowa: "19", kansas: "20", kentucky: "21", louisiana: "22", maine: "23", maryland: "24", massachusetts: "25", michigan: "26", minnesota: "27", mississippi: "28", missouri: "29", montana: "30", nebraska: "31", nevada: "32", "new hampshire": "33", "new jersey": "34", "new mexico": "35", "new york": "36", "north carolina": "37", "north dakota": "38", ohio: "39", oklahoma: "40", oregon: "41", pennsylvania: "42", "rhode island": "44", "south carolina": "45", "south dakota": "46", tennessee: "47", texas: "48", utah: "49", vermont: "50", virginia: "51", washington: "53", "west virginia": "54", wisconsin: "55", wyoming: "56" };
