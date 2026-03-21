@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { ArrowLeft, Edit, Loader2 } from "lucide-react";
 import { executeSQL } from "@/components/querybuilder/sqlEngine";
 import ChartRenderer from "./ChartRenderer";
+import { safeChartData } from "./ChartRenderer";
 
 export default function ChartViewer({ chart, onClose, onEdit }) {
   const [data, setData] = useState([]);
