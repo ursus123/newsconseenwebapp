@@ -787,8 +787,13 @@ export default function QueryBuilder() {
       {showPinModal && (
         <PinWidgetModal
           sql={sql}
+          chartType={selectedChartType}
+          data={results}
           onClose={() => setShowPinModal(false)}
-          onPinned={() => { qc.invalidateQueries({ queryKey: ["dashboardWidgets"] }); }}
+          onPinned={() => {
+            qc.invalidateQueries({ queryKey: ["dashboardWidgets"] });
+            qc.invalidateQueries({ queryKey: ["reportCharts"] });
+          }}
         />
       )}
 
