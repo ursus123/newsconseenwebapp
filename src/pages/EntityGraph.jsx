@@ -508,8 +508,9 @@ export default function EntityGraph() {
           />
 
           {/* Center: Graph */}
+          <div className="flex-1 min-h-0 overflow-hidden">
           {displayNodes.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center border border-slate-200 rounded-2xl bg-slate-50">
+            <div className="w-full h-full flex items-center justify-center border border-slate-200 rounded-2xl bg-slate-50">
               <div className="text-center">
                 <Network className="w-12 h-12 text-slate-200 mx-auto mb-3" />
                 <p className="text-slate-400 font-medium">No data to display</p>
