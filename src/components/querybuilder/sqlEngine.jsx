@@ -668,6 +668,9 @@ export async function executeSQL(sql, uploadedTables) {
       "osm_places", "osm_nearby", "weather_current", "weather_forecast",
       "worldbank_indicators", "exchange_rates", "countries",
       "fda_devices", "fda_food_recalls", "medications_recalls", "medications_label",
+      "geo_overview", "geo_economy", "geo_competitors", "geo_infrastructure",
+      "geo_weather_profile", "geo_market_size", "geo_cost_of_living",
+      "geo_population", "us_state", "us_county",
     ];
     const matchedVirtual = VIRTUAL_TABLE_NAMES.find(t => sqlLower.includes(`from ${t}`));
     if (matchedVirtual) {
