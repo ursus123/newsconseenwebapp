@@ -1,6 +1,12 @@
 import React from "react";
+import {
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Legend,
+} from "recharts";
+import MapChart from "@/components/querybuilder/MapChart";
 
-function safeVal(val) {
+export function safeVal(val) {
   if (val === null || val === undefined) return "—";
   if (typeof val === "boolean") return val ? "Yes" : "No";
   if (val instanceof Date) return val.toLocaleDateString();
@@ -8,11 +14,34 @@ function safeVal(val) {
   if (typeof val === "object") return JSON.stringify(val);
   return String(val);
 }
-import {
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend,
-} from "recharts";
+
+export function safeChartData(rawData) {
+  if (!Array.isArray(rawData)) return [];
+  return rawData.map((row) => {
+    const safeRow = {};
+    Object.entries(row).forEach(([k, v]) => {
+      safeRow[k] = typeof v === "object" && v !== null && !(v instanceof Date) ? JSON.stringify(v) : v;
+    });
+    return safeRow;
+  });
+}
+
+export function detectChartColumns(data) {
+  if (!data?.length) return { xKey: null, yKey: null, allNumericKeys: [] };
+  const keys = Object.keys(data[0]);
+  const sample = data.slice(0, 5);
+
+  const numericKeys = keys.filter((k) =>
+    sample.every((row) => row[k] !== null && row[k] !== undefined && !isNaN(Number(row[k])))
+  );
+  const labelKeys = keys.filter((k) => !numericKeys.includes(k));
+
+  const xKey = labelKeys[0] || keys[0];
+  const yKey = numericKeys.find((k) => k !== xKey) || numericKeys[0] || keys[1] || keys[0];
+  const allNumericKeys = numericKeys.filter((k) => k !== xKey);
+
+  return { xKey, yKey, allNumericKeys };
+}
 
 const SCHEME_COLOR = {
   emerald: "#10b981",
@@ -23,22 +52,33 @@ const SCHEME_COLOR = {
   amber: "#f59e0b",
 };
 
-const PIE_COLORS = ["#10b981", "#3b82f6", "#8b5cf6", "#f97316", "#f43f5e", "#f59e0b", "#06b6d4", "#84cc16"];
+const COLORS = ["#10b981", "#3b82f6", "#8b5cf6", "#f97316", "#f43f5e", "#f59e0b", "#06b6d4", "#84cc16"];
 
 export default function ChartRenderer({ chart, data, height = 320 }) {
   if (!chart) return null;
 
   const color = SCHEME_COLOR[chart.color_scheme] || "#10b981";
-  const chartData = data || [];
-  const xKey = chart.x_axis_key;
-  const yKey = chart.y_axis_key;
+  const rawData = data || [];
 
-  if (chartData.length === 0) {
+  if (rawData.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-slate-300 text-xs">
         No data available
       </div>
     );
+  }
+
+  const chartData = safeChartData(rawData);
+
+  // Auto-detect columns, but prefer saved x/y keys from chart config
+  const { xKey: detectedX, yKey: detectedY, allNumericKeys } = detectChartColumns(chartData);
+  const xKey = chart.x_axis_key || detectedX;
+  const yKey = chart.y_axis_key || detectedY;
+
+  // Map detection
+  const hasLatLon = "lat" in (chartData[0] || {}) && "lon" in (chartData[0] || {});
+  if (chart.chart_type === "map" || hasLatLon) {
+    return <MapChart data={rawData} height={height} />;
   }
 
   if (chart.chart_type === "number") {
@@ -79,13 +119,13 @@ export default function ChartRenderer({ chart, data, height = 320 }) {
         <PieChart>
           <Pie
             data={chartData}
-            dataKey={yKey || Object.keys(chartData[0] || {})[1] || "value"}
-            nameKey={xKey || Object.keys(chartData[0] || {})[0] || "name"}
+            dataKey={yKey}
+            nameKey={xKey}
             cx="50%" cy="50%"
             outerRadius={Math.min(height / 2 - 30, 100)}
             label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
           >
-            {chartData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+            {chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
           </Pie>
           <Tooltip />
         </PieChart>
@@ -114,6 +154,7 @@ export default function ChartRenderer({ chart, data, height = 320 }) {
   }
 
   if (chart.chart_type === "line") {
+    const seriesKeys = allNumericKeys.length > 0 ? allNumericKeys : [yKey];
     return (
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
@@ -121,21 +162,31 @@ export default function ChartRenderer({ chart, data, height = 320 }) {
           <XAxis dataKey={xKey} tick={{ fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11 }} />
           <Tooltip />
-          <Line type="monotone" dataKey={yKey} stroke={color} strokeWidth={2.5} dot={{ r: 4, fill: color }} />
+          {seriesKeys.length > 1 && <Legend />}
+          {seriesKeys.map((key, i) => (
+            <Line key={key} type="monotone" dataKey={key} stroke={COLORS[i % COLORS.length]}
+              strokeWidth={2.5} dot={{ r: 3, fill: COLORS[i % COLORS.length] }}
+              name={key.replace(/_/g, " ")} />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     );
   }
 
-  // Default: bar
+  // Default: bar — support multiple numeric series
+  const seriesKeys = allNumericKeys.length > 0 ? allNumericKeys : [yKey];
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={chartData} margin={{ top: 10, right: 20, bottom: 5, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-        <XAxis dataKey={xKey} tick={{ fontSize: 11 }} />
-        <YAxis tick={{ fontSize: 11 }} />
+        <XAxis dataKey={xKey} tick={{ fontSize: 10 }} tickLine={false} />
+        <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
         <Tooltip />
-        <Bar dataKey={yKey} fill={color} radius={[4, 4, 0, 0]} />
+        {seriesKeys.length > 1 && <Legend />}
+        {seriesKeys.map((key, i) => (
+          <Bar key={key} dataKey={key} fill={COLORS[i % COLORS.length]}
+            radius={[4, 4, 0, 0]} name={key.replace(/_/g, " ")} />
+        ))}
       </BarChart>
     </ResponsiveContainer>
   );
