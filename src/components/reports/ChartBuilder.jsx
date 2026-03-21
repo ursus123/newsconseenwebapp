@@ -1,259 +1,404 @@
-import React, { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent } from "@/components/ui/card";
-import { BarChart, Bar, PieChart, Pie, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell, ResponsiveContainer } from "recharts";
-import { Loader2, RefreshCw, AlertCircle } from "lucide-react";
-
-const API_BASE = "https://newsconseenwebapp-production.up.railway.app";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, Play, Save, BarChart2, TrendingUp, PieChart, Activity, Hash, Table2, Target, ScatterChart } from "lucide-react";
+import {
+  BarChart, Bar, LineChart, Line, PieChart as RechartPie, Pie, Cell, AreaChart, Area,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from "recharts";
 
 const CHART_TYPES = [
-  { value: "bar", label: "Bar Chart" },
-  { value: "pie", label: "Pie Chart" },
-  { value: "line", label: "Line Chart" },
+  { id: "bar",     label: "Bar",     icon: BarChart2 },
+  { id: "line",    label: "Line",    icon: TrendingUp },
+  { id: "pie",     label: "Pie",     icon: PieChart },
+  { id: "area",    label: "Area",    icon: Activity },
+  { id: "number",  label: "Number",  icon: Hash },
+  { id: "table",   label: "Table",   icon: Table2 },
+  { id: "gauge",   label: "Gauge",   icon: Target },
+  { id: "scatter", label: "Scatter", icon: ScatterChart },
 ];
 
-const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
+const COLOR_SCHEMES = [
+  { id: "emerald", label: "Emerald", color: "#10b981" },
+  { id: "blue",    label: "Blue",    color: "#3b82f6" },
+  { id: "purple",  label: "Purple",  color: "#8b5cf6" },
+  { id: "orange",  label: "Orange",  color: "#f97316" },
+  { id: "rose",    label: "Rose",    color: "#f43f5e" },
+  { id: "amber",   label: "Amber",   color: "#f59e0b" },
+];
 
-const DATA_SOURCES = {
-  enterprise_summary: {
-    label: "Enterprise Summary",
-    endpoint: "/enterprise-summary",
-    columns: ["status", "enterprise_type", "enterprise_count"],
-  },
-  task_summary: {
-    label: "Task Summary",
-    endpoint: "/task-summary",
-    columns: ["task_type", "status", "total_tasks", "completed_tasks"],
-  },
-  transaction_summary: {
-    label: "Transaction Summary",
-    endpoint: "/transaction-summary",
-    columns: ["transaction_type", "status", "total_transactions", "total_amount", "avg_amount"],
-  },
-  people_summary: {
-    label: "People Summary",
-    endpoint: "/people-summary",
-    columns: ["person_type", "status", "people_count"],
-  },
-  service_summary: {
-    label: "Service Summary",
-    endpoint: "/service-summary",
-    columns: ["service_type", "status", "category", "service_count"],
-  },
-  product_summary: {
-    label: "Product Summary",
-    endpoint: "/product-summary",
-    columns: ["item_type", "status", "total_products", "total_stock", "avg_price"],
-  },
-};
+const SCHEME_COLOR = { emerald: "#10b981", blue: "#3b82f6", purple: "#8b5cf6", orange: "#f97316", rose: "#f43f5e", amber: "#f59e0b" };
 
-export default function ChartBuilder({ open, onClose, onSave, initialData = null }) {
-  const [selectedTable, setSelectedTable] = useState(initialData?.table || "");
-  const [selectedXAxis, setSelectedXAxis] = useState(initialData?.xAxis || "");
-  const [selectedYAxis, setSelectedYAxis] = useState(initialData?.yAxis || "");
-  const [chartType, setChartType] = useState(initialData?.type || "bar");
-  const [title, setTitle] = useState(initialData?.title || "");
-  const [saving, setSaving] = useState(false);
+const ENTITIES = ["Enterprise", "Person", "Task", "Transaction", "Product", "Service"];
 
-  const [apiData, setApiData] = useState([]);
-  const [apiLoading, setApiLoading] = useState(false);
-  const [apiError, setApiError] = useState(null);
+function MiniChartPreview({ chartType, data, xKey, yKey, colorScheme }) {
+  const color = SCHEME_COLOR[colorScheme] || "#10b981";
+  if (!data || data.length === 0) return (
+    <div className="flex items-center justify-center h-full text-slate-300 text-xs">Run query to preview</div>
+  );
 
-  const currentSource = DATA_SOURCES[selectedTable];
-  const columns = currentSource?.columns || [];
-
-  const fetchData = async (tableKey) => {
-    const source = DATA_SOURCES[tableKey];
-    if (!source) return;
-    setApiLoading(true);
-    setApiError(null);
-    setApiData([]);
-    try {
-      const res = await fetch(`${API_BASE}${source.endpoint}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      // API may return array directly or wrapped
-      const rows = Array.isArray(json) ? json : (json.data || json.results || []);
-      setApiData(rows);
-    } catch (e) {
-      setApiError(e.message || "Failed to fetch data");
-    } finally {
-      setApiLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedTable) {
-      setSelectedXAxis("");
-      setSelectedYAxis("");
-      fetchData(selectedTable);
-    }
-  }, [selectedTable]);
-
-  const previewData = apiData.slice(0, 10); // cap for readability
-
-  const renderChart = () => {
-    if (apiLoading) return (
-      <div className="flex items-center justify-center py-16 gap-2 text-slate-400">
-        <Loader2 className="w-5 h-5 animate-spin" />
-        <span className="text-sm">Loading data…</span>
-      </div>
-    );
-
-    if (apiError) return (
-      <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
-        <AlertCircle className="w-6 h-6 text-rose-400" />
-        <p className="text-sm text-rose-500">{apiError}</p>
-        <Button size="sm" variant="outline" onClick={() => fetchData(selectedTable)}>
-          <RefreshCw className="w-3 h-3 mr-1" /> Retry
-        </Button>
-      </div>
-    );
-
-    if (!selectedXAxis || !selectedYAxis) return (
-      <p className="text-sm text-slate-400 text-center py-16">Select axes to preview chart</p>
-    );
-
-    if (!previewData.length) return (
-      <p className="text-sm text-slate-400 text-center py-16">No data available</p>
-    );
-
+  if (chartType === "number") {
+    const val = data[0]?.[yKey] ?? data[0]?.[Object.keys(data[0])[0]];
     return (
-      <ResponsiveContainer width="100%" height={250}>
-        {chartType === "bar" ? (
-          <BarChart data={previewData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey={selectedXAxis} tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} />
-            <Tooltip />
-            <Bar dataKey={selectedYAxis} fill="#10b981" radius={[6, 6, 0, 0]} />
-          </BarChart>
-        ) : chartType === "pie" ? (
-          <PieChart>
-            <Pie data={previewData} dataKey={selectedYAxis} nameKey={selectedXAxis} cx="50%" cy="50%" outerRadius={80} label>
-              {previewData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-            </Pie>
-            <Tooltip />
-          </PieChart>
-        ) : (
-          <LineChart data={previewData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey={selectedXAxis} tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} />
-            <Tooltip />
-            <Legend />
-            <Line type="monotone" dataKey={selectedYAxis} stroke="#10b981" strokeWidth={2} />
-          </LineChart>
-        )}
+      <div className="flex items-center justify-center h-full">
+        <span className="text-5xl font-black" style={{ color }}>{Number(val).toLocaleString()}</span>
+      </div>
+    );
+  }
+
+  if (chartType === "table") {
+    const cols = Object.keys(data[0] || {});
+    return (
+      <div className="overflow-auto h-full">
+        <table className="text-[11px] w-full">
+          <thead><tr>{cols.map(c => <th key={c} className="text-left py-1 px-2 bg-slate-100 font-semibold">{c}</th>)}</tr></thead>
+          <tbody>{data.slice(0, 5).map((row, i) => <tr key={i}>{cols.map(c => <td key={c} className="py-1 px-2 border-b border-slate-50">{row[c]}</td>)}</tr>)}</tbody>
+        </table>
+      </div>
+    );
+  }
+
+  if (chartType === "pie") {
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <RechartPie>
+          <Pie data={data} dataKey={yKey || Object.keys(data[0] || {})[1] || "value"} nameKey={xKey || Object.keys(data[0] || {})[0] || "name"} cx="50%" cy="50%" outerRadius={80}>
+            {data.map((_, i) => <Cell key={i} fill={[color, "#94a3b8", "#64748b", "#cbd5e1", "#e2e8f0"][i % 5]} />)}
+          </Pie>
+          <Tooltip />
+        </RechartPie>
       </ResponsiveContainer>
     );
+  }
+
+  if (chartType === "area") {
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+          <XAxis dataKey={xKey} tick={{ fontSize: 10 }} />
+          <YAxis tick={{ fontSize: 10 }} />
+          <Tooltip />
+          <Area type="monotone" dataKey={yKey} stroke={color} fill={color} fillOpacity={0.2} />
+        </AreaChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  if (chartType === "line") {
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+          <XAxis dataKey={xKey} tick={{ fontSize: 10 }} />
+          <YAxis tick={{ fontSize: 10 }} />
+          <Tooltip />
+          <Line type="monotone" dataKey={yKey} stroke={color} strokeWidth={2} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+        <XAxis dataKey={xKey} tick={{ fontSize: 10 }} />
+        <YAxis tick={{ fontSize: 10 }} />
+        <Tooltip />
+        <Bar dataKey={yKey} fill={color} radius={[3, 3, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+export default function ChartBuilder({ chart, folders, currentUser, onClose }) {
+  const qc = useQueryClient();
+  const [step, setStep] = useState(1);
+  const [sql, setSql] = useState(chart?.sql_query || "SELECT * FROM enterprises LIMIT 20");
+  const [previewData, setPreviewData] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [chartType, setChartType] = useState(chart?.chart_type || "bar");
+  const [title, setTitle] = useState(chart?.title || "");
+  const [description, setDescription] = useState(chart?.description || "");
+  const [xKey, setXKey] = useState(chart?.x_axis_key || "");
+  const [yKey, setYKey] = useState(chart?.y_axis_key || "");
+  const [colorScheme, setColorScheme] = useState(chart?.color_scheme || "emerald");
+  const [folderId, setFolderId] = useState(chart?.folder_id || "");
+  const [sharedWithRoles, setSharedWithRoles] = useState(chart?.shared_with_roles || ["admin"]);
+  const [isPublic, setIsPublic] = useState(chart?.is_public || false);
+  const [tags, setTags] = useState((chart?.tags || []).join(", "));
+
+  const columns = previewData?.length > 0 ? Object.keys(previewData[0]) : [];
+
+  const saveMut = useMutation({
+    mutationFn: (data) => chart
+      ? base44.entities.ReportChart.update(chart.id, data)
+      : base44.entities.ReportChart.create(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reportCharts"] });
+      onClose();
+    },
+  });
+
+  const runQuery = async () => {
+    setPreviewLoading(true);
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `Execute this SQL-like query against the Base44 data and return results as JSON array. Query: ${sql}. Return ONLY a JSON array of objects, nothing else.`,
+        response_json_schema: { type: "object", properties: { rows: { type: "array", items: { type: "object" } } } },
+      });
+      const rows = result?.rows || [];
+      setPreviewData(rows);
+      if (rows.length > 0 && !xKey) setXKey(Object.keys(rows[0])[0]);
+      if (rows.length > 0 && !yKey) setYKey(Object.keys(rows[0])[1] || Object.keys(rows[0])[0]);
+    } catch {
+      setPreviewData([]);
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
-  const handleSave = async () => {
-    if (!title || !selectedTable || !selectedXAxis || !selectedYAxis) {
-      alert("Please fill in all fields");
-      return;
-    }
-    setSaving(true);
-    await onSave({ title, table: selectedTable, xAxis: selectedXAxis, yAxis: selectedYAxis, type: chartType });
-    setSaving(false);
+  const handleSave = () => {
+    saveMut.mutate({
+      title,
+      description,
+      chart_type: chartType,
+      sql_query: sql,
+      x_axis_key: xKey,
+      y_axis_key: yKey,
+      color_scheme: colorScheme,
+      folder_id: folderId || null,
+      shared_with_roles: sharedWithRoles,
+      is_public: isPublic,
+      tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+      company_id: currentUser?.company_id,
+      status: "active",
+    });
+  };
+
+  const toggleRole = (role) => {
+    setSharedWithRoles((prev) =>
+      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
+    );
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{initialData ? "Edit Chart" : "Create Chart"}</DialogTitle>
-        </DialogHeader>
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 bg-white shrink-0">
+        <Button variant="ghost" size="sm" onClick={onClose} className="gap-1.5">
+          <ArrowLeft className="w-4 h-4" /> Back
+        </Button>
+        <div className="flex-1">
+          <h2 className="text-base font-semibold text-slate-800">{chart ? "Edit Chart" : "New Chart"}</h2>
+        </div>
+        {/* Steps */}
+        <div className="flex items-center gap-1.5 text-xs">
+          {["Data", "Type", "Settings", "Sharing"].map((s, i) => (
+            <button
+              key={s}
+              onClick={() => setStep(i + 1)}
+              className={`px-3 py-1 rounded-full font-medium transition-all ${
+                step === i + 1 ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+              }`}
+            >
+              {i + 1}. {s}
+            </button>
+          ))}
+        </div>
+        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5" onClick={handleSave} disabled={saveMut.isPending}>
+          <Save className="w-3.5 h-3.5" /> {saveMut.isPending ? "Saving..." : "Save Chart"}
+        </Button>
+      </div>
 
-        <div className="grid grid-cols-2 gap-6 py-4">
-          {/* Config */}
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Chart Title</label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Tasks by Type"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
-              />
-            </div>
+      <div className="flex-1 overflow-y-auto">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-0 h-full">
+          {/* Left: Editor */}
+          <div className="p-6 border-r border-slate-100 space-y-6">
+            {/* Step 1: Data */}
+            {step === 1 && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">Data Source — SQL Query</h3>
+                <textarea
+                  className="w-full h-48 font-mono text-xs bg-slate-950 text-emerald-400 rounded-xl p-4 resize-none outline-none border-0"
+                  value={sql}
+                  onChange={(e) => setSql(e.target.value)}
+                  placeholder="SELECT enterprise, COUNT(*) as count FROM tasks GROUP BY enterprise"
+                  spellCheck={false}
+                />
+                <Button className="mt-2 gap-1.5 bg-emerald-600 hover:bg-emerald-700" size="sm" onClick={runQuery} disabled={previewLoading}>
+                  <Play className="w-3.5 h-3.5" /> {previewLoading ? "Running..." : "Run Query"}
+                </Button>
+                {previewData && (
+                  <div className="mt-4">
+                    <p className="text-xs text-slate-500 mb-2">{previewData.length} rows returned (showing first 5)</p>
+                    <div className="overflow-x-auto rounded-xl border border-slate-100">
+                      <table className="text-[11px] w-full">
+                        <thead>
+                          <tr>{Object.keys(previewData[0] || {}).map((c) => (
+                            <th key={c} className="text-left py-2 px-3 bg-slate-50 font-semibold text-slate-600">{c}</th>
+                          ))}</tr>
+                        </thead>
+                        <tbody>
+                          {previewData.slice(0, 5).map((row, i) => (
+                            <tr key={i} className="border-t border-slate-50">
+                              {Object.values(row).map((v, j) => (
+                                <td key={j} className="py-1.5 px-3 text-slate-700">{String(v)}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <Button size="sm" variant="outline" className="mt-2" onClick={() => setStep(2)}>
+                      Next: Choose Chart Type →
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
 
-            <div>
-              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Data Source</label>
-              <Select value={selectedTable} onValueChange={setSelectedTable}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select data source..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(DATA_SOURCES).map(([key, { label }]) => (
-                    <SelectItem key={key} value={key}>{label}</SelectItem>
+            {/* Step 2: Chart Type */}
+            {step === 2 && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">Chart Type</h3>
+                <div className="grid grid-cols-4 gap-3">
+                  {CHART_TYPES.map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      onClick={() => setChartType(id)}
+                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                        chartType === id ? "border-emerald-500 bg-emerald-50" : "border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      <Icon className={`w-6 h-6 ${chartType === id ? "text-emerald-600" : "text-slate-400"}`} />
+                      <span className="text-[11px] font-medium text-slate-600">{label}</span>
+                    </button>
                   ))}
-                </SelectContent>
-              </Select>
-              {apiLoading && (
-                <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                  <Loader2 className="w-3 h-3 animate-spin" /> Fetching data…
-                </p>
-              )}
-              {apiData.length > 0 && !apiLoading && (
-                <p className="text-xs text-emerald-600 mt-1">{apiData.length} rows loaded</p>
-              )}
-            </div>
+                </div>
+                <Button size="sm" variant="outline" className="mt-4" onClick={() => setStep(3)}>
+                  Next: Chart Settings →
+                </Button>
+              </div>
+            )}
 
-            <div>
-              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">X-Axis (Categories)</label>
-              <Select value={selectedXAxis} onValueChange={setSelectedXAxis} disabled={!selectedTable || apiLoading}>
-                <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
-                <SelectContent>
-                  {columns.map((col) => <SelectItem key={col} value={col}>{col}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Step 3: Settings */}
+            {step === 3 && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-slate-700">Chart Settings</h3>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium mb-1 block">Title *</label>
+                  <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Revenue by Enterprise" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium mb-1 block">Description</label>
+                  <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full border border-slate-200 rounded-lg text-xs px-3 py-2 resize-none h-16 outline-none" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-500 font-medium mb-1 block">X Axis</label>
+                    <select value={xKey} onChange={(e) => setXKey(e.target.value)} className="w-full border border-slate-200 rounded-lg text-xs px-3 py-2 outline-none bg-white">
+                      <option value="">Select column</option>
+                      {columns.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 font-medium mb-1 block">Y Axis / Value</label>
+                    <select value={yKey} onChange={(e) => setYKey(e.target.value)} className="w-full border border-slate-200 rounded-lg text-xs px-3 py-2 outline-none bg-white">
+                      <option value="">Select column</option>
+                      {columns.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium mb-2 block">Color Scheme</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {COLOR_SCHEMES.map((cs) => (
+                      <button
+                        key={cs.id}
+                        onClick={() => setColorScheme(cs.id)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${
+                          colorScheme === cs.id ? "border-slate-400" : "border-transparent"
+                        }`}
+                        style={{ backgroundColor: cs.color + "20", color: cs.color }}
+                      >
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cs.color }} />
+                        {cs.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium mb-1 block">Folder</label>
+                  <select value={folderId} onChange={(e) => setFolderId(e.target.value)} className="w-full border border-slate-200 rounded-lg text-xs px-3 py-2 outline-none bg-white">
+                    <option value="">Uncategorized</option>
+                    {folders.map((f) => <option key={f.id} value={f.id}>{f.icon || "📁"} {f.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium mb-1 block">Tags (comma-separated)</label>
+                  <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="retention, monthly, clients" />
+                </div>
+              </div>
+            )}
 
-            <div>
-              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Y-Axis (Values)</label>
-              <Select value={selectedYAxis} onValueChange={setSelectedYAxis} disabled={!selectedTable || apiLoading}>
-                <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
-                <SelectContent>
-                  {columns.map((col) => <SelectItem key={col} value={col}>{col}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Chart Type</label>
-              <Select value={chartType} onValueChange={setChartType}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {CHART_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Step 4: Sharing */}
+            {step === 4 && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-slate-700">Sharing & Visibility</h3>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium mb-2 block">Who can see this chart?</label>
+                  <div className="space-y-2">
+                    {["admin", "executive", "user"].map((role) => (
+                      <label key={role} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={sharedWithRoles.includes(role)}
+                          onChange={() => toggleRole(role)}
+                          className="rounded"
+                        />
+                        <span className="text-xs text-slate-700 capitalize">{role === "user" ? "Staff (all users)" : role}</span>
+                      </label>
+                    ))}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} className="rounded" />
+                      <span className="text-xs text-slate-700">Public — all company members</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Preview */}
-          <div>
-            <label className="text-xs font-semibold text-slate-600 uppercase block mb-2">Preview</label>
-            <Card className="border border-slate-100">
-              <CardContent className="pt-4 min-h-[280px] flex flex-col justify-center">
-                {renderChart()}
-              </CardContent>
-            </Card>
+          {/* Right: Preview */}
+          <div className="p-6 bg-slate-50">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Live Preview</p>
+            <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+              <p className="text-sm font-semibold text-slate-800 mb-1">{title || "Chart Title"}</p>
+              {description && <p className="text-xs text-slate-400 mb-3">{description}</p>}
+              <div className="h-64">
+                <MiniChartPreview
+                  chartType={chartType}
+                  data={previewData}
+                  xKey={xKey}
+                  yKey={yKey}
+                  colorScheme={colorScheme}
+                />
+              </div>
+              {tags && (
+                <div className="flex flex-wrap gap-1 mt-3">
+                  {tags.split(",").filter(Boolean).map((t) => (
+                    <span key={t} className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{t.trim()}</span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-
-        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-            {initialData ? "Update Chart" : "Create Chart"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
