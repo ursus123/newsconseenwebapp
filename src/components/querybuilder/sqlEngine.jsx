@@ -926,6 +926,7 @@ export async function executeSQL(sql, uploadedTables) {
       "geo_overview", "geo_economy", "geo_competitors", "geo_infrastructure",
       "geo_weather_profile", "geo_market_size", "geo_cost_of_living",
       "geo_population", "us_state", "us_county",
+      "us_zipcode", "cms_healthcare", "usda_food_access",
     ];
     const matchedVirtual = VIRTUAL_TABLE_NAMES.find(t => sqlLower.includes(`from ${t}`));
     if (matchedVirtual) {
