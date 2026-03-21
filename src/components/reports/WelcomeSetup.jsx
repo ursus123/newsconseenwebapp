@@ -187,6 +187,22 @@ export default function WelcomeSetup({ currentUser, onComplete }) {
       });
     }
 
+    // Archive any previously created fake/demo charts
+    if (companyId) {
+      const existingCharts = await base44.entities.ReportChart.filter({ company_id: companyId });
+      for (const chart of existingCharts) {
+        if (
+          chart.title?.includes("Enterprise A") ||
+          chart.title?.includes("Enterprise B") ||
+          chart.title?.includes("Enterprise C") ||
+          chart.title?.includes("Sample") ||
+          chart.source === "welcome_setup_demo"
+        ) {
+          await base44.entities.ReportChart.update(chart.id, { status: "archived" });
+        }
+      }
+    }
+
     qc.invalidateQueries({ queryKey: ["chartFolders"] });
     qc.invalidateQueries({ queryKey: ["reportCharts"] });
     qc.invalidateQueries({ queryKey: ["reports"] });

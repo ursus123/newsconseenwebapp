@@ -146,7 +146,7 @@ function SectionEditor({ section, index, total, charts, onUpdate, onMove, onDele
             </div>
             {section.chart_id && (
               <div className="h-48 border border-slate-100 rounded-xl overflow-hidden">
-                <ChartRenderer chart={charts.find((c) => c.id === section.chart_id)} height={192} />
+                <ChartSection chart={charts.find((c) => c.id === section.chart_id)} height={192} />
               </div>
             )}
             <Input
