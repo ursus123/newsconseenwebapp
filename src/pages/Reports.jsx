@@ -54,9 +54,17 @@ export default function Reports() {
   });
 
   const { data: allReports = [] } = useQuery({
-    queryKey: ["reports"],
-    queryFn: () => base44.entities.Report.list(),
+    queryKey: ["reports", currentUser?.company_id],
+    queryFn: () => currentUser?.role === "super_admin"
+      ? base44.entities.Report.list()
+      : base44.entities.Report.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser,
+  });
+
+  const { data: pinnedWidgets = [] } = useQuery({
+    queryKey: ["pinnedWidgets", currentUser?.company_id],
+    queryFn: () => base44.entities.SavedDashboardWidget.filter({ company_id: currentUser.company_id }),
+    enabled: !!currentUser?.company_id,
   });
 
   const createFolderMut = useMutation({
