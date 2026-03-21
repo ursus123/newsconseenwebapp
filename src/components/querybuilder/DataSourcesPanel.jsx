@@ -146,7 +146,7 @@ export default function DataSourcesPanel({ uploadedTables, onTablesChange, onUse
         </Section>
 
         {/* Geographic Research */}
-        <Section title="Geographic Research" icon={MapPin} iconColor="text-emerald-400" defaultOpen={false}>
+        <Section title="Geographic Research (8 tables)" icon={MapPin} iconColor="text-emerald-400" defaultOpen={false}>
           <div className="px-2 space-y-0.5">
             <p className="text-[9px] text-slate-500 px-2 pb-1 font-mono uppercase tracking-widest">Universal — any location</p>
             {GEO_TABLES.map(({ table, label, desc, sample }) => (
