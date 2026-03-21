@@ -7,6 +7,7 @@ import ChartBuilder from "@/components/reports/ChartBuilder";
 import ReportBuilder from "@/components/reports/ReportBuilder";
 import ReportViewer from "@/components/reports/ReportViewer";
 import WelcomeSetup from "@/components/reports/WelcomeSetup";
+import { Loader2, RefreshCw } from "lucide-react";
 
 function canUserSee(item, currentUser) {
   if (!currentUser) return false;
