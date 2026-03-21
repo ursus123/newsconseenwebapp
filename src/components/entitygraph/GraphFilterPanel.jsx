@@ -46,7 +46,8 @@ export default function GraphFilterPanel({
   };
 
   return (
-    <div className="w-52 shrink-0 flex flex-col gap-3 bg-white border border-slate-200 rounded-2xl p-3 overflow-y-auto">
+    <div className="w-52 shrink-0 flex flex-col overflow-hidden border border-slate-200 rounded-2xl bg-white">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 flex flex-col">
       {/* Title */}
       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Entity Types</p>
 
