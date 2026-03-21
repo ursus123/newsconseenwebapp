@@ -86,10 +86,30 @@ export default function Reports() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reports"] }),
   });
 
+  // Filter by company and visibility
+  const charts = allCharts.filter((c) => {
+    if (currentUser?.role === "super_admin") return true;
+    if (c.company_id && currentUser?.company_id && c.company_id !== currentUser.company_id) return false;
+    return canUserSee(c, currentUser);
+  });
+
+  const reports = allReports.filter((r) => {
+    if (currentUser?.role === "super_admin") return true;
+    if (r.company_id && currentUser?.company_id && r.company_id !== currentUser.company_id) return false;
+    return canUserSee(r, currentUser);
+  });
+
+  // myFolders must be defined before the useEffect that depends on it
+  const myFolders = folders.filter((f) => {
+    if (currentUser?.role === "super_admin") return true;
+    return !f.company_id || f.company_id === currentUser?.company_id;
+  });
+  const showSetup = isAdmin && myFolders.length === 0 && charts.length === 0 && !setupDone;
+
   // Auto-create "From QueryBuilder" folder
   useEffect(() => {
     if (!currentUser?.company_id || !isAdmin) return;
-    if (myFolders.length === 0) return; // wait until folders loaded
+    if (myFolders.length === 0) return;
     const hasQBFolder = myFolders.some((f) => f.name === "From QueryBuilder");
     if (!hasQBFolder) {
       base44.entities.ChartFolder.create({
@@ -126,26 +146,6 @@ export default function Reports() {
       setEtlLoading(false);
     }
   };
-
-  // Filter by company and visibility
-  const charts = allCharts.filter((c) => {
-    if (currentUser?.role === "super_admin") return true;
-    if (c.company_id && currentUser?.company_id && c.company_id !== currentUser.company_id) return false;
-    return canUserSee(c, currentUser);
-  });
-
-  const reports = allReports.filter((r) => {
-    if (currentUser?.role === "super_admin") return true;
-    if (r.company_id && currentUser?.company_id && r.company_id !== currentUser.company_id) return false;
-    return canUserSee(r, currentUser);
-  });
-
-  // Check if setup needed
-  const myFolders = folders.filter((f) => {
-    if (currentUser?.role === "super_admin") return true;
-    return !f.company_id || f.company_id === currentUser?.company_id;
-  });
-  const showSetup = isAdmin && myFolders.length === 0 && charts.length === 0 && !setupDone;
 
   const handleNewFolder = (parentId) => {
     setNewFolderParentId(parentId);
