@@ -139,9 +139,11 @@ export default function FolderContents({
   selected, folders, charts, reports, currentUser,
   onViewChart, onEditChart, onDeleteChart,
   onViewReport, onEditReport, onDeleteReport,
+  pinnedWidgets = [], onPinnedWidgetsChange,
 }) {
   const [viewMode, setViewMode] = useState("grid");
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+  const qc = useQueryClient();
 
   let visibleCharts = charts.filter((c) => canUserSee(c, currentUser));
   let visibleReports = reports.filter((r) => canUserSee(r, currentUser));
