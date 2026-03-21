@@ -272,7 +272,7 @@ export default function FolderContents({
             <p className="text-slate-400 text-sm mt-1">Create a chart or report to get started</p>
           </div>
         )}
-        {totalItems > 0 && viewMode === "grid" ? (
+        {totalItems > 0 && viewMode === "grid" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {visibleCharts.map((chart) => (
               <ChartCard
@@ -295,7 +295,8 @@ export default function FolderContents({
               />
             ))}
           </div>
-        ) : totalItems > 0 ? (
+        )}
+        {totalItems > 0 && viewMode === "list" && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
             <table className="w-full text-xs">
               <thead>
@@ -349,7 +350,7 @@ export default function FolderContents({
               </tbody>
             </table>
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );
