@@ -253,8 +253,8 @@ export default function ChartBuilder({ chart, folders, currentUser, onClose, rea
               </div>
             )}
           </div>
-        ) : null}
-        {!readOnly && <div className="grid grid-cols-1 xl:grid-cols-2 gap-0 h-full">
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-0 h-full">
           {/* Left: Editor */}
           <div className="p-6 border-r border-slate-100 space-y-6">
             {/* Step 1: Data */}
