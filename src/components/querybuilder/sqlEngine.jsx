@@ -188,8 +188,10 @@ async function executeVirtualTable(table, sql) {
       const lat = w.lat || "44.8", lon = w.lon || "-68.7";
       const type = w.type || "pharmacy";
       const radius = parseInt(w.radius_km || w.radius || "5") * 1000;
-      const body = `[out:json];node["amenity"="${type}"](around:${radius},${lat},${lon});out body;`;
-      const res = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body });
+      const query = `[out:json];node["amenity"="${type}"](around:${radius},${lat},${lon});out body;`;
+      const res = await fetch(
+        `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`
+      );
       const data = await res.json();
       rows = (data.elements || []).map(r => ({
         osm_id: r.id, name: r.tags?.name || "Unnamed", amenity: r.tags?.amenity || type,
