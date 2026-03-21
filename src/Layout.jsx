@@ -467,11 +467,13 @@ export default function Layout({ children, currentPageName }) {
             )}
           </header>
 
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-4 lg:p-8 max-w-[1600px] mx-auto w-full">
-              <TenantGuard currentUser={currentUser}>
-                {children}
-              </TenantGuard>
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-4 lg:p-8 max-w-[1600px] mx-auto w-full">
+                <TenantGuard currentUser={currentUser}>
+                  {children}
+                </TenantGuard>
+              </div>
             </div>
           </div>
         </main>
