@@ -26,6 +26,7 @@ import {
   Shield,
   ShieldCheck,
   Wrench,
+  TrendingUp,
 } from "lucide-react";
 import TrialBanner from "@/components/shared/TrialBanner";
 import { useQuery } from "@tanstack/react-query";
