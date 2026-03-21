@@ -221,7 +221,40 @@ export default function ChartBuilder({ chart, folders, currentUser, onClose, rea
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-0 h-full">
+        {readOnly ? (
+          <div className="p-8 max-w-3xl mx-auto">
+            <h3 className="text-lg font-semibold text-slate-800 mb-1">{chart?.title}</h3>
+            {chart?.description && <p className="text-sm text-slate-500 mb-6">{chart.description}</p>}
+            <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm h-80">
+              <MiniChartPreview
+                chartType={chartType}
+                data={previewData}
+                xKey={xKey}
+                yKey={yKey}
+                colorScheme={colorScheme}
+              />
+            </div>
+            {!previewData && (
+              <div className="mt-4 text-center">
+                <button
+                  onClick={runQuery}
+                  disabled={previewLoading}
+                  className="px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {previewLoading ? "Loading..." : "Load Chart Data"}
+                </button>
+              </div>
+            )}
+            {chart?.tags?.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-4">
+                {chart.tags.map((t) => (
+                  <span key={t} className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{t}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+        {!readOnly && <div className="grid grid-cols-1 xl:grid-cols-2 gap-0 h-full">
           {/* Left: Editor */}
           <div className="p-6 border-r border-slate-100 space-y-6">
             {/* Step 1: Data */}
