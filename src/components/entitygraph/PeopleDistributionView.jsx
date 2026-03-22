@@ -13,6 +13,17 @@ export default function PeopleDistributionView({ enterprises, people, selectedEn
   });
   const sharedStaff = people.filter(p => (personEnterpriseMap[p.id] || []).length > 1);
 
+  if (people.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center px-8">
+        <div className="text-5xl mb-4">👥</div>
+        <h3 className="text-base font-bold text-slate-700 mb-2">No people added yet</h3>
+        <p className="text-sm text-slate-400 max-w-xs mb-4">Add staff and clients to your enterprises to see distribution here.</p>
+        <p className="text-xs text-indigo-500 font-medium">Go to People page to add your team</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 overflow-auto h-full">
       {sharedStaff.length > 0 && (

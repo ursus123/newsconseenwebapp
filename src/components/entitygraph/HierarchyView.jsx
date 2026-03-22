@@ -8,7 +8,10 @@ export default function HierarchyView({ enterprises, people, services, products,
     ? enterprises
     : enterprises.filter(e => e.id === selectedEnterprise);
 
-  const parentEnterprises = visibleEnterprises.filter(e => !e.parent_enterprise_id || e.id === e.parent_enterprise_id);
+  const rootEnterprise = visibleEnterprises.find(e => e.id === e.company_id);
+  const parentEnterprises = rootEnterprise
+    ? [rootEnterprise, ...visibleEnterprises.filter(e => e.id !== rootEnterprise.id)]
+    : visibleEnterprises.filter(e => !e.parent_enterprise_id);
   const childrenOf = (parentId) => visibleEnterprises.filter(e => e.parent_enterprise_id === parentId && e.id !== parentId);
 
   const toggleExpand = (id) => {
@@ -41,7 +44,7 @@ export default function HierarchyView({ enterprises, people, services, products,
     return { staff, clients, addrs, svcs, recentTasks, completionRate, revenue, health };
   };
 
-  const EnterpriseCard = ({ enterprise, depth = 0 }) => {
+  const EnterpriseCard = ({ enterprise, depth = 0, isRoot = false }) => {
     const stats = statsFor(enterprise.enterprise_name);
     const children = childrenOf(enterprise.id);
     const isExpanded = expanded.has(enterprise.id);
@@ -60,7 +63,12 @@ export default function HierarchyView({ enterprises, people, services, products,
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-xl ${healthBg} border flex items-center justify-center text-lg shrink-0`}>🏢</div>
               <div>
-                <h3 className="font-bold text-slate-800">{enterprise.enterprise_name}</h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-slate-800">{enterprise.enterprise_name}</h3>
+                  {isRoot && (
+                    <span className="text-[10px] bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full font-bold">👑 Parent Enterprise</span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-400">
                   {enterprise.enterprise_type || "Enterprise"}
                   {enterprise.city && ` · ${enterprise.city}`}
@@ -157,11 +165,13 @@ export default function HierarchyView({ enterprises, people, services, products,
     );
   };
 
-  if (parentEnterprises.length === 0) {
+  if (visibleEnterprises.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <div className="text-5xl mb-3">🏢</div>
-        <p className="text-slate-400 text-sm">No enterprises to display.</p>
+      <div className="flex flex-col items-center justify-center py-24 text-center px-8">
+        <div className="text-5xl mb-4">🏢</div>
+        <h3 className="text-base font-bold text-slate-700 mb-2">No enterprises yet</h3>
+        <p className="text-sm text-slate-400 max-w-xs mb-4">Create your first enterprise to see the hierarchy here.</p>
+        <p className="text-xs text-indigo-500 font-medium">Go to Enterprises page to get started</p>
       </div>
     );
   }
@@ -170,7 +180,7 @@ export default function HierarchyView({ enterprises, people, services, products,
     <div className="p-6 overflow-auto h-full">
       <div className="max-w-4xl mx-auto">
         <p className="text-xs text-slate-400 mb-6">Click any enterprise to expand its details. Child enterprises appear indented below their parent.</p>
-        {parentEnterprises.map(e => <EnterpriseCard key={e.id} enterprise={e} />)}
+        {parentEnterprises.map(e => <EnterpriseCard key={e.id} enterprise={e} isRoot={e.id === rootEnterprise?.id} />)}
       </div>
     </div>
   );

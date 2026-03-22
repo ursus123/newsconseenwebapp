@@ -131,6 +131,7 @@ export default function EntityGraph() {
   // Phase 1: Load core data — SCOPED TO TENANT
   useEffect(() => {
     if (!currentUser) return;
+    if (loadStates.core !== LOAD_STATES.idle) return;
     const loadCore = async () => {
       setLoad("core", LOAD_STATES.loading);
       const [ents, ppl, svcs, rels] = await Promise.all([
@@ -146,7 +147,7 @@ export default function EntityGraph() {
       setLoad("core", LOAD_STATES.loaded);
     };
     loadCore();
-  }, [currentUser]);
+  }, [currentUser, loadStates.core]);
 
   // Phase 2: Load secondary data after core is loaded
   useEffect(() => {

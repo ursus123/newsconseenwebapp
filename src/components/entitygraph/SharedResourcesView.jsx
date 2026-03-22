@@ -19,6 +19,18 @@ export default function SharedResourcesView({ enterprises, people, products, ser
   });
   const sharedServices = Object.entries(servicesByName).filter(([, ents]) => ents.length > 1);
 
+  const hasAny = sharedStaff.length > 0 || globalProducts.length > 0 || sharedServices.length > 0;
+
+  if (!hasAny && enterprises.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center px-8">
+        <div className="text-5xl mb-4">🔄</div>
+        <h3 className="text-base font-bold text-slate-700 mb-2">No shared resources detected</h3>
+        <p className="text-sm text-slate-400 max-w-xs">When staff or services appear across multiple enterprises they will show here.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 overflow-auto h-full">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

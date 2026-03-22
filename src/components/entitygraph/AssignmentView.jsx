@@ -5,6 +5,17 @@ export default function AssignmentView({ enterprises, people, relationships, tas
     ? enterprises
     : enterprises.filter(e => e.id === selectedEnterprise);
 
+  if (enterprises.length === 0 || people.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center px-8">
+        <div className="text-5xl mb-4">🔗</div>
+        <h3 className="text-base font-bold text-slate-700 mb-2">No assignments yet</h3>
+        <p className="text-sm text-slate-400 max-w-xs mb-4">Create relationships between staff and clients to see assignments here.</p>
+        <p className="text-xs text-indigo-500 font-medium">Go to Relationships page to assign staff</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 overflow-auto h-full">
       {visibleEnterprises.map(enterprise => {
