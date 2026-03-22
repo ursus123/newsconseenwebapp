@@ -7,6 +7,29 @@ import UploadPanel from "./UploadPanel";
 import NotebookModal from "./NotebookModal";
 import { NotebookStore } from "./NotebookStore";
 
+const FINANCIAL_TABLES = [
+  { table: "stock_quote",      label: "Stock Quote",       desc: "Real-time stock price & signals",      sample: "SELECT * FROM stock_quote WHERE symbol = 'JNJ'" },
+  { table: "crypto_price",     label: "Crypto Price",      desc: "Live crypto prices (CoinGecko)",        sample: "SELECT * FROM crypto_price WHERE coin = 'bitcoin'" },
+  { table: "fed_rates",        label: "Fed / FRED Data",   desc: "Federal Reserve economic series",       sample: "SELECT * FROM fed_rates WHERE series = 'FEDFUNDS' AND year_from = '2020'" },
+  { table: "commodity_price",  label: "Commodity Prices",  desc: "Gold, oil, wheat, copper prices",       sample: "SELECT * FROM commodity_price WHERE commodity = 'gold'" },
+];
+
+const JOB_TABLES = [
+  { table: "bls_wages",        label: "BLS Wages",         desc: "Wages by occupation & state (BLS)",     sample: "SELECT * FROM bls_wages WHERE occupation = 'registered_nurse' AND state = 'Iowa'" },
+  { table: "salary_benchmark", label: "Salary Benchmark",  desc: "Compare labor costs across states",     sample: "SELECT * FROM salary_benchmark WHERE role = 'registered_nurse' AND states = 'Iowa,Minnesota,Maine,Indiana'" },
+];
+
+const NEWS_TABLES = [
+  { table: "news_search",   label: "News Search",    desc: "Global news search via GDELT",        sample: "SELECT * FROM news_search WHERE query = 'home healthcare Iowa' AND limit = 10" },
+  { table: "global_events", label: "Global Events",  desc: "World events by country/category",    sample: "SELECT * FROM global_events WHERE country = 'Nigeria' AND days_back = 7" },
+];
+
+const ENV_TABLES = [
+  { table: "air_quality",     label: "Air Quality",     desc: "Real-time AQI any city (OpenAQ)",      sample: "SELECT * FROM air_quality WHERE city = 'Des Moines Iowa'" },
+  { table: "earthquake_data", label: "Earthquake Data", desc: "USGS seismic history & risk",           sample: "SELECT * FROM earthquake_data WHERE city = 'San Francisco California' AND days_back = 30 AND min_magnitude = 3" },
+  { table: "climate_risk",    label: "Climate Risk",    desc: "Full climate risk assessment",          sample: "SELECT * FROM climate_risk WHERE city = 'Miami Florida'" },
+];
+
 const GEO_TABLES = [
   { table: "geo_overview",       label: "Place Overview",       desc: "Quick summary of any location",         sample: "SELECT * FROM geo_overview WHERE place = 'Lagos Nigeria'" },
   { table: "geo_economy",        label: "Country Economy",      desc: "Economic indicators any country",        sample: "SELECT * FROM geo_economy WHERE country = 'Nigeria'" },
