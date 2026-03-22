@@ -13,6 +13,8 @@ import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
 import { Upload, Building2, CheckCircle, Clock, Globe } from "lucide-react";
+import SubEnterprisesPanel from "@/components/enterprise/SubEnterprisesPanel";
+import { useTerminology } from "@/hooks/useTerminology";
 import {
   ENTERPRISE_FIELDS, ENTERPRISE_MAPPING_RULES, ENTERPRISE_TEMPLATE_EXAMPLE,
   ENTERPRISE_TEMPLATE_INSTRUCTIONS, validateEnterprise, transformEnterprise,
@@ -130,6 +132,7 @@ export default function Enterprises() {
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   const companyId  = currentUser?.company_id;
+  const { t } = useTerminology(currentUser);
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
   const withScope  = useWithScope(currentUser);
@@ -220,6 +223,18 @@ export default function Enterprises() {
         <StatCard icon={Clock}        iconClass="bg-blue-50 text-blue-600"       label="Open Now"           value={openCount} />
         <StatCard icon={Globe}        iconClass="bg-purple-50 text-purple-600"   label="Countries"          value={countryCount} />
       </div>
+
+      {/* Hierarchy panel — show for the primary (parent) enterprise */}
+      {enterprises.length > 0 && enterprises.some(e => e.id === companyId) && (
+        <SubEnterprisesPanel
+          enterprise={enterprises.find(e => e.id === companyId) || enterprises[0]}
+          currentUser={currentUser}
+          onAddChild={perms.can_create ? () => {
+            setEditing({ parent_enterprise_id: companyId, company_id: companyId });
+            setFormOpen(true);
+          } : undefined}
+        />
+      )}
 
       {/* Toolbar */}
       <EnterpriseToolbar search={search} setSearch={setSearch} filters={filters} setFilters={setFilters} sortBy={sortBy} setSortBy={setSortBy} />
