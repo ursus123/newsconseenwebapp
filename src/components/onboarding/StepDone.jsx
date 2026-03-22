@@ -1,22 +1,69 @@
 import React, { useEffect, useRef } from "react";
 import { CheckCircle2, ArrowRight } from "lucide-react";
+import { getTermsFromEnterpriseType } from "@/config/enterpriseTerminology";
 
-const NEXT_STEPS = {
+const NEXT_STEPS_BY_CATEGORY = {
   healthcare: [
     "Set up medication administration",
     "Import your staff and client list",
-    "Configure your service catalog",
+    "Configure your care services",
   ],
   education: [
-    "Import your staff list",
+    "Import your teaching staff and students",
     "Add your courses and programs",
     "Set up attendance tracking",
   ],
-  default: [
-    "Import your inventory",
+  community: [
+    "Add your leaders and members",
+    "Set up your programs and ministries",
+    "Record your first contribution",
+  ],
+  agriculture: [
+    "Add your animals or crop units",
+    "Set up feeding and care schedules",
+    "Record your first farm transaction",
+  ],
+  business: [
+    "Import your products and inventory",
     "Create your first transaction",
     "Explore your analytics dashboard",
   ],
+  nonprofit: [
+    "Add your staff and beneficiaries",
+    "Set up your programs",
+    "Record your first grant or donation",
+  ],
+  government: [
+    "Add your department staff",
+    "Set up your public services",
+    "Record your first budget item",
+  ],
+  other: [
+    "Add your team members",
+    "Create your first task",
+    "Explore your analytics dashboard",
+  ],
+};
+
+const CATEGORY_MAP = {
+  healthcare: "healthcare", home_health: "healthcare", residential_care: "healthcare",
+  education: "education", school: "education", university: "education", training: "education",
+  community: "community", faith: "community", church: "community", nonprofit: "nonprofit",
+  agriculture: "agriculture", farm: "agriculture", livestock: "agriculture",
+  retail: "business", consulting: "business", technology: "business",
+  manufacturing: "business", logistics: "business", hospitality: "business",
+  government: "government", other: "other",
+};
+
+const DONE_MESSAGES = {
+  healthcare:  "manage your care team, track medication rounds, and measure client outcomes",
+  education:   "manage your teaching staff, track student activities, and measure learning outcomes",
+  community:   "manage your volunteers, track programs, and grow your community",
+  agriculture: "manage your farm team, track animal health, and record farm transactions",
+  business:    "manage your team, track tasks, and measure business performance",
+  nonprofit:   "manage your staff, track programs, and record donations",
+  government:  "manage your department, track cases, and measure service delivery",
+  other:       "manage your people, track activities, and measure your goals",
 };
 
 function Confetti() {
@@ -38,14 +85,9 @@ function Confetti() {
     }
     return () => pieces.forEach((p) => p.remove());
   }, []);
-
   return (
     <>
-      <style>{`
-        @keyframes confettiFall {
-          to { transform: translateY(400px) rotate(720deg); opacity: 0; }
-        }
-      `}</style>
+      <style>{`@keyframes confettiFall { to { transform: translateY(400px) rotate(720deg); opacity: 0; } }`}</style>
       <div ref={ref} className="absolute inset-0 overflow-hidden pointer-events-none" />
     </>
   );
@@ -53,26 +95,27 @@ function Confetti() {
 
 export default function StepDone({ summary, onComplete, completing }) {
   const { enterprise, people, items, tasks, invites, industry } = summary;
-  const nextSteps = NEXT_STEPS[industry] || NEXT_STEPS.default;
+  const category = CATEGORY_MAP[industry] || "other";
+  const nextSteps = NEXT_STEPS_BY_CATEGORY[category] || NEXT_STEPS_BY_CATEGORY.other;
+  const doneMsg = DONE_MESSAGES[category] || DONE_MESSAGES.other;
+  const enterpriseName = enterprise?.name || "Your enterprise";
 
   return (
     <div className="space-y-5 relative">
       <Confetti />
-
       <div className="text-center mb-6">
         <div className="text-6xl mb-3">🎉</div>
-        <h2 className="text-2xl font-black text-slate-800">You're all set!</h2>
-        <p className="text-slate-500 text-sm mt-1">Your Newsconseen workspace is ready</p>
+        <h2 className="text-2xl font-black text-slate-800">{enterpriseName} is ready.</h2>
+        <p className="text-slate-500 text-sm mt-2 leading-relaxed max-w-xs mx-auto">
+          You can now {doneMsg} — all in one place.
+        </p>
       </div>
 
-      {/* Summary */}
       <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 space-y-2">
         {enterprise && (
           <div className="flex items-center gap-2 text-sm">
             <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-            <span className="text-slate-700">
-              <span className="font-semibold">Enterprise:</span> {enterprise.name} ({enterprise.industry}, {enterprise.country})
-            </span>
+            <span className="text-slate-700"><span className="font-semibold">Enterprise:</span> {enterprise.name}</span>
           </div>
         )}
         <div className="flex items-center gap-2 text-sm">
@@ -87,13 +130,14 @@ export default function StepDone({ summary, onComplete, completing }) {
           <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
           <span className="text-slate-700"><span className="font-semibold">{tasks}</span> tasks created</span>
         </div>
-        <div className="flex items-center gap-2 text-sm">
-          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-          <span className="text-slate-700"><span className="font-semibold">{invites}</span> invites sent</span>
-        </div>
+        {invites > 0 && (
+          <div className="flex items-center gap-2 text-sm">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span className="text-slate-700"><span className="font-semibold">{invites}</span> invites sent</span>
+          </div>
+        )}
       </div>
 
-      {/* Next steps */}
       <div>
         <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Recommended Next Steps</p>
         <div className="space-y-2">
@@ -114,7 +158,7 @@ export default function StepDone({ summary, onComplete, completing }) {
         {completing ? (
           <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
         ) : (
-          <>Go to Dashboard <ArrowRight className="w-5 h-5" /></>
+          <>Enter {enterpriseName} <ArrowRight className="w-5 h-5" /></>
         )}
       </button>
     </div>
