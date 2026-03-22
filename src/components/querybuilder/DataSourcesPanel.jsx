@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   Upload, Globe, Code2, ChevronDown, ChevronRight,
   Zap, Plus, CheckCircle, Trash2, MapPin,
+  TrendingUp, Briefcase, Newspaper, Leaf,
 } from "lucide-react";
 import UploadPanel from "./UploadPanel";
 import NotebookModal from "./NotebookModal";
@@ -165,6 +166,78 @@ export default function DataSourcesPanel({ uploadedTables, onTablesChange, onUse
             >
               <Plus className="w-3 h-3" /> Add API Source
             </button>
+          </div>
+        </Section>
+
+        {/* Financial Markets */}
+        <Section title="Financial Markets (4 tables)" icon={TrendingUp} iconColor="text-yellow-400" defaultOpen={false}>
+          <div className="px-2 space-y-0.5">
+            {FINANCIAL_TABLES.map(({ table, label, desc, sample }) => (
+              <div key={table} className="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-yellow-500/5 transition-all">
+                <TrendingUp className="w-3 h-3 text-yellow-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[10px] text-slate-300 block truncate">{table}</span>
+                  <span className="text-[9px] text-slate-600">{desc}</span>
+                </div>
+                <button onClick={() => onUseInQuery(sample)} title="Use sample query" className="hidden group-hover:flex p-1 rounded hover:bg-yellow-500/20 text-slate-500 hover:text-yellow-400 transition-colors">
+                  <Zap className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* Job Market */}
+        <Section title="Job Market (2 tables)" icon={Briefcase} iconColor="text-violet-400" defaultOpen={false}>
+          <div className="px-2 space-y-0.5">
+            {JOB_TABLES.map(({ table, label, desc, sample }) => (
+              <div key={table} className="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-violet-500/5 transition-all">
+                <Briefcase className="w-3 h-3 text-violet-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[10px] text-slate-300 block truncate">{table}</span>
+                  <span className="text-[9px] text-slate-600">{desc}</span>
+                </div>
+                <button onClick={() => onUseInQuery(sample)} title="Use sample query" className="hidden group-hover:flex p-1 rounded hover:bg-violet-500/20 text-slate-500 hover:text-violet-400 transition-colors">
+                  <Zap className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* News & Sentiment */}
+        <Section title="News & Sentiment (2 tables)" icon={Newspaper} iconColor="text-sky-400" defaultOpen={false}>
+          <div className="px-2 space-y-0.5">
+            {NEWS_TABLES.map(({ table, label, desc, sample }) => (
+              <div key={table} className="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-sky-500/5 transition-all">
+                <Newspaper className="w-3 h-3 text-sky-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[10px] text-slate-300 block truncate">{table}</span>
+                  <span className="text-[9px] text-slate-600">{desc}</span>
+                </div>
+                <button onClick={() => onUseInQuery(sample)} title="Use sample query" className="hidden group-hover:flex p-1 rounded hover:bg-sky-500/20 text-slate-500 hover:text-sky-400 transition-colors">
+                  <Zap className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* Environment */}
+        <Section title="Environment (3 tables)" icon={Leaf} iconColor="text-teal-400" defaultOpen={false}>
+          <div className="px-2 space-y-0.5">
+            {ENV_TABLES.map(({ table, label, desc, sample }) => (
+              <div key={table} className="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-teal-500/5 transition-all">
+                <Leaf className="w-3 h-3 text-teal-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[10px] text-slate-300 block truncate">{table}</span>
+                  <span className="text-[9px] text-slate-600">{desc}</span>
+                </div>
+                <button onClick={() => onUseInQuery(sample)} title="Use sample query" className="hidden group-hover:flex p-1 rounded hover:bg-teal-500/20 text-slate-500 hover:text-teal-400 transition-colors">
+                  <Zap className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
           </div>
         </Section>
 
