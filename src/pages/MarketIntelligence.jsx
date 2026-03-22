@@ -505,8 +505,8 @@ export default function MarketIntelligence() {
           )}
         </div>
 
-        {/* History sidebar */}
-        <div className="xl:w-64 shrink-0">
+        {/* History + Query Log sidebar */}
+        <div className="xl:w-64 shrink-0 space-y-4">
           <ResearchHistory
             history={history}
             onSelect={(entry) => {
@@ -515,6 +515,44 @@ export default function MarketIntelligence() {
               runAnalysis(p);
             }}
           />
+
+          {/* Queries Used Panel */}
+          {queryLog.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+              <button
+                onClick={() => setShowQueries(v => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <Code2 className="w-4 h-4 text-slate-400" />
+                  Queries Used ({queryLog.length})
+                </span>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showQueries ? "rotate-180" : ""}`} />
+              </button>
+              {showQueries && (
+                <div className="border-t border-slate-100 divide-y divide-slate-50 max-h-96 overflow-y-auto">
+                  {queryLog.map((q, i) => (
+                    <div key={i} className="px-3 py-2.5">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">{q.section.replace(/_/g, " ")}</span>
+                        <div className="flex items-center gap-1.5">
+                          {q.status === "running" && <Loader2 className="w-3 h-3 animate-spin text-blue-400" />}
+                          {q.status === "done" && <span className="text-[10px] text-emerald-500">{q.rows} rows</span>}
+                          {q.status === "error" && <span className="text-[10px] text-rose-500">error</span>}
+                          <button
+                            onClick={() => { setEditingQuery({ ...q, index: i }); setShowQueryEditor(true); }}
+                            className="text-[10px] text-slate-400 hover:text-emerald-500 transition-colors"
+                            title="Edit and rerun"
+                          >✏️</button>
+                        </div>
+                      </div>
+                      <pre className="text-[10px] font-mono text-slate-400 whitespace-pre-wrap line-clamp-2 leading-4">{q.sql}</pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
