@@ -388,10 +388,6 @@ export default function EntityGraph() {
     return displayNodes.filter(n => n.label.toLowerCase().includes(searchQuery.toLowerCase())).length;
   }, [searchQuery, displayNodes]);
 
-  const handleKeyDown = useCallback((e) => {
-    if (e.key === "Escape") { setSearchQuery(""); setHighlightPath(null); }
-  }, []);
-
   return (
     <div className="flex flex-col h-full overflow-hidden -m-4 lg:-m-8" onKeyDown={handleKeyDown}>
       {/* Navigation bar */}
