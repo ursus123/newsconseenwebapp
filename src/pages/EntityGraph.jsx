@@ -38,11 +38,20 @@ const COLOR_BY_OPTIONS = [
 
 const LOAD_STATES = { idle: "idle", loading: "loading", loaded: "loaded" };
 
+const LOAD_LABELS = {
+  core: "People & Services",
+  products: "Products",
+  tasks: "Tasks",
+  transactions: "Transactions",
+  addresses: "Locations",
+};
+
 function LoadBadge({ type, state }) {
+  const label = LOAD_LABELS[type] || type;
   if (state === LOAD_STATES.loading)
-    return <span className="text-[9px] text-amber-500 font-semibold animate-pulse">Loading {type}…</span>;
+    return <span className="text-[9px] text-amber-500 font-semibold animate-pulse">Loading {label}…</span>;
   if (state === LOAD_STATES.loaded)
-    return <span className="text-[9px] text-emerald-500 font-semibold">✓ {type}</span>;
+    return <span className="text-[9px] text-emerald-500 font-semibold">✓ {label}</span>;
   return null;
 }
 
@@ -175,24 +184,38 @@ export default function EntityGraph() {
 
   const isLoading = loadStates.core === LOAD_STATES.loading || loadStates.core === LOAD_STATES.idle;
 
-  const anomalies = useMemo(() => {
+  const anomalyDetails = useMemo(() => {
     if (isLoading) return [];
     const issues = [];
     enterprises.forEach(e => {
       const entName = e.enterprise_name;
       const staff = people.filter(p => p.enterprise === entName && p.person_type === "employee" && p.status === "active");
       const clients = people.filter(p => p.enterprise === entName && p.person_type === "client" && p.status === "active");
-      if (!staff.length) issues.push(e.id + "_staff");
-      if (!clients.length) issues.push(e.id + "_clients");
+      if (!staff.length) issues.push({ severity: "critical", enterprise: entName, type: "No active staff", detail: `${entName} has no active staff members`, action: "Add staff in People page" });
+      if (!clients.length) issues.push({ severity: "warning", enterprise: entName, type: "No active clients", detail: `${entName} has no active clients`, action: "Add clients in People page" });
       const recentTasks = tasks.filter(t =>
         t.enterprise === entName && (new Date() - new Date(t.scheduled_date || t.created_date)) / (1000 * 60 * 60 * 24) <= 30
       );
-      if (clients.length > 0 && !recentTasks.length) issues.push(e.id + "_tasks");
+      if (clients.length > 0 && !recentTasks.length) issues.push({ severity: "critical", enterprise: entName, type: "No recent activity", detail: `${entName} has no tasks in 30 days`, action: "Check Tasks page" });
+      const expiring = staff.filter(s => {
+        if (!s.certification_expiry) return false;
+        const days = (new Date(s.certification_expiry) - new Date()) / (1000 * 60 * 60 * 24);
+        return days > 0 && days <= 90;
+      });
+      if (expiring.length > 0) issues.push({ severity: "warning", enterprise: entName, type: "Expiring certifications", detail: `${expiring.length} certifications expiring within 90 days at ${entName}`, action: "Review staff certifications" });
+      const entAddrs = addresses.filter(a => a.enterprise === entName);
+      if (!entAddrs.length) issues.push({ severity: "warning", enterprise: entName, type: "No locations defined", detail: `${entName} has no addresses`, action: "Add locations in Addresses page" });
     });
-    const lowStock = products.filter(p => p.stock_quantity != null && p.min_stock_level != null && p.stock_quantity <= p.min_stock_level);
-    if (lowStock.length > 0) issues.push("low_stock");
+    const lowStock = products.filter(p => p.stock_quantity != null && p.min_stock_level != null && p.stock_quantity <= p.min_stock_level && p.status === "active");
+    if (lowStock.length > 0) issues.push({ severity: "critical", enterprise: "All", type: "Low stock items", detail: `${lowStock.length} products at or below minimum: ${lowStock.slice(0, 3).map(p => p.name).join(", ")}`, action: "Reorder from Products page" });
+    const unpaid = transactions.filter(t => t.payment_status === "unpaid" && (t.amount || 0) > 0);
+    if (unpaid.length > 0) {
+      const total = unpaid.reduce((s, t) => s + (t.amount || 0), 0);
+      issues.push({ severity: "warning", enterprise: "All", type: "Outstanding payments", detail: `${unpaid.length} unpaid invoices: $${total.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, action: "Review Transactions page" });
+    }
     return issues;
-  }, [enterprises, people, tasks, products, isLoading]);
+  }, [enterprises, people, tasks, products, transactions, addresses, isLoading]);
+  const anomalies = anomalyDetails;
 
   const { nodes: rawNodes, links: rawLinks } = useMemo(
     () => buildGraph(enterprises, people, services, products, tasks, transactions, addresses, relationships, filter, colorBy),
@@ -376,7 +399,12 @@ export default function EntityGraph() {
 
   const applyPreset = (presetName) => {
     setFilter(VIEW_PRESETS[presetName] || INITIAL_FILTER);
-    setShowPresets(false);
+  };
+
+  const handleRefresh = () => {
+    setEnterprises([]); setPeople([]); setServices([]); setProducts([]);
+    setTasks([]); setTransactions([]); setAddresses([]); setRelationships([]);
+    setLoadStates({ core: LOAD_STATES.idle, products: LOAD_STATES.idle, tasks: LOAD_STATES.idle, transactions: LOAD_STATES.idle, addresses: LOAD_STATES.idle });
   };
 
   const handleKeyDown = useCallback((e) => {
@@ -389,26 +417,46 @@ export default function EntityGraph() {
   }, [searchQuery, displayNodes]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden -m-4 lg:-m-8" onKeyDown={handleKeyDown}>
+    <div className="flex flex-col h-full overflow-hidden" onKeyDown={handleKeyDown}>
       {/* Navigation bar */}
-      <div className="flex items-center gap-2 bg-white border-b border-slate-100 px-4 py-3 sticky top-0 z-20 flex-wrap shadow-sm shrink-0">
+      <div className="flex items-center gap-2 bg-white border-b border-slate-100 px-4 py-3 shrink-0 flex-wrap shadow-sm z-20">
         <h1 className="text-base font-bold text-slate-800 mr-2 flex items-center gap-2">
           <Network className="w-4 h-4 text-indigo-500" />
           Enterprise Intelligence
         </h1>
 
-        <div className="flex gap-1 flex-wrap">
+        {/* Desktop tabs */}
+        <div className="hidden lg:flex gap-1">
           {VIEWS.map(view => (
             <button
               key={view.id}
               onClick={() => setActiveView(view.id)}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
                 activeView === view.id ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
               }`}
             >
               {view.icon} {view.label}
               {view.id === "anomalies" && anomalies.length > 0 && (
                 <span className="bg-rose-500 text-white text-[9px] rounded-full px-1 ml-1">{anomalies.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Mobile tabs - horizontal scroll */}
+        <div className="flex lg:hidden gap-1 overflow-x-auto pb-1 max-w-[60vw]" style={{ scrollbarWidth: "none" }}>
+          {VIEWS.map(view => (
+            <button
+              key={view.id}
+              onClick={() => setActiveView(view.id)}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-semibold transition-all whitespace-nowrap shrink-0 ${
+                activeView === view.id ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500"
+              }`}
+            >
+              {view.icon}
+              <span className="hidden sm:inline">{view.label}</span>
+              {view.id === "anomalies" && anomalies.length > 0 && (
+                <span className="bg-rose-500 text-white text-[9px] rounded-full px-1">{anomalies.length}</span>
               )}
             </button>
           ))}
@@ -424,10 +472,13 @@ export default function EntityGraph() {
             {enterprises.map(e => <option key={e.id} value={e.id}>{e.enterprise_name}</option>)}
           </select>
           {anomalies.length > 0 && activeView !== "anomalies" && (
-            <button onClick={() => setActiveView("anomalies")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-500 text-white animate-pulse">
+            <button onClick={() => setActiveView("anomalies")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-500 text-white">
               ⚠️ {anomalies.length} Issues
             </button>
           )}
+          <button onClick={handleRefresh} title="Refresh all data" className="p-1.5 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 transition-colors">
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 
@@ -462,10 +513,41 @@ export default function EntityGraph() {
             <SharedResourcesView enterprises={enterprises} people={people} products={products} services={services} />
           )}
           {activeView === "anomalies" && (
-            <AnomalyView enterprises={enterprises} people={people} products={products} services={services} tasks={tasks} transactions={transactions} addresses={addresses} relationships={relationships} />
+            <AnomalyView anomalies={anomalyDetails} enterprises={enterprises} people={people} products={products} services={services} tasks={tasks} transactions={transactions} addresses={addresses} relationships={relationships} />
           )}
           {activeView === "graph" && (
-            <div className="flex gap-3 h-full overflow-hidden p-4">
+            <>
+            <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border-b border-slate-100 shrink-0 flex-wrap">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search nodes…" className="pl-7 pr-7 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none w-40" />
+                {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-3 h-3" /></button>}
+              </div>
+              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5">
+                <span className="text-xs text-slate-500">Depth</span>
+                <input type="range" min={1} max={3} value={depth} onChange={e => setDepth(Number(e.target.value))} className="w-16 accent-indigo-500" />
+                <span className="text-xs font-bold text-indigo-600 w-3">{depth}</span>
+              </div>
+              <button onClick={() => { setFocusMode(v => !v); if (focusMode) setFocusedEnterprise(null); }} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border transition-all ${focusMode ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200"}`}>
+                <Target className="w-3.5 h-3.5" />{focusMode ? "Focus ON" : "Focus"}
+              </button>
+              <select value={colorBy} onChange={e => setColorBy(e.target.value)} className="text-xs border border-slate-200 rounded-xl px-2 py-1.5 bg-white text-slate-600 focus:outline-none">
+                {COLOR_BY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <div className="relative ml-auto">
+                <button onClick={() => setShowExport(v => !v)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all">
+                  <Download className="w-3.5 h-3.5" /> Export
+                </button>
+                {showExport && (
+                  <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-lg z-50 min-w-44 py-1">
+                    <button onClick={() => { exportAsPNG(); setShowExport(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Export as PNG</button>
+                    <button onClick={() => { exportAsJSON(displayNodes, displayLinks); setShowExport(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Export as JSON</button>
+                    <button onClick={() => { exportAsCSV(displayNodes); setShowExport(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Export as CSV</button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-3 flex-1 overflow-hidden p-4">
               <GraphFilterPanel filter={filter} setFilter={setFilter} collapsedTypes={collapsedTypes} setCollapsedTypes={setCollapsedTypes} counts={typeCounts} focusMode={focusMode} setFocusMode={setFocusMode} setFocusedEnterprise={setFocusedEnterprise} depth={depth} setDepth={setDepth} nodeCount={displayNodes.length} linkCount={displayLinks.length} />
               <div className="flex-1 min-h-0 overflow-hidden">
                 {displayNodes.length === 0 ? (
@@ -481,6 +563,7 @@ export default function EntityGraph() {
               </div>
               <GraphSidePanel nodes={displayNodes} links={displayLinks} selected={selected} enterprises={enterprises} people={people} services={services} products={products} tasks={tasks} transactions={transactions} onHighlightPath={setHighlightPath} />
             </div>
+            </>
           )}
         </div>
       )}
