@@ -499,7 +499,7 @@ export default function EntityGraph() {
             <HierarchyView enterprises={enterprises} people={people} services={services} products={products} tasks={tasks} transactions={transactions} addresses={addresses} relationships={relationships} selectedEnterprise={selectedEnterprise} />
           )}
           {activeView === "people" && (
-            <PeopleDistributionView enterprises={enterprises} people={people} selectedEnterprise={selectedEnterprise} />
+            <PeopleDistributionView enterprises={enterprises} people={people} relationships={relationships} selectedEnterprise={selectedEnterprise} />
           )}
           {activeView === "services" && (
             <ServiceCoverageView enterprises={enterprises} services={services} people={people} tasks={tasks} selectedEnterprise={selectedEnterprise} />
@@ -508,7 +508,7 @@ export default function EntityGraph() {
             <ProductDependencyView products={products} services={services} tasks={tasks} enterprises={enterprises} selectedEnterprise={selectedEnterprise} />
           )}
           {activeView === "assignments" && (
-            <AssignmentView enterprises={enterprises} people={people} relationships={relationships} tasks={tasks} selectedEnterprise={selectedEnterprise} />
+            <AssignmentView enterprises={enterprises} people={people} relationships={relationships} tasks={tasks} addresses={addresses} selectedEnterprise={selectedEnterprise} />
           )}
           {activeView === "shared" && (
             <SharedResourcesView enterprises={enterprises} people={people} products={products} services={services} />
