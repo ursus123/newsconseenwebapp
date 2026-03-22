@@ -353,7 +353,7 @@ export default function Layout({ children, currentPageName }) {
                     <NavItem
                       key={item.name}
                       name={item.name}
-                      label={item.label || item.name}
+                      label={ADAPTIVE_LABELS[item.name] || item.label || item.name}
                       icon={item.icon}
                       isActive={currentPageName === item.name}
                       onClick={() => handleNavClick(item.name)}
