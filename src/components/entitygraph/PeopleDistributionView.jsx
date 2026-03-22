@@ -1,17 +1,42 @@
-import React from "react";
+import React, { useMemo } from "react";
 
-export default function PeopleDistributionView({ enterprises, people, selectedEnterprise }) {
+export default function PeopleDistributionView({ enterprises, people, relationships, selectedEnterprise }) {
   const visibleEnterprises = selectedEnterprise === "all"
     ? enterprises
     : enterprises.filter(e => e.id === selectedEnterprise);
 
-  const personEnterpriseMap = {};
-  people.forEach(p => {
-    if (!p.enterprise) return;
-    if (!personEnterpriseMap[p.id]) personEnterpriseMap[p.id] = [];
-    if (!personEnterpriseMap[p.id].includes(p.enterprise)) personEnterpriseMap[p.id].push(p.enterprise);
-  });
-  const sharedStaff = people.filter(p => (personEnterpriseMap[p.id] || []).length > 1);
+  // Build enterprise→person names from Relationships
+  const enterprisePeopleNames = useMemo(() => {
+    const map = {};
+    relationships.filter(r => r.relationship_type === "person_enterprise" && r.status !== "ended" && r.enterprise_name && r.person_name).forEach(r => {
+      if (!map[r.enterprise_name]) map[r.enterprise_name] = new Set();
+      map[r.enterprise_name].add(r.person_name.trim());
+    });
+    return map;
+  }, [relationships]);
+
+  // Build person name → person record
+  const peopleByName = useMemo(() => {
+    const map = {};
+    people.forEach(p => { map[`${p.first_name} ${p.last_name}`.trim()] = p; });
+    return map;
+  }, [people]);
+
+  // Build person id → list of enterprise names (for detecting shared staff)
+  const personEnterprises = useMemo(() => {
+    const map = {};
+    Object.entries(enterprisePeopleNames).forEach(([entName, names]) => {
+      names.forEach(name => {
+        const person = peopleByName[name];
+        if (!person) return;
+        if (!map[person.id]) map[person.id] = [];
+        if (!map[person.id].includes(entName)) map[person.id].push(entName);
+      });
+    });
+    return map;
+  }, [enterprisePeopleNames, peopleByName]);
+
+  const sharedStaff = people.filter(p => (personEnterprises[p.id] || []).length > 1);
 
   if (people.length === 0) {
     return (
@@ -32,7 +57,7 @@ export default function PeopleDistributionView({ enterprises, people, selectedEn
           <div className="flex flex-wrap gap-2">
             {sharedStaff.map(p => (
               <span key={p.id} className="text-xs bg-white border border-amber-200 text-amber-700 px-2 py-1 rounded-xl">
-                {p.first_name} {p.last_name} → {personEnterpriseMap[p.id].join(", ")}
+                {p.first_name} {p.last_name} → {(personEnterprises[p.id] || []).join(", ")}
               </span>
             ))}
           </div>
@@ -41,9 +66,10 @@ export default function PeopleDistributionView({ enterprises, people, selectedEn
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {visibleEnterprises.map(enterprise => {
-          const entPeople = people.filter(p => p.enterprise === enterprise.enterprise_name);
-          const staff = entPeople.filter(p => p.person_type === "employee");
-          const clients = entPeople.filter(p => p.person_type === "client");
+          const entPeopleNames = enterprisePeopleNames[enterprise.enterprise_name] || new Set();
+          const entPeople = [...entPeopleNames].map(n => peopleByName[n]).filter(Boolean);
+          const staff = entPeople.filter(p => ["employee", "contractor", "freelancer"].includes(p.person_type));
+          const clients = entPeople.filter(p => ["client", "patient"].includes(p.person_type));
 
           const roleGroups = {};
           staff.forEach(p => {
@@ -89,7 +115,7 @@ export default function PeopleDistributionView({ enterprises, people, selectedEn
                         <div className="flex flex-wrap gap-1 mt-1">
                           {members.slice(0, 3).map(m => (
                             <span key={m.id} className="text-[9px] text-slate-400">
-                              {m.first_name} {m.last_name}{sharedStaff.find(s => s.id === m.id) ? " 🔄" : ""}
+                              {m.first_name} {m.last_name}{(personEnterprises[m.id] || []).length > 1 ? " 🔄" : ""}
                             </span>
                           ))}
                           {members.length > 3 && <span className="text-[9px] text-slate-300">+{members.length - 3}</span>}
