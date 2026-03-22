@@ -381,6 +381,12 @@ export default function MarketIntelligence() {
                 <Download className="w-4 h-4 mr-2" />
                 Export Excel
               </Button>
+              <Link to={createPageUrl("MarketIntelligencePDF")}>
+                <Button variant="outline" className="mt-6 shrink-0">
+                  <FileText className="w-4 h-4 mr-2" />
+                  PDF Summary
+                </Button>
+              </Link>
             </>
           )}
         </div>
