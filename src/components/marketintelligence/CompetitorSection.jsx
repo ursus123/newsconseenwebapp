@@ -63,6 +63,16 @@ const BUCKET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#84cc16", "#22c55e"];
 export default function CompetitorSection({ data, businessType, location, radiusKm, loading }) {
   const [view, setView] = useState("chart"); // "chart" | "map" | "table"
 
+  const summary = data ? data.find(r => r.name?.startsWith("SUMMARY:") || r.distance_km === 0) : null;
+  const competitors = data ? data.filter(r => r.distance_km > 0).slice(0, 20) : [];
+
+  const mapCenter = useMemo(() => {
+    if (!data) return null;
+    if (summary?.lat && summary?.lon) return [summary.lat, summary.lon];
+    const first = data.find(r => r.lat && r.lon);
+    return first ? [first.lat, first.lon] : null;
+  }, [data, summary]);
+
   if (loading) return <SectionSkeleton title="Competitor Analysis" rows={4} />;
   if (!data) return null;
 
