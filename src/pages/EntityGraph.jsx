@@ -14,12 +14,15 @@ import ProductDependencyView from "@/components/entitygraph/ProductDependencyVie
 import AssignmentView from "@/components/entitygraph/AssignmentView";
 import SharedResourcesView from "@/components/entitygraph/SharedResourcesView";
 import AnomalyView from "@/components/entitygraph/AnomalyView";
+import AddressesView from "@/components/entitygraph/AddressesView";
+import ProductsView from "@/components/entitygraph/ProductsView";
 
 const VIEWS = [
   { id: "hierarchy",   icon: "🏢", label: "Enterprise Structure" },
   { id: "people",      icon: "👥", label: "Who Works Where" },
   { id: "services",    icon: "⚙️",  label: "Service Coverage" },
-  { id: "products",    icon: "📦", label: "Product Dependencies" },
+  { id: "products",    icon: "📦", label: "Products" },
+  { id: "addresses",   icon: "📍", label: "Addresses" },
   { id: "assignments", icon: "🔗", label: "Staff-Client Links" },
   { id: "shared",      icon: "🔄", label: "Shared Resources" },
   { id: "anomalies",   icon: "⚠️",  label: "Anomalies" },
@@ -523,7 +526,10 @@ export default function EntityGraph() {
             <ServiceCoverageView enterprises={enterprises} services={services} people={people} tasks={tasks} selectedEnterprise={selectedEnterprise} />
           )}
           {activeView === "products" && (
-            <ProductDependencyView products={products} services={services} tasks={tasks} enterprises={enterprises} selectedEnterprise={selectedEnterprise} />
+            <ProductsView enterprises={enterprises} products={products} relationships={relationships} selectedEnterprise={selectedEnterprise} />
+          )}
+          {activeView === "addresses" && (
+            <AddressesView enterprises={enterprises} addresses={addresses} relationships={relationships} selectedEnterprise={selectedEnterprise} />
           )}
           {activeView === "assignments" && (
             <AssignmentView enterprises={enterprises} people={people} relationships={relationships} tasks={tasks} addresses={addresses} selectedEnterprise={selectedEnterprise} />
