@@ -6,6 +6,7 @@ import L from "leaflet";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from "recharts";
+import ClusterAnalysisView from "./ClusterAnalysisView";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -61,7 +62,7 @@ const DISTANCE_BUCKETS = [
 const BUCKET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#84cc16", "#22c55e"];
 
 export default function CompetitorSection({ data, businessType, location, radiusKm, loading }) {
-  const [view, setView] = useState("chart"); // "chart" | "map" | "table"
+  const [view, setView] = useState("chart"); // "chart" | "cluster" | "map" | "table"
 
   const summary = data ? data.find(r => r.name?.startsWith("SUMMARY:") || r.distance_km === 0) : null;
   const competitors = data ? data.filter(r => r.distance_km > 0).slice(0, 20) : [];
@@ -99,10 +100,15 @@ export default function CompetitorSection({ data, businessType, location, radius
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-bold text-slate-800">🏢 Competitor Analysis</h3>
         <div className="flex gap-1">
-          {["chart", "map", "table"].map(v => (
-            <button key={v} onClick={() => setView(v)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${view === v ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-              {v === "chart" ? "📊" : v === "map" ? "🗺️" : "📋"} {v.charAt(0).toUpperCase() + v.slice(1)}
+          {[
+            { key: "chart",   label: "📊 Distance" },
+            { key: "cluster", label: "🔵 Clusters" },
+            { key: "map",     label: "🗺️ Map" },
+            { key: "table",   label: "📋 Table" },
+          ].map(({ key, label }) => (
+            <button key={key} onClick={() => setView(key)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${view === key ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+              {label}
             </button>
           ))}
         </div>
@@ -122,6 +128,11 @@ export default function CompetitorSection({ data, businessType, location, radius
         <div className="py-6 text-center text-slate-400 text-sm">🟢 No competitors found — potential first-mover advantage!</div>
       ) : (
         <>
+          {/* Cluster Analysis View */}
+          {view === "cluster" && (
+            <ClusterAnalysisView competitors={competitors} radiusKm={radiusKm} />
+          )}
+
           {/* Chart View */}
           {view === "chart" && (
             <div>
