@@ -296,10 +296,10 @@ function PathFinder({ nodes, links, allNodes: allNodesRaw, allLinks: allLinksRaw
           <p className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Path ({path.length - 1} hop{path.length !== 2 ? "s" : ""})</p>
           <div className="flex flex-wrap gap-0.5 items-center text-[10px] text-slate-600">
             {path.map((id, i) => {
-              const n = nodes.find(x => x.id === id);
+              const n = searchNodes.find(x => x.id === id);
               return (
                 <React.Fragment key={id}>
-                  <span className="bg-slate-100 px-1 rounded font-mono">{n?.label || id}</span>
+                  <span className="bg-slate-100 px-1 rounded font-mono">{NODE_CONFIG[n?.type]?.icon} {n?.label || id}</span>
                   {i < path.length - 1 && <span className="text-slate-400">→</span>}
                 </React.Fragment>
               );
