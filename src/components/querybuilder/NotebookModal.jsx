@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotebookStore } from "./NotebookStore";
+import { UploadedDataStore } from "./UploadedDataStore";
 import { base44 } from "@/api/base44Client";
 
 const DEFAULT_API_CONFIG = `{
@@ -245,10 +246,45 @@ Return ONLY valid JSON, no explanation.`;
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleConnect = () => {
+  const [connectMessage, setConnectMessage] = useState(null);
+
+  const handleConnect = async () => {
     if (!nbName.trim()) { alert("Please give this notebook a name first."); return; }
     const id = editNotebook?.id || nbName.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
-    const notebook = { id, name: nbName.trim(), type: nbType, cells, connected: true, outputSchema: outputSchema || [], updatedAt: new Date().toISOString() };
+
+    // For API cells: run all api_config cells and save their rows to UploadedDataStore
+    const apiCells = cells.filter(c => c.type === "api_config");
+    let savedRows = [];
+    for (const cell of apiCells) {
+      try {
+        const config = JSON.parse(cell.source);
+        const fetchOpts = { method: config.method || "GET", headers: config.headers || {} };
+        if (config.body && config.method !== "GET") fetchOpts.body = JSON.stringify(config.body);
+        const urlWithParams = config.params && Object.keys(config.params).length
+          ? config.url + "?" + new URLSearchParams(config.params).toString()
+          : config.url;
+        const res = await fetch(urlWithParams, fetchOpts);
+        const data = await res.json();
+        const rows = Array.isArray(data) ? data : data.results || data.data || data.items || [data];
+        const tableName = id;
+        UploadedDataStore.set(tableName, { rows, source: "api_connector", url: config.url, savedAt: new Date().toISOString() });
+        savedRows = rows;
+        setConnectMessage(`✅ Connected as table: ${tableName} — ${rows.length} rows loaded. Query with: SELECT * FROM ${tableName}`);
+      } catch (e) {
+        setConnectMessage(`❌ API error: ${e.message}`);
+      }
+    }
+
+    // For Python cells with output: save result rows
+    const codeCells = cells.filter(c => c.type === "code" && c.output?.rows?.length);
+    for (const cell of codeCells) {
+      const tableName = `${id}_output`;
+      UploadedDataStore.set(tableName, { rows: cell.output.rows, source: "python_output", savedAt: new Date().toISOString() });
+      if (!apiCells.length) setConnectMessage(`✅ Python output saved as table: ${tableName} — ${cell.output.rows.length} rows`);
+    }
+
+    const schema = savedRows.length ? inferColumns(savedRows) : outputSchema || [];
+    const notebook = { id, name: nbName.trim(), type: nbType, cells, connected: true, outputSchema: schema, updatedAt: new Date().toISOString() };
     NotebookStore.set(id, notebook);
     setConnected(true);
     onSaved?.(notebook);

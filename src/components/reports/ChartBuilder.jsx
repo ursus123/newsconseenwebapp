@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { executeSQL } from "@/components/querybuilder/sqlEngine";
 
 function safeVal(val) {
   if (val === null || val === undefined) return "—";
@@ -167,18 +168,20 @@ export default function ChartBuilder({ chart, folders, currentUser, onClose, rea
     },
   });
 
+  const [queryError, setQueryError] = useState(null);
+
   const runQuery = async () => {
+    if (!sql.trim()) return;
     setPreviewLoading(true);
+    setQueryError(null);
     try {
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Execute this SQL-like query against the Base44 data and return results as JSON array. Query: ${sql}. Return ONLY a JSON array of objects, nothing else.`,
-        response_json_schema: { type: "object", properties: { rows: { type: "array", items: { type: "object" } } } },
-      });
+      const result = await executeSQL(sql, {});
       const rows = result?.rows || [];
       setPreviewData(rows);
       if (rows.length > 0 && !xKey) setXKey(Object.keys(rows[0])[0]);
       if (rows.length > 0 && !yKey) setYKey(Object.keys(rows[0])[1] || Object.keys(rows[0])[0]);
-    } catch {
+    } catch (e) {
+      setQueryError(e.message);
       setPreviewData([]);
     } finally {
       setPreviewLoading(false);
@@ -295,6 +298,9 @@ export default function ChartBuilder({ chart, folders, currentUser, onClose, rea
                 <Button className="mt-2 gap-1.5 bg-emerald-600 hover:bg-emerald-700" size="sm" onClick={runQuery} disabled={previewLoading}>
                   <Play className="w-3.5 h-3.5" /> {previewLoading ? "Running..." : "Run Query"}
                 </Button>
+                {queryError && (
+                  <div className="mt-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-600 font-mono">{queryError}</div>
+                )}
                 {previewData && (
                   <div className="mt-4">
                     <p className="text-xs text-slate-500 mb-2">{previewData.length} rows returned (showing first 5)</p>
