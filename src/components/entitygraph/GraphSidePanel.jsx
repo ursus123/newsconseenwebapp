@@ -245,15 +245,19 @@ function GraphAnalyticsPanel({ nodes, links }) {
   );
 }
 
-function PathFinder({ nodes, links, onHighlightPath }) {
+function PathFinder({ nodes, links, allNodes: allNodesRaw, allLinks: allLinksRaw, onHighlightPath }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [path, setPath] = useState(null);
   const [noPath, setNoPath] = useState(false);
 
+  // Use full unfiltered graph for path finding so hidden intermediary nodes (e.g. shared staff) are traversable
+  const searchNodes = allNodesRaw && allNodesRaw.length > 0 ? allNodesRaw : nodes;
+  const searchLinks = allLinksRaw && allLinksRaw.length > 0 ? allLinksRaw : links;
+
   const findPath = () => {
     if (!from || !to) return;
-    const result = findShortestPath(nodes, links, from, to);
+    const result = findShortestPath(searchNodes, searchLinks, from, to);
     if (result) {
       setPath(result);
       setNoPath(false);
@@ -265,7 +269,8 @@ function PathFinder({ nodes, links, onHighlightPath }) {
     }
   };
 
-  const allNodes = [...nodes].sort((a, b) => a.label.localeCompare(b.label));
+  // Dropdowns show enterprise nodes only (most common use case), but path traverses all node types
+  const allNodes = [...nodes].filter(n => n.type === "enterprise").sort((a, b) => a.label.localeCompare(b.label));
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2">
