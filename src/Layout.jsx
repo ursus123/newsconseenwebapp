@@ -279,6 +279,16 @@ export default function Layout({ children, currentPageName }) {
     setSidebarOpen(false);
   };
 
+  // Build adaptive labels for terminology-aware nav items
+  const ADAPTIVE_LABELS = {
+    People:       t("person_plural"),
+    Products:     t("product_plural"),
+    Addresses:    t("address_plural"),
+    Services:     t("service_plural"),
+    Tasks:        t("task_plural"),
+    Transactions: t("transaction_plural"),
+  };
+
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
       <NetworkBanner />
