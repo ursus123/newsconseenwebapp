@@ -50,7 +50,19 @@ function DensityGauge({ count, ideal }) {
   );
 }
 
+const DISTANCE_BUCKETS = [
+  { label: "0–5 km",  min: 0,  max: 5 },
+  { label: "5–10 km", min: 5,  max: 10 },
+  { label: "10–20 km",min: 10, max: 20 },
+  { label: "20–30 km",min: 20, max: 30 },
+  { label: "30+ km",  min: 30, max: Infinity },
+];
+
+const BUCKET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#84cc16", "#22c55e"];
+
 export default function CompetitorSection({ data, businessType, location, radiusKm, loading }) {
+  const [view, setView] = useState("chart"); // "chart" | "map" | "table"
+
   if (loading) return <SectionSkeleton title="Competitor Analysis" rows={4} />;
   if (!data) return null;
 
@@ -65,81 +77,121 @@ export default function CompetitorSection({ data, businessType, location, radius
 
   const totalCount = competitors.length;
 
+  const bucketData = DISTANCE_BUCKETS.map((b, i) => ({
+    label: b.label,
+    count: competitors.filter(c => c.distance_km >= b.min && c.distance_km < b.max).length,
+    color: BUCKET_COLORS[i],
+  })).filter(b => b.count > 0);
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-lg text-xs">
+        <p className="font-semibold text-slate-700">{label}</p>
+        <p className="text-rose-600 font-bold">{payload[0].value} competitors</p>
+      </div>
+    );
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-      <h3 className="text-sm font-bold text-slate-800 mb-2">🏢 Competitor Analysis</h3>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-bold text-slate-800">🏢 Competitor Analysis</h3>
+        <div className="flex gap-1">
+          {["chart", "map", "table"].map(v => (
+            <button key={v} onClick={() => setView(v)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${view === v ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+              {v === "chart" ? "📊" : v === "map" ? "🗺️" : "📋"} {v.charAt(0).toUpperCase() + v.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="bg-slate-50 rounded-xl p-3 mb-4 text-sm text-slate-600">
         Found <span className="font-bold text-slate-800">{totalCount}</span> {businessType} providers within{" "}
         <span className="font-bold">{radiusKm}km</span> of {location}
       </div>
 
-      <div className="mb-3">
+      <div className="mb-4">
         <p className="text-xs text-slate-500 mb-1.5 font-medium">Competition Density</p>
         <DensityGauge count={totalCount} ideal={Math.max(10, totalCount * 1.5)} />
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-4">
-        {mapCenter && (
-          <div className="lg:w-72 h-56 rounded-xl overflow-hidden border border-slate-100 shrink-0">
-            <MapContainer
-              center={mapCenter}
-              zoom={11}
-              style={{ height: "100%", width: "100%" }}
-              scrollWheelZoom={false}
-              zoomControl={false}
-            >
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              {summary?.lat && (
-                <Marker position={[summary.lat, summary.lon]} icon={centerIcon}>
-                  <Popup>📍 {location} (center)</Popup>
-                </Marker>
-              )}
-              {competitors.filter(c => c.lat && c.lon).map((c, i) => (
-                <Marker key={i} position={[c.lat, c.lon]} icon={redIcon}>
-                  <Popup>
-                    <div className="text-sm">
-                      <strong>{c.name}</strong><br />
-                      {c.address && <span className="text-xs text-slate-500">{c.address}</span>}<br />
-                      <span className="text-xs">{c.distance_km} km away</span>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
-            </MapContainer>
-          </div>
-        )}
+      {competitors.length === 0 ? (
+        <div className="py-6 text-center text-slate-400 text-sm">🟢 No competitors found — potential first-mover advantage!</div>
+      ) : (
+        <>
+          {/* Chart View */}
+          {view === "chart" && (
+            <div>
+              <p className="text-xs text-slate-500 mb-2 font-medium">Competitors by Distance</p>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={bucketData} barCategoryGap="30%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#94a3b8" }} width={28} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                    {bucketData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
 
-        <div className="flex-1 overflow-x-auto">
-          {competitors.length === 0 ? (
-            <div className="py-6 text-center text-slate-400 text-sm">
-              🟢 No competitors found — potential first-mover advantage!
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100">
-                  <th className="text-left text-xs text-slate-400 pb-2 font-medium">#</th>
-                  <th className="text-left text-xs text-slate-400 pb-2 font-medium">Name</th>
-                  <th className="text-left text-xs text-slate-400 pb-2 font-medium">Distance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {competitors.slice(0, 15).map((c, i) => (
-                  <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
-                    <td className="py-1.5 pr-2 text-slate-400 text-xs">{i + 1}</td>
-                    <td className="py-1.5 pr-4">
-                      <p className="font-medium text-slate-800 truncate max-w-[200px]">{c.name}</p>
-                      {c.address && <p className="text-xs text-slate-400 truncate">{c.address}</p>}
-                    </td>
-                    <td className="py-1.5 text-slate-500 text-xs whitespace-nowrap">{c.distance_km} km</td>
-                  </tr>
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {competitors.slice(0, 6).map((c, i) => (
+                  <div key={i} className="bg-slate-50 rounded-xl px-3 py-2 border border-slate-100">
+                    <p className="text-xs font-semibold text-slate-800 truncate">{c.name}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{c.distance_km} km away</p>
+                    {c.address && <p className="text-[10px] text-slate-400 truncate">{c.address}</p>}
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </div>
           )}
-        </div>
-      </div>
+
+          {/* Map View */}
+          {view === "map" && mapCenter && (
+            <div className="h-72 rounded-xl overflow-hidden border border-slate-100">
+              <MapContainer center={mapCenter} zoom={11} style={{ height: "100%", width: "100%" }} scrollWheelZoom={false} zoomControl={false}>
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                {summary?.lat && <Marker position={[summary.lat, summary.lon]} icon={centerIcon}><Popup>📍 {location} (center)</Popup></Marker>}
+                {competitors.filter(c => c.lat && c.lon).map((c, i) => (
+                  <Marker key={i} position={[c.lat, c.lon]} icon={redIcon}>
+                    <Popup><div className="text-sm"><strong>{c.name}</strong><br />{c.address && <span className="text-xs text-slate-500">{c.address}</span>}<br /><span className="text-xs">{c.distance_km} km away</span></div></Popup>
+                  </Marker>
+                ))}
+              </MapContainer>
+            </div>
+          )}
+
+          {/* Table View */}
+          {view === "table" && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="text-left text-xs text-slate-400 pb-2 font-medium">#</th>
+                    <th className="text-left text-xs text-slate-400 pb-2 font-medium">Name</th>
+                    <th className="text-left text-xs text-slate-400 pb-2 font-medium">Distance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {competitors.slice(0, 15).map((c, i) => (
+                    <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="py-1.5 pr-2 text-slate-400 text-xs">{i + 1}</td>
+                      <td className="py-1.5 pr-4">
+                        <p className="font-medium text-slate-800 truncate max-w-[200px]">{c.name}</p>
+                        {c.address && <p className="text-xs text-slate-400 truncate">{c.address}</p>}
+                      </td>
+                      <td className="py-1.5 text-slate-500 text-xs whitespace-nowrap">{c.distance_km} km</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
