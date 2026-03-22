@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
+import StepEnterpriseType from "@/components/onboarding/StepEnterpriseType";
 import StepWorkspace from "@/components/onboarding/StepWorkspace";
 import StepTeam from "@/components/onboarding/StepTeam";
 import StepOfferings from "@/components/onboarding/StepOfferings";
@@ -11,15 +12,16 @@ import StepInvite from "@/components/onboarding/StepInvite";
 import StepDone from "@/components/onboarding/StepDone";
 
 const STEPS = [
-  { label: "Workspace", time: "~2 min" },
-  { label: "Team",      time: "~2 min" },
-  { label: "Products",  time: "~1 min" },
-  { label: "Tasks",     time: "~1 min" },
-  { label: "Invite",    time: "~1 min" },
-  { label: "Done",      time: "" },
+  { label: "Type",     time: "~1 min" },
+  { label: "Details",  time: "~2 min" },
+  { label: "People",   time: "~2 min" },
+  { label: "Offerings",time: "~1 min" },
+  { label: "Tasks",    time: "~1 min" },
+  { label: "Invite",   time: "~1 min" },
+  { label: "Done",     time: "" },
 ];
 
-const OPTIONAL_STEPS = [1, 2, 3, 4]; // 0-indexed
+const OPTIONAL_STEPS = [2, 3, 4, 5]; // 0-indexed
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -30,6 +32,7 @@ export default function Onboarding() {
   const [currentUser, setCurrentUser] = useState(null);
 
   // Per-step data
+  const [selectedType, setSelectedType] = useState("");
   const [workspaceData, setWorkspaceData] = useState({});
   const [workspaceErrors, setWorkspaceErrors] = useState({});
   const [people, setPeople] = useState([]);
@@ -37,8 +40,6 @@ export default function Onboarding() {
   const [taskData, setTaskData] = useState({});
   const [taskErrors, setTaskErrors] = useState({});
   const [invites, setInvites] = useState([]);
-
-  // Created entity refs
   const [createdEnterprise, setCreatedEnterprise] = useState(null);
 
   useEffect(() => {
@@ -49,10 +50,11 @@ export default function Onboarding() {
   }, []);
 
   // ── Validation ─────────────────────────────────────────────────────────────
+  const validateType = () => !!selectedType;
+
   const validateWorkspace = () => {
     const err = {};
-    if (!workspaceData.org_name?.trim()) err.org_name = "Organization name is required";
-    if (!workspaceData.industry) err.industry = "Please select an industry";
+    if (!workspaceData.org_name?.trim()) err.org_name = "Enterprise name is required";
     if (!workspaceData.country) err.country = "Please select a country";
     if (!workspaceData.full_name?.trim()) err.full_name = "Your name is required";
     setWorkspaceErrors(err);
@@ -77,26 +79,23 @@ export default function Onboarding() {
 
       const enterprise = await base44.entities.Enterprise.create({
         enterprise_name: workspaceData.org_name,
-        enterprise_type: workspaceData.industry,
+        enterprise_type: selectedType,
+        description: workspaceData.purpose || "",
         country: workspaceData.country,
+        city: workspaceData.city || "",
         status: "active",
         operating_status: "open",
         subscription_tier: "professional",
         subscription_status: "trial",
         trial_ends_at: trialEndsAt,
       });
-      
-      // Stamp enterprise's own id as company_id
-      await base44.entities.Enterprise.update(enterprise.id, {
-        company_id: enterprise.id
-      });
-      
-      // Update admin user with this company_id
+
+      await base44.entities.Enterprise.update(enterprise.id, { company_id: enterprise.id });
       await base44.auth.updateMe({
         company_id: enterprise.id,
         full_name: workspaceData.full_name,
       });
-      
+
       setCreatedEnterprise({ ...enterprise, company_id: enterprise.id });
       return true;
     } catch (e) {
@@ -118,13 +117,13 @@ export default function Onboarding() {
           primary_role: p.role,
           person_type: p.person_type,
           status: "active",
-          company_id: createdEnterprise?.enterprise_name,
+          company_id: createdEnterprise?.id,
         })
       ));
       return true;
     } catch (e) {
       console.error(e);
-      return true; // non-blocking
+      return true;
     } finally {
       setSaving(false);
     }
@@ -144,7 +143,7 @@ export default function Onboarding() {
             stock_quantity: Number(p.stock_quantity) || 0,
             unit_price: Number(p.unit_price) || 0,
             status: "active",
-            company_id: createdEnterprise?.enterprise_name,
+            company_id: createdEnterprise?.id,
           })
         ),
         ...services.map((s) =>
@@ -179,7 +178,7 @@ export default function Onboarding() {
         priority: taskData.priority || "normal",
         status: "open",
         enterprise: createdEnterprise?.enterprise_name || "",
-        company_id: createdEnterprise?.enterprise_name,
+        company_id: createdEnterprise?.id,
       });
       return true;
     } catch (e) {
@@ -214,11 +213,12 @@ export default function Onboarding() {
   // ── Navigation ─────────────────────────────────────────────────────────────
   const handleNext = async () => {
     let ok = true;
-    if (step === 0) ok = await saveWorkspace();
-    if (step === 1) ok = await saveTeam();
-    if (step === 2) ok = await saveOfferings();
-    if (step === 3) ok = await saveTask();
-    if (step === 4) ok = await saveInvites();
+    if (step === 0) { if (!validateType()) return; }
+    if (step === 1) ok = await saveWorkspace();
+    if (step === 2) ok = await saveTeam();
+    if (step === 3) ok = await saveOfferings();
+    if (step === 4) ok = await saveTask();
+    if (step === 5) ok = await saveInvites();
     if (ok) setStep((s) => s + 1);
   };
 
@@ -239,17 +239,14 @@ export default function Onboarding() {
     }
   };
 
-  const progress = ((step) / (STEPS.length - 1)) * 100;
-  const timeRemaining = step <= 1 ? "~2 min remaining" : step <= 4 ? "~1 min remaining" : "";
+  const progress = (step / (STEPS.length - 1)) * 100;
+  const timeRemaining = step === 0 ? "~1 min remaining" : step <= 2 ? "~2 min remaining" : step <= 5 ? "~1 min remaining" : "";
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {/* Top gradient bar */}
       <div className="h-1.5 bg-slate-100">
-        <div
-          className="h-full bg-emerald-500 transition-all duration-500 ease-out"
-          style={{ width: `${progress}%` }}
-        />
+        <div className="h-full bg-emerald-500 transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
       </div>
 
       {/* Header */}
@@ -272,16 +269,14 @@ export default function Onboarding() {
           {STEPS.map((s, i) => (
             <React.Fragment key={i}>
               <div className="flex flex-col items-center">
-                <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all
-                    ${i < step ? "bg-emerald-500 text-white" : i === step ? "bg-emerald-500 text-white ring-4 ring-emerald-100" : "bg-slate-100 text-slate-400"}`}
-                >
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all
+                  ${i < step ? "bg-emerald-500 text-white" : i === step ? "bg-emerald-500 text-white ring-4 ring-emerald-100" : "bg-slate-100 text-slate-400"}`}>
                   {i < step ? "✓" : i + 1}
                 </div>
                 <span className={`text-[9px] mt-1 font-medium hidden sm:block ${i === step ? "text-emerald-600" : "text-slate-400"}`}>{s.label}</span>
               </div>
               {i < STEPS.length - 1 && (
-                <div className={`w-6 sm:w-10 h-0.5 mb-3 transition-colors ${i < step ? "bg-emerald-400" : "bg-slate-100"}`} />
+                <div className={`w-6 sm:w-8 h-0.5 mb-3 transition-colors ${i < step ? "bg-emerald-400" : "bg-slate-100"}`} />
               )}
             </React.Fragment>
           ))}
@@ -290,31 +285,34 @@ export default function Onboarding() {
 
       {/* Step card */}
       <div className="flex-1 flex items-start justify-center px-4 pb-10">
-        <div className="w-full max-w-lg bg-white rounded-3xl shadow-xl border border-slate-100 p-8">
+        <div className={`w-full bg-white rounded-3xl shadow-xl border border-slate-100 p-8 ${step === 0 ? "max-w-2xl" : "max-w-lg"}`}>
           {step === 0 && (
-            <StepWorkspace data={workspaceData} onChange={setWorkspaceData} errors={workspaceErrors} />
+            <StepEnterpriseType selected={selectedType} onSelect={(v) => setSelectedType(v)} />
           )}
           {step === 1 && (
-            <StepTeam people={people} onChange={setPeople} />
+            <StepWorkspace data={{ ...workspaceData, industry: selectedType }} onChange={setWorkspaceData} errors={workspaceErrors} />
           )}
           {step === 2 && (
-            <StepOfferings items={items} onChange={setItems} />
+            <StepTeam people={people} onChange={setPeople} />
           )}
           {step === 3 && (
-            <StepTask data={taskData} onChange={setTaskData} errors={taskErrors} people={people} />
+            <StepOfferings items={items} onChange={setItems} />
           )}
           {step === 4 && (
-            <StepInvite invites={invites} onChange={setInvites} />
+            <StepTask data={taskData} onChange={setTaskData} errors={taskErrors} people={people} />
           )}
           {step === 5 && (
+            <StepInvite invites={invites} onChange={setInvites} />
+          )}
+          {step === 6 && (
             <StepDone
               summary={{
-                enterprise: createdEnterprise ? { name: createdEnterprise.enterprise_name, industry: workspaceData.industry, country: workspaceData.country } : null,
+                enterprise: createdEnterprise ? { name: createdEnterprise.enterprise_name, industry: selectedType, country: workspaceData.country } : null,
                 people: people.length,
                 items: items.length,
                 tasks: taskData.title ? 1 : 0,
                 invites: invites.length,
-                industry: workspaceData.industry,
+                industry: selectedType,
               }}
               onComplete={handleComplete}
               completing={completing}
@@ -322,7 +320,7 @@ export default function Onboarding() {
           )}
 
           {/* Navigation buttons */}
-          {step < 5 && (
+          {step < 6 && (
             <div className="mt-8 flex flex-col gap-3">
               <div className="flex items-center gap-3">
                 <button
@@ -335,14 +333,14 @@ export default function Onboarding() {
 
                 <button
                   onClick={handleNext}
-                  disabled={saving}
+                  disabled={saving || (step === 0 && !selectedType)}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm transition-colors disabled:opacity-60"
                 >
                   {saving ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      {step === 4 ? "Send & Continue" : "Continue"}
+                      {step === 5 ? "Send & Continue" : "Continue"}
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
@@ -355,9 +353,9 @@ export default function Onboarding() {
                   disabled={saving}
                   className="text-center text-xs text-slate-400 hover:text-slate-600 transition-colors py-1"
                 >
-                  {step === 1 ? "I'll add people later →" :
-                   step === 2 ? "I'll add these later →" :
-                   step === 3 ? "I'll create tasks later →" :
+                  {step === 2 ? "I'll add people later →" :
+                   step === 3 ? "I'll add these later →" :
+                   step === 4 ? "I'll create tasks later →" :
                    "I'll invite people later →"}
                 </button>
               )}
