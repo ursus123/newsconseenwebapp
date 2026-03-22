@@ -394,208 +394,98 @@ export default function EntityGraph() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden -m-4 lg:-m-8" onKeyDown={handleKeyDown}>
-      {/* Header row 1: title + mode + search + export + presets */}
-      <div className="flex items-center justify-between shrink-0 flex-wrap gap-2">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            <Network className="w-5 h-5 text-indigo-500" />
-            Entity Graph
-          </h1>
-          {/* Load badges */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {Object.entries(loadStates).map(([k, s]) => <LoadBadge key={k} type={k} state={s} />)}
-          </div>
-          {/* Node count summary */}
-          <span className={`text-xs px-2.5 py-1 rounded-full ${
-            displayNodes.length > 100 ? "bg-amber-50 text-amber-600" : "bg-slate-100 text-slate-400"
-          }`}>
-            {displayNodes.length} nodes · {displayLinks.length} connections
-          </span>
+      {/* Navigation bar */}
+      <div className="flex items-center gap-2 bg-white border-b border-slate-100 px-4 py-3 sticky top-0 z-20 flex-wrap shadow-sm shrink-0">
+        <h1 className="text-base font-bold text-slate-800 mr-2 flex items-center gap-2">
+          <Network className="w-4 h-4 text-indigo-500" />
+          Enterprise Intelligence
+        </h1>
+
+        <div className="flex gap-1 flex-wrap">
+          {VIEWS.map(view => (
+            <button
+              key={view.id}
+              onClick={() => setActiveView(view.id)}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                activeView === view.id ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+              }`}
+            >
+              {view.icon} {view.label}
+              {view.id === "anomalies" && anomalies.length > 0 && (
+                <span className="bg-rose-500 text-white text-[9px] rounded-full px-1 ml-1">{anomalies.length}</span>
+              )}
+            </button>
+          ))}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-            <input
-              ref={searchRef}
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search nodes…"
-              className="pl-7 pr-7 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 w-44"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <X className="w-3 h-3" />
-              </button>
-            )}
-            {matchCount !== null && (
-              <span className="absolute -top-2 -right-2 bg-amber-500 text-white text-[9px] font-bold rounded-full px-1.5 py-0.5 leading-none">
-                {matchCount}
-              </span>
-            )}
-          </div>
-
-          {/* Depth slider */}
-          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5">
-            <span className="text-xs text-slate-500 whitespace-nowrap">Depth</span>
-            <input
-              type="range" min={1} max={3} value={depth}
-              onChange={e => setDepth(Number(e.target.value))}
-              className="w-16 accent-indigo-500"
-            />
-            <span className="text-xs font-bold text-indigo-600 w-3">{depth}</span>
-          </div>
-
-          {/* Focus Mode */}
-          <button
-            onClick={() => { setFocusMode(v => !v); if (focusMode) setFocusedEnterprise(null); }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border transition-all ${
-              focusMode ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-            }`}
-          >
-            <Target className="w-3.5 h-3.5" />
-            {focusMode ? "Focus ON" : "Focus"}
-          </button>
-
-          {/* 2D/3D toggle */}
-          <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 gap-1">
-            <button onClick={() => { setMode("2d"); setSelected(null); }} className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${mode === "2d" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100"}`}>2D</button>
-          </div>
-
-          {/* Color By */}
+        <div className="ml-auto flex items-center gap-2">
           <select
-            value={colorBy}
-            onChange={e => setColorBy(e.target.value)}
-            className="text-xs border border-slate-200 rounded-xl px-2 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            value={selectedEnterprise}
+            onChange={e => setSelectedEnterprise(e.target.value)}
+            className="text-xs border border-slate-200 rounded-xl px-3 py-1.5 bg-white text-slate-600 focus:outline-none"
           >
-            {COLOR_BY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            <option value="all">All Enterprises</option>
+            {enterprises.map(e => <option key={e.id} value={e.id}>{e.enterprise_name}</option>)}
           </select>
-
-          {/* View Presets */}
-          <div className="relative">
-            <button
-              onClick={() => setShowPresets(v => !v)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all"
-            >
-              View <ChevronDown className="w-3.5 h-3.5" />
+          {anomalies.length > 0 && activeView !== "anomalies" && (
+            <button onClick={() => setActiveView("anomalies")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-500 text-white animate-pulse">
+              ⚠️ {anomalies.length} Issues
             </button>
-            {showPresets && (
-              <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-lg z-50 min-w-44 py-1">
-                {Object.keys(VIEW_PRESETS).map(preset => (
-                  <button key={preset} onClick={() => applyPreset(preset)}
-                    className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors">
-                    {preset}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Export */}
-          <div className="relative">
-            <button
-              onClick={() => setShowExport(v => !v)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all"
-            >
-              <Download className="w-3.5 h-3.5" /> Export
-            </button>
-            {showExport && (
-              <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-lg z-50 min-w-44 py-1">
-                <button onClick={() => { exportAsPNG(); setShowExport(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Export as PNG</button>
-                <button onClick={() => { exportAsJSON(displayNodes, displayLinks); setShowExport(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Export as JSON</button>
-                <button onClick={() => { exportAsCSV(displayNodes); setShowExport(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Export node list as CSV</button>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
-
-      {focusMode && (
-        <div className="text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl shrink-0">
-          👆 Click an enterprise node to focus on it{focusedEnterprise && " · Click again to unfocus"}
-        </div>
-      )}
-
-      {isCapped && (
-        <div className="shrink-0">
-          <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2 py-1 rounded-xl">
-            ⚠ Capped at {MAX_NODES} of {collapsedNodes.length} nodes
-          </span>
-        </div>
-      )}
 
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
-            <p className="text-sm text-slate-400">Loading entity network…</p>
+            <p className="text-sm text-slate-400">Loading enterprise data…</p>
+            <div className="flex gap-2 flex-wrap justify-center">
+              {Object.entries(loadStates).map(([k, s]) => <LoadBadge key={k} type={k} state={s} />)}
+            </div>
           </div>
         </div>
       ) : (
-        <div className="flex gap-3 flex-1 overflow-hidden min-h-0">
-          {/* Left: Filter Panel */}
-          <GraphFilterPanel
-            filter={filter}
-            setFilter={setFilter}
-            collapsedTypes={collapsedTypes}
-            setCollapsedTypes={setCollapsedTypes}
-            counts={typeCounts}
-            focusMode={focusMode}
-            setFocusMode={setFocusMode}
-            setFocusedEnterprise={setFocusedEnterprise}
-            depth={depth}
-            setDepth={setDepth}
-            nodeCount={displayNodes.length}
-            linkCount={displayLinks.length}
-          />
-
-          {/* Center: Graph */}
-          <div className="flex-1 min-h-0 overflow-hidden">
-          {displayNodes.length === 0 ? (
-            <div className="w-full h-full flex items-center justify-center border border-slate-200 rounded-2xl bg-slate-50">
-              <div className="text-center">
-                <Network className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                <p className="text-slate-400 font-medium">No data to display</p>
-                <p className="text-slate-300 text-sm mt-1">Enable entity types in the panel on the left</p>
-              </div>
-            </div>
-          ) : (
-            <Graph2D
-              nodes={displayNodes}
-              links={displayLinks}
-              selected={selected}
-              onSelect={(id) => {
-                if (focusMode) {
-                  const n = displayNodes.find(x => x.id === id);
-                  if (n?.type === "enterprise") {
-                    setFocusedEnterprise(prev => prev === id ? null : id);
-                    return;
-                  }
-                }
-                setSelected(id);
-              }}
-              colorBy={colorBy}
-              searchQuery={searchQuery}
-              highlightPath={highlightPath}
-              onClusterClick={handleClusterClick}
-            />
+        <div className="flex-1 overflow-hidden">
+          {activeView === "hierarchy" && (
+            <HierarchyView enterprises={enterprises} people={people} services={services} products={products} tasks={tasks} transactions={transactions} addresses={addresses} selectedEnterprise={selectedEnterprise} />
           )}
-          </div>
-
-          {/* Right: Details Panel */}
-          <GraphSidePanel
-            nodes={displayNodes}
-            links={displayLinks}
-            selected={selected}
-            enterprises={enterprises}
-            people={people}
-            services={services}
-            products={products}
-            tasks={tasks}
-            transactions={transactions}
-            onHighlightPath={setHighlightPath}
-          />
+          {activeView === "people" && (
+            <PeopleDistributionView enterprises={enterprises} people={people} selectedEnterprise={selectedEnterprise} />
+          )}
+          {activeView === "services" && (
+            <ServiceCoverageView enterprises={enterprises} services={services} people={people} tasks={tasks} selectedEnterprise={selectedEnterprise} />
+          )}
+          {activeView === "products" && (
+            <ProductDependencyView products={products} services={services} tasks={tasks} enterprises={enterprises} selectedEnterprise={selectedEnterprise} />
+          )}
+          {activeView === "assignments" && (
+            <AssignmentView enterprises={enterprises} people={people} relationships={relationships} tasks={tasks} selectedEnterprise={selectedEnterprise} />
+          )}
+          {activeView === "shared" && (
+            <SharedResourcesView enterprises={enterprises} people={people} products={products} services={services} />
+          )}
+          {activeView === "anomalies" && (
+            <AnomalyView enterprises={enterprises} people={people} products={products} services={services} tasks={tasks} transactions={transactions} addresses={addresses} relationships={relationships} />
+          )}
+          {activeView === "graph" && (
+            <div className="flex gap-3 h-full overflow-hidden p-4">
+              <GraphFilterPanel filter={filter} setFilter={setFilter} collapsedTypes={collapsedTypes} setCollapsedTypes={setCollapsedTypes} counts={typeCounts} focusMode={focusMode} setFocusMode={setFocusMode} setFocusedEnterprise={setFocusedEnterprise} depth={depth} setDepth={setDepth} nodeCount={displayNodes.length} linkCount={displayLinks.length} />
+              <div className="flex-1 min-h-0 overflow-hidden">
+                {displayNodes.length === 0 ? (
+                  <div className="w-full h-full flex items-center justify-center border border-slate-200 rounded-2xl bg-slate-50">
+                    <div className="text-center">
+                      <Network className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                      <p className="text-slate-400 font-medium">No data to display</p>
+                    </div>
+                  </div>
+                ) : (
+                  <Graph2D nodes={displayNodes} links={displayLinks} selected={selected} onSelect={(id) => { if (focusMode) { const n = displayNodes.find(x => x.id === id); if (n?.type === "enterprise") { setFocusedEnterprise(prev => prev === id ? null : id); return; } } setSelected(id); }} colorBy={colorBy} searchQuery={searchQuery} highlightPath={highlightPath} onClusterClick={handleClusterClick} />
+                )}
+              </div>
+              <GraphSidePanel nodes={displayNodes} links={displayLinks} selected={selected} enterprises={enterprises} people={people} services={services} products={products} tasks={tasks} transactions={transactions} onHighlightPath={setHighlightPath} />
+            </div>
+          )}
         </div>
       )}
     </div>
