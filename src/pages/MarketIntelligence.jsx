@@ -336,6 +336,29 @@ export default function MarketIntelligence() {
       )
     : [];
 
+  // Operational context for nearby enterprises
+  useEffect(() => {
+    if (!nearbyEnterprises?.length || !currentUser) return;
+    setOperationalContext(null);
+    const enterpriseNames = nearbyEnterprises.map(e => e.enterprise_name);
+    const loadCtx = async () => {
+      try {
+        const [allTasks, allTxns, allPeople] = await Promise.all([
+          base44.entities.Task.filter({ company_id: currentUser.company_id }),
+          base44.entities.Transaction.filter({ company_id: currentUser.company_id }),
+          base44.entities.Person.filter({ company_id: currentUser.company_id }),
+        ]);
+        const tasks = allTasks.filter(t => enterpriseNames.includes(t.enterprise));
+        const txns  = allTxns.filter(t => enterpriseNames.includes(t.enterprise) && t.transaction_type === "sale_service");
+        const people = allPeople.filter(p => enterpriseNames.includes(p.enterprise));
+        const totalRevenue = txns.filter(t => t.payment_status === "paid").reduce((s, t) => s + (t.amount || 0), 0);
+        const completionRate = tasks.length > 0 ? Math.round(tasks.filter(t => t.status === "completed").length / tasks.length * 100) : null;
+        setOperationalContext({ enterprises: nearbyEnterprises.length, total_staff: people.filter(p => p.person_type === "employee").length, total_clients: people.filter(p => p.person_type === "client").length, total_revenue: totalRevenue, task_completion: completionRate, total_tasks: tasks.length });
+      } catch {}
+    };
+    loadCtx();
+  }, [nearbyEnterprises?.length, currentUser?.company_id]);
+
   const sectionDone = (key, altKey) =>
     !!(results?.[key] || (altKey && results?.[altKey]));
 
