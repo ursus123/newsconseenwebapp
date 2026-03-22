@@ -4,7 +4,8 @@ import { createPageUrl } from "@/utils";
 import { Search, LayoutGrid } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { APP_REGISTRY, CATEGORIES, PLAN_ORDER } from "@/components/applications/appRegistry";
+import { APP_REGISTRY, CATEGORIES, PLAN_ORDER, APPS_BY_ENTERPRISE_CATEGORY } from "@/components/applications/appRegistry";
+import { getCategoryFromType } from "@/config/enterpriseTerminology";
 import AppCard from "@/components/applications/AppCard";
 import ComingSoonModal from "@/components/applications/ComingSoonModal";
 import RecentlyUsed from "@/components/applications/RecentlyUsed";
@@ -51,6 +52,8 @@ export default function Applications() {
   });
   const enterprise = enterprises[0];
   const industry = enterprise?.enterprise_type || "";
+  const enterpriseCategory = getCategoryFromType(industry);
+  const recommendedIds = APPS_BY_ENTERPRISE_CATEGORY[enterpriseCategory] || [];
 
   const isEducation = industry === "education";
   const isSuperAdmin = user?.role === "super_admin";
@@ -178,6 +181,39 @@ export default function Applications() {
       {/* Recently Used */}
       {!search && activeCategory === "All" && (
         <RecentlyUsed apps={recentApps} onLaunch={handleCardClick} />
+      )}
+
+      {/* Recommended for your enterprise type */}
+      {!search && activeCategory === "All" && recommendedIds.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-lg">⭐</span>
+            <h2 className="text-sm font-bold text-emerald-700 uppercase tracking-wide">Recommended for you</h2>
+            <span className="text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-2 py-0.5 rounded-full font-medium capitalize">{enterpriseCategory}</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {recommendedIds
+              .map(id => visibleApps.find(a => a.id === id))
+              .filter(Boolean)
+              .map((app) => (
+                <AppCard
+                  key={app.id}
+                  app={app}
+                  isLocked={isLocked(app)}
+                  onLaunch={handleCardClick}
+                  onUpgrade={() => setUpgradeApp(app)}
+                />
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* All Applications header when recommended shown */}
+      {!search && activeCategory === "All" && recommendedIds.length > 0 && (
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-lg">📱</span>
+          <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">All Applications</h2>
+        </div>
       )}
 
       {/* Empty state */}
