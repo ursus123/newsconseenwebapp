@@ -15,7 +15,7 @@ import EnvironmentSection from "@/components/marketintelligence/EnvironmentSecti
 import LaborMarketSection from "@/components/marketintelligence/LaborMarketSection";
 import { executeSQL } from "@/components/querybuilder/sqlEngine";
 import { Button } from "@/components/ui/button";
-import { BookmarkPlus, Loader2, Download, Building2, ExternalLink } from "lucide-react";
+import { BookmarkPlus, Loader2, Download, Building2, ExternalLink, Code2, ChevronDown, X } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import * as XLSX from "xlsx";
 import { Link } from "react-router-dom";
@@ -146,6 +146,11 @@ export default function MarketIntelligence() {
   const [results, setResults] = useState(null);
   const [compareResults, setCompareResults] = useState([]);
   const [history, setHistory] = useState([]);
+  const [queryLog, setQueryLog] = useState([]);
+  const [showQueries, setShowQueries] = useState(false);
+  const [editingQuery, setEditingQuery] = useState(null);
+  const [showQueryEditor, setShowQueryEditor] = useState(false);
+  const [operationalContext, setOperationalContext] = useState(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -181,6 +186,8 @@ export default function MarketIntelligence() {
     setRunning(true);
     setResults(null);
     setCompareResults([]);
+    setQueryLog([]);
+    setOperationalContext(null);
 
     const loc    = p.location.trim();
     const biz    = p.businessType;
@@ -193,12 +200,15 @@ export default function MarketIntelligence() {
     setResults({ location: loc, businessType: biz, radiusKm: radius, isUS, stateName, loading: true });
 
     const runSection = async (key, sql) => {
+      setQueryLog(prev => [...prev, { section: key, sql, status: "running", rows: null, error: null, ts: Date.now() }]);
       try {
         const res = await executeSQL(sql, {});
         const rows = res.rows || [];
+        setQueryLog(prev => prev.map(q => q.section === key ? { ...q, status: "done", rows: rows.length } : q));
         setResults(prev => ({ ...(prev || {}), [key]: rows }));
         return rows;
       } catch (e) {
+        setQueryLog(prev => prev.map(q => q.section === key ? { ...q, status: "error", error: e.message } : q));
         setResults(prev => ({ ...(prev || {}), [key]: [], [`${key}_error`]: e.message }));
         return [];
       }
