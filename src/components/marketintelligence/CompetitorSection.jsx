@@ -76,15 +76,6 @@ export default function CompetitorSection({ data, businessType, location, radius
   if (loading) return <SectionSkeleton title="Competitor Analysis" rows={4} />;
   if (!data) return null;
 
-  const summary = data.find(r => r.name?.startsWith("SUMMARY:") || r.distance_km === 0);
-  const competitors = data.filter(r => r.distance_km > 0).slice(0, 20);
-
-  const mapCenter = useMemo(() => {
-    if (summary?.lat && summary?.lon) return [summary.lat, summary.lon];
-    const first = data.find(r => r.lat && r.lon);
-    return first ? [first.lat, first.lon] : null;
-  }, [data, summary]);
-
   const totalCount = competitors.length;
 
   const bucketData = DISTANCE_BUCKETS.map((b, i) => ({
