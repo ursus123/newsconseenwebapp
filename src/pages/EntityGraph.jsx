@@ -496,7 +496,7 @@ export default function EntityGraph() {
       ) : (
         <div className="flex-1 overflow-hidden">
           {activeView === "hierarchy" && (
-            <HierarchyView enterprises={enterprises} people={people} services={services} products={products} tasks={tasks} transactions={transactions} addresses={addresses} selectedEnterprise={selectedEnterprise} />
+            <HierarchyView enterprises={enterprises} people={people} services={services} products={products} tasks={tasks} transactions={transactions} addresses={addresses} relationships={relationships} selectedEnterprise={selectedEnterprise} />
           )}
           {activeView === "people" && (
             <PeopleDistributionView enterprises={enterprises} people={people} selectedEnterprise={selectedEnterprise} />
