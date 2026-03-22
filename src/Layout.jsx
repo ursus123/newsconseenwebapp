@@ -80,7 +80,7 @@ const NAV_CONFIG = {
         { name: "UserManagement", label: "User Management", icon: UserCog },
         { name: "Permissions",    icon: Shield },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },
-        { name: "EntityGraph",    label: "Entity Graph",    icon: Network },
+        { name: "EntityGraph",    label: "Enterprise Intelligence", icon: Network },
         { name: "Pipelines",      icon: GitBranch },
         { name: "Billing",        icon: CreditCard },
       ],
