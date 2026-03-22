@@ -35,6 +35,7 @@ import { usePermissions } from "@/components/shared/usePermissions";
 import TenantGuard from "@/components/shared/TenantGuard";
 import { useBranding } from "@/hooks/useBranding";
 import NetworkBanner from "@/components/shared/NetworkBanner";
+import { useTerminology } from "@/hooks/useTerminology";
 
 // ─── Role-aware nav config ────────────────────────────────────────────────────
 const NAV_CONFIG = {
