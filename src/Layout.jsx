@@ -127,7 +127,7 @@ const NAV_CONFIG = {
       items: [
         { name: "UserManagement", label: "User Management", icon: UserCog },
         { name: "Permissions",    icon: Shield },
-        { name: "EntityGraph",    label: "Entity Graph",    icon: Network },
+        { name: "EntityGraph",    label: "Enterprise Intelligence", icon: Network },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },
         { name: "Pipelines",      icon: GitBranch },
         { name: "Billing",        icon: CreditCard },
