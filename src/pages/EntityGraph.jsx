@@ -586,7 +586,7 @@ export default function EntityGraph() {
                   <Graph2D nodes={displayNodes} links={displayLinks} selected={selected} onSelect={(id) => { if (focusMode) { const n = displayNodes.find(x => x.id === id); if (n?.type === "enterprise") { setFocusedEnterprise(prev => prev === id ? null : id); return; } } setSelected(id); }} colorBy={colorBy} searchQuery={searchQuery} highlightPath={highlightPath} onClusterClick={handleClusterClick} />
                 )}
               </div>
-              <GraphSidePanel nodes={displayNodes} links={displayLinks} selected={selected} enterprises={enterprises} people={people} services={services} products={products} tasks={tasks} transactions={transactions} onHighlightPath={setHighlightPath} />
+              <GraphSidePanel nodes={displayNodes} links={displayLinks} allNodes={rawNodes} allLinks={rawLinks} selected={selected} enterprises={enterprises} people={people} services={services} products={products} tasks={tasks} transactions={transactions} onHighlightPath={setHighlightPath} />
             </div>
             </>
           )}
