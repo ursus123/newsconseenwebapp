@@ -346,12 +346,26 @@ async function executeVirtualTable(table, sql) {
         } catch {}
       }
       let weather = null;
+      let timezone = countryData?.timezones?.[0] || "";
+      let cityPop = null;
       try {
         const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`);
         const wData = await wRes.json();
         weather = wData.current?.temperature_2m;
+        // Use Open-Meteo timezone — accurate to the specific city
+        if (wData.timezone) timezone = wData.timezone;
       } catch {}
-      rows = [{ place, city: cityName, state_region: stateName, country: countryName, country_code: countryCode, lat, lon, continent: countryData?.region || "", subregion: countryData?.subregion || "", capital: countryData?.capital?.[0] || "", country_population: population ? Math.round(population).toLocaleString() : null, gdp_per_capita_usd: gdpPerCapita ? Math.round(gdpPerCapita).toLocaleString() : null, currency: Object.keys(countryData?.currencies || {})[0] || "", currency_name: Object.values(countryData?.currencies || {})[0]?.name || "", language: Object.values(countryData?.languages || {})[0] || "", calling_code: countryData?.idd?.root || "", timezone: countryData?.timezones?.[0] || "", current_temp_c: weather, flag: countryData?.flag || "" }];
+      // Try to get city population from Nominatim extratags
+      try {
+        const osmType = geo.osm_type === "node" ? "N" : geo.osm_type === "way" ? "W" : "R";
+        const detailRes = await fetch(
+          `https://nominatim.openstreetmap.org/details?osmtype=${osmType}&osmid=${geo.osm_id}&addressdetails=1&format=json`,
+          { headers: { "User-Agent": "newsconseen/1.0" } }
+        );
+        const detail = await detailRes.json();
+        if (detail?.extratags?.population) cityPop = parseInt(detail.extratags.population);
+      } catch {}
+      rows = [{ place, city: cityName, state_region: stateName, country: countryName, country_code: countryCode, lat, lon, continent: countryData?.region || "", subregion: countryData?.subregion || "", capital: countryData?.capital?.[0] || "", city_population_estimate: cityPop, country_population: population ? Math.round(population) : null, gdp_per_capita_usd: gdpPerCapita ? Math.round(gdpPerCapita) : null, currency: Object.keys(countryData?.currencies || {})[0] || "", currency_name: Object.values(countryData?.currencies || {})[0]?.name || "", language: Object.values(countryData?.languages || {})[0] || "", calling_code: countryData?.idd?.root || "", timezone, current_temp_c: weather, flag: countryData?.flag || "" }];
       message = `Overview for ${place}`;
     }
 
