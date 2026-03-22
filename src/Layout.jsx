@@ -252,6 +252,7 @@ export default function Layout({ children, currentPageName }) {
       .catch(() => {});
   }, [currentUser?.company_id]);
 
+  const { t } = useTerminology(currentUser);
   const branding = useBranding(currentUser);
 
   useEffect(() => {
