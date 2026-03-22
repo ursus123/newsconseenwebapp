@@ -23,6 +23,7 @@ import OutcomeDialog from "../components/tasks/OutcomeDialog";
 import { taskTypeLabel } from "../components/tasks/TaskForm";
 import { useToast } from "@/components/ui/use-toast";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
+import { useTerminology } from "@/hooks/useTerminology";
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -217,6 +218,7 @@ function HealthBadge({ score }) {
 function AdminDashboard({ user }) {
   const listFn = useEntityListFn(user);
   const companyId = user?.company_id;
+  const { t } = useTerminology(user);
 
   const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person) });
   const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId], queryFn: () => listFn(base44.entities.Enterprise) });
@@ -257,18 +259,18 @@ function AdminDashboard({ user }) {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        <StatCard title="People" value={people.length} icon={Users} color="blue" subtitle={`${people.filter((p) => p.status === "active").length} active`} />
+        <StatCard title={t("person_plural")} value={people.length} icon={Users} color="blue" subtitle={`${people.filter((p) => p.status === "active").length} active`} />
         <StatCard title="Enterprises" value={enterprises.length} icon={Building2} color="purple" subtitle={`${enterprises.filter((e) => e.status === "active").length} active`} />
-        <StatCard title="Products" value={products.length} icon={Package} color="amber"
+        <StatCard title={t("product_plural")} value={products.length} icon={Package} color="amber"
           subtitle={lowStockCount > 0 ? `${lowStockCount} low stock` : `${products.filter((p) => p.status === "active").length} active`}
           subtitleColor={lowStockCount > 0 ? "text-amber-600" : undefined}
         />
-        <StatCard title="Services" value={services.length} icon={Wrench} color="teal" subtitle={`${services.filter((s) => s.status === "active").length} active`} />
-        <StatCard title="Tasks" value={tasks.length} icon={ClipboardList} color="emerald"
+        <StatCard title={t("service_plural")} value={services.length} icon={Wrench} color="teal" subtitle={`${services.filter((s) => s.status === "active").length} active`} />
+        <StatCard title={t("task_plural")} value={tasks.length} icon={ClipboardList} color="emerald"
           subtitle={overdueCount > 0 ? `${overdueCount} overdue` : `${tasks.filter((t) => t.status === "open").length} open`}
           subtitleColor={overdueCount > 0 ? "text-rose-600" : undefined}
         />
-        <StatCard title="Transactions" value={transactions.length} icon={ArrowLeftRight} color="rose"
+        <StatCard title={t("transaction_plural")} value={transactions.length} icon={ArrowLeftRight} color="rose"
           subtitle={draftTxCount > 0 ? `${draftTxCount} pending draft${draftTxCount !== 1 ? "s" : ""}` : `${transactions.filter((t) => t.status === "posted").length} posted`}
           subtitleColor={draftTxCount > 0 ? "text-amber-600" : undefined}
         />
