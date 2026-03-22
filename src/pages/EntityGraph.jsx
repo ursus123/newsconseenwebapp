@@ -99,20 +99,22 @@ export default function EntityGraph() {
     addresses: LOAD_STATES.idle,
   });
 
-  // UI state
+  // Intelligence UI state
+  const [activeView,         setActiveView]         = useState("hierarchy");
+  const [selectedEnterprise, setSelectedEnterprise] = useState("all");
+
+  // Graph view UI state (preserved for graph tab)
   const [selected,          setSelected]          = useState(null);
   const [filter,            setFilter]            = useState(INITIAL_FILTER);
-  const [colorBy,           setColorBy]           = useState("default");
-  const [mode,              setMode]              = useState("2d");
+  const [colorBy,           setColorBy]           = useState("status");
   const [searchQuery,       setSearchQuery]       = useState("");
   const [highlightPath,     setHighlightPath]     = useState(null);
   const [showExport,        setShowExport]        = useState(false);
-  const [showPresets,       setShowPresets]       = useState(false);
-  const [focusMode,         setFocusMode]         = useState(false);
+  const [focusMode,         setFocusMode]         = useState(true);
   const [focusedEnterprise, setFocusedEnterprise] = useState(null);
   const [depth,             setDepth]             = useState(1);
   const [expandedClusters,  setExpandedClusters]  = useState(new Set());
-  const [collapsedTypes,    setCollapsedTypes]    = useState(new Set()); // global collapse per type
+  const [collapsedTypes,    setCollapsedTypes]    = useState(new Set());
   const searchRef = useRef(null);
 
   const setLoad = (key, state) => setLoadStates(prev => ({ ...prev, [key]: state }));
