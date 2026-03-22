@@ -388,8 +388,12 @@ export default function EntityGraph() {
     return displayNodes.filter(n => n.label.toLowerCase().includes(searchQuery.toLowerCase())).length;
   }, [searchQuery, displayNodes]);
 
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === "Escape") { setSearchQuery(""); setHighlightPath(null); }
+  }, []);
+
   return (
-    <div className="flex flex-col h-full overflow-hidden gap-2" onKeyDown={handleKeyDown}>
+    <div className="flex flex-col h-full overflow-hidden -m-4 lg:-m-8" onKeyDown={handleKeyDown}>
       {/* Header row 1: title + mode + search + export + presets */}
       <div className="flex items-center justify-between shrink-0 flex-wrap gap-2">
         <div className="flex items-center gap-3 flex-wrap">
