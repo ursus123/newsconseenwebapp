@@ -7,6 +7,24 @@ import { useEntityListFn } from "@/components/shared/useDataQuery";
 import Graph2D from "@/components/entitygraph/Graph2D";
 import GraphSidePanel from "@/components/entitygraph/GraphSidePanel";
 import GraphFilterPanel from "@/components/entitygraph/GraphFilterPanel";
+import HierarchyView from "@/components/entitygraph/HierarchyView";
+import PeopleDistributionView from "@/components/entitygraph/PeopleDistributionView";
+import ServiceCoverageView from "@/components/entitygraph/ServiceCoverageView";
+import ProductDependencyView from "@/components/entitygraph/ProductDependencyView";
+import AssignmentView from "@/components/entitygraph/AssignmentView";
+import SharedResourcesView from "@/components/entitygraph/SharedResourcesView";
+import AnomalyView from "@/components/entitygraph/AnomalyView";
+
+const VIEWS = [
+  { id: "hierarchy",   icon: "🏢", label: "Enterprise Structure" },
+  { id: "people",      icon: "👥", label: "Who Works Where" },
+  { id: "services",    icon: "⚙️",  label: "Service Coverage" },
+  { id: "products",    icon: "📦", label: "Product Dependencies" },
+  { id: "assignments", icon: "🔗", label: "Staff-Client Links" },
+  { id: "shared",      icon: "🔄", label: "Shared Resources" },
+  { id: "anomalies",   icon: "⚠️",  label: "Anomalies" },
+  { id: "graph",       icon: "🕸️",  label: "Graph View" },
+];
 
 const INITIAL_FILTER = { enterprise: true, person: true, service: false, product: false, task: false, transaction: false, address: false };
 const CLUSTER_THRESHOLD = 5;
