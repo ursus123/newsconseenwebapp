@@ -175,6 +175,25 @@ export default function EntityGraph() {
 
   const isLoading = loadStates.core === LOAD_STATES.loading || loadStates.core === LOAD_STATES.idle;
 
+  const anomalies = useMemo(() => {
+    if (isLoading) return [];
+    const issues = [];
+    enterprises.forEach(e => {
+      const entName = e.enterprise_name;
+      const staff = people.filter(p => p.enterprise === entName && p.person_type === "employee" && p.status === "active");
+      const clients = people.filter(p => p.enterprise === entName && p.person_type === "client" && p.status === "active");
+      if (!staff.length) issues.push(e.id + "_staff");
+      if (!clients.length) issues.push(e.id + "_clients");
+      const recentTasks = tasks.filter(t =>
+        t.enterprise === entName && (new Date() - new Date(t.scheduled_date || t.created_date)) / (1000 * 60 * 60 * 24) <= 30
+      );
+      if (clients.length > 0 && !recentTasks.length) issues.push(e.id + "_tasks");
+    });
+    const lowStock = products.filter(p => p.stock_quantity != null && p.min_stock_level != null && p.stock_quantity <= p.min_stock_level);
+    if (lowStock.length > 0) issues.push("low_stock");
+    return issues;
+  }, [enterprises, people, tasks, products, isLoading]);
+
   const { nodes: rawNodes, links: rawLinks } = useMemo(
     () => buildGraph(enterprises, people, services, products, tasks, transactions, addresses, relationships, filter, colorBy),
     [enterprises, people, services, products, tasks, transactions, addresses, relationships, filter, colorBy]
