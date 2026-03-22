@@ -13,9 +13,10 @@ import FinancialContextSection from "@/components/marketintelligence/FinancialCo
 import NewsSection from "@/components/marketintelligence/NewsSection";
 import EnvironmentSection from "@/components/marketintelligence/EnvironmentSection";
 import LaborMarketSection from "@/components/marketintelligence/LaborMarketSection";
+import ForecastingModule from "@/components/marketintelligence/ForecastingModule";
 import { executeSQL } from "@/components/querybuilder/sqlEngine";
 import { Button } from "@/components/ui/button";
-import { BookmarkPlus, Loader2, Download, Building2, ExternalLink, Code2, ChevronDown, X } from "lucide-react";
+import { BookmarkPlus, Loader2, Download, Building2, ExternalLink, Code2, ChevronDown, X, FileText } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import * as XLSX from "xlsx";
 import { Link } from "react-router-dom";
@@ -459,6 +460,20 @@ export default function MarketIntelligence() {
 
               {/* 9. Market Opportunity Score */}
               <OpportunityScoreSection data={results?.market} infrastructure={results?.infrastructure} economy={results?.economy_us || results?.economy_intl} isUS={results?.isUS} loading={running && !results?.market} />
+
+              {/* 10. Growth Factor Forecasting */}
+              {results?.market?.[0]?.opportunity_score != null && (
+                <ForecastingModule
+                  baseScore={results.market[0].opportunity_score}
+                  baseRadarData={[
+                    { metric: "Market Size",        value: Math.min(100, (results.market[0].annual_market_usd || 0) / 1000000) },
+                    { metric: "Low Competition",     value: Math.max(0, 100 - ((results.market[0].existing_competitors || 0) / Math.max(results.market[0].ideal_market_units || 5, 1)) * 100) },
+                    { metric: "Economic Strength",   value: (() => { const inc = results.economy_us?.[0]?.median_household_income || results.economy_intl?.[0]?.gdp_per_capita_usd || 0; return inc > 70000 ? 85 : inc > 40000 ? 65 : inc > 20000 ? 45 : 30; })() },
+                    { metric: "Infrastructure",      value: parseInt(results.infrastructure?.find(r => r.infrastructure_type === "OVERALL SCORE")?.availability) || 50 },
+                    { metric: "Demographic Fit",     value: Math.min(100, ((results.economy_us?.[0]?.population_over65_pct || 10) / 20) * 100) },
+                  ]}
+                />
+              )}
 
               {/* 10. Your Operations Nearby */}
               {nearbyEnterprises.length > 0 && (
