@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { ChevronDown } from "lucide-react";
 
-export default function HierarchyView({ enterprises, people, services, products, tasks, transactions, addresses, selectedEnterprise }) {
+export default function HierarchyView({ enterprises, people, services, products, tasks, transactions, addresses, relationships, selectedEnterprise }) {
   const [expanded, setExpanded] = useState(new Set());
 
   const visibleEnterprises = selectedEnterprise === "all"
@@ -18,18 +18,58 @@ export default function HierarchyView({ enterprises, people, services, products,
     setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   };
 
+  // Build enterprise→person names map via Relationships
+  const enterprisePeopleNames = useMemo(() => {
+    const map = {};
+    relationships.filter(r => r.relationship_type === "person_enterprise" && r.status !== "ended" && r.enterprise_name && r.person_name).forEach(r => {
+      if (!map[r.enterprise_name]) map[r.enterprise_name] = new Set();
+      map[r.enterprise_name].add(r.person_name.trim());
+    });
+    return map;
+  }, [relationships]);
+
+  // Build enterprise→service names map via Relationships
+  const enterpriseServiceNames = useMemo(() => {
+    const map = {};
+    relationships.filter(r => r.relationship_type === "enterprise_service" && r.status !== "ended" && r.enterprise_name && r.service_name).forEach(r => {
+      if (!map[r.enterprise_name]) map[r.enterprise_name] = new Set();
+      map[r.enterprise_name].add(r.service_name.trim());
+    });
+    return map;
+  }, [relationships]);
+
+  // Build person name→person record map for fast lookup
+  const peopleByName = useMemo(() => {
+    const map = {};
+    people.forEach(p => { map[`${p.first_name} ${p.last_name}`.trim()] = p; });
+    return map;
+  }, [people]);
+
+  const getPeopleForEnterprise = (enterpriseName) => {
+    const names = enterprisePeopleNames[enterpriseName] || new Set();
+    return [...names].map(n => peopleByName[n]).filter(Boolean);
+  };
+
   const statsFor = (enterpriseName) => {
-    const staff = people.filter(p => p.enterprise === enterpriseName && p.person_type === "employee" && p.status === "active");
-    const clients = people.filter(p => p.enterprise === enterpriseName && p.person_type === "client" && p.status === "active");
-    const addrs = addresses.filter(a => a.enterprise === enterpriseName);
-    const svcs = services.filter(s => s.enterprise === enterpriseName || !s.enterprise);
+    const entPeople = getPeopleForEnterprise(enterpriseName);
+    const staff = entPeople.filter(p => ["employee", "contractor", "freelancer"].includes(p.person_type) && p.status === "active");
+    const clients = entPeople.filter(p => ["client", "patient"].includes(p.person_type) && p.status === "active");
+
+    const addrs = addresses.filter(a => {
+      const linked = a.linked_enterprises || [];
+      return linked.some(le => le.enterprise_name === enterpriseName && le.active !== false);
+    });
+
+    const svcNames = enterpriseServiceNames[enterpriseName] || new Set();
+    const svcs = services.filter(s => svcNames.has((s.name || s.service_name || "").trim()));
+
     const recentTasks = tasks.filter(t => {
       const d = new Date(t.scheduled_date || t.created_date);
       return t.enterprise === enterpriseName && (new Date() - d) / (1000 * 60 * 60 * 24) <= 30;
     });
     const completedTasks = recentTasks.filter(t => t.status === "completed");
     const revenue = transactions
-      .filter(t => t.enterprise === enterpriseName && t.transaction_type === "sale_service" && t.payment_status === "paid")
+      .filter(t => t.enterprise === enterpriseName && t.payment_status === "paid")
       .reduce((sum, t) => sum + (t.amount || 0), 0);
     const completionRate = recentTasks.length > 0 ? Math.round(completedTasks.length / recentTasks.length * 100) : null;
 
@@ -48,7 +88,6 @@ export default function HierarchyView({ enterprises, people, services, products,
     const stats = statsFor(enterprise.enterprise_name);
     const children = childrenOf(enterprise.id);
     const isExpanded = expanded.has(enterprise.id);
-    const healthColor = stats.health >= 75 ? "emerald" : stats.health >= 50 ? "amber" : "rose";
     const healthBg = stats.health >= 75 ? "bg-emerald-50 border-emerald-100" : stats.health >= 50 ? "bg-amber-50 border-amber-100" : "bg-rose-50 border-rose-100";
     const healthText = stats.health >= 75 ? "text-emerald-600" : stats.health >= 50 ? "text-amber-600" : "text-rose-600";
     const healthSubText = stats.health >= 75 ? "text-emerald-400" : stats.health >= 50 ? "text-amber-400" : "text-rose-400";
