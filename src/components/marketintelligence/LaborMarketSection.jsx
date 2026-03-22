@@ -1,6 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { Loader2 } from "lucide-react";
 import SectionSkeleton from "./SectionSkeleton";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  Cell, ReferenceLine, LabelList
+} from "recharts";
 
 const BIZ_ROLE_LABEL = {
   home_healthcare: "Registered Nurse",

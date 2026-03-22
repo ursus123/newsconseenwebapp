@@ -1,5 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import SectionSkeleton from "./SectionSkeleton";
+import {
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LineChart, Line, Legend
+} from "recharts";
 
 function KPICard({ label, value, signal }) {
   const colors = {
