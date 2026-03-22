@@ -579,6 +579,51 @@ export default function MarketIntelligence() {
           )}
         </div>
       </div>
+    {/* Query Editor Modal */}
+    {showQueryEditor && editingQuery && (
+      <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <h3 className="font-bold text-slate-800">Edit Query — {editingQuery.section.replace(/_/g, " ")}</h3>
+            <button onClick={() => setShowQueryEditor(false)} className="text-slate-400 hover:text-slate-600">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="p-5">
+            <textarea
+              value={editingQuery.sql}
+              onChange={e => setEditingQuery(prev => ({ ...prev, sql: e.target.value }))}
+              className="w-full h-40 font-mono text-sm bg-slate-900 text-emerald-300 rounded-xl p-4 outline-none resize-none border border-slate-700"
+            />
+            {editingQuery.error && <p className="text-xs text-rose-500 mt-2">Error: {editingQuery.error}</p>}
+          </div>
+          <div className="flex gap-3 px-5 pb-5">
+            <button
+              onClick={async () => {
+                const newSql = editingQuery.sql;
+                const key = editingQuery.section;
+                const idx = editingQuery.index;
+                setShowQueryEditor(false);
+                try {
+                  const res = await executeSQL(newSql, {});
+                  const rows = res.rows || [];
+                  setResults(prev => ({ ...(prev || {}), [key]: rows }));
+                  setQueryLog(prev => prev.map((q, i) => i === idx ? { ...q, sql: newSql, status: "done", rows: rows.length, error: null } : q));
+                } catch (e) {
+                  setQueryLog(prev => prev.map((q, i) => i === idx ? { ...q, sql: newSql, status: "error", error: e.message } : q));
+                }
+              }}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-2.5 font-semibold text-sm"
+            >
+              ▶ Run Updated Query
+            </button>
+            <button onClick={() => setShowQueryEditor(false)} className="px-4 py-2.5 border border-slate-200 rounded-xl text-slate-600 text-sm">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }
