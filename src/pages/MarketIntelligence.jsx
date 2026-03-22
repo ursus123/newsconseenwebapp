@@ -480,6 +480,30 @@ export default function MarketIntelligence() {
                         </Link>
                       </div>
                     ))}
+
+                  {operationalContext && (
+                    <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-100">
+                      {[
+                        { label: "Clients", value: operationalContext.total_clients, color: "text-slate-800" },
+                        { label: "Staff", value: operationalContext.total_staff, color: "text-slate-800" },
+                        { label: "Revenue", value: operationalContext.total_revenue > 0 ? `$${operationalContext.total_revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—", color: "text-emerald-600" },
+                        { label: "Task Done", value: operationalContext.task_completion != null ? `${operationalContext.task_completion}%` : "—", color: "text-blue-600" },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="text-center">
+                          <p className={`text-lg font-black ${color}`}>{value}</p>
+                          <p className="text-xs text-slate-400">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {operationalContext && results?.market?.[0] && (
+                    <div className="mt-3 pt-3 border-t border-slate-100 bg-blue-50 rounded-xl p-3">
+                      <p className="text-xs font-bold text-blue-700 mb-1">📊 Market vs Your Performance</p>
+                      <p className="text-xs text-blue-600">Market score: <strong>{results.market[0].opportunity_score}/100</strong></p>
+                      <p className="text-xs text-blue-600 mt-1">You serve <strong>{operationalContext.total_clients} clients</strong> — addressable market: <strong>${(results.market[0].annual_market_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr</strong></p>
+                    </div>
+                  )}
                   </div>
                 </div>
               )}
