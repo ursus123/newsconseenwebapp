@@ -185,13 +185,31 @@ export default function EntityGraph() {
 
   const isLoading = loadStates.core === LOAD_STATES.loading || loadStates.core === LOAD_STATES.idle;
 
+  // Relationship-based enterprise→people lookup (shared across anomaly + badge count)
+  const enterprisePeopleNames = useMemo(() => {
+    const map = {};
+    relationships.filter(r => r.relationship_type === "person_enterprise" && r.status !== "ended" && r.enterprise_name && r.person_name).forEach(r => {
+      if (!map[r.enterprise_name]) map[r.enterprise_name] = new Set();
+      map[r.enterprise_name].add(r.person_name.trim());
+    });
+    return map;
+  }, [relationships]);
+
+  const peopleByName = useMemo(() => {
+    const map = {};
+    people.forEach(p => { map[`${p.first_name} ${p.last_name}`.trim()] = p; });
+    return map;
+  }, [people]);
+
   const anomalyDetails = useMemo(() => {
     if (isLoading) return [];
     const issues = [];
     enterprises.forEach(e => {
       const entName = e.enterprise_name;
-      const staff = people.filter(p => p.enterprise === entName && p.person_type === "employee" && p.status === "active");
-      const clients = people.filter(p => p.enterprise === entName && p.person_type === "client" && p.status === "active");
+      const entPeopleNames = enterprisePeopleNames[entName] || new Set();
+      const entPeople = [...entPeopleNames].map(n => peopleByName[n]).filter(Boolean);
+      const staff = entPeople.filter(p => ["employee", "contractor", "freelancer"].includes(p.person_type) && p.status === "active");
+      const clients = entPeople.filter(p => ["client", "patient"].includes(p.person_type) && p.status === "active");
       if (!staff.length) issues.push({ severity: "critical", enterprise: entName, type: "No active staff", detail: `${entName} has no active staff members`, action: "Add staff in People page" });
       if (!clients.length) issues.push({ severity: "warning", enterprise: entName, type: "No active clients", detail: `${entName} has no active clients`, action: "Add clients in People page" });
       const recentTasks = tasks.filter(t =>
@@ -215,7 +233,7 @@ export default function EntityGraph() {
       issues.push({ severity: "warning", enterprise: "All", type: "Outstanding payments", detail: `${unpaid.length} unpaid invoices: $${total.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, action: "Review Transactions page" });
     }
     return issues;
-  }, [enterprises, people, tasks, products, transactions, addresses, isLoading]);
+  }, [enterprises, enterprisePeopleNames, peopleByName, tasks, products, transactions, addresses, isLoading]);
   const anomalies = anomalyDetails;
 
   const { nodes: rawNodes, links: rawLinks } = useMemo(
