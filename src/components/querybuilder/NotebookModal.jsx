@@ -472,8 +472,12 @@ Return ONLY valid JSON, no explanation.`;
 
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-4 border-t border-white/10 shrink-0">
-          <div className="text-xs text-white/30">
-            {outputSchema ? (
+          <div className="text-xs text-white/30 max-w-sm">
+            {connectMessage ? (
+              <span className={`flex items-start gap-1.5 font-mono text-[10px] leading-snug ${connectMessage.startsWith("✅") ? "text-emerald-400" : "text-rose-400"}`}>
+                {connectMessage}
+              </span>
+            ) : outputSchema ? (
               <span className="flex items-center gap-1.5 text-emerald-400/70">
                 <CheckCircle className="w-3.5 h-3.5" />
                 Schema detected: {outputSchema.length} columns
