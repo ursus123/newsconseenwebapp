@@ -51,6 +51,18 @@ export const APP_REGISTRY = [
 
 export const CATEGORIES = ["All", "HR", "Inventory", "Healthcare", "Field", "Finance", "Compliance", "Education"];
 
+// Apps recommended by enterprise category
+export const APPS_BY_ENTERPRISE_CATEGORY = {
+  healthcare:  ["medadmin", "staffschedule", "clockinout", "barcodescanner", "stockcounter", "incidentreport", "careplan"],
+  education:   ["attendanceregister", "feecollection", "staffschedule", "clockinout", "stockcounter", "librarylog"],
+  community:   ["attendanceregister", "donationtracker", "staffschedule", "visitorlog", "maintenancerequest"],
+  agriculture: ["stockcounter", "barcodescanner", "inspectionchecklist", "vehiclelog", "maintenancerequest"],
+  business:    ["clockinout", "staffschedule", "stockcounter", "barcodescanner", "deliverytracker", "receiptscanner"],
+  nonprofit:   ["donationtracker", "attendanceregister", "budgettracker", "fieldvisitreport", "staffschedule"],
+  government:  ["inspectionchecklist", "licensetracker", "documentexpiry", "staffschedule", "clockinout"],
+  other:       ["clockinout", "staffschedule", "stockcounter", "barcodescanner"],
+};
+
 export const PLAN_ORDER = { starter: 0, professional: 1, consultant: 2 };
 
 export const COLOR_MAP = {
