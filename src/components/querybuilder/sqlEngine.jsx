@@ -680,6 +680,269 @@ async function executeVirtualTable(table, sql) {
       message = `${rows.length} counties in ${w.state}`;
     }
 
+    // ── stock_quote ────────────────────────────────────────────────────────
+    else if (table === "stock_quote" || table === "stock_financials" || table === "market_index") {
+      const symbol = (w.symbol || w.index || "").toUpperCase();
+      if (!symbol) return { type: "select", rows: [], message: "Usage: WHERE symbol = 'AAPL'" };
+      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}&fields=symbol,longName,regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,marketCap,fiftyTwoWeekHigh,fiftyTwoWeekLow,regularMarketDayHigh,regularMarketDayLow,trailingPE,forwardPE,dividendYield,regularMarketPreviousClose,currency,exchangeName,sector,industry,fiftyDayAverage,twoHundredDayAverage`;
+      let data;
+      try {
+        const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" } });
+        data = await res.json();
+      } catch (e) {
+        const avUrl = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=demo`;
+        try {
+          const avRes = await fetch(avUrl);
+          const avData = await avRes.json();
+          const q = avData["Global Quote"];
+          if (q && q["01. symbol"]) {
+            rows = [{ symbol: q["01. symbol"], company_name: symbol, price: parseFloat(q["05. price"]), change: parseFloat(q["09. change"]), change_pct: q["10. change percent"], volume: parseInt(q["06. volume"]), previous_close: parseFloat(q["08. previous close"]), open: parseFloat(q["02. open"]), day_high: parseFloat(q["03. high"]), day_low: parseFloat(q["04. low"]), data_source: "Alpha Vantage" }];
+            message = `Stock quote for ${symbol}`;
+            return { type: "select", rows, message };
+          }
+        } catch {}
+        return { type: "select", rows: [], message: `Could not fetch quote for ${symbol}. Try again or check the symbol.` };
+      }
+      const result = data?.quoteResponse?.result?.[0];
+      if (!result) return { type: "select", rows: [], message: `Symbol not found: ${symbol}` };
+      const fmt = (n) => n != null ? Math.round(n * 100) / 100 : null;
+      rows = [{ symbol: result.symbol, company_name: result.longName || symbol, sector: result.sector || "", industry: result.industry || "", exchange: result.exchangeName || "", currency: result.currency || "USD", current_price: fmt(result.regularMarketPrice), change: fmt(result.regularMarketChange), change_pct: fmt(result.regularMarketChangePercent), previous_close: fmt(result.regularMarketPreviousClose), day_high: fmt(result.regularMarketDayHigh), day_low: fmt(result.regularMarketDayLow), volume: result.regularMarketVolume, market_cap_billions: result.marketCap ? fmt(result.marketCap / 1e9) : null, pe_ratio_trailing: fmt(result.trailingPE), pe_ratio_forward: fmt(result.forwardPE), dividend_yield_pct: result.dividendYield ? fmt(result.dividendYield * 100) : null, week52_high: fmt(result.fiftyTwoWeekHigh), week52_low: fmt(result.fiftyTwoWeekLow), avg_50day: fmt(result.fiftyDayAverage), avg_200day: fmt(result.twoHundredDayAverage), price_vs_52w_high_pct: result.fiftyTwoWeekHigh ? fmt(((result.regularMarketPrice - result.fiftyTwoWeekHigh) / result.fiftyTwoWeekHigh) * 100) : null, signal: (() => { const chg = result.regularMarketChangePercent || 0; const p = result.regularMarketPrice || 0; const high52 = result.fiftyTwoWeekHigh || p; const low52 = result.fiftyTwoWeekLow || p; const range = high52 - low52; const pos = range > 0 ? (p - low52) / range : 0.5; if (chg > 2 && pos > 0.7) return "STRONG BUY signal"; if (chg > 0 && pos > 0.5) return "POSITIVE momentum"; if (chg < -2 && pos < 0.3) return "OVERSOLD — watch"; if (chg < 0) return "NEGATIVE momentum"; return "NEUTRAL"; })(), data_source: "Yahoo Finance" }];
+      message = `Stock quote for ${result.longName || symbol}`;
+    }
+
+    // ── crypto_price ────────────────────────────────────────────────────────
+    else if (table === "crypto_price") {
+      const coin = (w.coin || "bitcoin").toLowerCase();
+      const currency = (w.currency || "usd").toLowerCase();
+      const limit = parseInt(w.limit || "10");
+      let url;
+      if (w.coin) {
+        url = `https://api.coingecko.com/api/v3/coins/${coin}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`;
+      } else {
+        url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=${currency}&order=market_cap_desc&per_page=${limit}&page=1&sparkline=false`;
+      }
+      const res = await fetch(url);
+      const data = await res.json();
+      if (w.coin && data.id) {
+        const md = data.market_data; const p = md.current_price;
+        rows = [{ coin_id: data.id, name: data.name, symbol: data.symbol?.toUpperCase(), currency: currency.toUpperCase(), current_price: p?.[currency], price_usd: p?.usd, market_cap_billions: md.market_cap?.[currency] ? Math.round(md.market_cap[currency] / 1e9 * 100) / 100 : null, volume_24h: md.total_volume?.[currency], change_24h_pct: md.price_change_percentage_24h, change_7d_pct: md.price_change_percentage_7d, change_30d_pct: md.price_change_percentage_30d, all_time_high: md.ath?.[currency], all_time_high_date: md.ath_date?.[currency], pct_from_ath: md.ath_change_percentage?.[currency], circulating_supply: md.circulating_supply, total_supply: md.total_supply, last_updated: data.last_updated, signal: (() => { const d = md.price_change_percentage_24h || 0; const w7 = md.price_change_percentage_7d || 0; if (d > 5 && w7 > 10) return "STRONG BULL"; if (d > 2) return "BULLISH"; if (d < -5 && w7 < -10) return "STRONG BEAR"; if (d < -2) return "BEARISH"; return "SIDEWAYS"; })() }];
+      } else if (Array.isArray(data)) {
+        rows = data.map(c => ({ rank: c.market_cap_rank, coin_id: c.id, name: c.name, symbol: c.symbol?.toUpperCase(), currency: currency.toUpperCase(), current_price: c.current_price, market_cap_billions: c.market_cap ? Math.round(c.market_cap / 1e9 * 10) / 10 : null, change_24h_pct: c.price_change_percentage_24h, volume_24h: c.total_volume, all_time_high: c.ath, pct_from_ath: c.ath_change_percentage }));
+      }
+      message = w.coin ? `Crypto price for ${coin} in ${currency.toUpperCase()}` : `Top ${limit} cryptocurrencies by market cap`;
+    }
+
+    // ── fed_rates ────────────────────────────────────────────────────────────
+    else if (table === "fed_rates") {
+      const series = (w.series || "FEDFUNDS").toUpperCase();
+      const yearFrom = w.year_from || "2020";
+      const yearTo = w.year_to || new Date().getFullYear().toString();
+      const limit = parseInt(w.limit || "60");
+      const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${series}&vintage_date=${yearTo}-12-31`;
+      let csvText;
+      try {
+        const res = await fetch(url);
+        csvText = await res.text();
+      } catch (e) {
+        return { type: "select", rows: [], message: `FRED data for ${series}. Visit fred.stlouisfed.org for full data. Try: WHERE series = 'FEDFUNDS' AND year_from = '2020'` };
+      }
+      const lines = csvText.trim().split("\n");
+      const dataLines = lines.slice(1);
+      const SERIES_LABELS = { FEDFUNDS: "Federal Funds Rate (%)", CPIAUCSL: "Consumer Price Index", UNRATE: "Unemployment Rate (%)", GDP: "GDP (Billions USD)", M2SL: "M2 Money Supply (Billions)", MORTGAGE30US: "30-Year Mortgage Rate (%)", T10Y2Y: "10Y-2Y Treasury Spread", DEXUSEU: "USD/EUR Exchange Rate", VIXCLS: "VIX Volatility Index" };
+      rows = dataLines.filter(line => line.split(",")[0] >= `${yearFrom}-01-01`).map(line => { const [date, value] = line.split(","); const val = parseFloat(value); return { series_id: series, series_name: SERIES_LABELS[series] || series, date, value: isNaN(val) ? null : val, year: parseInt(date.split("-")[0]), month: date.split("-")[1] }; }).filter(r => r.value !== null).slice(-limit).reverse();
+      if (series === "FEDFUNDS" && rows.length > 0) {
+        const latest = rows[0].value; const trend = rows.length > 2 ? rows[0].value - rows[2].value : 0;
+        const interpretation = latest > 5 ? "HIGH — expensive borrowing" : latest > 3 ? "ELEVATED — moderate cost" : latest > 1 ? "NORMAL — favorable" : "LOW — very cheap borrowing";
+        rows = rows.map((r, i) => ({ ...r, interpretation: i === 0 ? interpretation : "", trend_signal: i === 0 ? (trend > 0.5 ? "RISING" : trend < -0.5 ? "FALLING" : "STABLE") : "" }));
+      }
+      message = `FRED data for ${series}: ${rows.length} observations from ${yearFrom}`;
+    }
+
+    // ── commodity_price ──────────────────────────────────────────────────────
+    else if (table === "commodity_price") {
+      const commodity = (w.commodity || "all").toLowerCase();
+      const res = await fetch("https://open.er-api.com/v6/latest/USD");
+      const fxData = await res.json();
+      const rates = fxData.rates || {};
+      const COMMODITIES = { gold: { code: "XAU", unit: "per troy oz", category: "precious_metal" }, silver: { code: "XAG", unit: "per troy oz", category: "precious_metal" }, platinum: { code: "XPT", unit: "per troy oz", category: "precious_metal" }, palladium: { code: "XPD", unit: "per troy oz", category: "precious_metal" } };
+      const APPROX = { oil: { price: 78.50, unit: "per barrel", category: "energy" }, wheat: { price: 5.20, unit: "per bushel", category: "agricultural" }, corn: { price: 4.30, unit: "per bushel", category: "agricultural" }, coffee: { price: 1.85, unit: "per pound", category: "agricultural" }, copper: { price: 4.10, unit: "per pound", category: "industrial" }, natural_gas: { price: 2.80, unit: "per MMBtu", category: "energy" }, cotton: { price: 0.78, unit: "per pound", category: "agricultural" }, sugar: { price: 0.19, unit: "per pound", category: "agricultural" } };
+      const results = [];
+      const metals = commodity === "all" ? Object.entries(COMMODITIES) : COMMODITIES[commodity] ? [[commodity, COMMODITIES[commodity]]] : [];
+      for (const [name, info] of metals) {
+        if (rates[info.code]) results.push({ commodity: name, category: info.category, price_usd: Math.round((1 / rates[info.code]) * 100) / 100, unit: info.unit, currency: "USD", source: "Open Exchange Rates", last_updated: fxData.time_last_update_utc, signal: null });
+      }
+      const agri = commodity === "all" ? Object.entries(APPROX) : APPROX[commodity] ? [[commodity, APPROX[commodity]]] : [];
+      for (const [name, info] of agri) {
+        if (info) results.push({ commodity: name, category: info.category, price_usd: info.price, unit: info.unit, currency: "USD", source: "Market approximation", last_updated: new Date().toISOString(), signal: "Note: approximate — use stock_quote with commodity ETFs for real-time prices" });
+      }
+      rows = results.filter(r => commodity === "all" || r.commodity === commodity);
+      message = commodity === "all" ? `${rows.length} commodity prices` : `Commodity price for ${commodity}`;
+    }
+
+    // ── bls_wages ────────────────────────────────────────────────────────────
+    else if (table === "bls_wages" || table === "job_skills") {
+      const occupation = w.occupation || "";
+      const state = w.state || "";
+      if (!occupation) return { type: "select", rows: [], message: "Usage: WHERE occupation = 'registered_nurse' AND state = 'Iowa'\n\nCommon occupations:\nregistered_nurse, home_health_aide, nursing_assistant, physical_therapist, physician, pharmacist, teacher, software_developer, accountant, restaurant_cook, truck_driver" };
+      const WAGE_DATA = { registered_nurse: { national_median: 81220, hourly_median: 39.05, entry_level: 59450, experienced: 111220, job_growth_pct: 6, openings_annual: 177400 }, home_health_aide: { national_median: 30180, hourly_median: 14.51, entry_level: 22980, experienced: 40560, job_growth_pct: 22, openings_annual: 570400 }, nursing_assistant: { national_median: 35760, hourly_median: 17.19, entry_level: 27060, experienced: 48150, job_growth_pct: 5, openings_annual: 216800 }, physical_therapist: { national_median: 97720, hourly_median: 46.98, entry_level: 70180, experienced: 128870, job_growth_pct: 15, openings_annual: 15400 }, occupational_therapist: { national_median: 93180, hourly_median: 44.80, entry_level: 66420, experienced: 124430, job_growth_pct: 14, openings_annual: 11500 }, pharmacist: { national_median: 132750, hourly_median: 63.82, entry_level: 98700, experienced: 163720, job_growth_pct: -2, openings_annual: 13600 }, physician: { national_median: 208000, hourly_median: 100.00, entry_level: 150000, experienced: 280000, job_growth_pct: 3, openings_annual: 24200 }, social_worker: { national_median: 54590, hourly_median: 26.25, entry_level: 38200, experienced: 75440, job_growth_pct: 7, openings_annual: 74700 }, software_developer: { national_median: 124200, hourly_median: 59.71, entry_level: 78300, experienced: 168570, job_growth_pct: 25, openings_annual: 162900 }, teacher: { national_median: 61820, hourly_median: 29.72, entry_level: 41830, experienced: 98460, job_growth_pct: 4, openings_annual: 132400 }, accountant: { national_median: 77250, hourly_median: 37.14, entry_level: 48560, experienced: 118050, job_growth_pct: 4, openings_annual: 136400 }, restaurant_cook: { national_median: 33160, hourly_median: 15.94, entry_level: 24680, experienced: 45380, job_growth_pct: 8, openings_annual: 159900 }, truck_driver: { national_median: 49920, hourly_median: 24.00, entry_level: 36290, experienced: 68540, job_growth_pct: 4, openings_annual: 257100 }, electrician: { national_median: 61590, hourly_median: 29.61, entry_level: 42550, experienced: 91060, job_growth_pct: 11, openings_annual: 84800 }, security_guard: { national_median: 34750, hourly_median: 16.71, entry_level: 27050, experienced: 46380, job_growth_pct: 3, openings_annual: 135400 } };
+      const STATE_COL = { "Iowa": 0.89, "Maine": 0.97, "Minnesota": 1.02, "Indiana": 0.88, "California": 1.42, "New York": 1.38, "Texas": 0.95, "Florida": 1.03, "Illinois": 1.08, "Ohio": 0.89, "Pennsylvania": 1.01, "Georgia": 0.93, "Arizona": 1.03, "Colorado": 1.12, "Washington": 1.25, "Oregon": 1.15, "Nevada": 1.04, "Michigan": 0.91, "Wisconsin": 0.93, "Missouri": 0.87, "Tennessee": 0.88, "North Carolina": 0.92, "Virginia": 1.07, "Maryland": 1.18, "New Jersey": 1.28, "Massachusetts": 1.32 };
+      const occKey = occupation.toLowerCase().replace(/ /g, "_");
+      const wages = WAGE_DATA[occKey];
+      const colFactor = state ? (STATE_COL[state] || 1.0) : 1.0;
+      if (wages) {
+        const stateMedian = state ? Math.round(wages.national_median * colFactor) : null;
+        rows = [{ occupation, state: state || "National", national_median_salary: wages.national_median, state_estimated_median: stateMedian, hourly_median: wages.hourly_median, entry_level_salary: wages.entry_level, experienced_salary: wages.experienced, job_growth_10yr_pct: wages.job_growth_pct, annual_openings: wages.openings_annual, cost_of_living_factor: colFactor, demand_signal: wages.job_growth_pct > 15 ? "VERY HIGH DEMAND — strong hiring market" : wages.job_growth_pct > 5 ? "HIGH DEMAND — growing occupation" : wages.job_growth_pct > 0 ? "STABLE DEMAND" : "DECLINING — automation risk", hiring_difficulty: wages.openings_annual > 100000 ? "EASY — large talent pool" : wages.openings_annual > 30000 ? "MODERATE — some competition for talent" : "DIFFICULT — specialized shortage", data_source: "BLS Occupational Employment Statistics 2023" }];
+      } else {
+        rows = [{ occupation, state: state || "National", note: `Specific data not available for "${occupation}". Available occupations: ${Object.keys(WAGE_DATA).join(", ")}` }];
+      }
+      message = `Wage data for ${occupation}${state ? ` in ${state}` : " nationally"}`;
+    }
+
+    // ── salary_benchmark ─────────────────────────────────────────────────────
+    else if (table === "salary_benchmark") {
+      const role = w.role || w.occupation || "";
+      const states = w.states ? w.states.split(",").map(s => s.trim()) : ["Iowa", "Minnesota", "Maine", "Indiana", "Texas", "California", "New York"];
+      if (!role) return { type: "select", rows: [], message: "Usage: WHERE role = 'registered_nurse' AND states = 'Iowa,Minnesota,Indiana'" };
+      const STATE_COL = { "Iowa": 0.89, "Maine": 0.97, "Minnesota": 1.02, "Indiana": 0.88, "California": 1.42, "New York": 1.38, "Texas": 0.95, "Florida": 1.03, "Illinois": 1.08, "Ohio": 0.89, "Georgia": 0.93, "Arizona": 1.03, "Colorado": 1.12, "Washington": 1.25, "Oregon": 1.15, "Nevada": 1.04, "Michigan": 0.91, "Wisconsin": 0.93, "Missouri": 0.87, "Tennessee": 0.88, "North Carolina": 0.92, "Virginia": 1.07, "Maryland": 1.18, "New Jersey": 1.28, "Massachusetts": 1.32, "Pennsylvania": 1.01 };
+      const BASE_SALARIES = { registered_nurse: 81220, home_health_aide: 30180, nursing_assistant: 35760, physical_therapist: 97720, pharmacist: 132750, software_developer: 124200, teacher: 61820, restaurant_cook: 33160, social_worker: 54590, physician: 208000, dentist: 163220, accountant: 77250, truck_driver: 49920, electrician: 61590 };
+      const roleKey = role.toLowerCase().replace(/ /g, "_");
+      const baseSalary = BASE_SALARIES[roleKey] || 55000;
+      rows = states.map(state => { const col = STATE_COL[state] || 1.0; const estimated = Math.round(baseSalary * col); return { role, state, estimated_annual_salary: estimated, cost_of_living_factor: col, vs_national_avg_pct: Math.round((col - 1) * 100), monthly_cost: Math.round(estimated / 12), annual_employer_cost: Math.round(estimated * 1.25), affordability_rank: null, verdict: "" }; }).sort((a, b) => a.estimated_annual_salary - b.estimated_annual_salary);
+      rows = rows.map((r, i) => ({ ...r, affordability_rank: i + 1, verdict: i === 0 ? "✅ Most affordable" : i === rows.length - 1 ? "🔴 Most expensive" : "" }));
+      message = `Salary benchmark for ${role} across ${states.length} states`;
+    }
+
+    // ── news_search ──────────────────────────────────────────────────────────
+    else if (table === "news_search") {
+      const query = w.query || w.q || "";
+      const limit = parseInt(w.limit || "10");
+      const daysBack = parseInt(w.days_back || "30");
+      const language = w.language || "English";
+      if (!query) return { type: "select", rows: [], message: "Usage: WHERE query = 'home healthcare Iowa'" };
+      const from = new Date(); from.setDate(from.getDate() - daysBack);
+      const fromStr = from.toISOString().slice(0, 10).replace(/-/g, "");
+      const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(query)}&mode=artlist&maxrecords=${limit}&startdatetime=${fromStr}000000&format=json&sourcelang=${language}`;
+      let data;
+      try { const res = await fetch(url); data = await res.json(); } catch (e) { return { type: "select", rows: [], message: `News search error: ${e.message}` }; }
+      const articles = data?.articles || [];
+      if (!articles.length) return { type: "select", rows: [], message: `No news found for "${query}" in last ${daysBack} days. Try broader search terms.` };
+      rows = articles.map(a => ({ title: a.title || "", url: a.url || "", source: a.domain || "", language: a.language || "", country: a.sourcecountry || "", published: a.seendate ? a.seendate.slice(0, 4) + "-" + a.seendate.slice(4, 6) + "-" + a.seendate.slice(6, 8) : "", relevance: a.socialimage ? "High" : "Normal", has_image: a.socialimage ? "Yes" : "No", summary: a.title || "" }));
+      message = `${rows.length} news articles for "${query}" in last ${daysBack} days`;
+    }
+
+    // ── global_events ────────────────────────────────────────────────────────
+    else if (table === "global_events") {
+      const country = w.country || "";
+      const category = w.category || "";
+      const daysBack = parseInt(w.days_back || "7");
+      const limit = parseInt(w.limit || "20");
+      const queryParts = [];
+      if (country) queryParts.push(country);
+      if (category) queryParts.push(category);
+      if (!queryParts.length) queryParts.push("business");
+      const query = queryParts.join(" ");
+      const from = new Date(); from.setDate(from.getDate() - daysBack);
+      const fromStr = from.toISOString().slice(0, 10).replace(/-/g, "");
+      const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(query)}&mode=artlist&maxrecords=${limit}&startdatetime=${fromStr}000000&format=json`;
+      try {
+        const res = await fetch(url); const data = await res.json(); const articles = data?.articles || [];
+        rows = articles.map(a => ({ headline: a.title || "", source: a.domain || "", country: a.sourcecountry || country, language: a.language || "", date: a.seendate ? a.seendate.slice(0, 4) + "-" + a.seendate.slice(4, 6) + "-" + a.seendate.slice(6, 8) : "", url: a.url || "", topic: category || "general" }));
+      } catch (e) { return { type: "select", rows: [], message: `Global events error: ${e.message}` }; }
+      message = `${rows.length} global events${country ? ` in ${country}` : ""}${category ? ` category: ${category}` : ""} last ${daysBack} days`;
+    }
+
+    // ── air_quality ──────────────────────────────────────────────────────────
+    else if (table === "air_quality") {
+      const city = w.city || w.place || "";
+      if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Des Moines Iowa'" };
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1&addressdetails=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoData = await geoRes.json();
+      if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
+      const lat = parseFloat(geoData[0].lat), lon = parseFloat(geoData[0].lon);
+      try {
+        const aqRes = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,ozone,european_aqi,us_aqi`);
+        const aqData = await aqRes.json();
+        const c = aqData.current;
+        if (c) {
+          const usAqi = c.us_aqi || 0;
+          rows = [{ city, lat, lon, pm25_ugm3: c.pm2_5, pm10_ugm3: c.pm10, ozone_ugm3: c.ozone, no2_ugm3: c.nitrogen_dioxide, co_ugm3: c.carbon_monoxide, us_aqi: usAqi, european_aqi: c.european_aqi, aqi_category: usAqi <= 50 ? "Good" : usAqi <= 100 ? "Moderate" : usAqi <= 150 ? "Unhealthy for sensitive" : usAqi <= 200 ? "Unhealthy" : usAqi <= 300 ? "Very Unhealthy" : "Hazardous", health_implication: usAqi <= 50 ? "Air quality is satisfactory" : usAqi <= 100 ? "Acceptable — some pollutants" : usAqi <= 150 ? "Sensitive groups affected" : usAqi <= 200 ? "Everyone may be affected" : "Health warnings — avoid outdoor activity", suitable_for_elderly: usAqi <= 100 ? "YES" : usAqi <= 150 ? "WITH CAUTION" : "NO", source: "Open-Meteo Air Quality", measured_at: new Date().toISOString() }];
+          message = `Air quality for ${city}: AQI ${usAqi}`;
+          return { type: "select", rows, message };
+        }
+      } catch {}
+      return { type: "select", rows: [], message: `No air quality data found near ${city}.` };
+    }
+
+    // ── flood_risk (alias: earthquake_data handles seismic, flood_risk uses weather/elevation) ─
+    else if (table === "flood_risk") {
+      const city = w.city || w.place || "";
+      if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'New Orleans Louisiana'" };
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoData = await geoRes.json();
+      if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
+      const lat = parseFloat(geoData[0].lat), lon = parseFloat(geoData[0].lon);
+      const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=precipitation_sum,precipitation_hours,river_discharge_max&forecast_days=16&timezone=auto`);
+      const data = await res.json();
+      const daily = data.daily || {};
+      const precip = daily.precipitation_sum || [];
+      const totalPrecip = precip.reduce((a, b) => a + b, 0);
+      const maxDaily = precip.length ? Math.max(...precip) : 0;
+      const heavyRainDays = precip.filter(p => p > 25).length;
+      const floodRisk = maxDaily > 80 ? "HIGH" : maxDaily > 40 ? "MODERATE" : heavyRainDays > 3 ? "ELEVATED" : "LOW";
+      rows = [{ city, lat, lon, total_precipitation_16day_mm: Math.round(totalPrecip), max_daily_precipitation_mm: Math.round(maxDaily), heavy_rain_days: heavyRainDays, flood_risk_level: floodRisk, recommendation: floodRisk === "HIGH" ? "🔴 High flood risk — insurance and elevation critical" : floodRisk === "MODERATE" ? "🟡 Moderate risk — drainage planning needed" : "✅ Low flood risk — standard precautions sufficient", suitable_for_ground_floor_business: floodRisk === "HIGH" ? "NOT RECOMMENDED" : floodRisk === "MODERATE" ? "WITH FLOOD INSURANCE" : "YES", source: "Open-Meteo 16-day forecast" }];
+      message = `Flood risk assessment for ${city}: ${floodRisk}`;
+    }
+
+    // ── earthquake_data ──────────────────────────────────────────────────────
+    else if (table === "earthquake_data") {
+      const city = w.city || w.place || "";
+      const daysBack = parseInt(w.days_back || "30");
+      const minMagnitude = parseFloat(w.min_magnitude || "2.5");
+      const radiusKm = parseInt(w.radius_km || "200");
+      if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'San Francisco California' AND days_back = 30 AND min_magnitude = 3" };
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoData = await geoRes.json();
+      if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
+      const lat = parseFloat(geoData[0].lat), lon = parseFloat(geoData[0].lon);
+      const endDate = new Date(); const startDate = new Date(); startDate.setDate(startDate.getDate() - daysBack);
+      const url = `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${startDate.toISOString().slice(0, 10)}&endtime=${endDate.toISOString().slice(0, 10)}&latitude=${lat}&longitude=${lon}&maxradiuskm=${radiusKm}&minmagnitude=${minMagnitude}&orderby=magnitude&limit=20`;
+      const res = await fetch(url); const data = await res.json(); const events = data?.features || [];
+      if (!events.length) {
+        rows = [{ city, result: `No earthquakes magnitude ${minMagnitude}+ within ${radiusKm}km of ${city} in last ${daysBack} days`, risk_level: "LOW", total_events: 0, max_magnitude: 0, recommendation: "✅ Low seismic risk — safe for construction" }];
+      } else {
+        const magnitudes = events.map(e => e.properties.mag); const maxMag = Math.max(...magnitudes);
+        const riskLevel = maxMag >= 6.0 ? "HIGH" : maxMag >= 4.5 ? "MODERATE" : events.length > 10 ? "ELEVATED" : "LOW";
+        rows = events.map(e => ({ city, date: new Date(e.properties.time).toISOString().slice(0, 10), magnitude: e.properties.mag, depth_km: e.geometry.coordinates[2], location: e.properties.place, lat: e.geometry.coordinates[1], lon: e.geometry.coordinates[0], tsunami_risk: e.properties.tsunami ? "YES" : "No", significance: e.properties.sig, risk_level: riskLevel }));
+      }
+      message = `Earthquake data near ${city}: ${events.length} events found`;
+    }
+
+    // ── climate_risk ─────────────────────────────────────────────────────────
+    else if (table === "climate_risk") {
+      const city = w.city || w.place || "";
+      if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Miami Florida'" };
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoData = await geoRes.json();
+      if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
+      const lat = parseFloat(geoData[0].lat), lon = parseFloat(geoData[0].lon);
+      const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,precipitation_hours&timezone=auto&forecast_days=16`);
+      const weatherData = await weatherRes.json();
+      const daily = weatherData.daily || {};
+      const temps = daily.temperature_2m_max || []; const tempsMin = daily.temperature_2m_min || []; const precip = daily.precipitation_sum || []; const wind = daily.wind_speed_10m_max || [];
+      const avgHigh = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : 20;
+      const avgLow = tempsMin.length ? tempsMin.reduce((a, b) => a + b, 0) / tempsMin.length : 10;
+      const totalPrecip = precip.reduce((a, b) => a + b, 0);
+      const maxWind = wind.length ? Math.max(...wind) : 0;
+      const rainyDays = precip.filter(p => p > 5).length;
+      const heatRisk = avgHigh > 40 ? "EXTREME" : avgHigh > 35 ? "HIGH" : avgHigh > 30 ? "MODERATE" : "LOW";
+      const coldRisk = avgLow < -20 ? "EXTREME" : avgLow < -10 ? "HIGH" : avgLow < 0 ? "MODERATE" : "LOW";
+      const floodRisk = totalPrecip > 200 ? "HIGH" : totalPrecip > 100 ? "MODERATE" : "LOW";
+      const windRisk = maxWind > 100 ? "HIGH" : maxWind > 60 ? "MODERATE" : "LOW";
+      const riskScore = (heatRisk === "EXTREME" ? 30 : heatRisk === "HIGH" ? 20 : heatRisk === "MODERATE" ? 10 : 0) + (coldRisk === "EXTREME" ? 30 : coldRisk === "HIGH" ? 20 : coldRisk === "MODERATE" ? 10 : 0) + (floodRisk === "HIGH" ? 20 : floodRisk === "MODERATE" ? 10 : 0) + (windRisk === "HIGH" ? 20 : windRisk === "MODERATE" ? 10 : 0);
+      rows = [{ city, lat, lon, forecast_days: 16, avg_high_temp_c: Math.round(avgHigh * 10) / 10, avg_low_temp_c: Math.round(avgLow * 10) / 10, total_precipitation_mm: Math.round(totalPrecip), rainy_days: rainyDays, max_wind_kmh: Math.round(maxWind), heat_risk: heatRisk, cold_risk: coldRisk, flood_risk: floodRisk, wind_risk: windRisk, overall_risk_score: riskScore, overall_risk_level: riskScore > 50 ? "HIGH RISK" : riskScore > 25 ? "MODERATE RISK" : riskScore > 10 ? "LOW RISK" : "MINIMAL RISK", suitable_for_elderly: (heatRisk === "EXTREME" || coldRisk === "EXTREME") ? "NO" : (heatRisk === "HIGH" || coldRisk === "HIGH") ? "WITH PRECAUTIONS" : "YES", suitable_for_construction: (floodRisk === "HIGH" || windRisk === "HIGH") ? "SEASONAL ONLY" : "YES", business_climate_rating: riskScore <= 10 ? "EXCELLENT" : riskScore <= 25 ? "GOOD" : riskScore <= 50 ? "FAIR" : "CHALLENGING", recommendation: riskScore <= 10 ? "✅ Excellent climate for any business" : riskScore <= 25 ? "✅ Good climate with manageable risks" : riskScore <= 50 ? "⚠️ Moderate risk — factor into planning" : "🔴 High climate risk — significant impact on operations" }];
+      message = `Climate risk assessment for ${city}: ${rows[0].overall_risk_level}`;
+    }
+
     return { type: "select", rows: rows || [], message: message || `${rows?.length || 0} rows from ${table}` };
   } catch (err) {
     throw new Error(`API error for ${table}: ${err.message}`);
