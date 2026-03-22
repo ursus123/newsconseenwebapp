@@ -311,7 +311,7 @@ function PathFinder({ nodes, links, allNodes: allNodesRaw, allLinks: allLinksRaw
   );
 }
 
-export default function GraphSidePanel({ nodes, links, selected, enterprises, people, services, products, tasks, transactions, onHighlightPath }) {
+export default function GraphSidePanel({ nodes, links, allNodes, allLinks, selected, enterprises, people, services, products, tasks, transactions, onHighlightPath }) {
   const selectedNode = selected ? nodes.find((n) => n.id === selected) : null;
   const connectedLinks = selected ? links.filter((l) => l.source === selected || l.target === selected) : [];
 
@@ -411,7 +411,7 @@ export default function GraphSidePanel({ nodes, links, selected, enterprises, pe
       )}
 
       {/* Path finder */}
-      <PathFinder nodes={nodes} links={links} onHighlightPath={onHighlightPath} />
+      <PathFinder nodes={nodes} links={links} allNodes={allNodes} allLinks={allLinks} onHighlightPath={onHighlightPath} />
 
       {/* Graph analytics */}
       <GraphAnalyticsPanel nodes={nodes} links={links} />
