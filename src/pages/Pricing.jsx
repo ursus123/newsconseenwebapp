@@ -36,8 +36,8 @@ const PLANS = [
       { text: "Everything in Starter", included: true },
       { text: "Full analytics (charts + reports)", included: true },
       { text: "QueryBuilder with open data APIs", included: true },
-      { text: "Superset BI dashboards", included: true },
-      { text: "Medication autocomplete (FDA/RxNorm)", included: true },
+      { text: "Market Intelligence", included: true },
+      { text: "Adaptive terminology by enterprise type", included: true },
       { text: "Priority support", included: true },
     ],
     popular: true,
@@ -66,37 +66,31 @@ const PLANS = [
   },
 ];
 
+const USE_CASES = [
+  { emoji: "🏥", label: "Healthcare", desc: "Care homes · Home health · Clinics · Nursing facilities" },
+  { emoji: "🏫", label: "Education", desc: "Schools · Training centers · Tutoring · Universities" },
+  { emoji: "⛪", label: "Community", desc: "Churches · NGOs · Bible study groups · Community centers" },
+  { emoji: "🌾", label: "Agriculture", desc: "Farms · Barns · Livestock operations · Aquaculture" },
+  { emoji: "💼", label: "Business", desc: "SMBs · Departments · Franchises · Retail chains" },
+  { emoji: "🤝", label: "Nonprofit", desc: "Charities · Foundations · Social organizations · SDGs" },
+];
+
 const FAQS = [
-  {
-    q: "Can I change plans later?",
-    a: "Yes, upgrade or downgrade anytime from your billing settings. Changes take effect immediately.",
-  },
-  {
-    q: "What happens after the trial?",
-    a: "You'll be prompted to add a payment method. Your data is never deleted — even if your subscription lapses.",
-  },
-  {
-    q: "Is my data secure?",
-    a: "Yes. All data is isolated per workspace with enterprise-grade security. Each tenant's data is completely segregated.",
-  },
+  { q: "Can I change plans later?", a: "Yes, upgrade or downgrade anytime from your billing settings. Changes take effect immediately." },
+  { q: "What happens after the trial?", a: "You'll be prompted to add a payment method. Your data is never deleted — even if your subscription lapses." },
+  { q: "Is my data secure?", a: "Yes. All data is isolated per workspace with enterprise-grade security. Each tenant's data is completely segregated." },
+  { q: "Does it work for non-healthcare organizations?", a: "Absolutely. Newsconseen adapts its language and suggested workflows based on your enterprise type — care homes and church groups use the same powerful platform." },
 ];
 
 function FaqItem({ q, a }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="border border-slate-200 rounded-xl overflow-hidden">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-slate-50 transition-colors"
-      >
+      <button onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-slate-50 transition-colors">
         <span className="font-semibold text-slate-800 text-sm">{q}</span>
         {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
       </button>
-      {open && (
-        <div className="px-6 pb-4">
-          <p className="text-sm text-slate-500 leading-relaxed">{a}</p>
-        </div>
-      )}
+      {open && <div className="px-6 pb-4"><p className="text-sm text-slate-500 leading-relaxed">{a}</p></div>}
     </div>
   );
 }
@@ -115,10 +109,7 @@ export default function Pricing() {
           </div>
           <span className="text-lg font-bold text-slate-800">Newsconseen</span>
         </div>
-        <button
-          onClick={() => navigate("/Dashboard")}
-          className="text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
-        >
+        <button onClick={() => navigate("/Dashboard")} className="text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">
           Sign in →
         </button>
       </nav>
@@ -129,10 +120,14 @@ export default function Pricing() {
           <Zap className="w-3.5 h-3.5" /> 14-day free trial — no card required
         </span>
         <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight mb-4">
-          Simple, transparent pricing
+          The operating system<br />for any enterprise
         </h1>
-        <p className="text-lg text-slate-500 max-w-xl mx-auto mb-8">
-          Choose the plan that fits your team. Upgrade or downgrade anytime.
+        <p className="text-lg text-slate-500 max-w-2xl mx-auto mb-3">
+          From care homes to church groups, from farms to franchises —<br />
+          Newsconseen runs any organized enterprise.
+        </p>
+        <p className="text-base text-slate-400 max-w-xl mx-auto mb-8">
+          One platform. Adaptive terminology. Universal workflows.
         </p>
 
         {/* Billing toggle */}
@@ -164,61 +159,71 @@ export default function Pricing() {
             >
               {plan.popular && (
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                  <span className="bg-emerald-500 text-white text-xs font-bold px-4 py-1 rounded-full shadow-md">
-                    Most Popular
-                  </span>
+                  <span className="bg-emerald-500 text-white text-xs font-bold px-4 py-1 rounded-full shadow-md">Most Popular</span>
                 </div>
               )}
-
               <div className="mb-6">
                 <h3 className="text-xl font-bold text-slate-800">{plan.name}</h3>
                 <p className="text-sm text-slate-400 mt-1">{plan.tagline}</p>
                 <div className="mt-4 flex items-end gap-1">
-                  <span className="text-5xl font-black text-slate-900">
-                    ${annual ? plan.annual : plan.monthly}
-                  </span>
+                  <span className="text-5xl font-black text-slate-900">${annual ? plan.annual : plan.monthly}</span>
                   <span className="text-slate-400 text-sm mb-1.5">/month</span>
                 </div>
-                {annual && (
-                  <p className="text-xs text-emerald-600 font-medium mt-1">
-                    Billed annually — save ${(plan.monthly - plan.annual) * 12}/yr
-                  </p>
-                )}
+                {annual && <p className="text-xs text-emerald-600 font-medium mt-1">Billed annually — save ${(plan.monthly - plan.annual) * 12}/yr</p>}
               </div>
-
               <ul className="space-y-3 flex-1 mb-8">
                 {plan.features.map((f, i) => (
                   <li key={i} className="flex items-start gap-2.5 text-sm">
-                    {f.included ? (
-                      <Check className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
-                    ) : (
-                      <X className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
-                    )}
+                    {f.included ? <Check className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" /> : <X className="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />}
                     <span className={f.included ? "text-slate-700" : "text-slate-400"}>{f.text}</span>
                   </li>
                 ))}
               </ul>
-
-              <button
-                onClick={() => navigate("/Dashboard")}
-                className={`w-full py-3 rounded-xl text-sm font-bold transition-all ${plan.btnClass}`}
-              >
+              <button onClick={() => navigate("/Dashboard")} className={`w-full py-3 rounded-xl text-sm font-bold transition-all ${plan.btnClass}`}>
                 Start Free Trial
               </button>
             </div>
           ))}
         </div>
+        <p className="text-center text-sm text-slate-400 mt-8">All plans include a 14-day free trial. No credit card required.</p>
+      </div>
 
-        {/* Trust line */}
-        <p className="text-center text-sm text-slate-400 mt-8">
-          All plans include a 14-day free trial. No credit card required.
-        </p>
-        <p className="text-center text-sm text-slate-400 mt-2">
-          Questions? Contact us at{" "}
-          <a href="mailto:support@newsconseen.com" className="text-emerald-600 hover:underline">
-            support@newsconseen.com
-          </a>
-        </p>
+      {/* Use Cases */}
+      <div className="bg-slate-50 py-16">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-black text-slate-900 mb-3">Built for every enterprise</h2>
+            <p className="text-slate-500 max-w-xl mx-auto">The same six layers — People, Products, Addresses, Services, Tasks, Transactions — power every type of organization.</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {USE_CASES.map((uc) => (
+              <div key={uc.label} className="bg-white rounded-2xl p-6 border border-slate-200 hover:shadow-md transition-shadow">
+                <div className="text-4xl mb-3">{uc.emoji}</div>
+                <h3 className="font-bold text-slate-800 text-base mb-1">{uc.label}</h3>
+                <p className="text-sm text-slate-500">{uc.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* How it works */}
+      <div className="max-w-4xl mx-auto px-6 py-16 text-center">
+        <h2 className="text-3xl font-black text-slate-900 mb-4">The same way Windows runs any software,<br />Newsconseen runs any enterprise.</h2>
+        <p className="text-slate-500 text-lg mb-10">When you sign up, tell us your enterprise type. The platform adapts its language, task types, and suggested workflows to match your world.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          {[
+            { emoji: "🏥", from: "Clients + Caregivers", to: "Care records + Medication rounds" },
+            { emoji: "🏫", from: "Students + Teachers", to: "Lessons + Assessments" },
+            { emoji: "🌾", from: "Animals + Farm Hands", to: "Feeding rounds + Health checks" },
+          ].map((ex) => (
+            <div key={ex.emoji} className="bg-slate-50 rounded-2xl p-5 border border-slate-200">
+              <div className="text-3xl mb-2">{ex.emoji}</div>
+              <p className="text-sm font-semibold text-slate-700 mb-1">{ex.from}</p>
+              <p className="text-xs text-slate-400">→ {ex.to}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* FAQ */}
@@ -227,11 +232,15 @@ export default function Pricing() {
         <div className="space-y-3">
           {FAQS.map((faq, i) => <FaqItem key={i} {...faq} />)}
         </div>
+        <p className="text-center text-sm text-slate-400 mt-8">
+          Questions? Contact us at{" "}
+          <a href="mailto:support@newsconseen.com" className="text-emerald-600 hover:underline">support@newsconseen.com</a>
+        </p>
       </div>
 
       {/* Footer */}
       <div className="border-t border-slate-100 py-8 text-center text-xs text-slate-400">
-        © {new Date().getFullYear()} Newsconseen. All rights reserved.
+        © {new Date().getFullYear()} Newsconseen — The universal enterprise operating system.
       </div>
     </div>
   );
