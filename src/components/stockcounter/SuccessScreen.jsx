@@ -1,6 +1,6 @@
 import React from "react";
 import { formatDistanceStrict } from "date-fns";
-import * as XLSX from "xlsx";
+
 import { Button } from "@/components/ui/button";
 
 function exportCountReport(result) {
