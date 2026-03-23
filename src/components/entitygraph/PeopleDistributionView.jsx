@@ -1,11 +1,11 @@
 import React, { useMemo } from "react";
+import { isAgricultural, getLivestock, isStaff, isParticipant } from "./enterpriseHelpers";
 
-export default function PeopleDistributionView({ enterprises, people, relationships, selectedEnterprise }) {
+export default function PeopleDistributionView({ enterprises, people, relationships, products = [], selectedEnterprise }) {
   const visibleEnterprises = selectedEnterprise === "all"
     ? enterprises
     : enterprises.filter(e => e.id === selectedEnterprise);
 
-  // Build enterprise→person names from Relationships
   const enterprisePeopleNames = useMemo(() => {
     const map = {};
     relationships.filter(r => r.relationship_type === "person_enterprise" && r.status !== "ended" && r.enterprise_name && r.person_name).forEach(r => {
@@ -15,14 +15,12 @@ export default function PeopleDistributionView({ enterprises, people, relationsh
     return map;
   }, [relationships]);
 
-  // Build person name → person record
   const peopleByName = useMemo(() => {
     const map = {};
     people.forEach(p => { map[`${p.first_name} ${p.last_name}`.trim()] = p; });
     return map;
   }, [people]);
 
-  // Build person id → list of enterprise names (for detecting shared staff)
   const personEnterprises = useMemo(() => {
     const map = {};
     Object.entries(enterprisePeopleNames).forEach(([entName, names]) => {
@@ -68,8 +66,10 @@ export default function PeopleDistributionView({ enterprises, people, relationsh
         {visibleEnterprises.map(enterprise => {
           const entPeopleNames = enterprisePeopleNames[enterprise.enterprise_name] || new Set();
           const entPeople = [...entPeopleNames].map(n => peopleByName[n]).filter(Boolean);
-          const staff = entPeople.filter(p => ["employee", "contractor", "freelancer"].includes(p.person_type));
-          const clients = entPeople.filter(p => ["client", "patient"].includes(p.person_type));
+          const staff = entPeople.filter(p => isStaff(p) && p.status === "active");
+          const participants = entPeople.filter(p => isParticipant(p) && p.status === "active");
+          const isAgri = isAgricultural(enterprise);
+          const livestock = getLivestock(products, enterprise.enterprise_name);
 
           const roleGroups = {};
           staff.forEach(p => {
@@ -78,8 +78,8 @@ export default function PeopleDistributionView({ enterprises, people, relationsh
             roleGroups[role].push(p);
           });
 
-          const ratio = clients.length > 0 && staff.length > 0
-            ? (clients.length / staff.length).toFixed(1)
+          const ratio = !isAgri && participants.length > 0 && staff.length > 0
+            ? (participants.length / staff.length).toFixed(1)
             : null;
           const ratioGood = ratio && parseFloat(ratio) <= 5;
 
@@ -88,7 +88,11 @@ export default function PeopleDistributionView({ enterprises, people, relationsh
               <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
                 <h3 className="font-bold text-slate-800 text-sm">{enterprise.enterprise_name}</h3>
                 <div className="flex items-center gap-3 mt-1">
-                  <span className="text-xs text-slate-500">{staff.length} staff · {clients.length} clients</span>
+                  {isAgri ? (
+                    <span className="text-xs text-slate-500">{staff.length} staff · {livestock.reduce((s, p) => s + (p.stock_quantity || 0), 0)} livestock head</span>
+                  ) : (
+                    <span className="text-xs text-slate-500">{staff.length} staff · {participants.length} participants</span>
+                  )}
                   {ratio && (
                     <span className={`text-xs font-bold ${ratioGood ? "text-emerald-600" : "text-rose-500"}`}>
                       1:{ratio} ratio
@@ -125,17 +129,40 @@ export default function PeopleDistributionView({ enterprises, people, relationsh
                   </div>
                 )}
 
-                {clients.length > 0 && (
+                {/* Participants — non-agricultural only */}
+                {!isAgri && participants.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Clients ({clients.length})</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Participants ({participants.length})</p>
                     <div className="flex flex-wrap gap-1">
-                      {clients.slice(0, 6).map(c => (
+                      {participants.slice(0, 6).map(c => (
                         <span key={c.id} className="text-[10px] bg-purple-50 text-purple-600 border border-purple-100 px-1.5 py-0.5 rounded-lg">
                           {c.first_name} {c.last_name}
                         </span>
                       ))}
-                      {clients.length > 6 && <span className="text-[10px] text-slate-400">+{clients.length - 6} more</span>}
+                      {participants.length > 6 && <span className="text-[10px] text-slate-400">+{participants.length - 6} more</span>}
                     </div>
+                  </div>
+                )}
+
+                {/* Agricultural: show livestock from Products */}
+                {isAgri && livestock.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Livestock (from Products)</p>
+                    <div className="flex flex-wrap gap-1">
+                      {livestock.map(p => (
+                        <span key={p.id} className="text-[10px] bg-lime-50 text-lime-600 border border-lime-100 px-1.5 py-0.5 rounded-lg">
+                          {p.name}: {p.stock_quantity} head
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-2 italic">Animals are tracked as Products, not People</p>
+                  </div>
+                )}
+
+                {/* Agricultural with no humans */}
+                {isAgri && participants.length === 0 && livestock.length === 0 && (
+                  <div className="mt-4 pt-4 border-t border-slate-100 text-center">
+                    <p className="text-[10px] text-slate-400 italic">Farm operations are staff-only. Add livestock in Products.</p>
                   </div>
                 )}
               </div>

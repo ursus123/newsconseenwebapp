@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from "react";
 import { ChevronDown } from "lucide-react";
-
-const AGRICULTURAL_TYPES = ["agriculture", "farm", "livestock", "animal_barn", "aquaculture"];
+import {
+  isAgricultural, getLivestock, getFeed,
+  getLivestockUnit, isStaff, isParticipant,
+} from "./enterpriseHelpers";
 
 export default function HierarchyView({ enterprises, people, services, products, tasks, transactions, addresses, relationships, selectedEnterprise }) {
   const [expanded, setExpanded] = useState(new Set());
@@ -20,7 +22,6 @@ export default function HierarchyView({ enterprises, people, services, products,
     setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   };
 
-  // Build enterprise→person names map via Relationships
   const enterprisePeopleNames = useMemo(() => {
     const map = {};
     relationships.filter(r => r.relationship_type === "person_enterprise" && r.status !== "ended" && r.enterprise_name && r.person_name).forEach(r => {
@@ -30,7 +31,6 @@ export default function HierarchyView({ enterprises, people, services, products,
     return map;
   }, [relationships]);
 
-  // Build enterprise→service names map via Relationships
   const enterpriseServiceNames = useMemo(() => {
     const map = {};
     relationships.filter(r => r.relationship_type === "enterprise_service" && r.status !== "ended" && r.enterprise_name && r.service_name).forEach(r => {
@@ -40,7 +40,6 @@ export default function HierarchyView({ enterprises, people, services, products,
     return map;
   }, [relationships]);
 
-  // Build person name→person record map for fast lookup
   const peopleByName = useMemo(() => {
     const map = {};
     people.forEach(p => { map[`${p.first_name} ${p.last_name}`.trim()] = p; });
@@ -54,9 +53,8 @@ export default function HierarchyView({ enterprises, people, services, products,
 
   const statsFor = (enterpriseName) => {
     const entPeople = getPeopleForEnterprise(enterpriseName);
-    const staff = entPeople.filter(p => ["employee", "contractor", "freelancer"].includes(p.person_type) && p.status === "active");
-    // Participants are humans only (clients, patients, students, members, etc.)
-    const clients = entPeople.filter(p => ["client", "patient", "student", "member", "beneficiary", "resident", "customer"].includes(p.person_type) && p.status === "active");
+    const staff = entPeople.filter(p => isStaff(p) && p.status === "active");
+    const participants = entPeople.filter(p => isParticipant(p) && p.status === "active");
 
     const addrs = addresses.filter(a => {
       const linked = a.linked_enterprises || [];
@@ -77,29 +75,24 @@ export default function HierarchyView({ enterprises, people, services, products,
     const completionRate = recentTasks.length > 0 ? Math.round(completedTasks.length / recentTasks.length * 100) : null;
 
     let health = 0;
-    if (staff.length > 0) health += 20;
-    if (clients.length > 0) health += 20;
+    if (staff.length > 0) health += 25;
+    if (participants.length > 0) health += 15;
     if (addrs.length > 0) health += 15;
     if (svcs.length > 0) health += 15;
     if (recentTasks.length > 0) health += 15;
     if (revenue > 0) health += 15;
 
-    return { staff, clients, addrs, svcs, recentTasks, completionRate, revenue, health };
+    return { staff, participants, addrs, svcs, recentTasks, completionRate, revenue, health };
   };
 
   const EnterpriseCard = ({ enterprise, depth = 0, isRoot = false }) => {
     const stats = statsFor(enterprise.enterprise_name);
     const children = childrenOf(enterprise.id);
-    const isAgricultural = AGRICULTURAL_TYPES.some(t => (enterprise.enterprise_type || "").toLowerCase().includes(t));
+    const isAgri = isAgricultural(enterprise);
     const entName = enterprise.enterprise_name;
-    const livestock = products.filter(p =>
-      p.item_type === "livestock" &&
-      (p.assigned_enterprises || []).some(ae => ae.enterprise_name === entName)
-    );
-    const feedInventory = products.filter(p =>
-      (p.item_type === "feed" || (p.name || "").toLowerCase().includes("feed") || (p.name || "").toLowerCase().includes("hay")) &&
-      (p.assigned_enterprises || []).some(ae => ae.enterprise_name === entName)
-    );
+    const livestock = getLivestock(products, entName);
+    const feed = getFeed(products, entName);
+    const totalLivestock = livestock.reduce((s, p) => s + (p.stock_quantity || 0), 0);
     const isExpanded = expanded.has(enterprise.id);
     const healthBg = stats.health >= 75 ? "bg-emerald-50 border-emerald-100" : stats.health >= 50 ? "bg-amber-50 border-amber-100" : "bg-rose-50 border-rose-100";
     const healthText = stats.health >= 75 ? "text-emerald-600" : stats.health >= 50 ? "text-amber-600" : "text-rose-600";
@@ -113,7 +106,9 @@ export default function HierarchyView({ enterprises, people, services, products,
         >
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl ${healthBg} border flex items-center justify-center text-lg shrink-0`}>🏢</div>
+              <div className={`w-10 h-10 rounded-xl ${healthBg} border flex items-center justify-center text-lg shrink-0`}>
+                {isAgri ? "🌾" : "🏢"}
+              </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-bold text-slate-800">{enterprise.enterprise_name}</h3>
@@ -137,20 +132,44 @@ export default function HierarchyView({ enterprises, people, services, products,
             </div>
           </div>
 
+          {/* KPI strip */}
           <div className="grid grid-cols-5 gap-2">
-            {[
-              { icon: "👤", value: stats.staff.length, label: "Staff" },
-              { icon: "🤝", value: stats.clients.length, label: "Clients" },
-              { icon: "📍", value: stats.addrs.length, label: "Locations" },
-              { icon: "⚙️", value: stats.svcs.length, label: "Services" },
-              { icon: "✅", value: stats.completionRate !== null ? `${stats.completionRate}%` : "—", label: "Tasks" },
-            ].map((kpi, i) => (
-              <div key={i} className="text-center bg-slate-50 rounded-xl py-2">
-                <p className="text-sm">{kpi.icon}</p>
-                <p className="text-sm font-bold text-slate-700">{kpi.value}</p>
-                <p className="text-[9px] text-slate-400">{kpi.label}</p>
+            <div className="text-center bg-slate-50 rounded-xl py-2">
+              <p className="text-sm">👤</p>
+              <p className="text-sm font-bold text-slate-700">{stats.staff.length}</p>
+              <p className="text-[9px] text-slate-400">Staff</p>
+            </div>
+
+            {/* Non-agricultural: show participants; agricultural: show livestock */}
+            {!isAgri ? (
+              <div className="text-center bg-slate-50 rounded-xl py-2">
+                <p className="text-sm">🤝</p>
+                <p className="text-sm font-bold text-slate-700">{stats.participants.length}</p>
+                <p className="text-[9px] text-slate-400">Participants</p>
               </div>
-            ))}
+            ) : (
+              <div className="text-center bg-lime-50 rounded-xl py-2">
+                <p className="text-sm">🐄</p>
+                <p className="text-sm font-bold text-lime-700">{totalLivestock}</p>
+                <p className="text-[9px] text-lime-500">Livestock</p>
+              </div>
+            )}
+
+            <div className="text-center bg-slate-50 rounded-xl py-2">
+              <p className="text-sm">📍</p>
+              <p className="text-sm font-bold text-slate-700">{stats.addrs.length}</p>
+              <p className="text-[9px] text-slate-400">Locations</p>
+            </div>
+            <div className="text-center bg-slate-50 rounded-xl py-2">
+              <p className="text-sm">⚙️</p>
+              <p className="text-sm font-bold text-slate-700">{stats.svcs.length}</p>
+              <p className="text-[9px] text-slate-400">Services</p>
+            </div>
+            <div className="text-center bg-slate-50 rounded-xl py-2">
+              <p className="text-sm">✅</p>
+              <p className="text-sm font-bold text-slate-700">{stats.completionRate !== null ? `${stats.completionRate}%` : "—"}</p>
+              <p className="text-[9px] text-slate-400">Tasks</p>
+            </div>
           </div>
 
           {stats.revenue > 0 && (
@@ -176,19 +195,22 @@ export default function HierarchyView({ enterprises, people, services, products,
                 </div>
               </div>
             )}
-            {stats.clients.length > 0 && (
+
+            {/* Participants panel — non-agricultural only */}
+            {!isAgri && stats.participants.length > 0 && (
               <div className="bg-purple-50 border border-purple-100 rounded-xl p-3">
-                <p className="text-xs font-bold text-purple-700 mb-2">🤝 Clients ({stats.clients.length})</p>
+                <p className="text-xs font-bold text-purple-700 mb-2">🤝 Participants ({stats.participants.length})</p>
                 <div className="flex flex-wrap gap-1">
-                  {stats.clients.slice(0, 8).map(p => (
+                  {stats.participants.slice(0, 8).map(p => (
                     <span key={p.id} className="text-[10px] bg-white border border-purple-100 text-purple-600 px-2 py-0.5 rounded-full">
                       {p.first_name} {p.last_name}
                     </span>
                   ))}
-                  {stats.clients.length > 8 && <span className="text-[10px] text-purple-400">+{stats.clients.length - 8} more</span>}
+                  {stats.participants.length > 8 && <span className="text-[10px] text-purple-400">+{stats.participants.length - 8} more</span>}
                 </div>
               </div>
             )}
+
             {stats.addrs.length > 0 && (
               <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
                 <p className="text-xs font-bold text-amber-700 mb-2">📍 Locations ({stats.addrs.length})</p>
@@ -209,26 +231,29 @@ export default function HierarchyView({ enterprises, people, services, products,
                 </div>
               </div>
             )}
-            {isAgricultural && livestock.length > 0 && (
+
+            {/* Livestock panel — agricultural only */}
+            {isAgri && livestock.length > 0 && (
               <div className="bg-lime-50 border border-lime-100 rounded-xl p-3">
-                <p className="text-xs font-bold text-lime-700 mb-2">🐄 Livestock ({livestock.reduce((s, p) => s + (p.stock_quantity || 0), 0)} total head)</p>
-                <div className="flex flex-wrap gap-1">
+                <p className="text-xs font-bold text-lime-700 mb-2">🐄 Livestock — {totalLivestock} total</p>
+                <div className="flex flex-wrap gap-1 mb-2">
                   {livestock.map(p => (
                     <span key={p.id} className="text-[10px] bg-white border border-lime-100 text-lime-600 px-2 py-0.5 rounded-full">
-                      {p.name}: {p.stock_quantity} {p.unit || "head"}
+                      {p.name}: {p.stock_quantity} {getLivestockUnit(p)}
+                      {p.stock_quantity != null && p.min_stock_level != null && p.stock_quantity <= p.min_stock_level ? " ⚠️" : ""}
                     </span>
                   ))}
                 </div>
-                {feedInventory.length > 0 && (
+                {feed.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-lime-100">
                     <p className="text-[10px] font-bold text-lime-600 mb-1">Feed inventory:</p>
-                    {feedInventory.map(f => {
+                    {feed.map(f => {
                       const isLow = f.stock_quantity != null && f.min_stock_level != null && f.stock_quantity <= f.min_stock_level;
                       return (
                         <div key={f.id} className="flex items-center justify-between text-[10px]">
                           <span className="text-lime-600">{f.name}</span>
                           <span className={`font-bold ${isLow ? "text-rose-500" : "text-lime-600"}`}>
-                            {f.stock_quantity} {f.unit || "kg"}{isLow && " ⚠️"}
+                            {f.stock_quantity} {f.unit || "kg"}{isLow && " ⚠️ LOW"}
                           </span>
                         </div>
                       );
