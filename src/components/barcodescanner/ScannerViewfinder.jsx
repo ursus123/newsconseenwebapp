@@ -18,8 +18,12 @@ export default function ScannerViewfinder({ onScan, isProcessing }) {
 
   useEffect(() => {
     mountedRef.current = true;
+    let scanner;
 
-    const scanner = new Html5QrcodeScanner(
+    const init = async () => {
+      const { Html5QrcodeScanner, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+
+    scanner = new Html5QrcodeScanner(
       "qr-reader",
       {
         fps: 10,
