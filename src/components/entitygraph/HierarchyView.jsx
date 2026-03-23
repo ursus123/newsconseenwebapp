@@ -90,6 +90,16 @@ export default function HierarchyView({ enterprises, people, services, products,
   const EnterpriseCard = ({ enterprise, depth = 0, isRoot = false }) => {
     const stats = statsFor(enterprise.enterprise_name);
     const children = childrenOf(enterprise.id);
+    const isAgricultural = AGRICULTURAL_TYPES.some(t => (enterprise.enterprise_type || "").toLowerCase().includes(t));
+    const entName = enterprise.enterprise_name;
+    const livestock = products.filter(p =>
+      p.item_type === "livestock" &&
+      (p.assigned_enterprises || []).some(ae => ae.enterprise_name === entName)
+    );
+    const feedInventory = products.filter(p =>
+      (p.item_type === "feed" || (p.name || "").toLowerCase().includes("feed") || (p.name || "").toLowerCase().includes("hay")) &&
+      (p.assigned_enterprises || []).some(ae => ae.enterprise_name === entName)
+    );
     const isExpanded = expanded.has(enterprise.id);
     const healthBg = stats.health >= 75 ? "bg-emerald-50 border-emerald-100" : stats.health >= 50 ? "bg-amber-50 border-amber-100" : "bg-rose-50 border-rose-100";
     const healthText = stats.health >= 75 ? "text-emerald-600" : stats.health >= 50 ? "text-amber-600" : "text-rose-600";
@@ -197,6 +207,34 @@ export default function HierarchyView({ enterprises, people, services, products,
                     <span key={s.id} className="text-[10px] bg-white border border-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full">{s.name || s.service_name}</span>
                   ))}
                 </div>
+              </div>
+            )}
+            {isAgricultural && livestock.length > 0 && (
+              <div className="bg-lime-50 border border-lime-100 rounded-xl p-3">
+                <p className="text-xs font-bold text-lime-700 mb-2">🐄 Livestock ({livestock.reduce((s, p) => s + (p.stock_quantity || 0), 0)} total head)</p>
+                <div className="flex flex-wrap gap-1">
+                  {livestock.map(p => (
+                    <span key={p.id} className="text-[10px] bg-white border border-lime-100 text-lime-600 px-2 py-0.5 rounded-full">
+                      {p.name}: {p.stock_quantity} {p.unit || "head"}
+                    </span>
+                  ))}
+                </div>
+                {feedInventory.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-lime-100">
+                    <p className="text-[10px] font-bold text-lime-600 mb-1">Feed inventory:</p>
+                    {feedInventory.map(f => {
+                      const isLow = f.stock_quantity != null && f.min_stock_level != null && f.stock_quantity <= f.min_stock_level;
+                      return (
+                        <div key={f.id} className="flex items-center justify-between text-[10px]">
+                          <span className="text-lime-600">{f.name}</span>
+                          <span className={`font-bold ${isLow ? "text-rose-500" : "text-lime-600"}`}>
+                            {f.stock_quantity} {f.unit || "kg"}{isLow && " ⚠️"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
