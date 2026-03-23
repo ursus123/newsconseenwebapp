@@ -580,7 +580,7 @@ export default function MarketIntelligence() {
               <NewsSection data={results?.news} location={results?.location} businessType={results?.businessType} loading={running && !results?.news} />
 
               {/* 9. Market Opportunity Score */}
-              <OpportunityScoreSection data={results?.market} infrastructure={results?.infrastructure} economy={results?.economy_us || results?.economy_intl} isUS={results?.isUS} loading={running && !results?.market} />
+              <OpportunityScoreSection data={results?.market} infrastructure={results?.infrastructure} economy={results?.economy_us || results?.economy_intl} isUS={results?.isUS} businessType={results?.businessType} loading={running && !results?.market} />
 
               {/* Agricultural Commodity Context */}
               {results?.isAgricultural && results?.commodity?.length > 0 && (
