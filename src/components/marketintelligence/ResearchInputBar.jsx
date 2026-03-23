@@ -1,30 +1,73 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Search } from "lucide-react";
 
-const BUSINESS_TYPES = [
-  { value: "home_healthcare", label: "Home Healthcare" },
-  { value: "clinic", label: "Clinic" },
-  { value: "pharmacy", label: "Pharmacy" },
-  { value: "hospital", label: "Hospital" },
-  { value: "nursing_home", label: "Nursing Home" },
-  { value: "school", label: "School" },
-  { value: "restaurant", label: "Restaurant" },
-  { value: "hotel", label: "Hotel" },
-  { value: "gym", label: "Gym" },
-  { value: "childcare", label: "Childcare" },
-  { value: "veterinary", label: "Veterinary" },
-  { value: "coworking", label: "Coworking" },
-  { value: "grocery", label: "Grocery Store" },
-  { value: "mental_health", label: "Mental Health" },
-  { value: "physiotherapy", label: "Physiotherapy" },
-  { value: "dental", label: "Dental" },
-  { value: "supermarket", label: "Supermarket" },
-  { value: "bank", label: "Bank" },
-  { value: "other", label: "Other" },
+const BUSINESS_TYPE_GROUPS = [
+  {
+    group: "🏥 Healthcare",
+    types: [
+      { value: "home_healthcare", label: "Home Healthcare" },
+      { value: "clinic",          label: "Clinic / Medical Center" },
+      { value: "pharmacy",        label: "Pharmacy" },
+      { value: "nursing_home",    label: "Nursing Home / Care Facility" },
+      { value: "hospital",        label: "Hospital" },
+      { value: "dental",          label: "Dental Practice" },
+      { value: "physiotherapy",   label: "Physical Therapy" },
+      { value: "mental_health",   label: "Mental Health Services" },
+      { value: "veterinary",      label: "Veterinary Clinic" },
+    ]
+  },
+  {
+    group: "🏫 Education",
+    types: [
+      { value: "school",          label: "School / Academy" },
+      { value: "university",      label: "University / College" },
+      { value: "childcare",       label: "Childcare / Daycare" },
+      { value: "tutoring",        label: "Tutoring Center" },
+      { value: "training_center", label: "Training / Vocational" },
+    ]
+  },
+  {
+    group: "⛪ Community & Faith",
+    types: [
+      { value: "church",           label: "Church / Christian" },
+      { value: "mosque",           label: "Mosque / Islamic Center" },
+      { value: "temple",           label: "Temple / Place of Worship" },
+      { value: "community_center", label: "Community Center" },
+      { value: "ngo_program",      label: "NGO / Nonprofit Program" },
+      { value: "charity",          label: "Charity / Foundation" },
+    ]
+  },
+  {
+    group: "🌾 Agriculture",
+    types: [
+      { value: "livestock_farm",  label: "Livestock Farm" },
+      { value: "crop_farm",       label: "Crop Farm / Plantation" },
+      { value: "animal_barn",     label: "Animal Barn / Ranch" },
+      { value: "aquaculture",     label: "Aquaculture / Fish Farm" },
+    ]
+  },
+  {
+    group: "💼 Business",
+    types: [
+      { value: "restaurant",      label: "Restaurant / Food Service" },
+      { value: "hotel",           label: "Hotel / Hospitality" },
+      { value: "gym",             label: "Gym / Fitness Center" },
+      { value: "retail",          label: "Retail Store" },
+      { value: "coworking",       label: "Coworking Space" },
+    ]
+  },
+  {
+    group: "✨ Other",
+    types: [
+      { value: "other",           label: "Other / Custom" },
+    ]
+  },
 ];
+
+// Flat list for label lookup
+const ALL_TYPES = BUSINESS_TYPE_GROUPS.flatMap(g => g.types);
 
 const RADII = [5, 10, 15, 20, 30, 50, 100];
 
@@ -32,6 +75,8 @@ export default function ResearchInputBar({ params, onChange, onRun, running }) {
   const handleKey = (e) => {
     if (e.key === "Enter") onRun();
   };
+
+  const selectedLabel = ALL_TYPES.find(t => t.value === params.businessType)?.label || params.businessType;
 
   return (
     <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-4 lg:p-5">
@@ -49,31 +94,33 @@ export default function ResearchInputBar({ params, onChange, onRun, running }) {
             className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:border-emerald-500"
           />
         </div>
-        <div className="sm:w-48">
-          <label className="text-xs text-slate-400 mb-1 block">Business Type</label>
-          <Select value={params.businessType} onValueChange={v => onChange({ ...params, businessType: v })}>
-            <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {BUSINESS_TYPES.map(b => (
-                <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="sm:w-52">
+          <label className="text-xs text-slate-400 mb-1 block">Enterprise Type</label>
+          <select
+            value={params.businessType}
+            onChange={e => onChange({ ...params, businessType: e.target.value })}
+            className="w-full h-9 rounded-md border border-slate-700 bg-slate-800 text-white text-sm px-2 focus:outline-none focus:border-emerald-500"
+          >
+            {BUSINESS_TYPE_GROUPS.map(group => (
+              <optgroup key={group.group} label={group.group}>
+                {group.types.map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
         </div>
-        <div className="sm:w-32">
+        <div className="sm:w-28">
           <label className="text-xs text-slate-400 mb-1 block">Radius</label>
-          <Select value={String(params.radiusKm)} onValueChange={v => onChange({ ...params, radiusKm: parseInt(v) })}>
-            <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {RADII.map(r => (
-                <SelectItem key={r} value={String(r)}>{r} km</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <select
+            value={String(params.radiusKm)}
+            onChange={e => onChange({ ...params, radiusKm: parseInt(e.target.value) })}
+            className="w-full h-9 rounded-md border border-slate-700 bg-slate-800 text-white text-sm px-2 focus:outline-none focus:border-emerald-500"
+          >
+            {RADII.map(r => (
+              <option key={r} value={String(r)}>{r} km</option>
+            ))}
+          </select>
         </div>
         <Button
           onClick={() => onRun()}
