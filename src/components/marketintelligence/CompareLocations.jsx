@@ -31,15 +31,17 @@ export default function CompareLocations({
   };
 
   const compRows = (compareResults || []).map(d => ({
-    location:    d.location,
-    score:       d.opportunity_score,
-    competitors: d.competitor_count,
-    gap:         d.market?.supply_gap,
-    income:      d.median_income,
-    population:  d.population,
-    market_usd:  d.annual_market_usd,
-    loading:     d.loading,
-    isPrimary:   false,
+    location:     d.location,
+    score:        d.opportunity_score,
+    competitors:  d.competitor_count,
+    gap:          d.market?.supply_gap,
+    income:       d.median_income,
+    population:   d.population,
+    market_usd:   d.annual_market_usd,
+    climate_risk: d.climate_risk,
+    labor_cost:   d.labor_cost,
+    loading:      d.loading,
+    isPrimary:    false,
   }));
 
   const allRows  = [primaryRow, ...compRows];
@@ -90,16 +92,22 @@ export default function CompareLocations({
             </thead>
             <tbody>
               {[
-                { label: "Opportunity Score", key: "score",       fmt: v => v != null ? `${v}/100` : "—", best: "max" },
-                { label: "Competitors Nearby",key: "competitors",  fmt: v => v != null ? v : "—",          best: "min" },
-                { label: "Market Gap",         key: "gap",         fmt: v => v != null ? `${v} needed` : "—", best: "max" },
-                { label: "Annual Market",      key: "market_usd",  fmt: v => v != null ? `$${Number(v).toLocaleString()}` : "—", best: "max" },
-                { label: "Income / GDP pc",    key: "income",      fmt: v => v != null ? `$${Number(v).toLocaleString()}` : "—", best: "max" },
-                { label: "Population",         key: "population",  fmt: v => v != null ? Number(v).toLocaleString() : "—", best: "max" },
-              ].map(({ label, key, fmt, best }) => {
-                const vals = allRows.map(r => r[key]).filter(v => v != null && !isNaN(v));
+                { label: "Opportunity Score",  key: "score",        fmt: v => v != null ? `${v}/100` : "—", best: "max" },
+                { label: "Competitors Nearby", key: "competitors",  fmt: v => v != null ? v : "—",          best: "min" },
+                { label: "Market Gap",         key: "gap",          fmt: v => v != null ? `${v} needed` : "—", best: "max" },
+                { label: "Annual Market",      key: "market_usd",   fmt: v => v != null ? `$${Number(v).toLocaleString()}` : "—", best: "max" },
+                { label: "Income / GDP pc",    key: "income",       fmt: v => v != null ? `$${Number(v).toLocaleString()}` : "—", best: "max" },
+                { label: "Population",         key: "population",   fmt: v => v != null ? Number(v).toLocaleString() : "—", best: "max" },
+                { label: "Climate Risk",       key: "climate_risk", fmt: v => v || "—", best: "min", riskOrder: ["low","moderate","high","very_high"] },
+                { label: "Labor Cost/yr",      key: "labor_cost",   fmt: v => v != null ? `$${Number(v).toLocaleString()}` : "—", best: "min" },
+              ].map(({ label, key, fmt, best, riskOrder }) => {
+                const vals = riskOrder
+                  ? allRows.map(r => r[key]).filter(Boolean)
+                  : allRows.map(r => r[key]).filter(v => v != null && !isNaN(v));
                 const bestVal = vals.length
-                  ? (best === "max" ? Math.max(...vals) : Math.min(...vals))
+                  ? riskOrder
+                    ? vals.reduce((a, b) => (riskOrder.indexOf(a) <= riskOrder.indexOf(b) ? a : b))
+                    : best === "max" ? Math.max(...vals) : Math.min(...vals)
                   : null;
                 return (
                   <tr key={label} className="border-b border-slate-50">
