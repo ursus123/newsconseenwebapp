@@ -32,6 +32,77 @@ ORDER BY total_tasks DESC`,
     ],
   },
   {
+    category: "Financial Intelligence",
+    items: [
+      {
+        label: "Outstanding Invoices",
+        sql: `SELECT 
+  enterprise,
+  primary_person,
+  invoice_number,
+  description,
+  amount,
+  due_date,
+  CASE 
+    WHEN due_date < date('now') 
+    THEN 'OVERDUE'
+    ELSE 'PENDING'
+  END as urgency
+FROM transactions
+WHERE payment_status = 'unpaid'
+AND status = 'posted'
+ORDER BY due_date ASC`,
+      },
+      {
+        label: "Revenue by Enterprise",
+        sql: `SELECT 
+  enterprise,
+  COUNT(*) as invoice_count,
+  SUM(amount) as total_billed,
+  SUM(CASE WHEN payment_status = 'paid' THEN amount ELSE 0 END) as total_collected,
+  ROUND(
+    SUM(CASE WHEN payment_status = 'paid' THEN amount ELSE 0 END) * 100.0 / 
+    NULLIF(SUM(amount), 0)
+  , 1) as collection_rate_pct
+FROM transactions
+WHERE transaction_type IN (
+  'service_fee','tuition','donation',
+  'membership_fee','grant','livestock_sale'
+)
+GROUP BY enterprise
+ORDER BY total_collected DESC`,
+      },
+      {
+        label: "Monthly Revenue Trend",
+        sql: `SELECT 
+  substr(date, 1, 7) as month,
+  enterprise,
+  SUM(amount) as revenue
+FROM transactions
+WHERE payment_status = 'paid'
+AND transaction_type IN (
+  'service_fee','tuition','donation',
+  'membership_fee','grant','livestock_sale'
+)
+GROUP BY month, enterprise
+ORDER BY month DESC`,
+      },
+      {
+        label: "Draft Invoices Pending Review",
+        sql: `SELECT 
+  enterprise,
+  description,
+  amount,
+  primary_person,
+  task_title,
+  created_date
+FROM transactions
+WHERE status = 'draft'
+ORDER BY created_date DESC`,
+      },
+    ],
+  },
+  {
     category: "Finance",
     items: [
       {
