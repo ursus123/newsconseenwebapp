@@ -271,9 +271,11 @@ export default function Transactions() {
   }, [transactions, period]);
 
   const filtered = useMemo(() => {
-    if (filterEnterprise === "all") return filteredByPeriod;
-    return filteredByPeriod.filter(t => t.enterprise === filterEnterprise);
-  }, [filteredByPeriod, filterEnterprise]);
+    let list = filteredByPeriod;
+    if (filterEnterprise !== "all") list = list.filter(t => t.enterprise === filterEnterprise);
+    if (filterSource !== "all") list = list.filter(t => (t.source || "manual") === filterSource);
+    return list;
+  }, [filteredByPeriod, filterEnterprise, filterSource]);
 
   // KPI calculations
   const totalRevenue    = filtered.filter(t => REVENUE_TYPES.includes(t.transaction_type) && t.payment_status === "paid").reduce((s, t) => s + (t.net_amount || t.amount || 0), 0);
