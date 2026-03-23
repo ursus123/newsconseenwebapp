@@ -19,7 +19,7 @@ import { useToast } from "@/components/ui/use-toast";
 import {
   TRANSACTION_TYPES, REVENUE_TYPES, EXPENSE_TYPES, INVENTORY_TYPES,
 } from "@/config/transactionTypes";
-import { generateInvoiceNumber } from "@/utils/autoInvoice";
+import { createTransaction } from "@/utils/createTransaction";
 
 const STOCK_IMPACT_TYPES = ["stock_out", "item_assignment"];
 const STOCK_IN_TYPES = ["stock_in", "item_return"];
