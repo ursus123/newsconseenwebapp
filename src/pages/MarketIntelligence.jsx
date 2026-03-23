@@ -18,7 +18,7 @@ import { executeSQL } from "@/components/querybuilder/sqlEngine";
 import { Button } from "@/components/ui/button";
 import { BookmarkPlus, Loader2, Download, Building2, ExternalLink, Code2, ChevronDown, X, FileText } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import * as XLSX from "xlsx";
+
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
