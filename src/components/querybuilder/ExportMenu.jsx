@@ -1,31 +1,22 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Download, FileText, FileSpreadsheet, Braces, Clipboard, CheckCircle2 } from "lucide-react";
 import { exportCSV, exportJSON, copyToClipboard } from "./sqlEngine";
-import * as XLSX from "xlsx";
 
 function exportXLSX(rows, sql) {
   if (!rows.length) return;
   const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const keys = Object.keys(rows[0]);
-  const wb = XLSX.utils.book_new();
-
-  // Data sheet
-  const wsData = [keys, ...rows.map((r) => keys.map((k) => r[k] ?? ""))];
-  const ws = XLSX.utils.aoa_to_sheet(wsData);
-  ws["!cols"] = keys.map((k) => ({ wch: Math.max(k.length + 4, 14) }));
-  // Bold green header
-  keys.forEach((_, i) => {
-    const ref = XLSX.utils.encode_cell({ r: 0, c: i });
-    if (ws[ref]) ws[ref].s = { font: { bold: true }, fill: { fgColor: { rgb: "10B981" } }, alignment: { horizontal: "center" } };
-  });
-  XLSX.utils.book_append_sheet(wb, ws, "Query Results");
-
-  // SQL sheet
-  const wsSql = XLSX.utils.aoa_to_sheet([["SQL Query"], [sql || ""]]);
-  wsSql["!cols"] = [{ wch: 80 }];
-  XLSX.utils.book_append_sheet(wb, wsSql, "Query");
-
-  XLSX.writeFile(wb, `newsconseen_query_${ts}.xlsx`);
+  const header = keys.join(",");
+  const body = rows.map(r => keys.map(k => JSON.stringify(r[k] ?? "")).join(",")).join("\n");
+  const sqlSection = `\n\n=== SQL Query ===\n${sql || ""}`;
+  const csv = header + "\n" + body + sqlSection;
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `newsconseen_query_${ts}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function ExportMenu({ results, sql }) {
