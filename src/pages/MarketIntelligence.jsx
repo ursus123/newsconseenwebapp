@@ -507,7 +507,7 @@ export default function MarketIntelligence() {
               </Button>
               <Button onClick={handleExportExcel} variant="outline" className="mt-6 shrink-0">
                 <Download className="w-4 h-4 mr-2" />
-                Export Excel
+                Export CSV
               </Button>
               <Button
                 onClick={() => window.print()}
