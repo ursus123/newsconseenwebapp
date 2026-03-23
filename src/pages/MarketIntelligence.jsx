@@ -582,19 +582,49 @@ export default function MarketIntelligence() {
               {/* 9. Market Opportunity Score */}
               <OpportunityScoreSection data={results?.market} infrastructure={results?.infrastructure} economy={results?.economy_us || results?.economy_intl} isUS={results?.isUS} loading={running && !results?.market} />
 
-              {/* 10. Growth Factor Forecasting */}
-              {results?.market?.[0]?.opportunity_score != null && (
-                <ForecastingModule
-                  baseScore={results.market[0].opportunity_score}
-                  baseRadarData={[
-                    { metric: "Market Size",        value: Math.min(100, (results.market[0].annual_market_usd || 0) / 1000000) },
-                    { metric: "Low Competition",     value: Math.max(0, 100 - ((results.market[0].existing_competitors || 0) / Math.max(results.market[0].ideal_market_units || 5, 1)) * 100) },
-                    { metric: "Economic Strength",   value: (() => { const inc = results.economy_us?.[0]?.median_household_income || results.economy_intl?.[0]?.gdp_per_capita_usd || 0; return inc > 70000 ? 85 : inc > 40000 ? 65 : inc > 20000 ? 45 : 30; })() },
-                    { metric: "Infrastructure",      value: parseInt(results.infrastructure?.find(r => r.infrastructure_type === "OVERALL SCORE")?.availability) || 50 },
-                    { metric: "Demographic Fit",     value: Math.min(100, ((results.economy_us?.[0]?.population_over65_pct || 10) / 20) * 100) },
-                  ]}
-                />
+              {/* Agricultural Commodity Context */}
+              {results?.isAgricultural && results?.commodity?.length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                  <h3 className="text-base font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                    🌾 Commodity Market Context
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {results.commodity.map((c, i) => (
+                      <div key={i} className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                        <p className="text-xs font-bold text-amber-700 capitalize">{c.commodity}</p>
+                        <p className="text-lg font-black text-amber-800">${c.price_usd}</p>
+                        <p className="text-[10px] text-amber-500">{c.unit}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
+
+              {/* 10. Growth Factor Forecasting */}
+              {results?.market?.[0]?.opportunity_score != null && (() => {
+                const bizCategory = getBizCategory(results.businessType);
+                const ecoData = results.economy_us?.[0] || results.economy_intl?.[0];
+                const incomeScore = (() => { const inc = ecoData?.median_household_income || ecoData?.gdp_per_capita_usd || 0; return inc > 70000 ? 85 : inc > 40000 ? 65 : inc > 20000 ? 45 : 30; })();
+                const infraScore = parseInt(results.infrastructure?.find(r => r.infrastructure_type === "OVERALL SCORE")?.availability) || 50;
+                const mktSize = Math.min(100, (results.market[0].annual_market_usd || 0) / 1000000);
+                const lowComp = Math.max(0, 100 - ((results.market[0].existing_competitors || 0) / Math.max(results.market[0].ideal_market_units || 5, 1)) * 100);
+                const elderlyPct = ecoData?.population_over65_pct || 10;
+                const youthPct   = ecoData?.population_under18_pct || 25;
+                const popScore   = Math.min(100, ((ecoData?.total_population || ecoData?.population || 50000) / 500000) * 100);
+                const radarByCategory = {
+                  healthcare:  [{ metric: "Market Size", value: mktSize }, { metric: "Low Competition", value: lowComp }, { metric: "Elderly Pop %", value: Math.min(100,(elderlyPct/20)*100) }, { metric: "Income Level", value: incomeScore }, { metric: "Infrastructure", value: infraScore }],
+                  education:   [{ metric: "Market Size", value: mktSize }, { metric: "Low Competition", value: lowComp }, { metric: "Youth Pop %",   value: Math.min(100,(youthPct/35)*100) }, { metric: "Income Level", value: incomeScore }, { metric: "Infrastructure", value: infraScore }],
+                  community:   [{ metric: "Market Size", value: mktSize }, { metric: "Low Competition", value: lowComp }, { metric: "Population",     value: popScore }, { metric: "Economic Need", value: 100 - incomeScore }, { metric: "Infrastructure", value: infraScore }],
+                  agriculture: [{ metric: "Market Size", value: mktSize }, { metric: "Low Competition", value: lowComp }, { metric: "Rural Score",    value: Math.max(0, 100 - popScore) }, { metric: "Income Level", value: incomeScore }, { metric: "Infrastructure", value: infraScore }],
+                  business:    [{ metric: "Market Size", value: mktSize }, { metric: "Low Competition", value: lowComp }, { metric: "Income Level",   value: incomeScore }, { metric: "Population", value: popScore }, { metric: "Infrastructure", value: infraScore }],
+                };
+                return (
+                  <ForecastingModule
+                    baseScore={results.market[0].opportunity_score}
+                    baseRadarData={radarByCategory[bizCategory] || radarByCategory.business}
+                  />
+                );
+              })()}
 
               {/* 10. Your Operations Nearby */}
               {nearbyEnterprises.length > 0 && (
