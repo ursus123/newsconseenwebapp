@@ -365,7 +365,9 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, appUser
                   <SelectContent>
                     <SelectItem value={null}>— None —</SelectItem>
                     {(products || []).map((p) => (
-                      <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+                      <SelectItem key={p.id} value={p.name}>
+                        {p.item_type === "livestock" ? `🐄 ` : ""}{p.name}{p.stock_quantity != null ? ` (${p.stock_quantity} ${p.unit || "units"})` : ""}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
