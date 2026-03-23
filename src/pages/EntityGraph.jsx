@@ -208,8 +208,6 @@ export default function EntityGraph() {
     return map;
   }, [people]);
 
-  const AGRICULTURAL_TYPES = ["agriculture", "farm", "livestock", "animal_barn", "aquaculture", "crop"];
-
   const anomalyDetails = useMemo(() => {
     if (isLoading) return [];
     const issues = [];
@@ -217,56 +215,68 @@ export default function EntityGraph() {
       const entName = e.enterprise_name;
       const entPeopleNames = enterprisePeopleNames[entName] || new Set();
       const entPeople = [...entPeopleNames].map(n => peopleByName[n]).filter(Boolean);
-      const staff = entPeople.filter(p => ["employee", "contractor", "freelancer"].includes(p.person_type) && p.status === "active");
-      // Participants are human only — clients, patients, students, members, etc. (NOT animals)
-      const participants = entPeople.filter(p => ["client", "patient", "student", "member", "beneficiary", "resident", "customer"].includes(p.person_type) && p.status === "active");
+      const staff = entPeople.filter(p => isStaff(p) && p.status === "active");
+      const participants = entPeople.filter(p => isParticipant(p) && p.status === "active");
+      const isAgri = isAgricultural(e);
+
       if (!staff.length) issues.push({ severity: "critical", enterprise: entName, type: "No active staff", detail: `${entName} has no active staff members`, action: "Add staff in People page" });
-      if (!participants.length) issues.push({ severity: "warning", enterprise: entName, type: "No active participants", detail: `${entName} has no active clients / members`, action: "Add people in People page" });
+
+      if (!isAgri && !participants.length) {
+        issues.push({ severity: "warning", enterprise: entName, type: "No active participants", detail: `${entName} has no active clients / members`, action: "Add people in People page" });
+      }
+
       const recentTasks = tasks.filter(t =>
         t.enterprise === entName && (new Date() - new Date(t.scheduled_date || t.created_date)) / (1000 * 60 * 60 * 24) <= 30
       );
-      if (participants.length > 0 && !recentTasks.length) issues.push({ severity: "critical", enterprise: entName, type: "No recent activity", detail: `${entName} has no tasks in 30 days`, action: "Check Tasks page" });
+      if (!isAgri && participants.length > 0 && !recentTasks.length) {
+        issues.push({ severity: "critical", enterprise: entName, type: "No recent activity", detail: `${entName} has no tasks in 30 days`, action: "Check Tasks page" });
+      }
+
       const expiring = staff.filter(s => {
         if (!s.certification_expiry) return false;
         const days = (new Date(s.certification_expiry) - new Date()) / (1000 * 60 * 60 * 24);
         return days > 0 && days <= 90;
       });
       if (expiring.length > 0) issues.push({ severity: "warning", enterprise: entName, type: "Expiring certifications", detail: `${expiring.length} certifications expiring within 90 days at ${entName}`, action: "Review staff certifications" });
+
       const entAddrs = addresses.filter(a => a.enterprise === entName);
       if (!entAddrs.length) issues.push({ severity: "warning", enterprise: entName, type: "No locations defined", detail: `${entName} has no addresses`, action: "Add locations in Addresses page" });
 
-      // Agricultural enterprise: livestock health and feed checks
-      const isAgricultural = AGRICULTURAL_TYPES.some(t => (e.enterprise_type || "").toLowerCase().includes(t));
-      if (isAgricultural) {
-        const entProducts = products.filter(p => (p.assigned_enterprises || []).some(ae => ae.enterprise_name === entName) || p.company_id === e.company_id);
-        const livestock = entProducts.filter(p => p.item_type === "livestock" && (p.stock_quantity || 0) > 0);
+      // Agricultural-specific checks
+      if (isAgri) {
+        const livestock = getLivestock(products, entName);
+        const feed = getFeed(products, entName);
+
+        if (!livestock.length) {
+          issues.push({ severity: "warning", enterprise: entName, type: "No livestock tracked", detail: `${entName} is an agricultural enterprise with no livestock in Products`, action: "Add livestock in Products page with item_type = livestock" });
+        }
+
         if (livestock.length > 0) {
           const vetTasks = tasks.filter(t =>
             t.enterprise === entName &&
             (["health_check", "vaccination", "vet_visit"].includes(t.task_type) ||
               (t.title || "").toLowerCase().includes("vet") ||
-              (t.title || "").toLowerCase().includes("health")) &&
+              (t.title || "").toLowerCase().includes("health") ||
+              (t.title || "").toLowerCase().includes("check")) &&
             (new Date() - new Date(t.scheduled_date || t.created_date)) / (1000 * 60 * 60 * 24) <= 30
           );
-          if (!vetTasks.length) issues.push({
-            severity: "warning", enterprise: entName, type: "No veterinary activity",
-            detail: `${entName} has ${livestock.length} livestock product type(s) with no health check tasks in 30 days`,
-            action: "Schedule a veterinary check in Tasks page",
-          });
+          if (!vetTasks.length) issues.push({ severity: "warning", enterprise: entName, type: "No veterinary activity", detail: `${entName} has livestock but no health check tasks in 30 days`, action: "Schedule health check in Tasks page" });
         }
-        const feedItems = entProducts.filter(p =>
-          (p.item_type === "feed" || (p.name || "").toLowerCase().includes("feed") || (p.name || "").toLowerCase().includes("hay")) &&
-          p.stock_quantity != null && p.min_stock_level != null && p.stock_quantity <= p.min_stock_level
-        );
-        if (feedItems.length > 0) issues.push({
-          severity: "critical", enterprise: entName, type: "Feed supply critical",
-          detail: `${feedItems.length} feed item(s) at ${entName} are below minimum level: ${feedItems.slice(0, 2).map(p => p.name).join(", ")}`,
-          action: "Reorder feed from Products page",
-        });
+
+        const lowFeed = feed.filter(f => f.stock_quantity != null && f.min_stock_level != null && f.stock_quantity <= f.min_stock_level);
+        if (lowFeed.length > 0) {
+          issues.push({ severity: "critical", enterprise: entName, type: "Feed supply critical", detail: `${lowFeed.length} feed items at or below minimum at ${entName}: ${lowFeed.slice(0, 2).map(f => f.name).join(", ")}`, action: "Reorder feed from Products page" });
+        }
       }
     });
-    const lowStock = products.filter(p => p.item_type !== "livestock" && p.stock_quantity != null && p.min_stock_level != null && p.stock_quantity <= p.min_stock_level && p.status === "active");
+
+    const lowStock = products.filter(p =>
+      !LIVESTOCK_ITEM_TYPES.includes(p.item_type) &&
+      p.stock_quantity != null && p.min_stock_level != null &&
+      p.stock_quantity <= p.min_stock_level && p.status === "active"
+    );
     if (lowStock.length > 0) issues.push({ severity: "critical", enterprise: "All", type: "Low stock items", detail: `${lowStock.length} products at or below minimum: ${lowStock.slice(0, 3).map(p => p.name).join(", ")}`, action: "Reorder from Products page" });
+
     const unpaid = transactions.filter(t => t.payment_status === "unpaid" && (t.amount || 0) > 0);
     if (unpaid.length > 0) {
       const total = unpaid.reduce((s, t) => s + (t.amount || 0), 0);
