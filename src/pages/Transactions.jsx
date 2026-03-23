@@ -193,6 +193,7 @@ export default function Transactions() {
   const [activeTab, setActiveTab]         = useState("outstanding");
   const [period, setPeriod]               = useState("30d");
   const [filterEnterprise, setFilterEnterprise] = useState("all");
+  const [filterSource, setFilterSource]         = useState("all");
   const qc = useQueryClient();
   const { toast } = useToast();
 
