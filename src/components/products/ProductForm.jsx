@@ -179,30 +179,35 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
             {/* STEP 1: Item Type — always shown first */}
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Step 1 — Select Item Type</p>
-              <div className="grid grid-cols-2 gap-2">
-                {ITEM_TYPE_OPTIONS.map((opt) => {
-                  const active = form.item_type === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => {
-                        set("item_type", opt.value);
-                        if (opt.value !== "medication") {
-                          setRecallWarning(false);
-                          setMedicationSelected(false);
-                        }
-                      }}
-                      className={`px-3 py-2.5 rounded-xl text-sm font-medium border text-left transition-all
-                        ${active
-                          ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20"
-                          : "bg-white text-slate-600 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50"}`}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
+              {ITEM_TYPE_GROUPS.map(({ group, types }) => (
+                <div key={group} className="mb-3">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{group}</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {types.map((opt) => {
+                      const active = form.item_type === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            set("item_type", opt.value);
+                            if (opt.value !== "medication") {
+                              setRecallWarning(false);
+                              setMedicationSelected(false);
+                            }
+                          }}
+                          className={`px-3 py-2 rounded-xl text-sm font-medium border text-left transition-all
+                            ${active
+                              ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20"
+                              : "bg-white text-slate-600 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50"}`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* STEP 2: Name field — only shown after item_type is chosen */}
