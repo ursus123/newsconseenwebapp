@@ -308,8 +308,11 @@ export default function MarketIntelligence() {
       }
     };
 
+    const isAgricultural = AGRICULTURAL_TYPES.includes(biz);
+    const newsQuery = buildNewsQuery(biz, loc);
+
     // Run ALL sections simultaneously
-    const [, , , , , , , , marketResult] = await Promise.allSettled([
+    const allSettledResults = await Promise.allSettled([
       runSection("overview",      `SELECT * FROM geo_overview WHERE place = '${loc}'`),
       runSection("infrastructure",`SELECT * FROM geo_infrastructure WHERE city = '${loc}' AND radius_km = ${radius}`),
       runSection("competitors",   `SELECT * FROM geo_competitors WHERE city = '${loc}' AND business_type = '${biz}' AND radius_km = ${radius}`),
@@ -318,7 +321,7 @@ export default function MarketIntelligence() {
         : runSection("economy_intl",`SELECT * FROM geo_economy WHERE country = '${countryName}'`),
       runSection("environment",   `SELECT * FROM climate_risk WHERE city = '${loc}'`),
       runSection("air_quality",   `SELECT * FROM air_quality WHERE city = '${loc}'`),
-      runSection("news",          `SELECT * FROM news_search WHERE query = '${biz} ${loc}' AND limit = 5`),
+      runSection("news",          `SELECT * FROM news_search WHERE query = '${newsQuery}' AND limit = 5`),
       isUS
         ? runSection("wages", `SELECT * FROM bls_wages WHERE occupation = '${BIZ_TO_OCCUPATION[biz] || "registered_nurse"}'${stateName ? ` AND state = '${stateName}'` : ""}`)
         : Promise.resolve([]),
@@ -327,7 +330,14 @@ export default function MarketIntelligence() {
       BIZ_TO_STOCK[biz]
         ? runSection("sector_stock", `SELECT * FROM stock_quote WHERE symbol = '${BIZ_TO_STOCK[biz]}'`)
         : Promise.resolve([]),
+      isAgricultural
+        ? runSection("commodity",   `SELECT * FROM commodity_price WHERE commodity = '${COMMODITY_MAP[biz] || "all"}'`)
+        : Promise.resolve([]),
+      isAgricultural
+        ? runSection("farm_weather", `SELECT * FROM geo_weather_profile WHERE city = '${loc}'`)
+        : Promise.resolve([]),
     ]);
+    const marketResult = allSettledResults[8];
 
     setResults(prev => ({ ...prev, loading: false, isUS, stateName }));
 
