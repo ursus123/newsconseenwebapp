@@ -579,7 +579,7 @@ export default function EntityGraph() {
             <AddressesView enterprises={enterprises} addresses={addresses} relationships={relationships} selectedEnterprise={selectedEnterprise} />
           )}
           {activeView === "assignments" && (
-            <AssignmentView enterprises={enterprises} people={people} relationships={relationships} tasks={tasks} addresses={addresses} selectedEnterprise={selectedEnterprise} />
+            <AssignmentView enterprises={enterprises} people={people} relationships={relationships} tasks={tasks} addresses={addresses} products={products} selectedEnterprise={selectedEnterprise} />
           )}
           {activeView === "shared" && (
             <SharedResourcesView enterprises={enterprises} people={people} products={products} services={services} />
