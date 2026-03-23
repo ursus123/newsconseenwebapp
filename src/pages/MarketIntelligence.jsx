@@ -422,26 +422,38 @@ export default function MarketIntelligence() {
     setSaving(false);
   };
 
-  const handleExportExcel = async () => {
+  const handleExportExcel = () => {
     if (!results) return;
-    const XLSX = await import("xlsx");
-    const wb = XLSX.utils.book_new();
-    const sheets = [
-      ["Overview",          results.overview],
-      ["Economy",           results.economy_us || results.economy_intl],
-      ["Infrastructure",    results.infrastructure],
-      ["Competitors",       results.competitors],
-      ["Market Opportunity",results.market],
-      ["Labor Market",      results.wages],
-      ["Environment",       results.environment],
-      ["News",              results.news],
+    const toCSV = (rows) => {
+      if (!rows?.length) return "";
+      const keys = Object.keys(rows[0]);
+      const header = keys.join(",");
+      const body = rows.map(r => keys.map(k => JSON.stringify(r[k] ?? "")).join(",")).join("\n");
+      return header + "\n" + body;
+    };
+    const sections = [
+      ["Overview", results.overview],
+      ["Economy", results.economy_us || results.economy_intl],
+      ["Infrastructure", results.infrastructure],
+      ["Competitors", results.competitors],
+      ["Market Opportunity", results.market],
+      ["Labor Market", results.wages],
+      ["Environment", results.environment],
+      ["News", results.news],
     ];
-    sheets.forEach(([name, data]) => {
-      if (data?.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), name);
-    });
+    const csv = sections
+      .filter(([, data]) => data?.length)
+      .map(([name, data]) => `=== ${name} ===\n${toCSV(data)}`)
+      .join("\n\n");
     const safeLoc = results.location.replace(/[^a-zA-Z0-9]/g, "_");
     const date = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `market_analysis_${safeLoc}_${date}.xlsx`);
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `market_analysis_${safeLoc}_${date}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Nearby enterprises
