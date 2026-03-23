@@ -21,7 +21,7 @@ export default function ScannerViewfinder({ onScan, isProcessing }) {
     let scanner;
 
     const init = async () => {
-      const { Html5QrcodeScanner, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+      const { Html5QrcodeScanner, Html5QrcodeSupportedFormats } = await import(/* @vite-ignore */ "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js");
 
     scanner = new Html5QrcodeScanner(
       "qr-reader",
