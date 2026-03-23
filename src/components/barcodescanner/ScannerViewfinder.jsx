@@ -11,6 +11,17 @@ const scannerStyles = `
   #qr-reader img { display: none !important; }
 `;
 
+function loadHtml5QrcodeScript() {
+  return new Promise((resolve, reject) => {
+    if (window.Html5QrcodeScanner) { resolve(); return; }
+    const script = document.createElement("script");
+    script.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
 export default function ScannerViewfinder({ onScan, isProcessing }) {
   const [status, setStatus] = useState("init"); // init | ready | detected | denied
   const scannerRef = useRef(null);
@@ -18,30 +29,30 @@ export default function ScannerViewfinder({ onScan, isProcessing }) {
 
   useEffect(() => {
     mountedRef.current = true;
-    let scanner;
 
     const init = async () => {
-      const { Html5QrcodeScanner, Html5QrcodeSupportedFormats } = await import(/* @vite-ignore */ "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js");
+      await loadHtml5QrcodeScript();
+      if (!mountedRef.current) return;
 
-    scanner = new Html5QrcodeScanner(
-      "qr-reader",
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 150 },
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-        ],
-        rememberLastUsedCamera: true,
-        showTorchButtonIfSupported: true,
-      },
-      false
-    );
+      const scanner = new window.Html5QrcodeScanner(
+        "qr-reader",
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 150 },
+          formatsToSupport: [
+            window.Html5QrcodeSupportedFormats?.QR_CODE,
+            window.Html5QrcodeSupportedFormats?.CODE_128,
+            window.Html5QrcodeSupportedFormats?.CODE_39,
+            window.Html5QrcodeSupportedFormats?.EAN_13,
+            window.Html5QrcodeSupportedFormats?.EAN_8,
+            window.Html5QrcodeSupportedFormats?.UPC_A,
+            window.Html5QrcodeSupportedFormats?.UPC_E,
+          ].filter(Boolean),
+          rememberLastUsedCamera: true,
+          showTorchButtonIfSupported: true,
+        },
+        false
+      );
 
       scannerRef.current = scanner;
 
@@ -57,7 +68,6 @@ export default function ScannerViewfinder({ onScan, isProcessing }) {
         }
       );
 
-      // Detect when camera starts
       setTimeout(() => {
         if (mountedRef.current && status === "init") setStatus("ready");
       }, 2000);
@@ -82,12 +92,9 @@ export default function ScannerViewfinder({ onScan, isProcessing }) {
   return (
     <div className="bg-slate-900 px-4 pt-4 pb-2">
       <style>{scannerStyles}</style>
-      {/* Let html5-qrcode control its own layout — no clipping */}
       <div className="mx-auto max-w-[480px] rounded-2xl overflow-hidden bg-black">
         <div id="qr-reader" style={{ width: "100%" }} />
       </div>
-
-      {/* Status message */}
       <p className={`text-center text-sm mt-2 font-semibold ${msg.color}`}>{msg.text}</p>
     </div>
   );
