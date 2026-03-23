@@ -96,6 +96,21 @@ export const TASK_TYPE_GROUPS = [
     ],
   },
   {
+    group: "🌾 Livestock & Farm",
+    types: [
+      { value: "feeding",      label: "🌾 Feeding Round" },
+      { value: "health_check", label: "🩺 Health Check" },
+      { value: "vaccination",  label: "💉 Vaccination" },
+      { value: "vet_visit",    label: "🏥 Veterinary Visit" },
+      { value: "milking",      label: "🥛 Milking" },
+      { value: "shearing",     label: "✂️ Shearing" },
+      { value: "harvest",      label: "🌽 Harvest / Collection" },
+      { value: "breeding",     label: "🐄 Breeding" },
+      { value: "weighing",     label: "⚖️ Weighing / Measurement" },
+      { value: "sale",         label: "💰 Livestock Sale" },
+    ],
+  },
+  {
     group: "Other",
     types: [{ value: "other", label: "Other" }],
   },
