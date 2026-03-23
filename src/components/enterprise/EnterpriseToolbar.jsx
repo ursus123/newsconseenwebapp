@@ -72,9 +72,9 @@ export default function EnterpriseToolbar({ search, setSearch, filters, setFilte
           <FilterSelect label="Status" value={filters.status || "__all__"} onChange={(v) => setFilter("status", v)}
             options={[{ value: "__all__", label: "Any Status" }, { value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }, { value: "prospect", label: "Prospect" }, { value: "archived", label: "Archived" }]} />
           <FilterSelect label="Type" value={filters.enterprise_type || "__all__"} onChange={(v) => setFilter("enterprise_type", v)}
-            options={[{ value: "__all__", label: "Any Type" }, "retail","food_beverage","healthcare","technology","construction","education","finance","manufacturing","logistics","hospitality","agriculture","media","other"].map((v) => typeof v === "string" ? { value: v, label: v.replace(/_/g, " ") } : v)} />
+            options={[{ value: "__all__", label: "Any Type" }, ...Object.entries(TYPE_CONFIG).map(([k, v]) => ({ value: k, label: `${v.icon} ${v.label}` }))]} />
           <FilterSelect label="Operating" value={filters.operating_status || "__all__"} onChange={(v) => setFilter("operating_status", v)}
-            options={[{ value: "__all__", label: "Any" }, { value: "open", label: "Open" }, { value: "closed", label: "Closed" }, { value: "temporarily_closed", label: "Temp. Closed" }, { value: "seasonal", label: "Seasonal" }]} />
+            options={[{ value: "__all__", label: "Any" }, { value: "open", label: "Open / Active" }, { value: "closed", label: "Closed / Inactive" }, { value: "temporarily_closed", label: "Temporarily Closed" }, { value: "seasonal", label: "Seasonal" }, { value: "in_development", label: "In Development" }]} />
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-slate-500">Country</label>
             <Input

@@ -265,19 +265,61 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
         return (
           <div className="space-y-5">
             <Field label="Enterprise Type">
-              <Sel value={form.enterprise_type} onChange={(v) => set("enterprise_type", v)} options={[
-                { value: "retail", label: "Retail" }, { value: "food_beverage", label: "Food & Beverage" },
-                { value: "healthcare", label: "Healthcare" }, { value: "technology", label: "Technology" },
-                { value: "construction", label: "Construction" }, { value: "education", label: "Education" },
-                { value: "finance", label: "Finance" }, { value: "manufacturing", label: "Manufacturing" },
-                { value: "logistics", label: "Logistics" }, { value: "hospitality", label: "Hospitality" },
-                { value: "agriculture", label: "Agriculture" }, { value: "media", label: "Media" },
-                { value: "other", label: "Other" },
-              ]} />
+              <select
+                value={form.enterprise_type || ""}
+                onChange={e => set("enterprise_type", e.target.value)}
+                className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-200 bg-white"
+              >
+                <option value="">Select enterprise type</option>
+                {ENTERPRISE_TYPE_GROUPS.map(group => (
+                  <optgroup key={group.group} label={group.group}>
+                    {group.types.map(t => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
             </Field>
             <Field label="Sub-Type">
               <Input value={form.sub_type || ""} onChange={(e) => set("sub_type", e.target.value)} className="rounded-xl" placeholder="e.g. Grocery Store, Pharmacy..." />
             </Field>
+            <Field label="Purpose (optional)">
+              <textarea
+                value={form.description || ""}
+                onChange={e => set("description", e.target.value)}
+                placeholder="What does this enterprise exist to do?"
+                rows={2}
+                className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2 focus:outline-none resize-none"
+              />
+            </Field>
+            {form.enterprise_type && (
+              <Field label="Primary Objective">
+                {(() => {
+                  const opts = OBJECTIVE_OPTIONS[form.enterprise_type] || ["Achieve our primary mission", "Custom objective"];
+                  return (
+                    <>
+                      <select
+                        value={form.primary_objective || ""}
+                        onChange={e => set("primary_objective", e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none bg-white"
+                      >
+                        <option value="">Select an objective</option>
+                        {opts.map(o => <option key={o} value={o}>{o}</option>)}
+                        <option value="custom">Custom...</option>
+                      </select>
+                      {form.primary_objective === "custom" && (
+                        <Input
+                          value={form.custom_objective || ""}
+                          onChange={e => set("custom_objective", e.target.value)}
+                          placeholder="Describe your objective..."
+                          className="rounded-xl mt-2"
+                        />
+                      )}
+                    </>
+                  );
+                })()}
+              </Field>
+            )}
             <Field label="Business Model (select all that apply)">
               <div className="flex flex-wrap gap-2 mt-1">
                 {BUSINESS_MODELS.map((m) => {
