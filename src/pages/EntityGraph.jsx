@@ -3,6 +3,10 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Network, RefreshCw, Search, X, Download, ChevronDown, Target } from "lucide-react";
 import { buildGraph, NODE_CONFIG, VIEW_PRESETS } from "@/components/entitygraph/graphConfig";
+import {
+  isAgricultural, getLivestock, getFeed,
+  isStaff, isParticipant, LIVESTOCK_ITEM_TYPES,
+} from "@/components/entitygraph/enterpriseHelpers";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 import Graph2D from "@/components/entitygraph/Graph2D";
 import GraphSidePanel from "@/components/entitygraph/GraphSidePanel";
