@@ -567,7 +567,7 @@ export default function EntityGraph() {
             <HierarchyView enterprises={enterprises} people={people} services={services} products={products} tasks={tasks} transactions={transactions} addresses={addresses} relationships={relationships} selectedEnterprise={selectedEnterprise} />
           )}
           {activeView === "people" && (
-            <PeopleDistributionView enterprises={enterprises} people={people} relationships={relationships} selectedEnterprise={selectedEnterprise} />
+            <PeopleDistributionView enterprises={enterprises} people={people} relationships={relationships} products={products} selectedEnterprise={selectedEnterprise} />
           )}
           {activeView === "services" && (
             <ServiceCoverageView enterprises={enterprises} services={services} people={people} tasks={tasks} selectedEnterprise={selectedEnterprise} />
