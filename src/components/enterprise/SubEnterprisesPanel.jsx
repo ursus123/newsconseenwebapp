@@ -11,12 +11,17 @@ const TYPE_EMOJI = {
   logistics: "🚚", hospitality: "🏨", finance: "💰", other: "🏢",
 };
 
-export default function SubEnterprisesPanel({ enterprise, currentUser, onAddChild }) {
-  const { data: children = [] } = useQuery({
+export default function SubEnterprisesPanel({ enterprise, allEnterprises, currentUser, onAddChild }) {
+  const { data: fetchedChildren = [] } = useQuery({
     queryKey: ["sub_enterprises", enterprise.id],
     queryFn: () => base44.entities.Enterprise.filter({ parent_enterprise_id: enterprise.id }),
-    enabled: !!enterprise.id,
+    enabled: !!enterprise.id && !allEnterprises,
   });
+
+  // Use allEnterprises if provided (avoids extra fetch), else use fetched
+  const children = allEnterprises
+    ? (allEnterprises || []).filter(e => e.parent_enterprise_id === enterprise.id && e.id !== enterprise.id)
+    : fetchedChildren;
 
   const terms = getTermsFromEnterpriseType(enterprise.enterprise_type || "other");
 

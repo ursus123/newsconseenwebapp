@@ -14,7 +14,9 @@ import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
 import { Upload, Building2, CheckCircle, Clock, Globe } from "lucide-react";
 import SubEnterprisesPanel from "@/components/enterprise/SubEnterprisesPanel";
+import EnterpriseCard from "@/components/enterprise/EnterpriseCard";
 import { useTerminology } from "@/hooks/useTerminology";
+import { getTypeConfig, typeColor, typeLabel, typeIcon } from "@/components/enterprise/typeConfig";
 import {
   ENTERPRISE_FIELDS, ENTERPRISE_MAPPING_RULES, ENTERPRISE_TEMPLATE_EXAMPLE,
   ENTERPRISE_TEMPLATE_INSTRUCTIONS, validateEnterprise, transformEnterprise,
@@ -28,48 +30,42 @@ const statusColor = (s) => ({
   archived: "bg-slate-100 text-slate-400",
 }[s] || "bg-slate-100 text-slate-600");
 
-// ── Industry / type colors ─────────────────────────────────────────
-const typeColor = (type) => ({
-  healthcare:      "bg-blue-50 text-blue-700",
-  education:       "bg-emerald-50 text-emerald-700",
-  social_services: "bg-violet-50 text-violet-700",
-  retail:          "bg-amber-50 text-amber-700",
-  consulting:      "bg-cyan-50 text-cyan-700",
-  logistics:       "bg-orange-50 text-orange-700",
-  manufacturing:   "bg-slate-100 text-slate-600",
-  food_beverage:   "bg-rose-50 text-rose-700",
-  professional:    "bg-indigo-50 text-indigo-700",
-  other:           "bg-slate-100 text-slate-500",
-}[type] || "bg-purple-50 text-purple-700");
-
 // ── Table columns ──────────────────────────────────────────────────
 const columns = [
   {
-    key: "enterprise_name", label: "Enterprise",
-    render: (val, row) => (
-      <div>
-        <p className="font-medium text-slate-800">{val}</p>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          {row.short_name && (
-            <span className="text-[10px] font-mono text-slate-400">{row.short_name}</span>
-          )}
-          {(row.city || row.country) && (
-            <span className="text-[10px] text-slate-400">
-              · {[row.city, row.country].filter(Boolean).join(", ")}
-            </span>
-          )}
+    key: "enterprise_name",
+    label: "Enterprise",
+    render: (val, row) => {
+      const cfg = getTypeConfig(row.enterprise_type);
+      return (
+        <div className="flex items-start gap-2.5">
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm shrink-0 ${cfg.color}`}>
+            {cfg.icon}
+          </div>
+          <div>
+            <p className="font-semibold text-slate-800 text-sm">{val}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {row.short_name && <span className="text-[10px] font-mono text-slate-400">{row.short_name}</span>}
+              {(row.city || row.region) && (
+                <span className="text-[10px] text-slate-400">· {[row.city, row.region].filter(Boolean).join(", ")}</span>
+              )}
+              {row.country && <span className="text-[10px] text-slate-300">{row.country}</span>}
+            </div>
+          </div>
         </div>
-      </div>
-    ),
+      );
+    },
   },
   {
-    key: "enterprise_type", label: "Type",
+    key: "enterprise_type",
+    label: "Type",
     render: (val) => val
-      ? <Badge className={typeColor(val)}>{val.replace(/_/g, " ")}</Badge>
+      ? <Badge className={typeColor(val)}>{typeIcon(val)} {typeLabel(val)}</Badge>
       : "—",
   },
   {
-    key: "phone", label: "Contact",
+    key: "phone",
+    label: "Contact",
     render: (val, row) => (
       <div className="space-y-0.5">
         {row.phone && <p className="text-xs text-slate-600">{row.phone}</p>}
@@ -79,15 +75,8 @@ const columns = [
     ),
   },
   {
-    key: "operating_status", label: "Operating",
-    render: (val) => (
-      <Badge className={val === "open" ? "bg-green-50 text-green-700" : val === "closed" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"}>
-        {(val || "open").replace(/_/g, " ")}
-      </Badge>
-    ),
-  },
-  {
-    key: "status", label: "Status",
+    key: "status",
+    label: "Status",
     render: (val) => (
       <Badge className={statusColor(val)}>{(val || "active").replace(/_/g, " ")}</Badge>
     ),
@@ -127,6 +116,7 @@ export default function Enterprises() {
   const [search, setSearch]         = useState("");
   const [sortBy, setSortBy]         = useState("created_date_desc");
   const [filters, setFilters]       = useState({ status: "", enterprise_type: "", operating_status: "", country: "" });
+  const [viewMode, setViewMode]     = useState("table");
   const qc = useQueryClient();
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
@@ -136,7 +126,6 @@ export default function Enterprises() {
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
   const withScope  = useWithScope(currentUser);
-  const withCompany = withScope;
 
   const { data: enterprises = [], isLoading } = useQuery({
     queryKey: ["enterprises", companyId, currentUser?.email],
@@ -196,16 +185,25 @@ export default function Enterprises() {
     setEditing(null);
   };
 
-  // ── Stat values ────────────────────────────────────────────────
+  // ── Adaptive stats ──────────────────────────────────────────────
+  const activeCount  = enterprises.filter(e => e.status === "active").length;
   const countryCount = new Set(enterprises.map(e => e.country).filter(Boolean)).size;
+  const uniqueTypes  = new Set(enterprises.map(e => e.enterprise_type).filter(Boolean)).size;
   const openCount    = enterprises.filter(e => e.operating_status === "open" || !e.operating_status).length;
+
+  const stat3 = { icon: Clock, iconClass: "bg-blue-50 text-blue-600", label: "Open / Operating", value: openCount };
+  const stat4 = countryCount > 1
+    ? { icon: Globe,  iconClass: "bg-purple-50 text-purple-600", label: "Countries",       value: countryCount }
+    : { icon: Globe,  iconClass: "bg-purple-50 text-purple-600", label: "Enterprise Types", value: uniqueTypes };
+
+  const rootEnterprise = enterprises.find(e => e.id === companyId);
 
   return (
     <div className="space-y-5">
       {/* Header */}
       <PageHeader
-        title="Enterprises"
-        subtitle="Manage business entities and enterprise records"
+        title={t("enterprise_plural") || "Enterprises"}
+        subtitle={`Manage your ${t("enterprise_child") || "enterprises"} and operational units`}
         onAdd={perms.can_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
         addLabel="New Enterprise"
       >
@@ -218,16 +216,17 @@ export default function Enterprises() {
 
       {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={Building2}    iconClass="bg-slate-100 text-slate-500"    label="Total Enterprises" value={enterprises.length} />
-        <StatCard icon={CheckCircle}  iconClass="bg-emerald-50 text-emerald-600" label="Active"             value={enterprises.filter(e => e.status === "active").length} />
-        <StatCard icon={Clock}        iconClass="bg-blue-50 text-blue-600"       label="Open Now"           value={openCount} />
-        <StatCard icon={Globe}        iconClass="bg-purple-50 text-purple-600"   label="Countries"          value={countryCount} />
+        <StatCard icon={Building2}   iconClass="bg-slate-100 text-slate-500"    label="Total Enterprises" value={enterprises.length} />
+        <StatCard icon={CheckCircle} iconClass="bg-emerald-50 text-emerald-600" label="Active"             value={activeCount} />
+        <StatCard {...stat3} />
+        <StatCard {...stat4} />
       </div>
 
-      {/* Hierarchy panel — show for the primary (parent) enterprise */}
-      {enterprises.length > 0 && enterprises.some(e => e.id === companyId) && (
+      {/* Hierarchy panel */}
+      {rootEnterprise && (
         <SubEnterprisesPanel
-          enterprise={enterprises.find(e => e.id === companyId) || enterprises[0]}
+          enterprise={rootEnterprise}
+          allEnterprises={enterprises}
           currentUser={currentUser}
           onAddChild={perms.can_create ? () => {
             setEditing({ parent_enterprise_id: companyId, company_id: companyId });
@@ -236,15 +235,35 @@ export default function Enterprises() {
         />
       )}
 
-      {/* Toolbar */}
-      <EnterpriseToolbar search={search} setSearch={setSearch} filters={filters} setFilters={setFilters} sortBy={sortBy} setSortBy={setSortBy} />
+      {/* Toolbar + view toggle */}
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <EnterpriseToolbar search={search} setSearch={setSearch} filters={filters} setFilters={setFilters} sortBy={sortBy} setSortBy={setSortBy} />
+          </div>
+          <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1 shrink-0 self-start mt-0.5">
+            <button
+              onClick={() => setViewMode("table")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${viewMode === "table" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
+            >
+              ☰ Table
+            </button>
+            <button
+              onClick={() => setViewMode("cards")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${viewMode === "cards" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
+            >
+              ⊞ Cards
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Empty state */}
       {!isLoading && enterprises.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
           <Building2 className="w-10 h-10 text-slate-200 mb-3" />
           <p className="text-slate-400 font-medium mb-1">No enterprises yet</p>
-          <p className="text-slate-300 text-sm mb-4">Add your first enterprise to start managing operations</p>
+          <p className="text-slate-300 text-sm mb-4">Add your first enterprise to start managing your {t("person_plural") || "team"} and operations</p>
           <div className="flex gap-2">
             <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
               Add Enterprise
@@ -253,6 +272,17 @@ export default function Enterprises() {
               Import from Excel
             </Button>
           </div>
+        </div>
+      ) : viewMode === "cards" ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {processedEnterprises.map(enterprise => (
+            <EnterpriseCard
+              key={enterprise.id}
+              enterprise={enterprise}
+              onEdit={perms.can_edit ? () => { setEditing(enterprise); setFormOpen(true); } : undefined}
+              onDelete={perms.can_delete ? () => setDeleting(enterprise) : undefined}
+            />
+          ))}
         </div>
       ) : (
         <DataTable
