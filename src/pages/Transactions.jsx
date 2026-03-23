@@ -122,6 +122,14 @@ function TransactionRow({ transaction, onEdit, onMarkPaid, onPost, onVoid, onExp
                     Due {transaction.due_date}{isOverdue && " ⚠️ OVERDUE"}
                   </span>
                 )}
+                {transaction.source && transaction.source !== "manual" && (() => {
+                  const src = SOURCE_CONFIG[transaction.source] || SOURCE_CONFIG.manual;
+                  return (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${src.color}`}>
+                      {src.icon} {src.label}
+                    </span>
+                  );
+                })()}
               </div>
             </div>
           </div>
