@@ -65,19 +65,41 @@ function extractCountry(loc) {
 
 // ── Business type mappings ──────────────────────────────────────────────────
 const BIZ_TO_OCCUPATION = {
-  home_healthcare: "registered_nurse",
-  clinic:          "registered_nurse",
-  pharmacy:        "pharmacist",
-  school:          "teacher",
-  restaurant:      "restaurant_cook",
-  hotel:           "building_cleaner",
-  gym:             "fitness_trainer",
-  childcare:       "childcare_worker",
-  nursing_home:    "nursing_assistant",
-  veterinary:      "veterinarian",
-  dental:          "dentist",
-  physiotherapy:   "physical_therapist",
-  mental_health:   "social_worker",
+  // Healthcare
+  home_healthcare:  "registered_nurse",
+  clinic:           "registered_nurse",
+  pharmacy:         "pharmacist",
+  nursing_home:     "nursing_assistant",
+  hospital:         "registered_nurse",
+  dental:           "dentist",
+  physiotherapy:    "physical_therapist",
+  mental_health:    "social_worker",
+  veterinary:       "veterinarian",
+  // Education
+  school:           "teacher",
+  university:       "teacher",
+  tutoring:         "teacher",
+  training_center:  "teacher",
+  childcare:        "childcare_worker",
+  // Community / Faith
+  church:           "social_worker",
+  mosque:           "social_worker",
+  temple:           "social_worker",
+  ngo_program:      "social_worker",
+  community_center: "social_worker",
+  charity:          "social_worker",
+  // Agriculture
+  livestock_farm:   "farm_worker",
+  crop_farm:        "farm_worker",
+  animal_barn:      "farm_worker",
+  aquaculture:      "farm_worker",
+  // Business
+  restaurant:       "restaurant_cook",
+  hotel:            "hotel_worker",
+  gym:              "fitness_trainer",
+  retail:           "retail_worker",
+  coworking:        "office_manager",
+  other:            "general_worker",
 };
 
 const BIZ_TO_STOCK = {
@@ -90,7 +112,75 @@ const BIZ_TO_STOCK = {
   gym:             "PLNT",
   nursing_home:    "ENSG",
   hospital:        "HCA",
+  livestock_farm:  "TSN",
+  crop_farm:       "ADM",
+  church:          null,
+  ngo_program:     null,
+  childcare:       null,
+  other:           null,
 };
+
+const REVENUE_TYPES = [
+  "service_fee", "tuition", "donation", "tithe", "grant",
+  "livestock_sale", "crop_sale", "product_sale", "income",
+  "event_income", "membership_fee", "sale_service",
+];
+
+const AGRICULTURAL_TYPES = ["livestock_farm", "crop_farm", "animal_barn", "aquaculture"];
+
+const COMMODITY_MAP = {
+  livestock_farm: "cattle",
+  crop_farm:      "wheat",
+  animal_barn:    "cattle",
+  aquaculture:    "fish",
+};
+
+const BIZ_NEWS_TERMS = {
+  home_healthcare:  "home health care services",
+  clinic:           "medical clinic healthcare",
+  pharmacy:         "pharmacy medicine drugs",
+  nursing_home:     "nursing home elderly care",
+  hospital:         "hospital healthcare medical",
+  dental:           "dental practice clinic",
+  physiotherapy:    "physical therapy rehabilitation",
+  mental_health:    "mental health counseling services",
+  veterinary:       "veterinary animal health",
+  school:           "school education students",
+  university:       "university college education",
+  childcare:        "childcare daycare children",
+  tutoring:         "tutoring education learning",
+  training_center:  "vocational training skills",
+  church:           "church community faith",
+  mosque:           "mosque community islamic",
+  temple:           "temple worship community",
+  community_center: "community center social services",
+  ngo_program:      "nonprofit charity development",
+  charity:          "charity nonprofit fundraising",
+  livestock_farm:   "livestock farming agriculture",
+  crop_farm:        "agriculture farming crops",
+  animal_barn:      "farm animals livestock",
+  aquaculture:      "aquaculture fish farming",
+  restaurant:       "restaurant food service",
+  hotel:            "hotel hospitality tourism",
+  gym:              "fitness gym health wellness",
+  retail:           "retail store shopping",
+  coworking:        "coworking office workspace",
+  other:            "business services",
+};
+
+function buildNewsQuery(bizType, location) {
+  const term = BIZ_NEWS_TERMS[bizType] || bizType.replace(/_/g, " ");
+  const country = location.split(",").slice(-1)[0].trim();
+  return `${term} ${country}`;
+}
+
+export function getBizCategory(bizType) {
+  if (["home_healthcare","clinic","pharmacy","nursing_home","hospital","dental","physiotherapy","mental_health","veterinary"].includes(bizType)) return "healthcare";
+  if (["school","university","childcare","tutoring","training_center"].includes(bizType)) return "education";
+  if (["church","mosque","temple","community_center","ngo_program","charity"].includes(bizType)) return "community";
+  if (AGRICULTURAL_TYPES.includes(bizType)) return "agriculture";
+  return "business";
+}
 
 // ── Section status config ───────────────────────────────────────────────────
 const SECTION_STATUS = [
@@ -100,9 +190,12 @@ const SECTION_STATUS = [
   { key: "wages",          label: "Labor" },
   { key: "infrastructure", label: "Infrastructure" },
   { key: "competitors",    label: "Competitors" },
-  { key: "environment",    label: "Environment" },
+  { key: "environment",    label: "Climate" },
+  { key: "air_quality",    label: "Air" },
   { key: "news",           label: "News" },
   { key: "market",         label: "Market Size" },
+  { key: "commodity",      label: "Commodities", agriculturalOnly: true },
+  { key: "sector_stock",   label: "Sector Stock" },
 ];
 
 // ── Report sections builder ─────────────────────────────────────────────────
