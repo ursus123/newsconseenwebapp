@@ -3,7 +3,8 @@ import { formatDistanceStrict } from "date-fns";
 
 import { Button } from "@/components/ui/button";
 
-function exportCountReport(result) {
+async function exportCountReport(result) {
+  const XLSX = await import("xlsx");
   const session = result.session;
   const counts = Object.entries(session.counts);
   const now = new Date();
