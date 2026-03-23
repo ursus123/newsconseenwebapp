@@ -280,6 +280,40 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
                     <Field label="Description">
                       <Textarea value={form.description || ""} onChange={(e) => set("description", e.target.value)} className="rounded-xl resize-none" rows={3} />
                     </Field>
+                    {/* Livestock-specific fields */}
+                    {form.item_type === "livestock" && (
+                      <div className="space-y-3 p-4 bg-lime-50 border border-lime-100 rounded-xl">
+                        <p className="text-xs font-bold text-lime-700">🐄 Livestock Details</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <Field label="Unit">
+                            <select
+                              value={form.unit || "head"}
+                              onChange={e => set("unit", e.target.value)}
+                              className="w-full h-9 rounded-xl border border-slate-200 bg-white text-sm px-2 focus:outline-none"
+                            >
+                              <option value="head">Head (individual)</option>
+                              <option value="flock">Flock (group)</option>
+                              <option value="herd">Herd (group)</option>
+                              <option value="batch">Batch</option>
+                            </select>
+                          </Field>
+                          <Field label="Species">
+                            <select
+                              value={form._species || ""}
+                              onChange={e => {
+                                const sp = e.target.value;
+                                set("_species", sp);
+                                if (sp) set("internal_notes", `Species: ${sp}. ${(form.internal_notes || "").replace(/^Species: \w+\. /, "")}`);
+                              }}
+                              className="w-full h-9 rounded-xl border border-slate-200 bg-white text-sm px-2 focus:outline-none"
+                            >
+                              <option value="">Select species</option>
+                              {LIVESTOCK_SPECIES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                            </select>
+                          </Field>
+                        </div>
+                      </div>
+                    )}
                     <Field label="Item Category">
                       <Sel value={form.category} onChange={(v) => set("category", v)} options={[
                         { value: "electronics", label: "Electronics" }, { value: "food_beverage", label: "Food & Beverage" },
