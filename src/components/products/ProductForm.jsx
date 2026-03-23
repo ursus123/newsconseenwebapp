@@ -22,15 +22,52 @@ const TABS = [
   { id: "relationships", label: "Relationships", icon: Link2 },
 ];
 
-const ITEM_TYPE_OPTIONS = [
-  { value: "medication", label: "💊 Medication" },
-  { value: "inventory_item", label: "📦 Inventory Item" },
-  { value: "fixed_asset", label: "🔧 Fixed Asset" },
-  { value: "consumable", label: "🧴 Consumable / Supply" },
-  { value: "service_item", label: "⚙️ Service Item" },
-  { value: "digital_item", label: "💻 Digital Item" },
-  { value: "raw_material", label: "🪨 Raw Material" },
-  { value: "other", label: "📁 Other" },
+const ITEM_TYPE_GROUPS = [
+  { group: "Healthcare", types: [
+    { value: "medication",    label: "💊 Medication" },
+    { value: "equipment",     label: "🩺 Medical Equipment" },
+    { value: "consumable",    label: "🧴 Medical Supply / Consumable" },
+  ]},
+  { group: "Agriculture", types: [
+    { value: "livestock",     label: "🐄 Livestock / Animal" },
+    { value: "feed",          label: "🌾 Animal Feed" },
+    { value: "seed",          label: "🌱 Seeds / Crops" },
+    { value: "crop",          label: "🌽 Harvested Crop" },
+    { value: "fertilizer",    label: "🪣 Fertilizer / Chemical" },
+  ]},
+  { group: "Education", types: [
+    { value: "textbook",      label: "📚 Textbook / Material" },
+    { value: "device",        label: "💻 Device / Technology" },
+  ]},
+  { group: "Community", types: [
+    { value: "resource",      label: "📦 Resource / Material" },
+    { value: "furniture",     label: "🪑 Furniture / Fixture" },
+  ]},
+  { group: "General", types: [
+    { value: "inventory_item",label: "📦 Inventory Item" },
+    { value: "fixed_asset",   label: "🔧 Fixed Asset" },
+    { value: "vehicle",       label: "🚗 Vehicle" },
+    { value: "tool",          label: "🔧 Tool / Implement" },
+    { value: "uniform",       label: "👕 Uniform / Apparel" },
+    { value: "food",          label: "🍎 Food / Consumable" },
+    { value: "raw_material",  label: "🪨 Raw Material" },
+    { value: "digital_item",  label: "💻 Digital Item" },
+    { value: "service_item",  label: "⚙️ Service Item" },
+    { value: "other",         label: "📁 Other" },
+  ]},
+];
+// Flat list for backward compat (classification tab uses Sel)
+const ITEM_TYPE_OPTIONS = ITEM_TYPE_GROUPS.flatMap(g => g.types);
+
+const LIVESTOCK_SPECIES = [
+  { value: "cattle",   label: "Cattle" },
+  { value: "pig",      label: "Pig / Swine" },
+  { value: "chicken",  label: "Chicken / Poultry" },
+  { value: "sheep",    label: "Sheep" },
+  { value: "goat",     label: "Goat" },
+  { value: "horse",    label: "Horse" },
+  { value: "fish",     label: "Fish / Aquaculture" },
+  { value: "other",    label: "Other" },
 ];
 
 const ITEM_CLASSES = ["asset", "inventory", "service", "digital"];
