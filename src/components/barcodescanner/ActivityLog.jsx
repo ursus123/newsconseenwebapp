@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { Download } from "lucide-react";
+
 function UndoTimer({ entry, onUndo }) {
   const [remaining, setRemaining] = useState(30);
 
@@ -35,7 +36,8 @@ export default function ActivityLog({ log, onUndo }) {
   const dirIcon = { in: "↑", out: "↓", check: "🔍" };
   const dirColor = { in: "text-emerald-400", out: "text-rose-400", check: "text-blue-400" };
 
-  const exportXlsx = () => {
+  const exportCSV = () => {
+    if (!log.length) return;
     const rows = log.map((e) => ({
       Time: format(e.time, "HH:mm:ss"),
       Date: format(e.time, "yyyy-MM-dd"),
@@ -61,7 +63,6 @@ export default function ActivityLog({ log, onUndo }) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
       <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between shrink-0">
         <div>
           <p className="text-white font-black text-sm">Session Activity</p>
@@ -70,13 +71,12 @@ export default function ActivityLog({ log, onUndo }) {
           </p>
         </div>
         {log.length > 0 && (
-          <button onClick={exportXlsx} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors">
+          <button onClick={exportCSV} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors">
             <Download className="w-3.5 h-3.5" /> Export
           </button>
         )}
       </div>
 
-      {/* Log entries */}
       <div className="flex-1 overflow-y-auto divide-y divide-slate-800">
         {log.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-slate-600">
@@ -116,7 +116,6 @@ export default function ActivityLog({ log, onUndo }) {
         )}
       </div>
 
-      {/* Session summary */}
       {log.length > 0 && (
         <div className="shrink-0 border-t border-slate-800 bg-slate-950 px-4 py-3">
           <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Today's Summary</p>

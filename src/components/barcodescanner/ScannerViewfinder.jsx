@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 
-// Style overrides for the html5-qrcode UI to fit dark theme
 const scannerStyles = `
   #qr-reader { background: #0f172a !important; border: none !important; }
   #qr-reader__scan_region { background: #000 !important; }
@@ -23,7 +22,7 @@ function loadHtml5QrcodeScript() {
 }
 
 export default function ScannerViewfinder({ onScan, isProcessing }) {
-  const [status, setStatus] = useState("init"); // init | ready | detected | denied
+  const [status, setStatus] = useState("init");
   const scannerRef = useRef(null);
   const mountedRef = useRef(true);
 
@@ -64,7 +63,7 @@ export default function ScannerViewfinder({ onScan, isProcessing }) {
           setTimeout(() => { if (mountedRef.current) setStatus("ready"); }, 1500);
         },
         () => {
-          if (mountedRef.current && status === "init") setStatus("ready");
+          if (mountedRef.current) setStatus("ready");
         }
       );
 
