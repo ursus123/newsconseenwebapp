@@ -477,7 +477,7 @@ export default function MarketIntelligence() {
   return (
     <div className="flex flex-col gap-0 min-h-full">
       {/* Sticky input bar */}
-      <div className="sticky top-0 z-30 bg-white border-b border-slate-100 pb-3 pt-2 -mx-4 lg:-mx-8 px-4 lg:px-8 shadow-sm">
+      <div className="sticky top-0 z-30 bg-white border-b border-slate-100 pb-3 pt-2 shadow-sm no-print">
         <div className="flex items-start gap-3 flex-wrap">
           <div className="flex-1 min-w-0">
             <ResearchInputBar params={params} onChange={setParams} onRun={runAnalysis} running={running} />
@@ -492,12 +492,14 @@ export default function MarketIntelligence() {
                 <Download className="w-4 h-4 mr-2" />
                 Export Excel
               </Button>
-              <Link to={createPageUrl("MarketIntelligencePDF")}>
-                <Button variant="outline" className="mt-6 shrink-0">
-                  <FileText className="w-4 h-4 mr-2" />
-                  PDF Summary
-                </Button>
-              </Link>
+              <Button
+                onClick={() => window.print()}
+                variant="outline"
+                className="mt-6 shrink-0 no-print"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Print Report
+              </Button>
             </>
           )}
         </div>
