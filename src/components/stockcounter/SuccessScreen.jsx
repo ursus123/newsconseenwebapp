@@ -3,17 +3,20 @@ import { formatDistanceStrict } from "date-fns";
 
 import { Button } from "@/components/ui/button";
 
-async function exportCountReport(result) {
-  const XLSX = await import("xlsx");
+function exportCountReport(result) {
   const session = result.session;
   const counts = Object.entries(session.counts);
   const now = new Date();
 
+  const toCSV = (rows) => {
+    if (!rows.length) return "";
+    const keys = Object.keys(rows[0]);
+    return [keys.join(","), ...rows.map(r => keys.map(k => JSON.stringify(r[k] ?? "")).join(","))].join("\n");
+  };
+
   const rows = counts.map(([, count]) => {
     const diff = (count.physical_count ?? count.system_count) - count.system_count;
-    const diffPct = count.system_count > 0
-      ? ((diff / count.system_count) * 100).toFixed(1) + "%"
-      : "N/A";
+    const diffPct = count.system_count > 0 ? ((diff / count.system_count) * 100).toFixed(1) + "%" : "N/A";
     const valueDiff = (diff * (count.cost_price || 0)).toFixed(2);
     let status = "Not counted";
     if (count.physical_count !== null) {
@@ -23,39 +26,31 @@ async function exportCountReport(result) {
       else status = "Gap";
     }
     return {
-      "Item Name": count.product_name,
-      "SKU": count.sku || "",
-      "Category": count.category || "",
-      "Unit": count.unit || "",
-      "System Count": count.system_count,
+      "Item Name": count.product_name, "SKU": count.sku || "", "Category": count.category || "",
+      "Unit": count.unit || "", "System Count": count.system_count,
       "Physical Count": count.physical_count ?? "Not counted",
       "Difference": count.physical_count !== null ? diff : "",
       "Difference %": count.physical_count !== null ? diffPct : "",
       "Value Difference": count.physical_count !== null ? valueDiff : "",
-      "Notes": count.notes || "",
-      "Status": status,
+      "Notes": count.notes || "", "Status": status,
     };
   });
 
-  const info = [{
-    "Enterprise": session.enterprise || "",
-    "Location": session.location || "",
-    "Counted By": session.counted_by || "",
-    "Started": session.started_at ? new Date(session.started_at).toLocaleString() : "",
-    "Completed": now.toLocaleString(),
-    "Total Items": counts.length,
-    "Items Updated": result.updated,
-    "Items Skipped": result.skipped,
-    "Errors": result.errors,
-  }];
+  const info = [{ "Enterprise": session.enterprise || "", "Location": session.location || "",
+    "Counted By": session.counted_by || "", "Started": session.started_at ? new Date(session.started_at).toLocaleString() : "",
+    "Completed": now.toLocaleString(), "Total Items": counts.length,
+    "Items Updated": result.updated, "Items Skipped": result.skipped, "Errors": result.errors }];
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Count Results");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(info), "Session Info");
-
+  const csv = `=== Count Results ===\n${toCSV(rows)}\n\n=== Session Info ===\n${toCSV(info)}`;
   const date = now.toISOString().split("T")[0];
   const name = (session.enterprise || "count").replace(/\s+/g, "_");
-  XLSX.writeFile(wb, `stock_count_${name}_${date}.xlsx`);
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `stock_count_${name}_${date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function SuccessScreen({ result, onNewCount, onViewProducts }) {
