@@ -1,14 +1,27 @@
-import * as XLSX from "xlsx";
 import { format } from "date-fns";
+
+function toCSV(rows) {
+  if (!rows.length) return "";
+  const keys = Object.keys(rows[0]);
+  return [keys.join(","), ...rows.map(r => keys.map(k => JSON.stringify(r[k] ?? "")).join(","))].join("\n");
+}
+
+function downloadCSV(csv, filename) {
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export function exportCountReport(session, products) {
   if (!session) return;
 
   const entries = Object.entries(session.counts);
   const now = new Date();
-  const completedAt = now.toISOString();
 
-  // Sheet 1 — Count Results
   const rows = entries.map(([productId, count]) => {
     const diff = count.physical_count !== null ? count.physical_count - count.system_count : null;
     const pct = diff !== null && count.system_count > 0
@@ -39,12 +52,10 @@ export function exportCountReport(session, products) {
     };
   });
 
-  // Sheet 2 — Session Info
   const startedAt = session.started_at ? new Date(session.started_at) : null;
   const duration = startedAt ? Math.round((now - startedAt) / 60000) + " min" : "";
   const counted = entries.filter(([, c]) => c.counted && c.physical_count !== null).length;
   const updated = entries.filter(([, c]) => c.counted && c.physical_count !== null && c.physical_count !== c.system_count).length;
-
   const systemValue = entries.reduce((sum, [, c]) => sum + (c.system_count * (c.cost_price || 0)), 0);
   const countedValue = entries.filter(([, c]) => c.physical_count !== null)
     .reduce((sum, [, c]) => sum + (c.physical_count * (c.cost_price || 0)), 0);
@@ -64,11 +75,8 @@ export function exportCountReport(session, products) {
     total_value_difference: (countedValue - systemValue).toFixed(2),
   }];
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Count Results");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(info), "Session Info");
-
+  const csv = `=== Count Results ===\n${toCSV(rows)}\n\n=== Session Info ===\n${toCSV(info)}`;
   const dateStr = format(now, "yyyy-MM-dd");
   const safeName = (session.enterprise || "all").replace(/[^a-z0-9]/gi, "_").toLowerCase();
-  XLSX.writeFile(wb, `stock_count_${safeName}_${dateStr}.xlsx`);
+  downloadCSV(csv, `stock_count_${safeName}_${dateStr}.csv`);
 }

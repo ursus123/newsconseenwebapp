@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { Download } from "lucide-react";
-import * as XLSX from "xlsx";
-
 function UndoTimer({ entry, onUndo }) {
   const [remaining, setRemaining] = useState(30);
 
