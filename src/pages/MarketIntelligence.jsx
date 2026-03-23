@@ -422,8 +422,9 @@ export default function MarketIntelligence() {
     setSaving(false);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!results) return;
+    const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     const sheets = [
       ["Overview",          results.overview],
