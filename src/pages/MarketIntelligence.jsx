@@ -339,7 +339,7 @@ export default function MarketIntelligence() {
     ]);
     const marketResult = allSettledResults[8];
 
-    setResults(prev => ({ ...prev, loading: false, isUS, stateName }));
+    setResults(prev => ({ ...prev, loading: false, isUS, stateName, isAgricultural }));
 
     const marketRows = marketResult?.value;
     const score = Array.isArray(marketRows) ? marketRows[0]?.opportunity_score : undefined;
@@ -356,13 +356,17 @@ export default function MarketIntelligence() {
     const stateN  = extractState(loc);
     const countryN = extractCountry(loc);
 
-    const [overviewRes, marketRes, economyRes, competitorsRes] = await Promise.all([
+    const [overviewRes, marketRes, economyRes, competitorsRes, climateRes, wagesRes] = await Promise.all([
       executeSQL(`SELECT * FROM geo_overview WHERE place = '${loc}'`, {}).then(r => r.rows?.[0] || null).catch(() => null),
       executeSQL(`SELECT * FROM geo_market_size WHERE city = '${loc}' AND business_type = '${biz}' AND radius_km = ${radius}`, {}).then(r => r.rows?.[0] || null).catch(() => null),
       isUSLoc && stateN
         ? executeSQL(`SELECT * FROM us_state WHERE state = '${stateN}'`, {}).then(r => r.rows?.[0] || null).catch(() => null)
         : executeSQL(`SELECT * FROM geo_economy WHERE country = '${countryN}'`, {}).then(r => r.rows?.[0] || null).catch(() => null),
       executeSQL(`SELECT * FROM geo_competitors WHERE city = '${loc}' AND business_type = '${biz}' AND radius_km = ${radius}`, {}).then(r => r.rows || []).catch(() => []),
+      executeSQL(`SELECT * FROM climate_risk WHERE city = '${loc}'`, {}).then(r => r.rows?.[0] || null).catch(() => null),
+      isUSLoc && stateN
+        ? executeSQL(`SELECT * FROM bls_wages WHERE occupation = '${BIZ_TO_OCCUPATION[biz] || "registered_nurse"}' AND state = '${stateN}'`, {}).then(r => r.rows?.[0] || null).catch(() => null)
+        : Promise.resolve(null),
     ]);
 
     return {
@@ -372,11 +376,15 @@ export default function MarketIntelligence() {
       market: marketRes,
       economy: economyRes,
       competitors: competitorsRes,
+      climate: climateRes,
+      wages: wagesRes,
       opportunity_score:  marketRes?.opportunity_score,
       annual_market_usd:  marketRes?.annual_market_usd,
       competitor_count:   competitorsRes.filter(c => c.distance_km > 0).length,
       population:         economyRes?.total_population || economyRes?.population,
       median_income:      economyRes?.median_household_income || economyRes?.gdp_per_capita_usd,
+      climate_risk:       climateRes?.overall_risk_level,
+      labor_cost:         wagesRes?.state_estimated_median || wagesRes?.national_median_salary,
     };
   };
 
