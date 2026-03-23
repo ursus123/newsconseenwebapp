@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from "html5-qrcode";
 
 // Style overrides for the html5-qrcode UI to fit dark theme
 const scannerStyles = `
