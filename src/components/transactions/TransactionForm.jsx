@@ -1,450 +1,309 @@
 import React, { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Save, X, Plus, Trash2, Upload, FileText, Users, CreditCard, StickyNote, Package, AlertTriangle } from "lucide-react";
-import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { X } from "lucide-react";
+import { TRANSACTION_TYPES, REVENUE_TYPES, EXPENSE_TYPES, INVENTORY_TYPES } from "@/config/transactionTypes";
 
-export const TX_TYPES = [
-  { value: "stock_in",        label: "Stock In" },
-  { value: "stock_out",       label: "Stock Out" },
-  { value: "stock_transfer",  label: "Stock Transfer" },
-  { value: "item_assignment", label: "Item Assignment" },
-  { value: "item_return",     label: "Item Return" },
-  { value: "sale_service",    label: "Sale / Service" },
-  { value: "expense",         label: "Expense" },
-  { value: "adjustment",      label: "Adjustment" },
-  { value: "attendance",      label: "Attendance" },
+const CURRENCIES = ["USD", "EUR", "GBP", "RWF", "KES", "NGN", "ZAR", "CAD", "AUD", "INR"];
+
+const PAYMENT_METHODS = [
+  { v: "private_pay",   l: "Private Pay" },
+  { v: "medicaid",      l: "Medicaid" },
+  { v: "medicare",      l: "Medicare" },
+  { v: "insurance",     l: "Insurance" },
+  { v: "cash",          l: "Cash" },
+  { v: "bank_transfer", l: "Bank Transfer" },
+  { v: "check",         l: "Check" },
+  { v: "donation",      l: "Donation" },
+  { v: "grant",         l: "Grant" },
+  { v: "crypto",        l: "Crypto" },
+  { v: "other",         l: "Other" },
 ];
 
-// Which fields each transaction type needs
-const TYPE_CONFIG = {
-  stock_in:        { enterprise: true, from_enterprise: false, to_enterprise: false, primary_person: false, counterparty: false, payment: false, lines: true },
-  stock_out:       { enterprise: true, from_enterprise: false, to_enterprise: false, primary_person: false, counterparty: false, payment: false, lines: true },
-  stock_transfer:  { enterprise: false, from_enterprise: true, to_enterprise: true, primary_person: false, counterparty: false, payment: false, lines: true },
-  item_assignment: { enterprise: true, from_enterprise: false, to_enterprise: false, primary_person: true, counterparty: false, payment: false, lines: true },
-  item_return:     { enterprise: true, from_enterprise: false, to_enterprise: false, primary_person: true, counterparty: false, payment: false, lines: true },
-  sale_service:    { enterprise: true, from_enterprise: false, to_enterprise: false, primary_person: true, counterparty: true, payment: true, lines: true },
-  expense:         { enterprise: true, from_enterprise: false, to_enterprise: false, primary_person: true, counterparty: false, payment: true, lines: false },
-  adjustment:      { enterprise: true, from_enterprise: false, to_enterprise: false, primary_person: false, counterparty: false, payment: false, lines: true },
-  attendance:      { enterprise: true, from_enterprise: false, to_enterprise: false, primary_person: true, counterparty: false, payment: false, lines: false },
-};
-
-const TABS = [
-  { id: "details", label: "Details", icon: FileText },
-  { id: "parties", label: "Parties", icon: Users },
-  { id: "lines",   label: "Items / Lines", icon: Package },
-  { id: "payment", label: "Payment", icon: CreditCard },
-  { id: "notes",   label: "Notes & Files", icon: StickyNote },
-];
-
-function Field({ label, hint, children }) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-sm font-medium text-slate-700">{label}</Label>
-      {children}
-      {hint && <p className="text-xs text-slate-400">{hint}</p>}
-    </div>
-  );
+function defaultDueDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toISOString().slice(0, 10);
 }
 
-function Sel({ value, onChange, options, placeholder, disabled }) {
-  return (
-    <Select value={value || ""} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger className="rounded-xl border-slate-200">
-        <SelectValue placeholder={placeholder || "Select..."} />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-      </SelectContent>
-    </Select>
-  );
-}
-
-function EntityCombo({ value, onChange, items, labelKey, placeholder, disabled }) {
-  const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false);
-  const filtered = (items || []).filter((i) =>
-    (i[labelKey] || "").toLowerCase().includes(search.toLowerCase())
-  ).slice(0, 8);
-
-  return (
-    <div className="relative">
-      <Input
-        value={value || ""}
-        disabled={disabled}
-        onChange={(e) => { onChange(e.target.value); setSearch(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 180)}
-        className="rounded-xl"
-        placeholder={placeholder || "Search or type..."}
-      />
-      {open && filtered.length > 0 && (
-        <div className="absolute z-50 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
-          {filtered.map((item) => (
-            <button key={item.id} type="button"
-              className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 transition-colors"
-              onMouseDown={() => { onChange(item[labelKey]); setOpen(false); }}>
-              {item[labelKey]}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function TransactionForm({ open, onClose, onSubmit, initialData }) {
-  const [activeTab, setActiveTab] = useState("details");
-  const [form, setForm] = useState({});
-  const [uploading, setUploading] = useState(false);
-
-  const { data: enterprises = [] } = useQuery({
-    queryKey: ["tx-enterprises"], queryFn: () => base44.entities.Enterprise.filter({ status: "active" }, "enterprise_name"), enabled: open,
-  });
-  const { data: people = [] } = useQuery({
-    queryKey: ["tx-people"], queryFn: () => base44.entities.Person.filter({ status: "active" }, "first_name"), enabled: open,
-  });
-  const { data: products = [] } = useQuery({
-    queryKey: ["tx-products"], queryFn: () => base44.entities.Product.filter({ status: "active" }, "name"), enabled: open,
-  });
-  const { data: addresses = [] } = useQuery({
-    queryKey: ["tx-addresses"], queryFn: () => base44.entities.Address.filter({ status: "active" }, "label"), enabled: open,
-  });
-
-  const peopleOptions = people.map((p) => ({
-    id: p.id,
-    display: `${p.first_name} ${p.last_name}${p.primary_role ? ` · ${p.primary_role}` : ""}`,
-    full_name: `${p.first_name} ${p.last_name}`,
-  }));
+export default function TransactionForm({ open, onClose, onSubmit, initialData, enterprises = [], people = [], services = [] }) {
+  const [formData, setFormData] = useState({});
 
   useEffect(() => {
     if (open) {
-      setActiveTab("details");
-      const today = new Date().toISOString().split("T")[0];
-      const now = new Date().toTimeString().slice(0, 5);
-      setForm(initialData || { status: "draft", date: today, time: now, line_items: [], tax_amount: 0, attachment_urls: [], payment_method: "cash", payment_status: "na" });
+      setFormData({
+        enterprise: "",
+        transaction_type: "service_fee",
+        description: "",
+        amount: "",
+        currency: "USD",
+        tax_amount: 0,
+        discount_amount: 0,
+        primary_person: "",
+        service_id: "",
+        service_name: "",
+        payment_method: "private_pay",
+        payment_status: "unpaid",
+        date: new Date().toISOString().slice(0, 10),
+        due_date: defaultDueDate(),
+        notes: "",
+        status: "draft",
+        ...(initialData || {}),
+      });
     }
   }, [open, initialData]);
 
-  const isPosted = form.status === "posted";
-  const isVoided = form.status === "voided";
-  const isLocked = isPosted || isVoided;
+  const set = (key, val) => setFormData(f => ({ ...f, [key]: val }));
 
-  const cfg = TYPE_CONFIG[form.transaction_type] || {};
+  const isRevenue   = REVENUE_TYPES.includes(formData.transaction_type);
+  const isExpense   = EXPENSE_TYPES.includes(formData.transaction_type);
+  const isInventory = INVENTORY_TYPES.includes(formData.transaction_type);
 
-  const set = (key, val) => { if (isLocked) return; setForm((f) => ({ ...f, [key]: val })); };
-  const addLine = () => set("line_items", [...(form.line_items || []), { item_name: "", quantity: 1, unit: "piece", unit_price: 0 }]);
-  const removeLine = (idx) => set("line_items", (form.line_items || []).filter((_, i) => i !== idx));
-  const updateLine = (idx, field, val) => {
-    if (isLocked) return;
-    setForm((f) => ({
-      ...f,
-      line_items: (f.line_items || []).map((l, i) => {
-        if (i !== idx) return l;
-        const updated = { ...l, [field]: val };
-        // Auto-fill unit price when item is selected
-        if (field === "item_name") {
-          const prod = products.find((p) => p.name === val);
-          if (prod?.unit_price != null) updated.unit_price = prod.unit_price;
-          if (prod?.unit) updated.unit = prod.unit;
-        }
-        return updated;
-      }),
-    }));
-  };
+  const enterprisePeople   = people.filter(p => !p.enterprise || p.enterprise === formData.enterprise);
+  const enterpriseServices = services.filter(s => !s.enterprise || s.enterprise === formData.enterprise);
 
-  const subtotal = (form.line_items || []).reduce((s, l) => s + (parseFloat(l.quantity) || 0) * (parseFloat(l.unit_price) || 0), 0);
-  const tax = parseFloat(form.tax_amount) || 0;
-  const total = subtotal + tax;
+  if (!open) return null;
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setUploading(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    setForm((f) => ({ ...f, attachment_urls: [...(f.attachment_urls || []), file_url] }));
-    setUploading(false);
-  };
-
-  const handleSubmit = (e) => { e.preventDefault(); onSubmit({ ...form, amount: total }); };
-
-  const statusColors = { draft: "bg-amber-50 text-amber-700", posted: "bg-emerald-50 text-emerald-700", voided: "bg-slate-100 text-slate-500" };
-  const currentIdx = TABS.findIndex((t) => t.id === activeTab);
-
-  const renderTab = () => {
-    switch (activeTab) {
-      case "details":
-        return (
-          <div className="space-y-4">
-            {isLocked && (
-              <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium ${isVoided ? "bg-slate-100 text-slate-500" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                {isVoided ? "Voided — history is preserved." : "Posted — cannot be edited. Corrections require a new transaction."}
-              </div>
-            )}
-            {cfg.enterprise !== false && (
-              <Field label="Enterprise">
-                <EntityCombo disabled={isLocked} value={form.enterprise} onChange={(v) => set("enterprise", v)} items={enterprises} labelKey="enterprise_name" placeholder="Select enterprise..." />
-              </Field>
-            )}
-            <Field label="Address / Location">
-              <EntityCombo disabled={isLocked} value={form.address} onChange={(v) => set("address", v)} items={addresses.map((a) => ({ ...a, label: a.label || a.address_line1 }))} labelKey="label" placeholder="Select address..." />
-            </Field>
-            <Field label="Reference Number">
-              <Input disabled={isLocked} value={form.reference_number || ""} onChange={(e) => set("reference_number", e.target.value)} className="rounded-xl" placeholder="Optional external ref" />
-            </Field>
-            <Field label="Reason / Description">
-              <Textarea disabled={isLocked} value={form.description || ""} onChange={(e) => set("description", e.target.value)} className="rounded-xl resize-none" rows={3} placeholder="What happened and why..." />
-            </Field>
-          </div>
-        );
-
-      case "parties":
-        return (
-          <div className="space-y-4">
-            {cfg.primary_person && (
-              <Field label="Primary Person" hint="Main actor: employee, nurse, driver">
-                <EntityCombo disabled={isLocked} value={form.primary_person} onChange={(v) => set("primary_person", v)} items={peopleOptions} labelKey="display" placeholder="Search people..." />
-              </Field>
-            )}
-            <Field label="Secondary Person">
-              <EntityCombo disabled={isLocked} value={form.secondary_person} onChange={(v) => set("secondary_person", v)} items={peopleOptions} labelKey="display" placeholder="Search people..." />
-            </Field>
-            {cfg.counterparty && (
-              <Field label="Counterparty" hint="Customer, vendor, or patient">
-                <Input disabled={isLocked} value={form.counterparty || ""} onChange={(e) => set("counterparty", e.target.value)} className="rounded-xl" placeholder="Name..." />
-              </Field>
-            )}
-            {cfg.from_enterprise && (
-              <Field label="From Enterprise">
-                <EntityCombo disabled={isLocked} value={form.from_enterprise} onChange={(v) => set("from_enterprise", v)} items={enterprises} labelKey="enterprise_name" placeholder="Source..." />
-              </Field>
-            )}
-            {cfg.to_enterprise && (
-              <Field label="To Enterprise">
-                <EntityCombo disabled={isLocked} value={form.to_enterprise} onChange={(v) => set("to_enterprise", v)} items={enterprises} labelKey="enterprise_name" placeholder="Destination..." />
-              </Field>
-            )}
-          </div>
-        );
-
-      case "lines":
-        return (
-          <div className="space-y-4">
-            {cfg.lines === false && (
-              <div className="text-center py-8 text-xs text-slate-400">Line items not required for this transaction type</div>
-            )}
-            {cfg.lines !== false && (
-              <>
-                <div className="space-y-2">
-                  {(form.line_items || []).length > 0 && (
-                    <div className="grid grid-cols-12 gap-2 px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      <span className="col-span-4">Item</span>
-                      <span className="col-span-2">Qty</span>
-                      <span className="col-span-2">Unit</span>
-                      <span className="col-span-2">Price</span>
-                      <span className="col-span-1">Subtotal</span>
-                      <span className="col-span-1" />
-                    </div>
-                  )}
-                  {(form.line_items || []).map((line, i) => {
-                    const lineSub = (parseFloat(line.quantity) || 0) * (parseFloat(line.unit_price) || 0);
-                    return (
-                      <div key={i} className="grid grid-cols-12 gap-1.5 items-center bg-slate-50 rounded-xl p-2">
-                        <div className="col-span-4">
-                          <EntityCombo value={line.item_name} onChange={(v) => updateLine(i, "item_name", v)} items={products} labelKey="name" placeholder="Item..." disabled={isLocked} />
-                        </div>
-                        <Input type="number" value={line.quantity ?? ""} onChange={(e) => updateLine(i, "quantity", parseFloat(e.target.value) || 0)} className="col-span-2 rounded-lg text-xs h-8" disabled={isLocked} />
-                        <Input placeholder="unit" value={line.unit || ""} onChange={(e) => updateLine(i, "unit", e.target.value)} className="col-span-2 rounded-lg text-xs h-8" disabled={isLocked} />
-                        <Input type="number" value={line.unit_price ?? ""} onChange={(e) => updateLine(i, "unit_price", parseFloat(e.target.value) || 0)} className="col-span-2 rounded-lg text-xs h-8" placeholder="0.00" disabled={isLocked} />
-                        <span className="col-span-1 text-xs text-slate-500 text-right">${lineSub.toFixed(0)}</span>
-                        {!isLocked && (
-                          <button type="button" onClick={() => removeLine(i)} className="col-span-1 text-slate-400 hover:text-rose-500 flex justify-center"><Trash2 className="w-3.5 h-3.5" /></button>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {(form.line_items || []).length === 0 && (
-                    <p className="text-xs text-slate-400 text-center py-4">No items — click "Add Item" below</p>
-                  )}
-                </div>
-                {!isLocked && (
-                  <Button type="button" variant="outline" size="sm" className="rounded-xl text-xs w-full" onClick={addLine}>
-                    <Plus className="w-3 h-3 mr-1" /> Add Item
-                  </Button>
-                )}
-                <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
-                  <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>${subtotal.toFixed(2)}</span></div>
-                  <div className="flex justify-between items-center text-slate-600">
-                    <span>Tax</span>
-                    {isLocked ? <span>${tax.toFixed(2)}</span>
-                      : <Input type="number" value={form.tax_amount ?? 0} onChange={(e) => set("tax_amount", parseFloat(e.target.value) || 0)} className="rounded-lg h-7 text-xs w-24 text-right" />
-                    }
-                  </div>
-                  <div className="flex justify-between font-bold text-slate-800 text-base border-t border-slate-200 pt-2">
-                    <span>Total</span><span>${total.toFixed(2)}</span>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        );
-
-      case "payment":
-        return (
-          <div className="space-y-4">
-            {!cfg.payment && (
-              <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-500 text-center">Payment details apply to Sale/Service and Expense types</div>
-            )}
-            <Field label="Payment Method">
-              <Sel disabled={isLocked} value={form.payment_method} onChange={(v) => set("payment_method", v)} options={[
-                { value: "cash", label: "Cash" }, { value: "bank_transfer", label: "Bank Transfer" },
-                { value: "credit_card", label: "Credit Card" }, { value: "mobile_money", label: "Mobile Money" },
-                { value: "check", label: "Check" }, { value: "other", label: "Other" },
-              ]} />
-            </Field>
-            <Field label="Payment Status">
-              <Sel disabled={isLocked} value={form.payment_status} onChange={(v) => set("payment_status", v)} options={[
-                { value: "paid", label: "Paid" }, { value: "unpaid", label: "Unpaid" },
-                { value: "partial", label: "Partial" }, { value: "na", label: "N/A" },
-              ]} />
-            </Field>
-            <Field label="Amount Paid">
-              <Input type="number" disabled={isLocked} value={form.amount_paid ?? ""} onChange={(e) => set("amount_paid", parseFloat(e.target.value) || 0)} className="rounded-xl" placeholder="0.00" />
-            </Field>
-            {(form.payment_status === "unpaid" || form.payment_status === "partial") && (
-              <Field label="Due Date">
-                <Input type="date" disabled={isLocked} value={form.due_date || ""} onChange={(e) => set("due_date", e.target.value)} className="rounded-xl" />
-              </Field>
-            )}
-          </div>
-        );
-
-      case "notes":
-        return (
-          <div className="space-y-5">
-            <Field label="Internal Notes">
-              <Textarea disabled={isLocked} value={form.internal_notes || ""} onChange={(e) => set("internal_notes", e.target.value)} className="rounded-xl resize-none" rows={4} placeholder="Notes visible only internally..." />
-            </Field>
-            {form.source_task_id && (
-              <div className="text-xs text-slate-400 bg-slate-50 rounded-xl px-4 py-3">
-                Triggered by Task ID: <span className="font-mono text-slate-600">{form.source_task_id}</span>
-              </div>
-            )}
-            <Field label="Attachments">
-              <div className="space-y-2">
-                {(form.attachment_urls || []).map((url, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <a href={url} target="_blank" rel="noreferrer" className="text-sm text-emerald-600 underline truncate flex-1">Attachment {i + 1}</a>
-                    {!isLocked && (
-                      <button type="button" onClick={() => setForm((f) => ({ ...f, attachment_urls: f.attachment_urls.filter((_, j) => j !== i) }))} className="text-slate-400 hover:text-rose-500">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {!isLocked && (
-                  <label className="flex items-center gap-3 border-2 border-dashed border-slate-200 rounded-xl px-4 py-5 cursor-pointer hover:border-emerald-400 transition-colors">
-                    <Upload className="w-5 h-5 text-slate-400" />
-                    <span className="text-sm text-slate-500">{uploading ? "Uploading..." : "Click to upload file"}</span>
-                    <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} />
-                  </label>
-                )}
-              </div>
-            </Field>
-          </div>
-        );
-
-      default: return null;
-    }
+  const handleSubmit = () => {
+    const amt = parseFloat(formData.amount) || 0;
+    onSubmit({
+      ...formData,
+      amount: amt,
+      net_amount: amt - (parseFloat(formData.discount_amount) || 0) + (parseFloat(formData.tax_amount) || 0),
+    });
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl w-full p-0 overflow-hidden max-h-[92vh]">
-        <DialogHeader className="px-6 pt-5 pb-4 border-b border-slate-100">
-          <div className="flex flex-wrap gap-3 items-start justify-between">
-            <div>
-              <DialogTitle className="text-lg font-semibold text-slate-800">
-                {initialData ? "Transaction" : "New Transaction"}
-              </DialogTitle>
-              {initialData?.id && <p className="text-xs text-slate-400 mt-0.5 font-mono">#{initialData.id.slice(0, 8).toUpperCase()}</p>}
-            </div>
-            <Badge className={statusColors[form.status] || "bg-slate-100 text-slate-500"}>
-              ● {(form.status || "draft").replace(/_/g, " ")}
-            </Badge>
+    <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-end p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-lg h-full max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white z-10">
+          <div>
+            <h2 className="font-bold text-slate-800">{initialData?.id ? "Edit Transaction" : "New Transaction"}</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Record a financial event in your enterprise</p>
           </div>
-          <div className="grid grid-cols-3 gap-3 mt-3">
-            <div>
-              <Label className="text-xs text-slate-500 mb-1 block">Transaction Type *</Label>
-              <Sel disabled={isLocked} value={form.transaction_type} onChange={(v) => set("transaction_type", v)} options={TX_TYPES} placeholder="Select type..." />
-            </div>
-            <div>
-              <Label className="text-xs text-slate-500 mb-1 block">Date *</Label>
-              <Input type="date" disabled={isLocked} value={form.date || ""} onChange={(e) => set("date", e.target.value)} className="rounded-xl h-9 text-sm" />
-            </div>
-            <div>
-              <Label className="text-xs text-slate-500 mb-1 block">Time</Label>
-              <Input type="time" disabled={isLocked} value={form.time || ""} onChange={(e) => set("time", e.target.value)} className="rounded-xl h-9 text-sm" />
-            </div>
-          </div>
-        </DialogHeader>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100 transition-colors">
+            <X className="w-4 h-4 text-slate-400" />
+          </button>
+        </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="flex overflow-hidden">
-            <div className="bg-slate-50/60 px-3 py-4 shrink-0 border-r border-slate-100 min-h-[360px]">
-              {TABS.map((t) => {
-                const Icon = t.icon;
-                const active = activeTab === t.id;
+        <div className="p-6 space-y-5 flex-1 overflow-y-auto">
+          {/* 1. Enterprise */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">1. Which enterprise is this for?</label>
+            <select value={formData.enterprise || ""} onChange={e => set("enterprise", e.target.value)}
+              className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-200 bg-white">
+              <option value="">Select enterprise...</option>
+              {enterprises.map(e => <option key={e.id} value={e.enterprise_name}>{e.enterprise_name}</option>)}
+            </select>
+          </div>
+
+          {/* 2. Type */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">2. What type of transaction is this?</label>
+            <p className="text-xs text-slate-400 mb-2">Is money coming in, going out, or is this a stock movement?</p>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              {[
+                { label: "💰 Income",    desc: "Money received",  types: REVENUE_TYPES },
+                { label: "💸 Expense",   desc: "Money paid out",  types: EXPENSE_TYPES },
+                { label: "📦 Inventory", desc: "Stock movement",  types: INVENTORY_TYPES },
+              ].map(cat => {
+                const isActive = cat.types.includes(formData.transaction_type);
                 return (
-                  <button key={t.id} type="button" onClick={() => setActiveTab(t.id)}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-left w-full mb-0.5 transition-all
-                      ${active ? "bg-emerald-50 text-emerald-700 font-medium" : "text-slate-500 hover:bg-white hover:text-slate-700"}`}>
-                    <Icon className={`w-4 h-4 shrink-0 ${active ? "text-emerald-600" : "text-slate-400"}`} />
-                    <span className="whitespace-nowrap">{t.label}</span>
+                  <button key={cat.label} type="button"
+                    onClick={() => set("transaction_type", cat.types[0])}
+                    className={`p-3 rounded-xl border text-left transition-all ${isActive ? "border-emerald-300 bg-emerald-50" : "border-slate-200 hover:border-slate-300"}`}>
+                    <p className="text-sm font-bold text-slate-700">{cat.label}</p>
+                    <p className="text-[10px] text-slate-400">{cat.desc}</p>
                   </button>
                 );
               })}
             </div>
+            <select value={formData.transaction_type || ""} onChange={e => set("transaction_type", e.target.value)}
+              className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none bg-white">
+              <optgroup label="💰 Income">
+                {REVENUE_TYPES.map(t => <option key={t} value={t}>{TRANSACTION_TYPES[t] || t}</option>)}
+              </optgroup>
+              <optgroup label="💸 Expenses">
+                {EXPENSE_TYPES.map(t => <option key={t} value={t}>{TRANSACTION_TYPES[t] || t}</option>)}
+              </optgroup>
+              <optgroup label="📦 Inventory">
+                {INVENTORY_TYPES.map(t => <option key={t} value={t}>{TRANSACTION_TYPES[t] || t}</option>)}
+              </optgroup>
+            </select>
+          </div>
 
-            <div className="flex-1 px-6 py-5 overflow-y-auto max-h-[400px]">
-              <div className="mb-4">
-                <h3 className="text-sm font-semibold text-slate-700">{TABS.find((t) => t.id === activeTab)?.label}</h3>
-                <div className="h-px bg-slate-100 mt-2" />
+          {/* 3. Description */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">3. What is this for?</label>
+            <input value={formData.description || ""} onChange={e => set("description", e.target.value)}
+              placeholder={isRevenue ? "e.g. Personal Care Visit — 4 hours" : isExpense ? "e.g. Monthly medication restock" : "e.g. Donepezil — 30 tablets dispensed"}
+              className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-200" />
+          </div>
+
+          {/* 4. Amount */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">4. How much?</label>
+            <div className="flex gap-2">
+              <select value={formData.currency || "USD"} onChange={e => set("currency", e.target.value)}
+                className="border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none w-24 bg-white">
+                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input type="number" min="0" step="0.01" value={formData.amount || ""} onChange={e => {
+                const amount = parseFloat(e.target.value) || 0;
+                setFormData(f => ({ ...f, amount, net_amount: amount - (f.discount_amount || 0) + (f.tax_amount || 0) }));
+              }}
+                placeholder="0.00"
+                className="flex-1 border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-200" />
+            </div>
+          </div>
+
+          {/* 5. Person */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              5. Who is involved? <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <p className="text-xs text-slate-400 mb-2">
+              {isRevenue ? "Which client or donor is paying?" : isExpense ? "Which staff member or supplier?" : "Which person is this related to?"}
+            </p>
+            <div className="flex gap-2">
+              {enterprisePeople.length > 0 ? (
+                <select value={formData.primary_person || ""} onChange={e => set("primary_person", e.target.value)}
+                  className="flex-1 border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none bg-white">
+                  <option value="">Select person...</option>
+                  {enterprisePeople.map(p => (
+                    <option key={p.id} value={`${p.first_name} ${p.last_name}`}>
+                      {p.first_name} {p.last_name}{p.primary_role ? ` (${p.primary_role})` : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input value={formData.primary_person || ""} onChange={e => set("primary_person", e.target.value)}
+                  placeholder="Type a name..."
+                  className="flex-1 border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none" />
+              )}
+            </div>
+          </div>
+
+          {/* 6. Service */}
+          {isRevenue && enterpriseServices.length > 0 && (
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                6. Which service was delivered? <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <select value={formData.service_id || ""} onChange={e => {
+                const svc = enterpriseServices.find(s => s.id === e.target.value);
+                setFormData(f => ({
+                  ...f,
+                  service_id:   e.target.value,
+                  service_name: svc?.name || svc?.service_name || "",
+                  amount:       svc?.price ? parseFloat(svc.price) : f.amount,
+                }));
+              }}
+                className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none bg-white">
+                <option value="">Select service...</option>
+                {enterpriseServices.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name || s.service_name}{s.price ? ` — $${s.price}` : ""}
+                  </option>
+                ))}
+              </select>
+              {formData.service_id && <p className="text-[10px] text-emerald-600 mt-1">✓ Amount auto-filled from service rate</p>}
+            </div>
+          )}
+
+          {/* 7. Payment */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              {isRevenue ? "7." : "6."} How was it paid?
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] text-slate-400 mb-1">Payment method</p>
+                <select value={formData.payment_method || "private_pay"} onChange={e => set("payment_method", e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none bg-white">
+                  {PAYMENT_METHODS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+                </select>
               </div>
-              {renderTab()}
+              <div>
+                <p className="text-[10px] text-slate-400 mb-1">Payment status</p>
+                <select value={formData.payment_status || "unpaid"} onChange={e => setFormData(f => ({
+                  ...f, payment_status: e.target.value,
+                  payment_date: e.target.value === "paid" ? new Date().toISOString().slice(0, 10) : f.payment_date,
+                }))}
+                  className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none bg-white">
+                  <option value="unpaid">Unpaid — awaiting payment</option>
+                  <option value="paid">Paid — payment received</option>
+                  <option value="partial">Partial — some paid</option>
+                  <option value="waived">Waived — no charge</option>
+                  <option value="na">N/A</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <p className="text-[10px] text-slate-400 mb-1">Transaction date</p>
+                <input type="date" value={formData.date || ""} onChange={e => set("date", e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none" />
+              </div>
+              {isRevenue && (
+                <div>
+                  <p className="text-[10px] text-slate-400 mb-1">Payment due date</p>
+                  <input type="date" value={formData.due_date || ""} onChange={e => set("due_date", e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none" />
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/40">
-            <div className="flex gap-2">
-              {currentIdx > 0 && (
-                <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={() => setActiveTab(TABS[currentIdx - 1].id)}>← Back</Button>
-              )}
-              {currentIdx < TABS.length - 1 && (
-                <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={() => setActiveTab(TABS[currentIdx + 1].id)}>Next →</Button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" variant="ghost" onClick={onClose} className="rounded-xl text-sm"><X className="w-4 h-4 mr-1" /> Close</Button>
-              {isVoided && <span className="text-xs text-slate-400 self-center italic">Voided — read only</span>}
-              {!isLocked && (
-                <>
-                  <Button type="submit" variant="outline" className="rounded-xl text-sm border-amber-300 text-amber-700 hover:bg-amber-50">
-                    <Save className="w-4 h-4 mr-2" /> Save Draft
-                  </Button>
-                </>
-              )}
-            </div>
+          {/* Notes */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Notes <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <textarea value={formData.notes || ""} onChange={e => set("notes", e.target.value)}
+              placeholder="Any additional notes..." rows={2}
+              className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none resize-none" />
           </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+
+          {/* Summary */}
+          {parseFloat(formData.amount) > 0 && (
+            <div className={`rounded-xl p-4 ${isRevenue ? "bg-emerald-50 border border-emerald-100" : isExpense ? "bg-rose-50 border border-rose-100" : "bg-amber-50 border border-amber-100"}`}>
+              <p className="text-xs font-bold text-slate-600 mb-2">Transaction Summary</p>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Type:</span>
+                  <span className="font-medium text-slate-700">{TRANSACTION_TYPES[formData.transaction_type] || formData.transaction_type}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Amount:</span>
+                  <span className="font-bold text-slate-800">{formData.currency} {parseFloat(formData.amount || 0).toFixed(2)}</span>
+                </div>
+                {formData.primary_person && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Person:</span>
+                    <span className="text-slate-700">{formData.primary_person}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Status:</span>
+                  <span className="font-medium text-slate-700 capitalize">{formData.payment_status || "unpaid"}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white border-t border-slate-100 px-6 py-4 flex gap-3">
+          <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-all">
+            Cancel
+          </button>
+          <button onClick={handleSubmit}
+            disabled={!formData.enterprise || !formData.amount || parseFloat(formData.amount) <= 0}
+            className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+            {initialData?.id ? "Save Changes" : "Save Transaction"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
