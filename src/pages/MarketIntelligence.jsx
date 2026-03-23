@@ -507,15 +507,17 @@ export default function MarketIntelligence() {
         {/* Progress status pills */}
         {running && (
           <div className="flex gap-2 flex-wrap pt-2">
-            {SECTION_STATUS.map(s => {
-              const done = sectionDone(s.key, s.altKey);
-              return (
-                <span key={s.key} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${done ? "bg-emerald-50 text-emerald-600 border border-emerald-200" : "bg-slate-100 text-slate-400"}`}>
-                  {done ? "✅" : <Loader2 className="w-3 h-3 animate-spin" />}
-                  {s.label}
-                </span>
-              );
-            })}
+            {SECTION_STATUS
+              .filter(s => !s.agriculturalOnly || results?.isAgricultural)
+              .map(s => {
+                const done = sectionDone(s.key, s.altKey);
+                return (
+                  <span key={s.key} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${done ? "bg-emerald-50 text-emerald-600 border border-emerald-200" : "bg-slate-100 text-slate-400"}`}>
+                    {done ? "✅" : <Loader2 className="w-3 h-3 animate-spin" />}
+                    {s.label}
+                  </span>
+                );
+              })}
           </div>
         )}
       </div>
