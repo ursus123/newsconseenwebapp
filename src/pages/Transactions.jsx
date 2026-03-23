@@ -24,6 +24,16 @@ import { createTransaction } from "@/utils/createTransaction";
 const STOCK_IMPACT_TYPES = ["stock_out", "item_assignment"];
 const STOCK_IN_TYPES = ["stock_in", "item_return"];
 
+const SOURCE_CONFIG = {
+  manual:        { icon: "✏️", label: "Manual",      color: "bg-slate-100 text-slate-500" },
+  task_complete: { icon: "✅", label: "Task",         color: "bg-emerald-50 text-emerald-600" },
+  medadmin:      { icon: "💊", label: "MedAdmin",     color: "bg-blue-50 text-blue-600" },
+  stockcounter:  { icon: "📊", label: "StockCounter", color: "bg-amber-50 text-amber-600" },
+  barcode:       { icon: "📷", label: "Barcode",      color: "bg-purple-50 text-purple-600" },
+  clockinout:    { icon: "⏰", label: "Clock In/Out", color: "bg-indigo-50 text-indigo-600" },
+  import:        { icon: "📥", label: "Import",       color: "bg-slate-100 text-slate-500" },
+};
+
 const TABS = [
   {
     id: "outstanding", label: "Outstanding", icon: "⏳",
