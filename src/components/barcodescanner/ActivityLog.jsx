@@ -48,10 +48,15 @@ export default function ActivityLog({ log, onUndo }) {
       "Unit Price": e.product?.unit_price || 0,
       "Total Value": (e.qty || 0) * (e.product?.unit_price || 0),
     }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Session Log");
-    XLSX.writeFile(wb, `scan_session_${format(new Date(), "yyyy-MM-dd_HHmm")}.xlsx`);
+    const keys = Object.keys(rows[0]);
+    const csv = [keys.join(","), ...rows.map(r => keys.map(k => JSON.stringify(r[k] ?? "")).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `scan_session_${format(new Date(), "yyyy-MM-dd_HHmm")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
