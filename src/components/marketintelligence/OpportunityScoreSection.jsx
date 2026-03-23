@@ -1,6 +1,23 @@
 import React from "react";
 import SectionSkeleton from "./SectionSkeleton";
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from "recharts";
+import { getBizCategory } from "@/pages/MarketIntelligence";
+
+const CATEGORY_LABELS = {
+  healthcare:  "Healthcare Opportunity Score",
+  education:   "Education Market Opportunity",
+  community:   "Community Need Score",
+  agriculture: "Agricultural Market Opportunity",
+  business:    "Business Opportunity Score",
+};
+
+const CATEGORY_PROVIDER_TERM = {
+  healthcare:  "providers",
+  education:   "institutions",
+  community:   "organizations",
+  agriculture: "operations",
+  business:    "providers",
+};
 
 function ScoreBadge({ score }) {
   if (score >= 70) return { label: "STRONG OPPORTUNITY", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" };
@@ -9,7 +26,7 @@ function ScoreBadge({ score }) {
   return { label: "SATURATED MARKET", color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-200" };
 }
 
-export default function OpportunityScoreSection({ data, infrastructure, economy, isUS, loading }) {
+export default function OpportunityScoreSection({ data, infrastructure, economy, isUS, businessType, loading }) {
   if (loading) return <SectionSkeleton title="Market Opportunity Score" rows={5} />;
   if (!data) return null;
 
@@ -18,6 +35,9 @@ export default function OpportunityScoreSection({ data, infrastructure, economy,
 
   const score = d.opportunity_score ?? 0;
   const badge = ScoreBadge({ score });
+  const bizCategory = getBizCategory(businessType || "other");
+  const sectionTitle = CATEGORY_LABELS[bizCategory] || "Market Opportunity Score";
+  const providerTerm = CATEGORY_PROVIDER_TERM[bizCategory] || "providers";
 
   // Build radar data
   const infOverall = infrastructure?.find(r => r.infrastructure_type === "OVERALL SCORE");
@@ -44,7 +64,7 @@ export default function OpportunityScoreSection({ data, infrastructure, economy,
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-      <h3 className="text-sm font-bold text-slate-800 mb-4">🎯 Market Opportunity Score</h3>
+      <h3 className="text-sm font-bold text-slate-800 mb-4">🎯 {sectionTitle}</h3>
 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Score card */}
@@ -60,7 +80,7 @@ export default function OpportunityScoreSection({ data, infrastructure, economy,
               { label: "Est. Market Size", value: d.annual_market_usd ? `$${(d.annual_market_usd / 1000000).toFixed(1)}M/yr` : "—" },
               { label: "Competitors Found", value: d.existing_competitors ?? "—" },
               { label: "Ideal Market Size", value: d.ideal_market_units ?? "—" },
-              { label: "Supply Gap", value: d.supply_gap > 0 ? `${d.supply_gap} needed` : "Saturated" },
+              { label: "Supply Gap", value: d.supply_gap > 0 ? `${d.supply_gap} ${providerTerm} needed` : "Saturated" },
               { label: "Est. Population", value: d.estimated_population ? Number(d.estimated_population).toLocaleString() : "—" },
               { label: "Market Status", value: d.market_status || "—" },
             ].map(({ label, value }) => (
