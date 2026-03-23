@@ -22,6 +22,9 @@ import * as XLSX from "xlsx";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
+// Print styles
+const PRINT_STYLES = `@media print { .no-print { display: none !important; } body { font-size: 12px; } }`;
+
 const HISTORY_KEY_PREFIX = "mi_history_";
 
 // ── US detection helpers ────────────────────────────────────────────────────
@@ -476,6 +479,7 @@ export default function MarketIntelligence() {
 
   return (
     <div className="flex flex-col gap-0 min-h-full">
+      <style>{PRINT_STYLES}</style>
       {/* Sticky input bar */}
       <div className="sticky top-0 z-30 bg-white border-b border-slate-100 pb-3 pt-2 shadow-sm no-print">
         <div className="flex items-start gap-3 flex-wrap">
