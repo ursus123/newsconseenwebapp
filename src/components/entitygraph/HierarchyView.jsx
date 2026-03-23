@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { ChevronDown } from "lucide-react";
 
+const AGRICULTURAL_TYPES = ["agriculture", "farm", "livestock", "animal_barn", "aquaculture"];
+
 export default function HierarchyView({ enterprises, people, services, products, tasks, transactions, addresses, relationships, selectedEnterprise }) {
   const [expanded, setExpanded] = useState(new Set());
 
@@ -53,7 +55,8 @@ export default function HierarchyView({ enterprises, people, services, products,
   const statsFor = (enterpriseName) => {
     const entPeople = getPeopleForEnterprise(enterpriseName);
     const staff = entPeople.filter(p => ["employee", "contractor", "freelancer"].includes(p.person_type) && p.status === "active");
-    const clients = entPeople.filter(p => ["client", "patient"].includes(p.person_type) && p.status === "active");
+    // Participants are humans only (clients, patients, students, members, etc.)
+    const clients = entPeople.filter(p => ["client", "patient", "student", "member", "beneficiary", "resident", "customer"].includes(p.person_type) && p.status === "active");
 
     const addrs = addresses.filter(a => {
       const linked = a.linked_enterprises || [];
