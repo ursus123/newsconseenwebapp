@@ -435,6 +435,13 @@ export default function Transactions() {
           <option value="all">All Enterprises</option>
           {enterprises.map(e => <option key={e.id} value={e.enterprise_name}>{e.enterprise_name}</option>)}
         </select>
+        <select value={filterSource} onChange={e => setFilterSource(e.target.value)}
+          className="text-xs border border-slate-200 rounded-xl px-3 py-1.5 bg-white text-slate-600 focus:outline-none">
+          <option value="all">All sources</option>
+          {Object.entries(SOURCE_CONFIG).map(([k, v]) => (
+            <option key={k} value={k}>{v.icon} {v.label}</option>
+          ))}
+        </select>
         {perms.l4_create_draft && (
           <button onClick={() => { setEditing(null); setFormOpen(true); }}
             className="ml-auto flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-all">
