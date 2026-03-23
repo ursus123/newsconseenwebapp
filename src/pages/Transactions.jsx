@@ -245,8 +245,15 @@ export default function Transactions() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => base44.entities.Transaction.create(withScope(d)),
+    mutationFn: async (data) => createTransaction(data, currentUser, {
+      autoPost:        data.status === "posted",
+      generateNumber:  data.status === "posted" && REVENUE_TYPES.includes(data.transaction_type),
+      toast,
+      existingTransactions: transactions,
+      enterprise:      enterprises.find(e => e.enterprise_name === data.enterprise),
+    }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setFormOpen(false); },
+    onError: (e) => toast({ title: "Failed to create transaction", description: e.message, variant: "destructive" }),
   });
 
   const updateMut = useMutation({
