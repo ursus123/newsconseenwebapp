@@ -39,7 +39,7 @@ export default function ExportMenu({ results, sql }) {
 
   const items = [
     { icon: FileText, label: "Export as CSV (.csv)", color: "text-amber-400", action: () => { exportCSV(results); setOpen(false); } },
-    { icon: FileSpreadsheet, label: "Export as Excel (.xlsx)", color: "text-emerald-400", action: () => { exportXLSX(results, sql); setOpen(false); } },
+    { icon: FileSpreadsheet, label: "Export as CSV (.csv) [full]", color: "text-emerald-400", action: () => { exportXLSX(results, sql); setOpen(false); } },
     { icon: Braces, label: "Export as JSON (.json)", color: "text-blue-400", action: () => { exportJSON(results); setOpen(false); } },
     { icon: copied ? CheckCircle2 : Clipboard, label: copied ? "Copied!" : "Copy as tab-separated", color: copied ? "text-emerald-400" : "text-slate-400", action: handleCopy },
   ];
