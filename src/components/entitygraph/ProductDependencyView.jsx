@@ -15,11 +15,30 @@ export default function ProductDependencyView({ products, services, tasks, enter
   });
 
   const TYPE_COLORS = {
-    medication: { bg: "bg-blue-50", border: "border-blue-100", text: "text-blue-700", sub: "text-blue-500", bar: "bg-blue-400" },
-    equipment:  { bg: "bg-amber-50", border: "border-amber-100", text: "text-amber-700", sub: "text-amber-500", bar: "bg-amber-400" },
-    consumable: { bg: "bg-emerald-50", border: "border-emerald-100", text: "text-emerald-700", sub: "text-emerald-500", bar: "bg-emerald-400" },
-    fixed_asset:{ bg: "bg-indigo-50", border: "border-indigo-100", text: "text-indigo-700", sub: "text-indigo-500", bar: "bg-indigo-400" },
-    Other:      { bg: "bg-slate-50", border: "border-slate-100", text: "text-slate-700", sub: "text-slate-500", bar: "bg-slate-400" },
+    medication:   { bg: "bg-blue-50",   border: "border-blue-100",   text: "text-blue-700",   sub: "text-blue-500",   bar: "bg-blue-400" },
+    equipment:    { bg: "bg-amber-50",  border: "border-amber-100",  text: "text-amber-700",  sub: "text-amber-500",  bar: "bg-amber-400" },
+    consumable:   { bg: "bg-emerald-50",border: "border-emerald-100",text: "text-emerald-700",sub: "text-emerald-500",bar: "bg-emerald-400" },
+    fixed_asset:  { bg: "bg-indigo-50", border: "border-indigo-100", text: "text-indigo-700", sub: "text-indigo-500", bar: "bg-indigo-400" },
+    livestock:    { bg: "bg-lime-50",   border: "border-lime-100",   text: "text-lime-700",   sub: "text-lime-500",   bar: "bg-lime-400" },
+    feed:         { bg: "bg-yellow-50", border: "border-yellow-100", text: "text-yellow-700", sub: "text-yellow-500", bar: "bg-yellow-400" },
+    seed:         { bg: "bg-teal-50",   border: "border-teal-100",   text: "text-teal-700",   sub: "text-teal-500",   bar: "bg-teal-400" },
+    crop:         { bg: "bg-green-50",  border: "border-green-100",  text: "text-green-700",  sub: "text-green-500",  bar: "bg-green-400" },
+    fertilizer:   { bg: "bg-orange-50", border: "border-orange-100", text: "text-orange-700", sub: "text-orange-500", bar: "bg-orange-400" },
+    vehicle:      { bg: "bg-violet-50", border: "border-violet-100", text: "text-violet-700", sub: "text-violet-500", bar: "bg-violet-400" },
+    tool:         { bg: "bg-slate-50",  border: "border-slate-100",  text: "text-slate-700",  sub: "text-slate-500",  bar: "bg-slate-400" },
+    Other:        { bg: "bg-slate-50",  border: "border-slate-100",  text: "text-slate-700",  sub: "text-slate-500",  bar: "bg-slate-400" },
+  };
+
+  const getUnitLabel = (product) => {
+    if (product.item_type === "livestock") return `${product.stock_quantity ?? 0} head`;
+    if (product.item_type === "feed" || product.item_type === "crop") return `${product.stock_quantity ?? 0} kg`;
+    return `${product.stock_quantity ?? 0} units`;
+  };
+
+  const getLowStockLabel = (product) => {
+    if (product.item_type === "livestock") return "Herd below target size";
+    if (product.item_type === "feed") return "Feed supply low";
+    return "Low stock";
   };
 
   if (products.length === 0) {
@@ -41,7 +60,7 @@ export default function ProductDependencyView({ products, services, tasks, enter
               {outOfStock.map(p => (
                 <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-rose-100 last:border-0">
                   <span className="text-xs text-rose-700 font-medium">{p.name}</span>
-                  <span className="text-xs font-bold text-rose-600">{p.stock_quantity} units</span>
+                  <span className="text-xs font-bold text-rose-600">{getUnitLabel(p)}</span>
                 </div>
               ))}
             </div>
@@ -51,7 +70,10 @@ export default function ProductDependencyView({ products, services, tasks, enter
               <p className="text-sm font-bold text-amber-700 mb-2">🟡 Low Stock ({lowStock.length})</p>
               {lowStock.map(p => (
                 <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-amber-100 last:border-0">
-                  <span className="text-xs text-amber-700 font-medium">{p.name}</span>
+                  <div>
+                    <span className="text-xs text-amber-700 font-medium">{p.name}</span>
+                    <p className="text-[10px] text-amber-500">{getLowStockLabel(p)}</p>
+                  </div>
                   <div className="flex items-center gap-2">
                     <div className="w-16 h-1.5 bg-amber-100 rounded-full overflow-hidden">
                       <div className="h-full bg-amber-400 rounded-full" style={{ width: `${Math.min(p.stock_quantity / p.min_stock_level * 100, 100)}%` }} />
