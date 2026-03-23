@@ -43,28 +43,31 @@ export default function ScannerViewfinder({ onScan, isProcessing }) {
       false
     );
 
-    scannerRef.current = scanner;
+      scannerRef.current = scanner;
 
-    scanner.render(
-      (decodedText) => {
-        if (!mountedRef.current) return;
-        setStatus("detected");
-        onScan(decodedText);
-        setTimeout(() => { if (mountedRef.current) setStatus("ready"); }, 1500);
-      },
-      () => {
+      scanner.render(
+        (decodedText) => {
+          if (!mountedRef.current) return;
+          setStatus("detected");
+          onScan(decodedText);
+          setTimeout(() => { if (mountedRef.current) setStatus("ready"); }, 1500);
+        },
+        () => {
+          if (mountedRef.current && status === "init") setStatus("ready");
+        }
+      );
+
+      // Detect when camera starts
+      setTimeout(() => {
         if (mountedRef.current && status === "init") setStatus("ready");
-      }
-    );
+      }, 2000);
+    };
 
-    // Detect when camera starts
-    setTimeout(() => {
-      if (mountedRef.current && status === "init") setStatus("ready");
-    }, 2000);
+    init();
 
     return () => {
       mountedRef.current = false;
-      try { scanner.clear(); } catch (e) {}
+      try { if (scannerRef.current) scannerRef.current.clear(); } catch (e) {}
     };
   }, []);
 
