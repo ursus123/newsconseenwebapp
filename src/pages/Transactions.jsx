@@ -455,12 +455,7 @@ export default function Transactions() {
             <option key={k} value={k}>{v.icon} {v.label}</option>
           ))}
         </select>
-        {perms.l4_create_draft && (
-          <button onClick={() => { setEditing(null); setFormOpen(true); }}
-            className="ml-auto flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-all">
-            <Plus className="w-4 h-4" /> New Transaction
-          </button>
-        )}
+
       </div>
 
       {/* Tab navigation */}

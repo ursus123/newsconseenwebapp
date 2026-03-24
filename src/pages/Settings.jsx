@@ -177,15 +177,15 @@ export default function Settings() {
 
 function ProfileSection({ user, myEnterprise, onUserUpdated }) {
   // display_name is the editable custom name; full_name is read-only from auth
-  const [name, setName] = useState(user.display_name || user.full_name || "");
+  const [name, setName] = useState(user.full_name || "");
   const [saving, setSaving] = useState(false);
   const [banner, setBanner] = useState(null);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await base44.auth.updateMe({ display_name: name });
-      onUserUpdated({ ...user, display_name: name });
+      await base44.auth.updateMe({ full_name: name });
+      onUserUpdated({ ...user, full_name: name });
       setBanner({ type: "success", msg: "Profile updated successfully." });
       setTimeout(() => setBanner(null), 3000);
     } catch {
