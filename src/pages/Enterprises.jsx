@@ -246,6 +246,8 @@ export default function Enterprises() {
         />
       )}
 
+      <BulkActionBar selectedIds={selectedIds} onClear={() => setSelectedIds([])} onDeleteSelected={perms.can_delete ? handleBulkDelete : undefined} canDelete={perms.can_delete} />
+
       {/* Toolbar + view toggle */}
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
