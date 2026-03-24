@@ -434,7 +434,9 @@ async function executeVirtualTable(table, sql) {
       const amenity = TYPE_MAP[businessType.toLowerCase()] || businessType;
       const query = `[out:json][timeout:25];node["amenity"="${amenity}"](around:${radiusM},${lat},${lon});out body;`;
       const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
-      const data = await res.json();
+      const resText = await res.text();
+      if (!resText.trim().startsWith("{")) return { type: "select", rows: [], message: `Overpass API temporarily unavailable. Try again in a moment.` };
+      const data = JSON.parse(resText);
       const locations = data.elements || [];
       const withDist = locations.map(r => ({ name: r.tags?.name || "Unnamed", business_type: businessType, lat: r.lat, lon: r.lon, address: [r.tags?.["addr:street"], r.tags?.["addr:city"]].filter(Boolean).join(", "), phone: r.tags?.phone || "", website: r.tags?.website || "", opening_hours: r.tags?.opening_hours || "", distance_km: +(Math.sqrt(Math.pow((r.lat - parseFloat(lat)) * 111, 2) + Math.pow((r.lon - parseFloat(lon)) * 111 * Math.cos(parseFloat(lat) * Math.PI / 180), 2))).toFixed(2) })).sort((a, b) => a.distance_km - b.distance_km);
       rows = [{ name: `SUMMARY: ${locations.length} ${businessType}s within ${radiusKm}km of ${city}`, business_type: businessType, lat: parseFloat(lat), lon: parseFloat(lon), address: `Center: ${city}`, phone: "", website: "", opening_hours: "", distance_km: 0 }, ...withDist];
