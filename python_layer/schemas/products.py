@@ -1,46 +1,41 @@
-# python_layer/schemas/products.py
-
-from pydantic import BaseModel
+from datetime import date, datetime
 from typing import Optional
-
-
-class ProductBase(BaseModel):
-    name: str
-    sku: str
-    item_type: str
-    stock_quantity: int
-    unit_price: float
-    cost_price: float
-    status: str
-
-
-class ProductCreate(ProductBase):
-    pass
-
-
-class ProductUpdate(BaseModel):
-    name: Optional[str] = None
-    sku: Optional[str] = None
-    item_type: Optional[str] = None
-    stock_quantity: Optional[int] = None
-    unit_price: Optional[float] = None
-    cost_price: Optional[float] = None
-    status: Optional[str] = None
-
-
-class Product(ProductBase):
-    id: int
-
-    class Config:
-        orm_mode = True
+from pydantic import BaseModel
 
 
 class ProductSummary(BaseModel):
     """
-    Output schema for /product-summary.
-    Matches the shape produced by etl/products.transform_products().
+    One row from analytics.product_summary.
+    Matches the output of etl/products.transform_products() exactly.
     """
-    item_type: str
-    total_products: int
-    total_stock: int
-    avg_price: float
+    # -- Grouping keys --
+    enterprise_id:           Optional[str] = None
+    company_id:              Optional[str] = None
+    item_type:               Optional[str] = None
+    status:                  Optional[str] = None
+
+    # -- Inventory metrics --
+    total_products:          int
+    total_stock:             int
+    avg_price:               float
+    avg_cost_price:          float
+    total_inventory_value:   float
+    avg_gross_margin_pct:    float
+
+    # -- Alert metrics --
+    low_stock_count:         int
+    out_of_stock_count:      int
+    expiring_7d_count:       int
+    expiring_30d_count:      int
+    new_last_30d:            int
+
+    # -- Classification --
+    is_medication:           bool = False
+    is_livestock:            bool = False
+
+    # -- Snapshot --
+    snapshot_date:           Optional[date]     = None
+    loaded_at:               Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
