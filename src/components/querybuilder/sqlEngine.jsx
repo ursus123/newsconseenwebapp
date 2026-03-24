@@ -456,7 +456,9 @@ async function executeVirtualTable(table, sql) {
       const SCAN_TYPES = ["hospital", "clinic", "pharmacy", "school", "university", "kindergarten", "supermarket", "restaurant", "bank", "hotel", "fuel", "atm", "nursing_home", "veterinary", "gym", "library", "post_office", "police", "fire_station"];
       const query = `[out:json][timeout:30];(${SCAN_TYPES.map(t => `node["amenity"="${t}"](around:${radiusM},${lat},${lon});`).join("")});out body;`;
       const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
-      const data = await res.json();
+      const infraText = await res.text();
+      if (!infraText.trim().startsWith("{")) return { type: "select", rows: [], message: `Overpass API temporarily unavailable. Infrastructure data could not be loaded.` };
+      const data = JSON.parse(infraText);
       const elements = data.elements || [];
       const counts = {};
       SCAN_TYPES.forEach(t => { counts[t] = 0; });
