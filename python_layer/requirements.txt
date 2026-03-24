@@ -15,4 +15,49 @@ geopandas
 shapely
 
 # Machine learning (used by geospatial.cluster_enterprises)
+scikit-learn# ----------------------------------------------------------
+# API framework
+# ----------------------------------------------------------
+fastapi
+uvicorn[standard]
+
+# ----------------------------------------------------------
+# Data
+# ----------------------------------------------------------
+pandas
+numpy
+requests
+python-dotenv
+
+# ----------------------------------------------------------
+# Config
+# ----------------------------------------------------------
+pydantic
+pydantic-settings
+
+# ----------------------------------------------------------
+# Database — Railway PostgreSQL
+# ----------------------------------------------------------
+sqlalchemy
+psycopg2-binary
+
+# ----------------------------------------------------------
+# Geospatial
+# ----------------------------------------------------------
+geopandas
+shapely
+
+# ----------------------------------------------------------
+# Machine learning — Phase 2
+# survival model (Cox PH)
+# ----------------------------------------------------------
+lifelines
+
+# time series forecasting (Prophet)
+prophet
+
+# gradient boosting (XGBoost demand model)
+xgboost
+
+# clustering + general ML utilities (DBSCAN, preprocessing)
 scikit-learn
