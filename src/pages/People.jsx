@@ -12,8 +12,11 @@ import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery"
 import { Badge } from "@/components/ui/badge";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
+import SearchFilterBar from "../components/shared/SearchFilterBar";
+import BulkActionBar from "../components/shared/BulkActionBar";
 import { Upload, Users, CheckCircle, Clock, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 import {
   PEOPLE_FIELDS, PEOPLE_MAPPING_RULES, PEOPLE_TEMPLATE_EXAMPLE,
   PEOPLE_TEMPLATE_INSTRUCTIONS, validatePerson, transformPerson,
