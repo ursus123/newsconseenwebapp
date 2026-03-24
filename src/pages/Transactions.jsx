@@ -534,16 +534,25 @@ export default function Transactions() {
           </div>
         ) : (
           tabTransactions.map(tx => (
-            <TransactionRow
-              key={tx.id}
-              transaction={tx}
-              isExpanded={expanded === tx.id}
-              onExpand={(id) => setExpanded(expanded === id ? null : id)}
-              onEdit={(t) => { setEditing(t); setFormOpen(true); }}
-              onMarkPaid={handleMarkPaid}
-              onPost={(t) => setPostTarget(t)}
-              onVoid={(t) => setVoidTarget(t)}
-            />
+            <div key={tx.id} className="flex items-start gap-2">
+              <div className="mt-4 shrink-0">
+                <Checkbox
+                  checked={selectedIds.includes(tx.id)}
+                  onCheckedChange={() => setSelectedIds(prev => prev.includes(tx.id) ? prev.filter(x => x !== tx.id) : [...prev, tx.id])}
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <TransactionRow
+                  transaction={tx}
+                  isExpanded={expanded === tx.id}
+                  onExpand={(id) => setExpanded(expanded === id ? null : id)}
+                  onEdit={(t) => { setEditing(t); setFormOpen(true); }}
+                  onMarkPaid={handleMarkPaid}
+                  onPost={(t) => setPostTarget(t)}
+                  onVoid={(t) => setVoidTarget(t)}
+                />
+              </div>
+            </div>
           ))
         )}
       </div>
