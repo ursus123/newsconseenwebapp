@@ -180,18 +180,18 @@ export default function BarcodeScanner() {
 
     await base44.entities.Product.update(prod.id, { stock_quantity: newQty });
 
-    const txn = await base44.entities.Transaction.create({
-      transaction_type: dir === "in" ? "stock_in" : "stock_out",
-      status: "posted",
-      date: format(new Date(), "yyyy-MM-dd"),
-      enterprise: selectedEnterprise,
-      company_id: user?.company_id,
-      description: `${dir === "in" ? "Stock IN" : "Stock OUT"}: ${prod.name} x${effectiveQty}`,
-      line_items: [{ item_name: prod.name, quantity: effectiveQty, unit_price: prod.unit_price || 0 }],
-      amount: effectiveQty * (prod.unit_price || 0),
-      payment_status: "na",
-      internal_notes: notes || "",
-    });
+    const txn = await createStockTransaction(
+      dir === "in" ? "stock_in" : "stock_out",
+      { id: prod.id, name: prod.name, unit: prod.unit || "units", cost_price: prod.cost_price || 0 },
+      effectiveQty,
+      selectedEnterprise || user?.company_id || "",
+      user,
+      {
+        source:    "barcode",
+        sourceRef: `barcode-${dir}-${prod.id}-${Date.now()}`,
+        notes:     `Scanned ${dir === "in" ? "in" : "out"} by: ${user?.email}. SKU: ${prod.sku || "—"}.${notes ? ` Notes: ${notes}` : ""}`,
+      }
+    );
 
     const task = await base44.entities.Task.create({
       task_type: "stock_counting",
