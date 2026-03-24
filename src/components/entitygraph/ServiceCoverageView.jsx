@@ -8,13 +8,29 @@ export default function ServiceCoverageView({ enterprises, services, people, tas
   const coverageMap = {};
   services.forEach(s => {
     coverageMap[s.id] = new Set();
+    const serviceNameLower = (s.name || s.service_name || "").toLowerCase();
     visibleEnterprises.forEach(e => {
-      const hasTasks = tasks.some(t =>
-        t.enterprise === e.enterprise_name &&
-        (t.service_id === s.id || t.related_service === (s.name || s.service_name))
-      );
-      const isAssigned = s.enterprise === e.enterprise_name || !s.enterprise;
-      if (hasTasks || isAssigned) coverageMap[s.id].add(e.id);
+      // Rule 1: no enterprise field = global service available everywhere
+      if (!s.enterprise || s.enterprise === "") {
+        coverageMap[s.id].add(e.id);
+        return;
+      }
+      // Rule 2: explicitly assigned to this enterprise
+      if (s.enterprise === e.enterprise_name) {
+        coverageMap[s.id].add(e.id);
+        return;
+      }
+      // Rule 3: tasks of this service type exist at this enterprise
+      if (serviceNameLower) {
+        const hasTasks = tasks.some(t =>
+          t.enterprise === e.enterprise_name &&
+          (t.service_id === s.id ||
+           t.related_service === (s.name || s.service_name) ||
+           (t.task_type || "").toLowerCase().includes(serviceNameLower) ||
+           (t.description || "").toLowerCase().includes(serviceNameLower))
+        );
+        if (hasTasks) coverageMap[s.id].add(e.id);
+      }
     });
   });
 
