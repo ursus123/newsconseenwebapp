@@ -300,6 +300,7 @@ export default function People() {
           data={processedPeople}
           onEdit={perms.l1_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
           onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
+          bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
         />
       )}
 
