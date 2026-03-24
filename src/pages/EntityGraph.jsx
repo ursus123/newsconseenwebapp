@@ -20,6 +20,8 @@ import SharedResourcesView from "@/components/entitygraph/SharedResourcesView";
 import AnomalyView from "@/components/entitygraph/AnomalyView";
 import AddressesView from "@/components/entitygraph/AddressesView";
 import ProductsView from "@/components/entitygraph/ProductsView";
+import TasksView from "@/components/entitygraph/TasksView";
+import TransactionsView from "@/components/entitygraph/TransactionsView";
 
 const VIEWS = [
   { id: "hierarchy",    icon: "🏢", label: "Structure" },
