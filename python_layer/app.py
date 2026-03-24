@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from etl import enterprises, geospatial, people, products, services, tasks, transactions
 from etl.load import load_dataframe, load_dataframe_replace
-from open_data.medication_routes import router as medication_router
+from open_data import ALL_ROUTERS
 from ml.routes import router as ml_router
 from schemas import (
     EnterpriseSummary,
@@ -73,7 +73,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(medication_router)
+for router in ALL_ROUTERS:
+    app.include_router(router)
 app.include_router(ml_router)
 
 
