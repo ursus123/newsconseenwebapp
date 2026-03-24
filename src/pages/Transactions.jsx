@@ -510,6 +510,20 @@ export default function Transactions() {
         })}
       </div>
 
+      <BulkActionBar
+        selectedIds={selectedIds}
+        onClear={() => setSelectedIds([])}
+        onDeleteSelected={perms.l4_void ? handleBulkDelete : undefined}
+        canDelete={perms.l4_void}
+        extraActions={
+          perms.l4_void && selectedIds.length > 0 ? (
+            <Button size="sm" variant="outline" className="h-7 border-amber-400 text-amber-300 hover:bg-amber-500/20" onClick={handleBulkVoid}>
+              Void {selectedIds.length}
+            </Button>
+          ) : null
+        }
+      />
+
       {/* Transaction list */}
       <div className="space-y-3">
         {tabTransactions.length === 0 ? (
