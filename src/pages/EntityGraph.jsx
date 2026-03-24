@@ -470,10 +470,13 @@ export default function EntityGraph() {
     setFilter(VIEW_PRESETS[presetName] || INITIAL_FILTER);
   };
 
+  const [refreshKey, setRefreshKey] = useState(0);
+
   const handleRefresh = () => {
     setEnterprises([]); setPeople([]); setServices([]); setProducts([]);
     setTasks([]); setTransactions([]); setAddresses([]); setRelationships([]);
     setLoadStates({ core: LOAD_STATES.idle, products: LOAD_STATES.idle, tasks: LOAD_STATES.idle, transactions: LOAD_STATES.idle, addresses: LOAD_STATES.idle });
+    setRefreshKey(prev => prev + 1);
   };
 
   const handleKeyDown = useCallback((e) => {
