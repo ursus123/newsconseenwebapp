@@ -1,155 +1,83 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import ServiceForm from "../components/services/ServiceForm";
+import SearchFilterBar from "../components/shared/SearchFilterBar";
+import BulkActionBar from "../components/shared/BulkActionBar";
 import { Badge } from "@/components/ui/badge";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 import { Upload, Settings, CheckCircle, Clock, DollarSign } from "lucide-react";
 import {
   SERVICE_FIELDS, SERVICE_MAPPING_RULES, SERVICE_TEMPLATE_EXAMPLE,
   SERVICE_TEMPLATE_INSTRUCTIONS, validateService, transformService,
 } from "@/components/shared/importConfigs";
 
-// ── Status colors ──────────────────────────────────────────────────
-const statusColor = (s) => ({
-  active:   "bg-emerald-50 text-emerald-700",
-  inactive: "bg-amber-50 text-amber-700",
-  archived: "bg-slate-100 text-slate-400",
-}[s] || "bg-slate-100 text-slate-600");
+const statusColor = (s) => ({ active: "bg-emerald-50 text-emerald-700", inactive: "bg-amber-50 text-amber-700", archived: "bg-slate-100 text-slate-400" }[s] || "bg-slate-100 text-slate-600");
+const catColor = (c) => ({ non_medical: "bg-cyan-50 text-cyan-700", personal_care: "bg-blue-50 text-blue-700", skilled_nursing: "bg-purple-50 text-purple-700", medication: "bg-rose-50 text-rose-600", transitional: "bg-orange-50 text-orange-700", specialty: "bg-violet-50 text-violet-700", respite: "bg-green-50 text-green-700", therapy: "bg-indigo-50 text-indigo-700", residential: "bg-amber-50 text-amber-700" }[c] || "bg-slate-100 text-slate-600");
+const typeColor = (t) => ({ recurring: "bg-emerald-50 text-emerald-700", on_demand: "bg-blue-50 text-blue-700", one_time: "bg-slate-100 text-slate-600" }[t] || "bg-slate-100 text-slate-600");
 
-// ── Category colors ────────────────────────────────────────────────
-const catColor = (c) => ({
-  non_medical:     "bg-cyan-50 text-cyan-700",
-  personal_care:   "bg-blue-50 text-blue-700",
-  skilled_nursing: "bg-purple-50 text-purple-700",
-  medication:      "bg-rose-50 text-rose-600",
-  transitional:    "bg-orange-50 text-orange-700",
-  specialty:       "bg-violet-50 text-violet-700",
-  respite:         "bg-green-50 text-green-700",
-  therapy:         "bg-indigo-50 text-indigo-700",
-  residential:     "bg-amber-50 text-amber-700",
-}[c] || "bg-slate-100 text-slate-600");
-
-// ── Service type colors ────────────────────────────────────────────
-const typeColor = (t) => ({
-  recurring: "bg-emerald-50 text-emerald-700",
-  on_demand: "bg-blue-50 text-blue-700",
-  one_time:  "bg-slate-100 text-slate-600",
-}[t] || "bg-slate-100 text-slate-600");
-
-// ── Table columns ──────────────────────────────────────────────────
 const columns = [
-  {
-    key: "name", label: "Service",
-    render: (val, row) => (
-      <div>
-        <p className="font-medium text-slate-800">{val}</p>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          {row.short_code && (
-            <span className="text-[10px] font-mono text-slate-400">{row.short_code}</span>
-          )}
-          {row.estimated_duration && row.duration_unit && (
-            <span className="text-[10px] text-slate-400">
-              · {row.estimated_duration} {row.duration_unit}
-            </span>
-          )}
-        </div>
-      </div>
-    ),
-  },
-  {
-    key: "category", label: "Category",
-    render: (val) => val
-      ? <Badge className={catColor(val)}>{val.replace(/_/g, " ")}</Badge>
-      : "—",
-  },
-  {
-    key: "service_type", label: "Type",
-    render: (val) => val
-      ? <Badge className={typeColor(val)}>{val.replace(/_/g, " ")}</Badge>
-      : "—",
-  },
-  {
-    key: "pricing_model", label: "Pricing",
-    render: (val, row) => (
-      <div>
-        <span className="text-xs text-slate-600 capitalize">
-          {val?.replace(/_/g, " ") || "—"}
-        </span>
-        {row.billing_unit && (
-          <span className="text-[10px] text-slate-400 ml-1">/ {row.billing_unit}</span>
-        )}
-      </div>
-    ),
-  },
-  {
-    key: "price", label: "Price",
-    render: (v) => v != null
-      ? <span className="font-semibold text-slate-800">${parseFloat(v).toLocaleString()}</span>
-      : "—",
-  },
-  {
-    key: "status", label: "Status",
-    render: (val) => <Badge className={statusColor(val)}>{val || "active"}</Badge>,
-  },
+  { key: "name", label: "Service", render: (val, row) => (<div><p className="font-medium text-slate-800">{val}</p><div className="flex items-center gap-1.5 mt-0.5">{row.short_code && <span className="text-[10px] font-mono text-slate-400">{row.short_code}</span>}{row.estimated_duration && row.duration_unit && <span className="text-[10px] text-slate-400">· {row.estimated_duration} {row.duration_unit}</span>}</div></div>) },
+  { key: "category", label: "Category", render: (val) => val ? <Badge className={catColor(val)}>{val.replace(/_/g, " ")}</Badge> : "—" },
+  { key: "service_type", label: "Type", render: (val) => val ? <Badge className={typeColor(val)}>{val.replace(/_/g, " ")}</Badge> : "—" },
+  { key: "pricing_model", label: "Pricing", render: (val, row) => (<div><span className="text-xs text-slate-600 capitalize">{val?.replace(/_/g, " ") || "—"}</span>{row.billing_unit && <span className="text-[10px] text-slate-400 ml-1">/ {row.billing_unit}</span>}</div>) },
+  { key: "price", label: "Price", render: (v) => v != null ? <span className="font-semibold text-slate-800">${parseFloat(v).toLocaleString()}</span> : "—" },
+  { key: "status", label: "Status", render: (val) => <Badge className={statusColor(val)}>{val || "active"}</Badge> },
 ];
 
-// ── Category tabs ──────────────────────────────────────────────────
 const CATEGORY_TABS = [
-  { id: "all",             label: "All" },
-  { id: "non_medical",     label: "Non-Medical" },
-  { id: "personal_care",   label: "Personal Care" },
-  { id: "skilled_nursing", label: "Skilled Nursing" },
-  { id: "medication",      label: "Medication" },
-  { id: "therapy",         label: "Therapy" },
-  { id: "residential",     label: "Residential" },
-  { id: "specialty",       label: "Specialty" },
-  { id: "respite",         label: "Respite" },
-  { id: "transitional",    label: "Transitional" },
+  { id: "all", label: "All" }, { id: "non_medical", label: "Non-Medical" }, { id: "personal_care", label: "Personal Care" },
+  { id: "skilled_nursing", label: "Skilled Nursing" }, { id: "medication", label: "Medication" },
+  { id: "therapy", label: "Therapy" }, { id: "residential", label: "Residential" },
+  { id: "specialty", label: "Specialty" }, { id: "respite", label: "Respite" }, { id: "transitional", label: "Transitional" },
 ];
 
-// ── Preview columns for bulk import ───────────────────────────────
 const SVC_PREVIEW_COLS = [
-  { label: "Name",     render: (r) => r.name || <span className="text-rose-500">MISSING</span> },
+  { label: "Name", render: (r) => r.name || <span className="text-rose-500">MISSING</span> },
   { label: "Category", render: (r) => r.category || "—" },
-  { label: "Type",     render: (r) => r.service_type || "—" },
-  { label: "Price",    render: (r) => r.price ? `$${r.price}` : "—" },
-  { label: "Status",   render: (r) => r.status || "active" },
+  { label: "Type", render: (r) => r.service_type || "—" },
+  { label: "Price", render: (r) => r.price ? `$${r.price}` : "—" },
+  { label: "Status", render: (r) => r.status || "active" },
 ];
 
-// ── Stat card ──────────────────────────────────────────────────────
 function StatCard({ icon: Icon, iconClass, label, value }) {
   return (
     <div className="bg-white border border-slate-100 rounded-2xl px-4 py-3 flex items-center gap-3">
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${iconClass}`}>
-        <Icon className="w-4 h-4" />
-      </div>
-      <div>
-        <p className="text-xs text-slate-400">{label}</p>
-        <p className="text-lg font-bold text-slate-800 leading-tight">{value}</p>
-      </div>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${iconClass}`}><Icon className="w-4 h-4" /></div>
+      <div><p className="text-xs text-slate-400">{label}</p><p className="text-lg font-bold text-slate-800 leading-tight">{value}</p></div>
     </div>
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────
+const FILTER_DEFS = [
+  { key: "status", label: "All Status", options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }, { value: "archived", label: "Archived" }] },
+  { key: "service_type", label: "All Types", options: [{ value: "recurring", label: "Recurring" }, { value: "on_demand", label: "On Demand" }, { value: "one_time", label: "One Time" }] },
+  { key: "pricing_model", label: "All Pricing", options: [{ value: "fixed", label: "Fixed" }, { value: "hourly", label: "Hourly" }, { value: "per_unit", label: "Per Unit" }, { value: "subscription", label: "Subscription" }] },
+];
+
 export default function Services() {
-  const [formOpen, setFormOpen]   = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [editing, setEditing]     = useState(null);
-  const [deleting, setDeleting]   = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState({ status: "", service_type: "", pricing_model: "" });
+  const [selectedIds, setSelectedIds] = useState([]);
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
-  const listFn    = useEntityListFn(currentUser);
+  const listFn = useEntityListFn(currentUser);
   const withScope = useWithScope(currentUser);
 
   const { data: services = [], isLoading } = useQuery({
@@ -158,164 +86,109 @@ export default function Services() {
     enabled: currentUser !== null,
   });
 
-  const createMut = useMutation({
-    mutationFn: (d) => base44.entities.Service.create(withScope(d)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setFormOpen(false); },
-  });
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Service.update(id, withScope(data)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setFormOpen(false); setEditing(null); },
-  });
-  const deleteMut = useMutation({
-    mutationFn: (id) => base44.entities.Service.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setDeleting(null); },
-  });
+  const createMut = useMutation({ mutationFn: (d) => base44.entities.Service.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setFormOpen(false); } });
+  const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Service.update(id, withScope(data)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setFormOpen(false); setEditing(null); } });
+  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Service.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setDeleting(null); } });
 
   const handleSubmit = (data, saveAndNew = false) => {
-    if (editing) {
-      updateMut.mutate({ id: editing.id, data });
-    } else {
-      createMut.mutate(data);
-      if (saveAndNew) { setEditing(null); setFormOpen(true); }
-    }
+    if (editing) { updateMut.mutate({ id: editing.id, data }); }
+    else { createMut.mutate(data); if (saveAndNew) { setEditing(null); setFormOpen(true); } }
   };
 
-  const handleArchive = (item) => {
-    updateMut.mutate({ id: item.id, data: { ...item, status: "archived" } });
-    setFormOpen(false);
-    setEditing(null);
+  const handleArchive = (item) => { updateMut.mutate({ id: item.id, data: { ...item, status: "archived" } }); setFormOpen(false); setEditing(null); };
+
+  const handleBulkDelete = async () => {
+    for (const id of selectedIds) await base44.entities.Service.delete(id);
+    qc.invalidateQueries({ queryKey: ["services"] });
+    toast({ title: `${selectedIds.length} services deleted` });
+    setSelectedIds([]);
   };
 
-  // ── Filtered data for table ──────────────────────────────────────
-  const filtered = activeTab === "all"
-    ? services
-    : services.filter(s => s.category === activeTab);
+  const tabFiltered = activeTab === "all" ? services : services.filter((s) => s.category === activeTab);
 
-  // ── Stat values ──────────────────────────────────────────────────
-  const avgPrice = services.length > 0
-    ? "$" + (services.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0) / services.length).toFixed(0)
-    : "$0";
+  const processedServices = useMemo(() => {
+    let list = [...tabFiltered];
+    if (search) list = fuzzyFilter(list, search, ["name", "short_code", "description", "category", "sub_category"]);
+    if (filters.status) list = list.filter((s) => s.status === filters.status);
+    if (filters.service_type) list = list.filter((s) => s.service_type === filters.service_type);
+    if (filters.pricing_model) list = list.filter((s) => s.pricing_model === filters.pricing_model);
+    return list;
+  }, [tabFiltered, search, filters]);
 
-  // ── Visible tabs (only where data exists) ────────────────────────
-  const visibleTabs = CATEGORY_TABS.filter(
-    t => t.id === "all" || services.some(s => s.category === t.id)
-  );
+  const avgPrice = services.length > 0 ? "$" + (services.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0) / services.length).toFixed(0) : "$0";
+
+  const visibleTabs = CATEGORY_TABS.filter((t) => t.id === "all" || services.some((s) => s.category === t.id));
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <PageHeader
-        title="Services"
-        subtitle="Define reusable service offerings and pricing"
-        onAdd={() => { setEditing(null); setFormOpen(true); }}
-        addLabel="New Service"
-      >
+      <PageHeader title="Services" subtitle="Define reusable service offerings and pricing" onAdd={() => { setEditing(null); setFormOpen(true); }} addLabel="New Service">
         <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
           <Upload className="w-4 h-4 mr-2" /> Import
         </Button>
       </PageHeader>
 
-      {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={Settings}     iconClass="bg-slate-100 text-slate-500"    label="Total Services" value={services.length} />
-        <StatCard icon={CheckCircle}  iconClass="bg-emerald-50 text-emerald-600" label="Active"         value={services.filter(s => s.status === "active").length} />
-        <StatCard icon={Clock}        iconClass="bg-blue-50 text-blue-600"       label="Recurring"      value={services.filter(s => s.service_type === "recurring").length} />
-        <StatCard icon={DollarSign}   iconClass="bg-purple-50 text-purple-600"   label="Average Price"  value={avgPrice} />
+        <StatCard icon={Settings} iconClass="bg-slate-100 text-slate-500" label="Total Services" value={services.length} />
+        <StatCard icon={CheckCircle} iconClass="bg-emerald-50 text-emerald-600" label="Active" value={services.filter((s) => s.status === "active").length} />
+        <StatCard icon={Clock} iconClass="bg-blue-50 text-blue-600" label="Recurring" value={services.filter((s) => s.service_type === "recurring").length} />
+        <StatCard icon={DollarSign} iconClass="bg-purple-50 text-purple-600" label="Average Price" value={avgPrice} />
       </div>
 
-      {/* Category filter tabs */}
       {visibleTabs.length > 1 && (
         <div className="bg-slate-100 rounded-xl p-1 flex flex-wrap gap-1">
-          {visibleTabs.map(tab => {
-            const count = tab.id === "all"
-              ? services.length
-              : services.filter(s => s.category === tab.id).length;
+          {visibleTabs.map((tab) => {
+            const count = tab.id === "all" ? services.length : services.filter((s) => s.category === tab.id).length;
             const isActive = activeTab === tab.id;
             return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5
-                  ${isActive
-                    ? "bg-white shadow-sm text-slate-800"
-                    : "text-slate-500 hover:text-slate-700"}`}
-              >
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${isActive ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:text-slate-700"}`}>
                 {tab.label}
-                <span className={`text-[11px] px-1.5 py-0.5 rounded-full
-                  ${isActive ? "bg-slate-100 text-slate-600" : "bg-slate-200 text-slate-500"}`}>
-                  {count}
-                </span>
+                <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${isActive ? "bg-slate-100 text-slate-600" : "bg-slate-200 text-slate-500"}`}>{count}</span>
               </button>
             );
           })}
         </div>
       )}
 
-      {/* Empty state */}
+      <SearchFilterBar
+        search={search} setSearch={setSearch}
+        filters={filters} setFilters={setFilters}
+        filterDefs={FILTER_DEFS}
+        placeholder="Search services, categories..."
+        resultCount={processedServices.length}
+        totalCount={tabFiltered.length}
+      />
+
+      <BulkActionBar selectedIds={selectedIds} onClear={() => setSelectedIds([])} onDeleteSelected={handleBulkDelete} canDelete />
+
       {!isLoading && services.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
           <Settings className="w-10 h-10 text-slate-200 mb-3" />
           <p className="text-slate-400 font-medium mb-1">No services yet</p>
-          <p className="text-slate-300 text-sm mb-4">
-            Add your care service catalog to start tracking operations
-          </p>
+          <p className="text-slate-300 text-sm mb-4">Add your service catalog to start tracking operations</p>
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              onClick={() => { setEditing(null); setFormOpen(true); }}
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-            >
-              Add First Service
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setImportOpen(true)}
-              className="rounded-xl"
-            >
-              Import from Excel
-            </Button>
+            <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">Add First Service</Button>
+            <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="rounded-xl">Import from Excel</Button>
           </div>
         </div>
       ) : (
-        <DataTable
-          columns={columns}
-          data={filtered}
-          searchField="name"
+        <DataTable columns={columns} data={processedServices}
           onEdit={(row) => { setEditing(row); setFormOpen(true); }}
           onDelete={(row) => setDeleting(row)}
+          bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
         />
       )}
 
-      {/* Forms & dialogs */}
-      <ServiceForm
-        open={formOpen}
-        onClose={() => { setFormOpen(false); setEditing(null); }}
-        onSubmit={handleSubmit}
-        onArchive={handleArchive}
-        initialData={editing}
-      />
-      <DeleteDialog
-        open={!!deleting}
-        onClose={() => setDeleting(null)}
-        onConfirm={() => deleteMut.mutate(deleting.id)}
-        itemName={deleting?.name}
-      />
+      <ServiceForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }} onSubmit={handleSubmit} onArchive={handleArchive} initialData={editing} />
+      <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name} />
       <BulkImportDialog
-        open={importOpen}
-        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["services"] }); }}
-        entityName="Services"
-        fields={SERVICE_FIELDS}
-        mappingRules={SERVICE_MAPPING_RULES}
+        open={importOpen} onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["services"] }); }}
+        entityName="Services" fields={SERVICE_FIELDS} mappingRules={SERVICE_MAPPING_RULES}
         templateFileName="newsconseen_services_import_template.xlsx"
-        templateExample={SERVICE_TEMPLATE_EXAMPLE}
-        templateInstructions={SERVICE_TEMPLATE_INSTRUCTIONS}
-        validateRow={validateService}
-        transformRow={transformService}
+        templateExample={SERVICE_TEMPLATE_EXAMPLE} templateInstructions={SERVICE_TEMPLATE_INSTRUCTIONS}
+        validateRow={validateService} transformRow={transformService}
         onImport={(row) => base44.entities.Service.create(withScope(row))}
-        currentUser={currentUser}
-        previewColumns={SVC_PREVIEW_COLS}
-        requiredField="name"
+        currentUser={currentUser} previewColumns={SVC_PREVIEW_COLS} requiredField="name"
       />
     </div>
   );

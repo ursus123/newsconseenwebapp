@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
@@ -6,8 +6,12 @@ import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import RelationshipForm from "../components/relationships/RelationshipForm";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
+import SearchFilterBar from "../components/shared/SearchFilterBar";
+import BulkActionBar from "../components/shared/BulkActionBar";
 import { Button } from "@/components/ui/button";
 import { Upload, Users, Building2, Package, Wrench, MapPin, Link2 } from "lucide-react";
+import { fuzzyFilter } from "@/components/shared/fuzzySearch";
+import { useToast } from "@/components/ui/use-toast";
 import {
   RELATIONSHIP_FIELDS, RELATIONSHIP_MAPPING_RULES, RELATIONSHIP_TEMPLATE_EXAMPLE,
   RELATIONSHIP_TEMPLATE_INSTRUCTIONS, validateRelationship,
@@ -31,45 +35,38 @@ const TYPE_CONFIG = {
   enterprise_address: { label: "Enterprise → Address", color: "bg-emerald-50 text-emerald-700" },
 };
 
-const statusColor = (s) => ({
-  active:   "bg-emerald-50 text-emerald-700",
-  ended:    "bg-rose-50 text-rose-600",
-  archived: "bg-slate-100 text-slate-400",
-}[s] || "bg-slate-100 text-slate-600");
+const statusColor = (s) => ({ active: "bg-emerald-50 text-emerald-700", ended: "bg-rose-50 text-rose-600", archived: "bg-slate-100 text-slate-400" }[s] || "bg-slate-100 text-slate-600");
 
 const columns = [
-  { key: "relationship_type", label: "Type", render: (val) => {
-    const c = TYPE_CONFIG[val];
-    return c ? <Badge className={c.color}>{c.label}</Badge> : val;
-  }},
-  { key: "person_name",     label: "Person",     render: (v) => v || "—" },
+  { key: "relationship_type", label: "Type", render: (val) => { const c = TYPE_CONFIG[val]; return c ? <Badge className={c.color}>{c.label}</Badge> : val; } },
+  { key: "person_name", label: "Person", render: (v) => v || "—" },
   { key: "enterprise_name", label: "Enterprise", render: (v) => v || "—" },
-  { key: "item_name",       label: "Item",       render: (v) => v || "—" },
-  { key: "service_name",    label: "Service",    render: (v) => v || "—" },
-  { key: "role",            label: "Role",       render: (v) => v || "—" },
-  { key: "start_date",      label: "Start" },
-  { key: "end_date",        label: "End",        render: (v) => v || "—" },
-  { key: "status",          label: "Status",     render: (val) => <Badge className={statusColor(val)}>{val || "active"}</Badge> },
+  { key: "item_name", label: "Item", render: (v) => v || "—" },
+  { key: "service_name", label: "Service", render: (v) => v || "—" },
+  { key: "role", label: "Role", render: (v) => v || "—" },
+  { key: "start_date", label: "Start" },
+  { key: "end_date", label: "End", render: (v) => v || "—" },
+  { key: "status", label: "Status", render: (val) => <Badge className={statusColor(val)}>{val || "active"}</Badge> },
 ];
 
 const TYPE_TABS = [
-  { id: "all",                label: "All" },
-  { id: "person_enterprise",  label: "Person → Enterprise" },
-  { id: "item_enterprise",    label: "Item → Enterprise" },
-  { id: "item_person",        label: "Item → Person" },
-  { id: "person_service",     label: "Person → Service" },
+  { id: "all", label: "All" },
+  { id: "person_enterprise", label: "Person → Enterprise" },
+  { id: "item_enterprise", label: "Item → Enterprise" },
+  { id: "item_person", label: "Item → Person" },
+  { id: "person_service", label: "Person → Service" },
   { id: "enterprise_service", label: "Enterprise → Service" },
-  { id: "person_address",     label: "Person → Address" },
+  { id: "person_address", label: "Person → Address" },
   { id: "enterprise_address", label: "Enterprise → Address" },
 ];
 
 const QUICK_ADDS = [
-  { type: "person_enterprise",  icon: Users,      label: "Person → Enterprise", cls: "bg-blue-600 hover:bg-blue-700 shadow-blue-500/20" },
-  { type: "person_service",     icon: Wrench,     label: "Person → Service",    cls: "bg-cyan-600 hover:bg-cyan-700 shadow-cyan-500/20" },
-  { type: "person_address",     icon: MapPin,     label: "Person → Address",    cls: "bg-teal-600 hover:bg-teal-700 shadow-teal-500/20" },
-  { type: "item_enterprise",    icon: Building2,  label: "Item → Enterprise",   cls: "bg-purple-600 hover:bg-purple-700 shadow-purple-500/20" },
-  { type: "item_person",        icon: Package,    label: "Item → Person",       cls: "bg-amber-500 hover:bg-amber-600 shadow-amber-500/20" },
-  { type: "enterprise_service", icon: Link2,      label: "Enterprise → Service",cls: "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/20" },
+  { type: "person_enterprise", icon: Users, label: "Person → Enterprise", cls: "bg-blue-600 hover:bg-blue-700" },
+  { type: "person_service", icon: Wrench, label: "Person → Service", cls: "bg-cyan-600 hover:bg-cyan-700" },
+  { type: "person_address", icon: MapPin, label: "Person → Address", cls: "bg-teal-600 hover:bg-teal-700" },
+  { type: "item_enterprise", icon: Building2, label: "Item → Enterprise", cls: "bg-purple-600 hover:bg-purple-700" },
+  { type: "item_person", icon: Package, label: "Item → Person", cls: "bg-amber-500 hover:bg-amber-600" },
+  { type: "enterprise_service", icon: Link2, label: "Enterprise → Service", cls: "bg-indigo-600 hover:bg-indigo-700" },
 ];
 
 const REL_PREVIEW_COLS = [
@@ -78,6 +75,10 @@ const REL_PREVIEW_COLS = [
   { label: "Enterprise", render: (r) => r.enterprise_name || "—" },
   { label: "Item", render: (r) => r.item_name || "—" },
   { label: "Start Date", render: (r) => r.start_date || "—" },
+];
+
+const FILTER_DEFS = [
+  { key: "status", label: "All Status", options: [{ value: "active", label: "Active" }, { value: "ended", label: "Ended" }, { value: "archived", label: "Archived" }] },
 ];
 
 export default function Relationships() {
@@ -90,8 +91,12 @@ export default function Relationships() {
   const [endTarget, setEndTarget] = useState(null);
   const [detailRel, setDetailRel] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState({ status: "" });
+  const [selectedIds, setSelectedIds] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
   const perms = usePermissions(currentUser);
@@ -114,20 +119,25 @@ export default function Relationships() {
     else { createMut.mutate(data); if (saveAndNew) { setFormOpen(true); } }
   };
 
-  const handleEnd = (data) => updateMut.mutate({ id: editing.id, data: { ...editing, ...data } });
+  const handleEndDialog = (data) => updateMut.mutate({ id: endTarget.id, data: { ...endTarget, ...data } });
 
-  const handleEndDialog = (data) => {
-    updateMut.mutate({ id: endTarget.id, data: { ...endTarget, ...data } });
+  const openNew = (type, prefill = null) => { setFormType(type); setEditing(null); setFormPrefill(prefill); setFormOpen(true); };
+
+  const handleBulkDelete = async () => {
+    for (const id of selectedIds) await base44.entities.Relationship.delete(id);
+    qc.invalidateQueries({ queryKey: ["relationships"] });
+    toast({ title: `${selectedIds.length} relationships deleted` });
+    setSelectedIds([]);
   };
 
-  const openNew = (type, prefill = null) => {
-    setFormType(type);
-    setEditing(null);
-    setFormPrefill(prefill);
-    setFormOpen(true);
-  };
+  const tabFiltered = activeTab === "all" ? relationships : relationships.filter((r) => r.relationship_type === activeTab);
 
-  const filtered = activeTab === "all" ? relationships : relationships.filter((r) => r.relationship_type === activeTab);
+  const processedRelationships = useMemo(() => {
+    let list = [...tabFiltered];
+    if (search) list = fuzzyFilter(list, search, ["person_name", "enterprise_name", "item_name", "service_name", "role", "location"]);
+    if (filters.status) list = list.filter((r) => (r.status || "active") === filters.status);
+    return list;
+  }, [tabFiltered, search, filters]);
 
   return (
     <div>
@@ -142,7 +152,6 @@ export default function Relationships() {
       <RelationshipSummaryCards relationships={relationships} people={people} />
       <RelationshipHealthAlerts relationships={relationships} people={people} products={products} onEdit={(r) => { setEditing(r); setFormType(r.relationship_type); setFormOpen(true); }} onOpenNew={openNew} />
 
-      {/* Quick-add buttons */}
       {perms.l2_assign && (
         <div className="mb-6">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Quick Assign</p>
@@ -156,23 +165,43 @@ export default function Relationships() {
         </div>
       )}
 
-      {/* Filter tabs */}
-      <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1 mb-6">
-        {TYPE_TABS.map((t) => (
-          <button key={t.id} onClick={() => setActiveTab(t.id)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === t.id ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
-            {t.label}
-          </button>
-        ))}
+      {/* Type filter tabs */}
+      <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1 mb-4">
+        {TYPE_TABS.map((t) => {
+          const count = t.id === "all" ? relationships.length : relationships.filter((r) => r.relationship_type === t.id).length;
+          return (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${activeTab === t.id ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+              {t.label}
+              {count > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === t.id ? "bg-slate-100 text-slate-600" : "bg-slate-200 text-slate-500"}`}>{count}</span>}
+            </button>
+          );
+        })}
       </div>
+
+      <SearchFilterBar
+        search={search} setSearch={setSearch}
+        filters={filters} setFilters={setFilters}
+        filterDefs={FILTER_DEFS}
+        placeholder="Search by person, enterprise, item, role..."
+        resultCount={processedRelationships.length}
+        totalCount={tabFiltered.length}
+      />
+
+      <BulkActionBar
+        selectedIds={selectedIds}
+        onClear={() => setSelectedIds([])}
+        onDeleteSelected={perms.l2_unassign ? handleBulkDelete : undefined}
+        canDelete={perms.l2_unassign}
+      />
 
       <DataTable
         columns={columns}
-        data={filtered}
-        searchField="person_name"
+        data={processedRelationships}
         onRowClick={(row) => setDetailRel(row)}
         onEdit={perms.l2_assign ? (row) => { setEditing(row); setFormType(row.relationship_type); setFormOpen(true); } : undefined}
         onDelete={perms.l2_unassign ? (row) => setDeleting(row) : undefined}
+        bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
       />
 
       <RelationshipAnalytics relationships={relationships} />
@@ -181,44 +210,23 @@ export default function Relationships() {
         open={formOpen}
         onClose={() => { setFormOpen(false); setEditing(null); setFormPrefill(null); }}
         onSubmit={handleSubmit}
-        onEnd={(data) => { setEndTarget(editing); setFormOpen(false); }}
+        onEnd={() => { setEndTarget(editing); setFormOpen(false); }}
         initialData={editing || (formPrefill ? { relationship_type: formType, status: "active", start_date: new Date().toISOString().split("T")[0], ...formPrefill } : null)}
-        type={formType}
-        people={people}
-        enterprises={enterprises}
-        products={products}
-        services={services}
-        addresses={addresses}
+        type={formType} people={people} enterprises={enterprises} products={products} services={services} addresses={addresses}
       />
 
-      <EndRelationshipDialog
-        open={!!endTarget}
-        onClose={() => setEndTarget(null)}
-        onConfirm={handleEndDialog}
-      />
-
+      <EndRelationshipDialog open={!!endTarget} onClose={() => setEndTarget(null)} onConfirm={handleEndDialog} />
       <RelationshipDetailPanel rel={detailRel} open={!!detailRel} onClose={() => setDetailRel(null)} />
+      <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName="this assignment" />
 
-      <DeleteDialog
-        open={!!deleting}
-        onClose={() => setDeleting(null)}
-        onConfirm={() => deleteMut.mutate(deleting.id)}
-        itemName="this assignment"
-      />
       <BulkImportDialog
-        open={importOpen}
-        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["relationships"] }); }}
-        entityName="Relationships"
-        fields={RELATIONSHIP_FIELDS}
-        mappingRules={RELATIONSHIP_MAPPING_RULES}
+        open={importOpen} onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["relationships"] }); }}
+        entityName="Relationships" fields={RELATIONSHIP_FIELDS} mappingRules={RELATIONSHIP_MAPPING_RULES}
         templateFileName="newsconseen_relationships_import_template.xlsx"
-        templateExample={RELATIONSHIP_TEMPLATE_EXAMPLE}
-        templateInstructions={RELATIONSHIP_TEMPLATE_INSTRUCTIONS}
+        templateExample={RELATIONSHIP_TEMPLATE_EXAMPLE} templateInstructions={RELATIONSHIP_TEMPLATE_INSTRUCTIONS}
         validateRow={(row) => validateRelationship(row, { people, enterprises, products, services })}
         onImport={(row) => base44.entities.Relationship.create(withScope(row))}
-        currentUser={currentUser}
-        previewColumns={REL_PREVIEW_COLS}
-        requiredField="relationship_type"
+        currentUser={currentUser} previewColumns={REL_PREVIEW_COLS} requiredField="relationship_type"
       />
     </div>
   );

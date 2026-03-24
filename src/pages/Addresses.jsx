@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
@@ -6,10 +6,14 @@ import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import AddressForm from "../components/addresses/AddressForm";
 import AddressDetailPanel from "../components/addresses/AddressDetailPanel";
+import SearchFilterBar from "../components/shared/SearchFilterBar";
+import BulkActionBar from "../components/shared/BulkActionBar";
 import { Badge } from "@/components/ui/badge";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 import {
   Upload, MapPin, CheckCircle, Navigation, AlertCircle,
   Map, Loader2,
@@ -25,17 +29,8 @@ const statusColor = (s) => ({
 }[s] || "bg-slate-100 text-slate-600");
 
 async function geocodeAddress(address) {
-  const query = [
-    address.address_line1,
-    address.city,
-    address.state_region,
-    address.postal_code,
-    address.country,
-  ].filter(Boolean).join(", ");
-  const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
-    { headers: { "User-Agent": "newsconseen-app/1.0" } }
-  );
+  const query = [address.address_line1, address.city, address.state_region, address.postal_code, address.country].filter(Boolean).join(", ");
+  const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen-app/1.0" } });
   const data = await res.json();
   if (data.length > 0) return { latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon) };
   return null;
@@ -44,9 +39,7 @@ async function geocodeAddress(address) {
 function StatCard({ icon: Icon, iconColor, value, label }) {
   return (
     <div className="bg-white border border-slate-100 rounded-2xl p-4 flex items-center gap-3">
-      <div className={`p-2 rounded-xl ${iconColor}`}>
-        <Icon className="w-5 h-5" />
-      </div>
+      <div className={`p-2 rounded-xl ${iconColor}`}><Icon className="w-5 h-5" /></div>
       <div>
         <p className="text-2xl font-black text-slate-800 leading-none">{value}</p>
         <p className="text-xs text-slate-500 mt-0.5">{label}</p>
@@ -63,6 +56,11 @@ const ADDR_PREVIEW_COLS = [
   { label: "Label", render: (r) => r.label || "—" },
 ];
 
+const FILTER_DEFS = [
+  { key: "status", label: "All Status", options: [{ value: "active", label: "Active" }, { value: "archived", label: "Archived" }] },
+  { key: "gps", label: "GPS Status", options: [{ value: "yes", label: "Has GPS" }, { value: "no", label: "No GPS" }] },
+];
+
 export default function Addresses() {
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -73,7 +71,12 @@ export default function Addresses() {
   const [geocodingAll, setGeocodingAll] = useState(false);
   const [geocodeProgress, setGeocodeProgress] = useState(null);
   const [geocodingRowId, setGeocodingRowId] = useState(null);
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState({ status: "", gps: "" });
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
@@ -101,11 +104,7 @@ export default function Addresses() {
   const updateMut = useMutation({
     mutationFn: async ({ id, data, prevData }) => {
       let updated = { ...data };
-      const coreChanged = prevData && (
-        prevData.address_line1 !== data.address_line1 ||
-        prevData.city !== data.city ||
-        prevData.country !== data.country
-      );
+      const coreChanged = prevData && (prevData.address_line1 !== data.address_line1 || prevData.city !== data.city || prevData.country !== data.country);
       if (coreChanged || (!data.latitude && !data.longitude)) {
         const coords = await geocodeAddress(data);
         if (coords) updated = { ...updated, ...coords };
@@ -114,8 +113,7 @@ export default function Addresses() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["addresses"] });
-      setFormOpen(false);
-      setEditing(null);
+      setFormOpen(false); setEditing(null);
       if (detailAddress) setDetailAddress(null);
     },
   });
@@ -126,18 +124,13 @@ export default function Addresses() {
   });
 
   const handleSubmit = (data, saveAndNew = false) => {
-    if (editing) {
-      updateMut.mutate({ id: editing.id, data, prevData: editing });
-    } else {
-      createMut.mutate(data);
-      if (saveAndNew) { setEditing(null); setFormOpen(true); }
-    }
+    if (editing) { updateMut.mutate({ id: editing.id, data, prevData: editing }); }
+    else { createMut.mutate(data); if (saveAndNew) { setEditing(null); setFormOpen(true); } }
   };
 
   const handleArchive = (item) => {
     updateMut.mutate({ id: item.id, data: { ...item, status: "archived" }, prevData: item });
-    setFormOpen(false);
-    setEditing(null);
+    setFormOpen(false); setEditing(null);
   };
 
   const handleGeocodeAll = async () => {
@@ -147,9 +140,7 @@ export default function Addresses() {
     for (let i = 0; i < missing.length; i++) {
       setGeocodeProgress(`Geocoding ${i + 1} of ${missing.length}...`);
       const coords = await geocodeAddress(missing[i]);
-      if (coords) {
-        await base44.entities.Address.update(missing[i].id, { ...missing[i], ...coords });
-      }
+      if (coords) await base44.entities.Address.update(missing[i].id, { ...missing[i], ...coords });
     }
     setGeocodeProgress("✅ All addresses geocoded");
     qc.invalidateQueries({ queryKey: ["addresses"] });
@@ -161,12 +152,28 @@ export default function Addresses() {
     e.stopPropagation();
     setGeocodingRowId(row.id);
     const coords = await geocodeAddress(row);
-    if (coords) {
-      await base44.entities.Address.update(row.id, { ...row, ...coords });
-      qc.invalidateQueries({ queryKey: ["addresses"] });
-    }
+    if (coords) { await base44.entities.Address.update(row.id, { ...row, ...coords }); qc.invalidateQueries({ queryKey: ["addresses"] }); }
     setGeocodingRowId(null);
   };
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    for (const id of selectedIds) await base44.entities.Address.delete(id);
+    qc.invalidateQueries({ queryKey: ["addresses"] });
+    toast({ title: `${selectedIds.length} addresses deleted` });
+    setSelectedIds([]);
+    setBulkDeleting(false);
+  };
+
+  // Fuzzy search + filter
+  const processedAddresses = useMemo(() => {
+    let list = [...addresses];
+    if (search) list = fuzzyFilter(list, search, ["label", "address_line1", "city", "state_region", "country", "postal_code"]);
+    if (filters.status) list = list.filter((a) => a.status === filters.status);
+    if (filters.gps === "yes") list = list.filter((a) => a.latitude && a.longitude);
+    if (filters.gps === "no") list = list.filter((a) => !a.latitude || !a.longitude);
+    return list;
+  }, [addresses, search, filters]);
 
   const missingGps = addresses.filter((a) => !a.latitude || !a.longitude);
   const geocoded = addresses.filter((a) => a.latitude && a.longitude).length;
@@ -175,8 +182,7 @@ export default function Addresses() {
 
   const columns = [
     {
-      key: "label",
-      label: "Address",
+      key: "label", label: "Address",
       render: (val, row) => (
         <div className="flex items-start gap-2">
           <MapPin className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
@@ -184,7 +190,7 @@ export default function Addresses() {
             <div className="flex items-center gap-2">
               <p className="font-semibold text-slate-800">{val || "—"}</p>
               {row.latitude && row.longitude
-                ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">GPS</span>
+                ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">GPS ✓</span>
                 : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-400 border border-slate-200">No GPS</span>
               }
             </div>
@@ -197,32 +203,17 @@ export default function Addresses() {
     { key: "country", label: "Country", render: (val) => val || "—" },
     { key: "status", label: "Status", render: (val) => <Badge className={statusColor(val)}>{val || "active"}</Badge> },
     {
-      key: "_actions",
-      label: "",
+      key: "_actions", label: "",
       render: (_, row) => (
         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <a
-            href={row.latitude && row.longitude
-              ? `https://www.openstreetmap.org/?mlat=${row.latitude}&mlon=${row.longitude}&zoom=16`
-              : `https://www.openstreetmap.org/search?query=${encodeURIComponent([row.address_line1, row.city, row.country].filter(Boolean).join(" "))}`
-            }
-            target="_blank" rel="noreferrer"
-            className="p-1.5 rounded-lg text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-            title="Open in OpenStreetMap"
-          >
+          <a href={row.latitude && row.longitude ? `https://www.openstreetmap.org/?mlat=${row.latitude}&mlon=${row.longitude}&zoom=16` : `https://www.openstreetmap.org/search?query=${encodeURIComponent([row.address_line1, row.city, row.country].filter(Boolean).join(" "))}`}
+            target="_blank" rel="noreferrer" className="p-1.5 rounded-lg text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Open in map">
             <Map className="w-4 h-4" />
           </a>
           {(!row.latitude || !row.longitude) && (
-            <button
-              onClick={(e) => handleGeocodeRow(row, e)}
-              disabled={geocodingRowId === row.id}
-              className="p-1.5 rounded-lg text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-colors"
-              title="Geocode this address"
-            >
-              {geocodingRowId === row.id
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <Navigation className="w-4 h-4" />
-              }
+            <button onClick={(e) => handleGeocodeRow(row, e)} disabled={geocodingRowId === row.id}
+              className="p-1.5 rounded-lg text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-colors" title="Geocode">
+              {geocodingRowId === row.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4" />}
             </button>
           )}
         </div>
@@ -238,7 +229,6 @@ export default function Addresses() {
         </Button>
       </PageHeader>
 
-      {/* Stats Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <StatCard icon={MapPin} iconColor="bg-slate-100 text-slate-600" value={addresses.length} label="Total Addresses" />
         <StatCard icon={CheckCircle} iconColor="bg-emerald-50 text-emerald-600" value={active} label="Active" />
@@ -246,71 +236,58 @@ export default function Addresses() {
         <StatCard icon={AlertCircle} iconColor="bg-slate-100 text-slate-500" value={archived} label="Archived" />
       </div>
 
-      {/* Un-geocoded banner */}
       {missingGps.length > 0 && (
         <div className="mb-4 flex items-center justify-between gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-2xl">
-          <p className="text-sm text-amber-800">
-            ⚠️ <strong>{missingGps.length}</strong> {missingGps.length === 1 ? "address has" : "addresses have"} no GPS coordinates — map features won't work for these.
-          </p>
-          <button
-            onClick={handleGeocodeAll}
-            disabled={geocodingAll}
-            className="shrink-0 flex items-center gap-1.5 text-sm font-semibold text-amber-700 hover:text-amber-900 transition-colors whitespace-nowrap"
-          >
-            {geocodingAll
-              ? <><Loader2 className="w-4 h-4 animate-spin" /> {geocodeProgress}</>
-              : geocodeProgress
-                ? <span className="text-emerald-700">{geocodeProgress}</span>
-                : "Geocode All →"
-            }
+          <p className="text-sm text-amber-800">⚠️ <strong>{missingGps.length}</strong> {missingGps.length === 1 ? "address has" : "addresses have"} no GPS — map features won't work.</p>
+          <button onClick={handleGeocodeAll} disabled={geocodingAll}
+            className="shrink-0 flex items-center gap-1.5 text-sm font-semibold text-amber-700 hover:text-amber-900 transition-colors whitespace-nowrap">
+            {geocodingAll ? <><Loader2 className="w-4 h-4 animate-spin" /> {geocodeProgress}</> : geocodeProgress ? <span className="text-emerald-700">{geocodeProgress}</span> : "Geocode All →"}
           </button>
         </div>
       )}
 
+      <SearchFilterBar
+        search={search} setSearch={setSearch}
+        filters={filters} setFilters={setFilters}
+        filterDefs={FILTER_DEFS}
+        placeholder="Search addresses, cities, countries..."
+        resultCount={processedAddresses.length}
+        totalCount={addresses.length}
+      />
+
+      <BulkActionBar
+        selectedIds={selectedIds}
+        onClear={() => setSelectedIds([])}
+        onDeleteSelected={handleBulkDelete}
+        canDelete
+      />
+
       <DataTable
         columns={columns}
-        data={addresses}
-        searchField="label"
+        data={processedAddresses}
         onRowClick={(row) => setDetailAddress(row)}
         onEdit={(row) => { setEditing(row); setFormOpen(true); }}
         onDelete={(row) => setDeleting(row)}
+        bulkMode
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
       />
 
       {detailAddress && (
-        <AddressDetailPanel
-          address={detailAddress}
-          currentUser={currentUser}
-          onClose={() => setDetailAddress(null)}
-          onGeocoded={(updated) => {
-            setDetailAddress(updated);
-            qc.invalidateQueries({ queryKey: ["addresses"] });
-          }}
-        />
+        <AddressDetailPanel address={detailAddress} currentUser={currentUser} onClose={() => setDetailAddress(null)}
+          onGeocoded={(updated) => { setDetailAddress(updated); qc.invalidateQueries({ queryKey: ["addresses"] }); }} />
       )}
-
-      <AddressForm
-        open={formOpen}
-        onClose={() => { setFormOpen(false); setEditing(null); }}
-        onSubmit={handleSubmit}
-        onArchive={handleArchive}
-        initialData={editing}
-      />
+      <AddressForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }} onSubmit={handleSubmit} onArchive={handleArchive} initialData={editing} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.label || "this address"} />
       <BulkImportDialog
         open={importOpen}
         onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["addresses"] }); }}
-        entityName="Addresses"
-        fields={ADDRESS_FIELDS}
-        mappingRules={ADDRESS_MAPPING_RULES}
+        entityName="Addresses" fields={ADDRESS_FIELDS} mappingRules={ADDRESS_MAPPING_RULES}
         templateFileName="newsconseen_addresses_import_template.xlsx"
-        templateExample={ADDRESS_TEMPLATE_EXAMPLE}
-        templateInstructions={ADDRESS_TEMPLATE_INSTRUCTIONS}
-        validateRow={validateAddress}
-        transformRow={transformAddress}
+        templateExample={ADDRESS_TEMPLATE_EXAMPLE} templateInstructions={ADDRESS_TEMPLATE_INSTRUCTIONS}
+        validateRow={validateAddress} transformRow={transformAddress}
         onImport={(row) => base44.entities.Address.create(withScope(row))}
-        currentUser={currentUser}
-        previewColumns={ADDR_PREVIEW_COLS}
-        requiredField="address_line1"
+        currentUser={currentUser} previewColumns={ADDR_PREVIEW_COLS} requiredField="address_line1"
       />
     </div>
   );
