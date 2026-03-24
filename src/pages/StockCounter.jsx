@@ -23,6 +23,7 @@ const TABS = [
 
 export default function StockCounter() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState("sheet");
   const [session, setSession] = useState(null);
