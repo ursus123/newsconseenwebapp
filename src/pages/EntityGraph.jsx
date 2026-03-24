@@ -131,6 +131,7 @@ export default function EntityGraph() {
   const [depth,             setDepth]             = useState(1);
   const [expandedClusters,  setExpandedClusters]  = useState(new Set());
   const [collapsedTypes,    setCollapsedTypes]    = useState(new Set());
+  const [refreshKey,        setRefreshKey]        = useState(0);
   const searchRef = useRef(null);
 
   const setLoad = (key, state) => setLoadStates(prev => ({ ...prev, [key]: state }));
@@ -469,8 +470,6 @@ export default function EntityGraph() {
   const applyPreset = (presetName) => {
     setFilter(VIEW_PRESETS[presetName] || INITIAL_FILTER);
   };
-
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const handleRefresh = () => {
     setEnterprises([]); setPeople([]); setServices([]); setProducts([]);
