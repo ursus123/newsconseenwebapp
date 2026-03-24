@@ -13,6 +13,8 @@ import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
 import { Upload, Building2, CheckCircle, Clock, Globe } from "lucide-react";
+import BulkActionBar from "../components/shared/BulkActionBar";
+import { useToast } from "@/components/ui/use-toast";
 import SubEnterprisesPanel from "@/components/enterprise/SubEnterprisesPanel";
 import EnterpriseCard from "@/components/enterprise/EnterpriseCard";
 import { useTerminology } from "@/hooks/useTerminology";
