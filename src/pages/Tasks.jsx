@@ -256,15 +256,19 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Task.delete(id), onSuccess: () => { invalidate(); setDeleting(null); } });
 
-  const filtered = tasks.filter((t) => {
-    if (filter === "open" && t.status !== "open" && t.status !== "in_progress") return false;
-    if (filter === "overdue" && !isDuePast(t)) return false;
-    if (filter === "today" && !(t.due_date && isToday(parseISO(t.due_date)))) return false;
-    if (filter === "completed" && t.status !== "completed") return false;
-    if (filterPerson && t.assigned_to_name !== filterPerson && t.assigned_to_email !== filterPerson) return false;
-    if (filterEnterprise && t.enterprise !== filterEnterprise) return false;
-    return true;
-  });
+  const filtered = (() => {
+    let list = search ? fuzzyFilter(tasks, search, ["title", "enterprise", "assigned_to_name", "related_person", "outcome_notes"]) : [...tasks];
+    list = list.filter((t) => {
+      if (filter === "open" && t.status !== "open" && t.status !== "in_progress") return false;
+      if (filter === "overdue" && !isDuePast(t)) return false;
+      if (filter === "today" && !(t.due_date && isToday(parseISO(t.due_date)))) return false;
+      if (filter === "completed" && t.status !== "completed") return false;
+      if (filterPerson && t.assigned_to_name !== filterPerson && t.assigned_to_email !== filterPerson) return false;
+      if (filterEnterprise && t.enterprise !== filterEnterprise) return false;
+      return true;
+    });
+    return list;
+  })();
 
   const grouped = KANBAN_COLUMNS.map((s) => ({ ...s, items: filtered.filter((t) => t.status === s.key) }));
   const overdueCount = tasks.filter(isDuePast).length;
