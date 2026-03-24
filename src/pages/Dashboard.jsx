@@ -282,6 +282,7 @@ function AdminDashboard({ user }) {
         <OverdueTasksAlert tasks={tasks} />
         <PendingTransactionsAlert transactions={transactions} />
         <LowStockAlert products={products} />
+        <FinancialAlerts transactions={transactions} />
       </div>
 
       {/* Main 2-col layout */}
