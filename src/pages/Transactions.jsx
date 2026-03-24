@@ -450,8 +450,8 @@ export default function Transactions() {
         </select>
         <select value={filterSource} onChange={e => setFilterSource(e.target.value)}
           className="text-xs border border-slate-200 rounded-xl px-3 py-1.5 bg-white text-slate-600 focus:outline-none">
-          <option value="all">All sources</option>
-          {Object.entries(SOURCE_CONFIG).map(([k, v]) => (
+          <option value="all">All Sources</option>
+          {Object.entries(TRANSACTION_SOURCES).map(([k, v]) => (
             <option key={k} value={k}>{v.icon} {v.label}</option>
           ))}
         </select>
