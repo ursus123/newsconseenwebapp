@@ -100,20 +100,44 @@ export async function triggerTaskTransaction(task, performingUser) {
  */
 export async function triggerAttendanceTransaction(taskType, task, performingUser) {
   if (!["clock_in", "clock_out", "shift_start", "shift_end"].includes(taskType)) return null;
+  if (!performingUser?.company_id) return null;
 
-  return base44.entities.Transaction.create({
-    transaction_type: "adjustment",
-    status: "posted",
-    date: task.scheduled_date || todayStr(),
-    time: task.scheduled_time || nowTimeStr(),
-    enterprise: task.enterprise || null,
-    description: `Attendance — ${["clock_in", "shift_start"].includes(taskType) ? "Clock In" : "Clock Out"}: ${task.assigned_to_name || performingUser?.full_name || performingUser?.email}`,
-    assigned_person: task.assigned_to_name || null,
-    source_task_id: task.id,
-    internal_notes: [
-      `Task type: ${taskType}`,
-      `Task ref: ${task.id}`,
-      task.outcome_notes || "",
-    ].filter(Boolean).join(" | "),
-  });
+  return createTransaction(
+    {
+      transaction_type: "attendance",
+      enterprise:       task.enterprise || "",
+      description:      `Attendance — ${["clock_in", "shift_start"].includes(taskType) ? "Clock In" : "Clock Out"}: ${task.assigned_to_name || performingUser?.full_name || performingUser?.email}`,
+      amount:           0,
+      primary_person:   task.assigned_to_name || performingUser?.full_name || "",
+      task_id:          task.id,
+      source:           "clockinout",
+      date:             task.scheduled_date || todayStr(),
+    },
+    { autoPost: true, sourceRef: `attendance-${task.id}` },
+    performingUser
+  );
+}
+
+/**
+ * createPayrollFromShift — call when a supervisor approves a completed shift.
+ * Creates a payroll transaction for the staff member's hours.
+ */
+export async function createPayrollFromShift(shift, hoursWorked, hourlyRate, currentUser) {
+  if (!currentUser?.company_id) return null;
+  const { createPayrollTransaction } = await import("@/utils/createTransaction");
+  return createPayrollTransaction(
+    {
+      id:         shift.staff_id || shift.id,
+      name:       shift.assigned_to_name || shift.staff_name || "",
+      email:      shift.assigned_to_email || shift.staff_email || "",
+      hourly_rate: hourlyRate || 0,
+    },
+    hoursWorked,
+    hourlyRate || 0,
+    shift.enterprise || currentUser.company_id,
+    shift.scheduled_date || todayStr(),
+    shift.scheduled_date || todayStr(),
+    currentUser,
+    { source: "clockinout", sourceRef: `shift-${shift.id}` }
+  );
 }
