@@ -326,7 +326,10 @@ export default function EntityGraph() {
     const unpaid = transactions.filter(t => t.payment_status === "unpaid" && (t.amount || 0) > 0);
     if (unpaid.length > 0) {
       const total = unpaid.reduce((s, t) => s + (t.amount || 0), 0);
-      issues.push({ severity: "warning", enterprise: "All", type: "Outstanding payments", detail: `${unpaid.length} unpaid invoices: $${total.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, action: "Review Transactions page" });
+      const hasInvoices = unpaid.some(t => ["service_fee", "tuition", "membership_fee"].includes(t.transaction_type));
+      const hasDonations = unpaid.some(t => ["donation", "tithe", "grant"].includes(t.transaction_type));
+      const paymentLabel = hasInvoices ? "invoices" : hasDonations ? "contributions" : "payments";
+      issues.push({ severity: "warning", enterprise: "All", type: `Outstanding ${paymentLabel}`, detail: `${unpaid.length} unpaid ${paymentLabel}: $${total.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, action: "Review Transactions page" });
     }
     return issues;
   }, [enterprises, enterprisePeopleNames, peopleByName, tasks, products, transactions, addresses, isLoading]);
