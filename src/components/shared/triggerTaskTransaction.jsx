@@ -5,6 +5,7 @@
  */
 
 import { base44 } from "@/api/base44Client";
+import { createTransaction } from "@/utils/createTransaction";
 
 function todayStr() {
   return new Date().toISOString().split("T")[0];
@@ -83,7 +84,15 @@ export async function triggerTaskTransaction(task, performingUser) {
     }];
   }
 
-  return base44.entities.Transaction.create(payload);
+  // Route through the master engine
+  if (!performingUser?.company_id) {
+    return base44.entities.Transaction.create({ ...payload, company_id: payload.company_id || null });
+  }
+  return createTransaction(
+    { ...payload, source: "task_complete", amount: payload.amount || 0 },
+    { autoPost: false, sourceRef: `task-${task.id}` },
+    performingUser
+  );
 }
 
 /**
