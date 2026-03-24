@@ -273,11 +273,11 @@ function PasswordSection() {
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      await base44.auth.updatePassword({ currentPassword: current, newPassword: next });
+      await base44.auth.changePassword(current, next);
       setBanner({ type: "success", msg: "Password updated successfully." });
       setCurrent(""); setNext(""); setConfirm("");
-    } catch {
-      setBanner({ type: "error", msg: "Current password is incorrect. Please try again." });
+    } catch (e) {
+      setBanner({ type: "error", msg: e?.message?.includes("incorrect") || e?.message?.includes("wrong") ? "Current password is incorrect." : "Failed to update password. Please try again." });
     }
     setSaving(false);
   };
