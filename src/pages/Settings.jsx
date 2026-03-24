@@ -273,7 +273,8 @@ function PasswordSection() {
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      await base44.auth.changePassword(current, next);
+      const me = await base44.auth.me();
+      await base44.auth.changePassword({ userId: me.id, currentPassword: current, newPassword: next });
       setBanner({ type: "success", msg: "Password updated successfully." });
       setCurrent(""); setNext(""); setConfirm("");
     } catch (e) {
