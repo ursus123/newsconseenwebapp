@@ -232,6 +232,13 @@ export default function Relationships() {
       <RelationshipDetailPanel rel={detailRel} open={!!detailRel} onClose={() => setDetailRel(null)} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName="this assignment" />
 
+      <BulkAssignDialog
+        open={bulkAssignOpen}
+        onClose={() => setBulkAssignOpen(false)}
+        onAssign={handleBulkAssign}
+        people={people} enterprises={enterprises} products={products} services={services} addresses={addresses}
+      />
+
       <BulkImportDialog
         open={importOpen} onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["relationships"] }); }}
         entityName="Relationships" fields={RELATIONSHIP_FIELDS} mappingRules={RELATIONSHIP_MAPPING_RULES}
