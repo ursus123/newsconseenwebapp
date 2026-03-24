@@ -303,6 +303,7 @@ export default function Enterprises() {
           data={processedEnterprises}
           onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
           onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
+          bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
         />
       )}
 
