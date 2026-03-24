@@ -2,25 +2,50 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    # ----------------------------------------------------------
+    # Base44 entity URLs
+    # One URL per entity in the six-layer star schema.
+    # ----------------------------------------------------------
     base44_tasks_url: str
     base44_transactions_url: str
     base44_services_url: str
     base44_enterprises_url: str
     base44_people_url: str
     base44_products_url: str
+    base44_relationships_url: str
+    base44_addresses_url: str
+
+    # ----------------------------------------------------------
+    # Base44 authentication
+    # Base44 uses 'api_key' header, not 'Authorization: Bearer'
+    # ----------------------------------------------------------
     base44_api_key: str
 
+    # ----------------------------------------------------------
+    # Railway PostgreSQL — analytical store
+    # Optional so the app still starts locally without a DB.
+    # ----------------------------------------------------------
     database_url: str | None = None
+
+    # ----------------------------------------------------------
+    # Cron protection secret
+    # Railway calls POST /cron/etl-all with this in the
+    # X-Cron-Secret header. Prevents unauthorized ETL triggers.
+    # ----------------------------------------------------------
+    cron_secret: str = ""
 
     class Config:
         env_file = ".env"
         case_sensitive = False
-        extra = "ignore"  # ignore extra env vars like API_HOST, DEBUG etc.
+        extra = "ignore"
 
 
 settings = Settings()
 
-# Base44 uses 'api_key' header — not 'Authorization: Bearer'
+# ----------------------------------------------------------
+# Shared request headers for all Base44 API calls.
+# Imported by etl/base.py and anywhere else that calls Base44.
+# ----------------------------------------------------------
 HEADERS = {
     "api_key": settings.base44_api_key,
     "Content-Type": "application/json",
