@@ -175,17 +175,18 @@ export default function StockCounter() {
 
       try {
         await base44.entities.Product.update(productId, { stock_quantity: count.physical_count });
-        await base44.entities.Transaction.create({
-          transaction_type: diff > 0 ? "stock_in" : "stock_out",
-          status: "posted",
-          date: new Date().toISOString().split("T")[0],
-          enterprise: session.enterprise,
-          company_id: currentUser.company_id,
-          description: `Stock Count Adjustment: ${count.product_name} ${count.system_count} → ${count.physical_count}`,
-          amount: Math.abs(diff) * (count.cost_price || 0),
-          payment_status: "not_applicable",
-          internal_notes: `Physical count by ${session.counted_by} at ${session.location}. ${count.notes || ""}`,
-        });
+        await createStockTransaction(
+          "stock_adjustment",
+          { id: productId, name: count.product_name, unit: count.unit || "units", cost_price: count.cost_price || 0 },
+          diff,
+          session.enterprise || currentUser.company_id,
+          currentUser,
+          {
+            source:    "stockcounter",
+            sourceRef: `stockcount-${session.id}-${productId}`,
+            notes:     `Stock count adjustment. Expected: ${count.system_count}. Counted: ${count.physical_count}. Difference: ${diff > 0 ? "+" : ""}${diff}. Counted by: ${session.counted_by}. Location: ${session.location || "—"}.${count.notes ? ` Note: ${count.notes}` : ""}`,
+          }
+        );
         results.updated++;
       } catch (e) {
         results.errors++;
