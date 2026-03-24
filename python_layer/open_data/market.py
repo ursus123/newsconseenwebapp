@@ -1,74 +1,262 @@
-from fastapi import APIRouter, Query
+import logging
+import requests
 from typing import Optional
-from open_data.nonprofit import (
-    search_nonprofits,
-    get_nonprofit_filings,
-    search_irs_exempt,
-    search_grants,
-    get_giving_statistics,
-)
 
-router = APIRouter(prefix="/nonprofit", tags=["Nonprofit"])
+logger = logging.getLogger(__name__)
+
+REQUEST_TIMEOUT = 15
+
+# Yahoo Finance — unofficial but reliable, no key required
+YAHOO_QUERY_API = "https://query1.finance.yahoo.com/v8/finance/chart"
+YAHOO_SEARCH_API = "https://query1.finance.yahoo.com/v1/finance/search"
+
+# GDELT — Global Database of Events, Language, and Tone
+GDELT_API = "https://api.gdeltproject.org/api/v2/doc/doc"
+
+# World Bank Open Data
+WORLDBANK_API = "https://api.worldbank.org/v2"
+
+# Open Exchange Rates — free tier, no key required for latest rates
+OPENEXCHANGE_API = "https://open.er-api.com/v6/latest"
+
+# Alpha Vantage — free tier (25 req/day) for fundamentals
+# Users can configure ALPHA_VANTAGE_KEY for higher limits
 
 
-@router.get("/search")
-def irs_990_search(
-    name: Optional[str] = Query(None, description="Organization name"),
-    state: Optional[str] = Query(None, description="State abbreviation"),
-    ntee_code: Optional[str] = Query(None, description="NTEE major code e.g. X=Religion, E=Health, K=Food"),
-    limit: int = Query(20, ge=1, le=100),
-):
+def _get(url: str, params: dict = None, headers: dict = None) -> Optional[dict]:
+    try:
+        r = requests.get(
+            url, params=params,
+            headers=headers or {"User-Agent": "newsconseen/1.0"},
+            timeout=REQUEST_TIMEOUT,
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        logger.warning("market._get failed %s: %s", url, e)
+        return None
+
+
+# ----------------------------------------------------------
+# stock_quote
+# Yahoo Finance live and historical quotes
+# ----------------------------------------------------------
+def get_stock_quote(ticker: str, period: str = "1mo") -> dict:
     """
-    Search IRS 990 filers — revenue, assets, employees by organization.
-    SELECT * FROM irs_990 WHERE state = 'MD' AND ntee_code = 'X'
+    Get stock quote and price history for a ticker symbol.
+
+    ticker: stock symbol e.g. 'AAPL', 'AMZN', 'UNH'
+    period: '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y'
+
+    Returns current price, change, volume, and OHLCV history.
+    Useful for: tracking publicly traded competitors, supplier stocks,
+    insurance companies, healthcare systems.
     """
-    return {"results": search_nonprofits(name=name, state=state, ntee_code=ntee_code, limit=limit)}
+    data = _get(
+        f"{YAHOO_QUERY_API}/{ticker.upper()}",
+        params={"range": period, "interval": "1d"},
+    )
+
+    if not data:
+        return {"ticker": ticker, "error": "data unavailable"}
+
+    result = data.get("chart", {}).get("result", [])
+    if not result:
+        return {"ticker": ticker, "error": f"ticker '{ticker}' not found"}
+
+    meta = result[0].get("meta", {})
+    timestamps = result[0].get("timestamp", [])
+    quotes = result[0].get("indicators", {}).get("quote", [{}])[0]
+
+    history = []
+    for i, ts in enumerate(timestamps):
+        from datetime import datetime, timezone
+        date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+        history.append({
+            "date":   date_str,
+            "open":   _safe_round(quotes.get("open", [None])[i]),
+            "high":   _safe_round(quotes.get("high", [None])[i]),
+            "low":    _safe_round(quotes.get("low", [None])[i]),
+            "close":  _safe_round(quotes.get("close", [None])[i]),
+            "volume": quotes.get("volume", [None])[i],
+        })
+
+    logger.info("stock_quote: %d data points for %s", len(history), ticker)
+
+    return {
+        "ticker":          ticker.upper(),
+        "name":            meta.get("longName", ""),
+        "exchange":        meta.get("exchangeName", ""),
+        "currency":        meta.get("currency", "USD"),
+        "current_price":   _safe_round(meta.get("regularMarketPrice")),
+        "previous_close":  _safe_round(meta.get("chartPreviousClose")),
+        "market_cap":      meta.get("marketCap"),
+        "52w_high":        _safe_round(meta.get("fiftyTwoWeekHigh")),
+        "52w_low":         _safe_round(meta.get("fiftyTwoWeekLow")),
+        "period":          period,
+        "history":         history,
+    }
 
 
-@router.get("/filings/{ein}")
-def nonprofit_filings(
-    ein: str,
-    limit: int = Query(5, ge=1, le=10),
-):
-    """
-    Get recent 990 filing history for a specific organization by EIN.
-    SELECT * FROM irs_990_filings WHERE ein = '526049537'
-    """
-    return {"results": get_nonprofit_filings(ein=ein, limit=limit)}
+def search_stocks(query: str, limit: int = 10) -> list[dict]:
+    """Search for stock tickers by company name or partial symbol."""
+    data = _get(
+        YAHOO_SEARCH_API,
+        params={"q": query, "quotesCount": limit, "newsCount": 0},
+    )
+
+    if not data:
+        return []
+
+    quotes = data.get("quotes", [])
+    return [
+        {
+            "ticker":   q.get("symbol"),
+            "name":     q.get("longname") or q.get("shortname"),
+            "exchange": q.get("exchDisp"),
+            "type":     q.get("quoteType"),
+        }
+        for q in quotes
+        if q.get("quoteType") in ("EQUITY", "ETF")
+    ][:limit]
 
 
-@router.get("/exempt-orgs")
-def irs_exempt_orgs(
-    name: Optional[str] = Query(None),
-    state: Optional[str] = Query(None),
-    org_type: Optional[str] = Query(None, description="501c3, 501c4, 501c6 etc."),
-    limit: int = Query(20, ge=1, le=100),
-):
+# ----------------------------------------------------------
+# news_search
+# GDELT news and sentiment analysis
+# ----------------------------------------------------------
+def search_news(
+    query: str,
+    mode: str = "artlist",
+    limit: int = 10,
+    timespan: str = "1week",
+) -> list[dict]:
     """
-    IRS Tax Exempt Organization database — 501c status, EIN, ruling date.
-    SELECT * FROM irs_exempt_orgs WHERE name = 'Bethel' AND state = 'MD'
+    Search news articles via GDELT.
+
+    query:    search terms (e.g. 'home care industry', 'BrightStar Care')
+    mode:     'artlist' (articles) or 'timelinevol' (volume over time)
+    timespan: '1day', '1week', '1month', '3months'
+
+    Returns article title, URL, source, date, and tone score.
+    Tone: negative = critical/negative coverage, positive = favorable.
     """
-    return {"results": search_irs_exempt(name=name, state=state, org_type=org_type, limit=limit)}
+    params = {
+        "query":    query,
+        "mode":     mode,
+        "maxrecords": limit,
+        "timespan": timespan,
+        "format":   "json",
+        "sort":     "datedesc",
+    }
+
+    data = _get(GDELT_API, params)
+
+    if not data:
+        return []
+
+    if mode == "artlist":
+        articles = data.get("articles", [])
+        return [
+            {
+                "title":   a.get("title"),
+                "url":     a.get("url"),
+                "source":  a.get("domain"),
+                "date":    a.get("seendate", "")[:8],
+                "language":a.get("language"),
+                "tone":    _safe_round(a.get("tone")),
+                "positive_score": _safe_round(a.get("positive")),
+                "negative_score": _safe_round(a.get("negative")),
+            }
+            for a in articles
+        ]
+
+    return data.get("timeline", [])
 
 
-@router.get("/grants")
-def grants_gov(
-    keyword: Optional[str] = Query(None, description="Search term e.g. 'home care', 'food bank'"),
-    agency: Optional[str] = Query(None, description="Agency code e.g. HHS, USDA, DOE"),
-    eligibility: Optional[str] = Query(None, description="25=nonprofits, 12=state, 04=city"),
-    limit: int = Query(20, ge=1, le=100),
-):
+# ----------------------------------------------------------
+# world_bank
+# World Bank development indicators
+# ----------------------------------------------------------
+def get_world_bank(
+    indicator: str = "NY.GDP.MKTP.CD",
+    country: str = "US",
+    limit: int = 10,
+) -> dict:
     """
-    Federal grant opportunities from Grants.gov.
-    SELECT * FROM grants_gov WHERE keyword = 'home care' AND agency = 'HHS'
+    Get World Bank development indicator data.
+
+    Common indicators:
+      NY.GDP.MKTP.CD   GDP (current USD)
+      SP.POP.65UP.TO.ZS  Population ages 65+ (% of total)
+      SH.XPD.CHEX.GD.ZS  Health expenditure (% of GDP)
+      SE.XPD.TOTL.GD.ZS  Education expenditure (% of GDP)
+      SL.UEM.TOTL.ZS   Unemployment rate
+      FP.CPI.TOTL.ZG   Inflation (CPI)
+
+    country: ISO 2-letter country code or 'all'
     """
-    return {"results": search_grants(keyword=keyword, agency=agency, eligibility=eligibility, limit=limit)}
+    url = f"{WORLDBANK_API}/country/{country}/indicator/{indicator}"
+    params = {
+        "format":   "json",
+        "per_page": limit,
+        "mrv":      limit,   # most recent values
+    }
+
+    data = _get(url, params)
+
+    if not data or len(data) < 2:
+        return {"indicator": indicator, "country": country, "data": []}
+
+    metadata = data[0]
+    observations = data[1]
+
+    results = []
+    for obs in observations:
+        results.append({
+            "year":    obs.get("date"),
+            "value":   obs.get("value"),
+            "country": obs.get("country", {}).get("value"),
+        })
+
+    return {
+        "indicator":      indicator,
+        "indicator_name": metadata.get("lastupdated", ""),
+        "country":        country,
+        "source":         "World Bank Open Data",
+        "data":           results,
+    }
 
 
-@router.get("/giving-stats")
-def giving_statistics():
+# ----------------------------------------------------------
+# exchange_rates
+# Open Exchange Rates — live currency conversion
+# ----------------------------------------------------------
+def get_exchange_rates(base: str = "USD") -> dict:
     """
-    National charitable giving statistics from Giving USA.
-    SELECT * FROM giving_stats
+    Get current exchange rates relative to a base currency.
+    Uses Open Exchange Rates free tier — no key required.
+
+    base: ISO currency code (e.g. 'USD', 'EUR', 'GBP', 'NGN', 'KES')
+
+    Useful for: international enterprises, remittance tracking,
+    multi-currency financial reporting.
     """
-    return get_giving_statistics()
+    data = _get(f"{OPENEXCHANGE_API}/{base.upper()}")
+
+    if not data:
+        return {"base": base, "rates": {}, "error": "data unavailable"}
+
+    return {
+        "base":          data.get("base_code", base),
+        "last_updated":  data.get("time_last_update_utc", ""),
+        "next_update":   data.get("time_next_update_utc", ""),
+        "rates":         data.get("rates", {}),
+    }
+
+
+def _safe_round(val, digits: int = 2) -> Optional[float]:
+    try:
+        return round(float(val), digits) if val is not None else None
+    except (TypeError, ValueError):
+        return None
