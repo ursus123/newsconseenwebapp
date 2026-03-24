@@ -154,7 +154,7 @@ export default function EntityGraph() {
       setLoad("core", LOAD_STATES.loaded);
     };
     loadCore();
-  }, [currentUser, loadStates.core]);
+  }, [currentUser, loadStates.core, refreshKey]);
 
   // Phase 2: Load secondary data after core is loaded
   useEffect(() => {
@@ -171,7 +171,7 @@ export default function EntityGraph() {
       setLoad("addresses", LOAD_STATES.loaded);
     };
     loadSecondary();
-  }, [loadStates.core, currentUser]);
+  }, [loadStates.core, currentUser, refreshKey]);
 
   // Phase 3: Load heavy data (tasks, transactions) last
   useEffect(() => {
@@ -188,7 +188,7 @@ export default function EntityGraph() {
       setLoad("transactions", LOAD_STATES.loaded);
     };
     loadHeavy();
-  }, [loadStates.products, currentUser]);
+  }, [loadStates.products, currentUser, refreshKey]);
 
   const isLoading = loadStates.core === LOAD_STATES.loading || loadStates.core === LOAD_STATES.idle;
 
