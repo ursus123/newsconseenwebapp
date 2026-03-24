@@ -9,7 +9,8 @@ import BulkImportDialog from "../components/shared/BulkImportDialog";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Button } from "@/components/ui/button";
-import { Upload, Users, Building2, Package, Wrench, MapPin, Link2 } from "lucide-react";
+import { Upload, Users, Building2, Package, Wrench, MapPin, Link2, CheckSquare } from "lucide-react";
+import BulkAssignDialog from "../components/relationships/BulkAssignDialog";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useToast } from "@/components/ui/use-toast";
 import {
