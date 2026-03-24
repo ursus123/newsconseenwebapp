@@ -19,20 +19,31 @@ import { useToast } from "@/components/ui/use-toast";
 import {
   TRANSACTION_TYPES, REVENUE_TYPES, EXPENSE_TYPES, INVENTORY_TYPES,
 } from "@/config/transactionTypes";
-import { createTransaction } from "@/utils/createTransaction";
+import { createTransaction, TRANSACTION_SOURCES } from "@/utils/createTransaction";
 import { generateInvoiceNumber } from "@/utils/autoInvoice";
 
 const STOCK_IMPACT_TYPES = ["stock_out", "item_assignment"];
 const STOCK_IN_TYPES = ["stock_in", "item_return"];
 
-const SOURCE_CONFIG = {
-  manual:        { icon: "✏️", label: "Manual",      color: "bg-slate-100 text-slate-500" },
-  task_complete: { icon: "✅", label: "Task",         color: "bg-emerald-50 text-emerald-600" },
-  medadmin:      { icon: "💊", label: "MedAdmin",     color: "bg-blue-50 text-blue-600" },
-  stockcounter:  { icon: "📊", label: "StockCounter", color: "bg-amber-50 text-amber-600" },
-  barcode:       { icon: "📷", label: "Barcode",      color: "bg-purple-50 text-purple-600" },
-  clockinout:    { icon: "⏰", label: "Clock In/Out", color: "bg-indigo-50 text-indigo-600" },
-  import:        { icon: "📥", label: "Import",       color: "bg-slate-100 text-slate-500" },
+// Source badge color overrides (TRANSACTION_SOURCES has labels + icons)
+const SOURCE_COLORS = {
+  manual:        "bg-slate-100 text-slate-500",
+  task_complete: "bg-emerald-50 text-emerald-600",
+  medadmin:      "bg-blue-50 text-blue-600",
+  stockcounter:  "bg-amber-50 text-amber-600",
+  barcode:       "bg-purple-50 text-purple-600",
+  clockinout:    "bg-indigo-50 text-indigo-600",
+  scheduler:     "bg-cyan-50 text-cyan-600",
+  invoicer:      "bg-violet-50 text-violet-600",
+  purchase_order:"bg-orange-50 text-orange-600",
+  payroll:       "bg-pink-50 text-pink-600",
+  expenses:      "bg-rose-50 text-rose-600",
+  pos:           "bg-teal-50 text-teal-600",
+  farm:          "bg-lime-50 text-lime-600",
+  livestock:     "bg-yellow-50 text-yellow-700",
+  donations:     "bg-emerald-50 text-emerald-700",
+  grants:        "bg-blue-50 text-blue-700",
+  import:        "bg-slate-100 text-slate-500",
 };
 
 const TABS = [
