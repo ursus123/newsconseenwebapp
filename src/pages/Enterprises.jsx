@@ -183,6 +183,13 @@ export default function Enterprises() {
     return list;
   }, [enterprises, search, sortBy, filters]);
 
+  const handleBulkDelete = async () => {
+    for (const id of selectedIds) await base44.entities.Enterprise.delete(id);
+    qc.invalidateQueries({ queryKey: ["enterprises"] });
+    toast({ title: `${selectedIds.length} enterprises deleted` });
+    setSelectedIds([]);
+  };
+
   const handleArchive = (enterprise) => {
     updateMut.mutate({ id: enterprise.id, data: { ...enterprise, status: "archived" } });
     setFormOpen(false);
