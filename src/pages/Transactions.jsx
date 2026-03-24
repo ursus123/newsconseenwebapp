@@ -389,8 +389,25 @@ export default function Transactions() {
     toast({ title: "Payment recorded", description: `${tx.invoice_number || "Transaction"} marked as paid.` });
   };
 
+  const handleBulkVoid = async () => {
+    for (const id of selectedIds) {
+      await base44.entities.Transaction.update(id, { status: "voided", voided_by: currentUser?.email, voided_date: new Date().toISOString() });
+    }
+    qc.invalidateQueries({ queryKey: ["transactions"] });
+    toast({ title: `${selectedIds.length} transactions voided` });
+    setSelectedIds([]);
+  };
+
+  const handleBulkDelete = async () => {
+    for (const id of selectedIds) await base44.entities.Transaction.delete(id);
+    qc.invalidateQueries({ queryKey: ["transactions"] });
+    toast({ title: `${selectedIds.length} transactions deleted` });
+    setSelectedIds([]);
+  };
+
   const activeTabConfig = TABS.find(t => t.id === activeTab);
-  const tabTransactions = filtered.filter(activeTabConfig?.filter || (() => true));
+  const searchFiltered = search ? fuzzyFilter(filtered, search, ["description", "enterprise", "primary_person", "invoice_number", "counterparty", "service_name"]) : filtered;
+  const tabTransactions = searchFiltered.filter(activeTabConfig?.filter || (() => true));
 
   return (
     <div className="space-y-5">
