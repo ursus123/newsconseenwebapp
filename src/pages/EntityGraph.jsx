@@ -637,27 +637,28 @@ export default function EntityGraph() {
 
       {/* Summary stats bar — non-graph views only */}
       {!isLoading && activeView !== "graph" && (
-        <div className="flex items-center gap-4 px-4 py-2 bg-slate-50 border-b border-slate-100 shrink-0 overflow-x-auto">
+        <div className="flex items-center gap-1 px-4 py-2 bg-slate-50 border-b border-slate-100 shrink-0 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
           {[
             { label: "Enterprises", value: enterprises.length, icon: "🏢" },
-            { label: "Staff", value: people.filter(p => p.person_type === "employee" && p.status === "active").length, icon: "👤" },
-            { label: "Clients", value: people.filter(p => p.person_type === "client" && p.status === "active").length, icon: "🤝" },
+            { label: "Active Staff", value: people.filter(p => isStaff(p) && p.status === "active").length, icon: "👤" },
+            { label: "Participants", value: people.filter(p => isParticipant(p) && p.status === "active").length, icon: "🤝" },
             { label: "Locations", value: addresses.length, icon: "📍" },
             { label: "Services", value: services.length, icon: "⚙️" },
             { label: "Products", value: products.length, icon: "📦" },
             { label: "Tasks (30d)", value: tasks.filter(t => (new Date() - new Date(t.scheduled_date || t.created_date)) / (1000 * 60 * 60 * 24) <= 30).length, icon: "✅" },
+            { label: "Revenue (30d)", value: "$" + transactions.filter(t => ["service_fee","tuition","donation","tithe","grant","livestock_sale","crop_sale","product_sale","event_income","membership_fee"].includes(t.transaction_type) && (new Date() - new Date(t.date || t.created_date)) / (1000 * 60 * 60 * 24) <= 30).reduce((s,t) => s + (t.amount || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 }), icon: "💰" },
           ].map((stat, i) => (
             <div key={i} className="flex items-center gap-1.5 shrink-0">
               <span className="text-sm">{stat.icon}</span>
               <span className="text-xs font-bold text-slate-700">{stat.value}</span>
               <span className="text-[10px] text-slate-400">{stat.label}</span>
-              {i < 6 && <span className="text-slate-200 ml-2">|</span>}
+              {i < 7 && <span className="text-slate-200 mx-2">|</span>}
             </div>
           ))}
           {anomalies.length === 0 ? (
-            <span className="ml-auto text-[10px] font-bold text-emerald-500 shrink-0">✅ Network healthy</span>
+            <button className="ml-auto text-[10px] font-bold text-emerald-500 shrink-0 cursor-default">✅ Network healthy</button>
           ) : (
-            <span className="ml-auto text-[10px] font-bold text-rose-500 shrink-0">⚠️ {anomalies.length} issues found</span>
+            <button onClick={() => setActiveView("anomalies")} className="ml-auto text-[10px] font-bold text-rose-500 shrink-0 hover:underline">⚠️ {anomalies.length} issues found</button>
           )}
         </div>
       )}
