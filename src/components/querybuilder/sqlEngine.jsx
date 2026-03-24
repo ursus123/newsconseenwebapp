@@ -527,8 +527,11 @@ async function executeVirtualTable(table, sql) {
       let competitorCount = 0;
       try {
         const compRes = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
-        const compData = await compRes.json();
-        competitorCount = compData.elements?.length || 0;
+        const compText = await compRes.text();
+        if (compText.trim().startsWith("{")) {
+          const compData = JSON.parse(compText);
+          competitorCount = compData.elements?.length || 0;
+        }
       } catch {}
       const densityByGDP = gdpPerCapita > 30000 ? 3000 : gdpPerCapita > 10000 ? 2000 : gdpPerCapita > 3000 ? 1500 : 1000;
       const areaKm2 = Math.PI * radiusKm * radiusKm;
