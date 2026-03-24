@@ -176,6 +176,13 @@ export default function People() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setDeleting(null); },
   });
 
+  const handleBulkDelete = async () => {
+    for (const id of selectedIds) await base44.entities.Person.delete(id);
+    qc.invalidateQueries({ queryKey: ["people"] });
+    toast({ title: `${selectedIds.length} people deleted` });
+    setSelectedIds([]);
+  };
+
   // Type tab pre-filter
   const typeFiltered = activeTypeTab === "all"
     ? people
