@@ -12,6 +12,8 @@ import DraftBanner from "@/components/stockcounter/DraftBanner";
 import NewSessionDialog from "@/components/stockcounter/NewSessionDialog";
 import SubmitDialog from "@/components/stockcounter/SubmitDialog";
 import SuccessScreen from "@/components/stockcounter/SuccessScreen";
+import { createStockTransaction } from "@/utils/createTransaction";
+import { useToast } from "@/components/ui/use-toast";
 
 const TABS = [
   { id: "sheet",   label: "Count Sheet", icon: ClipboardList },

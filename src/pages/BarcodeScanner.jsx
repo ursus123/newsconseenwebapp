@@ -12,6 +12,7 @@ import ProductCard from "@/components/barcodescanner/ProductCard";
 import ActivityLog from "@/components/barcodescanner/ActivityLog";
 import LowStockPanel from "@/components/barcodescanner/LowStockPanel";
 import BulkQueue from "@/components/barcodescanner/BulkQueue";
+import { createStockTransaction } from "@/utils/createTransaction";
 
 export function playBeep(error = false) {
   try {
