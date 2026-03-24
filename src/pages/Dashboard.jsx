@@ -215,6 +215,63 @@ function HealthBadge({ score }) {
   return <span className="w-9 h-9 rounded-full bg-rose-100 text-rose-700 text-xs font-black flex items-center justify-center border-2 border-rose-300 shrink-0" title="At Risk">{score}</span>;
 }
 
+// ── Financial Alerts ─────────────────────────────────────────────────────────
+function FinancialAlerts({ transactions }) {
+  const overdueTransactions = transactions.filter(t =>
+    t.payment_status === "unpaid" &&
+    t.status === "posted" &&
+    t.due_date &&
+    new Date(t.due_date) < new Date() &&
+    REVENUE_TYPES.includes(t.transaction_type)
+  );
+  const draftTransactions = transactions.filter(t => t.status === "draft");
+  const overdueTotal = overdueTransactions.reduce((s, t) => s + (t.amount || 0), 0);
+
+  if (overdueTransactions.length === 0 && draftTransactions.length === 0) return null;
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
+      <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+        💳 Financial Alerts
+      </h3>
+      {overdueTransactions.length > 0 && (
+        <Link to={createPageUrl("Transactions")}>
+          <div className="flex items-center justify-between p-3 bg-rose-50 border border-rose-100 rounded-xl hover:bg-rose-100 transition-colors cursor-pointer">
+            <div className="flex items-center gap-2">
+              <span className="text-rose-500 text-lg">⚠️</span>
+              <div>
+                <p className="text-xs font-bold text-rose-700">
+                  {overdueTransactions.length} overdue invoice{overdueTransactions.length > 1 ? "s" : ""}
+                </p>
+                <p className="text-[10px] text-rose-500">
+                  ${overdueTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })} outstanding
+                </p>
+              </div>
+            </div>
+            <span className="text-xs text-rose-500 font-medium">View →</span>
+          </div>
+        </Link>
+      )}
+      {draftTransactions.length > 0 && (
+        <Link to={createPageUrl("Transactions")}>
+          <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100 transition-colors cursor-pointer">
+            <div className="flex items-center gap-2">
+              <span className="text-blue-500 text-lg">📝</span>
+              <div>
+                <p className="text-xs font-bold text-blue-700">
+                  {draftTransactions.length} draft invoice{draftTransactions.length > 1 ? "s" : ""} to review
+                </p>
+                <p className="text-[10px] text-blue-500">Auto-generated from completed tasks</p>
+              </div>
+            </div>
+            <span className="text-xs text-blue-500 font-medium">Review →</span>
+          </div>
+        </Link>
+      )}
+    </div>
+  );
+}
+
 // ── Admin Dashboard ───────────────────────────────────────────────────────────
 function AdminDashboard({ user }) {
   const listFn = useEntityListFn(user);
