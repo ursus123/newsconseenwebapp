@@ -9,7 +9,10 @@ import AuditTrail from "../components/transactions/AuditTrail";
 import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Button } from "@/components/ui/button";
-import { Lock, Upload, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { Lock, Upload, ChevronDown, ChevronUp, Plus, Search, X } from "lucide-react";
+import { fuzzyFilter } from "@/components/shared/fuzzySearch";
+import BulkActionBar from "../components/shared/BulkActionBar";
+import { Checkbox } from "@/components/ui/checkbox";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import {
   TRANSACTION_FIELDS, TRANSACTION_MAPPING_RULES, TRANSACTION_TEMPLATE_EXAMPLE,
