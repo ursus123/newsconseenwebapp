@@ -213,7 +213,7 @@ export default function Enterprises() {
     <div className="space-y-5">
       {/* Header */}
       <PageHeader
-        title={t("enterprise_plural") || "Enterprises"}
+        title="Enterprises"
         subtitle={`Manage your ${t("enterprise_child") || "enterprises"} and operational units`}
         onAdd={perms.can_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
         addLabel="New Enterprise"
