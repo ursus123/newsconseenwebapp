@@ -228,6 +228,8 @@ export default function Transactions() {
   const [period, setPeriod]               = useState("30d");
   const [filterEnterprise, setFilterEnterprise] = useState("all");
   const [filterSource, setFilterSource]         = useState("all");
+  const [search, setSearch]                     = useState("");
+  const [selectedIds, setSelectedIds]           = useState([]);
   const qc = useQueryClient();
   const { toast } = useToast();
 
