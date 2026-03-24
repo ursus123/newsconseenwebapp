@@ -80,21 +80,21 @@ export default function AdministerModal({ task, user, products = [], onClose, on
       });
 
       if (outcome === "completed" || outcome === "partially_done") {
-        await base44.entities.Transaction.create({
-          transaction_type: "stock_out",
-          status: "posted",
-          date: todayStr(),
-          time,
-          enterprise: task.enterprise || null,
-          description: `Medication Administration — ${task.title} for ${task.related_person || "patient"}`,
-          assigned_person: task.related_person || null,
-          line_items: [{ item_name: task.title, quantity: doseQty, unit: "piece", unit_price: 0 }],
-          internal_notes: `Admin: ${user?.full_name || user?.email} | Outcome: ${outcome} | Task: ${task.id}`,
-        });
-
         if (productRecord) {
           const newQty = Math.max(0, (productRecord.stock_quantity || 0) - doseQty);
           await base44.entities.Product.update(productRecord.id, { stock_quantity: newQty });
+          await createStockTransaction(
+            "stock_out",
+            { id: productRecord.id, name: productRecord.name || task.title, unit: productRecord.unit || "dose", cost_price: productRecord.cost_price || 0 },
+            doseQty,
+            task.enterprise || user?.company_id || "",
+            user,
+            {
+              source:    "medadmin",
+              sourceRef: `medadmin-${task.id}-${Date.now()}`,
+              notes:     `Administered to: ${task.related_person || "resident"}. Dose: ${doseQty} ${productRecord.unit || "dose"}. Given by: ${user?.full_name || user?.email}. Outcome: ${outcome}. Task: ${task.id}.`,
+            }
+          );
         }
       }
     },
