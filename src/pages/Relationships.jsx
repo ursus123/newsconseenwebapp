@@ -95,6 +95,7 @@ export default function Relationships() {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ status: "" });
   const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
   const { toast } = useToast();
