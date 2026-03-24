@@ -125,6 +125,12 @@ export default function Relationships() {
 
   const openNew = (type, prefill = null) => { setFormType(type); setEditing(null); setFormPrefill(prefill); setFormOpen(true); };
 
+  const handleBulkAssign = async (pairs) => {
+    for (const pair of pairs) await base44.entities.Relationship.create(withScope(pair));
+    qc.invalidateQueries({ queryKey: ["relationships"] });
+    toast({ title: `${pairs.length} relationship${pairs.length !== 1 ? "s" : ""} created` });
+  };
+
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Relationship.delete(id);
     qc.invalidateQueries({ queryKey: ["relationships"] });
