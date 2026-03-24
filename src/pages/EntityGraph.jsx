@@ -554,6 +554,67 @@ export default function EntityGraph() {
         </div>
       </div>
 
+      {/* Graph view secondary controls bar */}
+      {activeView === "graph" && !isLoading && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border-b border-slate-100 shrink-0 flex-wrap">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search nodes…" className="pl-7 pr-7 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none w-40" />
+            {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-3 h-3" /></button>}
+          </div>
+          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5">
+            <span className="text-xs text-slate-500">Depth</span>
+            <input type="range" min={1} max={3} value={depth} onChange={e => setDepth(Number(e.target.value))} className="w-16 accent-indigo-500" />
+            <span className="text-xs font-bold text-indigo-600 w-3">{depth}</span>
+          </div>
+          <button onClick={() => { setFocusMode(v => !v); if (focusMode) setFocusedEnterprise(null); }} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border transition-all ${focusMode ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200"}`}>
+            <Target className="w-3.5 h-3.5" />{focusMode ? "Focus ON" : "Focus"}
+          </button>
+          <select value={colorBy} onChange={e => setColorBy(e.target.value)} className="text-xs border border-slate-200 rounded-xl px-2 py-1.5 bg-white text-slate-600 focus:outline-none">
+            {COLOR_BY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <div className="relative ml-auto">
+            <button onClick={() => setShowExport(v => !v)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all">
+              <Download className="w-3.5 h-3.5" /> Export
+            </button>
+            {showExport && (
+              <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-lg z-50 min-w-44 py-1">
+                <button onClick={() => { exportAsPNG(); setShowExport(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Export as PNG</button>
+                <button onClick={() => { exportAsJSON(displayNodes, displayLinks); setShowExport(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Export as JSON</button>
+                <button onClick={() => { exportAsCSV(displayNodes); setShowExport(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Export as CSV</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Summary stats bar — non-graph views only */}
+      {!isLoading && activeView !== "graph" && (
+        <div className="flex items-center gap-4 px-4 py-2 bg-slate-50 border-b border-slate-100 shrink-0 overflow-x-auto">
+          {[
+            { label: "Enterprises", value: enterprises.length, icon: "🏢" },
+            { label: "Staff", value: people.filter(p => p.person_type === "employee" && p.status === "active").length, icon: "👤" },
+            { label: "Clients", value: people.filter(p => p.person_type === "client" && p.status === "active").length, icon: "🤝" },
+            { label: "Locations", value: addresses.length, icon: "📍" },
+            { label: "Services", value: services.length, icon: "⚙️" },
+            { label: "Products", value: products.length, icon: "📦" },
+            { label: "Tasks (30d)", value: tasks.filter(t => (new Date() - new Date(t.scheduled_date || t.created_date)) / (1000 * 60 * 60 * 24) <= 30).length, icon: "✅" },
+          ].map((stat, i) => (
+            <div key={i} className="flex items-center gap-1.5 shrink-0">
+              <span className="text-sm">{stat.icon}</span>
+              <span className="text-xs font-bold text-slate-700">{stat.value}</span>
+              <span className="text-[10px] text-slate-400">{stat.label}</span>
+              {i < 6 && <span className="text-slate-200 ml-2">|</span>}
+            </div>
+          ))}
+          {anomalies.length === 0 ? (
+            <span className="ml-auto text-[10px] font-bold text-emerald-500 shrink-0">✅ Network healthy</span>
+          ) : (
+            <span className="ml-auto text-[10px] font-bold text-rose-500 shrink-0">⚠️ {anomalies.length} issues found</span>
+          )}
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
@@ -591,38 +652,7 @@ export default function EntityGraph() {
             <AnomalyView anomalies={anomalyDetails} enterprises={enterprises} people={people} products={products} services={services} tasks={tasks} transactions={transactions} addresses={addresses} relationships={relationships} />
           )}
           {activeView === "graph" && (
-            <>
-            <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border-b border-slate-100 shrink-0 flex-wrap">
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search nodes…" className="pl-7 pr-7 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none w-40" />
-                {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-3 h-3" /></button>}
-              </div>
-              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5">
-                <span className="text-xs text-slate-500">Depth</span>
-                <input type="range" min={1} max={3} value={depth} onChange={e => setDepth(Number(e.target.value))} className="w-16 accent-indigo-500" />
-                <span className="text-xs font-bold text-indigo-600 w-3">{depth}</span>
-              </div>
-              <button onClick={() => { setFocusMode(v => !v); if (focusMode) setFocusedEnterprise(null); }} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border transition-all ${focusMode ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200"}`}>
-                <Target className="w-3.5 h-3.5" />{focusMode ? "Focus ON" : "Focus"}
-              </button>
-              <select value={colorBy} onChange={e => setColorBy(e.target.value)} className="text-xs border border-slate-200 rounded-xl px-2 py-1.5 bg-white text-slate-600 focus:outline-none">
-                {COLOR_BY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              <div className="relative ml-auto">
-                <button onClick={() => setShowExport(v => !v)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all">
-                  <Download className="w-3.5 h-3.5" /> Export
-                </button>
-                {showExport && (
-                  <div className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-lg z-50 min-w-44 py-1">
-                    <button onClick={() => { exportAsPNG(); setShowExport(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Export as PNG</button>
-                    <button onClick={() => { exportAsJSON(displayNodes, displayLinks); setShowExport(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Export as JSON</button>
-                    <button onClick={() => { exportAsCSV(displayNodes); setShowExport(false); }} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Export as CSV</button>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-3 flex-1 overflow-hidden p-4">
+            <div className="flex gap-3 flex-1 overflow-hidden p-4 h-full">
               <GraphFilterPanel filter={filter} setFilter={setFilter} collapsedTypes={collapsedTypes} setCollapsedTypes={setCollapsedTypes} counts={typeCounts} focusMode={focusMode} setFocusMode={setFocusMode} setFocusedEnterprise={setFocusedEnterprise} depth={depth} setDepth={setDepth} nodeCount={displayNodes.length} linkCount={displayLinks.length} />
               <div className="flex-1 min-h-0 overflow-hidden">
                 {displayNodes.length === 0 ? (
@@ -638,7 +668,6 @@ export default function EntityGraph() {
               </div>
               <GraphSidePanel nodes={displayNodes} links={displayLinks} allNodes={rawNodes} allLinks={rawLinks} selected={selected} enterprises={enterprises} people={people} services={services} products={products} tasks={tasks} transactions={transactions} onHighlightPath={setHighlightPath} />
             </div>
-            </>
           )}
         </div>
       )}
