@@ -140,7 +140,9 @@ export default function People() {
   const [filters, setFilters]         = useState({ status: "", availability_status: "", person_type: "", country: "", primary_role: "" });
   const [activeTypeTab, setActiveTypeTab] = useState("all");
   const [currentUser, setCurrentUser] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
