@@ -24,6 +24,7 @@ import { taskTypeLabel } from "../components/tasks/TaskForm";
 import { useToast } from "@/components/ui/use-toast";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 import { useTerminology } from "@/hooks/useTerminology";
+import { REVENUE_TYPES } from "@/config/transactionTypes";
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",

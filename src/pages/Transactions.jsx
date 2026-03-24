@@ -20,6 +20,7 @@ import {
   TRANSACTION_TYPES, REVENUE_TYPES, EXPENSE_TYPES, INVENTORY_TYPES,
 } from "@/config/transactionTypes";
 import { createTransaction } from "@/utils/createTransaction";
+import { generateInvoiceNumber } from "@/utils/autoInvoice";
 
 const STOCK_IMPACT_TYPES = ["stock_out", "item_assignment"];
 const STOCK_IN_TYPES = ["stock_in", "item_return"];
