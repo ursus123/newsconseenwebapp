@@ -12,10 +12,13 @@ export default function HierarchyView({ enterprises, people, services, products,
     ? enterprises
     : enterprises.filter(e => e.id === selectedEnterprise);
 
-  const rootEnterprise = visibleEnterprises.find(e => e.id === e.company_id);
-  const parentEnterprises = rootEnterprise
-    ? [rootEnterprise, ...visibleEnterprises.filter(e => e.id !== rootEnterprise.id)]
-    : visibleEnterprises.filter(e => !e.parent_enterprise_id);
+  // Root = enterprises with no parent_enterprise_id (or whose parent isn't in the visible set)
+  const visibleIds = new Set(visibleEnterprises.map(e => e.id));
+  const rootEnterprises = visibleEnterprises.filter(e =>
+    !e.parent_enterprise_id || !visibleIds.has(e.parent_enterprise_id)
+  );
+  const rootEnterprise = rootEnterprises.length === 1 ? rootEnterprises[0] : null;
+  const parentEnterprises = rootEnterprises;
   const childrenOf = (parentId) => visibleEnterprises.filter(e => e.parent_enterprise_id === parentId && e.id !== parentId);
 
   const toggleExpand = (id) => {
