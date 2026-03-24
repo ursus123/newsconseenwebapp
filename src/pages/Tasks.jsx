@@ -200,6 +200,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const [viewMode, setViewMode] = useState("kanban");
   const [filterPerson, setFilterPerson] = useState("");
   const [filterEnterprise, setFilterEnterprise] = useState("");
+  const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkAssignee, setBulkAssignee] = useState("");
   const qc = useQueryClient();
