@@ -265,6 +265,13 @@ export default function People() {
       {/* Toolbar */}
       <PeopleToolbar search={search} setSearch={setSearch} groupBy={groupBy} setGroupBy={setGroupBy} sortBy={sortBy} setSortBy={setSortBy} filters={filters} setFilters={setFilters} />
 
+      <BulkActionBar
+        selectedIds={selectedIds}
+        onClear={() => setSelectedIds([])}
+        onDeleteSelected={perms.can_delete ? handleBulkDelete : undefined}
+        canDelete={perms.can_delete}
+      />
+
       {/* Empty state */}
       {!isLoading && people.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
