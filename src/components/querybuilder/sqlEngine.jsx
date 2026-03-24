@@ -192,7 +192,9 @@ async function executeVirtualTable(table, sql) {
       const res = await fetch(
         `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`
       );
-      const data = await res.json();
+      const text = await res.text();
+      if (!text.trim().startsWith("{")) return { type: "select", rows: [], message: `Overpass API returned non-JSON. The service may be temporarily unavailable.` };
+      const data = JSON.parse(text);
       rows = (data.elements || []).map(r => ({
         osm_id: r.id, name: r.tags?.name || "Unnamed", amenity: r.tags?.amenity || type,
         lat: r.lat, lon: r.lon, phone: r.tags?.phone || "", opening_hours: r.tags?.opening_hours || "",
