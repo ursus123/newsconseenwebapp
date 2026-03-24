@@ -22,16 +22,40 @@ import AddressesView from "@/components/entitygraph/AddressesView";
 import ProductsView from "@/components/entitygraph/ProductsView";
 
 const VIEWS = [
-  { id: "hierarchy",   icon: "🏢", label: "Enterprise Structure" },
-  { id: "people",      icon: "👥", label: "Who Works Where" },
-  { id: "services",    icon: "⚙️",  label: "Service Coverage" },
-  { id: "products",    icon: "📦", label: "Products" },
-  { id: "addresses",   icon: "📍", label: "Addresses" },
-  { id: "assignments", icon: "🔗", label: "Staff-Client Links" },
-  { id: "shared",      icon: "🔄", label: "Shared Resources" },
-  { id: "anomalies",   icon: "⚠️",  label: "Anomalies" },
-  { id: "graph",       icon: "🕸️",  label: "Graph View" },
+  { id: "hierarchy",    icon: "🏢", label: "Structure" },
+  { id: "people",       icon: "👥", label: "People" },
+  { id: "services",     icon: "⚙️",  label: "Services" },
+  { id: "products",     icon: "📦", label: "Products" },
+  { id: "addresses",    icon: "📍", label: "Locations" },
+  { id: "tasks",        icon: "✅", label: "Tasks" },
+  { id: "transactions", icon: "💳", label: "Finances" },
+  { id: "assignments",  icon: "🔗", label: "Assignments" },
+  { id: "shared",       icon: "🔄", label: "Shared" },
+  { id: "anomalies",    icon: "⚠️",  label: "Anomalies" },
+  { id: "graph",        icon: "🕸️",  label: "Graph" },
 ];
+
+const ENTERPRISE_RELATIONSHIP_TYPES = [
+  "person_enterprise", "employment", "membership", "enrollment",
+  "care_assignment", "staff_assignment", "client_enrollment", "volunteer", "participant",
+];
+
+function getEnterpriseTerms(enterprise) {
+  const type = (enterprise?.enterprise_type || "other").toLowerCase();
+  const TERMS = {
+    healthcare:    { staff: "staff",       participant: "clients",       credential: "certifications", transaction: "invoices" },
+    residential_care: { staff: "caregivers", participant: "residents",   credential: "certifications", transaction: "invoices" },
+    education:     { staff: "teachers",    participant: "students",      credential: "qualifications", transaction: "fees" },
+    community:     { staff: "leaders",     participant: "members",       credential: "credentials",    transaction: "contributions" },
+    faith:         { staff: "ministers",   participant: "congregation",  credential: "credentials",    transaction: "offerings" },
+    agriculture:   { staff: "farm hands",  participant: "livestock",     credential: "licenses",       transaction: "sales" },
+    nonprofit:     { staff: "staff",       participant: "beneficiaries", credential: "certifications", transaction: "grants" },
+    business:      { staff: "employees",   participant: "customers",     credential: "certifications", transaction: "invoices" },
+    retail:        { staff: "employees",   participant: "customers",     credential: "certifications", transaction: "invoices" },
+  };
+  const match = Object.entries(TERMS).find(([key]) => type.includes(key));
+  return match?.[1] || { staff: "staff", participant: "members", credential: "credentials", transaction: "transactions" };
+}
 
 const INITIAL_FILTER = { enterprise: true, person: true, service: false, product: false, task: false, transaction: false, address: false };
 const CLUSTER_THRESHOLD = 5;
