@@ -162,7 +162,12 @@ export default function Relationships() {
 
       {perms.l2_assign && (
         <div className="mb-6">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Quick Assign</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Quick Assign</p>
+            <Button size="sm" onClick={() => setBulkAssignOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs h-8">
+              <CheckSquare className="w-3.5 h-3.5 mr-1.5" /> Bulk Assign
+            </Button>
+          </div>
           <div className="flex flex-wrap gap-2">
             {QUICK_ADDS.map(({ type, icon: Icon, label, cls }) => (
               <Button key={type} onClick={() => openNew(type)} className={`rounded-xl shadow text-sm ${cls}`}>
