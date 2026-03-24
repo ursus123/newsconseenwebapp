@@ -478,6 +478,16 @@ export default function Transactions() {
           ))}
         </select>
 
+        {/* Search */}
+        <div className="relative ml-auto">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <input
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search transactions..."
+            className="pl-8 pr-8 h-8 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400 w-48"
+          />
+          {search && <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><X className="w-3 h-3" /></button>}
+        </div>
       </div>
 
       {/* Tab navigation */}
