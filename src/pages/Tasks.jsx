@@ -391,20 +391,30 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
       </div>
 
       <div className="flex flex-wrap gap-2 mb-6 items-center">
+        {/* Fuzzy search */}
+        <div className="relative min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <input
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search tasks..."
+            className="pl-9 pr-3 h-9 w-full text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
+          />
+        </div>
         <Filter className="w-3.5 h-3.5 text-slate-400" />
         <select value={filterPerson} onChange={(e) => setFilterPerson(e.target.value)}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400">
+          className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400 h-9">
           <option value="">All People</option>
           {people.map((p) => <option key={p.id} value={`${p.first_name} ${p.last_name}`}>{p.first_name} {p.last_name}</option>)}
         </select>
         <select value={filterEnterprise} onChange={(e) => setFilterEnterprise(e.target.value)}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400">
+          className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400 h-9">
           <option value="">All Enterprises</option>
           {enterprises.map((e) => <option key={e.id} value={e.enterprise_name}>{e.enterprise_name}</option>)}
         </select>
-        {(filterPerson || filterEnterprise) && (
-          <button onClick={() => { setFilterPerson(""); setFilterEnterprise(""); }} className="text-xs text-slate-400 hover:text-rose-500 underline">Clear</button>
+        {(filterPerson || filterEnterprise || search) && (
+          <button onClick={() => { setFilterPerson(""); setFilterEnterprise(""); setSearch(""); }} className="text-xs text-slate-400 hover:text-rose-500 flex items-center gap-1"><X className="w-3 h-3" /> Clear</button>
         )}
+        <span className="ml-auto text-xs text-slate-400">{filtered.length} of {tasks.length}</span>
       </div>
 
       {/* Bulk Action Bar */}
