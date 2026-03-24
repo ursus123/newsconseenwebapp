@@ -676,13 +676,13 @@ export default function EntityGraph() {
       ) : (
         <div className="flex-1 overflow-hidden">
           {activeView === "hierarchy" && (
-            <HierarchyView enterprises={enterprises} people={people} services={services} products={products} tasks={tasks} transactions={transactions} addresses={addresses} relationships={relationships} selectedEnterprise={selectedEnterprise} />
+            <HierarchyView enterprises={enterprises} people={people} services={services} products={products} tasks={tasks} transactions={transactions} addresses={addresses} relationships={relationships} selectedEnterprise={selectedEnterprise} selectedEnterpriseObj={selectedEnterpriseObj} />
           )}
           {activeView === "people" && (
-            <PeopleDistributionView enterprises={enterprises} people={people} relationships={relationships} products={products} selectedEnterprise={selectedEnterprise} />
+            <PeopleDistributionView enterprises={enterprises} people={people} relationships={relationships} products={products} selectedEnterprise={selectedEnterprise} selectedEnterpriseObj={selectedEnterpriseObj} />
           )}
           {activeView === "services" && (
-            <ServiceCoverageView enterprises={enterprises} services={services} people={people} tasks={tasks} selectedEnterprise={selectedEnterprise} />
+            <ServiceCoverageView enterprises={enterprises} services={services} people={people} tasks={tasks} selectedEnterprise={selectedEnterprise} selectedEnterpriseObj={selectedEnterpriseObj} />
           )}
           {activeView === "products" && (
             <ProductsView enterprises={enterprises} products={products} relationships={relationships} selectedEnterprise={selectedEnterprise} />
@@ -690,8 +690,14 @@ export default function EntityGraph() {
           {activeView === "addresses" && (
             <AddressesView enterprises={enterprises} addresses={addresses} relationships={relationships} selectedEnterprise={selectedEnterprise} />
           )}
+          {activeView === "tasks" && (
+            <TasksView enterprises={enterprises} tasks={tasks} people={people} relationships={relationships} selectedEnterprise={selectedEnterprise} />
+          )}
+          {activeView === "transactions" && (
+            <TransactionsView enterprises={enterprises} transactions={transactions} selectedEnterprise={selectedEnterprise} />
+          )}
           {activeView === "assignments" && (
-            <AssignmentView enterprises={enterprises} people={people} relationships={relationships} tasks={tasks} addresses={addresses} products={products} selectedEnterprise={selectedEnterprise} />
+            <AssignmentView enterprises={enterprises} people={people} relationships={relationships} tasks={tasks} addresses={addresses} products={products} selectedEnterprise={selectedEnterprise} selectedEnterpriseObj={selectedEnterpriseObj} />
           )}
           {activeView === "shared" && (
             <SharedResourcesView enterprises={enterprises} people={people} products={products} services={services} />
