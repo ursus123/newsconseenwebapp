@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { CheckCircle2, AlertCircle, X, AlertTriangle, Package } from "lucide-react";
 import RefusalCaptureForm from "./RefusalCaptureForm";
+import { createStockTransaction } from "@/utils/createTransaction";
 import PINConfirmModal from "./PINConfirmModal";
 import VitalsCheckModal from "./VitalsCheckModal";
 
