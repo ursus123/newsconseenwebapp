@@ -219,13 +219,30 @@ export default function EntityGraph() {
 
   const isLoading = loadStates.core === LOAD_STATES.loading || loadStates.core === LOAD_STATES.idle;
 
-  // Relationship-based enterprise→people lookup (shared across anomaly + badge count)
+  // selectedEnterpriseObj for passing to child views
+  const selectedEnterpriseObj = useMemo(() => {
+    if (selectedEnterprise === "all") return null;
+    return enterprises.find(e => e.id === selectedEnterprise) || null;
+  }, [selectedEnterprise, enterprises]);
+
+  // Relationship-based enterprise→people lookup (robust: handles multiple field naming conventions)
   const enterprisePeopleNames = useMemo(() => {
     const map = {};
-    relationships.filter(r => r.relationship_type === "person_enterprise" && r.status !== "ended" && r.enterprise_name && r.person_name).forEach(r => {
-      if (!map[r.enterprise_name]) map[r.enterprise_name] = new Set();
-      map[r.enterprise_name].add(r.person_name.trim());
-    });
+    relationships
+      .filter(r => {
+        if (r.status === "ended") return false;
+        if (ENTERPRISE_RELATIONSHIP_TYPES.includes(r.relationship_type)) return true;
+        if (r.enterprise_name && r.person_name) return true;
+        if (r.enterprise && r.primary_person) return true;
+        return false;
+      })
+      .forEach(r => {
+        const entName = r.enterprise_name || r.enterprise;
+        const personName = r.person_name || r.primary_person;
+        if (!entName || !personName) return;
+        if (!map[entName]) map[entName] = new Set();
+        map[entName].add(personName.trim());
+      });
     return map;
   }, [relationships]);
 
