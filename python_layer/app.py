@@ -10,6 +10,7 @@ from config import settings
 from etl import enterprises, geospatial, people, products, services, tasks, transactions
 from etl.load import load_dataframe, load_dataframe_replace
 from open_data.medication_routes import router as medication_router
+from ml.routes import router as ml_router
 from schemas import (
     EnterpriseSummary,
     PeopleSummary,
@@ -73,6 +74,7 @@ app.add_middleware(
 )
 
 app.include_router(medication_router)
+app.include_router(ml_router)
 
 
 # ----------------------------------------------------------
