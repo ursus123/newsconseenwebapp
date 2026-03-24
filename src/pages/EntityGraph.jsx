@@ -263,10 +263,12 @@ export default function EntityGraph() {
       const participants = entPeople.filter(p => isParticipant(p) && p.status === "active");
       const isAgri = isAgricultural(e);
 
-      if (!staff.length) issues.push({ severity: "critical", enterprise: entName, type: "No active staff", detail: `${entName} has no active staff members`, action: "Add staff in People page" });
+      const terms = getEnterpriseTerms(e);
+
+      if (!staff.length) issues.push({ severity: "critical", enterprise: entName, type: `No active ${terms.staff}`, detail: `${entName} has no active ${terms.staff}`, action: "Add staff in People page" });
 
       if (!isAgri && !participants.length) {
-        issues.push({ severity: "warning", enterprise: entName, type: "No active participants", detail: `${entName} has no active clients / members`, action: "Add people in People page" });
+        issues.push({ severity: "warning", enterprise: entName, type: `No active ${terms.participant}`, detail: `${entName} has no active ${terms.participant}`, action: "Add people in People page" });
       }
 
       const recentTasks = tasks.filter(t =>
@@ -281,7 +283,7 @@ export default function EntityGraph() {
         const days = (new Date(s.certification_expiry) - new Date()) / (1000 * 60 * 60 * 24);
         return days > 0 && days <= 90;
       });
-      if (expiring.length > 0) issues.push({ severity: "warning", enterprise: entName, type: "Expiring certifications", detail: `${expiring.length} certifications expiring within 90 days at ${entName}`, action: "Review staff certifications" });
+      if (expiring.length > 0) issues.push({ severity: "warning", enterprise: entName, type: `Expiring ${terms.credential}`, detail: `${expiring.length} ${terms.credential} expiring within 90 days at ${entName}`, action: `Review ${terms.staff} ${terms.credential}` });
 
       const entAddrs = addresses.filter(a => a.enterprise === entName);
       if (!entAddrs.length) issues.push({ severity: "warning", enterprise: entName, type: "No locations defined", detail: `${entName} has no addresses`, action: "Add locations in Addresses page" });
