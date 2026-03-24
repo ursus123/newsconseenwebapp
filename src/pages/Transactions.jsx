@@ -135,9 +135,10 @@ function TransactionRow({ transaction, onEdit, onMarkPaid, onPost, onVoid, onExp
                   </span>
                 )}
                 {transaction.source && transaction.source !== "manual" && (() => {
-                  const src = SOURCE_CONFIG[transaction.source] || SOURCE_CONFIG.manual;
+                  const src  = TRANSACTION_SOURCES[transaction.source] || TRANSACTION_SOURCES.manual;
+                  const color = SOURCE_COLORS[transaction.source] || SOURCE_COLORS.manual;
                   return (
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${src.color}`}>
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${color}`}>
                       {src.icon} {src.label}
                     </span>
                   );
