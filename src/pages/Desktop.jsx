@@ -157,11 +157,15 @@ export default function Desktop() {
         onOpenApp={handleOpenApp}
         onFocusWindow={wm.focusWindow}
         onMinimizeWindow={wm.minimizeWindow}
+        onCloseWindow={wm.closeWindow}
         onToggleLauncher={launcher.toggleLauncher}
         onToggleNotifications={() => setNotifOpen(v => !v)}
         unreadCount={notifStore.unreadCount}
         pinnedApps={launcher.pinnedTaskbar}
         launcherOpen={launcher.isOpen}
+        onToggleTaskbarPin={launcher.toggleTaskbarPin}
+        onOpenSettings={() => handleOpenApp(DESKTOP_APPS.find(a => a.id === "settings"))}
+        user={user}
       />
 
       {/* Right-click context menu */}
