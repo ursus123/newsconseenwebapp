@@ -119,9 +119,13 @@ export default function Desktop() {
       {/* Top bar */}
       <div
         className="absolute top-0 left-0 right-0 h-8 flex items-center px-4 gap-4 z-50 select-none"
-        style={{ background: "rgba(0,0,0,0.3)", backdropFilter: "blur(10px)" }}
+        style={{
+          background: isLight ? "rgba(248,250,252,0.7)" : "rgba(0,0,0,0.35)",
+          backdropFilter: "blur(12px)",
+          borderBottom: isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.06)",
+        }}
       >
-        <span className="text-white font-bold text-xs tracking-wide">Newsconseen OS</span>
+        <span className={`font-bold text-xs tracking-wide ${isLight ? "text-slate-700" : "text-white"}`}>Newsconseen OS</span>
         <div className="flex-1" />
         {user && <span className="text-slate-300 text-xs">{user.full_name || user.email}</span>}
         {!pwa.isOnline && (
