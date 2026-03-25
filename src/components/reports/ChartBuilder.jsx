@@ -490,17 +490,45 @@ export default function ChartBuilder({ chart, folders, currentUser, onClose, rea
             {/* Step 1: Data */}
             {step === 1 && (
               <div>
-                <h3 className="text-sm font-semibold text-slate-700 mb-3">Data Source — SQL Query</h3>
-                <textarea
-                  className="w-full h-48 font-mono text-xs bg-slate-950 text-emerald-400 rounded-xl p-4 resize-none outline-none border-0"
-                  value={sql}
-                  onChange={(e) => setSql(e.target.value)}
-                  placeholder="SELECT enterprise, COUNT(*) as count FROM tasks GROUP BY enterprise"
-                  spellCheck={false}
-                />
-                <Button className="mt-2 gap-1.5 bg-emerald-600 hover:bg-emerald-700" size="sm" onClick={runQuery} disabled={previewLoading}>
-                  <Play className="w-3.5 h-3.5" /> {previewLoading ? "Running..." : "Run Query"}
-                </Button>
+                {/* Mode toggle */}
+                <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1 mb-4 w-fit">
+                  <button onClick={() => setDataMode("visual")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${dataMode === "visual" ? "bg-white shadow text-indigo-700" : "text-slate-500 hover:text-slate-700"}`}>
+                    <Wand2 className="w-3.5 h-3.5" /> Visual Builder
+                  </button>
+                  <button onClick={() => setDataMode("sql")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${dataMode === "sql" ? "bg-white shadow text-emerald-700" : "text-slate-500 hover:text-slate-700"}`}>
+                    <Code2 className="w-3.5 h-3.5" /> SQL Editor
+                  </button>
+                </div>
+
+                {/* Visual drag-and-drop builder */}
+                {dataMode === "visual" && (
+                  <VisualQueryBuilder
+                    onQueryGenerated={(generatedSQL) => {
+                      setSql(generatedSQL);
+                      runQueryWith(generatedSQL);
+                    }}
+                  />
+                )}
+
+                {/* Raw SQL editor */}
+                {dataMode === "sql" && (
+                  <>
+                    <h3 className="text-sm font-semibold text-slate-700 mb-3">Data Source — SQL Query</h3>
+                    <textarea
+                      className="w-full h-48 font-mono text-xs bg-slate-950 text-emerald-400 rounded-xl p-4 resize-none outline-none border-0"
+                      value={sql}
+                      onChange={(e) => setSql(e.target.value)}
+                      placeholder="SELECT enterprise, COUNT(*) as count FROM tasks GROUP BY enterprise"
+                      spellCheck={false}
+                    />
+                    <Button className="mt-2 gap-1.5 bg-emerald-600 hover:bg-emerald-700" size="sm" onClick={runQuery} disabled={previewLoading}>
+                      <Play className="w-3.5 h-3.5" /> {previewLoading ? "Running..." : "Run Query"}
+                    </Button>
+                  </>
+                )}
+
                 {queryError && (
                   <div className="mt-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-600 font-mono">{queryError}</div>
                 )}
