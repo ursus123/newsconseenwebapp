@@ -229,6 +229,24 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
               </>
             )}
 
+            {/* Person → Person */}
+            {relType === "person_person" && (
+              <>
+                <Field label="Person (From)" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} people={people} placeholder="Select first person..." /></Field>
+                <Field label="Person (To)" required><PersonSelect value={form.secondary_person} onChange={(v) => set("secondary_person", v)} people={people} placeholder="Select second person..." /></Field>
+                <Field label="Relationship Role"><Input value={form.role || ""} onChange={(e) => set("role", e.target.value)} className="rounded-xl" placeholder="e.g. Teacher of, Mentor of, Guardian of..." /></Field>
+              </>
+            )}
+
+            {/* Enterprise → Enterprise */}
+            {relType === "enterprise_enterprise" && (
+              <>
+                <Field label="Parent Enterprise" required><EnterpriseSelect value={form.enterprise_name} onChange={(v) => set("enterprise_name", v)} enterprises={enterprises} /></Field>
+                <Field label="Child / Sub Enterprise" required><EnterpriseSelect value={form.secondary_enterprise} onChange={(v) => set("secondary_enterprise", v)} enterprises={enterprises} /></Field>
+                <Field label="Relationship Type"><Input value={form.role || ""} onChange={(e) => set("role", e.target.value)} className="rounded-xl" placeholder="e.g. School → Class, Parent Org → Branch..." /></Field>
+              </>
+            )}
+
             {/* Shared fields */}
             <div className="grid grid-cols-2 gap-3">
               <Field label="Start Date" required>
