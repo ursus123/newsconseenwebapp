@@ -301,7 +301,7 @@ export default function BulkAssignDialog({ open, onClose, onAssign, people = [],
                 <div className="space-y-1 max-h-32 overflow-y-auto">
                   {pairs.slice(0, 10).map((p, i) => (
                     <p key={i} className="text-xs text-emerald-600">
-                      {p.person_name || p.enterprise_name || p.item_name} → {p.enterprise_name || p.person_name || p.service_name || p.location}
+                      {p.person_name || p.enterprise_name || p.item_name} → {p.secondary_person || p.secondary_enterprise || p.enterprise_name || p.person_name || p.service_name || p.location}
                       {p.role && <span className="text-emerald-400"> ({p.role})</span>}
                     </p>
                   ))}
