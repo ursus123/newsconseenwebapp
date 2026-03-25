@@ -177,6 +177,8 @@ export default function BulkAssignDialog({ open, onClose, onAssign, people = [],
         else if (mode === "enterprise_service") { rec.enterprise_name = l; rec.service_name = rightVal; }
         else if (mode === "person_address") { rec.person_name = l; rec.location = rightVal; }
         else if (mode === "enterprise_address") { rec.enterprise_name = l; rec.location = rightVal; }
+        else if (mode === "person_person") { rec.person_name = l; rec.secondary_person = rightVal; }
+        else if (mode === "enterprise_enterprise") { rec.enterprise_name = l; rec.secondary_enterprise = rightVal; }
         pairs.push(rec);
       }
     }
