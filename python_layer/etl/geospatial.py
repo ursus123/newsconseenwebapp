@@ -44,15 +44,24 @@ def transform_geospatial(df: pd.DataFrame) -> pd.DataFrame:
     Enterprise locations do not change daily — there is no time series
     dimension. Appending daily would grow the table with duplicate rows.
 
+    Coordinate strategy (in priority order):
+        1. address_summary table in Railway — populated by etl/addresses.py
+           which already geocodes via Base44 frontend or Nominatim fallback.
+           This is the preferred source — avoids duplicate Nominatim calls.
+        2. Legacy geocode cache from geospatial_summary — used for addresses
+           that predate the address_summary table.
+        3. Nominatim fallback — only for addresses with no coordinates in
+           either Railway table. Rate-limited to 1 req/second.
+
     Steps:
-        1. Load existing geocoded coordinates from Railway (cache)
-        2. Geocode only addresses not already cached or whose
-           primary_address has changed since last geocode
-        3. Run DBSCAN clustering on all coordinates
-        4. Return one row per enterprise with lat/lon/cluster
+        1. Load coordinates from address_summary (joined by enterprise_id)
+        2. For any enterprises with no match, fall back to geocode cache
+        3. For remaining gaps, call Nominatim
+        4. Run DBSCAN clustering on all coordinates
+        5. Return one row per enterprise with lat/lon/cluster
 
     Output columns:
-        enterprise_id, company_id, name, enterprise_type,
+        enterprise_id, company_id, name, enterprise_type, status,
         primary_address, latitude, longitude, geocoded_at,
         geocode_source, cluster_id
     """
@@ -69,28 +78,39 @@ def transform_geospatial(df: pd.DataFrame) -> pd.DataFrame:
         logger.error("transform_geospatial: missing 'id' column — returning empty")
         return _empty_summary()
 
-    df["primary_address"] = df.get("primary_address", pd.Series("", index=df.index))
+    df["primary_address"] = df.get(
+        "primary_address", pd.Series("", index=df.index)
+    )
 
     # ----------------------------------------------------------
-    # Load existing geocode cache from Railway
-    # Avoids re-geocoding unchanged addresses every night
+    # Step 1 — load coordinates from address_summary
+    # etl/addresses.py already geocoded these via Base44 or Nominatim.
+    # Join on enterprise_id to pull lat/lon without re-geocoding.
     # ----------------------------------------------------------
-    cached = _load_geocode_cache()
+    address_coords = _load_address_summary_coords()
 
-    # ----------------------------------------------------------
-    # Geocode addresses that are new or have changed
-    # ----------------------------------------------------------
     latitudes = []
     longitudes = []
     geocoded_at_list = []
     geocode_sources = []
 
-    addresses = df["primary_address"].tolist()
     ids = df["id"].tolist()
-    geocode_needed = []
+    addresses = df["primary_address"].tolist()
+
+    geocode_needed_indices = []
 
     for i, (eid, address) in enumerate(zip(ids, addresses)):
         address_str = str(address).strip() if pd.notna(address) else ""
+
+        # address_summary hit — best source, no Nominatim call needed
+        if eid in address_coords:
+            coords = address_coords[eid]
+            latitudes.append(coords["latitude"])
+            longitudes.append(coords["longitude"])
+            geocoded_at_list.append(coords["geocoded_at"])
+            geocode_sources.append("address_summary")
+            logger.debug("geospatial: address_summary hit for enterprise %s", eid)
+            continue
 
         if not address_str or address_str.lower() in ("none", "nan", ""):
             latitudes.append(None)
@@ -99,29 +119,44 @@ def transform_geospatial(df: pd.DataFrame) -> pd.DataFrame:
             geocode_sources.append("skipped_no_address")
             continue
 
-        # Check cache — use cached coords if address unchanged
-        if eid in cached and cached[eid]["address"] == address_str:
-            latitudes.append(cached[eid]["latitude"])
-            longitudes.append(cached[eid]["longitude"])
-            geocoded_at_list.append(cached[eid]["geocoded_at"])
-            geocode_sources.append("cache")
-            logger.debug("geospatial: cache hit for enterprise %s", eid)
-            continue
-
-        # Address is new or changed — needs geocoding
-        geocode_needed.append(i)
+        # No match in address_summary — flag for cache/Nominatim fallback
+        geocode_needed_indices.append(i)
         latitudes.append(None)
         longitudes.append(None)
         geocoded_at_list.append(None)
         geocode_sources.append("nominatim")
 
     # ----------------------------------------------------------
-    # Geocode only the addresses that need it
-    # Rate-limited to respect Nominatim ToS
+    # Step 2 — legacy geocode cache fallback
+    # For any enterprise not in address_summary, check the existing
+    # geospatial_summary cache before calling Nominatim.
+    # ----------------------------------------------------------
+    if geocode_needed_indices:
+        legacy_cache = _load_geocode_cache()
+        still_needed = []
+
+        for i in geocode_needed_indices:
+            eid = ids[i]
+            address_str = str(addresses[i]).strip()
+
+            if eid in legacy_cache and legacy_cache[eid]["address"] == address_str:
+                latitudes[i] = legacy_cache[eid]["latitude"]
+                longitudes[i] = legacy_cache[eid]["longitude"]
+                geocoded_at_list[i] = legacy_cache[eid]["geocoded_at"]
+                geocode_sources[i] = "cache"
+                logger.debug("geospatial: legacy cache hit for enterprise %s", eid)
+            else:
+                still_needed.append(i)
+
+        geocode_needed_indices = still_needed
+
+    # ----------------------------------------------------------
+    # Step 3 — Nominatim fallback for remaining gaps
+    # Rate-limited to respect Nominatim ToS (1 req/second)
     # ----------------------------------------------------------
     now_ts = pd.Timestamp.now(tz="UTC")
 
-    for idx, i in enumerate(geocode_needed):
+    for idx, i in enumerate(geocode_needed_indices):
         address_str = str(addresses[i]).strip()
         result = geocode_address(address_str)
 
@@ -141,17 +176,18 @@ def transform_geospatial(df: pd.DataFrame) -> pd.DataFrame:
             )
 
         # Rate limit — pause between requests, not after the last one
-        if idx < len(geocode_needed) - 1:
+        if idx < len(geocode_needed_indices) - 1:
             time.sleep(NOMINATIM_RATE_LIMIT_SECONDS)
 
-    if geocode_needed:
-        logger.info(
-            "geospatial: geocoded %d new/changed addresses, "
-            "%d served from cache, %d skipped",
-            len(geocode_needed),
-            sum(1 for s in geocode_sources if s == "cache"),
-            sum(1 for s in geocode_sources if s == "skipped_no_address"),
-        )
+    logger.info(
+        "geospatial: coordinate sources — "
+        "address_summary=%d, cache=%d, nominatim=%d, failed=%d, skipped=%d",
+        sum(1 for s in geocode_sources if s == "address_summary"),
+        sum(1 for s in geocode_sources if s == "cache"),
+        sum(1 for s in geocode_sources if s == "nominatim"),
+        sum(1 for s in geocode_sources if s == "nominatim_failed"),
+        sum(1 for s in geocode_sources if s == "skipped_no_address"),
+    )
 
     # ----------------------------------------------------------
     # Build enriched DataFrame
@@ -162,12 +198,12 @@ def transform_geospatial(df: pd.DataFrame) -> pd.DataFrame:
     df["geocode_source"] = geocode_sources
 
     # ----------------------------------------------------------
-    # DBSCAN clustering on geocoded coordinates
+    # Step 4 — DBSCAN clustering on geocoded coordinates
     # ----------------------------------------------------------
     df = _cluster_enterprises(df)
 
     # ----------------------------------------------------------
-    # Select output columns using safe .get() pattern
+    # Select output columns
     # ----------------------------------------------------------
     output_cols = {
         "enterprise_id":   df.get("id"),
@@ -200,6 +236,58 @@ def transform_geospatial(df: pd.DataFrame) -> pd.DataFrame:
 # ----------------------------------------------------------
 # Internal helpers
 # ----------------------------------------------------------
+
+def _load_address_summary_coords() -> dict:
+    """
+    Load enterprise coordinates from analytics.address_summary.
+    This is populated by etl/addresses.py and is the preferred
+    coordinate source — avoids duplicate Nominatim calls.
+
+    Returns dict keyed by enterprise_id:
+        { enterprise_id: { latitude, longitude, geocoded_at } }
+
+    Returns empty dict if address_summary does not exist yet
+    (e.g. first run before addresses ETL has run).
+    """
+    try:
+        from database import get_engine
+        from sqlalchemy import text
+
+        engine = get_engine()
+        with engine.connect() as conn:
+            result = conn.execute(text(
+                "SELECT enterprise_id, latitude, longitude, created_date "
+                "FROM analytics.address_summary "
+                "WHERE enterprise_id IS NOT NULL "
+                "AND latitude IS NOT NULL "
+                "AND longitude IS NOT NULL"
+            ))
+            rows = result.fetchall()
+
+        coords = {}
+        for row in rows:
+            # If an enterprise has multiple addresses, last one wins.
+            # Primary address is preferred — future improvement: filter
+            # on address_type = 'enterprise' when that column is reliable.
+            coords[row.enterprise_id] = {
+                "latitude":   row.latitude,
+                "longitude":  row.longitude,
+                "geocoded_at": row.created_date,
+            }
+
+        logger.info(
+            "geospatial: loaded %d enterprise coordinates from address_summary",
+            len(coords),
+        )
+        return coords
+
+    except Exception as e:
+        logger.info(
+            "geospatial: address_summary unavailable (%s) — "
+            "falling back to geocode cache and Nominatim", e
+        )
+        return {}
+
 
 def geocode_address(address: str) -> Optional[tuple[float, float]]:
     """
@@ -241,12 +329,13 @@ def geocode_address(address: str) -> Optional[tuple[float, float]]:
 
 def _load_geocode_cache() -> dict:
     """
-    Load existing geocoded coordinates from Railway.
+    Load existing geocoded coordinates from analytics.geospatial_summary.
+    Legacy fallback for enterprises not yet in address_summary.
+
     Returns dict keyed by enterprise_id:
         { enterprise_id: { address, latitude, longitude, geocoded_at } }
 
     Returns empty dict if Railway is unavailable or table does not exist yet.
-    This is safe — a cache miss just triggers a fresh geocode.
     """
     try:
         from database import get_engine
@@ -270,12 +359,14 @@ def _load_geocode_cache() -> dict:
                 "geocoded_at": row.geocoded_at,
             }
 
-        logger.info("geospatial: loaded %d cached coordinates from Railway", len(cache))
+        logger.info(
+            "geospatial: loaded %d entries from legacy geocode cache", len(cache)
+        )
         return cache
 
     except Exception as e:
         logger.info(
-            "geospatial: cache unavailable (%s) — will geocode all addresses", e
+            "geospatial: legacy cache unavailable (%s) — will geocode from scratch", e
         )
         return {}
 
