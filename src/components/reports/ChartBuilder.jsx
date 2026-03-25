@@ -24,7 +24,7 @@ import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Play, Save, BarChart2, TrendingUp, PieChart, Activity, Hash, Table2, Target, ScatterChart } from "lucide-react";
+import { ArrowLeft, Play, Save, BarChart2, TrendingUp, PieChart, Activity, Hash, Table2, Target, ScatterChart, GripVertical, Plus, X, Wand2, Code2, Database, ChevronDown, ChevronRight, Layers } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, PieChart as RechartPie, Pie, Cell, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
