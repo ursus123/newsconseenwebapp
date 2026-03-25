@@ -42,13 +42,16 @@ const statusColor = (s) => ({ active: "bg-emerald-50 text-emerald-700", ended: "
 
 const columns = [
   { key: "relationship_type", label: "Type", render: (val) => { const c = TYPE_CONFIG[val]; return c ? <Badge className={c.color}>{c.label}</Badge> : val; } },
-  { key: "person_name", label: "Person", render: (v) => v || "—" },
-  { key: "enterprise_name", label: "Enterprise", render: (v) => v || "—" },
+  { key: "person_name", label: "From (Person / Enterprise)", render: (v, row) => v || row.enterprise_name || "—" },
+  { key: "enterprise_name", label: "To (Enterprise / Person)", render: (v, row) => {
+    if (row.relationship_type === "person_person") return row.secondary_person || "—";
+    if (row.relationship_type === "enterprise_enterprise") return row.secondary_enterprise || "—";
+    return v || row.person_name || "—";
+  }},
   { key: "item_name", label: "Item", render: (v) => v || "—" },
   { key: "service_name", label: "Service", render: (v) => v || "—" },
   { key: "role", label: "Role", render: (v) => v || "—" },
   { key: "start_date", label: "Start" },
-  { key: "end_date", label: "End", render: (v) => v || "—" },
   { key: "status", label: "Status", render: (val) => <Badge className={statusColor(val)}>{val || "active"}</Badge> },
 ];
 
