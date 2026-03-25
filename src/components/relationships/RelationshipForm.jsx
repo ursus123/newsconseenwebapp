@@ -9,13 +9,15 @@ import { Badge } from "@/components/ui/badge";
 import { Save, X, StopCircle } from "lucide-react";
 
 export const TYPE_CONFIG = {
-  person_enterprise:  { label: "Assign Person → Enterprise",  prefix: "PE", color: "bg-blue-50 text-blue-700" },
-  item_enterprise:    { label: "Assign Item → Enterprise",    prefix: "IE", color: "bg-purple-50 text-purple-700" },
-  item_person:        { label: "Assign Item → Person",        prefix: "IP", color: "bg-amber-50 text-amber-700" },
-  person_service:     { label: "Assign Person → Service",     prefix: "PS", color: "bg-cyan-50 text-cyan-700" },
-  enterprise_service: { label: "Assign Enterprise → Service", prefix: "ES", color: "bg-indigo-50 text-indigo-700" },
-  person_address:     { label: "Assign Person → Address",     prefix: "PA", color: "bg-teal-50 text-teal-700" },
-  enterprise_address: { label: "Assign Enterprise → Address", prefix: "EA", color: "bg-emerald-50 text-emerald-700" },
+  person_enterprise:    { label: "Assign Person → Enterprise",    prefix: "PE", color: "bg-blue-50 text-blue-700" },
+  item_enterprise:      { label: "Assign Item → Enterprise",      prefix: "IE", color: "bg-purple-50 text-purple-700" },
+  item_person:          { label: "Assign Item → Person",          prefix: "IP", color: "bg-amber-50 text-amber-700" },
+  person_service:       { label: "Assign Person → Service",       prefix: "PS", color: "bg-cyan-50 text-cyan-700" },
+  enterprise_service:   { label: "Assign Enterprise → Service",   prefix: "ES", color: "bg-indigo-50 text-indigo-700" },
+  person_address:       { label: "Assign Person → Address",       prefix: "PA", color: "bg-teal-50 text-teal-700" },
+  enterprise_address:   { label: "Assign Enterprise → Address",   prefix: "EA", color: "bg-emerald-50 text-emerald-700" },
+  person_person:        { label: "Assign Person → Person",        prefix: "PP", color: "bg-rose-50 text-rose-700" },
+  enterprise_enterprise:{ label: "Assign Enterprise → Enterprise",prefix: "EE", color: "bg-violet-50 text-violet-700" },
 };
 
 const statusColor = { active: "bg-emerald-50 text-emerald-700", ended: "bg-rose-50 text-rose-600", archived: "bg-slate-100 text-slate-500" };
