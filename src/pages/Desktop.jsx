@@ -169,8 +169,8 @@ export default function Desktop() {
         />
       </div>
 
-      {/* Window layer */}
-      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ zIndex: 10, pointerEvents: "none" }}>
+      {/* Window layer — no pointer-events block; empty areas pass clicks to icons below */}
+      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ zIndex: 10 }}>
         {wm.windows.map(win => (
           <AppWindow
             key={win.id}
@@ -182,7 +182,6 @@ export default function Desktop() {
             onMove={wm.moveWindow}
             onResize={wm.resizeWindow}
             onSnap={wm.snapWindow}
-            style={{ pointerEvents: "all" }}
           />
         ))}
 
