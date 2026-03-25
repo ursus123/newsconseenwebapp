@@ -226,6 +226,8 @@ export default function DesktopIcons({
     localStorage.setItem("desktop_icon_positions", JSON.stringify(pos));
   }, []);
 
+  const DRAG_THRESHOLD = 6; // px before we commit to a drag
+
   // ── Drag handlers ────────────────────────────────────────────────────────────
   const onMouseDown = useCallback((e, app) => {
     if (e.button !== 0) return;
@@ -233,12 +235,11 @@ export default function DesktopIcons({
     e.stopPropagation();
     setSelectedId(app.id);
 
-    const rect = containerRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
     const pos  = positions[app.id] || { col: 0, row: 0 };
     const { x, y } = cellToPos(pos.col, pos.row);
 
     drag.current = {
-      active: true,
+      active: false,       // not dragging yet — waiting for threshold
       appId:  app.id,
       startMouseX: e.clientX,
       startMouseY: e.clientY,
@@ -247,15 +248,21 @@ export default function DesktopIcons({
       currentX: x,
       currentY: y,
     };
-    setDraggingId(app.id);
-    setDragPos({ x, y });
   }, [positions]);
 
   useEffect(() => {
     const onMove = (e) => {
-      if (!drag.current.active) return;
+      if (!drag.current.appId) return;
       const dx = e.clientX - drag.current.startMouseX;
       const dy = e.clientY - drag.current.startMouseY;
+
+      // Only commit to drag once threshold is exceeded
+      if (!drag.current.active) {
+        if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+        drag.current.active = true;
+        setDraggingId(drag.current.appId);
+      }
+
       const newX = drag.current.startIconX + dx;
       const newY = drag.current.startIconY + dy;
       drag.current.currentX = newX;
@@ -263,19 +270,27 @@ export default function DesktopIcons({
       setDragPos({ x: newX, y: newY });
     };
 
-    const onUp = () => {
-      if (!drag.current.active) return;
-      const { appId, currentX, currentY } = drag.current;
+    const onUp = (e) => {
+      if (!drag.current.appId) return;
+      const { appId, active, currentX, currentY } = drag.current;
+      drag.current.appId  = null;
       drag.current.active = false;
 
-      // Snap to grid cell
-      const { col, row } = posToCell(currentX, currentY);
-      setPositions(prev => {
-        const next = { ...prev, [appId]: { col, row } };
-        savePositions(next);
-        return next;
-      });
-      setDraggingId(null);
+      if (active) {
+        // Snap to grid cell after drag
+        const { col, row } = posToCell(currentX, currentY);
+        setPositions(prev => {
+          const next = { ...prev, [appId]: { col, row } };
+          savePositions(next);
+          return next;
+        });
+        setDraggingId(null);
+      } else {
+        // No drag movement → treat as click → open app
+        const app = DESKTOP_APPS.find(a => a.id === appId);
+        if (app) onOpenApp(app);
+        setDraggingId(null);
+      }
     };
 
     window.addEventListener("mousemove", onMove);
@@ -284,7 +299,7 @@ export default function DesktopIcons({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup",   onUp);
     };
-  }, [savePositions]);
+  }, [savePositions, onOpenApp]);
 
   // ── Context menu ─────────────────────────────────────────────────────────────
   const handleContextMenu = useCallback((e, app) => {
