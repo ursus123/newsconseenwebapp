@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from "react";
+import React, { useRef, useCallback } from "react";
 import { X, Minus, Maximize2, ExternalLink } from "lucide-react";
 
 export default function AppWindow({
