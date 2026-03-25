@@ -170,7 +170,7 @@ export default function Desktop() {
       </div>
 
       {/* Window layer */}
-      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ pointerEvents: "none" }}>
+      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ pointerEvents: "none", zIndex: 10 }}>
         {wm.windows.map(win => (
           <AppWindow
             key={win.id}
@@ -182,6 +182,7 @@ export default function Desktop() {
             onMove={wm.moveWindow}
             onResize={wm.resizeWindow}
             onSnap={wm.snapWindow}
+            style={{ pointerEvents: "all" }}
           />
         ))}
 
@@ -190,7 +191,7 @@ export default function Desktop() {
             <div className="text-center" style={{ opacity: 0.18 }}>
               <div className="text-7xl mb-4">🖥️</div>
               <p className={`text-lg font-semibold ${isLight ? "text-slate-700" : "text-white"}`}>Newsconseen Desktop</p>
-              <p className={`text-sm mt-1 ${isLight ? "text-slate-500" : "text-slate-300"}`}>Double-click an icon or press Ctrl+Space</p>
+              <p className={`text-sm mt-1 ${isLight ? "text-slate-500" : "text-slate-300"}`}>Click an icon or press Ctrl+Space to launch an app</p>
             </div>
           </div>
         )}
