@@ -14,11 +14,20 @@ import { usePWA } from "@/hooks/usePWA";
 import { base44 } from "@/api/base44Client";
 
 const WALLPAPERS = [
-  "linear-gradient(135deg, #0f172a 0%, #1e293b 40%, #0c4a6e 100%)",
-  "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
-  "linear-gradient(135deg, #064e3b 0%, #065f46 40%, #0f766e 100%)",
-  "linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%)",
-  "linear-gradient(135deg, #450a0a 0%, #7f1d1d 40%, #991b1b 100%)",
+  // 0 – Midnight Ocean (default)
+  { type: "gradient", value: "linear-gradient(135deg, #0a0f1e 0%, #0f172a 35%, #0c2a4a 70%, #0c4a6e 100%)" },
+  // 1 – Deep Space Navy
+  { type: "gradient", value: "linear-gradient(135deg, #020617 0%, #0f172a 40%, #1e1b4b 80%, #312e81 100%)" },
+  // 2 – Forest Night
+  { type: "gradient", value: "linear-gradient(135deg, #021a12 0%, #022c1c 40%, #064e3b 70%, #0f766e 100%)" },
+  // 3 – Cosmic Purple
+  { type: "gradient", value: "linear-gradient(135deg, #12032e 0%, #1e1b4b 40%, #4338ca 80%, #6d28d9 100%)" },
+  // 4 – Ember Red
+  { type: "gradient", value: "linear-gradient(135deg, #1c0202 0%, #450a0a 35%, #7f1d1d 70%, #b91c1c 100%)" },
+  // 5 – Sunrise (light)
+  { type: "gradient", value: "linear-gradient(160deg, #e0f2fe 0%, #bae6fd 40%, #f0abfc 80%, #fda4af 100%)" },
+  // 6 – Slate Day (light)
+  { type: "gradient", value: "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 40%, #cbd5e1 80%, #94a3b8 100%)" },
 ];
 
 export default function Desktop() {
