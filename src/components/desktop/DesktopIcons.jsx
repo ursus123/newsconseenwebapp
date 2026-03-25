@@ -84,7 +84,6 @@ function DesktopIcon({
   app, x, y,
   isDragging, isSelected,
   onMouseDown,
-  onDoubleClick,
   onContextMenu,
 }) {
   return (
@@ -98,7 +97,6 @@ function DesktopIcon({
         transition: isDragging ? "none" : "left 0.15s ease, top 0.15s ease",
       }}
       onMouseDown={onMouseDown}
-      onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
     >
       {/* Icon shell */}
@@ -336,7 +334,6 @@ export default function DesktopIcons({
             isDragging={isDragging}
             isSelected={isSelected}
             onMouseDown={(e) => onMouseDown(e, app)}
-            onDoubleClick={(e) => { e.stopPropagation(); onOpenApp(app); }}
             onContextMenu={(e) => handleContextMenu(e, app)}
           />
         );
