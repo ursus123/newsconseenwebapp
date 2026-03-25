@@ -36,7 +36,7 @@ export default function Taskbar({
     const openWin = windows.find(w => w.appId === app.id);
     if (openWin) {
       if (openWin.minimized) {
-        onFocusWindow(openWin.id);
+        onFocusWindow(openWin.id);   // restores + focuses
       } else {
         onMinimizeWindow(openWin.id);
       }
