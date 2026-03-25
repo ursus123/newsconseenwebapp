@@ -19,6 +19,9 @@ import NotificationsBell from "../components/dashboard/NotificationsBell";
 import WorkerMyStats from "../components/dashboard/WorkerMyStats";
 import ClientRetentionRisk from "../components/dashboard/ClientRetentionRisk";
 import StaffingIntelligence from "../components/dashboard/StaffingIntelligence";
+import TransactionsTrendChart from "../components/dashboard/TransactionsTrendChart";
+import TaskCompletionChart from "../components/dashboard/TaskCompletionChart";
+import StockHealthChart from "../components/dashboard/StockHealthChart";
 import OutcomeDialog from "../components/tasks/OutcomeDialog";
 import { taskTypeLabel } from "../components/tasks/TaskForm";
 import { useToast } from "@/components/ui/use-toast";
@@ -341,6 +344,14 @@ function AdminDashboard({ user }) {
         <LowStockAlert products={products} />
         <FinancialAlerts transactions={transactions} />
       </div>
+
+      {/* Performance Trend Charts */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <TaskCompletionChart tasks={tasks} />
+        <TransactionsTrendChart transactions={transactions} />
+      </div>
+
+      <StockHealthChart products={products} />
 
       {/* Main 2-col layout */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
