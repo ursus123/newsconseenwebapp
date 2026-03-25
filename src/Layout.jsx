@@ -28,7 +28,7 @@ import {
   Wrench,
   TrendingUp,
 } from "lucide-react";
-import TrialBanner from "@/components/shared/TrialBanner";
+import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { usePermissions } from "@/components/shared/usePermissions";
@@ -266,12 +266,7 @@ export default function Layout({ children, currentPageName }) {
     root.style.setProperty("--brand-accent",    branding.accentColor);
   }, [branding.primaryColor, branding.secondaryColor, branding.accentColor]);
 
-  const { data: trialEnterprises = [] } = useQuery({
-    queryKey: ["trial_enterprise", currentUser?.company_id],
-    queryFn: () => base44.entities.Enterprise.filter({ enterprise_name: currentUser.company_id }),
-    enabled: !!currentUser?.company_id && currentUser?.role !== "super_admin",
-  });
-  const trialEnterprise = trialEnterprises.find((e) => e.enterprise_name === currentUser?.company_id) || trialEnterprises[0];
+
 
   // Build role-aware nav sections
   const role = currentUser?.role || "user";
@@ -296,7 +291,7 @@ export default function Layout({ children, currentPageName }) {
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
       <NetworkBanner />
-      <TrialBanner enterprise={trialEnterprise} userRole={currentUser?.role} />
+      <TrialBannerWrapper currentUser={currentUser} />
       <div className="flex flex-1 overflow-hidden">
 
         {/* Mobile overlay */}
