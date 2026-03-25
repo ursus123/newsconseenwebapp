@@ -172,10 +172,10 @@ export default function Desktop() {
 
         {wm.windows.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <div className="text-center opacity-25">
-              <div className="text-6xl mb-4">🖥️</div>
-              <p className="text-white text-lg font-medium">Newsconseen Desktop</p>
-              <p className="text-slate-300 text-sm mt-1">Double-click an icon or press Ctrl+Space</p>
+            <div className="text-center" style={{ opacity: 0.18 }}>
+              <div className="text-7xl mb-4">🖥️</div>
+              <p className={`text-lg font-semibold ${isLight ? "text-slate-700" : "text-white"}`}>Newsconseen Desktop</p>
+              <p className={`text-sm mt-1 ${isLight ? "text-slate-500" : "text-slate-300"}`}>Double-click an icon or press Ctrl+Space</p>
             </div>
           </div>
         )}
