@@ -88,19 +88,31 @@ export default function Desktop() {
     return () => window.removeEventListener("keydown", onKey);
   }, [launcher]);
 
+  const wp = WALLPAPERS[wallpaperIdx] || WALLPAPERS[0];
+  const isLight = wallpaperIdx >= 5;
+
   return (
     <div
       className="fixed inset-0 overflow-hidden"
-      style={{ background: WALLPAPERS[wallpaperIdx], cursor: "default" }}
+      style={{ background: wp.value, cursor: "default" }}
       onContextMenu={handleContextMenu}
       onClick={() => { setContextMenu(null); }}
     >
-      {/* Grid overlay */}
+      {/* Subtle dot grid overlay */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px)",
+          backgroundImage: `radial-gradient(circle, ${isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.035)"} 1px, transparent 1px)`,
           backgroundSize: "32px 32px",
+        }}
+      />
+      {/* Vignette */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: isLight
+            ? "radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.12) 100%)"
+            : "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.5) 100%)",
         }}
       />
 
