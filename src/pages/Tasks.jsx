@@ -325,10 +325,18 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   };
 
   const bulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Task.delete(id);
+    let deleted = 0;
+    for (const id of selectedIds) {
+      try {
+        await base44.entities.Task.delete(id);
+        deleted++;
+      } catch (e) {
+        // Task may have already been deleted or not found — skip it
+      }
+    }
     invalidate();
     clearSelection();
-    toast({ title: `${selectedIds.length} tasks deleted` });
+    toast({ title: `${deleted} task${deleted !== 1 ? "s" : ""} deleted` });
   };
 
   const renderCard = (task, selectable = false) => (
