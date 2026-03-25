@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { X, Minus, Maximize2, Minimize2, ExternalLink } from "lucide-react";
 
 const TITLE_H = 36;
