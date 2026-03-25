@@ -66,12 +66,14 @@ const TYPE_TABS = [
 ];
 
 const QUICK_ADDS = [
-  { type: "person_enterprise", icon: Users, label: "Person → Enterprise", cls: "bg-blue-600 hover:bg-blue-700" },
-  { type: "person_service", icon: Wrench, label: "Person → Service", cls: "bg-cyan-600 hover:bg-cyan-700" },
-  { type: "person_address", icon: MapPin, label: "Person → Address", cls: "bg-teal-600 hover:bg-teal-700" },
-  { type: "item_enterprise", icon: Building2, label: "Item → Enterprise", cls: "bg-purple-600 hover:bg-purple-700" },
-  { type: "item_person", icon: Package, label: "Item → Person", cls: "bg-amber-500 hover:bg-amber-600" },
-  { type: "enterprise_service", icon: Link2, label: "Enterprise → Service", cls: "bg-indigo-600 hover:bg-indigo-700" },
+  { type: "person_enterprise",    icon: Users,     label: "Person → Enterprise",    cls: "bg-blue-600 hover:bg-blue-700" },
+  { type: "person_person",        icon: Users,     label: "Person → Person",        cls: "bg-rose-600 hover:bg-rose-700" },
+  { type: "enterprise_enterprise",icon: Building2, label: "Enterprise → Enterprise",cls: "bg-violet-600 hover:bg-violet-700" },
+  { type: "person_service",       icon: Wrench,    label: "Person → Service",       cls: "bg-cyan-600 hover:bg-cyan-700" },
+  { type: "person_address",       icon: MapPin,    label: "Person → Address",       cls: "bg-teal-600 hover:bg-teal-700" },
+  { type: "item_enterprise",      icon: Building2, label: "Item → Enterprise",      cls: "bg-purple-600 hover:bg-purple-700" },
+  { type: "item_person",          icon: Package,   label: "Item → Person",          cls: "bg-amber-500 hover:bg-amber-600" },
+  { type: "enterprise_service",   icon: Link2,     label: "Enterprise → Service",   cls: "bg-indigo-600 hover:bg-indigo-700" },
 ];
 
 const REL_PREVIEW_COLS = [
