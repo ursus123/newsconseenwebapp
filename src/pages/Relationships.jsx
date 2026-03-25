@@ -122,7 +122,16 @@ export default function Relationships() {
   const { data: addresses = [] } = useQuery({ queryKey: ["addresses", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Address), enabled: currentUser !== null });
 
   const createMut = useMutation({ mutationFn: (d) => base44.entities.Relationship.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); setFormOpen(false); setFormPrefill(null); } });
-  const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Relationship.update(id, data), onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); setFormOpen(false); setEditing(null); setEndTarget(null); } });
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Relationship.update(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["relationships"] });
+      setFormOpen(false);
+      setEditing(null);
+      setEndTarget(null);
+      toast({ title: "Relationship updated" });
+    },
+  });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Relationship.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); setDeleting(null); } });
 
   const handleSubmit = (data, saveAndNew = false) => {
