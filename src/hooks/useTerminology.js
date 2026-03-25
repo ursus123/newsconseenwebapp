@@ -6,6 +6,7 @@ export function useTerminology(currentUser) {
   const { data: enterprise } = useQuery({
     queryKey: ["primary_enterprise", currentUser?.company_id],
     queryFn: async () => {
+      if (!currentUser?.company_id) return null;
       const results = await base44.entities.Enterprise.filter({
         company_id: currentUser.company_id,
       });

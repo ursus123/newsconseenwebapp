@@ -35,7 +35,6 @@ import { usePermissions } from "@/components/shared/usePermissions";
 import TenantGuard from "@/components/shared/TenantGuard";
 import { useBranding } from "@/hooks/useBranding";
 import NetworkBanner from "@/components/shared/NetworkBanner";
-import { useTerminology } from "@/hooks/useTerminology";
 
 // ─── Role-aware nav config ────────────────────────────────────────────────────
 const NAV_CONFIG = {
@@ -252,8 +251,14 @@ export default function Layout({ children, currentPageName }) {
       .catch(() => {});
   }, [currentUser?.company_id]);
 
-  const { t } = useTerminology(currentUser);
-  const branding = useBranding(currentUser);
+  const branding = currentUser ? useBranding(currentUser) : { 
+    logoUrl: null,
+    appName: "Newsconseen",
+    primaryColor: "hsl(var(--primary))",
+    secondaryColor: "hsl(var(--secondary))",
+    accentColor: "hsl(var(--accent))",
+    hideNewsconseen: false
+  };
 
   useEffect(() => {
     const root = document.documentElement;
@@ -279,14 +284,14 @@ export default function Layout({ children, currentPageName }) {
     setSidebarOpen(false);
   };
 
-  // Build adaptive labels for terminology-aware nav items
+  // Build adaptive labels - use default names (terminology hooks are in children)
   const ADAPTIVE_LABELS = {
-    People:       t("person_plural"),
-    Products:     t("product_plural"),
-    Addresses:    t("address_plural"),
-    Services:     t("service_plural"),
-    Tasks:        t("task_plural"),
-    Transactions: t("transaction_plural"),
+    People:       "People",
+    Products:     "Products",
+    Addresses:    "Addresses",
+    Services:     "Services",
+    Tasks:        "Tasks",
+    Transactions: "Transactions",
   };
 
   return (
