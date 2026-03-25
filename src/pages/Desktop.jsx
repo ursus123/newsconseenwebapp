@@ -182,6 +182,10 @@ export default function Desktop() {
         user={user}
       />
 
+      {/* PWA: Offline indicator + Install banner */}
+      <OfflineIndicator isOnline={pwa.isOnline} />
+      <PWAInstallBanner canInstall={pwa.canInstall} onInstall={pwa.promptInstall} />
+
       {/* Right-click context menu */}
       {contextMenu && (
         <div
