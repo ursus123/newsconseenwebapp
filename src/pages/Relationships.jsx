@@ -55,6 +55,8 @@ const columns = [
 const TYPE_TABS = [
   { id: "all", label: "All" },
   { id: "person_enterprise", label: "Person → Enterprise" },
+  { id: "person_person", label: "Person → Person" },
+  { id: "enterprise_enterprise", label: "Enterprise → Enterprise" },
   { id: "item_enterprise", label: "Item → Enterprise" },
   { id: "item_person", label: "Item → Person" },
   { id: "person_service", label: "Person → Service" },
