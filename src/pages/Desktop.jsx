@@ -105,8 +105,8 @@ export default function Desktop() {
         <DesktopIcons onOpenApp={handleOpenApp} />
       </div>
 
-      {/* Window manager area */}
-      <div className="absolute top-8 left-0 right-0 bottom-14 overflow-hidden">
+      {/* Window layer — windows are sorted by zIndex in the store */}
+      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ pointerEvents: "none" }}>
         {wm.windows.map(win => (
           <AppWindow
             key={win.id}
