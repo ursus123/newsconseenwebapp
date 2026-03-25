@@ -1,15 +1,19 @@
+from .addresses    import AddressSummary
+from .enterprises  import EnterpriseSummary
+from .people       import PeopleSummary
+from .products     import ProductSummary
+from .relationships import RelationshipSummary
+from .services     import ServiceSummary
 from .tasks        import TaskSummary
 from .transactions import TransactionSummary
-from .people       import PeopleSummary
-from .services     import ServiceSummary
-from .enterprises  import EnterpriseSummary
-from .products     import ProductSummary
 
 __all__ = [
+    "AddressSummary",
+    "EnterpriseSummary",
+    "PeopleSummary",
+    "ProductSummary",
+    "RelationshipSummary",
+    "ServiceSummary",
     "TaskSummary",
     "TransactionSummary",
-    "PeopleSummary",
-    "ServiceSummary",
-    "EnterpriseSummary",
-    "ProductSummary",
 ]
