@@ -225,6 +225,8 @@ export default function DesktopIcons({
   }, []);
 
   const DRAG_THRESHOLD = 6; // px before we commit to a drag
+  const onOpenAppRef = useRef(onOpenApp);
+  useEffect(() => { onOpenAppRef.current = onOpenApp; }, [onOpenApp]);
 
   // ── Drag handlers ────────────────────────────────────────────────────────────
   const onMouseDown = useCallback((e, app) => {
@@ -233,11 +235,11 @@ export default function DesktopIcons({
     e.stopPropagation();
     setSelectedId(app.id);
 
-    const pos  = positions[app.id] || { col: 0, row: 0 };
+    const pos = positions[app.id] || { col: 0, row: 0 };
     const { x, y } = cellToPos(pos.col, pos.row);
 
     drag.current = {
-      active: false,       // not dragging yet — waiting for threshold
+      active: false,
       appId:  app.id,
       startMouseX: e.clientX,
       startMouseY: e.clientY,
@@ -254,7 +256,6 @@ export default function DesktopIcons({
       const dx = e.clientX - drag.current.startMouseX;
       const dy = e.clientY - drag.current.startMouseY;
 
-      // Only commit to drag once threshold is exceeded
       if (!drag.current.active) {
         if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
         drag.current.active = true;
@@ -268,26 +269,25 @@ export default function DesktopIcons({
       setDragPos({ x: newX, y: newY });
     };
 
-    const onUp = (e) => {
+    const onUp = () => {
       if (!drag.current.appId) return;
       const { appId, active, currentX, currentY } = drag.current;
-      drag.current.appId  = null;
-      drag.current.active = false;
+      // Reset ref AFTER reading values
+      drag.current = { active: false, appId: null, startMouseX: 0, startMouseY: 0, startIconX: 0, startIconY: 0, currentX: 0, currentY: 0 };
+
+      setDraggingId(null);
 
       if (active) {
-        // Snap to grid cell after drag
         const { col, row } = posToCell(currentX, currentY);
         setPositions(prev => {
           const next = { ...prev, [appId]: { col, row } };
           savePositions(next);
           return next;
         });
-        setDraggingId(null);
       } else {
-        // No drag movement → treat as click → open app
+        // Simple click — open the app
         const app = DESKTOP_APPS.find(a => a.id === appId);
-        if (app) onOpenApp(app);
-        setDraggingId(null);
+        if (app) onOpenAppRef.current(app);
       }
     };
 
@@ -297,7 +297,7 @@ export default function DesktopIcons({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup",   onUp);
     };
-  }, [savePositions, onOpenApp]);
+  }, [savePositions]); // stable — onOpenApp accessed via ref
 
   // ── Context menu ─────────────────────────────────────────────────────────────
   const handleContextMenu = useCallback((e, app) => {
