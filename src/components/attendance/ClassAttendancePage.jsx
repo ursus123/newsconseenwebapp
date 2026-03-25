@@ -23,30 +23,42 @@ export default function ClassAttendancePage({ classObj, currentUser, onBack, onO
 
   const loadData = async () => {
     setLoading(true);
-    const [rels, tasks] = await Promise.all([
+    const [rels, tasks, allPeople] = await Promise.all([
       base44.entities.Relationship.filter({ enterprise_name: classObj.enterprise_name, status: "active" }),
       base44.entities.Task.filter({ task_type: "attendance", enterprise: classObj.id }),
+      base44.entities.Person.list(),
     ]);
 
-    // Roster: role = "student"
-    const studentRels = rels.filter(r => r.role === "student" || r.role === "Student");
+    // Helper: find a person record by the name stored in relationship
+    const findPerson = (name) => {
+      if (!name) return null;
+      const lower = name.trim().toLowerCase();
+      return allPeople.find(p => {
+        const full = `${p.first_name} ${p.last_name}`.trim().toLowerCase();
+        const pref = (p.preferred_name || "").toLowerCase();
+        return full === lower || pref === lower;
+      });
+    };
+
+    // Roster: role = "student" (case-insensitive)
+    const studentRels = rels.filter(r => (r.role || "").toLowerCase() === "student");
     // Teacher
-    const teacherRel = rels.find(r => r.role === "teacher" || r.role === "Teacher");
+    const teacherRel = rels.find(r => (r.role || "").toLowerCase() === "teacher");
     if (teacherRel?.person_name) {
-      const people = await base44.entities.Person.filter({ preferred_name: teacherRel.person_name });
-      const fallback = people[0];
-      setTeacher(fallback || { first_name: teacherRel.person_name, last_name: "" });
+      const found = findPerson(teacherRel.person_name);
+      setTeacher(found || { first_name: teacherRel.person_name, last_name: "" });
     }
 
-    // Load person records for students
-    const studentPeople = [];
-    for (const rel of studentRels) {
-      if (rel.person_name) {
-        const found = await base44.entities.Person.filter({ preferred_name: rel.person_name });
-        if (found[0]) studentPeople.push({ ...found[0], _relId: rel.id });
-        else studentPeople.push({ id: rel.id, first_name: rel.person_name, last_name: "", _relId: rel.id });
-      }
-    }
+    // Build roster from relationship person_name
+    const studentPeople = studentRels
+      .filter(rel => rel.person_name)
+      .map(rel => {
+        const found = findPerson(rel.person_name);
+        if (found) return { ...found, _relId: rel.id };
+        // fallback: split name
+        const parts = rel.person_name.trim().split(" ");
+        return { id: `rel-${rel.id}`, first_name: parts[0] || rel.person_name, last_name: parts.slice(1).join(" "), _relId: rel.id };
+      });
     setRoster(studentPeople);
 
     // Initialize all to "present"
