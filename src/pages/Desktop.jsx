@@ -149,8 +149,8 @@ export default function Desktop() {
         <span className={`text-xs hidden sm:block ${isLight ? "text-slate-400" : "text-slate-500"}`}>Ctrl+Space for launcher</span>
       </div>
 
-      {/* Widget layer — sits above icons, below windows */}
-      <div className="absolute top-8 left-0 right-0 bottom-14 pointer-events-none" style={{ zIndex: 4 }}>
+      {/* Widget layer — z-index 5, above icons, below windows (z-10) */}
+      <div className="absolute top-8 left-0 right-0 bottom-14 pointer-events-none" style={{ zIndex: 5 }}>
         <div className="absolute inset-0" style={{ pointerEvents: "none" }}>
           <div style={{ pointerEvents: "all", position: "relative", width: "100%", height: "100%" }}>
             <DesktopWidgets isLight={isLight} />
@@ -158,8 +158,8 @@ export default function Desktop() {
         </div>
       </div>
 
-      {/* Desktop icons */}
-      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ overflow: "hidden" }}>
+      {/* Desktop icons — z-index 3, below windows */}
+      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ overflow: "hidden", zIndex: 3 }}>
         <DesktopIcons
           onOpenApp={handleOpenApp}
           pinnedDesktop={launcher.pinnedDesktop}
