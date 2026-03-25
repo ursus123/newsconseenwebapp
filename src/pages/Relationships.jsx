@@ -27,13 +27,15 @@ import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 
 const TYPE_CONFIG = {
-  person_enterprise:  { label: "Person → Enterprise",  color: "bg-blue-50 text-blue-700" },
-  item_enterprise:    { label: "Item → Enterprise",    color: "bg-purple-50 text-purple-700" },
-  item_person:        { label: "Item → Person",        color: "bg-amber-50 text-amber-700" },
-  person_service:     { label: "Person → Service",     color: "bg-cyan-50 text-cyan-700" },
-  enterprise_service: { label: "Enterprise → Service", color: "bg-indigo-50 text-indigo-700" },
-  person_address:     { label: "Person → Address",     color: "bg-teal-50 text-teal-700" },
-  enterprise_address: { label: "Enterprise → Address", color: "bg-emerald-50 text-emerald-700" },
+  person_enterprise:    { label: "Person → Enterprise",    color: "bg-blue-50 text-blue-700" },
+  item_enterprise:      { label: "Item → Enterprise",      color: "bg-purple-50 text-purple-700" },
+  item_person:          { label: "Item → Person",          color: "bg-amber-50 text-amber-700" },
+  person_service:       { label: "Person → Service",       color: "bg-cyan-50 text-cyan-700" },
+  enterprise_service:   { label: "Enterprise → Service",   color: "bg-indigo-50 text-indigo-700" },
+  person_address:       { label: "Person → Address",       color: "bg-teal-50 text-teal-700" },
+  enterprise_address:   { label: "Enterprise → Address",   color: "bg-emerald-50 text-emerald-700" },
+  person_person:        { label: "Person → Person",        color: "bg-rose-50 text-rose-700" },
+  enterprise_enterprise:{ label: "Enterprise → Enterprise",color: "bg-violet-50 text-violet-700" },
 };
 
 const statusColor = (s) => ({ active: "bg-emerald-50 text-emerald-700", ended: "bg-rose-50 text-rose-600", archived: "bg-slate-100 text-slate-400" }[s] || "bg-slate-100 text-slate-600");
