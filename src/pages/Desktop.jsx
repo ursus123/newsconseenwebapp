@@ -169,8 +169,8 @@ export default function Desktop() {
         />
       </div>
 
-      {/* Window layer — no pointer-events block; empty areas pass clicks to icons below */}
-      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ zIndex: 10 }}>
+      {/* Window layer — pointer-events:none on container so empty space doesn't block icons */}
+      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ zIndex: 10, pointerEvents: "none" }}>
         {wm.windows.map(win => (
           <AppWindow
             key={win.id}
