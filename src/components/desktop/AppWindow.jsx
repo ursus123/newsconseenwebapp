@@ -102,6 +102,22 @@ export default function AppWindow({ win, onClose, onFocus, onMinimize, onMaximiz
 
   if (win.minimized) return null;
 
+  // Snap preview overlay rendered at viewport level via portal-like absolute positioning
+  const snapOverlay = snapPreview ? (
+    <div
+      className="fixed pointer-events-none z-[9998] transition-all duration-100"
+      style={{
+        top: 32,
+        left:   snapPreview === "left"  ? 0 : "50%",
+        width:  "50%",
+        bottom: 52,
+        background: "rgba(99,102,241,0.18)",
+        border:     "2px solid rgba(99,102,241,0.5)",
+        borderRadius: 12,
+      }}
+    />
+  ) : null;
+
   const winStyle = win.maximized
     ? {
         left: win.x,
@@ -122,6 +138,8 @@ export default function AppWindow({ win, onClose, onFocus, onMinimize, onMaximiz
   const appUrl = window.location.origin + win.page;
 
   return (
+    <>
+    {snapOverlay}
     <div
       className="absolute flex flex-col overflow-hidden shadow-2xl"
       style={{
@@ -219,5 +237,6 @@ export default function AppWindow({ win, onClose, onFocus, onMinimize, onMaximiz
         />
       ))}
     </div>
+    </>
   );
 }
