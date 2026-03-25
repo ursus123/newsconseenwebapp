@@ -745,6 +745,40 @@ Respond with just the insight text, no headers or bullet points.`,
                 </div>
               )}
             </div>
+
+            {/* AI Insight Panel */}
+            {previewData && previewData.length > 0 && (
+              <div className="mt-4 bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+                    <span className="text-xs font-semibold text-slate-700">AI Insight</span>
+                  </div>
+                  <button
+                    onClick={generateInsight}
+                    disabled={aiLoading}
+                    className="flex items-center gap-1 text-[11px] font-medium text-violet-600 hover:text-violet-700 disabled:opacity-50 transition-colors"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${aiLoading ? "animate-spin" : ""}`} />
+                    {aiInsight ? "Regenerate" : "Generate"}
+                  </button>
+                </div>
+                {aiLoading && (
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <div className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <div className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <div className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <span>Analyzing data…</span>
+                  </div>
+                )}
+                {!aiLoading && aiInsight && (
+                  <p className="text-xs text-slate-600 leading-relaxed">{aiInsight}</p>
+                )}
+                {!aiLoading && !aiInsight && (
+                  <p className="text-[11px] text-slate-400 italic">Click "Generate" to get an AI-powered insight about this chart data.</p>
+                )}
+              </div>
+            )}
           </div>
           </div>
         )}
