@@ -152,6 +152,8 @@ export default function Taskbar({
   onToggleTaskbarPin,
   onOpenSettings,
   user,
+  onProfileClick,
+  profileSwitcherRef,
 }) {
   const [ctxMenu, setCtxMenu] = useState(null); // { x, y, appId, winId, isPinned }
 
@@ -266,6 +268,18 @@ export default function Taskbar({
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
+          </button>
+        </Tooltip>
+
+        {/* Profiles */}
+        <Tooltip label="Switch Profile">
+          <button
+            onClick={onProfileClick}
+            ref={profileSwitcherRef}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all text-sm font-bold"
+            title="Switch Profile"
+          >
+            👤
           </button>
         </Tooltip>
 

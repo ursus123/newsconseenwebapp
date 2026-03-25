@@ -2,12 +2,14 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useWindowManager } from "@/desktop/windowStore";
 import { useNotifications } from "@/desktop/notificationStore";
 import { useLauncherStore } from "@/desktop/launcherStore";
+import { useProfileStore } from "@/desktop/profileStore";
 import { DESKTOP_APPS } from "@/desktop/desktopApps";
 import AppWindow from "@/components/desktop/AppWindow";
 import Taskbar from "@/components/desktop/Taskbar";
 import AppLauncher from "@/components/desktop/AppLauncher";
 import NotificationCenter from "@/components/desktop/NotificationCenter";
 import DesktopIcons from "@/components/desktop/DesktopIcons";
+import ProfileSwitcher from "@/components/desktop/ProfileSwitcher";
 import OfflineIndicator from "@/components/desktop/OfflineIndicator";
 import PWAInstallBanner from "@/components/desktop/PWAInstallBanner";
 import GlobalSearch from "@/components/desktop/GlobalSearch";
@@ -33,31 +35,58 @@ export default function Desktop() {
   const [wallpaperIdx, setWallpaperIdx] = useState(0);
   const [contextMenu, setContextMenu] = useState(null);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [profileSwitcherOpen, setProfileSwitcherOpen] = useState(false);
+  const profileSwitcherRef = useRef(null);
   const quickActionsRef = useRef(null);
 
-  const wm         = useWindowManager();
-  const notifStore = useNotifications();
-  const launcher   = useLauncherStore();
-  const pwa        = usePWA();
+  const wm          = useWindowManager();
+  const notifStore  = useNotifications();
+  const launcher    = useLauncherStore();
+  const profileMgr  = useProfileStore();
+  const pwa         = usePWA();
 
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
-    const saved = localStorage.getItem("desktop_wallpaper");
-    if (saved !== null) setWallpaperIdx(parseInt(saved, 10));
+    
+    // Load wallpaper from current profile
+    setWallpaperIdx(profileMgr.currentProfile.theme.wallpaperIdx);
 
     // Listen for theme changes dispatched by DesktopSettings
     const onTheme = (e) => {
-      if (e.detail?.wpIdx !== undefined) setWallpaperIdx(e.detail.wpIdx);
+      if (e.detail?.wpIdx !== undefined) {
+        setWallpaperIdx(e.detail.wpIdx);
+        profileMgr.updateProfileTheme(profileMgr.currentProfileId, { wallpaperIdx: e.detail.wpIdx });
+      }
     };
     window.addEventListener("desktop-theme-change", onTheme);
     return () => window.removeEventListener("desktop-theme-change", onTheme);
-  }, []);
+  }, [profileMgr.currentProfileId, profileMgr]);
 
-  // Close quick actions popover on outside click
+  // Handle profile switch: close all windows, reload icons/apps
+  const handleSwitchProfile = useCallback((profileId) => {
+    // Close all open windows
+    wm.windows.forEach((win) => wm.closeWindow(win.id));
+    
+    // Switch profile
+    profileMgr.switchProfile(profileId);
+    
+    // Reload wallpaper
+    const newProfile = profileMgr.profiles.find((p) => p.id === profileId);
+    if (newProfile) {
+      setWallpaperIdx(newProfile.theme.wallpaperIdx);
+    }
+    
+    setProfileSwitcherOpen(false);
+  }, [wm, profileMgr]);
+
+  // Close popovers on outside click
   useEffect(() => {
     const handler = (e) => {
       if (quickActionsRef.current && !quickActionsRef.current.contains(e.target)) {
         setQuickActionsOpen(false);
+      }
+      if (profileSwitcherRef.current && !profileSwitcherRef.current.contains(e.target)) {
+        setProfileSwitcherOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -241,10 +270,20 @@ export default function Desktop() {
       <div className="absolute top-8 left-0 right-0 bottom-14" style={{ zIndex: 3 }}>
         <DesktopIcons
           onOpenApp={handleOpenApp}
-          pinnedDesktop={launcher.pinnedDesktop}
-          pinnedTaskbar={launcher.pinnedTaskbar}
-          onToggleTaskbarPin={launcher.toggleTaskbarPin}
-          onToggleDesktopPin={launcher.toggleDesktopPin}
+          pinnedDesktop={profileMgr.currentProfile.desktopIcons}
+          pinnedTaskbar={profileMgr.currentProfile.pinnedApps}
+          onToggleTaskbarPin={(appId) => {
+            const next = profileMgr.currentProfile.pinnedApps.includes(appId)
+              ? profileMgr.currentProfile.pinnedApps.filter(id => id !== appId)
+              : [...profileMgr.currentProfile.pinnedApps, appId];
+            profileMgr.updatePinnedApps(profileMgr.currentProfileId, next);
+          }}
+          onToggleDesktopPin={(appId) => {
+            const next = profileMgr.currentProfile.desktopIcons.includes(appId)
+              ? profileMgr.currentProfile.desktopIcons.filter(id => id !== appId)
+              : [...profileMgr.currentProfile.desktopIcons, appId];
+            profileMgr.updateDesktopIcons(profileMgr.currentProfileId, next);
+          }}
         />
       </div>
 
@@ -308,12 +347,44 @@ export default function Desktop() {
         onToggleLauncher={launcher.toggleLauncher}
         onToggleNotifications={() => setNotifOpen(v => !v)}
         unreadCount={notifStore.unreadCount}
-        pinnedApps={launcher.pinnedTaskbar}
+        pinnedApps={profileMgr.currentProfile.pinnedApps}
         launcherOpen={launcher.isOpen}
-        onToggleTaskbarPin={launcher.toggleTaskbarPin}
+        onToggleTaskbarPin={(appId) => {
+          const next = profileMgr.currentProfile.pinnedApps.includes(appId)
+            ? profileMgr.currentProfile.pinnedApps.filter(id => id !== appId)
+            : [...profileMgr.currentProfile.pinnedApps, appId];
+          profileMgr.updatePinnedApps(profileMgr.currentProfileId, next);
+        }}
         onOpenSettings={() => handleOpenApp(DESKTOP_APPS.find(a => a.id === "settings"))}
         user={user}
+        onProfileClick={() => setProfileSwitcherOpen(v => !v)}
+        profileSwitcherRef={profileSwitcherRef}
       />
+
+      {/* Profile Switcher */}
+      {profileSwitcherOpen && (
+        <div
+          ref={profileSwitcherRef}
+          style={{
+            position: "fixed",
+            bottom: 60,
+            right: 20,
+            zIndex: 100,
+          }}
+        >
+          <ProfileSwitcher
+            profiles={profileMgr.profiles}
+            currentProfileId={profileMgr.currentProfileId}
+            onSwitchProfile={handleSwitchProfile}
+            onAddProfile={(name, type, enterpriseId) => {
+              const newProfile = profileMgr.addProfile(name, type, enterpriseId);
+              handleSwitchProfile(newProfile.id);
+            }}
+            onDeleteProfile={profileMgr.deleteProfile}
+            isLight={isLight}
+          />
+        </div>
+      )}
 
       {/* PWA */}
       <OfflineIndicator isOnline={pwa.isOnline} />
