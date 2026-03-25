@@ -1,9 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { RefreshCw, AlertTriangle, Home, Bug } from "lucide-react";
 
 function ErrorFallback({ error, errorInfo, pageName, reported, reporting, onRetry, onGoHome, isTopLevel }) {
-  const [detailsOpen, setDetailsOpen] = React.useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const content = (
     <div className="max-w-md w-full text-center space-y-6">
