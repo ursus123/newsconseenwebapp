@@ -121,14 +121,7 @@ export default function Relationships() {
   const { data: services = [] } = useQuery({ queryKey: ["services", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Service), enabled: currentUser !== null });
   const { data: addresses = [] } = useQuery({ queryKey: ["addresses", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Address), enabled: currentUser !== null });
 
-  const createMut = useMutation({
-    mutationFn: (d) => base44.entities.Relationship.create(withScope(d)),
-    onSuccess: (_, vars, ctx) => {
-      qc.invalidateQueries({ queryKey: ["relationships"] });
-      toast({ title: "Relationship created" });
-      // saveAndNew is handled in handleSubmit via state
-    },
-  });
+
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Relationship.update(id, data),
     onSuccess: () => {
