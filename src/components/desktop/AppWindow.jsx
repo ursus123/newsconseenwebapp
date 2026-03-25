@@ -10,8 +10,6 @@ export default function AppWindow({
   onMove,
   onResize,
 }) {
-  const dragRef   = useRef(null);
-  const resizeRef = useRef(null);
   const windowRef = useRef(null);
 
   // ── Drag ──────────────────────────────────────────────────────────────────
@@ -22,17 +20,17 @@ export default function AppWindow({
     const startX = e.clientX - win.x;
     const startY = e.clientY - win.y;
 
-    const onMove = (me) => {
+    const handleMouseMove = (me) => {
       const nx = Math.max(0, me.clientX - startX);
       const ny = Math.max(0, me.clientY - startY);
-      onMove?.(win.id, nx, ny);
+      onMove(win.id, nx, ny);
     };
-    const onUp = () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+    const handleMouseUp = () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
   }, [win, onFocus, onMove]);
 
   // ── Resize ─────────────────────────────────────────────────────────────────
