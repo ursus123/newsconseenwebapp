@@ -17,6 +17,7 @@ import DataRepair from './pages/DataRepair';
 import StockCounter from './pages/StockCounter';
 import MarketIntelligence from './pages/MarketIntelligence';
 import MarketIntelligencePDF from './pages/MarketIntelligencePDF';
+import AttendanceRegister from './pages/AttendanceRegister';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
