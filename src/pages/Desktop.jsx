@@ -30,6 +30,7 @@ export default function Desktop() {
   const wm           = useWindowManager();
   const notifStore   = useNotifications();
   const launcher     = useLauncherStore();
+  const pwa          = usePWA();
 
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
