@@ -126,8 +126,15 @@ export default function Relationships() {
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Relationship.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); setDeleting(null); } });
 
   const handleSubmit = (data, saveAndNew = false) => {
-    if (editing) { updateMut.mutate({ id: editing.id, data }); }
-    else { createMut.mutate(data); if (saveAndNew) { setFormOpen(true); } }
+    if (editing) {
+      updateMut.mutate({ id: editing.id, data });
+    } else {
+      createMut.mutate(data);
+      if (saveAndNew) {
+        // reopen after create
+        setTimeout(() => { setFormOpen(true); setEditing(null); setFormPrefill(null); }, 100);
+      }
+    }
   };
 
   const handleEndDialog = (data) => updateMut.mutate({ id: endTarget.id, data: { ...endTarget, ...data } });
