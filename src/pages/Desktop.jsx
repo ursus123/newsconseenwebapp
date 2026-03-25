@@ -159,7 +159,7 @@ export default function Desktop() {
       </div>
 
       {/* Desktop icons — z-index 3, below windows */}
-      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ overflow: "hidden", zIndex: 3 }}>
+      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ zIndex: 3 }}>
         <DesktopIcons
           onOpenApp={handleOpenApp}
           pinnedDesktop={launcher.pinnedDesktop}
