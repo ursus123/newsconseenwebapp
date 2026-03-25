@@ -116,11 +116,35 @@ export function useWindowManager() {
     ));
   }, []);
 
+  // ── Snap half-screen (left / right) ───────────────────────────────────────
+  const snapWindow = useCallback((id, side) => {
+    setWindows(prev => prev.map(w => {
+      if (w.id !== id) return w;
+      const halfW  = Math.floor(window.innerWidth / 2);
+      const fullH  = window.innerHeight - TASKBAR_H - TOP_BAR_H;
+      return {
+        ...w,
+        maximized: false,
+        prevX: w.x, prevY: w.y, prevW: w.width, prevH: w.height,
+        x:      side === "left" ? 0 : halfW,
+        y:      TOP_BAR_H,
+        width:  halfW,
+        height: fullH,
+        zIndex: nextZ(),
+        snapped: side,
+      };
+    }));
+  }, []);
+
   // ── Move ──────────────────────────────────────────────────────────────────
   const moveWindow = useCallback((id, x, y) => {
     setWindows(prev => prev.map(w => {
       if (w.id !== id || w.maximized) return w;
       const clamped = clampPos(x, y, w.width, w.height);
+      // If previously snapped and user moves it away, restore original size
+      if (w.snapped) {
+        return { ...w, ...clamped, snapped: null, width: w.prevW || DEFAULT_W, height: w.prevH || DEFAULT_H };
+      }
       return { ...w, ...clamped };
     }));
   }, []);
