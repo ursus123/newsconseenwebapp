@@ -16,5 +16,12 @@ export default defineConfig({
       visualEditAgent: true
     }),
     react(),
-  ]
-});
+  ],
+  resolve: {
+    dedupe: [
+      "react",
+      "react-dom",
+      "@tanstack/react-query",
+    ],
+  },
+})
