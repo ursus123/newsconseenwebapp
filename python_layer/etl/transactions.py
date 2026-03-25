@@ -30,6 +30,13 @@ EXPENSE_TYPES = {
     "other_expense",
 }
 
+# Only these statuses represent committed financial reality.
+# draft   — not yet approved, must not affect dashboards
+# voided  — cancelled, must not affect dashboards
+# reconciled — finalised, already counted in prior periods
+# posted  — approved and outstanding, the only status we transform
+POSTED_STATUS = "posted"
+
 REQUIRED_COLUMNS = {"id", "status", "amount"}
 
 GROUP_COLUMNS = [
@@ -50,19 +57,24 @@ def extract_transactions() -> pd.DataFrame:
 
 def transform_transactions(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Transform raw transaction records into a financial summary
+    Transform posted transaction records into a financial summary
     suitable for appending to analytics.transaction_summary.
 
+    IMPORTANT: Only transactions with status == "posted" are included.
+    Draft, voided, and reconciled transactions are excluded before
+    any metrics are calculated. This ensures dashboards reflect
+    committed financial reality only.
+
     Produces per-group metrics:
-        total_transactions  — count of transactions in this group
+        total_transactions  — count of posted transactions in this group
         total_amount        — sum of amounts in this group
         avg_amount          — mean amount within this type+status group
+        outstanding_amount  — total posted revenue not yet reconciled
         is_revenue          — True if transaction_type is a revenue type
         is_expense          — True if transaction_type is an expense type
-        is_outstanding      — True if status is posted (invoiced not yet paid)
-        revenue_last_30d    — revenue transactions created in last 30 days
-        revenue_last_7d     — revenue transactions created in last 7 days
-        outstanding_amount  — total amount of posted unpaid invoices
+        revenue_last_7d     — posted revenue transactions in last 7 days
+        revenue_last_30d    — posted revenue transactions in last 30 days
+        expense_last_30d    — posted expense transactions in last 30 days
 
     Groups by: enterprise_id, company_id, transaction_type, status
     """
@@ -79,6 +91,28 @@ def transform_transactions(df: pd.DataFrame) -> pd.DataFrame:
         return _empty_summary()
 
     df = df.copy()
+
+    # ----------------------------------------------------------
+    # STATUS FILTER — posted only
+    # This is the critical gate. Draft and voided transactions
+    # must never reach the aggregation step.
+    # ----------------------------------------------------------
+    total_raw = len(df)
+    df = df[df["status"].str.lower().str.strip() == POSTED_STATUS].copy()
+    posted_count = len(df)
+
+    logger.info(
+        "transform_transactions: %d raw records → %d posted (filtered out %d draft/voided/reconciled)",
+        total_raw, posted_count, total_raw - posted_count,
+    )
+
+    if df.empty:
+        logger.warning(
+            "transform_transactions: no posted transactions found — "
+            "financial dashboards will show zero. "
+            "Confirm transactions have been posted in Base44."
+        )
+        return _empty_summary()
 
     # ----------------------------------------------------------
     # Parse and clean numeric fields
@@ -108,12 +142,11 @@ def transform_transactions(df: pd.DataFrame) -> pd.DataFrame:
     df["is_revenue"] = tx_type.isin(REVENUE_TYPES)
     df["is_expense"] = tx_type.isin(EXPENSE_TYPES)
 
-    # outstanding = posted invoice not yet paid
-    df["is_outstanding"] = df["status"] == "posted"
-    df["outstanding_amount"] = df["amount"].where(df["is_outstanding"], 0)
+    # All posted revenue is outstanding (approved but not yet reconciled)
+    df["outstanding_amount"] = df["amount"].where(df["is_revenue"], 0)
 
     # ----------------------------------------------------------
-    # Windowed revenue flags
+    # Windowed revenue/expense flags
     # ----------------------------------------------------------
     df["revenue_last_7d"] = (
         df["is_revenue"]
@@ -153,9 +186,7 @@ def transform_transactions(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # ----------------------------------------------------------
-    # Add type classification columns to the summary.
-    # Re-derive from transaction_type in the summary rows
-    # since agg dropped the original boolean columns.
+    # Re-derive classification columns after groupby
     # ----------------------------------------------------------
     if "transaction_type" in summary.columns:
         summary["is_revenue"] = summary["transaction_type"].isin(REVENUE_TYPES)
@@ -176,8 +207,8 @@ def transform_transactions(df: pd.DataFrame) -> pd.DataFrame:
         summary[col] = summary[col].fillna(0).astype(int)
 
     logger.info(
-        "transform_transactions: produced %d summary rows from %d raw records",
-        len(summary), len(df),
+        "transform_transactions: produced %d summary rows from %d posted records",
+        len(summary), posted_count,
     )
 
     return summary
