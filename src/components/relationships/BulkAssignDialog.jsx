@@ -138,15 +138,17 @@ export default function BulkAssignDialog({ open, onClose, onAssign, people = [],
     const pairs = [];
 
     const relType = {
-      person_enterprise: "person_enterprise",
-      enterprise_person: "person_enterprise",
-      people_enterprises: "person_enterprise",
-      item_enterprise: "item_enterprise",
-      item_person: "item_person",
-      person_service: "person_service",
-      enterprise_service: "enterprise_service",
-      person_address: "person_address",
-      enterprise_address: "enterprise_address",
+      person_enterprise:     "person_enterprise",
+      enterprise_person:     "person_enterprise",
+      people_enterprises:    "person_enterprise",
+      item_enterprise:       "item_enterprise",
+      item_person:           "item_person",
+      person_service:        "person_service",
+      enterprise_service:    "enterprise_service",
+      person_address:        "person_address",
+      enterprise_address:    "enterprise_address",
+      person_person:         "person_person",
+      enterprise_enterprise: "enterprise_enterprise",
     }[mode];
 
     if (isManyToMany) {
