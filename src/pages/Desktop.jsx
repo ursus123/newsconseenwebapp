@@ -32,6 +32,13 @@ export default function Desktop() {
     base44.auth.me().then(setUser).catch(() => {});
     const saved = localStorage.getItem("desktop_wallpaper");
     if (saved !== null) setWallpaperIdx(parseInt(saved, 10));
+
+    // Listen for theme changes dispatched by DesktopSettings
+    const onTheme = (e) => {
+      if (e.detail?.wpIdx !== undefined) setWallpaperIdx(e.detail.wpIdx);
+    };
+    window.addEventListener("desktop-theme-change", onTheme);
+    return () => window.removeEventListener("desktop-theme-change", onTheme);
   }, []);
 
   const handleOpenApp = useCallback((app) => {
