@@ -148,7 +148,10 @@ export default function Desktop() {
         notifications={notifStore.notifications}
         onClose={() => setNotifOpen(false)}
         onMarkRead={notifStore.markAsRead}
+        onMarkAllRead={notifStore.markAllRead}
         onClearAll={notifStore.clearAll}
+        onDismissOne={notifStore.dismissOne}
+        onOpenApp={handleOpenApp}
       />
 
       {/* Taskbar */}
