@@ -19,6 +19,7 @@ import MarketIntelligence from './pages/MarketIntelligence';
 import MarketIntelligencePDF from './pages/MarketIntelligencePDF';
 import AttendanceRegister from './pages/AttendanceRegister';
 import Desktop from './pages/Desktop';
+import DesktopSettings from './pages/DesktopSettings';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
@@ -105,6 +106,7 @@ const AuthenticatedApp = () => {
       <Route path="/AttendanceRegister" element={<LayoutWrapper currentPageName="Attendance Register"><AttendanceRegister /></LayoutWrapper>} />
       {/* Desktop Shell — NO layout wrapper, full screen */}
       <Route path="/Desktop" element={<Desktop />} />
+      <Route path="/DesktopSettings" element={<DesktopSettings />} />
 
       <Route path="*" element={<PageNotFound />} />
     </Routes>
