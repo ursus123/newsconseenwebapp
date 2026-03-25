@@ -148,7 +148,7 @@ export default function AppWindow({ win, onClose, onFocus, onMinimize, onMaximiz
         borderRadius: win.maximized ? 0 : 12,
         border: "1px solid rgba(255,255,255,0.12)",
         background: "#0f172a",
-        pointerEvents: "all",
+        pointerEvents: win.minimized ? "none" : "all",
         userSelect: isDragging ? "none" : "auto",
       }}
       onMouseDown={() => onFocus(win.id)}
