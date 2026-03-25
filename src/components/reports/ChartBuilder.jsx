@@ -52,6 +52,208 @@ const COLOR_SCHEMES = [
 
 const SCHEME_COLOR = { emerald: "#10b981", blue: "#3b82f6", purple: "#8b5cf6", orange: "#f97316", rose: "#f43f5e", amber: "#f59e0b" };
 
+// ─── Entity schema for the visual builder ────────────────────────────────────
+const ENTITY_SCHEMA = {
+  Enterprise:  { table: "enterprises",  icon: "🏢", color: "#6366f1", fields: ["id","enterprise_name","status","enterprise_type","city","country","legal_structure","subscription_tier"] },
+  Person:      { table: "people",       icon: "👤", color: "#0ea5e9", fields: ["id","first_name","last_name","person_type","status","primary_role","city","country","engagement_type"] },
+  Task:        { table: "tasks",        icon: "✅", color: "#f97316", fields: ["id","title","task_type","status","priority","enterprise","assigned_to_name","scheduled_date","due_date","outcome"] },
+  Transaction: { table: "transactions", icon: "💳", color: "#dc2626", fields: ["id","transaction_type","status","amount","net_amount","payment_status","payment_method","enterprise","date"] },
+  Product:     { table: "products",     icon: "📦", color: "#f59e0b", fields: ["id","name","sku","item_type","category","status","stock_quantity","unit_price","cost_price","supplier"] },
+  Service:     { table: "services",     icon: "⚙️", color: "#10b981", fields: ["id","name","category","status","pricing_model","price","service_type"] },
+  Relationship:{ table: "relationships",icon: "🔗", color: "#ec4899", fields: ["id","relationship_type","status","role","person_name","enterprise_name","start_date"] },
+};
+
+const AGGREGATIONS = [
+  { id: "COUNT", label: "Count", desc: "Total number of records" },
+  { id: "SUM",   label: "Sum",   desc: "Sum of a numeric field" },
+  { id: "AVG",   label: "Average", desc: "Average of a numeric field" },
+  { id: "MAX",   label: "Max",   desc: "Maximum value" },
+  { id: "MIN",   label: "Min",   desc: "Minimum value" },
+];
+
+// ─── Visual Query Builder ─────────────────────────────────────────────────────
+function VisualQueryBuilder({ onQueryGenerated }) {
+  const [entity, setEntity]       = useState(null);
+  const [groupBy, setGroupBy]     = useState("");
+  const [aggType, setAggType]     = useState("COUNT");
+  const [aggField, setAggField]   = useState("id");
+  const [limit, setLimit]         = useState(20);
+  const [filters, setFilters]     = useState([]); // [{field, op, value}]
+  const [draggingField, setDraggingField] = useState(null);
+  const dropRef = useRef(null);
+
+  const schema = entity ? ENTITY_SCHEMA[entity] : null;
+
+  const addFilter = () => setFilters(f => [...f, { field: schema?.fields[0] || "", op: "=", value: "" }]);
+  const removeFilter = (i) => setFilters(f => f.filter((_, idx) => idx !== i));
+  const updateFilter = (i, key, val) => setFilters(f => f.map((x, idx) => idx === i ? { ...x, [key]: val } : x));
+
+  const buildSQL = () => {
+    if (!schema) return "";
+    const tbl   = schema.table;
+    const metric = aggType === "COUNT" ? "COUNT(*) as count" : `${aggType}(${aggField}) as ${aggType.toLowerCase()}_${aggField}`;
+    const metricAlias = aggType === "COUNT" ? "count" : `${aggType.toLowerCase()}_${aggField}`;
+    const whereClauses = filters
+      .filter(f => f.field && f.value)
+      .map(f => `${f.field} ${f.op} '${f.value}'`);
+    const where = whereClauses.length ? `WHERE ${whereClauses.join(" AND ")}` : "";
+    if (!groupBy) {
+      return `SELECT ${metric}\nFROM ${tbl}\n${where}\nLIMIT ${limit}`.trim();
+    }
+    return `SELECT ${groupBy}, ${metric}\nFROM ${tbl}\n${where}\nGROUP BY ${groupBy}\nORDER BY ${metricAlias} DESC\nLIMIT ${limit}`.trim();
+  };
+
+  const handleGenerate = () => {
+    const sql = buildSQL();
+    if (sql) onQueryGenerated(sql);
+  };
+
+  // Drag-and-drop field → group-by
+  const handleDragStart = (field) => setDraggingField(field);
+  const handleDrop = (e) => {
+    e.preventDefault();
+    if (draggingField) { setGroupBy(draggingField); setDraggingField(null); }
+  };
+  const handleDragOver = (e) => e.preventDefault();
+
+  return (
+    <div className="space-y-4">
+      {/* Step A: Pick entity */}
+      <div>
+        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+          <Database className="w-3.5 h-3.5" /> 1. Choose Entity
+        </p>
+        <div className="grid grid-cols-4 gap-2">
+          {Object.entries(ENTITY_SCHEMA).map(([name, cfg]) => (
+            <button key={name} onClick={() => { setEntity(name); setGroupBy(""); setAggField(cfg.fields[0]); }}
+              className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border-2 text-center transition-all ${entity === name ? "border-indigo-500 bg-indigo-50" : "border-slate-200 hover:border-slate-300 bg-white"}`}
+            >
+              <span className="text-xl">{cfg.icon}</span>
+              <span className="text-[11px] font-semibold text-slate-600">{name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {schema && (
+        <>
+          {/* Step B: Drag fields */}
+          <div className="flex gap-3">
+            {/* Field palette */}
+            <div className="flex-1">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5" /> 2. Drag a field to Group By
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {schema.fields.map(f => (
+                  <div key={f}
+                    draggable
+                    onDragStart={() => handleDragStart(f)}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border cursor-grab active:cursor-grabbing transition-all select-none
+                      ${groupBy === f ? "bg-indigo-100 border-indigo-400 text-indigo-700" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                    onClick={() => setGroupBy(groupBy === f ? "" : f)}
+                  >
+                    <GripVertical className="w-3 h-3 text-slate-300" />
+                    {f}
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Drop zone */}
+            <div
+              ref={dropRef}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              className={`w-36 shrink-0 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-all cursor-pointer
+                ${groupBy ? "border-indigo-400 bg-indigo-50" : "border-slate-200 bg-slate-50 hover:border-slate-300"}`}
+              onClick={() => groupBy && setGroupBy("")}
+            >
+              {groupBy ? (
+                <>
+                  <span className="text-xs font-bold text-indigo-600 px-2 text-center">{groupBy}</span>
+                  <span className="text-[10px] text-indigo-400">click to clear</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 text-slate-300" />
+                  <span className="text-[10px] text-slate-400 text-center px-2">Drop field here to group by</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Step C: Aggregation */}
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">3. Aggregation</p>
+            <div className="flex gap-2 flex-wrap">
+              {AGGREGATIONS.map(agg => (
+                <button key={agg.id} onClick={() => setAggType(agg.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${aggType === agg.id ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
+                  title={agg.desc}
+                >
+                  {agg.label}
+                </button>
+              ))}
+            </div>
+            {aggType !== "COUNT" && (
+              <div className="mt-2">
+                <select value={aggField} onChange={e => setAggField(e.target.value)}
+                  className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 bg-white outline-none">
+                  {schema.fields.filter(f => f !== "id").map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Step D: Filters */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">4. Filters (optional)</p>
+              <button onClick={addFilter} className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium">
+                <Plus className="w-3 h-3" /> Add filter
+              </button>
+            </div>
+            {filters.map((f, i) => (
+              <div key={i} className="flex items-center gap-2 mb-1.5">
+                <select value={f.field} onChange={e => updateFilter(i, "field", e.target.value)}
+                  className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white outline-none">
+                  {schema.fields.map(fd => <option key={fd} value={fd}>{fd}</option>)}
+                </select>
+                <select value={f.op} onChange={e => updateFilter(i, "op", e.target.value)}
+                  className="w-16 text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white outline-none">
+                  {["=","!=",">","<",">=","<="].map(op => <option key={op} value={op}>{op}</option>)}
+                </select>
+                <input value={f.value} onChange={e => updateFilter(i, "value", e.target.value)}
+                  placeholder="value"
+                  className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1 outline-none" />
+                <button onClick={() => removeFilter(i)} className="text-slate-400 hover:text-rose-500"><X className="w-3.5 h-3.5" /></button>
+              </div>
+            ))}
+          </div>
+
+          {/* Limit + Generate */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-500">Limit</label>
+              <input type="number" value={limit} min={1} max={500} onChange={e => setLimit(Number(e.target.value))}
+                className="w-16 text-xs border border-slate-200 rounded-lg px-2 py-1 outline-none text-center" />
+            </div>
+            <button onClick={handleGenerate}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition-colors ml-auto">
+              <Wand2 className="w-3.5 h-3.5" /> Generate Query & Preview
+            </button>
+          </div>
+
+          {/* SQL preview */}
+          <div className="bg-slate-950 rounded-xl p-3 font-mono text-[11px] text-emerald-400 whitespace-pre">
+            {buildSQL()}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 const ENTITIES = ["Enterprise", "Person", "Task", "Transaction", "Product", "Service"];
 
 function MiniChartPreview({ chartType, data, xKey, yKey, colorScheme }) {
