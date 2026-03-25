@@ -373,6 +373,28 @@ export default function ChartBuilder({ chart, folders, currentUser, onClose, rea
 
   const [queryError, setQueryError] = useState(null);
 
+  const runQueryWith = async (querySql) => {
+    if (!querySql?.trim()) return;
+    setPreviewLoading(true);
+    setQueryError(null);
+    try {
+      const result = await executeSQL(querySql, {});
+      const rows = result?.rows || [];
+      setPreviewData(rows);
+      if (rows.length > 0) {
+        setXKey(Object.keys(rows[0])[0]);
+        setYKey(Object.keys(rows[0])[1] || Object.keys(rows[0])[0]);
+      }
+      // Auto-advance to chart type selection if coming from visual builder
+      if (rows.length > 0) setStep(2);
+    } catch (e) {
+      setQueryError(e.message);
+      setPreviewData([]);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   const runQuery = async () => {
     if (!sql.trim()) return;
     setPreviewLoading(true);
