@@ -44,7 +44,7 @@ export const APP_REGISTRY = [
   { id: "cleaningschedule", name: "Cleaning Schedule", emoji: "🧹", description: "Assign and confirm daily cleaning tasks across all areas", category: "Compliance", route: "CleaningSchedule", color: "cyan", roles: "all", plan: "starter", exists: false },
 
   // EDUCATION
-  { id: "attendanceregister", name: "Attendance Register", emoji: "📓", description: "Mark student and class attendance with daily reports", category: "Education", route: "AttendanceRegister", color: "blue", roles: "all", plan: "starter", exists: false, educationOnly: true },
+  { id: "attendanceregister", name: "Attendance Register", emoji: "📓", description: "Mark student and class attendance with daily reports", category: "Education", route: "AttendanceRegister", color: "blue", roles: "all", plan: "starter", exists: true, isNew: true },
   { id: "feecollection", name: "Fee Collection", emoji: "💳", description: "Track school fee payments and outstanding balances per student", category: "Education", route: "FeeCollection", color: "emerald", roles: "admin_only", plan: "starter", exists: false, educationOnly: true },
   { id: "librarylog", name: "Library Log", emoji: "📚", description: "Book borrowing and return tracker with overdue alerts", category: "Education", route: "LibraryLog", color: "amber", roles: "all", plan: "starter", exists: false, educationOnly: true },
 ];
