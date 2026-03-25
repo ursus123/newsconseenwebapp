@@ -233,12 +233,8 @@ export default function Desktop() {
       </div>
 
       {/* Widget layer */}
-      <div className="absolute top-8 left-0 right-0 bottom-14 pointer-events-none" style={{ zIndex: 5 }}>
-        <div className="absolute inset-0" style={{ pointerEvents: "none" }}>
-          <div style={{ pointerEvents: "all", position: "relative", width: "100%", height: "100%" }}>
-            <DesktopWidgets isLight={isLight} />
-          </div>
-        </div>
+      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ zIndex: 5 }}>
+        <DesktopWidgets isLight={isLight} />
       </div>
 
       {/* Desktop icons */}
