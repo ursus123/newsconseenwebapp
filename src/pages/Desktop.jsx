@@ -71,6 +71,13 @@ export default function Desktop() {
     setContextMenu(null);
   };
 
+  const handleWallpaperPrev = () => {
+    const next = (wallpaperIdx - 1 + WALLPAPERS.length) % WALLPAPERS.length;
+    setWallpaperIdx(next);
+    localStorage.setItem("desktop_wallpaper", String(next));
+    setContextMenu(null);
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e) => {
