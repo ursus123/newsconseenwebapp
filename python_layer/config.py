@@ -6,14 +6,14 @@ class Settings(BaseSettings):
     # Base44 entity URLs
     # One URL per entity in the six-layer star schema.
     # ----------------------------------------------------------
-    base44_tasks_url: str
-    base44_transactions_url: str
-    base44_services_url: str
-    base44_enterprises_url: str
-    base44_people_url: str
-    base44_products_url: str
-    base44_relationships_url: str
-    base44_addresses_url: str
+    base44_tasks_url:          str
+    base44_transactions_url:   str
+    base44_services_url:       str
+    base44_enterprises_url:    str
+    base44_people_url:         str
+    base44_products_url:       str
+    base44_relationships_url:  str
+    base44_addresses_url:      str
 
     # ----------------------------------------------------------
     # Base44 authentication
@@ -34,10 +34,19 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------
     cron_secret: str = ""
 
+    # ----------------------------------------------------------
+    # Nominatim contact email
+    # Required by Nominatim ToS — must identify the application
+    # operator in the User-Agent header of every geocoding request.
+    # Set this to a monitored email address. Nominatim may contact
+    # you if your usage pattern triggers rate limit concerns.
+    # ----------------------------------------------------------
+    nominatim_contact_email: str = "contact@newsconseen.com"
+
     class Config:
-        env_file = ".env"
+        env_file      = ".env"
         case_sensitive = False
-        extra = "ignore"
+        extra          = "ignore"
 
 
 settings = Settings()
@@ -47,6 +56,14 @@ settings = Settings()
 # Imported by etl/base.py and anywhere else that calls Base44.
 # ----------------------------------------------------------
 HEADERS = {
-    "api_key": settings.base44_api_key,
+    "api_key":      settings.base44_api_key,
     "Content-Type": "application/json",
 }
+
+# ----------------------------------------------------------
+# Nominatim User-Agent string
+# Built from nominatim_contact_email so it stays in sync with
+# whatever is set in Railway environment variables.
+# Imported by etl/geospatial.py and etl/addresses.py.
+# ----------------------------------------------------------
+NOMINATIM_USER_AGENT = f"newsconseen-app/1.0 ({settings.nominatim_contact_email})"
