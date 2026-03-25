@@ -61,7 +61,7 @@ export default function AttendanceDashboard({ currentUser, onOpenClass, onOpenPe
 
   const handleOrgChange = async (org) => {
     setSelectedOrg(org);
-    await loadClasses(org.id);
+    await loadClasses(org);
   };
 
   // Chart data: sessions per class
