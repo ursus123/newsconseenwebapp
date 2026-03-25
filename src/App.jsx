@@ -103,6 +103,8 @@ const AuthenticatedApp = () => {
       <Route path="/MarketIntelligence" element={<LayoutWrapper currentPageName="Market Intelligence"><MarketIntelligence /></LayoutWrapper>} />
       <Route path="/MarketIntelligencePDF" element={<LayoutWrapper currentPageName="Market Intelligence PDF"><MarketIntelligencePDF /></LayoutWrapper>} />
       <Route path="/AttendanceRegister" element={<LayoutWrapper currentPageName="Attendance Register"><AttendanceRegister /></LayoutWrapper>} />
+      {/* Desktop Shell — NO layout wrapper, full screen */}
+      <Route path="/Desktop" element={<Desktop />} />
 
       <Route path="*" element={<PageNotFound />} />
     </Routes>
