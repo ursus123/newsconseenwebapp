@@ -107,17 +107,16 @@ export default function BulkAssignDialog({ open, onClose, onAssign, people = [],
 
   const getLeftItems = () => {
     if (!modeConfig) return [];
-    if (["person_enterprise", "people_enterprises", "person_service", "person_address"].includes(mode)) return people.map(p => ({ id: p.id, name: `${p.first_name} ${p.last_name}` }));
-    if (["enterprise_person"].includes(mode)) return enterprises.map(e => ({ id: e.id, name: e.enterprise_name }));
+    if (["person_enterprise", "people_enterprises", "person_service", "person_address", "person_person"].includes(mode)) return people.map(p => ({ id: p.id, name: `${p.first_name} ${p.last_name}` }));
+    if (["enterprise_person", "enterprise_service", "enterprise_address", "enterprise_enterprise"].includes(mode)) return enterprises.map(e => ({ id: e.id, name: e.enterprise_name }));
     if (["item_enterprise", "item_person"].includes(mode)) return products.map(p => ({ id: p.id, name: p.name }));
-    if (["enterprise_service", "enterprise_address"].includes(mode)) return enterprises.map(e => ({ id: e.id, name: e.enterprise_name }));
     return [];
   };
 
   const getRightItems = () => {
     if (!modeConfig) return [];
-    if (["person_enterprise", "people_enterprises", "item_enterprise", "enterprise_service"].includes(mode)) return enterprises.map(e => ({ id: e.id, name: e.enterprise_name }));
-    if (["enterprise_person", "item_person"].includes(mode)) return people.map(p => ({ id: p.id, name: `${p.first_name} ${p.last_name}` }));
+    if (["person_enterprise", "people_enterprises", "item_enterprise", "enterprise_service", "enterprise_enterprise"].includes(mode)) return enterprises.map(e => ({ id: e.id, name: e.enterprise_name }));
+    if (["enterprise_person", "item_person", "person_person"].includes(mode)) return people.map(p => ({ id: p.id, name: `${p.first_name} ${p.last_name}` }));
     if (["person_service"].includes(mode)) return services.map(s => ({ id: s.id, name: s.name }));
     if (["person_address", "enterprise_address"].includes(mode)) return addresses.map(a => ({ id: a.id, name: a.label || a.address_line1 }));
     return [];
