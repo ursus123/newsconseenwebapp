@@ -145,11 +145,18 @@ export default function Relationships() {
     if (editing) {
       updateMut.mutate({ id: editing.id, data });
     } else {
-      createMut.mutate(data);
-      if (saveAndNew) {
-        // reopen after create
-        setTimeout(() => { setFormOpen(true); setEditing(null); setFormPrefill(null); }, 100);
-      }
+      base44.entities.Relationship.create(withScope(data)).then(() => {
+        qc.invalidateQueries({ queryKey: ["relationships"] });
+        toast({ title: "Relationship created" });
+        if (saveAndNew) {
+          setEditing(null);
+          setFormPrefill(null);
+          // keep form open for next entry
+        } else {
+          setFormOpen(false);
+          setFormPrefill(null);
+        }
+      });
     }
   };
 
