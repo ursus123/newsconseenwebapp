@@ -150,6 +150,43 @@ export const ENTERPRISE_TYPE_GROUPS = [
   },
 ];
 
+// Sub-types per enterprise type
+export const ENTERPRISE_SUB_TYPES = {
+  school:           ["Class / Classroom", "Grade Level", "Department", "Campus", "Sports Team", "Club"],
+  university:       ["Faculty", "Department", "Campus", "Research Lab", "Student Club", "Dormitory"],
+  childcare:        ["Age Group", "Classroom", "Program"],
+  tutoring:         ["Subject Group", "Session Group"],
+  training_center:  ["Course / Module", "Cohort", "Department"],
+  church:           ["Ministry", "Cell Group", "Youth Group", "Choir", "Department", "Campus"],
+  mosque:           ["Circle / Halaqah", "Committee", "Youth Group", "Department"],
+  temple:           ["Group", "Committee", "Department"],
+  community:        ["Program", "Chapter", "Committee", "Working Group"],
+  ngo:              ["Program", "Chapter", "Field Office", "Project Team"],
+  nonprofit:        ["Program", "Chapter", "Committee", "Department"],
+  charity:          ["Program", "Campaign", "Chapter"],
+  social_services:  ["Case Unit", "Program", "Department"],
+  hospital:         ["Ward", "Department", "Unit", "Clinic"],
+  clinic:           ["Department", "Unit", "Location"],
+  nursing_home:     ["Unit", "Wing", "Department"],
+  residential_care: ["Unit", "Wing", "Floor", "Department"],
+  home_healthcare:  ["Team", "Region", "Program"],
+  mental_health:    ["Program", "Department", "Group"],
+  livestock_farm:   ["Pen / Barn", "Herd Group", "Pasture", "Unit"],
+  crop_farm:        ["Field", "Section", "Greenhouse", "Crop Group"],
+  animal_barn:      ["Pen", "Section", "Animal Group"],
+  agriculture:      ["Field", "Section", "Unit"],
+  retail:           ["Branch", "Department", "Location"],
+  restaurant:       ["Branch", "Department", "Kitchen"],
+  hotel:            ["Floor", "Wing", "Department"],
+  logistics:        ["Route", "Depot", "Team"],
+  manufacturing:    ["Line", "Department", "Shift", "Unit"],
+  technology:       ["Team", "Department", "Project Group"],
+  finance:          ["Branch", "Department", "Team"],
+  government:       ["Division", "Department", "Unit", "Branch"],
+  municipal:        ["Division", "Department", "Ward"],
+  public_sector:    ["Division", "Department", "Unit"],
+};
+
 export const OBJECTIVE_OPTIONS = {
   healthcare:       ["Improve client retention and care quality", "Optimize staffing and reduce care gaps", "Achieve medication compliance targets", "Grow client base and revenue"],
   home_healthcare:  ["Improve client retention and care quality", "Optimize staffing and reduce care gaps", "Achieve medication compliance targets", "Grow client base and revenue"],
