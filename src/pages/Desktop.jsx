@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useWindowManager } from "@/desktop/windowStore";
 import { useNotifications } from "@/desktop/notificationStore";
 import { useLauncherStore } from "@/desktop/launcherStore";
@@ -12,36 +12,33 @@ import OfflineIndicator from "@/components/desktop/OfflineIndicator";
 import PWAInstallBanner from "@/components/desktop/PWAInstallBanner";
 import GlobalSearch from "@/components/desktop/GlobalSearch";
 import DesktopWidgets from "@/components/desktop/DesktopWidgets";
+import DailyBriefing from "@/components/desktop/DailyBriefing";
+import EnterpriseContextSwitcher from "@/components/desktop/EnterpriseContextSwitcher";
 import { usePWA } from "@/hooks/usePWA";
 import { base44 } from "@/api/base44Client";
 
 const WALLPAPERS = [
-  // 0 – Midnight Ocean (default)
   { type: "gradient", value: "linear-gradient(135deg, #0a0f1e 0%, #0f172a 35%, #0c2a4a 70%, #0c4a6e 100%)" },
-  // 1 – Deep Space Navy
   { type: "gradient", value: "linear-gradient(135deg, #020617 0%, #0f172a 40%, #1e1b4b 80%, #312e81 100%)" },
-  // 2 – Forest Night
   { type: "gradient", value: "linear-gradient(135deg, #021a12 0%, #022c1c 40%, #064e3b 70%, #0f766e 100%)" },
-  // 3 – Cosmic Purple
   { type: "gradient", value: "linear-gradient(135deg, #12032e 0%, #1e1b4b 40%, #4338ca 80%, #6d28d9 100%)" },
-  // 4 – Ember Red
   { type: "gradient", value: "linear-gradient(135deg, #1c0202 0%, #450a0a 35%, #7f1d1d 70%, #b91c1c 100%)" },
-  // 5 – Sunrise (light)
   { type: "gradient", value: "linear-gradient(160deg, #e0f2fe 0%, #bae6fd 40%, #f0abfc 80%, #fda4af 100%)" },
-  // 6 – Slate Day (light)
   { type: "gradient", value: "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 40%, #cbd5e1 80%, #94a3b8 100%)" },
 ];
 
 export default function Desktop() {
-  const [user, setUser]           = useState(null);
-  const [notifOpen, setNotifOpen] = useState(false);
+  const [user, setUser]               = useState(null);
+  const [notifOpen, setNotifOpen]     = useState(false);
   const [wallpaperIdx, setWallpaperIdx] = useState(0);
-  const [contextMenu, setContextMenu]   = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const quickActionsRef = useRef(null);
 
-  const wm           = useWindowManager();
-  const notifStore   = useNotifications();
-  const launcher     = useLauncherStore();
-  const pwa          = usePWA();
+  const wm         = useWindowManager();
+  const notifStore = useNotifications();
+  const launcher   = useLauncherStore();
+  const pwa        = usePWA();
 
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
@@ -56,28 +53,33 @@ export default function Desktop() {
     return () => window.removeEventListener("desktop-theme-change", onTheme);
   }, []);
 
+  // Close quick actions popover on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (quickActionsRef.current && !quickActionsRef.current.contains(e.target)) {
+        setQuickActionsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const handleOpenApp = useCallback((app) => {
+    if (!app) return;
     wm.openWindow(app);
     launcher.closeLauncher();
   }, [wm, launcher]);
 
+  const openAppById = useCallback((id) => {
+    const app = DESKTOP_APPS.find(a => a.id === id);
+    if (app) handleOpenApp(app);
+    setContextMenu(null);
+    setQuickActionsOpen(false);
+  }, [handleOpenApp]);
+
   const handleContextMenu = (e) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY });
-  };
-
-  const handleChangeWallpaper = () => {
-    const next = (wallpaperIdx + 1) % WALLPAPERS.length;
-    setWallpaperIdx(next);
-    localStorage.setItem("desktop_wallpaper", String(next));
-    setContextMenu(null);
-  };
-
-  const handleWallpaperPrev = () => {
-    const next = (wallpaperIdx - 1 + WALLPAPERS.length) % WALLPAPERS.length;
-    setWallpaperIdx(next);
-    localStorage.setItem("desktop_wallpaper", String(next));
-    setContextMenu(null);
   };
 
   // Keyboard shortcuts
@@ -87,6 +89,7 @@ export default function Desktop() {
         launcher.closeLauncher();
         setNotifOpen(false);
         setContextMenu(null);
+        setQuickActionsOpen(false);
       }
       if (e.ctrlKey && e.code === "Space") {
         e.preventDefault();
@@ -100,6 +103,26 @@ export default function Desktop() {
   const wp = WALLPAPERS[wallpaperIdx] || WALLPAPERS[0];
   const isLight = wallpaperIdx >= 5;
 
+  const topBarBg = isLight ? "rgba(248,250,252,0.7)" : "rgba(0,0,0,0.35)";
+  const topBarBorder = isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.06)";
+  const textColor = isLight ? "#374151" : "white";
+  const mutedColor = isLight ? "#6b7280" : "#94a3b8";
+
+  // Quick actions list
+  const QUICK_ACTIONS = [
+    { label: "✚ New Task",        id: "tasks" },
+    { label: "✚ New Transaction", id: "transactions" },
+    { label: "✚ New Person",      id: "people" },
+    { label: "✚ New Enterprise",  id: "enterprises" },
+  ];
+
+  const quickBtnStyle = {
+    display: "block", width: "100%", textAlign: "left",
+    padding: "9px 16px", background: "none", border: "none",
+    color: isLight ? "#374151" : "#cbd5e1",
+    fontSize: 13, cursor: "pointer",
+  };
+
   return (
     <div
       className="fixed inset-0 overflow-hidden"
@@ -107,7 +130,7 @@ export default function Desktop() {
       onContextMenu={handleContextMenu}
       onClick={() => { setContextMenu(null); }}
     >
-      {/* Subtle dot grid overlay */}
+      {/* Dot grid overlay */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -125,31 +148,91 @@ export default function Desktop() {
         }}
       />
 
-      {/* Top bar */}
+      {/* ── Top bar ─────────────────────────────────────────────────────────── */}
       <div
-        className="absolute top-0 left-0 right-0 h-8 flex items-center px-4 gap-4 z-50 select-none"
-        style={{
-          background: isLight ? "rgba(248,250,252,0.7)" : "rgba(0,0,0,0.35)",
-          backdropFilter: "blur(12px)",
-          borderBottom: isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.06)",
-        }}
+        className="absolute top-0 left-0 right-0 h-8 flex items-center px-4 gap-3 z-50 select-none"
+        style={{ background: topBarBg, backdropFilter: "blur(12px)", borderBottom: topBarBorder }}
+        onClick={e => e.stopPropagation()}
       >
-        <span className={`font-bold text-xs tracking-wide shrink-0 ${isLight ? "text-slate-700" : "text-white"}`}>Newsconseen OS</span>
-        {/* Global Search */}
-        <div className="flex-1 flex justify-center px-4">
+        {/* Logo */}
+        <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: "0.04em", color: textColor, flexShrink: 0 }}>
+          Newsconseen OS
+        </span>
+
+        {/* Enterprise context switcher */}
+        <EnterpriseContextSwitcher isLight={isLight} />
+
+        {/* Global Search — centered */}
+        <div className="flex-1 flex justify-center px-2">
           <GlobalSearch onOpenApp={handleOpenApp} isLight={isLight} />
         </div>
-        {user && <span className={`text-xs shrink-0 ${isLight ? "text-slate-500" : "text-slate-400"}`}>{user.full_name || user.email}</span>}
+
+        {/* Quick actions + button */}
+        <div ref={quickActionsRef} style={{ position: "relative", flexShrink: 0 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setQuickActionsOpen(v => !v); }}
+            style={{
+              width: 22, height: 22, borderRadius: 6,
+              background: isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.12)",
+              border: isLight ? "1px solid rgba(0,0,0,0.1)" : "1px solid rgba(255,255,255,0.15)",
+              color: textColor, fontSize: 16, fontWeight: 300,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", lineHeight: 1,
+            }}
+            title="Quick Actions"
+          >
+            +
+          </button>
+
+          {quickActionsOpen && (
+            <div
+              style={{
+                position: "absolute", top: "calc(100% + 6px)", right: 0,
+                background: isLight ? "rgba(255,255,255,0.97)" : "rgba(8,15,30,0.97)",
+                border: isLight ? "1px solid rgba(0,0,0,0.1)" : "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 12, overflow: "hidden",
+                boxShadow: "0 16px 48px rgba(0,0,0,0.35)",
+                backdropFilter: "blur(20px)",
+                minWidth: 200, zIndex: 99999,
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div style={{ padding: "8px 14px 6px", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: mutedColor }}>
+                Quick Create
+              </div>
+              {QUICK_ACTIONS.map(a => (
+                <button key={a.id} style={quickBtnStyle} onClick={() => openAppById(a.id)}
+                  onMouseEnter={ev => ev.currentTarget.style.background = isLight ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.07)"}
+                  onMouseLeave={ev => ev.currentTarget.style.background = "none"}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Offline indicator */}
         {!pwa.isOnline && (
-          <span className="flex items-center gap-1 text-rose-400 text-xs font-semibold">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse inline-block" />
+          <span style={{ display: "flex", alignItems: "center", gap: 4, color: "#f87171", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f87171", display: "inline-block" }} />
             Offline
           </span>
         )}
-        <span className={`text-xs hidden sm:block ${isLight ? "text-slate-400" : "text-slate-500"}`}>Ctrl+Space for launcher</span>
+
+        {/* Username */}
+        {user && (
+          <span style={{ fontSize: 12, color: mutedColor, flexShrink: 0, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {user.full_name || user.email}
+          </span>
+        )}
+
+        <span style={{ fontSize: 11, color: mutedColor, flexShrink: 0, display: "none" }} className="sm:block">
+          Ctrl+Space
+        </span>
       </div>
 
-      {/* Widget layer — z-index 5, above icons, below windows (z-10) */}
+      {/* Widget layer */}
       <div className="absolute top-8 left-0 right-0 bottom-14 pointer-events-none" style={{ zIndex: 5 }}>
         <div className="absolute inset-0" style={{ pointerEvents: "none" }}>
           <div style={{ pointerEvents: "all", position: "relative", width: "100%", height: "100%" }}>
@@ -158,7 +241,7 @@ export default function Desktop() {
         </div>
       </div>
 
-      {/* Desktop icons — z-index 3, below windows */}
+      {/* Desktop icons */}
       <div className="absolute top-8 left-0 right-0 bottom-14" style={{ zIndex: 3 }}>
         <DesktopIcons
           onOpenApp={handleOpenApp}
@@ -169,7 +252,7 @@ export default function Desktop() {
         />
       </div>
 
-      {/* Window layer — pointer-events:none on container so empty space doesn't block icons */}
+      {/* Window layer */}
       <div className="absolute top-8 left-0 right-0 bottom-14" style={{ zIndex: 10, pointerEvents: "none" }}>
         {wm.windows.map(win => (
           <AppWindow
@@ -185,14 +268,9 @@ export default function Desktop() {
           />
         ))}
 
+        {/* Daily Briefing — shown when no windows are open */}
         {wm.windows.length === 0 && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <div className="text-center" style={{ opacity: 0.18 }}>
-              <div className="text-7xl mb-4">🖥️</div>
-              <p className={`text-lg font-semibold ${isLight ? "text-slate-700" : "text-white"}`}>Newsconseen Desktop</p>
-              <p className={`text-sm mt-1 ${isLight ? "text-slate-500" : "text-slate-300"}`}>Click an icon or press Ctrl+Space to launch an app</p>
-            </div>
-          </div>
+          <DailyBriefing isLight={isLight} />
         )}
       </div>
 
@@ -241,38 +319,65 @@ export default function Desktop() {
         user={user}
       />
 
-      {/* PWA: Offline indicator + Install banner */}
+      {/* PWA */}
       <OfflineIndicator isOnline={pwa.isOnline} />
       <PWAInstallBanner canInstall={pwa.canInstall} onInstall={pwa.promptInstall} />
 
       {/* Right-click context menu */}
       {contextMenu && (
         <div
-          className="fixed z-[10000] rounded-xl overflow-hidden shadow-2xl"
           style={{
-            left: Math.min(contextMenu.x, window.innerWidth - 200),
-            top:  Math.min(contextMenu.y, window.innerHeight - 160),
+            position: "fixed",
+            left: Math.min(contextMenu.x, window.innerWidth - 210),
+            top:  Math.min(contextMenu.y, window.innerHeight - 260),
+            zIndex: 10000,
             background: "rgba(10,18,36,0.97)",
             border: "1px solid rgba(255,255,255,0.12)",
-            minWidth: 192,
+            borderRadius: 12,
+            minWidth: 200,
             backdropFilter: "blur(20px)",
+            overflow: "hidden",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
           }}
           onClick={e => e.stopPropagation()}
         >
-          <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left" onClick={handleChangeWallpaper}>
-            🎨 Next Wallpaper ({wallpaperIdx + 1}/{WALLPAPERS.length})
-          </button>
-          <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left" onClick={handleWallpaperPrev}>
-            🎨 Previous Wallpaper
-          </button>
-          <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left" onClick={() => { handleOpenApp(DESKTOP_APPS.find(a => a.id === "settings")); setContextMenu(null); }}>
+          <div style={{ padding: "8px 14px 6px", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#64748b" }}>
+            Quick Create
+          </div>
+          {QUICK_ACTIONS.map(a => (
+            <button key={a.id}
+              style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 16px", background: "none", border: "none", color: "#cbd5e1", fontSize: 13, cursor: "pointer" }}
+              onClick={() => openAppById(a.id)}
+              onMouseEnter={ev => ev.currentTarget.style.background = "rgba(255,255,255,0.07)"}
+              onMouseLeave={ev => ev.currentTarget.style.background = "none"}
+            >
+              {a.label}
+            </button>
+          ))}
+          <div style={{ height: 1, background: "rgba(255,255,255,0.1)", margin: "4px 12px" }} />
+          <button
+            style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 16px", background: "none", border: "none", color: "#cbd5e1", fontSize: 13, cursor: "pointer" }}
+            onClick={() => { openAppById("settings"); }}
+            onMouseEnter={ev => ev.currentTarget.style.background = "rgba(255,255,255,0.07)"}
+            onMouseLeave={ev => ev.currentTarget.style.background = "none"}
+          >
             ⚙️ System Settings
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left" onClick={() => { launcher.openLauncher(); setContextMenu(null); }}>
+          <button
+            style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 16px", background: "none", border: "none", color: "#cbd5e1", fontSize: 13, cursor: "pointer" }}
+            onClick={() => { launcher.openLauncher(); setContextMenu(null); }}
+            onMouseEnter={ev => ev.currentTarget.style.background = "rgba(255,255,255,0.07)"}
+            onMouseLeave={ev => ev.currentTarget.style.background = "none"}
+          >
             🛍️ Open App Launcher
           </button>
-          <div className="h-px bg-white/10 my-1" />
-          <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-400 hover:bg-white/10 transition-colors text-left" onClick={() => setContextMenu(null)}>
+          <div style={{ height: 1, background: "rgba(255,255,255,0.1)", margin: "4px 12px" }} />
+          <button
+            style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 16px", background: "none", border: "none", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}
+            onClick={() => setContextMenu(null)}
+            onMouseEnter={ev => ev.currentTarget.style.background = "rgba(255,255,255,0.07)"}
+            onMouseLeave={ev => ev.currentTarget.style.background = "none"}
+          >
             ✕ Close Menu
           </button>
         </div>
