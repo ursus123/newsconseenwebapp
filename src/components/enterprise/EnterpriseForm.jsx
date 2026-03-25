@@ -235,7 +235,12 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(form);
+    const submitData = { ...form };
+    if (submitData.sub_type === "__custom") {
+      submitData.sub_type = submitData.custom_sub_type || "";
+    }
+    delete submitData.custom_sub_type;
+    onSubmit(submitData);
   };
 
   const renderTab = () => {
