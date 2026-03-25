@@ -1,17 +1,14 @@
 import React, { useState } from "react";
 import { DESKTOP_APPS } from "@/desktop/desktopApps";
 
-// Only show a subset on the desktop itself
-const DESKTOP_ICON_IDS = [
-  "attendance", "people", "enterprises", "inventory",
-  "tasks", "transactions", "reports", "location",
-  "settings", "applications",
-];
+// Fallback default desktop icons if no pinnedDesktop provided
+const DEFAULT_DESKTOP = ["attendance", "people", "enterprises", "tasks", "transactions", "reports", "location", "settings"];
 
-export default function DesktopIcons({ onOpenApp }) {
+export default function DesktopIcons({ onOpenApp, pinnedDesktop }) {
   const [hoveredId, setHoveredId] = useState(null);
 
-  const apps = DESKTOP_APPS.filter(a => DESKTOP_ICON_IDS.includes(a.id));
+  const iconIds = (pinnedDesktop && pinnedDesktop.length > 0) ? pinnedDesktop : DEFAULT_DESKTOP;
+  const apps = iconIds.map(id => DESKTOP_APPS.find(a => a.id === id)).filter(Boolean);
 
   return (
     <div className="absolute top-6 left-6 flex flex-col gap-1 z-10">
