@@ -170,7 +170,7 @@ export default function Desktop() {
       </div>
 
       {/* Window layer */}
-      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ pointerEvents: "none", zIndex: 10 }}>
+      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ zIndex: 10, pointerEvents: "none" }}>
         {wm.windows.map(win => (
           <AppWindow
             key={win.id}
