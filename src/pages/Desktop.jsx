@@ -10,6 +10,8 @@ import NotificationCenter from "@/components/desktop/NotificationCenter";
 import DesktopIcons from "@/components/desktop/DesktopIcons";
 import OfflineIndicator from "@/components/desktop/OfflineIndicator";
 import PWAInstallBanner from "@/components/desktop/PWAInstallBanner";
+import GlobalSearch from "@/components/desktop/GlobalSearch";
+import DesktopWidgets from "@/components/desktop/DesktopWidgets";
 import { usePWA } from "@/hooks/usePWA";
 import { base44 } from "@/api/base44Client";
 
@@ -132,9 +134,12 @@ export default function Desktop() {
           borderBottom: isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.06)",
         }}
       >
-        <span className={`font-bold text-xs tracking-wide ${isLight ? "text-slate-700" : "text-white"}`}>Newsconseen OS</span>
-        <div className="flex-1" />
-        {user && <span className={`text-xs ${isLight ? "text-slate-500" : "text-slate-400"}`}>{user.full_name || user.email}</span>}
+        <span className={`font-bold text-xs tracking-wide shrink-0 ${isLight ? "text-slate-700" : "text-white"}`}>Newsconseen OS</span>
+        {/* Global Search */}
+        <div className="flex-1 flex justify-center px-4">
+          <GlobalSearch onOpenApp={handleOpenApp} isLight={isLight} />
+        </div>
+        {user && <span className={`text-xs shrink-0 ${isLight ? "text-slate-500" : "text-slate-400"}`}>{user.full_name || user.email}</span>}
         {!pwa.isOnline && (
           <span className="flex items-center gap-1 text-rose-400 text-xs font-semibold">
             <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse inline-block" />
