@@ -103,6 +103,12 @@ export default function Desktop() {
         <span className="text-white font-bold text-xs tracking-wide">Newsconseen OS</span>
         <div className="flex-1" />
         {user && <span className="text-slate-300 text-xs">{user.full_name || user.email}</span>}
+        {!pwa.isOnline && (
+          <span className="flex items-center gap-1 text-rose-400 text-xs font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse inline-block" />
+            Offline
+          </span>
+        )}
         <span className="text-slate-500 text-xs hidden sm:block">Ctrl+Space for launcher</span>
       </div>
 
