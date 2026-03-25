@@ -358,6 +358,33 @@ export default function ChartBuilder({ chart, folders, currentUser, onClose, rea
   const [sharedWithRoles, setSharedWithRoles] = useState(chart?.shared_with_roles || ["admin"]);
   const [isPublic, setIsPublic] = useState(chart?.is_public || false);
   const [tags, setTags] = useState((chart?.tags || []).join(", "));
+  const [aiInsight, setAiInsight] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const generateInsight = async () => {
+    if (!previewData || previewData.length === 0) return;
+    setAiLoading(true);
+    setAiInsight("");
+    try {
+      const sample = previewData.slice(0, 20);
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `You are a data analyst. Analyze this chart data and write ONE concise insight (2-3 sentences max). Focus on the most notable trend, pattern, or outlier. Be specific and mention actual values.
+
+Chart title: "${title || "Untitled chart"}"
+Chart type: ${chartType}
+X axis: ${xKey}, Y axis: ${yKey}
+Data (up to 20 rows):
+${JSON.stringify(sample, null, 2)}
+
+Respond with just the insight text, no headers or bullet points.`,
+      });
+      setAiInsight(typeof result === "string" ? result : result?.text || "");
+    } catch (e) {
+      setAiInsight("Could not generate insight. Please try again.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const columns = previewData?.length > 0 ? Object.keys(previewData[0]) : [];
 
