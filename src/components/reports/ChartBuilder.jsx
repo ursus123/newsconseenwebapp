@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { executeSQL } from "@/components/querybuilder/sqlEngine";
 
 function safeVal(val) {
