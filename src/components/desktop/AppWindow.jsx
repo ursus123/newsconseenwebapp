@@ -116,7 +116,7 @@ export default function AppWindow({ win, onClose, onFocus, onMinimize, onMaximiz
         borderRadius: win.maximized ? 0 : 12,
         border: "1px solid rgba(255,255,255,0.12)",
         background: "#0f172a",
-        // Pointer events always on, but disable iframe events while dragging to prevent steal
+        pointerEvents: "all",
         userSelect: isDragging ? "none" : "auto",
       }}
       onMouseDown={() => onFocus(win.id)}
