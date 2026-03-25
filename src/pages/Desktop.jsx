@@ -8,6 +8,9 @@ import Taskbar from "@/components/desktop/Taskbar";
 import AppLauncher from "@/components/desktop/AppLauncher";
 import NotificationCenter from "@/components/desktop/NotificationCenter";
 import DesktopIcons from "@/components/desktop/DesktopIcons";
+import OfflineIndicator from "@/components/desktop/OfflineIndicator";
+import PWAInstallBanner from "@/components/desktop/PWAInstallBanner";
+import { usePWA } from "@/hooks/usePWA";
 import { base44 } from "@/api/base44Client";
 
 const WALLPAPERS = [
