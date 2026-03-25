@@ -344,6 +344,7 @@ function MiniChartPreview({ chartType, data, xKey, yKey, colorScheme }) {
 export default function ChartBuilder({ chart, folders, currentUser, onClose, readOnly = false }) {
   const qc = useQueryClient();
   const [step, setStep] = useState(1);
+  const [dataMode, setDataMode] = useState("visual"); // "visual" | "sql"
   const [sql, setSql] = useState(chart?.sql_query || "SELECT * FROM enterprises LIMIT 20");
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
