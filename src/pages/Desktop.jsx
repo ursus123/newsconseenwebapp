@@ -138,8 +138,14 @@ export default function Desktop() {
       </div>
 
       {/* Desktop icons */}
-      <div className="absolute top-10 left-0 bottom-14 overflow-y-auto">
-        <DesktopIcons onOpenApp={handleOpenApp} pinnedDesktop={launcher.pinnedDesktop} />
+      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ overflow: "hidden" }}>
+        <DesktopIcons
+          onOpenApp={handleOpenApp}
+          pinnedDesktop={launcher.pinnedDesktop}
+          pinnedTaskbar={launcher.pinnedTaskbar}
+          onToggleTaskbarPin={launcher.toggleTaskbarPin}
+          onToggleDesktopPin={launcher.toggleDesktopPin}
+        />
       </div>
 
       {/* Window layer */}
