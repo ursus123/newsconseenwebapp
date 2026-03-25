@@ -18,6 +18,7 @@ import StockCounter from './pages/StockCounter';
 import MarketIntelligence from './pages/MarketIntelligence';
 import MarketIntelligencePDF from './pages/MarketIntelligencePDF';
 import AttendanceRegister from './pages/AttendanceRegister';
+import Desktop from './pages/Desktop';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
