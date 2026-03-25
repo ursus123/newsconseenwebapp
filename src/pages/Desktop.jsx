@@ -245,7 +245,10 @@ export default function Desktop() {
           onClick={e => e.stopPropagation()}
         >
           <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left" onClick={handleChangeWallpaper}>
-            🎨 Change Wallpaper
+            🎨 Next Wallpaper ({wallpaperIdx + 1}/{WALLPAPERS.length})
+          </button>
+          <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left" onClick={handleWallpaperPrev}>
+            🎨 Previous Wallpaper
           </button>
           <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left" onClick={() => { handleOpenApp(DESKTOP_APPS.find(a => a.id === "settings")); setContextMenu(null); }}>
             ⚙️ System Settings
