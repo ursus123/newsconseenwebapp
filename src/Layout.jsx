@@ -33,7 +33,6 @@ import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { usePermissions } from "@/components/shared/usePermissions";
 import TenantGuard from "@/components/shared/TenantGuard";
-import { useBranding } from "@/hooks/useBranding";
 import NetworkBanner from "@/components/shared/NetworkBanner";
 
 // ─── Role-aware nav config ────────────────────────────────────────────────────
@@ -251,12 +250,12 @@ export default function Layout({ children, currentPageName }) {
       .catch(() => {});
   }, [currentUser?.company_id]);
 
-  const branding = currentUser ? useBranding(currentUser) : { 
+  const branding = { 
     logoUrl: null,
     appName: "Newsconseen",
-    primaryColor: "hsl(var(--primary))",
-    secondaryColor: "hsl(var(--secondary))",
-    accentColor: "hsl(var(--accent))",
+    primaryColor: "#10b981",
+    secondaryColor: "#1e293b",
+    accentColor: "#6366f1",
     hideNewsconseen: false
   };
 
