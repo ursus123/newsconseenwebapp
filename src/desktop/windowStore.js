@@ -176,6 +176,7 @@ export function useWindowManager() {
     restoreWindow,
     moveWindow,
     resizeWindow,
+    snapWindow,
     TASKBAR_H,
     TOP_BAR_H,
   };

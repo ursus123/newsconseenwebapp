@@ -15,8 +15,11 @@ const RESIZE_HANDLES = [
   { id: "se", cursor: "se-resize", style: { bottom: 0, right: 0, width: 10, height: 10 } },
 ];
 
-export default function AppWindow({ win, onClose, onFocus, onMinimize, onMaximize, onMove, onResize }) {
+const SNAP_THRESHOLD = 48; // px from edge to trigger snap
+
+export default function AppWindow({ win, onClose, onFocus, onMinimize, onMaximize, onMove, onResize, onSnap }) {
   const [isDragging, setIsDragging] = useState(false);
+  const [snapPreview, setSnapPreview] = useState(null); // "left" | "right" | null
 
   // ── Drag title bar ────────────────────────────────────────────────────────
   const handleTitleMouseDown = useCallback((e) => {
@@ -30,15 +33,26 @@ export default function AppWindow({ win, onClose, onFocus, onMinimize, onMaximiz
 
     const onMouseMove = (me) => {
       onMove(win.id, me.clientX - ox, me.clientY - oy);
+      // Snap preview detection
+      if (me.clientX <= SNAP_THRESHOLD) setSnapPreview("left");
+      else if (me.clientX >= window.innerWidth - SNAP_THRESHOLD) setSnapPreview("right");
+      else setSnapPreview(null);
     };
-    const onMouseUp = () => {
+    const onMouseUp = (me) => {
       setIsDragging(false);
+      // Trigger snap on release near edge
+      if (me.clientX <= SNAP_THRESHOLD && onSnap) {
+        onSnap(win.id, "left");
+      } else if (me.clientX >= window.innerWidth - SNAP_THRESHOLD && onSnap) {
+        onSnap(win.id, "right");
+      }
+      setSnapPreview(null);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
-  }, [win, onFocus, onMove]);
+  }, [win, onFocus, onMove, onSnap]);
 
   // ── Resize from any edge/corner ───────────────────────────────────────────
   const handleResizeMouseDown = useCallback((e, handleId) => {
