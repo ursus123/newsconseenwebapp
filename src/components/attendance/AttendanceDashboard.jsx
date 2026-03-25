@@ -18,29 +18,45 @@ export default function AttendanceDashboard({ currentUser, onOpenClass, onOpenPe
     setLoading(true);
     const q = currentUser?.role === "super_admin" ? {} : { company_id: currentUser?.company_id };
     const all = await base44.entities.Enterprise.filter(q);
-    // Group orgs: top-level (non-class) enterprises
-    const top = all.filter(e => e.enterprise_type !== "class" && e.status === "active");
-    setOrgs(top);
-    if (top.length > 0) {
-      setSelectedOrg(top[0]);
-      await loadClasses(top[0].id, all);
+    setOrgs(all.filter(e => e.status === "active" || !e.status));
+    if (all.length > 0) {
+      const first = all.find(e => e.status === "active") || all[0];
+      setSelectedOrg(first);
+      await loadClasses(first, all);
     }
     setLoading(false);
   };
 
-  const loadClasses = async (orgId, allEnterprises) => {
-    // Classes = enterprises whose parent_enterprise_id === orgId
+  const loadClasses = async (org, allEnterprises) => {
+    const orgName = org.enterprise_name;
     const all = allEnterprises || await base44.entities.Enterprise.filter(
       currentUser?.role === "super_admin" ? {} : { company_id: currentUser?.company_id }
     );
-    const cls = all.filter(e => e.parent_enterprise_id === orgId && e.status === "active");
+
+    // Strategy 1: via enterprise_enterprise relationships (parent → child)
+    const rels = await base44.entities.Relationship.filter({
+      relationship_type: "enterprise_enterprise",
+      enterprise_name: orgName,
+      status: "active",
+    });
+
+    let cls = [];
+    if (rels.length > 0) {
+      const childNames = rels.map(r => r.secondary_enterprise).filter(Boolean);
+      cls = all.filter(e => childNames.includes(e.enterprise_name) && (e.status === "active" || !e.status));
+    }
+
+    // Strategy 2: fallback — enterprises with parent_enterprise_id set to org.id
+    if (cls.length === 0) {
+      cls = all.filter(e => e.parent_enterprise_id === org.id && (e.status === "active" || !e.status));
+    }
+
     setClasses(cls);
 
-    // Load recent attendance sessions (tasks with task_type = "attendance")
+    // Load recent attendance sessions
     const tasks = await base44.entities.Task.filter({ task_type: "attendance", status: "completed" });
     const classIds = cls.map(c => c.id);
-    const relevant = tasks.filter(t => classIds.includes(t.enterprise));
-    setSessions(relevant);
+    setSessions(tasks.filter(t => classIds.includes(t.enterprise)));
   };
 
   const handleOrgChange = async (org) => {
