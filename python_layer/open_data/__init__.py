@@ -5,7 +5,7 @@ from open_data.demographics_routes import router as demographics_router
 from open_data.geospatial_routes   import router as geospatial_router
 from open_data.education_routes    import router as education_router
 from open_data.agriculture_routes  import router as agriculture_router
-from open_data.nonprofit_routes    import router as nonprofit_router
+from open_data.nonprofits_routes    import router as nonprofit_router
 from open_data.market_routes       import router as market_router
 
 ALL_ROUTERS = [
