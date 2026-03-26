@@ -21,6 +21,11 @@ export default function TeacherProfilePage({ person, onBack, onOpenClass }) {
   });
 
   const assignedClasses = relationships
+    .filter(r =>
+      r.person_id === person?.id ||
+      `${person?.first_name} ${person?.last_name}`.toLowerCase() === (r.person_name || "").toLowerCase() ||
+      person?.preferred_name === r.person_name
+    )
     .map(r => enterprises.find(e => e.id === r.enterprise_id || e.id === r.enterprise_name))
     .filter(c => c);
 

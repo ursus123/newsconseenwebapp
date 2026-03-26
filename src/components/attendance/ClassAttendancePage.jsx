@@ -33,7 +33,10 @@ export default function ClassAttendancePage({ classObj, currentUser, onBack, onO
       `${p.first_name} ${p.last_name}`.toLowerCase() === (r.person_name || "").toLowerCase() ||
       p.preferred_name === r.person_name
     ))
-    .filter(p => p && p.person_type === "student");
+    .filter(p => p &&
+      p.person_type === "client" &&
+      (p.primary_role === "student" || p.primary_role === "learner" || p.primary_role === "enrollee")
+    );
 
   useEffect(() => {
     const initial = {};
