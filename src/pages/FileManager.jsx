@@ -59,10 +59,19 @@ export default function FileManager() {
   const [preview, setPreview] = useState(null); // {file, type} for modal
   const [dragOver, setDragOver] = useState(false);
   const [draggedFile, setDraggedFile] = useState(null); // {id, sourceFolder} for drag reorder
+  const [fileContextMenu, setFileContextMenu] = useState(null); // {file, x, y}
+  const [sharingModal, setSharingModal] = useState(null); // {file}
+  const [shares, setShares] = useState([]); // all FileShare records
+  const [detailsPanel, setDetailsPanel] = useState(null); // file id
+  const [users, setUsers] = useState([]); // team members for sharing dropdown
   const fileInputRef = useRef();
 
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
+    // Load all users for sharing
+    base44.entities.User.list(undefined, 100).then(setUsers).catch(() => {});
+    // Load file shares
+    base44.entities.FileShare.list(undefined, 500).then(setShares).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -198,6 +207,42 @@ export default function FileManager() {
     else if (mimeType.startsWith("text/") || f.name?.endsWith(".txt")) previewType = "text";
     setPreview({ file: f, type: previewType });
   }
+
+  function handleRightClick(f, e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileContextMenu({ file: f, x: e.clientX, y: e.clientY });
+  }
+
+  async function handleShare(file) {
+    setSharingModal({ file });
+    setFileContextMenu(null);
+  }
+
+  async function addShare(file, email, accessLevel) {
+    if (!email) return;
+    const recipient = users.find(u => u.email === email);
+    if (!recipient) return;
+    await base44.entities.FileShare.create({
+      file_id: file.id,
+      file_name: file.name,
+      shared_by_email: user?.email,
+      shared_with_email: email,
+      shared_with_name: recipient.full_name,
+      access_level: accessLevel,
+      company_id: user?.company_id,
+    });
+    const updated = await base44.entities.FileShare.list(undefined, 500);
+    setShares(updated);
+  }
+
+  async function removeShare(shareId) {
+    await base44.entities.FileShare.delete(shareId);
+    const updated = await base44.entities.FileShare.list(undefined, 500);
+    setShares(updated);
+  }
+
+  const getSharedWith = (fileId) => shares.filter(s => s.file_id === fileId);
 
   async function handleDelete() {
     if (!selected.size) return;
@@ -419,6 +464,7 @@ export default function FileManager() {
               toggleSelect={toggleSelect} openFolder={openFolder} section={section}
               onRestore={handleRestore} onPreview={handlePreview} draggedFile={draggedFile}
               startDragFile={startDragFile} handleDropOnFolder={handleDropOnFolder}
+              onRightClick={handleRightClick}
             />
           ) : (
             <GridView
@@ -429,6 +475,33 @@ export default function FileManager() {
           )}
         </div>
       </div>
+
+      {/* File context menu */}
+      {fileContextMenu && (
+        <FileContextMenu
+          file={fileContextMenu.file}
+          x={fileContextMenu.x}
+          y={fileContextMenu.y}
+          onShare={() => handleShare(fileContextMenu.file)}
+          onPreview={() => { handlePreview(fileContextMenu.file); setFileContextMenu(null); }}
+          onRename={() => { startRename(fileContextMenu.file); setFileContextMenu(null); }}
+          onDelete={() => { selected.add(fileContextMenu.file.id); handleDelete(); setFileContextMenu(null); }}
+          onClose={() => setFileContextMenu(null)}
+        />
+      )}
+
+      {/* Sharing modal */}
+      {sharingModal && (
+        <SharingModal
+          file={sharingModal.file}
+          shares={getSharedWith(sharingModal.file.id)}
+          users={users}
+          currentUser={user}
+          onShare={addShare}
+          onRemoveShare={removeShare}
+          onClose={() => setSharingModal(null)}
+        />
+      )}
 
       {/* Preview modal */}
       {preview && (
@@ -460,7 +533,7 @@ function FileIcon({ type, size = 20 }) {
   return <Icon size={size} color={cfg.color} />;
 }
 
-function ListView({ files, selected, renaming, renameValue, setRenameValue, commitRename, toggleSelect, openFolder, section, onRestore, onPreview, draggedFile, startDragFile, handleDropOnFolder }) {
+function ListView({ files, selected, renaming, renameValue, setRenameValue, commitRename, toggleSelect, openFolder, section, onRestore, onPreview, draggedFile, startDragFile, handleDropOnFolder, onRightClick }) {
   return (
     <table style={{ width: "100%", borderCollapse: "collapse" }}>
       <thead>
@@ -482,6 +555,7 @@ function ListView({ files, selected, renaming, renameValue, setRenameValue, comm
             <tr key={f.id}
               onClick={e => { if (!isRenaming) toggleSelect(f.id, e); }}
               onDoubleClick={() => { if (f.file_type === "folder") openFolder(f); else onPreview(f); }}
+              onContextMenu={e => onRightClick(f, e)}
               onDragStart={() => { if (f.file_type !== "folder") startDragFile(f); }}
               onDragOver={e => { if (f.file_type === "folder") e.preventDefault(); }}
               onDrop={() => { if (f.file_type === "folder") handleDropOnFolder(f); }}
@@ -636,6 +710,134 @@ function TextPreview({ fileUrl }) {
           {content}
         </pre>
       )}
+    </div>
+  );
+}
+
+function FileContextMenu({ file, x, y, onShare, onPreview, onRename, onDelete, onClose }) {
+  const ref = React.useRef(null);
+
+  React.useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    setTimeout(() => document.addEventListener("mousedown", handler), 0);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  const left = Math.min(x, window.innerWidth - 180);
+  const top = Math.min(y, window.innerHeight - 200);
+
+  return (
+    <div ref={ref} style={{
+      position: "fixed", left, top, zIndex: 99999,
+      background: "rgba(8,15,30,0.97)", border: "1px solid rgba(255,255,255,0.12)",
+      borderRadius: 8, minWidth: 160, overflow: "hidden",
+      boxShadow: "0 12px 32px rgba(0,0,0,0.5)", backdropFilter: "blur(12px)",
+    }} onMouseDown={e => e.stopPropagation()}>
+      <button style={{ ...ctxBtnStyle }} onClick={onPreview}>👁️ Preview</button>
+      <button style={{ ...ctxBtnStyle }} onClick={onRename}>✎ Rename</button>
+      <button style={{ ...ctxBtnStyle }} onClick={onShare}>🔗 Share</button>
+      <div style={{ height: 1, background: "rgba(255,255,255,0.1)", margin: "2px 8px" }} />
+      <button style={{ ...ctxBtnStyle, color: "#f87171" }} onClick={onDelete}>🗑️ Delete</button>
+    </div>
+  );
+}
+
+const ctxBtnStyle = {
+  display: "block", width: "100%", textAlign: "left",
+  padding: "8px 12px", background: "none", border: "none",
+  color: "#cbd5e1", fontSize: 12, cursor: "pointer",
+};
+
+function SharingModal({ file, shares, users, currentUser, onShare, onRemoveShare, onClose }) {
+  const [selectedEmail, setSelectedEmail] = React.useState("");
+  const [accessLevel, setAccessLevel] = React.useState("view_only");
+
+  const availableUsers = users.filter(u => u.email !== currentUser?.email && !shares.some(s => s.shared_with_email === u.email));
+
+  const handleShare = () => {
+    if (selectedEmail) {
+      onShare(file, selectedEmail, accessLevel);
+      setSelectedEmail("");
+      setAccessLevel("view_only");
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 99999,
+    }} onClick={onClose}>
+      <div style={{
+        background: "#0f172a", borderRadius: 12, padding: 24, maxWidth: 400,
+        border: "1px solid rgba(255,255,255,0.1)",
+      }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ color: "#e2e8f0", marginBottom: 4, fontSize: 15, fontWeight: 600 }}>Share: {file.name}</h3>
+        <p style={{ color: "#64748b", fontSize: 12, marginBottom: 16 }}>Grant access to team members</p>
+
+        {/* Current shares */}
+        {shares.length > 0 && (
+          <div style={{ marginBottom: 16, padding: 12, background: "rgba(255,255,255,0.05)", borderRadius: 8 }}>
+            <p style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, marginBottom: 8 }}>Shared With:</p>
+            {shares.map(s => (
+              <div key={s.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <div>
+                  <div style={{ color: "#cbd5e1", fontSize: 12 }}>{s.shared_with_name}</div>
+                  <div style={{ color: "#64748b", fontSize: 10 }}>{s.access_level === "view_only" ? "View Only" : "Can Edit"}</div>
+                </div>
+                <button onClick={() => onRemoveShare(s.id)} style={{ color: "#f87171", background: "none", border: "none", cursor: "pointer", fontSize: 12 }}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add new share */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", color: "#94a3b8", fontSize: 11, fontWeight: 600, marginBottom: 6 }}>Share with:</label>
+          <select value={selectedEmail} onChange={e => setSelectedEmail(e.target.value)}
+            style={{
+              width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)",
+              background: "rgba(255,255,255,0.05)", color: "#e2e8f0", fontSize: 12, outline: "none",
+            }}>
+            <option value="">Select a team member…</option>
+            {availableUsers.map(u => (
+              <option key={u.email} value={u.email}>{u.full_name || u.email}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", color: "#94a3b8", fontSize: 11, fontWeight: 600, marginBottom: 6 }}>Access level:</label>
+          <select value={accessLevel} onChange={e => setAccessLevel(e.target.value)}
+            style={{
+              width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)",
+              background: "rgba(255,255,255,0.05)", color: "#e2e8f0", fontSize: 12, outline: "none",
+            }}>
+            <option value="view_only">View Only</option>
+            <option value="can_edit">Can Edit</option>
+          </select>
+        </div>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={handleShare} disabled={!selectedEmail}
+            style={{
+              flex: 1, padding: "8px 12px", borderRadius: 6, border: "none",
+              background: selectedEmail ? "#6366f1" : "#4b5563", color: "white", cursor: selectedEmail ? "pointer" : "not-allowed",
+              fontSize: 12, fontWeight: 600,
+            }}>
+            Add Share
+          </button>
+          <button onClick={onClose}
+            style={{
+              flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)",
+              background: "transparent", color: "#cbd5e1", cursor: "pointer",
+              fontSize: 12, fontWeight: 600,
+            }}>
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
