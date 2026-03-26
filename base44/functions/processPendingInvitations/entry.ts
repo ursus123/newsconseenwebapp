@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
 Deno.serve(async (req) => {
   try {
@@ -10,29 +10,26 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true, processed: 0 });
     }
 
-    // Get all registered users
-    const users = await base44.asServiceRole.entities.User.list();
+    // Process each invitation in parallel
+    const results = await Promise.all(invitations.map(async (invitation) => {
+      // Find matching registered user by email (targeted filter, not full list)
+      const users = await base44.asServiceRole.entities.User.filter({ email: invitation.email });
+      const user = users?.[0];
+      if (!user) return false; // Not registered yet
 
-    let processed = 0;
-    for (const invitation of invitations) {
-      // Find matching registered user by email
-      const user = users.find((u) => u.email === invitation.email);
-      if (!user) continue; // Not registered yet
-
-      // If already has company_id, just clean up
+      // Stamp company_id and role if not already set
       if (!user.company_id) {
         const updatePayload = { company_id: invitation.company_id };
-        if (invitation.role) {
-          updatePayload.role = invitation.role;
-        }
+        if (invitation.role) updatePayload.role = invitation.role;
         await base44.asServiceRole.entities.User.update(user.id, updatePayload);
       }
 
       // Clean up the processed invitation
       await base44.asServiceRole.entities.PendingInvitation.delete(invitation.id);
-      processed++;
-    }
+      return true;
+    }));
 
+    const processed = results.filter(Boolean).length;
     return Response.json({ ok: true, processed });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
