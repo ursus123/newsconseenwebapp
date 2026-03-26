@@ -1,281 +1,165 @@
 import React, { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, Send, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-const STATUS_CONFIG = {
-  present: { label: "Present", color: "bg-emerald-100 text-emerald-700 border-emerald-300", icon: CheckCircle2, iconColor: "text-emerald-600" },
-  absent:  { label: "Absent",  color: "bg-rose-100 text-rose-700 border-rose-300",           icon: XCircle,       iconColor: "text-rose-600" },
-  late:    { label: "Late",    color: "bg-amber-100 text-amber-700 border-amber-300",         icon: Clock,         iconColor: "text-amber-600" },
-};
+import { useToast } from "@/components/ui/use-toast";
 
 export default function ClassAttendancePage({ classObj, currentUser, onBack, onOpenStudent }) {
-  const [roster, setRoster]         = useState([]);
-  const [teacher, setTeacher]       = useState(null);
-  const [attendance, setAttendance] = useState({}); // personId → status
-  const [sessions, setSessions]     = useState([]);
-  const [loading, setLoading]       = useState(true);
+  const { toast } = useToast();
+  const [attendance, setAttendance] = useState({});
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted]   = useState(false);
-  const [expandedSession, setExpandedSession] = useState(null);
 
-  useEffect(() => { loadData(); }, [classObj.id]);
+  const { data: relationships = [] } = useQuery({
+    queryKey: ["class_relationships", classObj?.id],
+    queryFn: () => base44.entities.Relationship.filter({ 
+      company_id: currentUser?.company_id,
+      enterprise_id: classObj.id,
+      relationship_type: "person_enterprise",
+    }),
+    enabled: !!classObj?.id,
+  });
 
-  const loadData = async () => {
-    setLoading(true);
-    const [rels, tasks, allPeople] = await Promise.all([
-      base44.entities.Relationship.filter({ enterprise_name: classObj.enterprise_name, status: "active" }),
-      base44.entities.Task.filter({ task_type: "attendance", enterprise: classObj.id }),
-      base44.entities.Person.list(),
-    ]);
+  const { data: people = [] } = useQuery({
+    queryKey: ["class_people", currentUser?.company_id],
+    queryFn: () => base44.entities.Person.filter({ company_id: currentUser?.company_id }),
+    enabled: !!currentUser?.company_id,
+  });
 
-    // Helper: find a person record by the name stored in relationship
-    const findPerson = (name) => {
-      if (!name) return null;
-      const lower = name.trim().toLowerCase();
-      return allPeople.find(p => {
-        const full = `${p.first_name} ${p.last_name}`.trim().toLowerCase();
-        const pref = (p.preferred_name || "").toLowerCase();
-        return full === lower || pref === lower;
-      });
-    };
+  const students = relationships
+    .filter(r => r.status === "active")
+    .map(r => people.find(p => p.id === r.person_name || p.id === r.person_id))
+    .filter(p => p && p.person_type === "student");
 
-    // Roster: role = "student" (case-insensitive)
-    const studentRels = rels.filter(r => (r.role || "").toLowerCase() === "student");
-    // Teacher
-    const teacherRel = rels.find(r => (r.role || "").toLowerCase() === "teacher");
-    if (teacherRel?.person_name) {
-      const found = findPerson(teacherRel.person_name);
-      setTeacher(found || { first_name: teacherRel.person_name, last_name: "" });
-    }
+  useEffect(() => {
+    const initial = {};
+    students.forEach(s => {
+      initial[s.id] = null;
+    });
+    setAttendance(initial);
+  }, [students]);
 
-    // Build roster from relationship person_name
-    const studentPeople = studentRels
-      .filter(rel => rel.person_name)
-      .map(rel => {
-        const found = findPerson(rel.person_name);
-        if (found) return { ...found, _relId: rel.id };
-        // fallback: split name
-        const parts = rel.person_name.trim().split(" ");
-        return { id: `rel-${rel.id}`, first_name: parts[0] || rel.person_name, last_name: parts.slice(1).join(" "), _relId: rel.id };
-      });
-    setRoster(studentPeople);
-
-    // Initialize all to "present"
-    const init = {};
-    studentPeople.forEach(p => { init[p.id] = "present"; });
-    setAttendance(init);
-
-    // Sort sessions newest first
-    setSessions(tasks.sort((a, b) => new Date(b.created_date) - new Date(a.created_date)));
-    setLoading(false);
-  };
-
-  const handleMark = (personId, status) => {
-    setAttendance(prev => ({ ...prev, [personId]: status }));
-  };
-
-  const handleMarkAll = (status) => {
-    const next = {};
-    roster.forEach(p => { next[p.id] = status; });
-    setAttendance(next);
+  const handleToggle = (studentId) => {
+    setAttendance(prev => ({
+      ...prev,
+      [studentId]: prev[studentId] === null ? "present" : prev[studentId] === "present" ? "absent" : "present",
+    }));
   };
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    const present = roster.filter(p => attendance[p.id] === "present").map(p => p.id);
-    const absent  = roster.filter(p => attendance[p.id] === "absent").map(p => p.id);
-    const late    = roster.filter(p => attendance[p.id] === "late").map(p => p.id);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      
+      for (const [studentId, state] of Object.entries(attendance)) {
+        if (state) {
+          await base44.entities.Task.create({
+            task_type: "attendance",
+            title: `Attendance — ${classObj.enterprise_name}`,
+            status: "completed",
+            outcome: state === "present" ? "completed" : "cancelled",
+            date: today,
+            enterprise: classObj.id,
+            company_id: currentUser.company_id,
+            assigned_to_email: people.find(p => p.id === studentId)?.email,
+            assigned_to_name: people.find(p => p.id === studentId)?.preferred_name || people.find(p => p.id === studentId)?.first_name,
+          });
+        }
+      }
 
-    await base44.entities.Task.create({
-      task_type: "attendance",
-      title: `Attendance — ${classObj.enterprise_name} — ${new Date().toLocaleDateString()}`,
-      status: "completed",
-      outcome: "completed",
-      enterprise: classObj.id,
-      assigned_to_name: teacher ? `${teacher.first_name} ${teacher.last_name}`.trim() : currentUser?.full_name,
-      assigned_to_email: currentUser?.email,
-      scheduled_date: new Date().toISOString().split("T")[0],
-      outcome_notes: JSON.stringify({ present, absent, late }),
-      company_id: currentUser?.company_id,
-    });
+      // Fire and forget refresh
+      fetch("https://newsconseenwebapp-production.up.railway.app/load/task-summary", {
+        method: "POST",
+      }).catch(() => {});
 
-    setSubmitted(true);
-    setSubmitting(false);
-    await loadData();
-    setTimeout(() => setSubmitted(false), 3000);
+      toast({ title: "Attendance recorded", description: `${Object.values(attendance).filter(s => s).length} students marked.` });
+      onBack();
+    } catch (e) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const parseSession = (s) => {
-    try { return JSON.parse(s.outcome_notes || "{}"); } catch { return {}; }
-  };
-
-  const presentCount  = roster.filter(p => attendance[p.id] === "present").length;
-  const absentCount   = roster.filter(p => attendance[p.id] === "absent").length;
-  const lateCount     = roster.filter(p => attendance[p.id] === "late").length;
-
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-    </div>
-  );
+  const markedCount = Object.values(attendance).filter(s => s).length;
+  const total = students.length;
+  const pct = total > 0 ? Math.round((markedCount / total) * 100) : 0;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="flex flex-col gap-6 min-h-full">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Back
-        </button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold text-slate-800">{classObj.enterprise_name}</h1>
-          <p className="text-sm text-slate-500">
-            {teacher ? `Teacher: ${teacher.first_name} ${teacher.last_name}`.trim() : "No teacher assigned"}
-            {" · "}
-            {roster.length} student{roster.length !== 1 ? "s" : ""}
-          </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={onBack}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800">{classObj?.enterprise_name}</h1>
+            <p className="text-slate-500 text-sm mt-0.5">{total} students</p>
+          </div>
         </div>
-        <div className="text-right">
-          <p className="text-sm font-medium text-slate-700">{new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+        <Button
+          size="sm"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white"
+          onClick={handleSubmit}
+          disabled={submitting || markedCount === 0}
+        >
+          {submitting ? "Submitting..." : "Submit Attendance"}
+        </Button>
+      </div>
+
+      {/* Progress bar */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-slate-700">{markedCount} of {total} marked</span>
+          <span className="text-sm font-bold text-emerald-600">{pct}%</span>
+        </div>
+        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+            style={{ width: `${pct}%` }}
+          />
         </div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-4">
-        {[
-          { label: "Present", count: presentCount, status: "present" },
-          { label: "Absent",  count: absentCount,  status: "absent" },
-          { label: "Late",    count: lateCount,    status: "late" },
-        ].map(s => {
-          const cfg = STATUS_CONFIG[s.status];
-          return (
-            <div key={s.status} className={`rounded-2xl border p-4 ${cfg.color}`}>
-              <p className="text-2xl font-bold">{s.count}</p>
-              <p className="text-sm font-medium">{s.label}</p>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Attendance form */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-slate-500" />
-              <span className="text-sm font-semibold text-slate-700">Mark Attendance</span>
-            </div>
-            <div className="flex gap-1">
-              {["present", "absent", "late"].map(s => (
-                <button key={s} onClick={() => handleMarkAll(s)}
-                  className={`text-[10px] px-2 py-1 rounded-lg font-medium border transition-all ${STATUS_CONFIG[s].color}`}>
-                  All {STATUS_CONFIG[s].label}
-                </button>
-              ))}
+      {/* Student list */}
+      <div className="space-y-2">
+        {students.map(student => (
+          <div
+            key={student.id}
+            className="bg-white border border-slate-100 rounded-xl p-4 flex items-center gap-3 hover:border-emerald-200 transition-all"
+          >
+            <button
+              onClick={() => onOpenStudent(student)}
+              className="flex-1 text-left"
+            >
+              <p className="font-semibold text-slate-800">{student.preferred_name || student.first_name} {student.last_name}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{student.email}</p>
+            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleToggle(student.id)}
+                className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
+                  attendance[student.id] === "present"
+                    ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                    : "bg-slate-100 text-slate-500 border-slate-200"
+                } border`}
+              >
+                <Check className="w-4 h-4" /> Present
+              </button>
+              <button
+                onClick={() => handleToggle(student.id)}
+                className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
+                  attendance[student.id] === "absent"
+                    ? "bg-rose-100 text-rose-700 border-rose-200"
+                    : "bg-slate-100 text-slate-500 border-slate-200"
+                } border`}
+              >
+                <X className="w-4 h-4" /> Absent
+              </button>
             </div>
           </div>
-
-          {roster.length === 0 ? (
-            <div className="py-12 text-center text-sm text-slate-400">
-              No students enrolled. Add Relationships with role "student" to this class.
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-50">
-              {roster.map((person) => {
-                const status = attendance[person.id] || "present";
-                const Cfg = STATUS_CONFIG[status];
-                return (
-                  <div key={person.id} className="flex items-center gap-3 px-5 py-3">
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 shrink-0">
-                      {(person.first_name || "?")[0].toUpperCase()}
-                    </div>
-                    <button onClick={() => onOpenStudent(person)} className="flex-1 text-left min-w-0">
-                      <p className="text-sm font-medium text-slate-700 truncate hover:text-blue-600 transition-colors">
-                        {person.first_name} {person.last_name}
-                      </p>
-                      {person.primary_role && <p className="text-[11px] text-slate-400">{person.primary_role}</p>}
-                    </button>
-                    <div className="flex gap-1">
-                      {["present", "absent", "late"].map(s => {
-                        const c = STATUS_CONFIG[s];
-                        const Icon = c.icon;
-                        return (
-                          <button key={s} onClick={() => handleMark(person.id, s)}
-                            title={c.label}
-                            className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all ${
-                              status === s ? c.color + " border-current" : "border-slate-100 bg-slate-50 hover:border-slate-200"
-                            }`}>
-                            <Icon className={`w-4 h-4 ${status === s ? c.iconColor : "text-slate-300"}`} />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {roster.length > 0 && (
-            <div className="px-5 py-4 border-t border-slate-100">
-              {submitted ? (
-                <div className="flex items-center gap-2 text-emerald-600 text-sm font-medium">
-                  <CheckCircle2 className="w-4 h-4" /> Attendance saved!
-                </div>
-              ) : (
-                <Button className="w-full bg-blue-600 hover:bg-blue-700 gap-2" onClick={handleSubmit} disabled={submitting}>
-                  <Send className="w-4 h-4" /> {submitting ? "Saving..." : "Submit Attendance"}
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Past sessions */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100">
-            <p className="text-sm font-semibold text-slate-700">Past Sessions ({sessions.length})</p>
-          </div>
-          {sessions.length === 0 ? (
-            <div className="py-12 text-center text-sm text-slate-400">No sessions recorded yet.</div>
-          ) : (
-            <div className="divide-y divide-slate-50 max-h-96 overflow-y-auto">
-              {sessions.map(session => {
-                const meta = parseSession(session);
-                const total = (meta.present?.length || 0) + (meta.absent?.length || 0) + (meta.late?.length || 0);
-                const pct = total > 0 ? Math.round((meta.present?.length || 0) / total * 100) : 0;
-                const isExpanded = expandedSession === session.id;
-                return (
-                  <div key={session.id}>
-                    <button onClick={() => setExpandedSession(isExpanded ? null : session.id)}
-                      className="w-full flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors text-left">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-slate-700">
-                          {new Date(session.scheduled_date || session.created_date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                        </p>
-                        <p className="text-[11px] text-slate-400">{session.assigned_to_name || "—"}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs font-semibold ${pct >= 80 ? "text-emerald-600" : pct >= 60 ? "text-amber-600" : "text-rose-600"}`}>
-                          {pct}% present
-                        </span>
-                        {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-slate-400" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />}
-                      </div>
-                    </button>
-                    {isExpanded && (
-                      <div className="px-5 pb-3 bg-slate-50 border-t border-slate-100">
-                        <div className="flex gap-4 text-xs pt-2">
-                          <span className="text-emerald-600 font-medium">✓ {meta.present?.length || 0} present</span>
-                          <span className="text-rose-600 font-medium">✗ {meta.absent?.length || 0} absent</span>
-                          <span className="text-amber-600 font-medium">⏱ {meta.late?.length || 0} late</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        ))}
       </div>
     </div>
   );

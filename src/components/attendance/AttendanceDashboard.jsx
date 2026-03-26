@@ -1,184 +1,173 @@
 import React, { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Building2, Users, CheckSquare, TrendingUp, ChevronRight, BookOpen } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { Users, BookOpen, Award, TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function AttendanceDashboard({ currentUser, onOpenClass, onOpenPerson }) {
-  const [orgs, setOrgs] = useState([]);
-  const [selectedOrg, setSelectedOrg] = useState(null);
-  const [classes, setClasses] = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("classes");
 
-  useEffect(() => {
-    loadOrgs();
-  }, [currentUser]);
+  const { data: people = [] } = useQuery({
+    queryKey: ["attendance_people", currentUser?.company_id],
+    queryFn: () => base44.entities.Person.filter({ company_id: currentUser?.company_id }),
+    enabled: !!currentUser?.company_id,
+  });
 
-  const loadOrgs = async () => {
-    setLoading(true);
-    const q = currentUser?.role === "super_admin" ? {} : { company_id: currentUser?.company_id };
-    const all = await base44.entities.Enterprise.filter(q);
-    setOrgs(all.filter(e => e.status === "active" || !e.status));
-    if (all.length > 0) {
-      const first = all.find(e => e.status === "active") || all[0];
-      setSelectedOrg(first);
-      await loadClasses(first, all);
-    }
-    setLoading(false);
+  const { data: enterprises = [] } = useQuery({
+    queryKey: ["attendance_enterprises", currentUser?.company_id],
+    queryFn: () => base44.entities.Enterprise.filter({ company_id: currentUser?.company_id }),
+    enabled: !!currentUser?.company_id,
+  });
+
+  const { data: relationships = [] } = useQuery({
+    queryKey: ["attendance_relationships", currentUser?.company_id],
+    queryFn: () => base44.entities.Relationship.filter({ company_id: currentUser?.company_id }),
+    enabled: !!currentUser?.company_id,
+  });
+
+  const { data: tasks = [] } = useQuery({
+    queryKey: ["attendance_tasks", currentUser?.company_id],
+    queryFn: () => base44.entities.Task.filter({ 
+      company_id: currentUser?.company_id,
+      task_type: "attendance",
+    }),
+    enabled: !!currentUser?.company_id,
+  });
+
+  const students = people.filter(p => p.person_type === "student");
+  const teachers = people.filter(p => p.person_type === "teacher");
+  const classes = enterprises;
+
+  // Calculate attendance rate for today
+  const today = new Date().toISOString().split("T")[0];
+  const todayAttendance = tasks.filter(t => t.date === today);
+  const attendanceRate = todayAttendance.length > 0
+    ? Math.round((todayAttendance.filter(t => t.outcome === "completed").length / todayAttendance.length) * 100)
+    : 0;
+
+  const getClassStudentCount = (classId) => {
+    return relationships.filter(r => 
+      r.enterprise_id === classId && 
+      r.relationship_type === "person_enterprise" &&
+      r.status === "active" &&
+      people.find(p => p.id === r.person_name && p.person_type === "student")
+    ).length;
   };
 
-  const loadClasses = async (org, allEnterprises) => {
-    const orgName = org.enterprise_name;
-    const all = allEnterprises || await base44.entities.Enterprise.filter(
-      currentUser?.role === "super_admin" ? {} : { company_id: currentUser?.company_id }
+  const getClassTeacher = (classId) => {
+    const teacherRel = relationships.find(r => 
+      r.enterprise_id === classId && 
+      r.relationship_type === "person_enterprise" &&
+      r.status === "active"
     );
-
-    // Strategy 1: via enterprise_enterprise relationships (parent → child)
-    const rels = await base44.entities.Relationship.filter({
-      relationship_type: "enterprise_enterprise",
-      enterprise_name: orgName,
-      status: "active",
-    });
-
-    let cls = [];
-    if (rels.length > 0) {
-      const childNames = rels.map(r => r.secondary_enterprise).filter(Boolean);
-      cls = all.filter(e => childNames.includes(e.enterprise_name) && (e.status === "active" || !e.status));
-    }
-
-    // Strategy 2: fallback — enterprises with parent_enterprise_id set to org.id
-    if (cls.length === 0) {
-      cls = all.filter(e => e.parent_enterprise_id === org.id && (e.status === "active" || !e.status));
-    }
-
-    setClasses(cls);
-
-    // Load recent attendance sessions
-    const tasks = await base44.entities.Task.filter({ task_type: "attendance", status: "completed" });
-    const classIds = cls.map(c => c.id);
-    setSessions(tasks.filter(t => classIds.includes(t.enterprise)));
+    if (!teacherRel) return null;
+    return people.find(p => p.id === teacherRel.person_name && p.person_type === "teacher");
   };
-
-  const handleOrgChange = async (org) => {
-    setSelectedOrg(org);
-    await loadClasses(org);
-  };
-
-  // Chart data: sessions per class
-  const chartData = classes.map(cls => ({
-    name: cls.short_name || cls.enterprise_name?.slice(0, 12),
-    sessions: sessions.filter(s => s.enterprise === cls.id).length,
-  }));
-
-  const totalStudentsEstimate = sessions.reduce((sum, s) => {
-    const meta = s.outcome_notes ? (() => { try { return JSON.parse(s.outcome_notes); } catch { return {}; } })() : {};
-    return sum + (meta.present?.length || 0) + (meta.absent?.length || 0) + (meta.late?.length || 0);
-  }, 0);
-
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-    </div>
-  );
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="flex flex-col gap-6 min-h-full">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
-          <BookOpen className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-slate-800">Attendance Register</h1>
-          <p className="text-sm text-slate-500">Track and manage attendance across your organization</p>
-        </div>
+      <div>
+        <h1 className="text-3xl font-black text-slate-800">Attendance Register</h1>
+        <p className="text-slate-500 text-sm mt-1">Track and manage student attendance</p>
       </div>
 
-      {/* Org selector */}
-      {orgs.length > 1 && (
-        <div className="flex gap-2 flex-wrap">
-          {orgs.map(org => (
-            <button key={org.id} onClick={() => handleOrgChange(org)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
-                selectedOrg?.id === org.id
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-slate-600 border-slate-200 hover:border-blue-300"
-              }`}>
-              {org.enterprise_name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Classes", value: classes.length, icon: Building2, color: "blue" },
-          { label: "Sessions Recorded", value: sessions.length, icon: CheckSquare, color: "emerald" },
-          { label: "Attendance Entries", value: totalStudentsEstimate, icon: Users, color: "violet" },
-          { label: "This Week", value: sessions.filter(s => {
-            const d = new Date(s.updated_date || s.created_date);
-            const now = new Date();
-            return (now - d) < 7 * 24 * 60 * 60 * 1000;
-          }).length, icon: TrendingUp, color: "amber" },
-        ].map(stat => (
-          <div key={stat.label} className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
-            <div className={`w-8 h-8 rounded-lg bg-${stat.color}-100 flex items-center justify-center mb-2`}>
-              <stat.icon className={`w-4 h-4 text-${stat.color}-600`} />
+          { label: "Students", value: students.length, icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
+          { label: "Teachers", value: teachers.length, icon: Award, color: "text-emerald-600", bg: "bg-emerald-50" },
+          { label: "Classes", value: classes.length, icon: BookOpen, color: "text-violet-600", bg: "bg-violet-50" },
+          { label: "Today's Rate", value: `${attendanceRate}%`, icon: TrendingUp, color: "text-orange-600", bg: "bg-orange-50" },
+        ].map(({ label, value, icon: Icon, color, bg }) => (
+          <div key={label} className="bg-white border border-slate-100 rounded-2xl p-4 flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
+              <Icon className={`w-5 h-5 ${color}`} />
             </div>
-            <p className="text-2xl font-bold text-slate-800">{stat.value}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{stat.label}</p>
+            <div>
+              <p className="text-2xl font-black text-slate-800">{value}</p>
+              <p className="text-xs text-slate-400">{label}</p>
+            </div>
           </div>
         ))}
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Sessions chart */}
-        {chartData.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-            <p className="text-sm font-semibold text-slate-700 mb-4">Sessions by Class</p>
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="sessions" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+      {/* Classes grid */}
+      {activeTab === "classes" && (
+        <div>
+          <h2 className="text-lg font-bold text-slate-800 mb-3">Classes</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {classes.map(classObj => (
+              <div key={classObj.id} className="bg-white border border-slate-100 rounded-2xl p-5 flex flex-col gap-3">
+                <div>
+                  <h3 className="font-bold text-slate-800">{classObj.enterprise_name}</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{getClassStudentCount(classObj.id)} students</p>
+                </div>
+                {getClassTeacher(classObj.id) && (
+                  <p className="text-sm text-slate-600">
+                    <span className="text-slate-400">Teacher:</span> {getClassTeacher(classObj.id).preferred_name || getClassTeacher(classObj.id).first_name}
+                  </p>
+                )}
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white mt-auto w-full"
+                  onClick={() => onOpenClass(classObj)}
+                >
+                  Take Attendance
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* People tabs and list */}
+      <div>
+        <div className="flex gap-2 mb-3 border-b border-slate-200">
+          {["classes", "students", "teachers"].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm font-medium transition-all ${
+                activeTab === tab
+                  ? "border-b-2 border-emerald-600 text-emerald-700"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "students" && (
+          <div className="space-y-2">
+            {students.map(student => (
+              <button
+                key={student.id}
+                onClick={() => onOpenPerson(student, "student")}
+                className="w-full text-left bg-white border border-slate-100 rounded-xl p-4 hover:border-emerald-200 hover:bg-emerald-50 transition-all"
+              >
+                <p className="font-semibold text-slate-800">{student.preferred_name || student.first_name} {student.last_name}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{student.status || "active"}</p>
+              </button>
+            ))}
           </div>
         )}
 
-        {/* Classes list */}
-        <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-          <p className="text-sm font-semibold text-slate-700 mb-3">
-            {selectedOrg ? `Classes in ${selectedOrg.enterprise_name}` : "Classes"}
-          </p>
-          {classes.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-8">
-              No classes found. Create sub-enterprises to represent classes.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {classes.map(cls => {
-                const clsSessions = sessions.filter(s => s.enterprise === cls.id).length;
-                return (
-                  <button key={cls.id} onClick={() => onOpenClass(cls)}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50 transition-all text-left group">
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
-                      <Building2 className="w-4 h-4 text-blue-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-800 truncate">{cls.enterprise_name}</p>
-                      <p className="text-xs text-slate-400">{clsSessions} session{clsSessions !== 1 ? "s" : ""} recorded</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        {activeTab === "teachers" && (
+          <div className="space-y-2">
+            {teachers.map(teacher => (
+              <button
+                key={teacher.id}
+                onClick={() => onOpenPerson(teacher, "teacher")}
+                className="w-full text-left bg-white border border-slate-100 rounded-xl p-4 hover:border-emerald-200 hover:bg-emerald-50 transition-all"
+              >
+                <p className="font-semibold text-slate-800">{teacher.preferred_name || teacher.first_name} {teacher.last_name}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{teacher.primary_role || "Teacher"}</p>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
