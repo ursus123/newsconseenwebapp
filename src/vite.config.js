@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import path from 'path'
 
+// Cache bust: 2026-03-26T04
 export default defineConfig({
   logLevel: 'error',
   plugins: [
@@ -16,5 +17,8 @@ export default defineConfig({
     alias: {
       '@': path.resolve('./src'),
     },
+  },
+  optimizeDeps: {
+    force: true,
   },
 })
