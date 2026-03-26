@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { X, Zap } from "lucide-react";
 
 function getDaysRemaining(trialEndsAt) {
@@ -22,7 +21,6 @@ function getBannerStyle(days) {
 const SESSION_KEY = "trial_banner_dismissed";
 
 export default function TrialBanner({ enterprise, userRole }) {
-  const navigate = useNavigate();
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
@@ -57,7 +55,7 @@ export default function TrialBanner({ enterprise, userRole }) {
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <button
-          onClick={() => navigate("/Billing")}
+          onClick={() => window.location.href = "/Billing"}
           className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${style.btn}`}
         >
           Upgrade Now →
