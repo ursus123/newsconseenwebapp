@@ -125,12 +125,30 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
   const [geocodeNote, setGeocodeNote] = useState(null);
   const [geocodeError, setGeocodeError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [primaryRoles, setPrimaryRoles] = useState([]);
   const withScope = useWithScope(currentUser);
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["enterprises-list"],
     queryFn: () => base44.entities.Enterprise.list(),
     enabled: open,
+  });
+
+  // Fetch primary roles based on person_type
+  useQuery({
+    queryKey: ["primary-roles", form.person_type],
+    queryFn: async () => {
+      if (!form.person_type) return [];
+      const options = await base44.entities.MasterDataOption.filter({
+        entity_type: 'person',
+        field_name: 'primary_role',
+        parent_value: form.person_type,
+        is_active: true,
+      });
+      setPrimaryRoles(options);
+      return options;
+    },
+    enabled: open && !!form.person_type,
   });
 
   useEffect(() => {
@@ -276,7 +294,12 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
         return (
           <div className="space-y-5">
             <Field label="Primary Role">
-              <SelectField value={form.primary_role} onChange={(v) => set("primary_role", v)} options={ALL_ROLES.map((r) => ({ value: r, label: r }))} placeholder="Select primary role" />
+              <SelectField 
+                value={form.primary_role} 
+                onChange={(v) => set("primary_role", v)} 
+                options={primaryRoles.length > 0 ? primaryRoles.map((r) => ({ value: r.value, label: r.label || r.value })) : ALL_ROLES.map((r) => ({ value: r, label: r }))} 
+                placeholder={form.person_type ? "Select primary role" : "Select person type first"} 
+              />
             </Field>
             <Field label="Role Category">
               <SelectField value={form.role_category} onChange={(v) => set("role_category", v)} options={[
