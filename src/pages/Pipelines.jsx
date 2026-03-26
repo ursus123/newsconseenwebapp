@@ -1,54 +1,76 @@
 import React, { useState } from "react";
-import AirflowSection from "../components/reports/AirflowSection";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import {
   RefreshCw, ExternalLink, Database, CheckCircle2, AlertTriangle,
   Clock, Activity, Zap, Building2, Users, Package, Wrench,
-  CheckSquare, Receipt, MapPin, Loader2, Info,
+  CheckSquare, Receipt, MapPin, Loader2, Info, Link2, Globe,
 } from "lucide-react";
 
-const AIRFLOW_URL = "http://localhost:8080";
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const CRON_SECRET = import.meta.env.VITE_CRON_SECRET || "";
 
 const PIPELINE_ENTITIES = [
-  { icon: CheckSquare,  label: "Tasks",        desc: "Operational task records and completion data",      color: "text-blue-500",    bg: "bg-blue-50"   },
-  { icon: Receipt,      label: "Transactions",  desc: "Financial ledger — income, expenses, inventory",    color: "text-emerald-500", bg: "bg-emerald-50"},
-  { icon: Wrench,       label: "Services",      desc: "Service catalog and delivery records",              color: "text-violet-500",  bg: "bg-violet-50" },
-  { icon: Building2,    label: "Enterprises",   desc: "Organization profiles and metadata",                color: "text-amber-500",   bg: "bg-amber-50"  },
-  { icon: Users,        label: "People",        desc: "Staff, clients, and external contacts",             color: "text-cyan-500",    bg: "bg-cyan-50"   },
-  { icon: Package,      label: "Products",      desc: "Inventory items, assets, and medications",          color: "text-rose-500",    bg: "bg-rose-50"   },
-  { icon: MapPin,       label: "Geospatial",    desc: "Location data enriched with census and demographics", color: "text-teal-500", bg: "bg-teal-50"   },
+  { icon: CheckSquare, label: "Tasks",         desc: "Operational task records and completion metrics",         color: "text-blue-500",    bg: "bg-blue-50"    },
+  { icon: Receipt,     label: "Transactions",  desc: "Posted financial records — revenue and expenses only",   color: "text-emerald-500", bg: "bg-emerald-50" },
+  { icon: Wrench,      label: "Services",      desc: "Service catalog, rates, and delivery records",           color: "text-violet-500",  bg: "bg-violet-50"  },
+  { icon: Building2,   label: "Enterprises",   desc: "Organization profiles, types, and operating status",     color: "text-amber-500",   bg: "bg-amber-50"   },
+  { icon: Users,       label: "People",        desc: "Staff, participants, and external contacts",             color: "text-cyan-500",    bg: "bg-cyan-50"    },
+  { icon: Package,     label: "Products",      desc: "Inventory, assets, medications, and equipment",          color: "text-rose-500",    bg: "bg-rose-50"    },
+  { icon: MapPin,      label: "Addresses",     desc: "Location records with geocoordinates",                   color: "text-orange-500",  bg: "bg-orange-50"  },
+  { icon: Link2,       label: "Relationships", desc: "Cross-entity links — the join backbone for dashboards",  color: "text-indigo-500",  bg: "bg-indigo-50"  },
+  { icon: Globe,       label: "Geospatial",    desc: "Enterprise locations with DBSCAN spatial clustering",    color: "text-teal-500",    bg: "bg-teal-50"    },
 ];
-
-const MOCK_PIPELINE_STATUS = {
-  total: 7,
-  healthy: 7,
-  failed: 0,
-  lastRun: "Today at 3:00 AM",
-  nextRun: "Tomorrow at 3:00 AM",
-  avgDuration: "4m 12s",
-};
 
 export default function Pipelines() {
   const [etlLoading, setEtlLoading] = useState(false);
+  const [etlResult, setEtlResult] = useState(null);
   const [lastTriggered, setLastTriggered] = useState(null);
   const { toast } = useToast();
 
   const triggerEtl = async () => {
     setEtlLoading(true);
+    setEtlResult(null);
     try {
-      const res = await fetch("/cron/etl-all", { method: "POST" });
-      if (!res.ok) throw new Error(`Status ${res.status}`);
+      const res = await fetch(`${RAILWAY_URL}/cron/etl-all`, {
+        method: "POST",
+        headers: { "x-cron-secret": CRON_SECRET },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `Status ${res.status}`);
+      setEtlResult(data);
       setLastTriggered(new Date().toLocaleTimeString());
-      toast({ title: "ETL triggered successfully", description: "All pipelines are now refreshing. Check logs in Airflow for progress." });
+      toast({
+        title: data.all_success
+          ? `ETL complete — ${data.success}/${data.total} entities synced`
+          : `ETL partial — ${data.success}/${data.total} succeeded`,
+        description: data.all_success
+          ? "All analytics tables are now up to date."
+          : "Some entities failed. Check results below.",
+        variant: data.all_success ? "default" : "destructive",
+      });
     } catch (e) {
-      toast({ title: "ETL trigger failed", description: e.message || "Could not reach the pipeline endpoint. Check your Airflow setup.", variant: "destructive" });
+      toast({
+        title: "ETL trigger failed",
+        description: e.message || "Could not reach the pipeline endpoint.",
+        variant: "destructive",
+      });
     } finally {
       setEtlLoading(false);
     }
   };
 
-  const hasFailures = MOCK_PIPELINE_STATUS.failed > 0;
+  const pipelineStats = etlResult ? {
+    total:    etlResult.total,
+    healthy:  etlResult.success,
+    failed:   etlResult.total - etlResult.success,
+  } : {
+    total:   9,
+    healthy: 9,
+    failed:  0,
+  };
+
+  const hasFailures = pipelineStats.failed > 0;
   const statusColor = hasFailures ? "text-rose-600" : "text-emerald-600";
   const statusBg    = hasFailures ? "bg-rose-50 border-rose-200" : "bg-emerald-50 border-emerald-200";
   const StatusIcon  = hasFailures ? AlertTriangle : CheckCircle2;
@@ -89,23 +111,15 @@ export default function Pipelines() {
           <StatusIcon className={`w-5 h-5 ${statusColor}`} />
           <span className={`font-bold text-sm ${statusColor}`}>
             {hasFailures
-              ? `${MOCK_PIPELINE_STATUS.failed} pipeline${MOCK_PIPELINE_STATUS.failed !== 1 ? "s" : ""} failed`
-              : `All ${MOCK_PIPELINE_STATUS.total} pipelines healthy`
+              ? `${pipelineStats.failed} pipeline${pipelineStats.failed !== 1 ? "s" : ""} failed`
+              : `All ${pipelineStats.total} pipelines healthy`
             }
           </span>
         </div>
         <div className="flex items-center gap-6 flex-wrap ml-auto text-xs text-slate-500">
           <span className="flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5" />
-            Last run: <strong className="text-slate-700 ml-1">{lastTriggered ? `Manually at ${lastTriggered}` : MOCK_PIPELINE_STATUS.lastRun}</strong>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Activity className="w-3.5 h-3.5" />
-            Next scheduled: <strong className="text-slate-700 ml-1">{MOCK_PIPELINE_STATUS.nextRun}</strong>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Zap className="w-3.5 h-3.5" />
-            Avg duration: <strong className="text-slate-700 ml-1">{MOCK_PIPELINE_STATUS.avgDuration}</strong>
+            Last run: <strong className="text-slate-700 ml-1">{lastTriggered ? `Manually at ${lastTriggered}` : "Not yet triggered"}</strong>
           </span>
         </div>
       </div>
@@ -113,10 +127,10 @@ export default function Pipelines() {
       {/* ── Stats row ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Active Pipelines",  value: MOCK_PIPELINE_STATUS.total,   icon: Activity,      color: "text-blue-600",    bg: "bg-blue-50"   },
-          { label: "Healthy",           value: MOCK_PIPELINE_STATUS.healthy,  icon: CheckCircle2,  color: "text-emerald-600", bg: "bg-emerald-50"},
-          { label: "Failed",            value: MOCK_PIPELINE_STATUS.failed,   icon: AlertTriangle, color: hasFailures ? "text-rose-600" : "text-slate-400", bg: hasFailures ? "bg-rose-50" : "bg-slate-50" },
-          { label: "Entities Synced",   value: "7",                           icon: Database,      color: "text-violet-600",  bg: "bg-violet-50" },
+          { label: "Active Pipelines",  value: pipelineStats.total,   icon: Activity,      color: "text-blue-600",    bg: "bg-blue-50"   },
+          { label: "Healthy",           value: pipelineStats.healthy,  icon: CheckCircle2,  color: "text-emerald-600", bg: "bg-emerald-50"},
+          { label: "Failed",            value: pipelineStats.failed,   icon: AlertTriangle, color: hasFailures ? "text-rose-600" : "text-slate-400", bg: hasFailures ? "bg-rose-50" : "bg-slate-50" },
+          { label: "Entities Synced",   value: String(pipelineStats.total),                icon: Database,      color: "text-violet-600",  bg: "bg-violet-50" },
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="bg-white border border-slate-100 rounded-2xl p-4 flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
@@ -129,6 +143,45 @@ export default function Pipelines() {
           </div>
         ))}
       </div>
+
+      {/* ── ETL Result Detail Table ── */}
+      {etlResult && (
+        <div className="bg-white border border-slate-100 rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Database className="w-4 h-4 text-slate-400" />
+            <h2 className="text-sm font-bold text-slate-700">Last ETL Run Results</h2>
+            <span className="ml-auto text-xs text-slate-400">Triggered at {lastTriggered}</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {Object.entries(etlResult.results || {}).map(([entity, result]) => (
+              <div key={entity} className={`flex items-center gap-2 p-3 rounded-xl border text-xs ${
+                result.status === "success"
+                  ? "border-emerald-100 bg-emerald-50"
+                  : result.status === "skipped"
+                  ? "border-amber-100 bg-amber-50"
+                  : "border-rose-100 bg-rose-50"
+              }`}>
+                <div className={`w-2 h-2 rounded-full shrink-0 ${
+                  result.status === "success" ? "bg-emerald-500"
+                  : result.status === "skipped" ? "bg-amber-400"
+                  : "bg-rose-500"
+                }`} />
+                <div className="min-w-0">
+                  <p className="font-bold text-slate-700 capitalize">{entity}</p>
+                  <p className="text-slate-500 truncate">
+                    {result.status === "success"
+                      ? `${result.rows_loaded} rows`
+                      : result.status === "skipped"
+                      ? "skipped — no data"
+                      : result.detail?.slice(0, 40) || "error"
+                    }
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── What these pipelines do ── */}
       <div className="bg-white border border-slate-100 rounded-2xl p-5">
@@ -152,24 +205,46 @@ export default function Pipelines() {
         </div>
       </div>
 
-      {/* ── Airflow Section ── */}
-      <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-bold text-slate-700">Pipeline Monitor</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Live Airflow DAG status and execution logs</p>
-          </div>
-          <a
-            href={AIRFLOW_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
-          >
-            Open Full UI <ExternalLink className="w-3 h-3" />
-          </a>
+      {/* ── Pipeline Logs Links ── */}
+      <div className="bg-white border border-slate-100 rounded-2xl p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Activity className="w-4 h-4 text-slate-400" />
+          <h2 className="text-sm font-bold text-slate-700">Pipeline Logs</h2>
         </div>
-        <div className="p-5">
-          <AirflowSection />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-3 p-4 rounded-xl border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50 transition-all group">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+              <Activity className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-700 group-hover:text-emerald-700">Airflow UI</p>
+              <p className="text-xs text-slate-400">localhost:8080 — local dev</p>
+            </div>
+            <ExternalLink className="w-3.5 h-3.5 text-slate-300 ml-auto group-hover:text-emerald-500" />
+          </a>
+          <a href={`${RAILWAY_URL}/docs`} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-3 p-4 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50 transition-all group">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+              <Database className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-700 group-hover:text-blue-700">API Docs</p>
+              <p className="text-xs text-slate-400">FastAPI Swagger UI</p>
+            </div>
+            <ExternalLink className="w-3.5 h-3.5 text-slate-300 ml-auto group-hover:text-blue-500" />
+          </a>
+          <a href={`${RAILWAY_URL}/health`} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-3 p-4 rounded-xl border border-slate-100 hover:border-violet-200 hover:bg-violet-50 transition-all group">
+            <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-5 h-5 text-violet-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-700 group-hover:text-violet-700">Health Check</p>
+              <p className="text-xs text-slate-400">API and database status</p>
+            </div>
+            <ExternalLink className="w-3.5 h-3.5 text-slate-300 ml-auto group-hover:text-violet-500" />
+          </a>
         </div>
       </div>
 
