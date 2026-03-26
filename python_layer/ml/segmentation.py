@@ -6,30 +6,51 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------------
-# K-Means — Client LTV Segmentation
+# K-Means — Entity LTV Segmentation
 #
-# CRISP-DM Phase 4 Objective 3: segment clients by lifetime
-# value to identify high-value relationships worth retaining
-# and low-engagement clients who may need outreach.
+# Segments enterprise-level groups by lifetime value to
+# identify high-value relationships worth retaining and
+# low-engagement groups that may need outreach.
 #
-# Input:  people_summary + transaction_summary joined on enterprise_id
-# Output: per-enterprise-group segment labels with LTV estimates
+# Generalised from homecare-specific client segmentation to
+# work across all enterprise verticals. Any person type can
+# be segmented — staff, participants, contacts, or all.
 #
-# Segments (k=3):
+# Input:  people_summary + transaction_summary + task_summary
+# Output: per-group segment labels with LTV estimates
+#
+# Segments (k=3 default):
 #   high_value    — long tenure, high transaction value, active
-#   mid_value     — medium tenure, moderate value
-#   low_engagement— short tenure or low transaction history
+#   mid_value     — moderate tenure and value
+#   low_engagement— short tenure or low activity
 # ----------------------------------------------------------
 
 N_CLUSTERS = 3
 SEGMENT_LABELS = {0: "high_value", 1: "mid_value", 2: "low_engagement"}
 
+# Person types that represent the "served" population —
+# i.e. the entities whose LTV is worth measuring.
+# Mirrors PARTICIPANT_TYPES from etl/people.py.
+# If none of these are present, falls back to all person types.
+PARTICIPANT_TYPES = {
+    "client", "customer", "patient", "resident",
+    "student", "learner", "trainee", "attendee",
+    "member", "participant", "beneficiary", "enrollee",
+    "subscriber", "applicant",
+}
+
+# Inactive statuses — mirrors INACTIVE_STATUSES from etl/people.py
+INACTIVE_STATUSES = {
+    "inactive", "archived", "closed", "terminated", "discharged",
+    "withdrawn", "suspended", "expired", "left", "graduated",
+}
+
 # Features used for clustering
 CLUSTER_FEATURES = [
-    "avg_tenure_days",          # length of care relationship
-    "retention_rate_pct",       # how consistently active
-    "total_revenue_per_client", # transaction value normalized by client count
-    "tasks_per_client",         # care intensity
+    "avg_tenure_days",           # length of relationship
+    "retention_rate_pct",        # how consistently active
+    "total_revenue_per_client",  # transaction value per person
+    "tasks_per_client",          # activity intensity
 ]
 
 
@@ -42,21 +63,35 @@ def build_segmentation_features(
     Join people, transaction, and task summaries to build
     the feature matrix for K-Means LTV segmentation.
 
+    Attempts to filter to participant-type rows first.
+    If no participant rows exist, uses all person types so
+    the model still runs for verticals that don't use
+    participant/client terminology.
+
     Returns one row per enterprise/company_id group with
-    normalized features ready for clustering.
+    normalised features ready for clustering.
     """
     if people_df.empty:
         logger.warning("build_segmentation_features: empty people DataFrame")
         return pd.DataFrame()
 
-    # Filter to participant rows only
-    participants = people_df[
-        people_df.get("is_participant", pd.Series(False, index=people_df.index))
-    ].copy()
+    # Try participant filter first
+    if "is_participant" in people_df.columns:
+        participants = people_df[people_df["is_participant"] == True].copy()
+    else:
+        # Fall back: match person_type against known participant types
+        pt = people_df.get(
+            "person_type", pd.Series("", index=people_df.index)
+        ).fillna("").str.lower().str.strip()
+        participants = people_df[pt.isin(PARTICIPANT_TYPES)].copy()
 
+    # If still empty, use all person types — better than returning nothing
     if participants.empty:
-        logger.warning("build_segmentation_features: no participant rows")
-        return pd.DataFrame()
+        logger.info(
+            "build_segmentation_features: no participant rows found — "
+            "using all person types for segmentation"
+        )
+        participants = people_df.copy()
 
     join_cols = [c for c in ["enterprise_id", "company_id"]
                  if c in participants.columns]
@@ -64,7 +99,7 @@ def build_segmentation_features(
     # Aggregate transaction revenue per enterprise
     if not transaction_df.empty and "is_revenue" in transaction_df.columns:
         revenue_agg = (
-            transaction_df[transaction_df["is_revenue"]]
+            transaction_df[transaction_df["is_revenue"] == True]
             .groupby(join_cols, dropna=False)
             .agg(total_revenue=("total_amount", "sum"))
             .reset_index()
@@ -72,6 +107,10 @@ def build_segmentation_features(
         participants = participants.merge(revenue_agg, on=join_cols, how="left")
     else:
         participants["total_revenue"] = 0.0
+        logger.info(
+            "build_segmentation_features: no transaction data — "
+            "LTV estimates will be tenure-based only"
+        )
 
     # Aggregate task counts per enterprise
     if not task_df.empty:
@@ -84,13 +123,17 @@ def build_segmentation_features(
     else:
         participants["total_tasks"] = 0
 
-    # Normalize revenue and tasks by client count
-    client_count = participants["active_count"].replace(0, 1)
+    # Normalise revenue and tasks by active count
+    active_count = participants.get(
+        "active_count", pd.Series(1, index=participants.index)
+    ).replace(0, 1)
+
     participants["total_revenue_per_client"] = (
-        participants["total_revenue"].fillna(0) / client_count
+        participants["total_revenue"].fillna(0) / active_count
     ).round(2)
+
     participants["tasks_per_client"] = (
-        participants["total_tasks"].fillna(0) / client_count
+        participants["total_tasks"].fillna(0) / active_count
     ).round(2)
 
     return participants
@@ -103,7 +146,7 @@ def run_ltv_segmentation(
     n_clusters: int = N_CLUSTERS,
 ) -> dict:
     """
-    Full pipeline: build features → normalize → K-Means → label segments.
+    Full pipeline: build features → normalise → K-Means → label segments.
 
     Called by ml/routes.py POST /ml/ltv-segmentation.
 
@@ -119,10 +162,16 @@ def run_ltv_segmentation(
         from sklearn.preprocessing import StandardScaler
     except ImportError:
         logger.error("ml/segmentation: scikit-learn not installed")
-        return {"status": "error", "reason": "scikit-learn not installed", "segments": []}
+        return {
+            "status": "error",
+            "reason": "scikit-learn not installed",
+            "segments": [],
+        }
 
     try:
-        features_df = build_segmentation_features(people_df, transaction_df, task_df)
+        features_df = build_segmentation_features(
+            people_df, transaction_df, task_df
+        )
 
         if features_df.empty:
             return {
@@ -132,12 +181,17 @@ def run_ltv_segmentation(
             }
 
         # Use only features that exist in the DataFrame
-        available_features = [f for f in CLUSTER_FEATURES if f in features_df.columns]
+        available_features = [
+            f for f in CLUSTER_FEATURES if f in features_df.columns
+        ]
 
         if len(available_features) < 2:
             return {
                 "status":   "skipped",
-                "reason":   f"only {len(available_features)} feature columns available — need at least 2",
+                "reason":   (
+                    f"only {len(available_features)} feature columns available "
+                    f"— need at least 2"
+                ),
                 "segments": [],
             }
 
@@ -146,11 +200,14 @@ def run_ltv_segmentation(
         if len(X) < n_clusters:
             return {
                 "status":   "skipped",
-                "reason":   f"only {len(X)} rows — need at least {n_clusters} for {n_clusters} clusters",
+                "reason":   (
+                    f"only {len(X)} rows — need at least {n_clusters} "
+                    f"for {n_clusters} clusters"
+                ),
                 "segments": [],
             }
 
-        # Normalize features — K-Means is distance-based, scale matters
+        # Normalise features — K-Means is distance-based, scale matters
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
@@ -161,11 +218,23 @@ def run_ltv_segmentation(
         features_df = features_df.copy()
         features_df["cluster_id"] = cluster_labels
 
-        # Order clusters by total_revenue_per_client descending
-        # so cluster 0 is always the highest-value segment
-        if "total_revenue_per_client" in features_df.columns:
+        # Order clusters by the best available value signal:
+        # 1. total_revenue_per_client if revenue data exists and is non-zero
+        # 2. avg_tenure_days as fallback (longer tenure = higher value)
+        # This prevents arbitrary label assignment when revenue is all zeros.
+        revenue_col = "total_revenue_per_client"
+        tenure_col = "avg_tenure_days"
+
+        has_revenue = (
+            revenue_col in features_df.columns
+            and features_df[revenue_col].sum() > 0
+        )
+
+        order_col = revenue_col if has_revenue else tenure_col
+
+        if order_col in features_df.columns:
             cluster_order = (
-                features_df.groupby("cluster_id")["total_revenue_per_client"]
+                features_df.groupby("cluster_id")[order_col]
                 .mean()
                 .sort_values(ascending=False)
                 .index.tolist()
@@ -173,27 +242,57 @@ def run_ltv_segmentation(
             rank_map = {cid: rank for rank, cid in enumerate(cluster_order)}
             features_df["cluster_id"] = features_df["cluster_id"].map(rank_map)
 
+            logger.info(
+                "ml/segmentation: clusters ordered by %s", order_col
+            )
+        else:
+            logger.warning(
+                "ml/segmentation: neither %s nor %s available for "
+                "cluster ordering — labels may be arbitrary",
+                revenue_col, tenure_col,
+            )
+
         # Apply human-readable segment labels
         features_df["segment"] = features_df["cluster_id"].map(SEGMENT_LABELS)
 
         # Estimate LTV — revenue per client * expected tenure years
-        if "total_revenue_per_client" in features_df.columns:
-            avg_tenure_years = (features_df["avg_tenure_days"].fillna(0) / 365).clip(lower=0.5)
+        # If no revenue data, LTV is expressed as tenure-years only
+        if has_revenue:
+            avg_tenure_years = (
+                features_df.get(
+                    "avg_tenure_days", pd.Series(0, index=features_df.index)
+                ).fillna(0) / 365
+            ).clip(lower=0.5)
             features_df["estimated_ltv"] = (
-                features_df["total_revenue_per_client"] * avg_tenure_years
+                features_df[revenue_col] * avg_tenure_years
             ).round(2)
         else:
-            features_df["estimated_ltv"] = 0.0
+            # No revenue — LTV proxy is tenure in years
+            features_df["estimated_ltv"] = (
+                features_df.get(
+                    "avg_tenure_days", pd.Series(0, index=features_df.index)
+                ).fillna(0) / 365
+            ).round(2)
+            logger.info(
+                "ml/segmentation: no revenue data — estimated_ltv "
+                "expressed as tenure years"
+            )
 
-        # Segment summary — aggregate stats per segment
+        # Segment summary
+        summary_agg = {"cluster_id": "count"}
+        if "avg_tenure_days" in features_df.columns:
+            summary_agg["avg_tenure_days"] = "mean"
+        if revenue_col in features_df.columns:
+            summary_agg[revenue_col] = "mean"
+        if "estimated_ltv" in features_df.columns:
+            summary_agg["estimated_ltv"] = "mean"
+
         segment_summary = (
             features_df.groupby("segment")
-            .agg(
-                group_count=("cluster_id", "count"),
-                avg_tenure_days=("avg_tenure_days", "mean"),
-                avg_revenue_per_client=("total_revenue_per_client", "mean"),
-                avg_estimated_ltv=("estimated_ltv", "mean"),
-            )
+            .agg(**{
+                "group_count": ("cluster_id", "count"),
+                **{k: (k, v) for k, v in summary_agg.items() if k != "cluster_id"},
+            })
             .round(2)
             .reset_index()
             .to_dict(orient="records")
@@ -207,8 +306,9 @@ def run_ltv_segmentation(
         ] if c in features_df.columns]
 
         logger.info(
-            "ml/segmentation: K-Means complete — %d groups across %d segments",
-            len(features_df), n_clusters,
+            "ml/segmentation: K-Means complete — %d groups across %d segments "
+            "ordered by %s",
+            len(features_df), n_clusters, order_col,
         )
 
         return {
@@ -217,6 +317,7 @@ def run_ltv_segmentation(
             "segment_summary": segment_summary,
             "n_clusters":      n_clusters,
             "features_used":   available_features,
+            "ordered_by":      order_col,
         }
 
     except Exception as e:
