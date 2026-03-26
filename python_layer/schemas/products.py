@@ -32,6 +32,9 @@ class ProductSummary(BaseModel):
     # -- Classification --
     is_medication:           bool = False
     is_livestock:            bool = False
+    is_perishable:           bool = False
+    is_digital:              bool = False
+    is_equipment:            bool = False
 
     # -- Snapshot --
     snapshot_date:           Optional[date]     = None
