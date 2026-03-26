@@ -10,15 +10,68 @@ logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------------
 # Item type classification
-# Livestock is tracked as Products (not People) per the
-# universal data model decision: heartbeat + no agency = Product.
-# Livestock uses head count, not unit quantities or prices.
+# Three buckets cover all enterprise verticals:
+#   PHYSICAL_TYPES    — tangible items with stock quantities,
+#                       prices, and reorder levels
+#   PERISHABLE_TYPES  — physical items that also expire
+#                       (medications, food, produce, vaccines)
+#   LIVESTOCK_TYPES   — living assets tracked by head count,
+#                       not unit price or stock quantity
+#
+# Per the universal data model: heartbeat + no agency = Product.
+# Livestock sits in products, not people.
+#
+# Types not in any bucket are counted but not classified.
+# They surface in dashboards as "unclassified" — log warns
+# the operator so they can extend the lists.
 # ----------------------------------------------------------
-LIVESTOCK_TYPES = {"livestock", "cattle", "poultry", "swine", "sheep", "goat"}
+LIVESTOCK_TYPES = {
+    "livestock", "cattle", "poultry", "swine", "sheep",
+    "goat", "pig", "horse", "fish", "rabbit",
+}
 
-MEDICATION_TYPES = {"medication", "medicine", "drug", "supplement", "vaccine"}
+MEDICATION_TYPES = {
+    "medication", "medicine", "drug", "pharmaceutical",
+    "supplement", "vitamin", "vaccine", "controlled_substance",
+}
 
-PERISHABLE_TYPES = MEDICATION_TYPES | {"food", "produce", "dairy", "perishable"}
+FOOD_TYPES = {
+    "food", "produce", "dairy", "beverage", "grain",
+    "perishable", "ingredient", "frozen",
+}
+
+# Perishable = anything with an expiry date that matters
+PERISHABLE_TYPES = MEDICATION_TYPES | FOOD_TYPES
+
+# Digital / non-physical items — no stock, no expiry
+DIGITAL_TYPES = {
+    "software", "license", "subscription", "digital",
+    "course", "ebook", "template", "service_package",
+}
+
+# Equipment and fixed assets — stock tracked but no expiry
+EQUIPMENT_TYPES = {
+    "equipment", "machinery", "vehicle", "furniture",
+    "tool", "fixture", "asset", "hardware",
+}
+
+# Consumable supplies — physical, no expiry, reorder-tracked
+SUPPLY_TYPES = {
+    "supply", "consumable", "stationery", "uniform",
+    "packaging", "raw_material", "component", "part",
+}
+
+# Active item statuses
+ACTIVE_STATUSES = {
+    "active", "available", "in_stock", "live",
+    "enabled", "approved", "listed",
+}
+
+# Inactive item statuses
+INACTIVE_STATUSES = {
+    "inactive", "discontinued", "archived", "out_of_stock",
+    "recalled", "expired", "delisted", "suspended",
+}
 
 # ----------------------------------------------------------
 # Low stock threshold fallback
@@ -38,7 +91,7 @@ GROUP_COLUMNS = [
 
 def extract_products() -> pd.DataFrame:
     """
-    Extract all product records from Base44.
+    Extract all product/item records from Base44.
     Returns raw DataFrame — no transformation applied here.
     """
     return fetch_json_to_df(settings.base44_products_url)
@@ -50,19 +103,22 @@ def transform_products(df: pd.DataFrame) -> pd.DataFrame:
     appending to analytics.product_summary.
 
     Produces per-group metrics:
-        total_products          — count of distinct products in this group
+        total_products          — count of distinct items in this group
         total_stock             — sum of stock_quantity across group
         avg_price               — mean unit_price within group
-        total_inventory_value   — total_stock * avg unit_price (capital tied up)
         avg_cost_price          — mean cost_price within group
+        total_inventory_value   — sum of (stock_quantity * unit_price)
         avg_gross_margin_pct    — mean (price - cost) / price * 100
-        low_stock_count         — products at or below reorder_level
-        out_of_stock_count      — products with stock_quantity = 0
-        expiring_30d_count      — products expiring within 30 days
-        expiring_7d_count       — products expiring within 7 days
+        low_stock_count         — items at or below reorder_level
+        out_of_stock_count      — items with stock_quantity = 0
+        expiring_7d_count       — perishables expiring within 7 days
+        expiring_30d_count      — perishables expiring within 30 days
         is_medication           — True if item_type is a medication type
         is_livestock            — True if item_type is a livestock type
-        new_last_30d            — products added in the last 30 days
+        is_perishable           — True if item_type is a perishable type
+        is_digital              — True if item_type is a digital type
+        is_equipment            — True if item_type is an equipment type
+        new_last_30d            — items added in the last 30 days
 
     Groups by: enterprise_id, company_id, item_type, status
     """
@@ -81,9 +137,15 @@ def transform_products(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     # ----------------------------------------------------------
+    # Normalise status to lowercase for consistent matching
+    # ----------------------------------------------------------
+    df["status"] = (
+        df["status"].fillna("unknown").str.lower().str.strip()
+    )
+
+    # ----------------------------------------------------------
     # Parse and clean numeric fields
-    # Use errors="coerce" so non-numeric livestock fields
-    # become NaN rather than crashing the transform
+    # errors="coerce" so bad values become NaN rather than crash
     # ----------------------------------------------------------
     df["stock_quantity"] = pd.to_numeric(
         df.get("stock_quantity"), errors="coerce"
@@ -116,27 +178,52 @@ def transform_products(df: pd.DataFrame) -> pd.DataFrame:
 
     # ----------------------------------------------------------
     # Item type classification
+    # Normalise to lowercase so "Medication" == "medication"
     # ----------------------------------------------------------
-    item_type = df.get("item_type", pd.Series("", index=df.index))
+    item_type = (
+        df.get("item_type", pd.Series("", index=df.index))
+        .fillna("").str.lower().str.strip()
+    )
 
-    df["is_livestock"] = item_type.isin(LIVESTOCK_TYPES)
+    df["is_livestock"]  = item_type.isin(LIVESTOCK_TYPES)
     df["is_medication"] = item_type.isin(MEDICATION_TYPES)
     df["is_perishable"] = item_type.isin(PERISHABLE_TYPES)
+    df["is_digital"]    = item_type.isin(DIGITAL_TYPES)
+    df["is_equipment"]  = item_type.isin(EQUIPMENT_TYPES)
+    df["is_active"]     = df["status"].isin(ACTIVE_STATUSES)
+
+    # ----------------------------------------------------------
+    # Log unclassified item types
+    # ----------------------------------------------------------
+    unclassified = (
+        ~df["is_livestock"] & ~df["is_perishable"]
+        & ~df["is_digital"] & ~df["is_equipment"]
+        & ~item_type.isin(SUPPLY_TYPES)
+        & item_type.ne("")
+    )
+    if unclassified.any():
+        unknown_types = item_type[unclassified].value_counts().to_dict()
+        logger.info(
+            "transform_products: %d unclassified items with types: %s — "
+            "add to appropriate type set if needed",
+            unclassified.sum(),
+            ", ".join(f"{k}({v})" for k, v in unknown_types.items()),
+        )
 
     # ----------------------------------------------------------
     # Inventory value per product row
     # Livestock: head count has no unit_price — value is 0
+    # Digital: no physical stock — value is 0
     # Everything else: stock_quantity * unit_price
     # ----------------------------------------------------------
     df["inventory_value"] = (
         (df["stock_quantity"] * df["unit_price"])
-        .where(~df["is_livestock"], 0)
+        .where(~df["is_livestock"] & ~df["is_digital"], 0)
     )
 
     # ----------------------------------------------------------
     # Gross margin per product row
     # Only meaningful when unit_price > 0
-    # Livestock and donated goods have unit_price = 0 — margin = NaN
     # ----------------------------------------------------------
     df["gross_margin_pct"] = (
         ((df["unit_price"] - df["cost_price"]) / df["unit_price"].replace(0, pd.NA))
@@ -154,7 +241,8 @@ def transform_products(df: pd.DataFrame) -> pd.DataFrame:
     df["is_out_of_stock"] = df["stock_quantity"] == 0
 
     # ----------------------------------------------------------
-    # Expiry flags — clinical safety for BrightStar medications
+    # Expiry flags — applies to all perishable types
+    # (medications, food, vaccines, produce, etc.)
     # ----------------------------------------------------------
     df["expiring_7d"] = (
         df["expiry_date"].notna()
@@ -169,7 +257,7 @@ def transform_products(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # ----------------------------------------------------------
-    # New products
+    # New items
     # ----------------------------------------------------------
     df["new_last_30d"] = (
         df["created_date"].notna()
@@ -203,11 +291,18 @@ def transform_products(df: pd.DataFrame) -> pd.DataFrame:
     # Re-derive classification flags on summary rows
     # ----------------------------------------------------------
     if "item_type" in summary.columns:
-        summary["is_medication"] = summary["item_type"].isin(MEDICATION_TYPES)
-        summary["is_livestock"] = summary["item_type"].isin(LIVESTOCK_TYPES)
+        it = summary["item_type"].fillna("").str.lower().str.strip()
+        summary["is_medication"] = it.isin(MEDICATION_TYPES)
+        summary["is_livestock"]  = it.isin(LIVESTOCK_TYPES)
+        summary["is_perishable"] = it.isin(PERISHABLE_TYPES)
+        summary["is_digital"]    = it.isin(DIGITAL_TYPES)
+        summary["is_equipment"]  = it.isin(EQUIPMENT_TYPES)
     else:
         summary["is_medication"] = False
-        summary["is_livestock"] = False
+        summary["is_livestock"]  = False
+        summary["is_perishable"] = False
+        summary["is_digital"]    = False
+        summary["is_equipment"]  = False
 
     # ----------------------------------------------------------
     # Round monetary columns
@@ -252,5 +347,8 @@ def _empty_summary() -> pd.DataFrame:
         "expiring_30d_count",
         "is_medication",
         "is_livestock",
+        "is_perishable",
+        "is_digital",
+        "is_equipment",
         "new_last_30d",
     ])
