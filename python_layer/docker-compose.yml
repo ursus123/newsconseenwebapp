@@ -1,10 +1,64 @@
 version: "3.9"
 
+# ----------------------------------------------------------
+# Newsconseen python_layer — Docker Compose
+#
+# Services:
+#   fastapi           — analytics API on port 8000
+#   postgres          — local PostgreSQL for dev/Airflow
+#   airflow-init      — one-shot DB init + admin user creation
+#   airflow-webserver — Airflow UI on port 8080
+#   airflow-scheduler — Airflow DAG scheduler
+#   superset          — BI dashboards on port 8089
+#
+# Quick start:
+#   cp .env.example .env   # fill in your values
+#   docker-compose up -d
+#
+# First boot takes ~2 minutes for Airflow init to complete.
+# Watch progress: docker-compose logs -f airflow-init
+# ----------------------------------------------------------
+
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.9.0
+  env_file:
+    - .env
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen
+    AIRFLOW__WEBSERVER__RBAC: "True"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    # All packages needed by ETL modules
+    _PIP_ADDITIONAL_REQUIREMENTS: >-
+      pydantic-settings
+      requests
+      pandas
+      sqlalchemy
+      psycopg2-binary
+      scikit-learn
+      geopandas
+      shapely
+      numpy
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./etl:/opt/airflow/dags/etl
+    - ./schemas:/opt/airflow/dags/schemas
+    - ./config.py:/opt/airflow/dags/config.py
+    - ./database.py:/opt/airflow/dags/database.py
+    - ./logs:/opt/airflow/logs
+  depends_on:
+    - postgres
+
+
 services:
+
+  # --------------------------------------------------------
+  # FastAPI — analytics API
+  # --------------------------------------------------------
   fastapi:
     build: .
     container_name: newsconseen_fastapi
-    command: uvicorn app:app --host 0.0.0.0 --port 8000
+    command: uvicorn app:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     volumes:
@@ -14,8 +68,15 @@ services:
     depends_on:
       - postgres
     environment:
+      # Override DATABASE_URL to point at local postgres container
+      # In Railway production this comes from Railway's DATABASE_URL env var
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/newsconseen
+    restart: unless-stopped
 
+
+  # --------------------------------------------------------
+  # PostgreSQL — local analytical store
+  # --------------------------------------------------------
   postgres:
     image: postgres:15
     container_name: newsconseen_postgres
@@ -27,55 +88,83 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
+
+  # --------------------------------------------------------
+  # Airflow init — runs once on first boot
+  # Creates the Airflow DB schema and default admin user.
+  # Must complete before webserver or scheduler start.
+  # --------------------------------------------------------
+  airflow-init:
+    <<: *airflow-common
+    container_name: newsconseen_airflow_init
+    command: >
+      bash -c "
+        pip install pydantic-settings requests pandas sqlalchemy psycopg2-binary scikit-learn geopandas shapely numpy &&
+        airflow db init &&
+        airflow users create
+          --username admin
+          --password admin
+          --firstname Newsconseen
+          --lastname Admin
+          --role Admin
+          --email admin@newsconseen.com
+      "
+    restart: "no"
+
+
+  # --------------------------------------------------------
+  # Airflow webserver — UI on port 8080
+  # Login: admin / admin (change after first login)
+  # --------------------------------------------------------
   airflow-webserver:
-    image: apache/airflow:2.9.0
+    <<: *airflow-common
     container_name: newsconseen_airflow_webserver
-    depends_on:
-      - postgres
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen
-      AIRFLOW__WEBSERVER__RBAC: "True"
-      _PIP_ADDITIONAL_REQUIREMENTS: "pydantic-settings requests pandas sqlalchemy psycopg2-binary"
-    env_file:
-      - .env
+    command: webserver
     ports:
       - "8080:8080"
-    command: webserver
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - ./etl:/opt/airflow/dags/etl
-      - ./config.py:/opt/airflow/dags/config.py
-      - ./database.py:/opt/airflow/dags/database.py
-      - ./logs:/opt/airflow/logs
-
-  airflow-scheduler:
-    image: apache/airflow:2.9.0
-    container_name: newsconseen_airflow_scheduler
     depends_on:
-      - airflow-webserver
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres:5432/newsconseen
-      _PIP_ADDITIONAL_REQUIREMENTS: "pydantic-settings requests pandas sqlalchemy psycopg2-binary"
-    env_file:
-      - .env
-    command: scheduler
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - ./etl:/opt/airflow/dags/etl
-      - ./config.py:/opt/airflow/dags/config.py
-      - ./database.py:/opt/airflow/dags/database.py
-      - ./logs:/opt/airflow/logs
+      - postgres
+      - airflow-init
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
+
+  # --------------------------------------------------------
+  # Airflow scheduler — runs DAGs on schedule
+  # --------------------------------------------------------
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: newsconseen_airflow_scheduler
+    command: scheduler
+    depends_on:
+      - postgres
+      - airflow-init
+    restart: unless-stopped
+
+
+  # --------------------------------------------------------
+  # Superset — BI dashboards on port 8089
+  # First boot: http://localhost:8089
+  # Default login: admin / admin
+  # --------------------------------------------------------
   superset:
     image: apache/superset:latest
     container_name: newsconseen_superset
     ports:
       - "8089:8088"
     environment:
-      SUPERSET_SECRET_KEY: "supersecret"
+      SUPERSET_SECRET_KEY: "${SUPERSET_SECRET_KEY:-change-me-in-production}"
       PYTHONPATH: /app
     depends_on:
       - postgres
@@ -85,9 +174,17 @@ services:
       bash -c "
         pip install psycopg2-binary &&
         superset db upgrade &&
+        superset fab create-admin
+          --username admin
+          --firstname Superset
+          --lastname Admin
+          --email admin@newsconseen.com
+          --password admin || true &&
         superset init &&
         superset run -h 0.0.0.0 -p 8088
       "
+    restart: unless-stopped
+
 
 volumes:
   postgres_data:
