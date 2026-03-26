@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { DESKTOP_APPS } from "@/desktop/desktopApps";
-import { Bell } from "lucide-react";
+import { Bell, Lock } from "lucide-react";
 
 // ── Clock ─────────────────────────────────────────────────────────────────────
 function Clock() {
@@ -153,6 +153,7 @@ export default function Taskbar({
   onOpenSettings,
   user,
   onProfileClick,
+  onLock,
 }) {
   const [ctxMenu, setCtxMenu] = useState(null); // { x, y, appId, winId, isPinned }
 
@@ -255,6 +256,16 @@ export default function Taskbar({
         <div className="flex-1" />
 
         {/* ── System tray ────────────────────────────────────────── */}
+        {/* Lock */}
+        <Tooltip label="Lock Screen  (Ctrl+L)">
+          <button
+            onClick={onLock}
+            className="relative w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+          >
+            <Lock className="w-4 h-4" />
+          </button>
+        </Tooltip>
+
         {/* Notifications */}
         <Tooltip label="Notifications">
           <button

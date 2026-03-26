@@ -102,6 +102,7 @@ const NAV = [
   { id: "permissions", label: "Permissions",  icon: Shield,     color: "#8b5cf6" },
   { id: "theme",       label: "Theme",        icon: Palette,    color: "#f59e0b" },
   { id: "sync",        label: "Sync",         icon: RefreshCw,  color: "#06b6d4" },
+  { id: "security",    label: "Security",     icon: Lock,       color: "#f43f5e" },
   { id: "apikeys",     label: "API Keys",     icon: Key,        color: "#ec4899" },
   { id: "about",       label: "About System", icon: Info,       color: "#64748b" },
 ];
@@ -473,6 +474,68 @@ function SyncSection({ user }) {
   );
 }
 
+function SecuritySection({ user }) {
+  const AUTO_LOCK_KEY = 'desktop_auto_lock_minutes';
+  const [autoLockMins, setAutoLockMins] = useState(() =>
+    parseInt(localStorage.getItem(AUTO_LOCK_KEY) || '0', 10)
+  );
+  const [saved, setSaved] = useState(false);
+
+  const save = () => {
+    localStorage.setItem(AUTO_LOCK_KEY, String(autoLockMins));
+    // Notify the Desktop store
+    window.dispatchEvent(new CustomEvent("desktop-auto-lock-change", { detail: { minutes: autoLockMins } }));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const lockNow = () => {
+    window.dispatchEvent(new CustomEvent("desktop-lock"));
+  };
+
+  return (
+    <div className="space-y-4">
+      <SectionTitle sub="Configure session lock and security preferences.">Security & Lock Screen</SectionTitle>
+      {saved && <Toast msg="Security settings saved." type="success" onDismiss={() => setSaved(false)} />}
+
+      <div className="p-4 rounded-2xl space-y-1" style={{ background: "rgba(255,255,255,0.04)" }}>
+        <SettingRow label="Auto-Lock After Inactivity" sub="Automatically locks the screen after X minutes of no activity. Set to 0 to disable.">
+          <select
+            value={autoLockMins}
+            onChange={e => setAutoLockMins(parseInt(e.target.value, 10))}
+            className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
+          >
+            <option value="0">Disabled</option>
+            <option value="1">1 minute</option>
+            <option value="5">5 minutes</option>
+            <option value="10">10 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="60">1 hour</option>
+          </select>
+        </SettingRow>
+      </div>
+
+      <div className="p-4 rounded-2xl space-y-3" style={{ background: "rgba(255,255,255,0.04)" }}>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Manual Lock</p>
+        <p className="text-xs text-slate-500">Lock the screen immediately. You can also use <span className="font-mono text-slate-400">Ctrl+L</span> from the desktop.</p>
+        <button
+          onClick={lockNow}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white border border-rose-500/30 hover:bg-rose-500/10 transition-all"
+          style={{ color: "#f87171" }}
+        >
+          <Lock className="w-4 h-4" />
+          Lock Screen Now
+        </button>
+      </div>
+
+      <div className="flex justify-end">
+        <SaveBtn onClick={save} saving={false} label="Save Security Settings" />
+      </div>
+    </div>
+  );
+}
+
 function ApiKeysSection({ user }) {
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -623,7 +686,7 @@ export default function DesktopSettings() {
     </div>
   );
 
-  const sections = { profile: ProfileSection, enterprise: EnterpriseSection, permissions: PermissionsSection, theme: ThemeSection, sync: SyncSection, apikeys: ApiKeysSection, about: AboutSection };
+  const sections = { profile: ProfileSection, enterprise: EnterpriseSection, permissions: PermissionsSection, theme: ThemeSection, sync: SyncSection, security: SecuritySection, apikeys: ApiKeysSection, about: AboutSection };
   const ActiveSection = sections[active] || ProfileSection;
 
   return (

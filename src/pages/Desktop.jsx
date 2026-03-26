@@ -18,6 +18,8 @@ import DailyBriefing from "@/components/desktop/DailyBriefing";
 import EnterpriseContextSwitcher from "@/components/desktop/EnterpriseContextSwitcher";
 import { usePWA } from "@/hooks/usePWA";
 import { base44 } from "@/api/base44Client";
+import { useLockStore } from "@/desktop/lockStore";
+import LockScreen from "@/components/desktop/LockScreen";
 
 const WALLPAPERS = [
   { type: "gradient", value: "linear-gradient(135deg, #0a0f1e 0%, #0f172a 35%, #0c2a4a 70%, #0c4a6e 100%)" },
@@ -44,6 +46,7 @@ export default function Desktop() {
   const launcher    = useLauncherStore();
   const profileMgr  = useProfileStore();
   const pwa         = usePWA();
+  const lockStore   = useLockStore();
 
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
@@ -111,6 +114,38 @@ export default function Desktop() {
     setContextMenu({ x: e.clientX, y: e.clientY });
   };
 
+  // Auto-lock: track inactivity
+  useEffect(() => {
+    if (lockStore.autoLockMinutes <= 0) return;
+    const events = ["mousemove", "mousedown", "keydown", "touchstart"];
+    const onActivity = () => lockStore.updateActivity();
+    events.forEach(ev => window.addEventListener(ev, onActivity, { passive: true }));
+
+    const interval = setInterval(() => {
+      const idle = (Date.now() - lockStore.lastActiveAt) / 1000 / 60;
+      if (idle >= lockStore.autoLockMinutes && !lockStore.isLocked) {
+        lockStore.lock();
+      }
+    }, 30000); // check every 30s
+
+    return () => {
+      events.forEach(ev => window.removeEventListener(ev, onActivity));
+      clearInterval(interval);
+    };
+  }, [lockStore.autoLockMinutes, lockStore.isLocked]);
+
+  // Listen for lock / auto-lock-change events dispatched by Settings
+  useEffect(() => {
+    const onLockEvent = () => lockStore.lock();
+    const onAutoLockChange = (e) => lockStore.setAutoLockMinutes(e.detail.minutes);
+    window.addEventListener("desktop-lock", onLockEvent);
+    window.addEventListener("desktop-auto-lock-change", onAutoLockChange);
+    return () => {
+      window.removeEventListener("desktop-lock", onLockEvent);
+      window.removeEventListener("desktop-auto-lock-change", onAutoLockChange);
+    };
+  }, [lockStore]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e) => {
@@ -124,10 +159,15 @@ export default function Desktop() {
         e.preventDefault();
         launcher.toggleLauncher();
       }
+      // Ctrl+L = lock
+      if (e.ctrlKey && e.key === "l") {
+        e.preventDefault();
+        lockStore.lock();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [launcher]);
+  }, [launcher, lockStore]);
 
   const wp = WALLPAPERS[wallpaperIdx] || WALLPAPERS[0];
   const isLight = wallpaperIdx >= 5;
@@ -358,6 +398,7 @@ export default function Desktop() {
         onOpenSettings={() => handleOpenApp(DESKTOP_APPS.find(a => a.id === "settings"))}
         user={user}
         onProfileClick={() => setProfileSwitcherOpen(v => !v)}
+        onLock={lockStore.lock}
       />
 
       {/* Profile Switcher */}
@@ -388,6 +429,14 @@ export default function Desktop() {
       {/* PWA */}
       <OfflineIndicator isOnline={pwa.isOnline} />
       <PWAInstallBanner canInstall={pwa.canInstall} onInstall={pwa.promptInstall} />
+
+      {/* Lock Screen — rendered on top of everything */}
+      {lockStore.isLocked && (
+        <LockScreen
+          onUnlock={lockStore.unlock}
+          wallpaperValue={wp.value}
+        />
+      )}
 
       {/* Right-click context menu */}
       {contextMenu && (
