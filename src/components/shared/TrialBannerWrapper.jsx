@@ -1,15 +1,19 @@
-import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import TrialBanner from "@/components/shared/TrialBanner";
 
 export default function TrialBannerWrapper({ currentUser }) {
-  const { data: trialEnterprises = [] } = useQuery({
-    queryKey: ["trial_enterprise", currentUser?.company_id],
-    queryFn: () => base44.entities.Enterprise.filter({ enterprise_name: currentUser.company_id }),
-    enabled: !!currentUser?.company_id && currentUser?.role !== "super_admin",
-  });
-  const trialEnterprise = trialEnterprises.find((e) => e.enterprise_name === currentUser?.company_id) || trialEnterprises[0];
+  const [trialEnterprise, setTrialEnterprise] = useState(null);
+
+  useEffect(() => {
+    if (!currentUser?.company_id || currentUser?.role === "super_admin") return;
+    base44.entities.Enterprise.filter({ enterprise_name: currentUser.company_id })
+      .then((results) => {
+        const match = results.find((e) => e.enterprise_name === currentUser.company_id) || results[0];
+        setTrialEnterprise(match || null);
+      })
+      .catch(() => {});
+  }, [currentUser?.company_id, currentUser?.role]);
 
   return <TrialBanner enterprise={trialEnterprise} userRole={currentUser?.role} />;
 }
