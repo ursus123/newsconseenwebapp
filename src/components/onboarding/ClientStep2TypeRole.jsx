@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import ClientStep2SecondaryRoles from './ClientStep2SecondaryRoles';
 
 export default function ClientStep2TypeRole({ formData, onChange }) {
   const [personTypes, setPersonTypes] = useState([]);
@@ -88,7 +89,7 @@ export default function ClientStep2TypeRole({ formData, onChange }) {
       </div>
 
       <div>
-        <Label htmlFor="primary_role">Role *</Label>
+        <Label htmlFor="primary_role">Primary Role *</Label>
         <Select value={formData.primary_role} onValueChange={(value) => onChange('primary_role', value)}>
           <SelectTrigger className="mt-1" disabled={!formData.person_type || loadingRoles}>
             <SelectValue placeholder={loadingRoles ? 'Loading roles...' : 'Select role'} />
@@ -109,10 +110,17 @@ export default function ClientStep2TypeRole({ formData, onChange }) {
         </Select>
       </div>
 
+      <ClientStep2SecondaryRoles
+        formData={formData}
+        personType={formData.person_type}
+        primaryRole={formData.primary_role}
+        onChange={onChange}
+      />
+
       <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <p className="text-sm text-blue-900">
           <strong>Tip:</strong> Select the person type first (e.g., "Client" for students, "Staff" for teachers),
-          then the specific role will be available below.
+          then the specific primary role. You can add secondary roles as needed.
         </p>
       </div>
     </div>
