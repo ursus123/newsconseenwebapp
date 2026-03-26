@@ -25,55 +25,142 @@ export const ANALYTICS_TABLES = {
   analytics_enterprises: {
     endpoint: "/enterprise-summary",
     columns: [
-      { col: "status", type: "ENUM" },
+      { col: "id", type: "VARCHAR" },
+      { col: "name", type: "VARCHAR" },
       { col: "enterprise_type", type: "ENUM" },
-      { col: "enterprise_count", type: "INT" },
+      { col: "status", type: "ENUM" },
+      { col: "operating_status", type: "ENUM" },
+      { col: "is_active", type: "ENUM" },
+      { col: "is_root", type: "ENUM" },
+      { col: "primary_address", type: "VARCHAR" },
+      { col: "days_since_created", type: "INT" },
+      { col: "snapshot_date", type: "DATE" },
     ],
   },
   analytics_tasks: {
     endpoint: "/task-summary",
     columns: [
+      { col: "enterprise_id", type: "VARCHAR" },
       { col: "task_type", type: "ENUM" },
       { col: "status", type: "ENUM" },
       { col: "total_tasks", type: "INT" },
       { col: "completed_tasks", type: "INT" },
+      { col: "completion_rate_pct", type: "FLOAT" },
+      { col: "overdue_tasks", type: "INT" },
+      { col: "tasks_last_7d", type: "INT" },
+      { col: "tasks_last_30d", type: "INT" },
+      { col: "snapshot_date", type: "DATE" },
     ],
   },
   analytics_transactions: {
     endpoint: "/transaction-summary",
     columns: [
+      { col: "enterprise_id", type: "VARCHAR" },
       { col: "transaction_type", type: "ENUM" },
       { col: "status", type: "ENUM" },
       { col: "total_transactions", type: "INT" },
       { col: "total_amount", type: "FLOAT" },
       { col: "avg_amount", type: "FLOAT" },
+      { col: "outstanding_amount", type: "FLOAT" },
+      { col: "is_revenue", type: "ENUM" },
+      { col: "is_expense", type: "ENUM" },
+      { col: "revenue_last_7d", type: "INT" },
+      { col: "revenue_last_30d", type: "INT" },
+      { col: "expense_last_30d", type: "INT" },
+      { col: "snapshot_date", type: "DATE" },
     ],
   },
   analytics_people: {
     endpoint: "/people-summary",
     columns: [
+      { col: "enterprise_id", type: "VARCHAR" },
       { col: "person_type", type: "ENUM" },
       { col: "status", type: "ENUM" },
       { col: "people_count", type: "INT" },
+      { col: "active_count", type: "INT" },
+      { col: "inactive_count", type: "INT" },
+      { col: "retention_rate_pct", type: "FLOAT" },
+      { col: "avg_tenure_days", type: "FLOAT" },
+      { col: "is_staff", type: "ENUM" },
+      { col: "is_participant", type: "ENUM" },
+      { col: "is_contact", type: "ENUM" },
+      { col: "new_last_7d", type: "INT" },
+      { col: "new_last_30d", type: "INT" },
+      { col: "snapshot_date", type: "DATE" },
     ],
   },
   analytics_services: {
     endpoint: "/service-summary",
     columns: [
+      { col: "enterprise_id", type: "VARCHAR" },
       { col: "service_type", type: "ENUM" },
       { col: "status", type: "ENUM" },
       { col: "category", type: "ENUM" },
       { col: "service_count", type: "INT" },
+      { col: "active_service_count", type: "INT" },
+      { col: "total_billable_value", type: "FLOAT" },
+      { col: "avg_rate", type: "FLOAT" },
+      { col: "is_billable", type: "ENUM" },
+      { col: "new_last_30d", type: "INT" },
+      { col: "snapshot_date", type: "DATE" },
     ],
   },
   analytics_products: {
     endpoint: "/product-summary",
     columns: [
+      { col: "enterprise_id", type: "VARCHAR" },
       { col: "item_type", type: "ENUM" },
       { col: "status", type: "ENUM" },
       { col: "total_products", type: "INT" },
       { col: "total_stock", type: "INT" },
       { col: "avg_price", type: "FLOAT" },
+      { col: "total_inventory_value", type: "FLOAT" },
+      { col: "avg_gross_margin_pct", type: "FLOAT" },
+      { col: "low_stock_count", type: "INT" },
+      { col: "out_of_stock_count", type: "INT" },
+      { col: "expiring_7d_count", type: "INT" },
+      { col: "expiring_30d_count", type: "INT" },
+      { col: "is_medication", type: "ENUM" },
+      { col: "is_livestock", type: "ENUM" },
+      { col: "is_perishable", type: "ENUM" },
+      { col: "is_digital", type: "ENUM" },
+      { col: "is_equipment", type: "ENUM" },
+      { col: "new_last_30d", type: "INT" },
+      { col: "snapshot_date", type: "DATE" },
+    ],
+  },
+  analytics_addresses: {
+    endpoint: "/address-summary",
+    columns: [
+      { col: "id", type: "VARCHAR" },
+      { col: "label", type: "VARCHAR" },
+      { col: "city", type: "VARCHAR" },
+      { col: "state_region", type: "VARCHAR" },
+      { col: "country", type: "VARCHAR" },
+      { col: "address_type", type: "ENUM" },
+      { col: "linked_entity_type", type: "ENUM" },
+      { col: "has_coordinates", type: "ENUM" },
+      { col: "coordinate_source", type: "ENUM" },
+      { col: "is_active", type: "ENUM" },
+      { col: "days_since_created", type: "INT" },
+    ],
+  },
+  analytics_relationships: {
+    endpoint: "/relationship-summary",
+    columns: [
+      { col: "id", type: "VARCHAR" },
+      { col: "relationship_type", type: "ENUM" },
+      { col: "relationship_category", type: "ENUM" },
+      { col: "person_name", type: "VARCHAR" },
+      { col: "enterprise_name", type: "VARCHAR" },
+      { col: "item_name", type: "VARCHAR" },
+      { col: "role", type: "VARCHAR" },
+      { col: "status", type: "ENUM" },
+      { col: "is_active", type: "ENUM" },
+      { col: "is_ended", type: "ENUM" },
+      { col: "duration_days", type: "INT" },
+      { col: "has_end_date", type: "ENUM" },
+      { col: "days_since_created", type: "INT" },
     ],
   },
 };
@@ -107,12 +194,15 @@ export const EXTERNAL_TABLES = {
 // In-memory analytics cache
 let analyticsCache = {};
 
-export async function fetchAllAnalytics() {
+export async function fetchAllAnalytics(companyId) {
   const results = {};
   await Promise.all(
     Object.entries(ANALYTICS_TABLES).map(async ([key, cfg]) => {
       try {
-        const res = await fetch(`${RAILWAY_BASE}${cfg.endpoint}`);
+        const url = companyId
+          ? `${RAILWAY_BASE}${cfg.endpoint}?company_id=${encodeURIComponent(companyId)}`
+          : `${RAILWAY_BASE}${cfg.endpoint}`;
+        const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
           results[key] = Array.isArray(data) ? data : (data.data || data.results || []);
@@ -128,16 +218,20 @@ export async function fetchAllAnalytics() {
   return results;
 }
 
-async function fetchAnalyticsTable(name) {
-  if (analyticsCache[name]) return analyticsCache[name];
+async function fetchAnalyticsTable(name, companyId) {
+  const cacheKey = companyId ? `${name}__${companyId}` : name;
+  if (analyticsCache[cacheKey]) return analyticsCache[cacheKey];
   const cfg = ANALYTICS_TABLES[name];
   if (!cfg) return [];
   try {
-    const res = await fetch(`${RAILWAY_BASE}${cfg.endpoint}`);
+    const url = companyId
+      ? `${RAILWAY_BASE}${cfg.endpoint}?company_id=${encodeURIComponent(companyId)}`
+      : `${RAILWAY_BASE}${cfg.endpoint}`;
+    const res = await fetch(url);
     if (!res.ok) return [];
     const data = await res.json();
     const rows = Array.isArray(data) ? data : (data.data || data.results || []);
-    analyticsCache[name] = rows;
+    analyticsCache[cacheKey] = rows;
     return rows;
   } catch {
     return [];
@@ -1295,7 +1389,7 @@ function parseColDefs(colStr) {
 }
 
 // Load rows for a table name
-async function loadTable(name, uploadedTables) {
+async function loadTable(name, uploadedTables, companyId) {
   const lower = name.toLowerCase();
   if (uploadedTables && Object.prototype.hasOwnProperty.call(uploadedTables, lower)) {
     return uploadedTables[lower].rows.map((r) => ({ ...r }));
@@ -1304,7 +1398,7 @@ async function loadTable(name, uploadedTables) {
     return base44.entities[MASTER_TABLES[lower].entity].list("-created_date", 2000);
   }
   if (ANALYTICS_TABLES[lower]) {
-    return fetchAnalyticsTable(lower);
+    return fetchAnalyticsTable(lower, companyId);
   }
   return null;
 }

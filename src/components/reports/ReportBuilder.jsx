@@ -223,6 +223,23 @@ export default function ReportBuilder({ report, folders, charts, currentUser, on
     });
   };
 
+  const handleTriggerETL = async (id) => {
+    const endpoints = [
+      "enterprise-summary", "task-summary", "people-summary",
+      "transaction-summary", "service-summary", "product-summary",
+      "address-summary", "relationship-summary",
+    ];
+    const API = "https://newsconseenwebapp-production.up.railway.app";
+    for (const ep of endpoints) {
+      try {
+        const res = await fetch(`${API}/load/${ep}?company_id=${encodeURIComponent(id)}`, { method: "POST" });
+        if (!res.ok) console.warn(`ETL failed for ${ep}`);
+      } catch (e) {
+        console.error(`ETL error for ${ep}:`, e);
+      }
+    }
+  };
+
   const handleSave = () => {
     saveMut.mutate({
       title,
