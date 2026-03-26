@@ -42,7 +42,7 @@ export default function StockCounter() {
   // Check for saved draft
   useEffect(() => {
     if (!currentUser?.email) return;
-    const draftKey = `stock_count_draft_${currentUser.email}`;
+    const draftKey = `stock_count_draft_${currentUser.email}_${currentUser.company_id || "default"}`;
     const saved = localStorage.getItem(draftKey);
     if (saved) {
       try {
@@ -94,13 +94,19 @@ export default function StockCounter() {
   // Auto-save session to localStorage whenever it changes
   useEffect(() => {
     if (!session || !currentUser?.email) return;
-    const draftKey = `stock_count_draft_${currentUser.email}`;
+    const draftKey = `stock_count_draft_${currentUser.email}_${session.enterprise || "default"}`;
     localStorage.setItem(draftKey, JSON.stringify(session));
   }, [session, currentUser?.email]);
 
   const handleStartSession = (enterprise, location) => {
     const enterpriseProducts = enterprise
-      ? products.filter(p => relationships.some(r => r.item_name === p.name && r.enterprise_name === enterprise && r.status === "active"))
+      ? products.filter(p =>
+          relationships.some(r =>
+            (r.item_id === p.id || r.item_name === p.name) &&
+            (r.enterprise_id === enterprise || r.enterprise_name === enterprise) &&
+            r.status === "active"
+          )
+        )
       : products;
 
     const newSession = {
@@ -139,7 +145,7 @@ export default function StockCounter() {
   };
 
   const handleDiscardDraft = () => {
-    const draftKey = `stock_count_draft_${currentUser?.email}`;
+    const draftKey = `stock_count_draft_${currentUser?.email}_${session?.enterprise || currentUser?.company_id || "default"}`;
     localStorage.removeItem(draftKey);
     setHasDraft(false);
     setDraftInfo(null);
@@ -215,8 +221,14 @@ export default function StockCounter() {
       }),
     });
 
-    const draftKey = `stock_count_draft_${currentUser?.email}`;
+    const draftKey = `stock_count_draft_${currentUser?.email}_${session?.enterprise || "default"}`;
     localStorage.removeItem(draftKey);
+
+    // Refresh analytics after stock count so dashboards reflect new levels immediately
+    fetch("https://newsconseenwebapp-production.up.railway.app/load/product-summary", {
+      method: "POST",
+    }).catch(() => {}); // fire and forget — don't block the success screen
+
     setShowSubmit(false);
     setSubmitResult({ ...results, session });
   };
