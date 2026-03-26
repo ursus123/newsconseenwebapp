@@ -15,6 +15,7 @@ export const DESKTOP_APPS = [
   { id: "barcode",      name: "Barcode Scanner",     icon: "📷", color: "#334155", route: "/BarcodeScanner",     category: "Inventory" },
   { id: "staffschedule",name: "Staff Schedule",      icon: "📅", color: "#4f46e5", route: "/StaffSchedule",      category: "Operations" },
   { id: "querybuilder", name: "Query Builder",       icon: "🧮", color: "#7c3aed", route: "/QueryBuilder",       category: "Analytics" },
+  { id: "files",        name: "Files",               icon: "📁", color: "#f59e0b", route: "/files",              category: "Tools" },
   { id: "settings",     name: "Settings",            icon: "⚙️", color: "#475569", route: "/DesktopSettings",   category: "Tools" },
   { id: "applications", name: "App Store",           icon: "🛍️", color: "#db2777", route: "/Applications",      category: "Tools" },
 ];
