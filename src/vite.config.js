@@ -36,6 +36,6 @@ export default defineConfig({
     react(),
   ],
   resolve: {
-    dedupe: ["react", "react-dom", "@tanstack/react-query"],
+    dedupe: ["react", "react-dom", "react-router-dom", "@tanstack/react-query", "@base44/sdk"],
   },
 })
