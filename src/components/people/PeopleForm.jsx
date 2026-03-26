@@ -154,7 +154,7 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
   useEffect(() => {
     if (open) {
       setActiveSection("identity");
-      setForm(initialData || { status: "active", person_type: "employee", availability_status: "available" });
+      setForm(initialData || { status: "active", person_type: "staff", availability_status: "available" });
       setGeocodeNote(null);
       setGeocodeError(null);
     }
@@ -252,13 +252,10 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
             </Field>
             <Field label="Person Type" required>
               <SelectField value={form.person_type} onChange={(v) => set("person_type", v)} options={[
-                { value: "employee", label: "Employee" },
-                { value: "contractor", label: "Contractor" },
-                { value: "freelancer", label: "Freelancer" },
-                { value: "vendor", label: "Vendor / Supplier" },
-                { value: "client", label: "Client / Customer" },
-                { value: "patient", label: "Patient / Care Recipient" },
-                { value: "external_partner", label: "External Partner" },
+                { value: "staff", label: "Staff" },
+                { value: "client", label: "Client / Student" },
+                { value: "contact", label: "Contact / Vendor" },
+                { value: "volunteer", label: "Volunteer" },
               ]} placeholder="Select person type..." />
             </Field>
             <Field label="Status">
