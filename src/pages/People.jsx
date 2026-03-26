@@ -37,11 +37,10 @@ const availColor = (s) => ({
 }[s] || "bg-slate-100 text-slate-600");
 
 const personTypeColor = (t) => ({
-  employee:   "bg-blue-50 text-blue-700",
-  client:     "bg-rose-50 text-rose-700",
-  contractor: "bg-amber-50 text-amber-700",
-  vendor:     "bg-purple-50 text-purple-700",
-  volunteer:  "bg-green-50 text-green-700",
+  staff:     "bg-blue-50 text-blue-700",
+  client:    "bg-rose-50 text-rose-700",
+  contact:   "bg-purple-50 text-purple-700",
+  volunteer: "bg-green-50 text-green-700",
 }[t] || "bg-slate-100 text-slate-500");
 
 // ── Table columns ──────────────────────────────────────────────────
@@ -97,11 +96,11 @@ const columns = [
 
 // ── Type tabs ──────────────────────────────────────────────────────
 const TYPE_TABS = [
-  { id: "all",        label: "All People" },
-  { id: "employee",   label: "Staff" },
-  { id: "client",     label: "Clients" },
-  { id: "contractor", label: "Contractors" },
-  { id: "vendor",     label: "Vendors" },
+  { id: "all",       label: "All People" },
+  { id: "staff",     label: "Staff" },
+  { id: "client",    label: "Clients" },
+  { id: "contact",   label: "Contacts" },
+  { id: "volunteer", label: "Volunteers" },
 ];
 
 // ── Preview cols for import ────────────────────────────────────────

@@ -142,7 +142,7 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
       if (!form.person_type) return [];
       const options = await base44.entities.MasterDataOption.filter({
         entity_type: 'person',
-        field_name: 'primary_role',
+        field_name: 'person_subtype',
         parent_value: form.person_type,
         is_active: true,
       });
@@ -326,12 +326,23 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
       case "roles":
         return (
           <div className="space-y-5">
-            <Field label="Primary Role">
-              <SelectField 
-                value={form.primary_role} 
-                onChange={(v) => set("primary_role", v)} 
-                options={primaryRoles.length > 0 ? primaryRoles.map((r) => ({ value: r.value, label: r.label || r.value })) : ALL_ROLES.map((r) => ({ value: r, label: r }))} 
-                placeholder={form.person_type ? "Select primary role" : "Select person type first"} 
+            <Field label="Primary Role / Subtype">
+              <TaxonomySelect
+                entityType="person"
+                fieldName="person_subtype"
+                parentValue={form.person_type}
+                companyId={currentUser?.company_id}
+                value={form.person_subtype || ""}
+                onChange={(v) => set("person_subtype", v)}
+                placeholder={form.person_type ? "Select subtype..." : "Select person type first"}
+              />
+            </Field>
+            <Field label="Specific Role Description">
+              <Input
+                value={form.primary_role || ""}
+                onChange={(e) => set("primary_role", e.target.value)}
+                placeholder="e.g. Head of Finance, Lead Developer, Form 3 Teacher"
+                className="rounded-xl"
               />
             </Field>
             <Field label="Role Category">

@@ -182,7 +182,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
       const newPerson = await base44.entities.Person.create({
         first_name: nameParts[0] || selection.name,
         last_name: nameParts.slice(1).join(" ") || "",
-        person_type: "employee",
+        person_type: "staff",
         primary_role: "Owner",
       });
       personName = `${newPerson.first_name} ${newPerson.last_name}`;
@@ -214,7 +214,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
       const newPerson = await base44.entities.Person.create({
         first_name: nameParts[0] || selection.name,
         last_name: nameParts.slice(1).join(" ") || "",
-        person_type: "employee",
+        person_type: "staff",
         primary_role: roleTitle || "Manager",
       });
       personName = `${newPerson.first_name} ${newPerson.last_name}`;
@@ -273,17 +273,16 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
             <Field label="Enterprise Type">
               <select
                 value={form.enterprise_type || ""}
-                onChange={e => set("enterprise_type", e.target.value)}
+                onChange={e => { set("enterprise_type", e.target.value); set("sub_type", ""); }}
                 className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-200 bg-white"
               >
                 <option value="">Select enterprise type</option>
-                {ENTERPRISE_TYPE_GROUPS.map(group => (
-                  <optgroup key={group.group} label={group.group}>
-                    {group.types.map(t => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </optgroup>
-                ))}
+                <option value="commercial">Commercial</option>
+                <option value="nonprofit">Nonprofit</option>
+                <option value="government">Government</option>
+                <option value="household">Household</option>
+                <option value="cooperative">Cooperative</option>
+                <option value="trust">Trust</option>
               </select>
             </Field>
             <Field label="Sub-Type">
