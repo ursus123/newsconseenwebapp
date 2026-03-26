@@ -4,10 +4,23 @@ import { base44 } from "@/api/base44Client";
 function ErrorFallback({ error, resetErrorBoundary }) {
   return (
     <div style={{ padding: 32, textAlign: "center" }}>
-      <p style={{ color: "#ef4444", marginBottom: 16 }}>Something went wrong.</p>
+      <p style={{ color: "#ef4444", marginBottom: 8, fontWeight: 600 }}>
+        Something went wrong
+      </p>
+      <p style={{ color: "#94a3b8", fontSize: 13, marginBottom: 20 }}>
+        {error?.message || "An unexpected error occurred"}
+      </p>
       <button
         onClick={resetErrorBoundary}
-        style={{ padding: "8px 20px", background: "#1e293b", color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}
+        style={{
+          padding: "8px 20px",
+          background: "#1e293b",
+          color: "white",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 8,
+          cursor: "pointer",
+          fontSize: 14,
+        }}
       >
         Try again
       </button>
