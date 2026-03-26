@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------
     nominatim_contact_email: str = "contact@newsconseen.com"
 
+    # ----------------------------------------------------------
+    # ML feature flag
+    # Set ML_ENABLED=true in Railway to enable /ml/* endpoints.
+    # Keep false until ML models have been retrained for the
+    # current deployment vertical. While false all /ml/* endpoints
+    # return 503 with a clear explanation.
+    # ----------------------------------------------------------
+    ml_enabled: str = "false"
+
     class Config:
         env_file      = ".env"
         case_sensitive = False
