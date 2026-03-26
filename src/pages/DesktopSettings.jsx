@@ -476,14 +476,23 @@ function SyncSection({ user }) {
 
 function SecuritySection({ user }) {
   const AUTO_LOCK_KEY = 'desktop_auto_lock_minutes';
+  const PIN_KEY = 'desktop_lock_pin';
+
   const [autoLockMins, setAutoLockMins] = useState(() =>
     parseInt(localStorage.getItem(AUTO_LOCK_KEY) || '0', 10)
   );
   const [saved, setSaved] = useState(false);
 
+  // PIN management
+  const [currentPin, setCurrentPin]   = useState("");
+  const [newPin, setNewPin]           = useState("");
+  const [confirmPin, setConfirmPin]   = useState("");
+  const [showPins, setShowPins]       = useState(false);
+  const [pinMsg, setPinMsg]           = useState(null);
+  const hasPinSet = !!localStorage.getItem(PIN_KEY);
+
   const save = () => {
     localStorage.setItem(AUTO_LOCK_KEY, String(autoLockMins));
-    // Notify the Desktop store
     window.dispatchEvent(new CustomEvent("desktop-auto-lock-change", { detail: { minutes: autoLockMins } }));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -493,13 +502,40 @@ function SecuritySection({ user }) {
     window.dispatchEvent(new CustomEvent("desktop-lock"));
   };
 
+  const savePin = () => {
+    if (newPin.length < 4) {
+      setPinMsg({ type: "error", msg: "PIN must be at least 4 characters." });
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setPinMsg({ type: "error", msg: "PINs do not match." });
+      return;
+    }
+    if (hasPinSet && currentPin !== localStorage.getItem(PIN_KEY)) {
+      setPinMsg({ type: "error", msg: "Current PIN is incorrect." });
+      return;
+    }
+    localStorage.setItem(PIN_KEY, newPin);
+    setCurrentPin(""); setNewPin(""); setConfirmPin("");
+    setPinMsg({ type: "success", msg: "Desktop PIN saved." });
+    setTimeout(() => setPinMsg(null), 3000);
+  };
+
+  const clearPin = () => {
+    localStorage.removeItem(PIN_KEY);
+    setCurrentPin(""); setNewPin(""); setConfirmPin("");
+    setPinMsg({ type: "success", msg: "Desktop PIN removed. Any input will unlock." });
+    setTimeout(() => setPinMsg(null), 3000);
+  };
+
   return (
     <div className="space-y-4">
       <SectionTitle sub="Configure session lock and security preferences.">Security & Lock Screen</SectionTitle>
       {saved && <Toast msg="Security settings saved." type="success" onDismiss={() => setSaved(false)} />}
 
+      {/* Auto-lock */}
       <div className="p-4 rounded-2xl space-y-1" style={{ background: "rgba(255,255,255,0.04)" }}>
-        <SettingRow label="Auto-Lock After Inactivity" sub="Automatically locks the screen after X minutes of no activity. Set to 0 to disable.">
+        <SettingRow label="Auto-Lock After Inactivity" sub="Locks screen after X minutes of no activity. 0 = disabled.">
           <select
             value={autoLockMins}
             onChange={e => setAutoLockMins(parseInt(e.target.value, 10))}
@@ -516,17 +552,60 @@ function SecuritySection({ user }) {
         </SettingRow>
       </div>
 
+      {/* Manual lock */}
       <div className="p-4 rounded-2xl space-y-3" style={{ background: "rgba(255,255,255,0.04)" }}>
         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Manual Lock</p>
-        <p className="text-xs text-slate-500">Lock the screen immediately. You can also use <span className="font-mono text-slate-400">Ctrl+L</span> from the desktop.</p>
+        <p className="text-xs text-slate-500">Lock the screen immediately. Also use <span className="font-mono text-slate-400">Ctrl+L</span> from the desktop.</p>
         <button
           onClick={lockNow}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white border border-rose-500/30 hover:bg-rose-500/10 transition-all"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border border-rose-500/30 hover:bg-rose-500/10 transition-all"
           style={{ color: "#f87171" }}
         >
           <Lock className="w-4 h-4" />
           Lock Screen Now
         </button>
+      </div>
+
+      {/* Desktop PIN */}
+      <div className="p-4 rounded-2xl space-y-3" style={{ background: "rgba(255,255,255,0.04)" }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Desktop Lock PIN</p>
+            <p className="text-[11px] text-slate-600 mt-0.5">
+              {hasPinSet ? "A PIN is set. Enter current PIN to change it." : "No PIN set — any input unlocks the screen."}
+            </p>
+          </div>
+          <button onClick={() => setShowPins(v => !v)} className="text-xs text-slate-500 hover:text-white flex items-center gap-1">
+            {showPins ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            {showPins ? "Collapse" : "Set PIN"}
+          </button>
+        </div>
+
+        {pinMsg && <Toast msg={pinMsg.msg} type={pinMsg.type} onDismiss={() => setPinMsg(null)} />}
+
+        {showPins && (
+          <div className="space-y-2.5 pt-1">
+            {hasPinSet && (
+              <OSInput type={showPins ? "text" : "password"} value={currentPin} onChange={setCurrentPin} placeholder="Current PIN" />
+            )}
+            <OSInput type="password" value={newPin} onChange={setNewPin} placeholder="New PIN (min 4 chars)" />
+            <OSInput type="password" value={confirmPin} onChange={setConfirmPin} placeholder="Confirm new PIN" />
+            {confirmPin && newPin !== confirmPin && (
+              <p className="text-xs text-rose-400">PINs do not match</p>
+            )}
+            <div className="flex gap-2 justify-end">
+              {hasPinSet && (
+                <button
+                  onClick={clearPin}
+                  className="px-3 py-2 rounded-xl text-xs text-rose-400 border border-rose-500/20 hover:bg-rose-500/10 transition-all"
+                >
+                  Remove PIN
+                </button>
+              )}
+              <SaveBtn onClick={savePin} saving={false} label="Save PIN" />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end">

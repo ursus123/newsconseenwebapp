@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Lock, Eye, EyeOff } from "lucide-react";
+import { Lock, Eye, EyeOff, User } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
 // ── Clock for lock screen ──────────────────────────────────────────────────────
@@ -24,40 +24,64 @@ function LockClock() {
 }
 
 // ── Lock Screen ────────────────────────────────────────────────────────────────
-export default function LockScreen({ onUnlock, wallpaperValue }) {
+export default function LockScreen({ onUnlock, wallpaperValue, profileName }) {
   const [user, setUser] = useState(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [showPin, setShowPin] = useState(false);
   const [shaking, setShaking] = useState(false);
+  const [loading, setLoading] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
     // Auto-focus after short delay
-    setTimeout(() => inputRef.current?.focus(), 300);
+    const t = setTimeout(() => inputRef.current?.focus(), 300);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Block all pointer events on the desktop underneath
+  useEffect(() => {
+    const prevent = (e) => e.stopPropagation();
+    document.addEventListener("mousedown", prevent, true);
+    document.addEventListener("touchstart", prevent, true);
+    return () => {
+      document.removeEventListener("mousedown", prevent, true);
+      document.removeEventListener("touchstart", prevent, true);
+    };
   }, []);
 
   const handleUnlock = async () => {
     if (!pin.trim()) {
-      triggerShake();
+      triggerShake("Please enter your password or PIN.");
       return;
     }
-    // Validate via the auth system
+    setLoading(true);
     try {
       await base44.auth.verifyPassword({ password: pin });
       onUnlock();
     } catch {
-      // Dev/fallback: allow any non-empty input in case verifyPassword isn't available
-      // Just unlock — in production you'd enforce real auth
-      onUnlock();
+      // verifyPassword not available on this platform — use a stored desktop PIN
+      const storedPin = localStorage.getItem("desktop_lock_pin");
+      if (storedPin) {
+        if (pin === storedPin) {
+          onUnlock();
+        } else {
+          setLoading(false);
+          triggerShake("Incorrect PIN. Try again.");
+          setPin("");
+        }
+      } else {
+        // No PIN configured — any non-empty input unlocks (dev/open mode)
+        onUnlock();
+      }
     }
   };
 
-  const triggerShake = () => {
+  const triggerShake = (msg = "Please enter your PIN or password.") => {
     setShaking(true);
-    setError("Please enter your PIN or password.");
-    setTimeout(() => { setShaking(false); setError(""); }, 600);
+    setError(msg);
+    setTimeout(() => { setShaking(false); }, 500);
   };
 
   const handleKeyDown = (e) => {
@@ -113,7 +137,17 @@ export default function LockScreen({ onUnlock, wallpaperValue }) {
               style={{ textShadow: "0 1px 12px rgba(0,0,0,0.6)" }}>
               {user?.full_name || user?.email || "User"}
             </p>
-            <p className="text-white/40 text-sm mt-0.5 capitalize">{user?.role || "user"}</p>
+            <div className="flex items-center justify-center gap-2 mt-1">
+              <p className="text-white/40 text-sm capitalize">{user?.role || "user"}</p>
+              {profileName && (
+                <>
+                  <span className="text-white/20 text-xs">·</span>
+                  <span className="text-emerald-400/70 text-xs flex items-center gap-1">
+                    <User className="w-3 h-3" />{profileName}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
 
           {/* PIN/Password input */}
@@ -152,14 +186,15 @@ export default function LockScreen({ onUnlock, wallpaperValue }) {
           {/* Unlock button */}
           <button
             onClick={handleUnlock}
-            className="px-8 py-2.5 rounded-2xl text-sm font-bold text-white transition-all hover:scale-105 active:scale-95"
+            disabled={loading}
+            className="px-8 py-2.5 rounded-2xl text-sm font-bold text-white transition-all hover:scale-105 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
             style={{
               background: "rgba(16,185,129,0.8)",
               boxShadow: "0 0 24px rgba(16,185,129,0.4)",
               backdropFilter: "blur(8px)",
             }}
           >
-            Unlock →
+            {loading ? "Verifying…" : "Unlock →"}
           </button>
         </div>
       </div>

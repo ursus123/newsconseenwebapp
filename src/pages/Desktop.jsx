@@ -149,6 +149,11 @@ export default function Desktop() {
   // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e) => {
+      // When locked, block ALL shortcuts except pass-through to LockScreen
+      if (lockStore.isLocked) {
+        e.stopPropagation();
+        return;
+      }
       if (e.key === "Escape") {
         launcher.closeLauncher();
         setNotifOpen(false);
@@ -167,7 +172,7 @@ export default function Desktop() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [launcher, lockStore]);
+  }, [launcher, lockStore, lockStore.isLocked]);
 
   const wp = WALLPAPERS[wallpaperIdx] || WALLPAPERS[0];
   const isLight = wallpaperIdx >= 5;
@@ -192,12 +197,14 @@ export default function Desktop() {
     fontSize: 13, cursor: "pointer",
   };
 
+  const locked = lockStore.isLocked;
+
   return (
     <div
       className="fixed inset-0 overflow-hidden"
       style={{ background: wp.value, cursor: "default" }}
-      onContextMenu={handleContextMenu}
-      onClick={() => { setContextMenu(null); }}
+      onContextMenu={locked ? undefined : handleContextMenu}
+      onClick={locked ? undefined : () => { setContextMenu(null); }}
     >
       {/* Dot grid overlay */}
       <div
@@ -319,6 +326,9 @@ export default function Desktop() {
           Ctrl+Space
         </span>
       </div>
+
+      {/* ── Interactive desktop content — blocked when locked ── */}
+      <div style={{ pointerEvents: locked ? "none" : undefined }}>
 
       {/* Widget layer */}
       <div className="absolute top-9 left-0 right-0 bottom-14" style={{ zIndex: 5 }}>
@@ -451,14 +461,6 @@ export default function Desktop() {
       <OfflineIndicator isOnline={pwa.isOnline} />
       <PWAInstallBanner canInstall={pwa.canInstall} onInstall={pwa.promptInstall} />
 
-      {/* Lock Screen — rendered on top of everything */}
-      {lockStore.isLocked && (
-        <LockScreen
-          onUnlock={lockStore.unlock}
-          wallpaperValue={wp.value}
-        />
-      )}
-
       {/* Right-click context menu */}
       {contextMenu && (
         <div
@@ -526,6 +528,17 @@ export default function Desktop() {
             ✕ Close Menu
           </button>
         </div>
+      )}
+
+      </div>{/* end blocked-when-locked wrapper */}
+
+      {/* Lock Screen — rendered on top of everything, blocks all interaction */}
+      {lockStore.isLocked && (
+        <LockScreen
+          onUnlock={lockStore.unlock}
+          wallpaperValue={wp.value}
+          profileName={profileMgr.currentProfile?.name}
+        />
       )}
     </div>
   );
