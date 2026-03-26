@@ -11,6 +11,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { useWithScope } from "@/components/shared/useDataQuery";
 import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
+import MasterDataOptionCombobox from "@/components/shared/MasterDataOptionCombobox";
 
 const SECTIONS = [
   { id: "identity", label: "Identity", icon: User },
@@ -257,6 +258,40 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
                 { value: "contact", label: "Contact / Vendor" },
                 { value: "volunteer", label: "Volunteer" },
               ]} placeholder="Select person type..." />
+            </Field>
+
+            {form.person_type && (
+              <Field label="Person Subtype">
+                <MasterDataOptionCombobox
+                  entityType="person"
+                  fieldName="person_subtype"
+                  parentValue={form.person_type}
+                  value={form.person_subtype || ""}
+                  onChange={(v) => set("person_subtype", v)}
+                  placeholder="Select subtype..."
+                />
+              </Field>
+            )}
+
+            <Field label="Primary Role">
+              <Input
+                value={form.primary_role || ""}
+                onChange={(e) => set("primary_role", e.target.value)}
+                placeholder="Specific role description"
+              />
+            </Field>
+
+            <Field label="Engagement Model">
+              <SelectField value={form.engagement_model || ""} onChange={(v) => set("engagement_model", v)} options={[
+                { value: "employed", label: "Employed" },
+                { value: "contracted", label: "Contracted" },
+                { value: "freelance", label: "Freelance" },
+                { value: "volunteer", label: "Volunteer" },
+                { value: "elected", label: "Elected" },
+                { value: "appointed", label: "Appointed" },
+                { value: "enrolled", label: "Enrolled" },
+                { value: "subscribed", label: "Subscribed" },
+              ]} placeholder="Select engagement model..." />
             </Field>
             <Field label="Status">
               <SelectField value={form.status} onChange={(v) => set("status", v)} options={[

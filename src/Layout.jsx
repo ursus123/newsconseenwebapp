@@ -32,9 +32,9 @@ import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { usePermissions } from "@/components/shared/usePermissions";
 import TenantGuard from "@/components/shared/TenantGuard";
 import NetworkBanner from "@/components/shared/NetworkBanner";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // ─── Role-aware nav config ────────────────────────────────────────────────────
 const NAV_CONFIG = {
@@ -269,9 +269,17 @@ export default function Layout({ children, currentPageName }) {
 
 
 
-  // Build role-aware nav sections
+  // Build role-aware nav sections with permissions
+  const { canAccessPage } = usePermissions();
   const role = currentUser?.role || "user";
-  const navSections = NAV_CONFIG[role] || NAV_CONFIG.user;
+  let navSections = NAV_CONFIG[role] || NAV_CONFIG.user;
+  
+  // Filter nav items based on permissions
+  navSections = navSections.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => canAccessPage(item.name)),
+  })).filter((section) => section.items.length > 0);
+  
   const roleBadge = ROLE_BADGE[role] || ROLE_BADGE.user;
 
   const handleNavClick = (pageName) => {
