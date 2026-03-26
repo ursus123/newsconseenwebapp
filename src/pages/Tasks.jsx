@@ -24,7 +24,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Pencil, Trash2, Calendar, User, Building2, CheckCircle, AlertCircle, Clock, ShieldCheck, Filter, LayoutGrid, List, CalendarDays, X, Upload, Search } from "lucide-react";
+import { Pencil, Trash2, Calendar, User, Building2, CheckCircle, AlertCircle, Clock, ShieldCheck, Filter, LayoutGrid, List, CalendarDays, X, Upload, Search, Tag } from "lucide-react";
+import { tagColor } from "@/components/shared/TagInput";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { format, isToday, isPast, parseISO } from "date-fns";
@@ -119,6 +120,9 @@ function TaskCard({ task, onEdit, onDelete, isAdmin, selectable, selected, onSel
                 <Badge className="bg-violet-50 text-violet-700 text-xs">→ Transaction</Badge>
               )}
               {srcBadge && <Badge className={`${srcBadge.cls} text-xs`}>{srcBadge.label}</Badge>}
+              {(task.tags || []).map((tag) => (
+                <span key={tag} className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${tagColor(tag)}`}>#{tag}</span>
+              ))}
             </div>
             {task.outcome_notes && (
               <p className="text-xs text-slate-400 mt-2 line-clamp-1 italic">{task.outcome_notes}</p>
@@ -200,6 +204,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const [viewMode, setViewMode] = useState("kanban");
   const [filterPerson, setFilterPerson] = useState("");
   const [filterEnterprise, setFilterEnterprise] = useState("");
+  const [filterTag, setFilterTag] = useState("");
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkAssignee, setBulkAssignee] = useState("");
@@ -265,6 +270,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
       if (filter === "completed" && t.status !== "completed") return false;
       if (filterPerson && t.assigned_to_name !== filterPerson && t.assigned_to_email !== filterPerson) return false;
       if (filterEnterprise && t.enterprise !== filterEnterprise) return false;
+      if (filterTag && !(t.tags || []).includes(filterTag)) return false;
       return true;
     });
     return list;
@@ -419,8 +425,20 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
           <option value="">All Enterprises</option>
           {enterprises.map((e) => <option key={e.id} value={e.enterprise_name}>{e.enterprise_name}</option>)}
         </select>
-        {(filterPerson || filterEnterprise || search) && (
-          <button onClick={() => { setFilterPerson(""); setFilterEnterprise(""); setSearch(""); }} className="text-xs text-slate-400 hover:text-rose-500 flex items-center gap-1"><X className="w-3 h-3" /> Clear</button>
+        {/* Tag filter — collect all unique tags */}
+        {(() => {
+          const allTags = [...new Set(tasks.flatMap(t => t.tags || []))].sort();
+          if (!allTags.length) return null;
+          return (
+            <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)}
+              className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400 h-9">
+              <option value="">All Tags</option>
+              {allTags.map((tag) => <option key={tag} value={tag}>#{tag}</option>)}
+            </select>
+          );
+        })()}
+        {(filterPerson || filterEnterprise || filterTag || search) && (
+          <button onClick={() => { setFilterPerson(""); setFilterEnterprise(""); setFilterTag(""); setSearch(""); }} className="text-xs text-slate-400 hover:text-rose-500 flex items-center gap-1"><X className="w-3 h-3" /> Clear</button>
         )}
         <span className="ml-auto text-xs text-slate-400">{filtered.length} of {tasks.length}</span>
       </div>

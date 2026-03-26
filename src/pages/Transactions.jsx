@@ -10,6 +10,7 @@ import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Button } from "@/components/ui/button";
 import { Lock, Upload, ChevronDown, ChevronUp, Plus, Search, X } from "lucide-react";
+import { tagColor } from "@/components/shared/TagInput";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -137,6 +138,9 @@ function TransactionRow({ transaction, onEdit, onMarkPaid, onPost, onVoid, onExp
                     Due {transaction.due_date}{isOverdue && " ⚠️ OVERDUE"}
                   </span>
                 )}
+                {(transaction.tags || []).map(tag => (
+                  <span key={tag} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${tagColor(tag)}`}>#{tag}</span>
+                ))}
                 {transaction.source && transaction.source !== "manual" && (() => {
                   const src  = TRANSACTION_SOURCES[transaction.source] || TRANSACTION_SOURCES.manual;
                   const color = SOURCE_COLORS[transaction.source] || SOURCE_COLORS.manual;
@@ -228,6 +232,7 @@ export default function Transactions() {
   const [period, setPeriod]               = useState("30d");
   const [filterEnterprise, setFilterEnterprise] = useState("all");
   const [filterSource, setFilterSource]         = useState("all");
+  const [filterTag, setFilterTag]               = useState("all");
   const [search, setSearch]                     = useState("");
   const [selectedIds, setSelectedIds]           = useState([]);
   const qc = useQueryClient();
@@ -310,8 +315,9 @@ export default function Transactions() {
     let list = filteredByPeriod;
     if (filterEnterprise !== "all") list = list.filter(t => t.enterprise === filterEnterprise);
     if (filterSource !== "all") list = list.filter(t => (t.source || "manual") === filterSource);
+    if (filterTag !== "all") list = list.filter(t => (t.tags || []).includes(filterTag));
     return list;
-  }, [filteredByPeriod, filterEnterprise, filterSource]);
+  }, [filteredByPeriod, filterEnterprise, filterSource, filterTag]);
 
   // KPI calculations
   const totalRevenue    = filtered.filter(t => REVENUE_TYPES.includes(t.transaction_type) && t.payment_status === "paid").reduce((s, t) => s + (t.net_amount || t.amount || 0), 0);
@@ -477,6 +483,19 @@ export default function Transactions() {
             <option key={k} value={k}>{v.icon} {v.label}</option>
           ))}
         </select>
+
+        {/* Tag filter */}
+        {(() => {
+          const allTags = [...new Set(transactions.flatMap(t => t.tags || []))].sort();
+          if (!allTags.length) return null;
+          return (
+            <select value={filterTag} onChange={e => setFilterTag(e.target.value)}
+              className="text-xs border border-slate-200 rounded-xl px-3 py-1.5 bg-white text-slate-600 focus:outline-none">
+              <option value="all">All Tags</option>
+              {allTags.map(tag => <option key={tag} value={tag}>#{tag}</option>)}
+            </select>
+          );
+        })()}
 
         {/* Search */}
         <div className="relative ml-auto">

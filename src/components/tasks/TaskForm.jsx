@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Save, X, CheckCircle, AlertCircle, ExternalLink } from "lucide-react";
 import { createPageUrl } from "@/utils";
+import TagInput from "@/components/shared/TagInput";
 
 export const TASK_TYPE_GROUPS = [
   {
@@ -458,6 +459,11 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, appUser
                 <span>Tasks never modify inventory, revenue, or records directly.</span>
               </div>
             </div>
+
+            <SectionDivider label="Tags" />
+            <Field label="Tags" hint="Press Enter or comma to add. Used for filtering and organization.">
+              <TagInput value={form.tags || []} onChange={(tags) => set("tags", tags)} placeholder="e.g. urgent, follow-up, q1-2025" />
+            </Field>
 
             <Field label="Internal Notes (Admin Only)">
               <Textarea value={form.internal_notes || ""} onChange={(e) => set("internal_notes", e.target.value)} className="rounded-xl resize-none" rows={2} placeholder="Admin context, instructions..." />

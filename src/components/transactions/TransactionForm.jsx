@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { TRANSACTION_TYPES, REVENUE_TYPES, EXPENSE_TYPES, INVENTORY_TYPES } from "@/config/transactionTypes";
+import TagInput from "@/components/shared/TagInput";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "RWF", "KES", "NGN", "ZAR", "CAD", "AUD", "INR"];
 
@@ -262,6 +263,15 @@ export default function TransactionForm({ open, onClose, onSubmit, initialData, 
             <textarea value={formData.notes || ""} onChange={e => set("notes", e.target.value)}
               placeholder="Any additional notes..." rows={2}
               className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none resize-none" />
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Tags <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <p className="text-xs text-slate-400 mb-2">Press Enter or comma to add a tag</p>
+            <TagInput value={formData.tags || []} onChange={(tags) => set("tags", tags)} placeholder="e.g. q1, reimbursable, priority" />
           </div>
 
           {/* Summary */}
