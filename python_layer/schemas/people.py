@@ -26,6 +26,7 @@ class PeopleSummary(BaseModel):
     # -- Classification --
     is_staff:            bool = False
     is_participant:      bool = False
+    is_contact:          bool = False
 
     # -- Snapshot --
     snapshot_date:       Optional[date]     = None
