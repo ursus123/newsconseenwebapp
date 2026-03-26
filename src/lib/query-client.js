@@ -7,14 +7,6 @@ export const queryClientInstance = new QueryClient({
       retry: 2,
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
       staleTime: 30000,
-      onError: (error) => {
-        console.error("Query error:", error);
-      },
-    },
-    mutations: {
-      onError: (error) => {
-        console.error("Mutation error:", error);
-      },
     },
   },
 });
