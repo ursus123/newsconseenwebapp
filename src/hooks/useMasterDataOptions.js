@@ -83,6 +83,14 @@ export function getSystemSubtypes() {
   return SYSTEM_SUBTYPES;
 }
 
+export function getSystemPersonTypes() {
+  return ["staff", "client", "contact", "volunteer"];
+}
+
+export function getSystemEngagementModels() {
+  return ["employed", "contracted", "freelance", "volunteer", "elected", "appointed", "enrolled", "subscribed"];
+}
+
 // Enterprise subtype system defaults by type
 const SYSTEM_ENTERPRISE_SUBTYPES = {
   commercial: [
@@ -350,6 +358,42 @@ export function getSuggestedItemClasses(itemSubtype) {
 
 export function getUnitOfMeasureForType(itemType) {
   return UNIT_OF_MEASURE_BY_TYPE[itemType] || [];
+}
+
+export function getSystemEnterpriseTypes() {
+  return ["commercial", "nonprofit", "government", "household", "cooperative", "trust"];
+}
+
+const SIC_DIVISIONS = [
+  { value: "A_agriculture_forestry_fishing", label: "A - Agriculture, Forestry, Fishing" },
+  { value: "B_mining", label: "B - Mining" },
+  { value: "C_construction", label: "C - Construction" },
+  { value: "D_manufacturing", label: "D - Manufacturing" },
+  { value: "E_transport_communications_utilities", label: "E - Transport, Communications, Utilities" },
+  { value: "F_wholesale_trade", label: "F - Wholesale Trade" },
+  { value: "G_retail_trade", label: "G - Retail Trade" },
+  { value: "H_finance_insurance_real_estate", label: "H - Finance, Insurance, Real Estate" },
+  { value: "I_services", label: "I - Services" },
+  { value: "J_public_administration", label: "J - Public Administration" },
+  { value: "K_education_health_social", label: "K - Education, Health, Social" },
+  { value: "L_nonprofit_religious", label: "L - Nonprofit, Religious" },
+  { value: "M_household_individual", label: "M - Household, Individual" }
+];
+
+export function getSystemSICDivisions() {
+  return SIC_DIVISIONS;
+}
+
+export function getSystemEnterpriseTiers() {
+  return ["headquarters", "regional_office", "branch", "subsidiary", "franchise", "department", "unit", "project"];
+}
+
+export function getSystemItemTypes() {
+  return ["physical", "living", "digital", "service_package", "financial_instrument"];
+}
+
+export function getSystemItemClasses() {
+  return ["perishable", "non_perishable", "hazardous", "controlled", "regulated", "unrestricted", "serialized", "non_serialized", "consumable", "reusable", "returnable"];
 }
 
 export async function createCustomOption(entityType, fieldName, value, label = null) {

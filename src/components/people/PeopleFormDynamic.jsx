@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { X, Plus } from "lucide-react";
-import { useMasterDataOptions, getFilteredRoles, getSystemSubtypes, createCustomOption } from "@/hooks/useMasterDataOptions";
+import { useMasterDataOptions, getFilteredRoles, getSystemSubtypes, getSystemPersonTypes, getSystemEngagementModels, createCustomOption } from "@/hooks/useMasterDataOptions";
 import { toast } from "sonner";
 
 function CustomCombobox({ label, value, onChange, options, customOptions, entityType, fieldName, personType, isRoles }) {
@@ -150,10 +150,11 @@ export default function PersonTypeAndRoleSection({ formData, onChange }) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="staff">Staff</SelectItem>
-            <SelectItem value="client">Client</SelectItem>
-            <SelectItem value="contact">Contact</SelectItem>
-            <SelectItem value="volunteer">Volunteer</SelectItem>
+            {getSystemPersonTypes().map((type) => (
+              <SelectItem key={type} value={type}>
+                {type.charAt(0).toUpperCase() + type.slice(1)}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -189,14 +190,11 @@ export default function PersonTypeAndRoleSection({ formData, onChange }) {
             <SelectValue placeholder="Select engagement model" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="employed">Employed</SelectItem>
-            <SelectItem value="contracted">Contracted</SelectItem>
-            <SelectItem value="freelance">Freelance</SelectItem>
-            <SelectItem value="volunteer">Volunteer</SelectItem>
-            <SelectItem value="elected">Elected</SelectItem>
-            <SelectItem value="appointed">Appointed</SelectItem>
-            <SelectItem value="enrolled">Enrolled</SelectItem>
-            <SelectItem value="subscribed">Subscribed</SelectItem>
+            {getSystemEngagementModels().map((model) => (
+              <SelectItem key={model} value={model}>
+                {model.charAt(0).toUpperCase() + model.slice(1).replace(/_/g, " ")}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

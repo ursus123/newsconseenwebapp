@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Plus } from "lucide-react";
-import { useMasterDataOptions, getFilteredEnterpriseSubtypes, getSICDivisionForSubtype, getSICCodeHint, createCustomOption } from "@/hooks/useMasterDataOptions";
+import { useMasterDataOptions, getFilteredEnterpriseSubtypes, getSICDivisionForSubtype, getSICCodeHint, getSystemEnterpriseTypes, getSystemSICDivisions, getSystemEnterpriseTiers, createCustomOption } from "@/hooks/useMasterDataOptions";
 import { toast } from "sonner";
 
 function CustomCombobox({ label, value, onChange, customOptions, options, entityType, fieldName }) {
@@ -156,12 +156,11 @@ export default function EnterpriseTypeAndSubtypeSection({ formData, onChange }) 
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="commercial">Commercial</SelectItem>
-            <SelectItem value="nonprofit">Nonprofit</SelectItem>
-            <SelectItem value="government">Government</SelectItem>
-            <SelectItem value="household">Household</SelectItem>
-            <SelectItem value="cooperative">Cooperative</SelectItem>
-            <SelectItem value="trust">Trust</SelectItem>
+            {getSystemEnterpriseTypes().map((type) => (
+              <SelectItem key={type} value={type}>
+                {type.charAt(0).toUpperCase() + type.slice(1)}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -186,19 +185,11 @@ export default function EnterpriseTypeAndSubtypeSection({ formData, onChange }) 
             <SelectValue placeholder="Select SIC division" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="A_agriculture_forestry_fishing">A - Agriculture, Forestry, Fishing</SelectItem>
-            <SelectItem value="B_mining">B - Mining</SelectItem>
-            <SelectItem value="C_construction">C - Construction</SelectItem>
-            <SelectItem value="D_manufacturing">D - Manufacturing</SelectItem>
-            <SelectItem value="E_transport_communications_utilities">E - Transport, Communications, Utilities</SelectItem>
-            <SelectItem value="F_wholesale_trade">F - Wholesale Trade</SelectItem>
-            <SelectItem value="G_retail_trade">G - Retail Trade</SelectItem>
-            <SelectItem value="H_finance_insurance_real_estate">H - Finance, Insurance, Real Estate</SelectItem>
-            <SelectItem value="I_services">I - Services</SelectItem>
-            <SelectItem value="J_public_administration">J - Public Administration</SelectItem>
-            <SelectItem value="K_education_health_social">K - Education, Health, Social</SelectItem>
-            <SelectItem value="L_nonprofit_religious">L - Nonprofit, Religious</SelectItem>
-            <SelectItem value="M_household_individual">M - Household, Individual</SelectItem>
+            {getSystemSICDivisions().map((div) => (
+              <SelectItem key={div.value} value={div.value}>
+                {div.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -224,14 +215,11 @@ export default function EnterpriseTypeAndSubtypeSection({ formData, onChange }) 
             <SelectValue placeholder="Select enterprise tier" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="headquarters">Headquarters</SelectItem>
-            <SelectItem value="regional_office">Regional Office</SelectItem>
-            <SelectItem value="branch">Branch</SelectItem>
-            <SelectItem value="subsidiary">Subsidiary</SelectItem>
-            <SelectItem value="franchise">Franchise</SelectItem>
-            <SelectItem value="department">Department</SelectItem>
-            <SelectItem value="unit">Unit</SelectItem>
-            <SelectItem value="project">Project</SelectItem>
+            {getSystemEnterpriseTiers().map((tier) => (
+              <SelectItem key={tier} value={tier}>
+                {tier.charAt(0).toUpperCase() + tier.slice(1).replace(/_/g, " ")}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

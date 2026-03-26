@@ -12,7 +12,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Plus } from "lucide-react";
-import { useMasterDataOptions, getFilteredItemSubtypes, getSuggestedItemClasses, getUnitOfMeasureForType, createCustomOption } from "@/hooks/useMasterDataOptions";
+import { useMasterDataOptions, getFilteredItemSubtypes, getSuggestedItemClasses, getUnitOfMeasureForType, getSystemItemTypes, getSystemItemClasses, createCustomOption } from "@/hooks/useMasterDataOptions";
 import { toast } from "sonner";
 
 function CustomCombobox({ label, value, onChange, customOptions, options, entityType, fieldName }) {
@@ -167,11 +167,11 @@ export default function ProductTypeAndClassificationSection({ formData, onChange
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="physical">Physical</SelectItem>
-            <SelectItem value="living">Living</SelectItem>
-            <SelectItem value="digital">Digital</SelectItem>
-            <SelectItem value="service_package">Service Package</SelectItem>
-            <SelectItem value="financial_instrument">Financial Instrument</SelectItem>
+            {getSystemItemTypes().map((type) => (
+              <SelectItem key={type} value={type}>
+                {type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, " ")}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -211,10 +211,7 @@ export default function ProductTypeAndClassificationSection({ formData, onChange
       <div>
         <Label>Item Class</Label>
         <div className="border border-slate-200 rounded-lg p-3 space-y-2">
-          {[
-            "perishable", "non_perishable", "hazardous", "controlled", "regulated", "unrestricted",
-            "serialized", "non_serialized", "consumable", "reusable", "returnable"
-          ].map((classValue) => (
+          {getSystemItemClasses().map((classValue) => (
             <div key={classValue} className="flex items-center gap-2">
               <Checkbox
                 id={`class_${classValue}`}
