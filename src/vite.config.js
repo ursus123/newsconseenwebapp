@@ -2,10 +2,25 @@ import base44 from "@base44/vite-plugin"
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import path from 'path'
+import fs from 'fs'
+
+function clearViteCache() {
+  return {
+    name: 'clear-vite-cache',
+    buildStart() {
+      const cacheDir = './node_modules/.vite'
+      if (fs.existsSync(cacheDir)) {
+        fs.rmSync(cacheDir, { recursive: true, force: true })
+        console.log('Vite cache cleared')
+      }
+    }
+  }
+}
 
 export default defineConfig({
   logLevel: 'error',
   plugins: [
+    clearViteCache(),
     base44({
       legacySDKImports: process.env.BASE44_LEGACY_SDK_IMPORTS === 'true',
       hmrNotifier: true,
@@ -33,13 +48,15 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
+    force: true,
     include: [
       "react",
       "react-dom",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
       "react-router-dom",
       "@tanstack/react-query",
       "framer-motion",
     ],
-    force: true,
   },
 })
