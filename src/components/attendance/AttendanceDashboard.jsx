@@ -50,7 +50,12 @@ export default function AttendanceDashboard({ currentUser, onOpenClass, onOpenPe
       r.enterprise_id === classId && 
       r.relationship_type === "person_enterprise" &&
       r.status === "active" &&
-      people.find(p => p.id === r.person_name && p.person_type === "student")
+      people.find(p => 
+        (p.id === r.person_id || 
+         `${p.first_name} ${p.last_name}`.toLowerCase() === (r.person_name || "").toLowerCase() ||
+         p.preferred_name === r.person_name) && 
+        p.person_type === "student"
+      )
     ).length;
   };
 
@@ -61,7 +66,12 @@ export default function AttendanceDashboard({ currentUser, onOpenClass, onOpenPe
       r.status === "active"
     );
     if (!teacherRel) return null;
-    return people.find(p => p.id === teacherRel.person_name && p.person_type === "teacher");
+    return people.find(p => 
+      (p.id === teacherRel.person_id ||
+       `${p.first_name} ${p.last_name}`.toLowerCase() === (teacherRel.person_name || "").toLowerCase() ||
+       p.preferred_name === teacherRel.person_name) &&
+      p.person_type === "teacher"
+    );
   };
 
   return (

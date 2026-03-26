@@ -28,7 +28,11 @@ export default function ClassAttendancePage({ classObj, currentUser, onBack, onO
 
   const students = relationships
     .filter(r => r.status === "active")
-    .map(r => people.find(p => p.id === r.person_name || p.id === r.person_id))
+    .map(r => people.find(p =>
+      p.id === r.person_id ||
+      `${p.first_name} ${p.last_name}`.toLowerCase() === (r.person_name || "").toLowerCase() ||
+      p.preferred_name === r.person_name
+    ))
     .filter(p => p && p.person_type === "student");
 
   useEffect(() => {

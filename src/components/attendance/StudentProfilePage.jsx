@@ -7,10 +7,21 @@ import { Button } from "@/components/ui/button";
 export default function StudentProfilePage({ person, onBack }) {
   const { data: tasks = [] } = useQuery({
     queryKey: ["student_attendance", person?.id],
-    queryFn: () => base44.entities.Task.filter({
-      task_type: "attendance",
-      assigned_to_name: person?.preferred_name || person?.first_name,
-    }),
+    queryFn: async () => {
+      const fullName = [person?.preferred_name || person?.first_name, person?.last_name]
+        .filter(Boolean).join(" ");
+      const byFullName = await base44.entities.Task.filter({
+        task_type: "attendance",
+        assigned_to_name: fullName,
+      });
+      if (byFullName.length > 0) return byFullName;
+      // fallback: filter by first name only
+      const byFirst = await base44.entities.Task.filter({
+        task_type: "attendance",
+        assigned_to_name: person?.preferred_name || person?.first_name,
+      });
+      return byFirst;
+    },
     enabled: !!person?.id,
   });
 
