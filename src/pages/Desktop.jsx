@@ -36,6 +36,7 @@ export default function Desktop() {
   const [notifOpen, setNotifOpen]     = useState(false);
   const [wallpaperIdx, setWallpaperIdx] = useState(0);
   const [contextMenu, setContextMenu] = useState(null);
+  const [iconContextMenuOpen, setIconContextMenuOpen] = useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [profileSwitcherOpen, setProfileSwitcherOpen] = useState(false);
   const profileSwitcherPopupRef = useRef(null);
@@ -110,6 +111,8 @@ export default function Desktop() {
   }, [handleOpenApp]);
 
   const handleContextMenu = (e) => {
+    // Don't show desktop context menu if icon context menu is open
+    if (iconContextMenuOpen) return;
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY });
   };
@@ -173,6 +176,18 @@ export default function Desktop() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [launcher, lockStore, lockStore.isLocked]);
+
+  // Listen for icon context menu open/close
+  useEffect(() => {
+    const onIconMenuOpen = () => setIconContextMenuOpen(true);
+    const onIconMenuClose = () => setIconContextMenuOpen(false);
+    window.addEventListener("icon-context-menu-open", onIconMenuOpen);
+    window.addEventListener("icon-context-menu-close", onIconMenuClose);
+    return () => {
+      window.removeEventListener("icon-context-menu-open", onIconMenuOpen);
+      window.removeEventListener("icon-context-menu-close", onIconMenuClose);
+    };
+  }, []);
 
   const wp = WALLPAPERS[wallpaperIdx] || WALLPAPERS[0];
   const isLight = wallpaperIdx >= 5;

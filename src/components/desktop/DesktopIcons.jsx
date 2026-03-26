@@ -33,7 +33,7 @@ function IconContextMenu({ app, x, y, isPinned, onOpen, onPin, onRemove, onClose
 
   useEffect(() => {
     const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) onClose();
+      if (ref.current && !ref.current.contains(e.target)) { onClose(); window.dispatchEvent(new CustomEvent("icon-context-menu-close")); }
     };
     setTimeout(() => document.addEventListener("mousedown", handler), 0);
     return () => document.removeEventListener("mousedown", handler);
@@ -207,6 +207,8 @@ export default function DesktopIcons({ onOpenApp, pinnedDesktop, pinnedTaskbar =
     e.preventDefault();
     e.stopPropagation();
     setSelectedId(app.id);
+    // Dispatch event so Desktop knows icon context menu is open and doesn't show desktop menu
+    window.dispatchEvent(new CustomEvent("icon-context-menu-open"));
     setContextMenu({ app, x: e.clientX, y: e.clientY });
   }, []);
 

@@ -3,7 +3,8 @@ import { base44 } from "@/api/base44Client";
 import {
   Folder, FileText, BarChart2, Download, Trash2, Upload,
   FolderPlus, Edit2, Search, Grid, List, ChevronRight,
-  File, Settings, Share2, Star, Clock, RefreshCw, X, Check
+  File, Settings, Share2, Star, Clock, RefreshCw, X, Check,
+  AlertTriangle, Eye, FileImage, FileCode, HardDrive
 } from "lucide-react";
 
 const TYPE_ICONS = {
@@ -40,6 +41,8 @@ const SIDEBAR_SECTIONS = [
   { key: "trash",     label: "Trash",           icon: Trash2 },
 ];
 
+const MAX_STORAGE_MB = 500;
+
 export default function FileManager() {
   const [user, setUser] = useState(null);
   const [files, setFiles] = useState([]);
@@ -53,6 +56,9 @@ export default function FileManager() {
   const [renaming, setRenaming] = useState(null); // file id being renamed
   const [renameValue, setRenameValue] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState(null); // {file, type} for modal
+  const [dragOver, setDragOver] = useState(false);
+  const [draggedFile, setDraggedFile] = useState(null); // {id, sourceFolder} for drag reorder
   const fileInputRef = useRef();
 
   useEffect(() => {
@@ -95,6 +101,12 @@ export default function FileManager() {
   async function handleUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const totalSize = [...files].reduce((acc, f) => acc + (f.size_bytes || 0), 0) + file.size;
+    if (totalSize > MAX_STORAGE_MB * 1024 * 1024) {
+      alert("Storage quota exceeded. Please delete some files.");
+      e.target.value = "";
+      return;
+    }
     setUploading(true);
     const { file_url } = await base44.integrations.Core.UploadFile({ file });
     await base44.entities.FileRecord.create({
@@ -113,6 +125,78 @@ export default function FileManager() {
     setUploading(false);
     e.target.value = "";
     load();
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault();
+    if (e.currentTarget === e.target) setDragOver(false);
+  }
+
+  async function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+
+    // Handle file upload
+    const fileList = e.dataTransfer.files;
+    if (fileList.length > 0) {
+      const file = fileList[0];
+      const totalSize = [...files].reduce((acc, f) => acc + (f.size_bytes || 0), 0) + file.size;
+      if (totalSize > MAX_STORAGE_MB * 1024 * 1024) {
+        alert("Storage quota exceeded. Please delete some files.");
+        return;
+      }
+      setUploading(true);
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      await base44.entities.FileRecord.create({
+        name: file.name,
+        file_type: "attachment",
+        file_url,
+        size_bytes: file.size,
+        mime_type: file.type,
+        folder_id: currentFolderId,
+        scope: section === "enterprise" ? "enterprise" : section === "shared" ? "shared" : "personal",
+        owner_email: user?.email,
+        owner_name: user?.full_name,
+        company_id: user?.company_id,
+        is_trashed: false,
+      });
+      setUploading(false);
+      load();
+    }
+  }
+
+  function startDragFile(f) {
+    setDraggedFile({ id: f.id, sourceFolder: currentFolderId });
+  }
+
+  async function handleDropOnFolder(targetFolder) {
+    if (!draggedFile || draggedFile.id === targetFolder.id) {
+      setDraggedFile(null);
+      return;
+    }
+    const f = files.find(x => x.id === draggedFile.id);
+    if (f) {
+      await base44.entities.FileRecord.update(f.id, { folder_id: targetFolder.id });
+      setDraggedFile(null);
+      load();
+    }
+  }
+
+  function handlePreview(f) {
+    if (f.file_type === "folder") return;
+    const mimeType = f.mime_type || "";
+    let previewType = "unknown";
+    if (mimeType.startsWith("image/")) previewType = "image";
+    else if (mimeType === "application/pdf") previewType = "pdf";
+    else if (mimeType.startsWith("text/") || f.name?.endsWith(".txt")) previewType = "text";
+    setPreview({ file: f, type: previewType });
   }
 
   async function handleDelete() {
@@ -186,11 +270,26 @@ export default function FileManager() {
 
   const hasDownloadable = [...selected].some(id => files.find(f => f.id === id)?.file_url);
 
+  // Storage stats
+  const totalUsedBytes = files.filter(f => f.file_type !== "folder").reduce((acc, f) => acc + (f.size_bytes || 0), 0);
+  const totalQuotaBytes = MAX_STORAGE_MB * 1024 * 1024;
+  const usedPercent = (totalUsedBytes / totalQuotaBytes) * 100;
+  const isStorageFull = usedPercent > 90;
+
+  // Breakdown by type
+  const typeBreakdown = {};
+  sorted.filter(f => f.file_type !== "folder").forEach(f => {
+    const type = f.file_type || "other";
+    if (!typeBreakdown[type]) typeBreakdown[type] = { count: 0, bytes: 0 };
+    typeBreakdown[type].count += 1;
+    typeBreakdown[type].bytes += f.size_bytes || 0;
+  });
+
   return (
     <div style={{ display: "flex", height: "100%", background: "#0f172a", color: "#e2e8f0", fontFamily: "system-ui, sans-serif", fontSize: 13 }}>
 
       {/* Sidebar */}
-      <div style={{ width: 200, borderRight: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", padding: "16px 8px", gap: 4, flexShrink: 0 }}>
+      <div style={{ width: 240, borderRight: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", padding: "16px 8px", gap: 4, flexShrink: 0, overflowY: "auto" }}>
         <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#475569", padding: "0 8px", marginBottom: 8 }}>
           File Manager
         </div>
@@ -214,10 +313,32 @@ export default function FileManager() {
           );
         })}
 
+        {/* Storage stats */}
         <div style={{ marginTop: "auto", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 12 }}>
-          <div style={{ fontSize: 11, color: "#475569", padding: "0 8px" }}>
-            {files.filter(f => f.file_type !== "folder").length} file(s)
+          {isStorageFull && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", padding: 8, borderRadius: 6, marginBottom: 10 }}>
+              <AlertTriangle size={14} color="#fca5a5" />
+              <span style={{ fontSize: 11, color: "#fca5a5" }}>Storage nearly full</span>
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+            <HardDrive size={14} color="#94a3b8" />
+            <span style={{ fontSize: 11, color: "#64748b" }}>Storage</span>
           </div>
+          <div style={{ marginBottom: 6 }}>
+            <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+              <div style={{ height: "100%", background: usedPercent > 90 ? "#f87171" : "#4ade80", width: `${Math.min(usedPercent, 100)}%` }} />
+            </div>
+          </div>
+          <div style={{ fontSize: 10, color: "#475569", marginBottom: 10 }}>
+            {(totalUsedBytes / (1024 * 1024)).toFixed(1)} MB / {MAX_STORAGE_MB} MB
+          </div>
+          <div style={{ fontSize: 10, color: "#475569", marginBottom: 4, fontWeight: 600 }}>Breakdown:</div>
+          {Object.entries(typeBreakdown).map(([type, stats]) => (
+            <div key={type} style={{ fontSize: 9, color: "#64748b", padding: "3px 0" }}>
+              {TYPE_LABELS[type]}: {stats.count} ({formatSize(stats.bytes)})
+            </div>
+          ))}
         </div>
       </div>
 
@@ -276,7 +397,17 @@ export default function FileManager() {
         </div>
 
         {/* File area */}
-        <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
+        <div
+          style={{ flex: 1, overflow: "auto", padding: 16, position: "relative" }}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {dragOver && (
+            <div style={{ position: "absolute", inset: 0, background: "rgba(99,102,241,0.15)", border: "2px dashed rgba(99,102,241,0.5)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, pointerEvents: "none" }}>
+              <div style={{ color: "#a5b4fc", fontSize: 14, fontWeight: 600 }}>Drop files here</div>
+            </div>
+          )}
           {loading ? (
             <div style={{ color: "#475569", textAlign: "center", marginTop: 60 }}>Loading…</div>
           ) : sorted.length === 0 ? (
@@ -286,17 +417,23 @@ export default function FileManager() {
               files={sorted} selected={selected} renaming={renaming} renameValue={renameValue}
               setRenameValue={setRenameValue} commitRename={commitRename}
               toggleSelect={toggleSelect} openFolder={openFolder} section={section}
-              onRestore={handleRestore}
+              onRestore={handleRestore} onPreview={handlePreview} draggedFile={draggedFile}
+              startDragFile={startDragFile} handleDropOnFolder={handleDropOnFolder}
             />
           ) : (
             <GridView
               files={sorted} selected={selected} renaming={renaming} renameValue={renameValue}
               setRenameValue={setRenameValue} commitRename={commitRename}
-              toggleSelect={toggleSelect} openFolder={openFolder}
+              toggleSelect={toggleSelect} openFolder={openFolder} onPreview={handlePreview}
             />
           )}
         </div>
       </div>
+
+      {/* Preview modal */}
+      {preview && (
+        <PreviewModal file={preview.file} type={preview.type} onClose={() => setPreview(null)} />
+      )}
     </div>
   );
 }
@@ -323,7 +460,7 @@ function FileIcon({ type, size = 20 }) {
   return <Icon size={size} color={cfg.color} />;
 }
 
-function ListView({ files, selected, renaming, renameValue, setRenameValue, commitRename, toggleSelect, openFolder, section, onRestore }) {
+function ListView({ files, selected, renaming, renameValue, setRenameValue, commitRename, toggleSelect, openFolder, section, onRestore, onPreview, draggedFile, startDragFile, handleDropOnFolder }) {
   return (
     <table style={{ width: "100%", borderCollapse: "collapse" }}>
       <thead>
@@ -340,17 +477,22 @@ function ListView({ files, selected, renaming, renameValue, setRenameValue, comm
         {files.map(f => {
           const isSelected = selected.has(f.id);
           const isRenaming = renaming === f.id;
+          const isDragging = draggedFile?.id === f.id;
           return (
             <tr key={f.id}
               onClick={e => { if (!isRenaming) toggleSelect(f.id, e); }}
-              onDoubleClick={() => openFolder(f)}
+              onDoubleClick={() => { if (f.file_type === "folder") openFolder(f); else onPreview(f); }}
+              onDragStart={() => { if (f.file_type !== "folder") startDragFile(f); }}
+              onDragOver={e => { if (f.file_type === "folder") e.preventDefault(); }}
+              onDrop={() => { if (f.file_type === "folder") handleDropOnFolder(f); }}
+              draggable={f.file_type !== "folder"}
               style={{
-                background: isSelected ? "rgba(99,102,241,0.15)" : "transparent",
+                background: isDragging ? "rgba(168,85,247,0.15)" : isSelected ? "rgba(99,102,241,0.15)" : "transparent",
                 borderRadius: 6, cursor: "pointer",
-                transition: "background 0.1s",
+                transition: "background 0.1s", opacity: isDragging ? 0.5 : 1,
               }}
-              onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
-              onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
+              onMouseEnter={e => { if (!isSelected && !isDragging) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+              onMouseLeave={e => { if (!isSelected && !isDragging) e.currentTarget.style.background = "transparent"; }}
             >
               <td style={{ padding: "7px 8px", borderRadius: "6px 0 0 6px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -387,7 +529,7 @@ function ListView({ files, selected, renaming, renameValue, setRenameValue, comm
   );
 }
 
-function GridView({ files, selected, renaming, renameValue, setRenameValue, commitRename, toggleSelect, openFolder }) {
+function GridView({ files, selected, renaming, renameValue, setRenameValue, commitRename, toggleSelect, openFolder, onPreview }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 12 }}>
       {files.map(f => {
@@ -396,7 +538,7 @@ function GridView({ files, selected, renaming, renameValue, setRenameValue, comm
         return (
           <div key={f.id}
             onClick={e => { if (!isRenaming) toggleSelect(f.id, e); }}
-            onDoubleClick={() => openFolder(f)}
+            onDoubleClick={() => { if (f.file_type === "folder") openFolder(f); else onPreview(f); }}
             style={{
               padding: 12, borderRadius: 10, border: `1.5px solid ${isSelected ? "rgba(99,102,241,0.5)" : "rgba(255,255,255,0.06)"}`,
               background: isSelected ? "rgba(99,102,241,0.15)" : "rgba(255,255,255,0.03)",
@@ -418,6 +560,82 @@ function GridView({ files, selected, renaming, renameValue, setRenameValue, comm
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PreviewModal({ file, type, onClose }) {
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 99999, padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: "#0f172a", borderRadius: 12, maxWidth: "90vw", maxHeight: "90vh",
+          overflow: "auto", border: "1px solid rgba(255,255,255,0.1)",
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+          <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{file.name}</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 20 }}>×</button>
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: 20 }}>
+          {type === "image" && file.file_url && (
+            <img src={file.file_url} alt={file.name} style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 8 }} />
+          )}
+          {type === "pdf" && file.file_url && (
+            <iframe src={file.file_url} style={{ width: "100%", height: "70vh", border: "none", borderRadius: 8 }} />
+          )}
+          {type === "text" && file.file_url && (
+            <TextPreview fileUrl={file.file_url} />
+          )}
+          {type === "unknown" && (
+            <div style={{ textAlign: "center", color: "#64748b", padding: "40px 20px" }}>
+              <File size={48} style={{ margin: "0 auto 16px", opacity: 0.5 }} />
+              <p>Preview not available for this file type</p>
+              {file.file_url && (
+                <a href={file.file_url} target="_blank" rel="noopener noreferrer"
+                  style={{ color: "#6366f1", textDecoration: "underline", marginTop: 12, display: "inline-block" }}>
+                  Download file →
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TextPreview({ fileUrl }) {
+  const [content, setContent] = React.useState("");
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    fetch(fileUrl)
+      .then(r => r.text())
+      .then(t => { setContent(t); setLoading(false); })
+      .catch(() => { setLoading(false); });
+  }, [fileUrl]);
+
+  return (
+    <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 8, padding: 16, maxHeight: "70vh", overflow: "auto" }}>
+      {loading ? (
+        <div style={{ color: "#475569" }}>Loading…</div>
+      ) : (
+        <pre style={{ color: "#cbd5e1", fontSize: 12, margin: 0, fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+          {content}
+        </pre>
+      )}
     </div>
   );
 }
