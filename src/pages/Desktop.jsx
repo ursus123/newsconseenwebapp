@@ -219,38 +219,57 @@ export default function Desktop() {
 
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
       <div
-        className="absolute top-0 left-0 right-0 h-8 flex items-center px-4 gap-3 z-50 select-none"
+        className="absolute top-0 left-0 right-0 h-9 flex items-center px-4 gap-3 z-50 select-none"
         style={{ background: topBarBg, backdropFilter: "blur(12px)", borderBottom: topBarBorder }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Logo */}
-        <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: "0.04em", color: textColor, flexShrink: 0 }}>
-          Newsconseen OS
-        </span>
+        {/* Logo pill */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 6,
+          padding: "2px 10px 2px 6px",
+          borderRadius: 20,
+          background: isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)",
+          border: isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.1)",
+          flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 14 }}>🖥️</span>
+          <span style={{ fontWeight: 700, fontSize: 11, letterSpacing: "0.05em", color: textColor }}>
+            Newsconseen
+          </span>
+        </div>
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 16, background: isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)", flexShrink: 0 }} />
 
         {/* Enterprise context switcher */}
         <EnterpriseContextSwitcher isLight={isLight} />
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 16, background: isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)", flexShrink: 0 }} />
 
         {/* Global Search — centered */}
         <div className="flex-1 flex justify-center px-2">
           <GlobalSearch onOpenApp={handleOpenApp} isLight={isLight} />
         </div>
 
-        {/* Quick actions + button */}
+        {/* Divider */}
+        <div style={{ width: 1, height: 16, background: isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)", flexShrink: 0 }} />
+
+        {/* Quick actions pill button */}
         <div ref={quickActionsRef} style={{ position: "relative", flexShrink: 0 }}>
           <button
             onClick={(e) => { e.stopPropagation(); setQuickActionsOpen(v => !v); }}
             style={{
-              width: 22, height: 22, borderRadius: 6,
+              height: 22, borderRadius: 11, padding: "0 10px",
+              display: "flex", alignItems: "center", gap: 4,
+              fontSize: 11, fontWeight: 600,
               background: isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.12)",
               border: isLight ? "1px solid rgba(0,0,0,0.1)" : "1px solid rgba(255,255,255,0.15)",
-              color: textColor, fontSize: 16, fontWeight: 300,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: "pointer", lineHeight: 1,
+              color: textColor, cursor: "pointer",
             }}
             title="Quick Actions"
           >
-            +
+            + Create
           </button>
 
           {quickActionsOpen && (
@@ -302,12 +321,12 @@ export default function Desktop() {
       </div>
 
       {/* Widget layer */}
-      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ zIndex: 5 }}>
+      <div className="absolute top-9 left-0 right-0 bottom-14" style={{ zIndex: 5 }}>
         <DesktopWidgets isLight={isLight} />
       </div>
 
       {/* Desktop icons */}
-      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ zIndex: 3 }}>
+      <div className="absolute top-9 left-0 right-0 bottom-14" style={{ zIndex: 3 }}>
         <DesktopIcons
           onOpenApp={handleOpenApp}
           pinnedDesktop={profileMgr.currentProfile.desktopIcons}
@@ -328,7 +347,7 @@ export default function Desktop() {
       </div>
 
       {/* Window layer */}
-      <div className="absolute top-8 left-0 right-0 bottom-14" style={{ zIndex: 10, pointerEvents: "none" }}>
+      <div className="absolute top-9 left-0 right-0 bottom-14" style={{ zIndex: 10, pointerEvents: "none" }}>
         {wm.windows.map(win => (
           <AppWindow
             key={win.id}
@@ -345,7 +364,9 @@ export default function Desktop() {
 
         {/* Daily Briefing — shown when no windows are open */}
         {wm.windows.length === 0 && (
-          <DailyBriefing isLight={isLight} />
+          <div style={{ pointerEvents: "all" }}>
+            <DailyBriefing isLight={isLight} />
+          </div>
         )}
       </div>
 
@@ -456,6 +477,15 @@ export default function Desktop() {
           }}
           onClick={e => e.stopPropagation()}
         >
+          {/* Context menu time header */}
+          <div style={{ padding: "10px 16px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "white", fontVariantNumeric: "tabular-nums" }}>
+              {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </div>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+              {new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}
+            </div>
+          </div>
           <div style={{ padding: "8px 14px 6px", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#64748b" }}>
             Quick Create
           </div>
