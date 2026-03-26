@@ -97,11 +97,7 @@ export default function Pipelines() {
               : <><RefreshCw className="w-4 h-4 mr-2" /> Run Full ETL Now</>
             }
           </Button>
-          <Button variant="outline" className="rounded-xl" asChild>
-            <a href={AIRFLOW_URL} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="w-4 h-4 mr-2" /> View Airflow UI
-            </a>
-          </Button>
+
         </div>
       </div>
 
