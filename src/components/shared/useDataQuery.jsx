@@ -1,3 +1,5 @@
+import React from "react";
+
 /**
  * useDataQuery.js
  * Multi-tenant data isolation — enforces company_id scoping.
