@@ -4,23 +4,16 @@ import { defineConfig } from 'vite'
 import path from 'path'
 import fs from 'fs'
 
-function clearViteCache() {
-  return {
-    name: 'clear-vite-cache',
-    buildStart() {
-      const cacheDir = './node_modules/.vite'
-      if (fs.existsSync(cacheDir)) {
-        fs.rmSync(cacheDir, { recursive: true, force: true })
-        console.log('Vite cache cleared')
-      }
-    }
-  }
+// Clear stale Vite dep cache immediately at config evaluation time
+const cacheDir = './node_modules/.vite'
+if (fs.existsSync(cacheDir)) {
+  fs.rmSync(cacheDir, { recursive: true, force: true })
+  console.log('[cache-bust] Vite dep cache cleared')
 }
 
 export default defineConfig({
   logLevel: 'error',
   plugins: [
-    clearViteCache(),
     base44({
       legacySDKImports: process.env.BASE44_LEGACY_SDK_IMPORTS === 'true',
       hmrNotifier: true,
