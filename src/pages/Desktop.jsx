@@ -36,7 +36,7 @@ export default function Desktop() {
   const [contextMenu, setContextMenu] = useState(null);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [profileSwitcherOpen, setProfileSwitcherOpen] = useState(false);
-  const profileSwitcherRef = useRef(null);
+  const profileSwitcherPopupRef = useRef(null);
   const quickActionsRef = useRef(null);
 
   const wm          = useWindowManager();
@@ -85,7 +85,7 @@ export default function Desktop() {
       if (quickActionsRef.current && !quickActionsRef.current.contains(e.target)) {
         setQuickActionsOpen(false);
       }
-      if (profileSwitcherRef.current && !profileSwitcherRef.current.contains(e.target)) {
+      if (profileSwitcherPopupRef.current && !profileSwitcherPopupRef.current.contains(e.target)) {
         setProfileSwitcherOpen(false);
       }
     };
@@ -358,13 +358,12 @@ export default function Desktop() {
         onOpenSettings={() => handleOpenApp(DESKTOP_APPS.find(a => a.id === "settings"))}
         user={user}
         onProfileClick={() => setProfileSwitcherOpen(v => !v)}
-        profileSwitcherRef={profileSwitcherRef}
       />
 
       {/* Profile Switcher */}
       {profileSwitcherOpen && (
         <div
-          ref={profileSwitcherRef}
+          ref={profileSwitcherPopupRef}
           style={{
             position: "fixed",
             bottom: 60,
