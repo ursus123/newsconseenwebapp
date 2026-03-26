@@ -231,6 +231,127 @@ export function getSICCodeHint(subtype) {
   return SIC_CODE_HINTS[subtype] || null;
 }
 
+// Product item_subtype system defaults by item_type
+const SYSTEM_ITEM_SUBTYPES = {
+  physical: [
+    "medication", "supplement", "vaccine", "controlled_substance", "medical_device", "medical_supply",
+    "food_ingredient", "packaged_food", "beverage", "frozen_good", "produce", "dairy",
+    "equipment", "machinery", "vehicle", "vessel", "aircraft",
+    "furniture", "fixture", "appliance", "electronics",
+    "tool", "hardware", "spare_part", "component", "raw_material",
+    "uniform", "protective_gear", "stationery", "cleaning_supply",
+    "fuel", "lubricant", "chemical", "fertilizer", "pesticide", "seed"
+  ],
+  living: [
+    "cattle", "poultry", "swine", "sheep", "goat", "horse", "fish", "rabbit",
+    "crop", "plant", "timber", "flower"
+  ],
+  digital: [
+    "software", "application", "platform", "plugin",
+    "license", "permit", "certificate", "subscription",
+    "course", "ebook", "template", "dataset", "digital_asset"
+  ],
+  service_package: [
+    "consultation", "session", "maintenance_contract", "delivery_service"
+  ],
+  financial_instrument: [
+    "insurance_policy", "loan_product", "savings_product", "investment_product"
+  ]
+};
+
+// Item class auto-suggestions based on item_subtype
+const ITEM_CLASS_SUGGESTIONS = {
+  medication: ["controlled", "perishable"],
+  vaccine: ["controlled", "perishable"],
+  controlled_substance: ["controlled", "perishable"],
+  medical_device: ["regulated", "non_perishable"],
+  medical_supply: ["regulated", "non_perishable"],
+  food_ingredient: ["perishable"],
+  packaged_food: ["perishable"],
+  beverage: ["perishable"],
+  frozen_good: ["perishable"],
+  produce: ["perishable"],
+  dairy: ["perishable"],
+  equipment: ["non_perishable", "serialized"],
+  machinery: ["non_perishable", "serialized"],
+  vehicle: ["non_perishable", "serialized"],
+  vessel: ["non_perishable", "serialized"],
+  aircraft: ["non_perishable", "serialized"],
+  furniture: ["non_perishable"],
+  fixture: ["non_perishable"],
+  appliance: ["non_perishable"],
+  electronics: ["non_perishable", "serialized"],
+  tool: ["non_perishable", "reusable"],
+  hardware: ["non_perishable"],
+  spare_part: ["non_perishable"],
+  component: ["non_perishable"],
+  raw_material: ["non_perishable"],
+  uniform: ["non_perishable", "consumable"],
+  protective_gear: ["non_perishable", "consumable"],
+  stationery: ["non_perishable", "consumable"],
+  cleaning_supply: ["non_perishable", "consumable"],
+  fuel: ["hazardous", "non_perishable"],
+  lubricant: ["hazardous", "non_perishable"],
+  chemical: ["hazardous", "non_perishable"],
+  fertilizer: ["hazardous", "non_perishable"],
+  pesticide: ["hazardous", "controlled", "non_perishable"],
+  seed: ["non_perishable"],
+  cattle: ["serialized"],
+  poultry: ["serialized"],
+  swine: ["serialized"],
+  sheep: ["serialized"],
+  goat: ["serialized"],
+  horse: ["serialized"],
+  fish: ["serialized"],
+  rabbit: ["serialized"],
+  crop: ["perishable"],
+  plant: ["perishable"],
+  timber: ["non_perishable"],
+  flower: ["perishable"],
+  software: ["non_perishable", "non_serialized"],
+  application: ["non_perishable", "non_serialized"],
+  platform: ["non_perishable", "non_serialized"],
+  plugin: ["non_perishable", "non_serialized"],
+  license: ["non_perishable", "non_serialized"],
+  permit: ["non_perishable", "non_serialized"],
+  certificate: ["non_perishable", "non_serialized"],
+  subscription: ["non_perishable", "non_serialized"],
+  course: ["non_perishable", "non_serialized"],
+  ebook: ["non_perishable", "non_serialized"],
+  template: ["non_perishable", "non_serialized"],
+  dataset: ["non_perishable", "non_serialized"],
+  digital_asset: ["non_perishable", "non_serialized"],
+  consultation: ["non_perishable", "unrestricted"],
+  session: ["non_perishable", "unrestricted"],
+  maintenance_contract: ["non_perishable", "unrestricted"],
+  delivery_service: ["non_perishable", "unrestricted"],
+  insurance_policy: ["non_perishable", "regulated"],
+  loan_product: ["non_perishable", "regulated"],
+  savings_product: ["non_perishable", "regulated"],
+  investment_product: ["non_perishable", "regulated"]
+};
+
+// Unit of measure suggestions by item_type
+const UNIT_OF_MEASURE_BY_TYPE = {
+  physical: ["piece", "box", "kg", "g", "liter", "ml", "meter", "carton", "pallet", "bag", "bottle"],
+  living: ["head", "flock", "herd", "acre", "hectare"],
+  digital: ["license_seat", "user_account", "session"],
+  service_package: ["hour", "day", "month", "session"],
+  financial_instrument: ["piece", "unit"]
+};
+
+export function getFilteredItemSubtypes(itemType) {
+  return SYSTEM_ITEM_SUBTYPES[itemType] || [];
+}
+
+export function getSuggestedItemClasses(itemSubtype) {
+  return ITEM_CLASS_SUGGESTIONS[itemSubtype] || [];
+}
+
+export function getUnitOfMeasureForType(itemType) {
+  return UNIT_OF_MEASURE_BY_TYPE[itemType] || [];
+}
+
 export async function createCustomOption(entityType, fieldName, value, label = null) {
   const user = await base44.auth.me();
   const company = user?.company_id || null;
