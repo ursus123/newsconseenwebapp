@@ -182,10 +182,17 @@ export default function People() {
     setSelectedIds([]);
   };
 
-  // Type tab pre-filter
+  // Type tab pre-filter with migration support
+  const TYPE_ALIASES = {
+    staff:     ["staff", "employee", "contractor", "freelancer"],
+    client:    ["client", "patient", "student", "member"],
+    contact:   ["contact", "vendor", "supplier", "external_partner"],
+    volunteer: ["volunteer"],
+  };
+
   const typeFiltered = activeTypeTab === "all"
     ? people
-    : people.filter(p => p.person_type === activeTypeTab);
+    : people.filter(p => (TYPE_ALIASES[activeTypeTab] || [activeTypeTab]).includes(p.person_type));
 
   const processedPeople = useMemo(() => {
     let list = [...typeFiltered];
@@ -208,7 +215,7 @@ export default function People() {
 
   // Visible tabs (only where data exists)
   const visibleTabs = TYPE_TABS.filter(
-    t => t.id === "all" || people.some(p => p.person_type === t.id)
+    t => t.id === "all" || people.some(p => (TYPE_ALIASES[t.id] || [t.id]).includes(p.person_type))
   );
 
   const availableCount = people.filter(p => p.availability_status === "available" || !p.availability_status).length;
@@ -241,7 +248,7 @@ export default function People() {
       {visibleTabs.length > 1 && (
         <div className="bg-slate-100 rounded-xl p-1 flex flex-wrap gap-1">
           {visibleTabs.map(tab => {
-            const count = tab.id === "all" ? people.length : people.filter(p => p.person_type === tab.id).length;
+            const count = tab.id === "all" ? people.length : people.filter(p => (TYPE_ALIASES[tab.id] || [tab.id]).includes(p.person_type)).length;
             const isActive = activeTypeTab === tab.id;
             return (
               <button
