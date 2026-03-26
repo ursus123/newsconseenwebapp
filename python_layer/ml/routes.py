@@ -5,10 +5,36 @@ from fastapi import APIRouter, HTTPException, Query
 
 from etl import people, tasks, transactions
 from etl.load import load_dataframe
+from config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ml", tags=["ML"])
+
+# ----------------------------------------------------------
+# ML_ENABLED gate
+# Set ML_ENABLED=false in Railway environment to suspend all
+# ML endpoints. Do this when the underlying models have not
+# been retrained for the current deployment vertical.
+# The endpoints return 503 with a clear explanation rather
+# than 404 so callers know the feature exists but is off.
+# ----------------------------------------------------------
+ML_ENABLED = getattr(settings, "ml_enabled", "false")
+if isinstance(ML_ENABLED, str):
+    ML_ENABLED = ML_ENABLED.lower() == "true"
+
+
+def _check_ml_enabled():
+    if not ML_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "ML endpoints are currently disabled. "
+                "Set ML_ENABLED=true in Railway environment variables "
+                "to enable. ML models require retraining before use "
+                "with this deployment's data."
+            ),
+        )
 
 
 def _load_summary_from_railway(table: str) -> "pd.DataFrame":
@@ -43,6 +69,29 @@ def _load_summary_from_railway(table: str) -> "pd.DataFrame":
 
 
 # ----------------------------------------------------------
+# GET /ml/status
+# Reports whether ML is enabled and which endpoints are live
+# ----------------------------------------------------------
+@router.get("/status")
+def ml_status():
+    """Returns ML feature status — always available regardless of ML_ENABLED."""
+    return {
+        "ml_enabled": ML_ENABLED,
+        "status": "available" if ML_ENABLED else "disabled",
+        "reason": None if ML_ENABLED else (
+            "ML_ENABLED=false in environment. "
+            "Models require retraining before enabling."
+        ),
+        "endpoints": [
+            "/ml/retention-risk",
+            "/ml/staffing-forecast",
+            "/ml/ltv-segmentation",
+            "/ml/shift-demand",
+        ] if ML_ENABLED else [],
+    }
+
+
+# ----------------------------------------------------------
 # POST /ml/retention-risk
 # Cox PH client retention risk scoring
 # ----------------------------------------------------------
@@ -62,14 +111,14 @@ def retention_risk(
         medium — 40–70%
         low    — <40%
     """
+    _check_ml_enabled()
+
     from ml.survival import run_retention_model
 
     try:
-        # Load from Railway for time-series history
         people_df = _load_summary_from_railway("people_summary")
         task_df = _load_summary_from_railway("task_summary")
 
-        # Fall back to live extract if Railway empty
         if people_df.empty:
             logger.info("/ml/retention-risk: using live Base44 people extract")
             raw = people.extract_people()
@@ -80,7 +129,6 @@ def retention_risk(
             raw = tasks.extract_tasks()
             task_df = tasks.transform_tasks(raw)
 
-        # Apply tenant filter
         if company_id:
             if "company_id" in people_df.columns:
                 people_df = people_df[people_df["company_id"] == company_id]
@@ -90,6 +138,8 @@ def retention_risk(
         result = run_retention_model(people_df, task_df, horizon_days=horizon_days)
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("/ml/retention-risk failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -112,6 +162,8 @@ def staffing_forecast(
     a meaningful forecast. Returns daily predictions with confidence
     intervals suitable for staffing schedule planning.
     """
+    _check_ml_enabled()
+
     from ml.forecast import run_staffing_forecast
 
     try:
@@ -132,6 +184,8 @@ def staffing_forecast(
         )
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("/ml/staffing-forecast failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -150,13 +204,14 @@ def ltv_segmentation(
     Segment clients into LTV tiers using K-Means clustering.
 
     Returns three segments (default):
-        high_value    — long tenure, high revenue per client
-        mid_value     — moderate tenure and revenue
-        low_engagement— short tenure or low care activity
+        high_value     — long tenure, high revenue per client
+        mid_value      — moderate tenure and revenue
+        low_engagement — short tenure or low activity
 
-    Also returns segment_summary with aggregate stats per tier,
-    useful for the Dashboard's client value distribution chart.
+    Also returns segment_summary with aggregate stats per tier.
     """
+    _check_ml_enabled()
+
     from ml.segmentation import run_ltv_segmentation
 
     try:
@@ -164,7 +219,6 @@ def ltv_segmentation(
         transaction_df = _load_summary_from_railway("transaction_summary")
         task_df = _load_summary_from_railway("task_summary")
 
-        # Fall back to live extracts if Railway empty
         if people_df.empty:
             raw = people.extract_people()
             people_df = people.transform_people(raw)
@@ -176,7 +230,7 @@ def ltv_segmentation(
             task_df = tasks.transform_tasks(raw)
 
         if company_id:
-            for df_name, df in [("people", people_df), ("transactions", transaction_df), ("tasks", task_df)]:
+            for df in [people_df, transaction_df, task_df]:
                 if "company_id" in df.columns:
                     df.drop(df[df["company_id"] != company_id].index, inplace=True)
 
@@ -185,6 +239,8 @@ def ltv_segmentation(
         )
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("/ml/ltv-segmentation failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -200,15 +256,16 @@ def shift_demand(
     forecast_days: int = Query(14, ge=3, le=30, description="Days ahead to forecast"),
 ):
     """
-    Predict daily caregiver shift demand for the next N days using XGBoost.
+    Predict daily shift demand for the next N days using XGBoost.
 
-    Complements the Prophet staffing forecast — Prophet gives the trend,
-    XGBoost gives the day-level demand signal including day-of-week patterns.
+    Complements the Prophet staffing forecast — Prophet gives the
+    trend, XGBoost gives the day-level demand signal including
+    day-of-week patterns.
 
-    Returns predicted shifts per day with ±15% confidence interval.
-    Use for scheduling: if predicted_shifts = 8 on Wednesday, ensure
-    at least 8 caregivers are scheduled.
+    Returns predicted shifts per day with confidence interval.
     """
+    _check_ml_enabled()
+
     from ml.demand import run_demand_model
 
     try:
@@ -230,6 +287,8 @@ def shift_demand(
         )
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("/ml/shift-demand failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
