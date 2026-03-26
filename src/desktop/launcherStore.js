@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { DESKTOP_APPS } from "./desktopApps";
 
 const PINNED_KEY = "desktop_pinned_apps";
