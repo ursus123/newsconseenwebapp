@@ -11,7 +11,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { useWithScope } from "@/components/shared/useDataQuery";
 import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
-import MasterDataOptionCombobox from "@/components/shared/MasterDataOptionCombobox";
+import TaxonomySelect from "@/components/shared/TaxonomySelect";
 
 const SECTIONS = [
   { id: "identity", label: "Identity", icon: User },
@@ -262,10 +262,11 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
 
             {form.person_type && (
               <Field label="Person Subtype">
-                <MasterDataOptionCombobox
+                <TaxonomySelect
                   entityType="person"
                   fieldName="person_subtype"
                   parentValue={form.person_type}
+                  companyId={currentUser?.company_id}
                   value={form.person_subtype || ""}
                   onChange={(v) => set("person_subtype", v)}
                   placeholder="Select subtype..."

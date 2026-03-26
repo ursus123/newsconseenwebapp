@@ -12,6 +12,7 @@ import { base44 } from "@/api/base44Client";
 import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
 import OrgManagementTab from "@/components/enterprise/OrgManagementTab";
 import { useQuery } from "@tanstack/react-query";
+import TaxonomySelect from "@/components/shared/TaxonomySelect";
 
 const TABS = [
   { id: "basic", label: "Basic Info", icon: Building2 },
@@ -107,7 +108,7 @@ function PersonPicker({ onSelect, excludeNames = [] }) {
   );
 }
 
-export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, initialData }) {
+export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, initialData, currentUser }) {
   const [activeTab, setActiveTab] = useState("basic");
   const [form, setForm] = useState({});
   const [uploading, setUploading] = useState(false);
@@ -286,26 +287,15 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
               </select>
             </Field>
             <Field label="Sub-Type">
-              {ENTERPRISE_SUB_TYPES[form.enterprise_type]?.length ? (
-                <div className="space-y-1">
-                  <Select value={form.sub_type || ""} onValueChange={(v) => set("sub_type", v)}>
-                    <SelectTrigger className="rounded-xl border-slate-200">
-                      <SelectValue placeholder="Select sub-type..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ENTERPRISE_SUB_TYPES[form.enterprise_type].map(st => (
-                        <SelectItem key={st} value={st}>{st}</SelectItem>
-                      ))}
-                      <SelectItem value="__custom">Other (type below)...</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {form.sub_type === "__custom" && (
-                    <Input value={form.custom_sub_type || ""} onChange={e => set("custom_sub_type", e.target.value)} className="rounded-xl mt-1" placeholder="Enter custom sub-type..." />
-                  )}
-                </div>
-              ) : (
-                <Input value={form.sub_type || ""} onChange={(e) => set("sub_type", e.target.value)} className="rounded-xl" placeholder="e.g. Grocery Store, Pharmacy..." />
-              )}
+              <TaxonomySelect
+                entityType="enterprise"
+                fieldName="enterprise_subtype"
+                parentValue={form.enterprise_type}
+                companyId={currentUser?.company_id}
+                value={form.sub_type || ""}
+                onChange={(v) => set("sub_type", v)}
+                placeholder="Select sub-type..."
+              />
             </Field>
             <Field label="Purpose (optional)">
               <textarea

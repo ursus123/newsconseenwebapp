@@ -10,6 +10,7 @@ import { Save, X, Plus, Trash2, Upload, Package, Tag, BarChart2, Link2, Clock, S
 import { base44 } from "@/api/base44Client";
 import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
 import MedicationAutocomplete from "@/components/products/MedicationAutocomplete";
+import TaxonomySelect from "@/components/shared/TaxonomySelect";
 
 const TABS = [
   { id: "basic", label: "Basic Info", icon: Package },
@@ -98,7 +99,7 @@ function Sel({ value, onChange, options, placeholder }) {
   );
 }
 
-export default function ProductForm({ open, onClose, onSubmit, onArchive, initialData }) {
+export default function ProductForm({ open, onClose, onSubmit, onArchive, initialData, currentUser }) {
   const [activeTab, setActiveTab] = useState("basic");
   const [form, setForm] = useState({});
   const [uploading, setUploading] = useState(false);
@@ -360,6 +361,19 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
                 if (v !== "medication") { setRecallWarning(false); setMedicationSelected(false); }
               }} options={ITEM_TYPE_OPTIONS} />
             </Field>
+            {form.item_type && (
+              <Field label="Item Subtype">
+                <TaxonomySelect
+                  entityType="item"
+                  fieldName="item_subtype"
+                  parentValue={form.item_type}
+                  companyId={currentUser?.company_id}
+                  value={form.item_subtype || ""}
+                  onChange={(v) => set("item_subtype", v)}
+                  placeholder="Select item subtype..."
+                />
+              </Field>
+            )}
             <Field label="Item Category">
               <Sel value={form.category} onChange={(v) => set("category", v)} options={[
                 { value: "electronics", label: "Electronics" }, { value: "food_beverage", label: "Food & Beverage" },
