@@ -82,9 +82,9 @@ function WorkerDashboard({ user }) {
   });
 
   // Stat counts from python_layer summary
-  const pendingTasks   = taskSummary.reduce((sum, row) => sum + (row.pending_count  || 0), 0);
+  const pendingTasks   = taskSummary.reduce((sum, row) => sum + (row.open_count  || 0), 0);
   const overdueTasks   = taskSummary.reduce((sum, row) => sum + (row.overdue_count  || 0), 0);
-  const completedToday = taskSummary.reduce((sum, row) => sum + (row.completed_today || 0), 0);
+  const completedToday = taskSummary.reduce((sum, row) => sum + (row.completed_count || 0), 0);
 
   // Operational lists for task card rendering
   const open = tasks.filter((t) => t.status === "open" || t.status === "in_progress");
@@ -398,7 +398,7 @@ function AdminDashboard({ user }) {
       <div className="space-y-4">
         <OverdueTasksAlert tasks={tasks} />
         <PendingTransactionsAlert transactions={transactions} />
-        <LowStockAlert products={products} />
+        <LowStockAlert products={products} lowStockCount={lowStockCount} />
         <FinancialAlerts transactions={transactions} />
       </div>
 
