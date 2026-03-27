@@ -463,26 +463,6 @@ export default function Layout({ children, currentPageName }) {
               )}
             </div>
 
-            {/* Quick nav buttons */}
-            {(currentUser?.role === "super_admin" || currentUser?.role === "admin") && (
-              <div className="hidden lg:flex items-center gap-2">
-                <button
-                  onClick={() => { handleNavClick("Pipelines"); setSidebarOpen(false); }}
-                  className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  Pipelines
-                </button>
-                {currentUser?.network_company_id && (
-                  <button
-                    onClick={() => { handleNavClick("network"); setSidebarOpen(false); }}
-                    className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    Network
-                  </button>
-                )}
-              </div>
-            )}
-
             {/* User menu */}
             {currentUser && (
               <div className="relative">
