@@ -60,6 +60,7 @@ function WorkerDashboard({ user }) {
   const { toast } = useToast();
   const [outcomeTask, setOutcomeTask] = useState(null);
 
+  // Operational query — needed for task list rendering, WorkerMyStats, complete action
   const { data: tasks = [] } = useQuery({
     queryKey: ["tasks", companyId, user?.email],
     queryFn: () => companyId
@@ -68,14 +69,25 @@ function WorkerDashboard({ user }) {
     enabled: !!user,
   });
 
+  // Analytics query — stat card counts come from python_layer (Layer 3 compliance)
+  const { data: taskSummary = [] } = useQuery({
+    queryKey: ["analytics-tasks-worker", companyId],
+    queryFn: () => fetchSummary("/task-summary", companyId),
+    enabled: !!companyId,
+  });
+
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
   });
 
+  // Stat counts from python_layer summary
+  const pendingTasks   = taskSummary.reduce((sum, row) => sum + (row.pending_count  || 0), 0);
+  const overdueTasks   = taskSummary.reduce((sum, row) => sum + (row.overdue_count  || 0), 0);
+  const completedToday = taskSummary.reduce((sum, row) => sum + (row.completed_today || 0), 0);
+
+  // Operational lists for task card rendering
   const open = tasks.filter((t) => t.status === "open" || t.status === "in_progress");
-  const overdue = tasks.filter((t) => t.due_date && isPast(parseISO(t.due_date)) && t.status !== "completed" && t.status !== "cancelled");
-  const doneToday = tasks.filter((t) => t.status === "completed" && t.updated_date && isToday(new Date(t.updated_date)));
   const recentDone = tasks.filter((t) => t.status === "completed").slice(0, 5);
 
   const todayOpen = open.filter((t) => t.due_date && isToday(parseISO(t.due_date)));
@@ -105,7 +117,7 @@ function WorkerDashboard({ user }) {
               Good day{firstName ? `, ${firstName}` : ""}
             </h1>
             <p className="text-sm text-slate-400 mt-0.5">{dayOfWeek}</p>
-            <p className="text-sm text-emerald-600 font-medium mt-1">{getMotivation(open.length)}</p>
+            <p className="text-sm text-emerald-600 font-medium mt-1">{getMotivation(pendingTasks)}</p>
           </div>
           <NotificationsBell tasks={tasks} transactions={[]} products={[]} />
         </div>
@@ -115,15 +127,15 @@ function WorkerDashboard({ user }) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="p-5 flex items-center gap-4 border-l-4 border-l-blue-400">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><ClipboardList className="w-5 h-5 text-blue-600" /></div>
-          <div><p className="text-2xl font-bold text-slate-800">{open.length}</p><p className="text-xs text-slate-400">Open tasks</p></div>
+          <div><p className="text-2xl font-bold text-slate-800">{pendingTasks}</p><p className="text-xs text-slate-400">Open tasks</p></div>
         </Card>
         <Card className="p-5 flex items-center gap-4 border-l-4 border-l-rose-400">
           <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center"><AlertCircle className="w-5 h-5 text-rose-600" /></div>
-          <div><p className="text-2xl font-bold text-slate-800">{overdue.length}</p><p className="text-xs text-slate-400">Overdue</p></div>
+          <div><p className="text-2xl font-bold text-slate-800">{overdueTasks}</p><p className="text-xs text-slate-400">Overdue</p></div>
         </Card>
         <Card className="p-5 flex items-center gap-4 border-l-4 border-l-emerald-400">
           <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center"><CheckCircle className="w-5 h-5 text-emerald-600" /></div>
-          <div><p className="text-2xl font-bold text-slate-800">{doneToday.length}</p><p className="text-xs text-slate-400">Completed today</p></div>
+          <div><p className="text-2xl font-bold text-slate-800">{completedToday}</p><p className="text-xs text-slate-400">Completed today</p></div>
         </Card>
       </div>
 
