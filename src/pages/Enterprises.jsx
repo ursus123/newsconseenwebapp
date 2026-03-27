@@ -24,6 +24,11 @@ import {
   ENTERPRISE_TEMPLATE_INSTRUCTIONS, validateEnterprise, transformEnterprise,
 } from "@/components/shared/importConfigs";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const triggerETL = (entity) => {
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
+};
+
 // ── Status colors ──────────────────────────────────────────────────
 const statusColor = (s) => ({
   active:   "bg-emerald-50 text-emerald-700",
@@ -152,12 +157,12 @@ export default function Enterprises() {
       }
       return { ...created, company_id: workspaceId };
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); setFormOpen(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); setFormOpen(false); },
   });
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Enterprise.update(id, withScope(data)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); setFormOpen(false); setEditing(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); setFormOpen(false); setEditing(null); },
   });
 
   const deleteMut = useMutation({

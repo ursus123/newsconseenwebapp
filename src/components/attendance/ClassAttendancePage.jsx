@@ -5,6 +5,11 @@ import { ArrowLeft, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const triggerETL = (entity) => {
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
+};
+
 const TYPE_ALIASES = {
   staff:     ["staff", "employee", "contractor", "freelancer"],
   client:    ["client", "patient", "student", "member"],
@@ -103,6 +108,7 @@ export default function ClassAttendancePage({ classObj, currentUser, onBack, onO
         method: "POST",
       }).catch(() => {});
 
+      triggerETL("task");
       toast({ title: "Attendance recorded", description: `${Object.values(attendance).filter(s => s).length} students marked.` });
       onBack();
     } catch (e) {

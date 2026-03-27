@@ -15,6 +15,11 @@ import SuccessScreen from "@/components/stockcounter/SuccessScreen";
 import { createStockTransaction } from "@/utils/createTransaction";
 import { useToast } from "@/components/ui/use-toast";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const triggerETL = (entity) => {
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
+};
+
 const TABS = [
   { id: "sheet",   label: "Count Sheet", icon: ClipboardList },
   { id: "summary", label: "Summary",     icon: BarChart2 },
@@ -225,9 +230,7 @@ export default function StockCounter() {
     localStorage.removeItem(draftKey);
 
     // Refresh analytics after stock count so dashboards reflect new levels immediately
-    fetch("https://newsconseenwebapp-production.up.railway.app/load/product-summary", {
-      method: "POST",
-    }).catch(() => {}); // fire and forget — don't block the success screen
+    triggerETL("product"); // fire and forget — don't block the success screen
 
     setShowSubmit(false);
     setSubmitResult({ ...results, session });

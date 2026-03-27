@@ -22,6 +22,11 @@ import {
   PEOPLE_TEMPLATE_INSTRUCTIONS, validatePerson, transformPerson,
 } from "@/components/shared/importConfigs";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const triggerETL = (entity) => {
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
+};
+
 // ── Color helpers ──────────────────────────────────────────────────
 const statusColor = (s) => ({
   active:   "bg-emerald-50 text-emerald-700",
@@ -163,12 +168,13 @@ export default function People() {
       qc.invalidateQueries({ queryKey: ["people"] });
       qc.invalidateQueries({ queryKey: ["addresses"] });
       qc.invalidateQueries({ queryKey: ["relationships"] });
+      triggerETL("people");
       setFormOpen(false);
     },
   });
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Person.update(id, withScope(data)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setFormOpen(false); setEditing(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); triggerETL("people"); setFormOpen(false); setEditing(null); },
   });
   const deleteMut = useMutation({
     mutationFn: (id) => base44.entities.Person.delete(id),
