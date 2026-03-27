@@ -642,13 +642,77 @@ const fetchAnalyticsTable = async (tableName, companyId) => {
 
 ### 12.6 Environment variables (Railway)
 
+Go to Railway → your service → Variables and set the following.
+
+#### Core (existing — confirm still set)
+
 ```
 DATABASE_URL              — Railway PostgreSQL connection string
 BASE44_API_KEY            — Base44 API key for ETL extraction
 VITE_BASE44_APP_ID        — Base44 app ID
 CRON_SECRET               — Protects all /cron/* and /load/* endpoints
-ML_ENABLED                — true/false — gates ML endpoints
+ML_ENABLED                — false (set true only when ML endpoints are ready)
 NOMINATIM_CONTACT_EMAIL   — Required for Nominatim geocoding
+```
+
+#### Phase 3A — Operational Copilot
+
+```
+COPILOT_BACKEND           — anthropic  (or openai)
+ANTHROPIC_API_KEY         — sk-ant-...
+OPENAI_API_KEY            — sk-...     (if using OpenAI backend instead)
+```
+
+#### Phase 3B — Alert channels
+
+```
+# WhatsApp Business
+WHATSAPP_PHONE_NUMBER_ID  — from Meta developer console
+WHATSAPP_ACCESS_TOKEN     — permanent token from Meta
+
+# Email — SendGrid (preferred)
+SENDGRID_API_KEY          — SG.xxx
+
+# Email — SMTP fallback
+SMTP_HOST                 — e.g. smtp.gmail.com
+SMTP_PORT                 — 587
+SMTP_USER                 — your@email.com
+SMTP_PASSWORD             — app password
+
+# SMS — Africa's Talking (default)
+SMS_PROVIDER              — africastalking
+AT_API_KEY                — from africastalking.com dashboard
+AT_USERNAME               — your AT username
+AT_SENDER_ID              — Newsconseen
+
+# SMS — Twilio (alternative)
+# SMS_PROVIDER            — twilio
+# TWILIO_ACCOUNT_SID      — ACxxx
+# TWILIO_AUTH_TOKEN       — xxx
+# TWILIO_FROM_NUMBER      — +1234567890
+
+# Alert defaults (fallback before AlertConfig is configured in the DB)
+ALERT_DEFAULT_EMAIL       — your@email.com
+ALERT_DEFAULT_WHATSAPP    — +254712345678
+ALERT_DEFAULT_PHONE       — +254712345678
+ALERT_FROM_EMAIL          — alerts@newsconseen.com
+ALERT_FROM_NAME           — Newsconseen Alerts
+```
+
+#### Phase 3C — Network Intelligence
+
+```
+NETWORK_ADMIN_KEY         — secret key protecting join code generation and member removal endpoints
+```
+
+#### Phase 3C — Base44 entity API URLs (replace YOUR_APP_ID with your actual Base44 app ID)
+
+```
+BASE44_NETWORK_MEMBERSHIP_URL   — https://app.base44.com/api/apps/YOUR_APP_ID/entities/networkmemberships
+BASE44_JOIN_CODES_URL           — https://app.base44.com/api/apps/YOUR_APP_ID/entities/joincodes
+BASE44_ALERT_CONFIG_URL         — https://app.base44.com/api/apps/YOUR_APP_ID/entities/alertconfigs
+BASE44_ALERT_LOG_URL            — https://app.base44.com/api/apps/YOUR_APP_ID/entities/alertlogs
+BASE44_CONNECTOR_MAPPINGS_URL   — https://app.base44.com/api/apps/YOUR_APP_ID/entities/connectormappings
 ```
 
 ---
