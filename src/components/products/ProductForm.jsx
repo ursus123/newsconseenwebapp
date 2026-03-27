@@ -23,53 +23,14 @@ const TABS = [
   { id: "relationships", label: "Relationships", icon: Link2 },
 ];
 
-const ITEM_TYPE_GROUPS = [
-  { group: "Healthcare", types: [
-    { value: "medication",    label: "💊 Medication" },
-    { value: "equipment",     label: "🩺 Medical Equipment" },
-    { value: "consumable",    label: "🧴 Medical Supply / Consumable" },
-  ]},
-  { group: "Agriculture", types: [
-    { value: "livestock",     label: "🐄 Livestock / Animal" },
-    { value: "feed",          label: "🌾 Animal Feed" },
-    { value: "seed",          label: "🌱 Seeds / Crops" },
-    { value: "crop",          label: "🌽 Harvested Crop" },
-    { value: "fertilizer",    label: "🪣 Fertilizer / Chemical" },
-  ]},
-  { group: "Education", types: [
-    { value: "textbook",      label: "📚 Textbook / Material" },
-    { value: "device",        label: "💻 Device / Technology" },
-  ]},
-  { group: "Community", types: [
-    { value: "resource",      label: "📦 Resource / Material" },
-    { value: "furniture",     label: "🪑 Furniture / Fixture" },
-  ]},
-  { group: "General", types: [
-    { value: "inventory_item",label: "📦 Inventory Item" },
-    { value: "fixed_asset",   label: "🔧 Fixed Asset" },
-    { value: "vehicle",       label: "🚗 Vehicle" },
-    { value: "tool",          label: "🔧 Tool / Implement" },
-    { value: "uniform",       label: "👕 Uniform / Apparel" },
-    { value: "food",          label: "🍎 Food / Consumable" },
-    { value: "raw_material",  label: "🪨 Raw Material" },
-    { value: "digital_item",  label: "💻 Digital Item" },
-    { value: "service_item",  label: "⚙️ Service Item" },
-    { value: "other",         label: "📁 Other" },
-  ]},
+const ITEM_TYPE_OPTIONS = [
+  { value: "physical",             label: "📦 Physical" },
+  { value: "living",               label: "🐄 Living" },
+  { value: "digital",              label: "💻 Digital" },
+  { value: "service_package",      label: "⚙️ Service Package" },
+  { value: "financial_instrument", label: "💰 Financial Instrument" },
 ];
-// Flat list for backward compat (classification tab uses Sel)
-const ITEM_TYPE_OPTIONS = ITEM_TYPE_GROUPS.flatMap(g => g.types);
 
-const LIVESTOCK_SPECIES = [
-  { value: "cattle",   label: "Cattle" },
-  { value: "pig",      label: "Pig / Swine" },
-  { value: "chicken",  label: "Chicken / Poultry" },
-  { value: "sheep",    label: "Sheep" },
-  { value: "goat",     label: "Goat" },
-  { value: "horse",    label: "Horse" },
-  { value: "fish",     label: "Fish / Aquaculture" },
-  { value: "other",    label: "Other" },
-];
 
 const ITEM_CLASSES = ["asset", "inventory", "service", "digital"];
 
@@ -111,7 +72,7 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
       setActiveTab("basic");
       setRecallWarning(false);
       // If editing an existing medication, treat it as already selected
-      setMedicationSelected(!!(initialData?.item_type === "medication" && initialData?.name));
+      setMedicationSelected(!!(initialData?.item_subtype === "Medication" && initialData?.name));
       setForm(initialData || {
         status: "active",
         unit: "piece",
@@ -139,7 +100,8 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
       side_effects: trim300(label.adverse_reactions),
       regulatory_status: "compliant",
       status: "active",
-      item_type: "medication",
+      item_type: "physical",
+      item_subtype: "Medication",
     }));
     setMedicationSelected(true);
   };
@@ -180,41 +142,29 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
             {/* STEP 1: Item Type — always shown first */}
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Step 1 — Select Item Type</p>
-              {ITEM_TYPE_GROUPS.map(({ group, types }) => (
-                <div key={group} className="mb-3">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{group}</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {types.map((opt) => {
-                      const active = form.item_type === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => {
-                            set("item_type", opt.value);
-                            if (opt.value !== "medication") {
-                              setRecallWarning(false);
-                              setMedicationSelected(false);
-                            }
-                          }}
-                          className={`px-3 py-2 rounded-xl text-sm font-medium border text-left transition-all
-                            ${active
-                              ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20"
-                              : "bg-white text-slate-600 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50"}`}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+              <select
+                value={form.item_type || ""}
+                onChange={e => {
+                  set("item_type", e.target.value);
+                  set("item_subtype", "");
+                  if (e.target.value !== "physical") {
+                    setRecallWarning(false);
+                    setMedicationSelected(false);
+                  }
+                }}
+                className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none bg-white"
+              >
+                <option value="">Select item type</option>
+                {ITEM_TYPE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
             </div>
 
-            {/* STEP 2: Name field — only shown after item_type is chosen */}
+            {/* STEP 2: Name and details — only shown after item_type is chosen */}
             {form.item_type && (
               <div className="space-y-4">
-                {form.item_type === "medication" ? (
+                {form.item_type === "physical" && (
                   <>
                     {recallWarning && (
                       <div className="flex items-start gap-2 bg-red-50 border border-red-300 rounded-xl px-4 py-3">
@@ -225,128 +175,52 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
                         </div>
                       </div>
                     )}
-                    <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 space-y-3">
-                      <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Step 2 — Search Medication</p>
-                      <Field label="Medication Name" required>
-                        <MedicationAutocomplete
-                          value={form.name || ""}
-                          onChange={(v) => { set("name", v); if (!v) setMedicationSelected(false); }}
-                          onMedicationSelected={handleMedicationSelected}
-                          onRecallWarning={setRecallWarning}
-                        />
-                      </Field>
-                      <p className="text-xs text-blue-500">Search by medication name, generic or brand. Fields will auto-fill once selected.</p>
-                    </div>
-
-                    {/* Fields only shown after a medication is picked from dropdown */}
-                    {medicationSelected && (
-                      <div className="space-y-4 border-t border-slate-100 pt-4">
-                        <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">✅ Auto-filled from FDA data</p>
-                        <Field label="SKU / Code">
-                          <Input value={form.sku || ""} onChange={(e) => set("sku", e.target.value)} className="rounded-xl" placeholder="Optional" />
+                    {form.item_subtype === "Medication" && !medicationSelected && (
+                      <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 space-y-3">
+                        <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Search Medication (FDA)</p>
+                        <Field label="Medication Name" required>
+                          <MedicationAutocomplete
+                            value={form.name || ""}
+                            onChange={(v) => { set("name", v); if (!v) setMedicationSelected(false); }}
+                            onMedicationSelected={handleMedicationSelected}
+                            onRecallWarning={setRecallWarning}
+                          />
                         </Field>
-                        <Field label="Description">
-                          <Textarea value={form.description || ""} onChange={(e) => set("description", e.target.value)} className="rounded-xl resize-none" rows={3} />
-                        </Field>
-                        <Field label="Dosage Instructions">
-                          <Textarea value={form.dosage_instructions || ""} onChange={(e) => set("dosage_instructions", e.target.value)} className="rounded-xl resize-none" rows={3} placeholder="e.g. Take 1 tablet orally twice daily with food" />
-                        </Field>
-                        <Field label="Side Effects">
-                          <Textarea value={form.side_effects || ""} onChange={(e) => set("side_effects", e.target.value)} className="rounded-xl resize-none" rows={2} placeholder="Common adverse reactions…" />
-                        </Field>
-                        <Field label="Contraindications">
-                          <Textarea value={form.contraindications || ""} onChange={(e) => set("contraindications", e.target.value)} className="rounded-xl resize-none" rows={2} placeholder="Contraindications and warnings…" />
-                        </Field>
-                        <Field label="Storage Instructions">
-                          <Input value={form.storage_instructions || ""} onChange={(e) => set("storage_instructions", e.target.value)} className="rounded-xl" placeholder="e.g. Store at room temperature, keep dry" />
-                        </Field>
-                        <Field label="Item Status">
-                          <Sel value={form.status} onChange={(v) => set("status", v)} options={[
-                            { value: "active", label: "Active" }, { value: "discontinued", label: "Discontinued" },
-                            { value: "out_of_stock", label: "Out of Stock" }, { value: "archived", label: "Archived" },
-                          ]} />
-                        </Field>
+                        <p className="text-xs text-blue-500">Search by medication name, generic or brand. Fields will auto-fill once selected.</p>
                       </div>
                     )}
-                  </>
-                ) : (
-                  /* Non-medication: show standard fields */
-                  <>
-                    <Field label="Item Name" required>
-                      <Input value={form.name || ""} onChange={(e) => set("name", e.target.value)} className="rounded-xl" required />
-                    </Field>
-                    <Field label="SKU / Code">
-                      <Input value={form.sku || ""} onChange={(e) => set("sku", e.target.value)} className="rounded-xl" placeholder="Optional" />
-                    </Field>
-                    <Field label="Description">
-                      <Textarea value={form.description || ""} onChange={(e) => set("description", e.target.value)} className="rounded-xl resize-none" rows={3} />
-                    </Field>
-                    {/* Livestock-specific fields */}
-                    {form.item_type === "livestock" && (
-                      <div className="space-y-3 p-4 bg-lime-50 border border-lime-100 rounded-xl">
-                        <p className="text-xs font-bold text-lime-700">🐄 Livestock Details</p>
-                        <div className="grid grid-cols-2 gap-3">
-                          <Field label="Unit">
-                            <select
-                              value={form.unit || "head"}
-                              onChange={e => set("unit", e.target.value)}
-                              className="w-full h-9 rounded-xl border border-slate-200 bg-white text-sm px-2 focus:outline-none"
-                            >
-                              <option value="head">Head (individual)</option>
-                              <option value="flock">Flock (group)</option>
-                              <option value="herd">Herd (group)</option>
-                              <option value="batch">Batch</option>
-                            </select>
-                          </Field>
-                          <Field label="Species">
-                            <select
-                              value={form._species || ""}
-                              onChange={e => {
-                                const sp = e.target.value;
-                                set("_species", sp);
-                                if (sp) set("internal_notes", `Species: ${sp}. ${(form.internal_notes || "").replace(/^Species: \w+\. /, "")}`);
-                              }}
-                              className="w-full h-9 rounded-xl border border-slate-200 bg-white text-sm px-2 focus:outline-none"
-                            >
-                              <option value="">Select species</option>
-                              {LIVESTOCK_SPECIES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                            </select>
-                          </Field>
-                        </div>
-                      </div>
-                    )}
-                    <Field label="Item Category">
-                      <Sel value={form.category} onChange={(v) => set("category", v)} options={[
-                        { value: "electronics", label: "Electronics" }, { value: "food_beverage", label: "Food & Beverage" },
-                        { value: "clothing", label: "Clothing" }, { value: "office_supplies", label: "Office Supplies" },
-                        { value: "raw_materials", label: "Raw Materials" }, { value: "tools_equipment", label: "Tools & Equipment" },
-                        { value: "health_beauty", label: "Health & Beauty" }, { value: "household", label: "Household" },
-                        { value: "vehicles", label: "Vehicles" }, { value: "equipment", label: "Equipment" },
-                        { value: "other", label: "Other" },
-                      ]} />
-                    </Field>
-                    <Field label="Item Class (select all that apply)">
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {ITEM_CLASSES.map((c) => {
-                          const active = (form.item_class || []).includes(c);
-                          return (
-                            <button key={c} type="button" onClick={() => toggleClass(c)}
-                              className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all capitalize
-                                ${active ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-emerald-400"}`}>
-                              {c}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </Field>
-                    <Field label="Item Status">
-                      <Sel value={form.status} onChange={(v) => set("status", v)} options={[
-                        { value: "active", label: "Active" }, { value: "discontinued", label: "Discontinued" },
-                        { value: "out_of_stock", label: "Out of Stock" }, { value: "archived", label: "Archived" },
-                      ]} />
-                    </Field>
                   </>
                 )}
+
+                <Field label="Item Name" required>
+                  <Input value={form.name || ""} onChange={(e) => set("name", e.target.value)} className="rounded-xl" required />
+                </Field>
+                <Field label="SKU / Code">
+                  <Input value={form.sku || ""} onChange={(e) => set("sku", e.target.value)} className="rounded-xl" placeholder="Optional" />
+                </Field>
+                <Field label="Description">
+                  <Textarea value={form.description || ""} onChange={(e) => set("description", e.target.value)} className="rounded-xl resize-none" rows={3} />
+                </Field>
+                <Field label="Item Class (select all that apply)">
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {ITEM_CLASSES.map((c) => {
+                      const active = (form.item_class || []).includes(c);
+                      return (
+                        <button key={c} type="button" onClick={() => toggleClass(c)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all capitalize
+                            ${active ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-emerald-400"}`}>
+                          {c}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Field>
+                <Field label="Item Status">
+                  <Sel value={form.status} onChange={(v) => set("status", v)} options={[
+                    { value: "active", label: "Active" }, { value: "discontinued", label: "Discontinued" },
+                    { value: "out_of_stock", label: "Out of Stock" }, { value: "archived", label: "Archived" },
+                  ]} />
+                </Field>
               </div>
             )}
           </div>
@@ -356,10 +230,20 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
         return (
           <div className="space-y-5">
             <Field label="Item Type">
-              <Sel value={form.item_type} onChange={(v) => {
-                set("item_type", v);
-                if (v !== "medication") { setRecallWarning(false); setMedicationSelected(false); }
-              }} options={ITEM_TYPE_OPTIONS} />
+              <select
+                value={form.item_type || ""}
+                onChange={e => {
+                  set("item_type", e.target.value);
+                  set("item_subtype", "");
+                  if (e.target.value !== "physical") { setRecallWarning(false); setMedicationSelected(false); }
+                }}
+                className="w-full border border-slate-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none bg-white"
+              >
+                <option value="">Select item type</option>
+                {ITEM_TYPE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
             </Field>
             {form.item_type && (
               <Field label="Item Subtype">
@@ -370,7 +254,7 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
                   companyId={currentUser?.company_id}
                   value={form.item_subtype || ""}
                   onChange={(v) => set("item_subtype", v)}
-                  placeholder="Select item subtype..."
+                  placeholder={form.item_type ? "Select item subtype..." : "Select item type first"}
                 />
               </Field>
             )}
