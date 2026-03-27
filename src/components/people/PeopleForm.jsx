@@ -232,6 +232,13 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
           start_date: form.start_date || new Date().toISOString().split("T")[0],
         }));
       }
+
+      // 4. Trigger ETL refresh (fire and forget)
+      const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+      fetch(`${RAILWAY_URL}/load/people-summary`, {
+        method: "POST",
+        headers: { "x-cron-secret": process.env.CRON_SECRET || "" },
+      }).catch(() => {});
     } finally {
       setSaving(false);
     }
