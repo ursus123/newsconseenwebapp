@@ -126,11 +126,17 @@ export function validatePerson(row) {
 // ── ENTERPRISES ───────────────────────────────────────────────────────────
 export const ENTERPRISE_FIELDS = [
   { key: "enterprise_name", label: "Enterprise Name *", required: true },
+  { key: "enterprise_id", label: "Enterprise ID" },
   { key: "short_name", label: "Short Name" },
   { key: "enterprise_type", label: "Enterprise Type" },
-  { key: "sub_type", label: "Sub Type" },
+  { key: "enterprise_subtype", label: "Enterprise Subtype" },
+  { key: "enterprise_tier", label: "Enterprise Tier" },
+  { key: "parent_enterprise_id", label: "Parent Enterprise ID" },
   { key: "status", label: "Status" },
   { key: "operating_status", label: "Operating Status" },
+  { key: "sic_sector_id", label: "SIC Sector ID" },
+  { key: "sic_sector_name", label: "SIC Sector Name" },
+  { key: "sic_division", label: "SIC Division" },
   { key: "phone", label: "Phone" },
   { key: "email", label: "Email" },
   { key: "website", label: "Website" },
@@ -138,58 +144,106 @@ export const ENTERPRISE_FIELDS = [
   { key: "city", label: "City" },
   { key: "region", label: "Region" },
   { key: "country", label: "Country" },
+  { key: "zip_code", label: "ZIP Code" },
+  { key: "latitude", label: "Latitude" },
+  { key: "longitude", label: "Longitude" },
+  { key: "founded_year", label: "Founded Year" },
+  { key: "license_number", label: "License Number" },
+  { key: "accreditation", label: "Accreditation" },
   { key: "legal_structure", label: "Legal Structure" },
   { key: "registration_number", label: "Registration Number" },
   { key: "tax_number", label: "Tax Number" },
   { key: "ownership_type", label: "Ownership Type" },
   { key: "description", label: "Description" },
   { key: "internal_notes", label: "Internal Notes" },
+  { key: "company_id", label: "Company ID" },
 ];
 
 export const ENTERPRISE_MAPPING_RULES = [
   [/company|business|organization|^name$|enterprise.?name/i, "enterprise_name"],
+  [/^id$|external.?id|enterprise.?id|branch.?id/i, "enterprise_id"],
   [/short.?name|code|abbreviation/i, "short_name"],
-  [/^type$|business.?type|sector|enterprise.?type/i, "enterprise_type"],
-  [/sub.?type/i, "sub_type"],
-  [/^status$/i, "status"],
-  [/operating.?status/i, "operating_status"],
-  [/phone|tel|contact/i, "phone"],
-  [/^email$|email.?address/i, "email"],
-  [/website|url|web/i, "website"],
-  [/^address$|street|address.?line/i, "primary_address"],
-  [/^city$|town/i, "city"],
-  [/region|state|province/i, "region"],
-  [/^country$/i, "country"],
+  [/^type$|business.?type|sector|enterprise.?type|org.?type/i, "enterprise_type"],
+  [/subtype|sub.?type|industry/i, "enterprise_subtype"],
+  [/tier|level|branch.?type|structure/i, "enterprise_tier"],
+  [/parent.?id|parent|hq.?id/i, "parent_enterprise_id"],
+  [/^status$|active.?status/i, "status"],
+  [/operating.?status|ops.?status|open.?status/i, "operating_status"],
+  [/sic.?id|naics.?id|sector.?id/i, "sic_sector_id"],
+  [/sic.?name|naics.?name|sector.?name|^sector$/i, "sic_sector_name"],
+  [/sic.?division|division/i, "sic_division"],
+  [/phone|telephone|contact.?phone|tel/i, "phone"],
+  [/^email$|contact.?email|e.?mail/i, "email"],
+  [/website|url|^web$/i, "website"],
+  [/^address$|street|address.?line|primary.?address/i, "primary_address"],
+  [/^city$|town|location/i, "city"],
+  [/region|state|state.?region|province/i, "region"],
+  [/^country$|nation/i, "country"],
+  [/zip|zip.?code|postal.?code|postcode/i, "zip_code"],
+  [/^lat$|latitude/i, "latitude"],
+  [/^lon$|^lng$|longitude/i, "longitude"],
+  [/founded|year.?founded|established/i, "founded_year"],
+  [/^license$|licence|license.?number|permit/i, "license_number"],
+  [/accreditation|accredited.?by|certification/i, "accreditation"],
   [/legal.?structure/i, "legal_structure"],
   [/registration|reg.?no|company.?no/i, "registration_number"],
   [/tax|vat/i, "tax_number"],
   [/ownership/i, "ownership_type"],
   [/description/i, "description"],
   [/notes/i, "internal_notes"],
+  [/company.?id|tenant|workspace/i, "company_id"],
 ];
 
 export const ENTERPRISE_TEMPLATE_EXAMPLE = {
-  enterprise_name: "Acme Corp", short_name: "ACME",
-  enterprise_type: "retail", sub_type: "Grocery Store",
-  status: "active", operating_status: "open",
-  phone: "+1-555-0200", email: "info@acme.com",
-  website: "https://acme.com", primary_address: "456 Business Rd",
-  city: "Chicago", region: "IL", country: "USA",
-  legal_structure: "llc", registration_number: "REG-001",
-  tax_number: "TAX-001", ownership_type: "privately_owned",
-  description: "A sample enterprise", internal_notes: "",
+  enterprise_id: "BSC-001",
+  enterprise_name: "BrightStar Bethesda",
+  enterprise_type: "commercial",
+  enterprise_subtype: "Home Health Agency",
+  enterprise_tier: "headquarters",
+  parent_enterprise_id: "",
+  status: "active",
+  operating_status: "open",
+  sic_sector_id: 16,
+  sic_sector_name: "Health Care and Social Assistance",
+  sic_division: "K_education_health_social",
+  phone: "+1-301-854-2824",
+  email: "info@brightstar-bethesda.brightstarcare.com",
+  website: "https://www.brightstarcare.com",
+  city: "Bethesda",
+  region: "MD",
+  country: "USA",
+  zip_code: "20859",
+  latitude: 38.984,
+  longitude: -77.095,
+  founded_year: 2009,
+  license_number: "HHA-42098",
+  accreditation: "Joint Commission",
+  company_id: "BRIGHTSTAR",
 };
 
-export const ENTERPRISE_TEMPLATE_INSTRUCTIONS = [
-  ["enterprise_name","Yes","Full enterprise name","Acme Corp"],
-  ["enterprise_type","No","Type","retail, food_beverage, healthcare, technology, construction, education, finance, manufacturing, logistics, hospitality, agriculture, media, other"],
-  ["status","No","Status","active, inactive, prospect, archived"],
-  ["operating_status","No","Operating status","open, closed, temporarily_closed, seasonal"],
-  ["legal_structure","No","Legal structure","sole_proprietorship, partnership, llc, corporation, nonprofit, cooperative, government, other"],
-  ["ownership_type","No","Ownership type","privately_owned, publicly_traded, family_owned, government_owned, joint_venture, other"],
-  ["email","No","Email (valid format)","info@example.com"],
-  ["phone","No","Phone number","+1-555-0200"],
-];
+export const ENTERPRISE_TEMPLATE_INSTRUCTIONS = `
+Excel import instructions for Enterprises:
+
+REQUIRED: enterprise_name
+
+ENUMS — use exact values:
+  enterprise_type:    commercial | nonprofit | government | household | cooperative | trust
+  enterprise_tier:    headquarters | regional_office | branch | subsidiary | franchise | department | unit | project
+  status:             active | inactive | prospect | archived
+  operating_status:   open | closed | temporarily_closed | seasonal
+  sic_division:       K_education_health_social | I_services | H_finance_insurance_real_estate | A_agriculture_forestry_fishing | B_mining | C_construction | D_manufacturing | E_transport_communications_utilities | F_wholesale_trade | G_retail_trade | J_public_administration | L_nonprofit_religious | M_household_individual
+
+NOTES:
+  • enterprise_id — your source system ID, stored in internal_notes as "External ID: XXX"
+  • region — maps to the 'region' field (state or province abbreviation)
+  • state_region — alias for region field
+  • latitude / longitude — stored in internal_notes as "Lat: X.XXX, Lon: -X.XXX"
+  • zip_code — stored in internal_notes as "Zip: XXXXX"
+  • license_number — stored in the licenses array
+  • accreditation — stored in internal_notes
+  • company_id — auto-fills from your session if blank
+  • parent_enterprise_id — must match the enterprise_id of an already-imported enterprise
+`;
 
 const ENTERPRISE_TYPE_KEYWORDS = [
   [/school|academy|college|university|education/i, "education"],
@@ -200,25 +254,108 @@ const ENTERPRISE_TYPE_KEYWORDS = [
   [/tech|software|digital|it\b/i, "technology"],
 ];
 
-export function detectEnterpriseType(name = "") {
-  for (const [regex, type] of ENTERPRISE_TYPE_KEYWORDS) {
-    if (regex.test(name)) return type;
-  }
-  return "other";
-}
+export function transformEnterprise(raw, currentUser) {
+  const internalNotes = [];
 
-export function transformEnterprise(row) {
-  if (!row.enterprise_type) row.enterprise_type = detectEnterpriseType(row.enterprise_name);
-  return row;
+  // Preserve external enterprise_id
+  if (raw.enterprise_id) {
+    internalNotes.push(`External ID: ${raw.enterprise_id}`);
+  }
+
+  // Coordinates
+  if (raw.latitude || raw.longitude) {
+    internalNotes.push(`Lat: ${raw.latitude || ""}, Lon: ${raw.longitude || ""}`);
+  }
+
+  // Founded year
+  if (raw.founded_year) {
+    internalNotes.push(`Founded: ${raw.founded_year}`);
+  }
+
+  // ZIP code
+  if (raw.zip_code) {
+    internalNotes.push(`Zip: ${raw.zip_code}`);
+  }
+
+  // Accreditation
+  if (raw.accreditation) {
+    internalNotes.push(`Accreditation: ${raw.accreditation}`);
+  }
+
+  // Build licenses array
+  const licenses = [];
+  if (raw.license_number) {
+    licenses.push({
+      type: "Operating License",
+      number: raw.license_number,
+      expiry_date: "",
+    });
+  }
+
+  // Map enterprise_type — enforce enum
+  const VALID_TYPES = ["commercial", "nonprofit", "government", "household", "cooperative", "trust"];
+  const enterpriseType = VALID_TYPES.includes(raw.enterprise_type)
+    ? raw.enterprise_type
+    : "commercial";
+
+  // Map enterprise_tier — enforce enum
+  const VALID_TIERS = ["headquarters", "regional_office", "branch", "subsidiary", "franchise", "department", "unit", "project"];
+  const enterpriseTier = VALID_TIERS.includes(raw.enterprise_tier)
+    ? raw.enterprise_tier
+    : undefined;
+
+  // Map sic_division — enforce enum
+  const VALID_DIVISIONS = [
+    "A_agriculture_forestry_fishing", "B_mining", "C_construction",
+    "D_manufacturing", "E_transport_communications_utilities",
+    "F_wholesale_trade", "G_retail_trade", "H_finance_insurance_real_estate",
+    "I_services", "J_public_administration", "K_education_health_social",
+    "L_nonprofit_religious", "M_household_individual"
+  ];
+  const sicDivision = VALID_DIVISIONS.includes(raw.sic_division)
+    ? raw.sic_division
+    : undefined;
+
+  return {
+    enterprise_name:      raw.enterprise_name,
+    short_name:           raw.short_name || undefined,
+    enterprise_type:      enterpriseType,
+    enterprise_subtype:   raw.enterprise_subtype || undefined,
+    sub_type:             raw.enterprise_subtype || undefined,
+    enterprise_tier:      enterpriseTier,
+    parent_enterprise_id: raw.parent_enterprise_id || undefined,
+    status:               ["active", "inactive", "prospect", "archived"].includes(raw.status)
+                            ? raw.status : "active",
+    operating_status:     ["open", "closed", "temporarily_closed", "seasonal"].includes(raw.operating_status)
+                            ? raw.operating_status : "open",
+    sic_sector_id:        raw.sic_sector_id ? Number(raw.sic_sector_id) : undefined,
+    sic_sector_name:      raw.sic_sector_name || undefined,
+    sic_division:         sicDivision,
+    phone:                raw.phone || undefined,
+    email:                raw.email || undefined,
+    website:              raw.website || undefined,
+    city:                 raw.city || undefined,
+    region:               raw.region || raw.state_region || undefined,
+    country:              raw.country || undefined,
+    licenses:             licenses.length > 0 ? licenses : undefined,
+    internal_notes:       internalNotes.length > 0 ? internalNotes.join(" | ") : undefined,
+    company_id:           raw.company_id || currentUser?.company_id,
+  };
 }
 
 export function validateEnterprise(row) {
-  const errors = [], warnings = [];
-  if (!row.enterprise_name) errors.push("enterprise_name required");
-  const validTypes = ["retail","food_beverage","healthcare","technology","construction","education","finance","manufacturing","logistics","hospitality","agriculture","media","other"];
-  if (row.enterprise_type && !validTypes.includes(row.enterprise_type)) warnings.push(`Unknown enterprise_type "${row.enterprise_type}"`);
-  if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) errors.push("Invalid email format");
-  return { errors, warnings };
+  const errors = [];
+  if (!row.enterprise_name?.trim()) {
+    errors.push("enterprise_name is required");
+  }
+  const VALID_TYPES = ["commercial", "nonprofit", "government", "household", "cooperative", "trust"];
+  if (row.enterprise_type && !VALID_TYPES.includes(row.enterprise_type)) {
+    errors.push(`enterprise_type "${row.enterprise_type}" is not valid. Use: ${VALID_TYPES.join(", ")}`);
+  }
+  if (row.email && !row.email.includes("@")) {
+    errors.push(`email "${row.email}" does not look valid`);
+  }
+  return errors;
 }
 
 // ── SERVICES ──────────────────────────────────────────────────────────────
