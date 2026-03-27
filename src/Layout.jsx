@@ -73,7 +73,13 @@ const NAV_CONFIG = {
         { name: "copilot",             label: "Copilot",              icon: Sparkles },
         { name: "alerts",              label: "Alerts",               icon: Bell, badge: "alerts" },
         { name: "Connectors",          icon: Plug },
-        { name: "network",             label: "Network",              icon: Globe, requiresNetwork: true },
+      ],
+    },
+    {
+      section: "Pipelines",
+      items: [
+        { name: "Pipelines",      icon: GitBranch },
+        { name: "network",        label: "Network",        icon: Globe, requiresNetwork: true },
       ],
     },
     {
@@ -87,7 +93,6 @@ const NAV_CONFIG = {
         { name: "Permissions",    icon: Shield },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },
         { name: "EntityGraph",    label: "Enterprise Intelligence", icon: Network },
-        { name: "Pipelines",      icon: GitBranch },
         { name: "Billing",        icon: CreditCard },
       ],
     },
@@ -125,7 +130,13 @@ const NAV_CONFIG = {
         { name: "copilot",            label: "Copilot",             icon: Sparkles },
         { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
         { name: "Connectors",         icon: Plug },
-        { name: "network",            label: "Network",             icon: Globe, requiresNetwork: true },
+      ],
+    },
+    {
+      section: "Pipelines",
+      items: [
+        { name: "Pipelines",      icon: GitBranch },
+        { name: "network",        label: "Network",        icon: Globe, requiresNetwork: true },
       ],
     },
     {
@@ -139,7 +150,6 @@ const NAV_CONFIG = {
         { name: "Permissions",    icon: Shield },
         { name: "EntityGraph",    label: "Enterprise Intelligence", icon: Network },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },
-        { name: "Pipelines",      icon: GitBranch },
         { name: "Billing",        icon: CreditCard },
       ],
     },
