@@ -1,16 +1,5 @@
 # ==============================================================
-# Newsconseen Proactive Intelligence — Alert API Routes
-# ==============================================================
-# FastAPI endpoints for alert management.
-#
-# GET  /alerts/rules              — list all alert rules
-# GET  /alerts/config             — get tenant alert configuration
-# POST /alerts/config             — update alert configuration
-# POST /alerts/evaluate           — manually trigger evaluation
-# POST /alerts/evaluate/enterprise— evaluate for one enterprise
-# GET  /alerts/log                — recent alert history
-# GET  /alerts/status             — channel configuration status
-# POST /alerts/test               — send a test alert
+# Newsconseen Phase 3B — Alert API Routes
 # ==============================================================
 
 import logging
@@ -20,243 +9,194 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Header
 from pydantic import BaseModel
 
-from alerts.rules import RULE_CATALOG, Alert
-from alerts.evaluator import AlertEvaluator
-from notifications.router import DeliveryRouter
-from notifications.channels import WhatsAppChannel, EmailChannel, SmsChannel
+from alerts.evaluator import AlertEvaluator, run_all_companies
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/alerts", tags=["Alerts"])
 
 
-# ----------------------------------------------------------
-# Request models
-# ----------------------------------------------------------
-
-class AlertConfigUpdate(BaseModel):
+class EvaluateRequest(BaseModel):
     company_id: str
-    rule_id:    str
-    enabled:    Optional[bool]  = None
-    threshold:  Optional[float] = None
-    channels:   Optional[list[str]] = None
+    dry_run:    bool = False
 
 
-class TestAlertRequest(BaseModel):
-    company_id:    str
-    channel:       str          # "whatsapp" | "email" | "sms"
-    recipient:     str          # phone number or email address
-    enterprise_id: Optional[str] = "test"
+class TestRequest(BaseModel):
+    company_id: str
+    channel:    str           # email | whatsapp | sms
+    recipient:  str           # email address, phone number, or WhatsApp number
+    name:       Optional[str] = "Test Recipient"
 
 
 # ----------------------------------------------------------
-# Endpoints
+# Alert evaluation endpoints
 # ----------------------------------------------------------
-
-@router.get("/rules")
-def list_rules(
-    category: Optional[str] = Query(None, description="inventory | people | tasks | financial | system"),
-):
-    """List all available alert rules with metadata."""
-    rules = list(RULE_CATALOG.values())
-    if category:
-        rules = [r for r in rules if r.get("category") == category]
-    return {
-        "rules":      rules,
-        "total":      len(rules),
-        "categories": list({r["category"] for r in RULE_CATALOG.values()}),
-    }
-
-
-@router.get("/status")
-def alert_status():
-    """Check which notification channels are configured."""
-    whatsapp = WhatsAppChannel()
-    email    = EmailChannel()
-    sms      = SmsChannel()
-
-    return {
-        "channels": {
-            "whatsapp": {
-                "configured": whatsapp.is_configured(),
-                "note":       "Set WHATSAPP_API_TOKEN and WHATSAPP_PHONE_ID",
-            },
-            "email": {
-                "configured": email.is_configured(),
-                "note":       "Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD",
-            },
-            "sms": {
-                "configured": sms.is_configured(),
-                "note":       "Set AT_API_KEY + AT_USERNAME (Africa's Talking) or TWILIO_* credentials",
-            },
-        },
-        "any_configured": any([
-            whatsapp.is_configured(),
-            email.is_configured(),
-            sms.is_configured(),
-        ]),
-    }
-
 
 @router.post("/evaluate")
 def evaluate_alerts(
-    company_id:    str = Query(...),
-    x_cron_secret: str = Header(None),
+    request: EvaluateRequest,
+    x_cron_secret: Optional[str] = Header(None),
 ):
     """
-    Evaluate all alert rules for a tenant and deliver any that fire.
+    Evaluate all alert rules for a company and send notifications.
+    Can be called manually or by Airflow on schedule.
 
-    Called by:
-      - Railway cron schedule (nightly + morning)
-      - After ETL completion
-      - Manually from Pipelines page
-
-    Protected by x-cron-secret header.
+    dry_run=true evaluates and logs without sending notifications.
+    Useful for testing alert rules before enabling live notifications.
     """
-    from config.settings import settings
-
-    if x_cron_secret != settings.cron_secret:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-
-    evaluator = AlertEvaluator(company_id=company_id)
-    alerts    = evaluator.evaluate()
-
-    if not alerts:
-        return {
-            "status":        "ok",
-            "alerts_fired":  0,
-            "delivered":     0,
-            "company_id":    company_id,
-        }
-
-    router_ = DeliveryRouter(company_id=company_id)
-    all_results = router_.deliver_batch(alerts)
-
-    total_delivered = sum(
-        sum(1 for r in results if r.success)
-        for results in all_results.values()
+    evaluator = AlertEvaluator(
+        company_id=request.company_id,
+        dry_run=request.dry_run,
     )
-
-    return {
-        "status":       "ok",
-        "alerts_fired": len(alerts),
-        "delivered":    total_delivered,
-        "company_id":   company_id,
-        "summary": [
-            {
-                "rule_id":      a.rule_id,
-                "level":        a.level,
-                "title":        a.title,
-                "enterprise_id":a.enterprise_id,
-            }
-            for a in alerts
-        ],
-    }
+    return evaluator.run()
 
 
-@router.post("/evaluate/enterprise")
-def evaluate_enterprise_alerts(
-    company_id:    str = Query(...),
-    enterprise_id: str = Query(...),
-    rule_ids:      Optional[str] = Query(None, description="Comma-separated rule IDs"),
-    x_cron_secret: str = Header(None),
+@router.post("/evaluate/all")
+def evaluate_all(
+    dry_run:       bool = Query(False),
+    x_cron_secret: Optional[str] = Header(None),
 ):
     """
-    Evaluate alert rules for a specific enterprise.
-    Called after ETL refresh for that enterprise.
+    Evaluate alerts for all active companies.
+    Protected by x-cron-secret header when called from Airflow.
     """
-    from config.settings import settings
-    if x_cron_secret != settings.cron_secret:
+    cron_secret = os.getenv("CRON_SECRET", "")
+    if cron_secret and x_cron_secret != cron_secret:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
-    rule_id_list = rule_ids.split(",") if rule_ids else None
+    return run_all_companies(dry_run=dry_run)
 
-    evaluator = AlertEvaluator(company_id=company_id)
-    alerts    = evaluator.evaluate_enterprise(enterprise_id, rule_id_list)
 
-    if not alerts:
-        return {"status": "ok", "alerts_fired": 0, "enterprise_id": enterprise_id}
+@router.get("/status")
+def alerts_status():
+    """Check which notification channels are configured."""
+    from alerts.channels.email import EmailChannel
+    from alerts.channels.whatsapp import WhatsAppChannel
+    from alerts.channels.sms import SmsChannel
 
-    delivery_router = DeliveryRouter(company_id=company_id)
-    results = delivery_router.deliver_batch(alerts)
-    delivered = sum(sum(1 for r in res if r.success) for res in results.values())
+    email_ch    = EmailChannel()
+    whatsapp_ch = WhatsAppChannel()
+    sms_ch      = SmsChannel()
 
     return {
-        "status":        "ok",
-        "alerts_fired":  len(alerts),
-        "delivered":     delivered,
-        "enterprise_id": enterprise_id,
-        "alerts": [
-            {"rule_id": a.rule_id, "level": a.level, "title": a.title}
-            for a in alerts
-        ],
+        "channels": {
+            "email": {
+                "configured": email_ch.is_configured(),
+                "backend":    "sendgrid" if email_ch.sendgrid_key else ("smtp" if email_ch.smtp_host else "none"),
+                "note": None if email_ch.is_configured() else
+                        "Set SENDGRID_API_KEY or SMTP_HOST + SMTP_USER + SMTP_PASSWORD",
+            },
+            "whatsapp": {
+                "configured": whatsapp_ch.is_configured(),
+                "note": None if whatsapp_ch.is_configured() else
+                        "Set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN",
+            },
+            "sms": {
+                "configured": sms_ch.is_configured(),
+                "provider":   sms_ch.provider or "none",
+                "note": None if sms_ch.is_configured() else
+                        "Set SMS_PROVIDER=africastalking (AT_API_KEY, AT_USERNAME) or SMS_PROVIDER=twilio",
+            },
+        },
+        "default_recipients": {
+            "email":     bool(os.getenv("ALERT_DEFAULT_EMAIL")),
+            "phone":     bool(os.getenv("ALERT_DEFAULT_PHONE")),
+            "whatsapp":  bool(os.getenv("ALERT_DEFAULT_WHATSAPP")),
+        },
+        "schedule": "Every 4 hours via Airflow DAG: alert_evaluator",
     }
 
 
 @router.post("/test")
-def send_test_alert(request: TestAlertRequest):
+def test_channel(request: TestRequest):
     """
-    Send a test alert to verify channel configuration.
-    Does not evaluate any rules — just sends a test message.
+    Send a test notification to verify channel configuration.
+    Use this after setting up credentials to confirm delivery.
     """
-    test_alert = Alert(
-        rule_id="test",
-        level="info",
-        title="🟢 Newsconseen alert test",
-        message=(
-            "This is a test alert from Newsconseen.\n"
-            "Your notification channel is working correctly.\n"
-            "You will receive real operational alerts at this address."
-        ),
-        enterprise_id=request.enterprise_id or "test",
-        company_id=request.company_id,
-        channels=[request.channel],
-    )
-
     channel = request.channel.lower()
-    recipient = request.recipient
 
-    if channel == "whatsapp":
-        result = WhatsAppChannel().send(
-            recipient, test_alert.title, test_alert.message, "info"
+    if channel == "email":
+        from alerts.channels.email import EmailChannel
+        ch = EmailChannel()
+        if not ch.is_configured():
+            raise HTTPException(
+                status_code=400,
+                detail="Email not configured. Set SENDGRID_API_KEY or SMTP credentials.",
+            )
+        from alerts.rules import Alert
+        from datetime import datetime, timezone
+        test_alert = Alert(
+            alert_type="test", severity="info",
+            title="Newsconseen email alerts configured",
+            message="Your email alerts are working correctly. You will receive operational alerts here.",
+            company_id=request.company_id,
+            suggested_action="No action needed — this is a test message.",
+            triggered_at=datetime.now(timezone.utc).isoformat(),
         )
-    elif channel == "email":
-        result = EmailChannel().send(
-            recipient, test_alert.title, test_alert.message, "info"
-        )
+        success = ch.send(test_alert, request.recipient, request.name or "")
+
+    elif channel == "whatsapp":
+        from alerts.channels.whatsapp import WhatsAppChannel
+        ch = WhatsAppChannel()
+        if not ch.is_configured():
+            raise HTTPException(
+                status_code=400,
+                detail="WhatsApp not configured. Set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN.",
+            )
+        success = ch.send_test(request.recipient)
+
     elif channel == "sms":
-        result = SmsChannel().send(
-            recipient, test_alert.title, test_alert.message, "info"
-        )
+        from alerts.channels.sms import SmsChannel
+        ch = SmsChannel()
+        if not ch.is_configured():
+            raise HTTPException(
+                status_code=400,
+                detail=f"SMS not configured. Set SMS_PROVIDER and credentials.",
+            )
+        success = ch.send_test(request.recipient)
+
     else:
-        raise HTTPException(status_code=400, detail=f"Unknown channel: {channel}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown channel '{channel}'. Use: email | whatsapp | sms",
+        )
+
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Test message failed to deliver via {channel}. Check logs for details.",
+        )
 
     return {
-        "success":   result.success,
-        "channel":   result.channel,
-        "recipient": result.recipient,
-        "error":     result.error,
-        "note":      "Test alert sent" if result.success else "Test alert failed",
+        "status":    "sent",
+        "channel":   channel,
+        "recipient": request.recipient,
+        "message":   f"Test notification sent via {channel}. Check your {channel} for delivery.",
     }
 
 
-@router.get("/rules/{rule_id}")
-def get_rule(rule_id: str):
-    """Get metadata for a specific alert rule."""
-    rule = RULE_CATALOG.get(rule_id)
-    if not rule:
-        raise HTTPException(status_code=404, detail=f"Rule '{rule_id}' not found")
-    return rule
+@router.get("/preview")
+def preview_alerts(
+    company_id: str = Query(...),
+    dry_run:    bool = Query(True),
+):
+    """
+    Preview which alerts would fire for a company without sending.
+    Returns the full list of alerts with severity, message, and action.
+    Always runs in dry_run mode regardless of parameter.
+    """
+    evaluator = AlertEvaluator(
+        company_id=company_id,
+        dry_run=True,
+    )
+    result = evaluator.run()
 
-
-@router.get("/categories")
-def list_categories():
-    """List all alert categories."""
-    from collections import Counter
-    cats = Counter(r["category"] for r in RULE_CATALOG.values())
+    # Return just the alerts, clean for UI display
+    alerts = result.get("alerts", [])
     return {
-        "categories": [
-            {"id": cat, "count": count}
-            for cat, count in cats.most_common()
-        ]
+        "company_id":  company_id,
+        "alert_count": len(alerts),
+        "critical":    [a for a in alerts if a.get("severity") == "critical"],
+        "warning":     [a for a in alerts if a.get("severity") == "warning"],
+        "info":        [a for a in alerts if a.get("severity") == "info"],
     }
