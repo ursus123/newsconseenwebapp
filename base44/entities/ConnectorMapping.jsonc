@@ -1,0 +1,55 @@
+{
+  "name": "ConnectorMapping",
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string",
+      "description": "Tenant scoping"
+    },
+    "connector_id": {
+      "type": "string",
+      "description": "Which connector this mapping belongs to"
+    },
+    "field_name": {
+      "type": "string",
+      "description": "The field being mapped (e.g. person_subtype)"
+    },
+    "source_value": {
+      "type": "string",
+      "description": "The raw value from the source system"
+    },
+    "taxonomy_value": {
+      "type": "string",
+      "description": "The mapped Newsconseen taxonomy value"
+    },
+    "parent_value": {
+      "type": "string",
+      "description": "Parent type context (e.g. staff, client, physical)"
+    },
+    "is_confirmed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Operator has confirmed this mapping"
+    },
+    "confirmed_by": {
+      "type": "string",
+      "description": "Email of operator who confirmed"
+    },
+    "usage_count": {
+      "type": "number",
+      "default": 0,
+      "description": "How many records have used this mapping"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this mapping was created"
+    }
+  },
+  "required": [
+    "company_id",
+    "field_name",
+    "source_value",
+    "taxonomy_value"
+  ]
+}

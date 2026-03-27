@@ -1,0 +1,78 @@
+{
+  "name": "ConnectorRun",
+  "type": "object",
+  "properties": {
+    "connector_id": {
+      "type": "string",
+      "description": "Which connector ran (mpesa, excel, adp, etc.)"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Tenant scoping"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "running",
+        "completed",
+        "failed",
+        "needs_review"
+      ],
+      "default": "pending",
+      "description": "Run status"
+    },
+    "records_extracted": {
+      "type": "number",
+      "default": 0,
+      "description": "Raw count pulled from source"
+    },
+    "records_created": {
+      "type": "number",
+      "default": 0,
+      "description": "New master records created"
+    },
+    "records_updated": {
+      "type": "number",
+      "default": 0,
+      "description": "Existing records updated"
+    },
+    "records_skipped": {
+      "type": "number",
+      "default": 0,
+      "description": "Records skipped due to unmapped values"
+    },
+    "records_failed": {
+      "type": "number",
+      "default": 0,
+      "description": "Records that failed validation"
+    },
+    "unmapped_values": {
+      "type": "string",
+      "description": "JSON array of values needing operator mapping"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the run started"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the run finished"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error detail if status = failed"
+    },
+    "dry_run": {
+      "type": "boolean",
+      "default": false,
+      "description": "True = preview only, no writes"
+    }
+  },
+  "required": [
+    "connector_id",
+    "company_id"
+  ]
+}
