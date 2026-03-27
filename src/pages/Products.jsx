@@ -22,7 +22,13 @@ const triggerETL = (entity) => {
 };
 
 const statusColor = (s) => ({ active: "bg-emerald-50 text-emerald-700", discontinued: "bg-slate-100 text-slate-600", out_of_stock: "bg-rose-50 text-rose-700", archived: "bg-slate-100 text-slate-400" }[s] || "bg-slate-100 text-slate-600");
-const typeColor = (t) => ({ medication: "bg-blue-50 text-blue-700", equipment: "bg-slate-100 text-slate-600", supply: "bg-amber-50 text-amber-700", asset: "bg-purple-50 text-purple-700", digital: "bg-cyan-50 text-cyan-700", other: "bg-slate-100 text-slate-500" }[t] || "bg-slate-100 text-slate-500");
+const itemTypeColor = (t) => ({
+  physical:             "bg-blue-50 text-blue-700",
+  living:               "bg-green-50 text-green-700",
+  digital:              "bg-purple-50 text-purple-700",
+  service_package:      "bg-amber-50 text-amber-700",
+  financial_instrument: "bg-rose-50 text-rose-700",
+}[t] || "bg-slate-100 text-slate-500");
 
 const buildColumns = (recalls) => [
   {
@@ -39,7 +45,7 @@ const buildColumns = (recalls) => [
       </div>
     ),
   },
-  { key: "item_type", label: "Type", render: (val) => val ? <Badge className={typeColor(val)}>{val.replace(/_/g, " ")}</Badge> : "—" },
+  { key: "item_type", label: "Type", render: (val) => val ? <Badge className={itemTypeColor(val)}>{val.replace(/_/g, " ")}</Badge> : "—" },
   { key: "category", label: "Category", render: (val) => val ? <Badge className="bg-amber-50 text-amber-700">{val.replace(/_/g, " ")}</Badge> : "—" },
   {
     key: "stock_quantity", label: "Stock",
@@ -65,9 +71,22 @@ const buildColumns = (recalls) => [
   { key: "status", label: "Status", render: (val) => <Badge className={statusColor(val)}>{(val || "active").replace(/_/g, " ")}</Badge> },
 ];
 
+const ITEM_TYPE_ALIASES = {
+  physical:             ["physical", "product", "goods", "medication", "equipment", "supply", "asset"],
+  living:               ["living", "livestock", "crop", "animal"],
+  digital:              ["digital", "software", "license"],
+  service_package:      ["service_package", "service"],
+  financial_instrument: ["financial_instrument"],
+};
+
 const TYPE_TABS = [
-  { id: "all", label: "All" }, { id: "medication", label: "Medications" }, { id: "equipment", label: "Equipment" },
-  { id: "supply", label: "Supplies" }, { id: "asset", label: "Assets" }, { id: "other", label: "Other" }, { id: "low_stock", label: "⚠️ Low Stock" },
+  { id: "all",                  label: "All Items" },
+  { id: "physical",             label: "Physical" },
+  { id: "living",               label: "Living" },
+  { id: "digital",              label: "Digital" },
+  { id: "service_package",      label: "Services" },
+  { id: "financial_instrument", label: "Financial" },
+  { id: "low_stock",            label: "⚠️ Low Stock" },
 ];
 
 function StatCard({ icon: Icon, iconClass, label, value }) {
@@ -81,7 +100,7 @@ function StatCard({ icon: Icon, iconClass, label, value }) {
 
 const FILTER_DEFS = [
   { key: "status", label: "All Status", options: [{ value: "active", label: "Active" }, { value: "out_of_stock", label: "Out of Stock" }, { value: "discontinued", label: "Discontinued" }, { value: "archived", label: "Archived" }] },
-  { key: "item_type", label: "All Types", options: [{ value: "medication", label: "Medication" }, { value: "equipment", label: "Equipment" }, { value: "supply", label: "Supply" }, { value: "asset", label: "Asset" }, { value: "other", label: "Other" }] },
+  { key: "item_type", label: "All Types", options: [{ value: "physical", label: "Physical" }, { value: "living", label: "Living" }, { value: "digital", label: "Digital" }, { value: "service_package", label: "Service Package" }, { value: "financial_instrument", label: "Financial Instrument" }] },
   { key: "category", label: "All Categories", options: [{ value: "electronics", label: "Electronics" }, { value: "food_beverage", label: "Food & Beverage" }, { value: "health_beauty", label: "Health & Beauty" }, { value: "tools_equipment", label: "Tools & Equipment" }, { value: "other", label: "Other" }] },
 ];
 
@@ -141,7 +160,7 @@ export default function Products() {
 
   const tabFiltered = activeTab === "low_stock"
     ? products.filter((p) => p.stock_quantity != null && p.min_stock_level != null && p.stock_quantity <= p.min_stock_level)
-    : activeTab === "all" ? products : products.filter((p) => p.item_type === activeTab);
+    : activeTab === "all" ? products : products.filter((p) => (ITEM_TYPE_ALIASES[activeTab] || [activeTab]).includes(p.item_type));
 
   const processedProducts = useMemo(() => {
     let list = [...tabFiltered];
@@ -155,13 +174,13 @@ export default function Products() {
   const visibleTabs = TYPE_TABS.filter((t) => {
     if (t.id === "all") return true;
     if (t.id === "low_stock") return lowStockItems.length > 0;
-    return products.some((p) => p.item_type === t.id);
+    return products.some((p) => (ITEM_TYPE_ALIASES[t.id] || [t.id]).includes(p.item_type));
   });
 
   const tabCount = (tab) => {
     if (tab.id === "all") return products.length;
     if (tab.id === "low_stock") return lowStockItems.length;
-    return products.filter((p) => p.item_type === tab.id).length;
+    return products.filter((p) => (ITEM_TYPE_ALIASES[tab.id] || [tab.id]).includes(p.item_type)).length;
   };
 
   const columns = buildColumns(recalls);
@@ -180,7 +199,7 @@ export default function Products() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={Package} iconClass="bg-slate-100 text-slate-500" label="Total Items" value={products.length} />
         <StatCard icon={AlertTriangle} iconClass={lowStockItems.length > 0 ? "bg-amber-50 text-amber-500" : "bg-slate-100 text-slate-400"} label="Low Stock" value={lowStockItems.length} />
-        <StatCard icon={Pill} iconClass="bg-blue-50 text-blue-600" label="Medications" value={products.filter((p) => p.item_type === "medication").length} />
+        <StatCard icon={Pill} iconClass="bg-blue-50 text-blue-600" label="Physical Items" value={products.filter((p) => (ITEM_TYPE_ALIASES.physical || []).includes(p.item_type)).length} />
         <StatCard icon={DollarSign} iconClass="bg-emerald-50 text-emerald-600" label="Total Stock Value" value={totalStockValue} />
       </div>
 
