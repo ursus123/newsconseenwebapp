@@ -1,0 +1,43 @@
+{
+  "name": "CopilotFeedback",
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string",
+      "description": "Tenant scoping"
+    },
+    "question": {
+      "type": "string",
+      "description": "The question asked"
+    },
+    "answer": {
+      "type": "string",
+      "description": "The copilot's answer"
+    },
+    "rating": {
+      "type": "number",
+      "description": "1 = thumbs up, -1 = thumbs down"
+    },
+    "comment": {
+      "type": "string",
+      "description": "Optional operator comment"
+    },
+    "intent": {
+      "type": "string",
+      "description": "Classified intent of the question"
+    },
+    "tools_called": {
+      "type": "string",
+      "description": "JSON array of query tools used"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this feedback was submitted"
+    }
+  },
+  "required": [
+    "company_id",
+    "question"
+  ]
+}

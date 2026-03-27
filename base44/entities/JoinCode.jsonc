@@ -1,0 +1,46 @@
+{
+  "name": "JoinCode",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "description": "The join code (format: NSW-XXX-XXXXX)"
+    },
+    "network_company_id": {
+      "type": "string",
+      "description": "Which network this code grants access to"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this code is still valid"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this code expires"
+    },
+    "used_by": {
+      "type": "string",
+      "description": "company_id that redeemed this code"
+    },
+    "used_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When it was redeemed"
+    },
+    "created_by": {
+      "type": "string",
+      "description": "Email of admin who generated this code"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this code was created"
+    }
+  },
+  "required": [
+    "code",
+    "network_company_id"
+  ]
+}

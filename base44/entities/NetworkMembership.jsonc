@@ -1,0 +1,50 @@
+{
+  "name": "NetworkMembership",
+  "type": "object",
+  "properties": {
+    "network_company_id": {
+      "type": "string",
+      "description": "The parent/HQ network identifier"
+    },
+    "child_company_id": {
+      "type": "string",
+      "description": "The member company's company_id"
+    },
+    "child_name": {
+      "type": "string",
+      "description": "Display name of the member"
+    },
+    "child_enterprise_type": {
+      "type": "string",
+      "description": "Enterprise type (commercial, nonprofit, government, etc.)"
+    },
+    "joined_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this member joined the network"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Active membership"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "base44",
+        "join_code",
+        "env"
+      ],
+      "description": "How membership was established"
+    },
+    "added_by": {
+      "type": "string",
+      "description": "Email of admin who added this member"
+    }
+  },
+  "required": [
+    "network_company_id",
+    "child_company_id",
+    "child_name"
+  ]
+}
