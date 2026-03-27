@@ -25,6 +25,7 @@ import DesktopSettings from './pages/DesktopSettings';
 import FileManager from './pages/FileManager';
 import Attendance from './pages/Attendance';
 import MapExplorer from './pages/MapExplorer';
+import Copilot from './pages/Copilot';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
@@ -112,6 +113,7 @@ const AuthenticatedApp = () => {
       <Route path="/ClientOnboarding" element={<LayoutWrapper currentPageName="Enroll Student/Client"><ClientOnboarding /></LayoutWrapper>} />
       <Route path="/Attendance" element={<LayoutWrapper currentPageName="Attendance"><Attendance /></LayoutWrapper>} />
       <Route path="/MapExplorer" element={<LayoutWrapper currentPageName="Map Explorer"><MapExplorer /></LayoutWrapper>} />
+      <Route path="/copilot" element={<LayoutWrapper currentPageName="Copilot"><Copilot /></LayoutWrapper>} />
       {/* Desktop Shell — NO layout wrapper, full screen */}
       <Route path="/Desktop" element={<Desktop />} />
       <Route path="/DesktopSettings" element={<DesktopSettings />} />

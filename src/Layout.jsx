@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   Wrench,
   TrendingUp,
+  Sparkles,
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
@@ -67,6 +68,7 @@ const NAV_CONFIG = {
         { name: "Reports",             icon: BarChart2 },
         { name: "QueryBuilder",        label: "Query Builder",        icon: Code2 },
         { name: "MarketIntelligence",  label: "Market Intelligence",  icon: TrendingUp },
+        { name: "copilot",             label: "Copilot",              icon: Sparkles },
       ],
     },
     {
@@ -115,6 +117,7 @@ const NAV_CONFIG = {
         { name: "Reports",            icon: BarChart2 },
         { name: "QueryBuilder",       label: "Query Builder",       icon: Code2 },
         { name: "MarketIntelligence", label: "Market Intelligence", icon: TrendingUp },
+        { name: "copilot",            label: "Copilot",             icon: Sparkles },
       ],
     },
     {
