@@ -140,6 +140,8 @@ export default function Enterprises() {
     queryKey: ["enterprises", companyId, currentUser?.email],
     queryFn: () => listFn(base44.entities.Enterprise),
     enabled: currentUser !== null,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const createMut = useMutation({
@@ -328,7 +330,11 @@ export default function Enterprises() {
       />
       <BulkImportDialog
         open={importOpen}
-        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["enterprises"] }); }}
+        onClose={() => {
+          setImportOpen(false);
+          qc.invalidateQueries({ queryKey: ["enterprises"] });
+          qc.refetchQueries({ queryKey: ["enterprises"] });
+        }}
         entityName="Enterprises"
         fields={ENTERPRISE_FIELDS}
         mappingRules={ENTERPRISE_MAPPING_RULES}
