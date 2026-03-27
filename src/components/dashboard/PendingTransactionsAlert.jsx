@@ -4,7 +4,7 @@ import { createPageUrl } from "@/utils";
 import { FileText } from "lucide-react";
 import { REVENUE_TYPES } from "@/config/transactionTypes";
 
-export default function PendingTransactionsAlert({ transactions }) {
+export default function PendingTransactionsAlert({ transactions, draftCount = null, overdueTransactionCount = null }) {
   const drafts = transactions.filter(t => t.status === "draft" || !t.status);
   const overdue = transactions.filter(t =>
     t.payment_status === "unpaid" &&
@@ -15,8 +15,10 @@ export default function PendingTransactionsAlert({ transactions }) {
   );
 
   const overdueTotal = overdue.reduce((s, t) => s + (t.amount || 0), 0);
+  const headlineDraftCount = draftCount !== null ? draftCount : drafts.length;
+  const headlineOverdueCount = overdueTransactionCount !== null ? overdueTransactionCount : overdue.length;
 
-  if (drafts.length === 0 && overdue.length === 0) return null;
+  if (headlineDraftCount === 0 && headlineOverdueCount === 0) return null;
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
@@ -24,14 +26,14 @@ export default function PendingTransactionsAlert({ transactions }) {
         💳 Financial Alerts
       </h3>
 
-      {overdue.length > 0 && (
+      {headlineOverdueCount > 0 && (
         <Link to={createPageUrl("Transactions")}>
           <div className="flex items-center justify-between p-3 bg-rose-50 border border-rose-100 rounded-xl hover:bg-rose-100 transition-colors cursor-pointer">
             <div className="flex items-center gap-2">
               <span className="text-rose-500 text-lg">⚠️</span>
               <div>
                 <p className="text-xs font-bold text-rose-700">
-                  {overdue.length} overdue invoice{overdue.length > 1 ? "s" : ""}
+                  {headlineOverdueCount} overdue invoice{headlineOverdueCount > 1 ? "s" : ""}
                 </p>
                 <p className="text-[10px] text-rose-500">
                   ${overdueTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })} outstanding
@@ -43,14 +45,14 @@ export default function PendingTransactionsAlert({ transactions }) {
         </Link>
       )}
 
-      {drafts.length > 0 && (
+      {headlineDraftCount > 0 && (
         <Link to={createPageUrl("Transactions")}>
           <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-100 rounded-xl hover:bg-blue-100 transition-colors cursor-pointer">
             <div className="flex items-center gap-2">
               <span className="text-blue-500 text-lg">📝</span>
               <div>
                 <p className="text-xs font-bold text-blue-700">
-                  {drafts.length} draft invoice{drafts.length > 1 ? "s" : ""} to review
+                  {headlineDraftCount} draft invoice{headlineDraftCount > 1 ? "s" : ""} to review
                 </p>
                 <p className="text-[10px] text-blue-500">Auto-generated from completed tasks</p>
               </div>

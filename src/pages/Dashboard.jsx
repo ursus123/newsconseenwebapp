@@ -396,8 +396,8 @@ function AdminDashboard({ user }) {
 
       {/* Alerts */}
       <div className="space-y-4">
-        <OverdueTasksAlert tasks={tasks} />
-        <PendingTransactionsAlert transactions={transactions} />
+        <OverdueTasksAlert tasks={tasks} overdueCount={overdueCount} />
+        <PendingTransactionsAlert transactions={transactions} draftCount={draftTxCount} overdueTransactionCount={transactionSummary.reduce((sum, row) => sum + (row.overdue_invoices || 0), 0)} />
         <LowStockAlert products={products} lowStockCount={lowStockCount} />
         <FinancialAlerts transactions={transactions} />
       </div>
