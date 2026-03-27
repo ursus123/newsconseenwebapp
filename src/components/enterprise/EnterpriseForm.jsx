@@ -234,14 +234,41 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const submitData = { ...form };
     if (submitData.sub_type === "__custom") {
       submitData.sub_type = submitData.custom_sub_type || "";
     }
     delete submitData.custom_sub_type;
-    onSubmit(submitData);
+
+    // Save the enterprise
+    await onSubmit(submitData);
+
+    // Create Address record if address data was entered
+    if (form.primary_address || form.city || form.country) {
+      try {
+        await base44.entities.Address.create({
+          label: `${form.enterprise_name} – Primary`,
+          status: "active",
+          address_line1: form.primary_address || "",
+          city: form.city || "",
+          state_region: form.region || "",
+          country: form.country || "",
+          postal_code: form.postal_code || "",
+          latitude: form.latitude,
+          longitude: form.longitude,
+          company_id: currentUser?.company_id,
+          linked_enterprises: [{
+            enterprise_name: form.enterprise_name,
+            address_type: "Primary",
+            active: true
+          }],
+        });
+      } catch (e) {
+        console.error("Address record creation failed", e);
+      }
+    }
   };
 
   const renderTab = () => {
