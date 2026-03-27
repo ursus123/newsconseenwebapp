@@ -1,0 +1,275 @@
+# ==============================================================
+# Newsconseen Operational Copilot — API Routes
+# ==============================================================
+# FastAPI endpoints for the copilot.
+#
+# POST /copilot/ask           — main question endpoint
+# POST /copilot/ask/stream    — streaming version
+# GET  /copilot/context       — what the copilot knows about this tenant
+# POST /copilot/feedback      — thumbs up/down on an answer
+# GET  /copilot/status        — health check
+# ==============================================================
+
+import logging
+import os
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
+from copilot.engine import CopilotEngine
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/copilot", tags=["Copilot"])
+
+RAILWAY_URL = os.getenv(
+    "RAILWAY_URL",
+    "https://newsconseenwebapp-production.up.railway.app",
+)
+
+COPILOT_BACKEND = os.getenv("COPILOT_BACKEND", "anthropic")
+
+
+# ----------------------------------------------------------
+# Request / response models
+# ----------------------------------------------------------
+
+class AskRequest(BaseModel):
+    question:       str
+    company_id:     str
+    enterprise_name:Optional[str] = ""
+    history:        Optional[list[dict]] = []
+    context:        Optional[dict] = {}
+
+
+class FeedbackRequest(BaseModel):
+    question:   str
+    answer:     str
+    company_id: str
+    rating:     int   # 1 = thumbs up, -1 = thumbs down
+    comment:    Optional[str] = None
+
+
+# ----------------------------------------------------------
+# Endpoints
+# ----------------------------------------------------------
+
+@router.get("/status")
+def copilot_status():
+    """Health check — confirms copilot is available and which backend is configured."""
+    backend = COPILOT_BACKEND
+
+    backend_available = False
+    backend_note      = ""
+
+    if backend == "anthropic":
+        try:
+            import anthropic
+            backend_available = bool(os.getenv("ANTHROPIC_API_KEY"))
+            backend_note = "Set ANTHROPIC_API_KEY in Railway environment variables"
+        except ImportError:
+            backend_note = "Install anthropic: pip install anthropic"
+
+    elif backend == "openai":
+        try:
+            import openai
+            backend_available = bool(os.getenv("OPENAI_API_KEY"))
+            backend_note = "Set OPENAI_API_KEY in Railway environment variables"
+        except ImportError:
+            backend_note = "Install openai: pip install openai"
+
+    elif backend == "local":
+        try:
+            import requests
+            resp = requests.get("http://localhost:11434/api/tags", timeout=2)
+            backend_available = resp.ok
+            backend_note = "Ollama running locally"
+        except Exception:
+            backend_note = "Ollama not running. Install from https://ollama.ai"
+
+    return {
+        "status":            "available" if backend_available else "degraded",
+        "backend":           backend,
+        "backend_available": backend_available,
+        "backend_note":      backend_note if not backend_available else None,
+        "endpoints": [
+            "POST /copilot/ask",
+            "POST /copilot/ask/stream",
+            "GET  /copilot/context",
+            "POST /copilot/feedback",
+        ],
+    }
+
+
+@router.post("/ask")
+def ask(request: AskRequest):
+    """
+    Ask the copilot a question about your enterprise data.
+
+    The copilot will:
+    1. Classify the intent of your question
+    2. Query the relevant analytics tables
+    3. Return a grounded answer with supporting data
+
+    Example questions:
+    - "Which medications expire in the next 7 days?"
+    - "How many active staff do we have at the Westlands branch?"
+    - "What was our revenue last month?"
+    - "Which students have attendance below 70%?"
+    - "Show me an overview of how we are doing"
+    """
+    if not request.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    if not request.company_id:
+        raise HTTPException(status_code=400, detail="company_id is required")
+
+    engine = CopilotEngine(
+        company_id=request.company_id,
+        enterprise_name=request.enterprise_name or "",
+        backend=COPILOT_BACKEND,
+        railway_url=RAILWAY_URL,
+    )
+
+    result = engine.ask(
+        question=request.question,
+        history=request.history or [],
+        context=request.context or {},
+    )
+
+    if result.get("error") and not result.get("answer"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    return result
+
+
+@router.post("/ask/stream")
+async def ask_stream(request: AskRequest):
+    """
+    Streaming version of /copilot/ask.
+    Returns server-sent events as the answer is generated.
+    Use this for the chat UI to show typing indicators.
+    """
+    if not request.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    async def generate():
+        engine = CopilotEngine(
+            company_id=request.company_id,
+            enterprise_name=request.enterprise_name or "",
+            backend=COPILOT_BACKEND,
+            railway_url=RAILWAY_URL,
+        )
+
+        # First yield: intent classification
+        yield f"data: {{'event': 'thinking', 'content': 'Analyzing your question...'}}\n\n"
+
+        result = engine.ask(
+            question=request.question,
+            history=request.history or [],
+            context=request.context or {},
+        )
+
+        # Yield tool calls as they happen
+        for tool_call in result.get("tools_called", []):
+            yield f"data: {{'event': 'querying', 'tool': '{tool_call['tool']}', 'count': {tool_call.get('count', 0)}}}\n\n"
+
+        # Yield the final answer
+        import json
+        yield f"data: {json.dumps({'event': 'answer', 'content': result['answer'], 'data': result.get('data', {}), 'intent': result.get('intent', '')})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/context")
+def get_context(company_id: str = Query(...)):
+    """
+    Returns what the copilot knows about this tenant's data.
+    Used by the chat UI to show data freshness and scope.
+    """
+    engine = CopilotEngine(
+        company_id=company_id,
+        backend=COPILOT_BACKEND,
+        railway_url=RAILWAY_URL,
+    )
+
+    # Quick overview to show data availability
+    overview = engine.query_engine.query_network_overview()
+
+    enterprises = engine.query_engine.query_enterprises()
+    ent_list = [
+        {"id": e.get("id"), "name": e.get("name"), "type": e.get("enterprise_type")}
+        for e in enterprises.get("data", [])
+    ]
+
+    return {
+        "company_id":          company_id,
+        "backend":             COPILOT_BACKEND,
+        "data_available":      not bool(overview.get("error")),
+        "enterprises":         ent_list,
+        "enterprise_count":    len(ent_list),
+        "alert_count":         overview.get("summary", {}).get("alert_count", 0),
+        "critical_alerts":     overview.get("summary", {}).get("critical_count", 0),
+        "sample_questions": [
+            "Give me an overview of how we are doing",
+            "Which items are expiring in the next 7 days?",
+            "How many active staff do we have?",
+            "What was our revenue this month?",
+            "Which tasks are overdue?",
+            "Show me low stock alerts",
+        ],
+    }
+
+
+@router.post("/feedback")
+def submit_feedback(request: FeedbackRequest):
+    """
+    Submit feedback on a copilot answer.
+    Thumbs up (1) or down (-1) with optional comment.
+    Used to improve answer quality over time.
+    """
+    # Log feedback for analysis
+    logger.info(
+        "copilot.feedback: company_id=%s rating=%d question='%s'",
+        request.company_id, request.rating, request.question[:100],
+    )
+
+    # Future: store to Base44 CopilotFeedback entity
+    # For now just acknowledge
+    return {
+        "status":  "received",
+        "rating":  request.rating,
+        "message": "Thank you for your feedback. It helps improve the copilot.",
+    }
+
+
+@router.get("/sample-questions")
+def sample_questions(company_id: Optional[str] = Query(None)):
+    """
+    Return sample questions tailored to the operator's data.
+    Used by the chat UI to show suggested questions.
+    """
+    base_questions = [
+        {"question": "Give me an overview of how we are doing today", "intent": "network_overview"},
+        {"question": "Which items are expiring in the next 7 days?",  "intent": "stock_expiry"},
+        {"question": "How many active staff do we have?",              "intent": "people_count"},
+        {"question": "What was our revenue this month?",               "intent": "financial_revenue"},
+        {"question": "Which tasks are overdue?",                       "intent": "task_overdue"},
+        {"question": "Show me everything that is running low on stock","intent": "stock_low"},
+        {"question": "What is our task completion rate?",              "intent": "task_completion"},
+        {"question": "How many new clients joined this month?",        "intent": "people_new"},
+        {"question": "What are our total expenses this month?",        "intent": "financial_expenses"},
+        {"question": "Which branches are active?",                     "intent": "branch_performance"},
+    ]
+
+    return {"questions": base_questions}
