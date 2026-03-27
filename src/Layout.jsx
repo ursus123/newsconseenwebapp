@@ -71,6 +71,7 @@ const NAV_CONFIG = {
         { name: "MarketIntelligence",  label: "Market Intelligence",  icon: TrendingUp },
         { name: "copilot",             label: "Copilot",              icon: Sparkles },
         { name: "alerts",              label: "Alerts",               icon: Bell, badge: "alerts" },
+        { name: "network",             label: "Network",              icon: Globe, requiresNetwork: true },
       ],
     },
     {
@@ -121,6 +122,7 @@ const NAV_CONFIG = {
         { name: "MarketIntelligence", label: "Market Intelligence", icon: TrendingUp },
         { name: "copilot",            label: "Copilot",             icon: Sparkles },
         { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
+        { name: "network",            label: "Network",             icon: Globe, requiresNetwork: true },
       ],
     },
     {
@@ -296,7 +298,11 @@ export default function Layout({ children, currentPageName }) {
   // Filter nav items based on permissions
   navSections = navSections.map((section) => ({
     ...section,
-    items: section.items.filter((item) => canAccessPage(item.name)),
+    items: section.items.filter((item) => {
+      if (!canAccessPage(item.name)) return false;
+      if (item.requiresNetwork && !currentUser?.network_company_id) return false;
+      return true;
+    }),
   })).filter((section) => section.items.length > 0);
   
   const roleBadge = ROLE_BADGE[role] || ROLE_BADGE.user;

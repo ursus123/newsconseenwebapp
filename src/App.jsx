@@ -27,6 +27,7 @@ import Attendance from './pages/Attendance';
 import MapExplorer from './pages/MapExplorer';
 import Copilot from './pages/Copilot';
 import AlertsPageWrapper from './pages/AlertsPageWrapper';
+import NetworkPage from './pages/NetworkPage';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
@@ -116,6 +117,7 @@ const AuthenticatedApp = () => {
       <Route path="/MapExplorer" element={<LayoutWrapper currentPageName="Map Explorer"><MapExplorer /></LayoutWrapper>} />
       <Route path="/copilot" element={<LayoutWrapper currentPageName="Copilot"><Copilot /></LayoutWrapper>} />
       <Route path="/alerts" element={<LayoutWrapper currentPageName="Operational Alerts"><AlertsPageWrapper /></LayoutWrapper>} />
+      <Route path="/network" element={<LayoutWrapper currentPageName="Network"><NetworkPage /></LayoutWrapper>} />
       {/* Desktop Shell — NO layout wrapper, full screen */}
       <Route path="/Desktop" element={<Desktop />} />
       <Route path="/DesktopSettings" element={<DesktopSettings />} />
