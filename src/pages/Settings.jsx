@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   User, Lock, Bell, Monitor, AlertTriangle,
   Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X, Settings as SettingsIcon, Palette, Bug,
+  Globe, Copy, Trash2, Loader2,
 } from "lucide-react";
 import BrandingSection from "@/components/settings/BrandingSection";
 import ErrorLogSection from "@/components/settings/ErrorLogSection";
@@ -92,6 +93,7 @@ const ALL_TABS = [
   { id: "password",      label: "Password",      icon: Lock,          adminOnly: false },
   { id: "notifications", label: "Notifications", icon: Bell,          adminOnly: false },
   { id: "sessions",      label: "Sessions",      icon: Monitor,       adminOnly: false },
+  { id: "network",       label: "Network",       icon: Globe,         adminOnly: false },
   { id: "branding",      label: "Branding",      icon: Palette,       adminOnly: true  },
   { id: "error_log",     label: "Error Log",     icon: Bug,           adminOnly: true  },
   { id: "danger",        label: "Danger Zone",   icon: AlertTriangle, adminOnly: false },
@@ -166,6 +168,7 @@ export default function Settings() {
           {activeTab === "password"      && <PasswordSection />}
           {activeTab === "notifications" && <NotificationsSection user={user} />}
           {activeTab === "sessions"      && <SessionsSection />}
+          {activeTab === "network"       && <NetworkSection user={user} enterprises={enterprises} />}
           {activeTab === "branding"      && <BrandingSection user={user} enterprise={myEnterprise} />}
           {activeTab === "error_log"     && <ErrorLogSection user={user} />}
           {activeTab === "danger"        && <DangerSection user={user} />}
@@ -457,6 +460,258 @@ function DangerSection({ user }) {
             variant="outline" className="w-full border-rose-300 text-rose-600 hover:bg-rose-50 rounded-xl">
             {submitting ? "Submitting..." : "Request Account Deletion"}
           </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function NetworkSection({ user, enterprises }) {
+  const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+  const isNetworkAdmin = !!user?.network_company_id;
+
+  // Network Admin: Manage Members
+  const [members, setMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isNetworkAdmin) return;
+    setMembersLoading(true);
+    fetch(`${RAILWAY_URL}/network/status?network_id=${user.network_company_id}`)
+      .then((r) => r.json())
+      .then((data) => setMembers(data.members || []))
+      .catch(() => setMembers([]))
+      .finally(() => setMembersLoading(false));
+  }, [isNetworkAdmin, user?.network_company_id]);
+
+  const handleRemoveMember = async (companyId) => {
+    if (!confirm(`Remove this member from the network?`)) return;
+    try {
+      const res = await fetch(`${RAILWAY_URL}/network/members/${companyId}`, { method: "DELETE" });
+      if (res.ok) {
+        setMembers((m) => m.filter((mem) => mem.child_company_id !== companyId));
+      }
+    } catch { /* error */ }
+  };
+
+  // Network Admin: Generate Join Code
+  const [expiresInDays, setExpiresInDays] = useState(30);
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [generatedCode, setGeneratedCode] = useState(null);
+  const [codeError, setCodeError] = useState(null);
+
+  const handleGenerateCode = async () => {
+    const adminKey = prompt("Enter admin key to generate join code:");
+    if (!adminKey) return;
+
+    setGeneratingCode(true);
+    setCodeError(null);
+    try {
+      const res = await fetch(`${RAILWAY_URL}/network/join-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          network_id: user.network_company_id,
+          admin_key: adminKey,
+          expires_in_days: expiresInDays,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setGeneratedCode(data.code);
+      } else {
+        setCodeError("Failed to generate code. Check admin key.");
+      }
+    } catch {
+      setCodeError("Error generating code.");
+    }
+    setGeneratingCode(false);
+  };
+
+  // Member Operator: Join a Network
+  const [joinCode, setJoinCode] = useState("");
+  const [joiningNetwork, setJoiningNetwork] = useState(false);
+  const [joinError, setJoinError] = useState(null);
+  const [joinSuccess, setJoinSuccess] = useState(false);
+
+  const myEnterpriseName =
+    enterprises.find((e) => e.id === user?.company_id)?.enterprise_name ||
+    user?.company_id ||
+    "Unknown";
+
+  const handleJoinNetwork = async () => {
+    if (!joinCode.trim()) return;
+
+    setJoiningNetwork(true);
+    setJoinError(null);
+    try {
+      const res = await fetch(`${RAILWAY_URL}/network/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          join_code: joinCode,
+          company_id: user.company_id,
+          company_name: myEnterpriseName,
+        }),
+      });
+      if (res.ok) {
+        setJoinSuccess(true);
+        setJoinCode("");
+      } else {
+        setJoinError("Invalid join code or already joined a network.");
+      }
+    } catch {
+      setJoinError("Error joining network.");
+    }
+    setJoiningNetwork(false);
+  };
+
+  return (
+    <Card className="p-6 space-y-8">
+      <div>
+        <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+          <Globe className="w-4 h-4" /> Network Administration
+        </h2>
+        <p className="text-xs text-slate-400 mt-0.5">Manage network membership and access.</p>
+      </div>
+
+      {isNetworkAdmin ? (
+        <>
+          {/* Section 1: Network Members */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-slate-700">Network Members</h3>
+            {membersLoading ? (
+              <div className="flex justify-center py-6">
+                <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+              </div>
+            ) : members.length === 0 ? (
+              <p className="text-xs text-slate-500 py-4">No members yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50">
+                      <th className="text-left px-3 py-2 font-semibold text-slate-700">Name</th>
+                      <th className="text-left px-3 py-2 font-semibold text-slate-700">Company ID</th>
+                      <th className="text-left px-3 py-2 font-semibold text-slate-700">Source</th>
+                      <th className="text-left px-3 py-2 font-semibold text-slate-700">Joined</th>
+                      <th className="text-left px-3 py-2 font-semibold text-slate-700">Status</th>
+                      <th className="text-center px-3 py-2 font-semibold text-slate-700">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {members.map((mem) => (
+                      <tr key={mem.child_company_id} className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="px-3 py-2 text-slate-800 font-medium">{mem.child_name}</td>
+                        <td className="px-3 py-2 text-slate-600 font-mono text-[10px]">{mem.child_company_id}</td>
+                        <td className="px-3 py-2 text-slate-600 capitalize">{mem.source || "—"}</td>
+                        <td className="px-3 py-2 text-slate-600">
+                          {mem.joined_at ? new Date(mem.joined_at).toLocaleDateString() : "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${
+                            mem.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
+                          }`}>
+                            {mem.is_active ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            onClick={() => handleRemoveMember(mem.child_company_id)}
+                            className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 p-1.5 rounded transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Section 2: Generate Join Code */}
+          <div className="space-y-3 border-t border-slate-100 pt-6">
+            <h3 className="text-sm font-semibold text-slate-700">Generate Join Code</h3>
+            <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700">Expires in (days)</label>
+                <Input
+                  type="number"
+                  value={expiresInDays}
+                  onChange={(e) => setExpiresInDays(Math.max(1, parseInt(e.target.value) || 30))}
+                  min="1"
+                  className="rounded-lg"
+                />
+              </div>
+              <Button
+                onClick={handleGenerateCode}
+                disabled={generatingCode}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 rounded-lg text-sm"
+              >
+                {generatingCode ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : null}
+                Generate Join Code
+              </Button>
+              {codeError && <p className="text-xs text-rose-600">{codeError}</p>}
+            </div>
+
+            {generatedCode && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-medium text-slate-700">Share this code with network members:</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 font-mono font-bold text-lg text-emerald-700 bg-white rounded-lg px-3 py-2 border border-emerald-200">
+                    {generatedCode}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedCode);
+                    }}
+                    className="p-2.5 hover:bg-emerald-100 rounded-lg transition-colors text-emerald-700"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-slate-600">
+                  Members enter this code at Settings → Network → Join Network
+                </p>
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        /* Section 3: Join a Network */
+        <div className="space-y-3 border-t border-slate-100 pt-6">
+          <h3 className="text-sm font-semibold text-slate-700">Join a Network</h3>
+
+          {joinSuccess && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-800">
+              ✅ You have joined the network. Refresh to see the Network view.
+            </div>
+          )}
+
+          {!joinSuccess && (
+            <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700">Enter join code</label>
+                <Input
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                  placeholder="NSW-XXX-XXXXX"
+                  className="rounded-lg font-mono uppercase"
+                />
+              </div>
+              <Button
+                onClick={handleJoinNetwork}
+                disabled={!joinCode.trim() || joiningNetwork}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 rounded-lg text-sm"
+              >
+                {joiningNetwork ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : null}
+                Join Network
+              </Button>
+              {joinError && <p className="text-xs text-rose-600">{joinError}</p>}
+            </div>
+          )}
         </div>
       )}
     </Card>
