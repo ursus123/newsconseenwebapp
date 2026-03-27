@@ -351,7 +351,7 @@ export default function Desktop() {
       </div>
 
       {/* Desktop icons */}
-      <div className="absolute top-9 left-0 right-0 bottom-14" style={{ zIndex: 3 }}>
+      <div className="absolute top-9 left-0 right-0 bottom-14" style={{ zIndex: 6 }}>
         <DesktopIcons
           onOpenApp={handleOpenApp}
           pinnedDesktop={profileMgr.currentProfile.desktopIcons}
