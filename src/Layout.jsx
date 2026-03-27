@@ -28,6 +28,7 @@ import {
   Wrench,
   TrendingUp,
   Sparkles,
+  Bell,
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
@@ -69,6 +70,7 @@ const NAV_CONFIG = {
         { name: "QueryBuilder",        label: "Query Builder",        icon: Code2 },
         { name: "MarketIntelligence",  label: "Market Intelligence",  icon: TrendingUp },
         { name: "copilot",             label: "Copilot",              icon: Sparkles },
+        { name: "alerts",              label: "Alerts",               icon: Bell, badge: "alerts" },
       ],
     },
     {
@@ -118,6 +120,7 @@ const NAV_CONFIG = {
         { name: "QueryBuilder",       label: "Query Builder",       icon: Code2 },
         { name: "MarketIntelligence", label: "Market Intelligence", icon: TrendingUp },
         { name: "copilot",            label: "Copilot",             icon: Sparkles },
+        { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
       ],
     },
     {
@@ -186,7 +189,7 @@ const ROLE_BADGE = {
 };
 
 // ─── NavItem ─────────────────────────────────────────────────────────────────
-function NavItem({ name, label, icon: Icon, isActive, onClick }) {
+function NavItem({ name, label, icon: Icon, isActive, onClick, showRedDot }) {
   return (
     <button
       onClick={onClick}
@@ -196,7 +199,12 @@ function NavItem({ name, label, icon: Icon, isActive, onClick }) {
           : "text-slate-400 hover:text-white hover:bg-white/5"
       }`}
     >
-      <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-emerald-400" : ""}`} />
+      <div className="relative shrink-0">
+        <Icon className={`w-4 h-4 ${isActive ? "text-emerald-400" : ""}`} />
+        {showRedDot && (
+          <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full" />
+        )}
+      </div>
       <span className="truncate">{label || name}</span>
     </button>
   );
@@ -207,10 +215,18 @@ export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [criticalAlerts, setCriticalAlerts] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
     base44.auth.me().then(setCurrentUser).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch("https://newsconseenwebapp-production.up.railway.app/alerts/status")
+      .then(r => r.json())
+      .then(data => setCriticalAlerts(data?.critical_count || 0))
+      .catch(() => {});
   }, []);
 
   // Auto-assign admin to their enterprise if company_id is missing
@@ -368,6 +384,7 @@ export default function Layout({ children, currentPageName }) {
                       icon={item.icon}
                       isActive={currentPageName === item.name}
                       onClick={() => handleNavClick(item.name)}
+                      showRedDot={item.badge === "alerts" && criticalAlerts > 0}
                     />
                   ))}
                 </div>
