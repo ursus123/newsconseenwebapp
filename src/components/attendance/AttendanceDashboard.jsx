@@ -4,6 +4,33 @@ import { base44 } from "@/api/base44Client";
 import { Users, BookOpen, Award, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+const TYPE_ALIASES = {
+  staff:     ["staff", "employee", "contractor", "freelancer"],
+  client:    ["client", "patient", "student", "member"],
+  contact:   ["contact", "vendor", "supplier", "external_partner"],
+  volunteer: ["volunteer"],
+};
+
+const isStudent = (p) =>
+  TYPE_ALIASES.client.includes(p.person_type) &&
+  (
+    !p.person_subtype ||
+    (p.person_subtype || "").toLowerCase().includes("student") ||
+    (p.person_subtype || "").toLowerCase().includes("learner") ||
+    (p.person_subtype || "").toLowerCase().includes("enrollee") ||
+    (p.primary_role   || "").toLowerCase().includes("student")
+  );
+
+const isTeacher = (p) =>
+  TYPE_ALIASES.staff.includes(p.person_type) &&
+  (
+    !p.person_subtype ||
+    (p.person_subtype || "").toLowerCase().includes("teacher") ||
+    (p.person_subtype || "").toLowerCase().includes("instructor") ||
+    (p.person_subtype || "").toLowerCase().includes("lecturer") ||
+    (p.primary_role   || "").toLowerCase().includes("teacher")
+  );
+
 export default function AttendanceDashboard({ currentUser, onOpenClass, onOpenPerson }) {
   const [activeTab, setActiveTab] = useState("classes");
 
@@ -34,14 +61,8 @@ export default function AttendanceDashboard({ currentUser, onOpenClass, onOpenPe
     enabled: !!currentUser?.company_id,
   });
 
-  const students = people.filter(p =>
-    p.person_type === "client" &&
-    (p.primary_role === "student" || p.primary_role === "learner" || p.primary_role === "enrollee")
-  );
-  const teachers = people.filter(p =>
-    p.person_type === "staff" &&
-    (p.primary_role === "teacher" || p.primary_role === "lecturer" || p.primary_role === "instructor" || p.primary_role === "tutor")
-  );
+  const students = people.filter(p => isStudent(p));
+  const teachers = people.filter(p => isTeacher(p));
   const classes = enterprises;
 
   // Calculate attendance rate for today
@@ -57,11 +78,10 @@ export default function AttendanceDashboard({ currentUser, onOpenClass, onOpenPe
       r.relationship_type === "person_enterprise" &&
       r.status === "active" &&
       people.find(p => 
-        (p.id === r.person_id || 
-         `${p.first_name} ${p.last_name}`.toLowerCase() === (r.person_name || "").toLowerCase() ||
-         p.preferred_name === r.person_name) && 
-        p.person_type === "client" &&
-        (p.primary_role === "student" || p.primary_role === "learner" || p.primary_role === "enrollee")
+      (p.id === r.person_id || 
+       `${p.first_name} ${p.last_name}`.toLowerCase() === (r.person_name || "").toLowerCase() ||
+       p.preferred_name === r.person_name) && 
+      isStudent(p)
       )
     ).length;
   };
@@ -77,8 +97,7 @@ export default function AttendanceDashboard({ currentUser, onOpenClass, onOpenPe
       (p.id === teacherRel.person_id ||
        `${p.first_name} ${p.last_name}`.toLowerCase() === (teacherRel.person_name || "").toLowerCase() ||
        p.preferred_name === teacherRel.person_name) &&
-      p.person_type === "staff" &&
-      (p.primary_role === "teacher" || p.primary_role === "lecturer" || p.primary_role === "instructor")
+      isTeacher(p)
     );
   };
 

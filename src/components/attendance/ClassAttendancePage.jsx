@@ -5,6 +5,33 @@ import { ArrowLeft, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 
+const TYPE_ALIASES = {
+  staff:     ["staff", "employee", "contractor", "freelancer"],
+  client:    ["client", "patient", "student", "member"],
+  contact:   ["contact", "vendor", "supplier", "external_partner"],
+  volunteer: ["volunteer"],
+};
+
+const isStudent = (p) =>
+  TYPE_ALIASES.client.includes(p.person_type) &&
+  (
+    !p.person_subtype ||
+    (p.person_subtype || "").toLowerCase().includes("student") ||
+    (p.person_subtype || "").toLowerCase().includes("learner") ||
+    (p.person_subtype || "").toLowerCase().includes("enrollee") ||
+    (p.primary_role   || "").toLowerCase().includes("student")
+  );
+
+const isTeacher = (p) =>
+  TYPE_ALIASES.staff.includes(p.person_type) &&
+  (
+    !p.person_subtype ||
+    (p.person_subtype || "").toLowerCase().includes("teacher") ||
+    (p.person_subtype || "").toLowerCase().includes("instructor") ||
+    (p.person_subtype || "").toLowerCase().includes("lecturer") ||
+    (p.primary_role   || "").toLowerCase().includes("teacher")
+  );
+
 export default function ClassAttendancePage({ classObj, currentUser, onBack, onOpenStudent }) {
   const { toast } = useToast();
   const [attendance, setAttendance] = useState({});
@@ -33,10 +60,7 @@ export default function ClassAttendancePage({ classObj, currentUser, onBack, onO
       `${p.first_name} ${p.last_name}`.toLowerCase() === (r.person_name || "").toLowerCase() ||
       p.preferred_name === r.person_name
     ))
-    .filter(p => p &&
-      p.person_type === "client" &&
-      (p.primary_role === "student" || p.primary_role === "learner" || p.primary_role === "enrollee")
-    );
+    .filter(p => p && isStudent(p));
 
   useEffect(() => {
     const initial = {};
