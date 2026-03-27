@@ -9,11 +9,11 @@ import {
   ToastViewport,
 } from "@/components/ui/toast";
 
-export function Toaster() {
+function ToasterContent() {
   const { toasts } = useToast();
 
   return (
-    <ToastProvider>
+    <>
       {toasts.map(function ({ id, title, description, action, ...props }) {
         return (
           <Toast key={id} {...props}>
@@ -29,6 +29,14 @@ export function Toaster() {
         );
       })}
       <ToastViewport />
+    </>
+  );
+}
+
+export function Toaster() {
+  return (
+    <ToastProvider>
+      <ToasterContent />
     </ToastProvider>
   );
 }
