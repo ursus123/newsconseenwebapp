@@ -10,6 +10,24 @@ const triggerETL = (entity) => {
   fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
 };
 
+const STUDENT_SUBTYPES = [
+  "Student Customer",
+  "Individual Consumer",
+  "Enrollee",
+  "Attendee",
+  "Participant",
+  "Learner",
+];
+
+const TEACHER_SUBTYPES = [
+  "Teacher",
+  "Lecturer",
+  "Instructor",
+  "Tutor",
+  "Trainer",
+  "Coach",
+];
+
 const TYPE_ALIASES = {
   staff:     ["staff", "employee", "contractor", "freelancer"],
   client:    ["client", "patient", "student", "member"],
@@ -20,21 +38,15 @@ const TYPE_ALIASES = {
 const isStudent = (p) =>
   TYPE_ALIASES.client.includes(p.person_type) &&
   (
-    !p.person_subtype ||
-    (p.person_subtype || "").toLowerCase().includes("student") ||
-    (p.person_subtype || "").toLowerCase().includes("learner") ||
-    (p.person_subtype || "").toLowerCase().includes("enrollee") ||
-    (p.primary_role   || "").toLowerCase().includes("student")
+    STUDENT_SUBTYPES.includes(p.person_subtype) ||
+    STUDENT_SUBTYPES.some(s => s.toLowerCase() === (p.primary_role || "").toLowerCase())
   );
 
 const isTeacher = (p) =>
   TYPE_ALIASES.staff.includes(p.person_type) &&
   (
-    !p.person_subtype ||
-    (p.person_subtype || "").toLowerCase().includes("teacher") ||
-    (p.person_subtype || "").toLowerCase().includes("instructor") ||
-    (p.person_subtype || "").toLowerCase().includes("lecturer") ||
-    (p.primary_role   || "").toLowerCase().includes("teacher")
+    TEACHER_SUBTYPES.includes(p.person_subtype) ||
+    TEACHER_SUBTYPES.some(s => s.toLowerCase() === (p.primary_role || "").toLowerCase())
   );
 
 export default function ClassAttendancePage({ classObj, currentUser, onBack, onOpenStudent }) {
