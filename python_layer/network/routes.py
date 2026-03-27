@@ -328,3 +328,107 @@ def remove_member(
         "company_id": company_id,
         "network_id": network_id,
     }
+
+# ==============================================================
+# Benchmark routes — append these to network/routes.py
+# After the existing router definition
+# ==============================================================
+
+# GET /network/benchmarks?network_id=...
+# GET /network/benchmarks/{company_id}?network_id=...
+# GET /network/benchmarks/distribution?network_id=...&metric=...
+
+
+@router.get("/benchmarks")
+def network_benchmarks(network_id: str = Query(...)):
+    """
+    Full benchmark report across all network members.
+    Returns percentiles, outliers, top/bottom performers,
+    and quartile distributions per metric.
+    """
+    from network.benchmarks import NetworkBenchmarks
+
+    registry = NetworkRegistry(network_id)
+    members  = registry.get_members()
+
+    if not members:
+        raise HTTPException(status_code=404, detail="No active members found.")
+
+    aggregator = NetworkAggregator(
+        network_id=network_id,
+        members=members,
+        railway_url=RAILWAY_URL,
+    )
+    member_summaries = aggregator.aggregate_members()
+
+    benchmarks = NetworkBenchmarks(member_summaries)
+    return benchmarks.compute_all()
+
+
+@router.get("/benchmarks/{company_id}")
+def member_benchmark(
+    company_id: str,
+    network_id: str = Query(...),
+):
+    """
+    Detailed benchmark comparison for a single member vs the network.
+    Shows per-metric percentile, position, and plain-language narrative.
+    """
+    from network.benchmarks import NetworkBenchmarks
+
+    registry = NetworkRegistry(network_id)
+    members  = registry.get_members()
+
+    if not members:
+        raise HTTPException(status_code=404, detail="No active members found.")
+
+    if not any(m["company_id"] == company_id for m in members):
+        raise HTTPException(
+            status_code=404,
+            detail=f"{company_id} is not a member of network {network_id}.",
+        )
+
+    aggregator = NetworkAggregator(
+        network_id=network_id,
+        members=members,
+        railway_url=RAILWAY_URL,
+    )
+    member_summaries = aggregator.aggregate_members()
+
+    benchmarks = NetworkBenchmarks(member_summaries)
+    return benchmarks.compare_member(company_id)
+
+
+@router.get("/benchmarks/distribution")
+def benchmark_distribution(
+    network_id: str = Query(...),
+    metric:     str = Query("health_score"),
+):
+    """
+    Quartile distribution for a specific metric across the network.
+    Returns Q1/Q2/Q3/Q4 groupings with member lists.
+    Useful for histogram visualisations in the dashboard.
+    """
+    from network.benchmarks import NetworkBenchmarks, BENCHMARK_METRICS
+
+    if metric not in BENCHMARK_METRICS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown metric '{metric}'. Valid: {', '.join(BENCHMARK_METRICS.keys())}",
+        )
+
+    registry = NetworkRegistry(network_id)
+    members  = registry.get_members()
+
+    if not members:
+        raise HTTPException(status_code=404, detail="No active members found.")
+
+    aggregator = NetworkAggregator(
+        network_id=network_id,
+        members=members,
+        railway_url=RAILWAY_URL,
+    )
+    member_summaries = aggregator.aggregate_members()
+
+    benchmarks = NetworkBenchmarks(member_summaries)
+    return benchmarks.quartile_distribution(metric)
