@@ -1,0 +1,41 @@
+{
+  "name": "AlertConfig",
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string",
+      "description": "Tenant scoping"
+    },
+    "config_key": {
+      "type": "string",
+      "description": "The configuration parameter name (e.g. expiry_critical_days, completion_rate_min, revenue_drop_pct)"
+    },
+    "config_value": {
+      "type": "string",
+      "description": "The value for that parameter"
+    },
+    "recipients": {
+      "type": "string",
+      "description": "JSON array of recipient objects: [{ name, email, phone, whatsapp }]"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this config is active"
+    },
+    "updated_by": {
+      "type": "string",
+      "description": "Email of operator who last changed this"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this config was last updated"
+    }
+  },
+  "required": [
+    "company_id",
+    "config_key",
+    "config_value"
+  ]
+}

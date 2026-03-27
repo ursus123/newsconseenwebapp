@@ -1,0 +1,82 @@
+{
+  "name": "AlertLog",
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string",
+      "description": "Tenant scoping"
+    },
+    "alert_type": {
+      "type": "string",
+      "description": "Machine-readable alert type (expiry_critical, expiry_warning, out_of_stock, low_stock, retention_drop, staff_shortage, completion_low, overdue_spike, negative_cashflow, revenue_drop)"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "warning",
+        "info"
+      ],
+      "description": "Alert severity"
+    },
+    "title": {
+      "type": "string",
+      "description": "Short headline (fits in SMS preview)"
+    },
+    "message": {
+      "type": "string",
+      "description": "Full alert message with context"
+    },
+    "enterprise_id": {
+      "type": "string",
+      "description": "Which branch/enterprise triggered this"
+    },
+    "enterprise_name": {
+      "type": "string",
+      "description": "Display name of the enterprise"
+    },
+    "suggested_action": {
+      "type": "string",
+      "description": "What the operator should do"
+    },
+    "triggered_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the alert fired"
+    },
+    "resolved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When it was resolved"
+    },
+    "is_resolved": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this alert has been resolved"
+    },
+    "sent_to": {
+      "type": "string",
+      "description": "JSON array of recipient names who received this"
+    },
+    "channel_used": {
+      "type": "string",
+      "description": "JSON array of channels used (email, whatsapp, sms)"
+    },
+    "delivery_status": {
+      "type": "string",
+      "enum": [
+        "sent",
+        "failed",
+        "pending"
+      ],
+      "default": "pending",
+      "description": "Delivery outcome"
+    }
+  },
+  "required": [
+    "company_id",
+    "alert_type",
+    "title",
+    "triggered_at"
+  ]
+}
