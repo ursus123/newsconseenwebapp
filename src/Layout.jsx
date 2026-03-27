@@ -29,6 +29,7 @@ import {
   TrendingUp,
   Sparkles,
   Bell,
+  Plug,
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
@@ -71,6 +72,7 @@ const NAV_CONFIG = {
         { name: "MarketIntelligence",  label: "Market Intelligence",  icon: TrendingUp },
         { name: "copilot",             label: "Copilot",              icon: Sparkles },
         { name: "alerts",              label: "Alerts",               icon: Bell, badge: "alerts" },
+        { name: "Connectors",          icon: Plug },
         { name: "network",             label: "Network",              icon: Globe, requiresNetwork: true },
       ],
     },
@@ -122,6 +124,7 @@ const NAV_CONFIG = {
         { name: "MarketIntelligence", label: "Market Intelligence", icon: TrendingUp },
         { name: "copilot",            label: "Copilot",             icon: Sparkles },
         { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
+        { name: "Connectors",         icon: Plug },
         { name: "network",            label: "Network",             icon: Globe, requiresNetwork: true },
       ],
     },
