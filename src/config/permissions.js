@@ -36,6 +36,10 @@ export const ROLE_PERMISSIONS = {
       "Permissions",
       "UserManagement",
       "Billing",
+      "copilot",
+      "alerts",
+      "Connectors",
+      "network",
     ],
     crudOps: {
       entities: [
