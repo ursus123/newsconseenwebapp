@@ -160,38 +160,55 @@ export const ENTERPRISE_FIELDS = [
 ];
 
 export const ENTERPRISE_MAPPING_RULES = [
-  [/company|business|organization|^name$|enterprise.?name/i, "enterprise_name"],
-  [/^id$|external.?id|enterprise.?id|branch.?id/i, "enterprise_id"],
-  [/short.?name|code|abbreviation/i, "short_name"],
-  [/^type$|business.?type|sector|enterprise.?type|org.?type/i, "enterprise_type"],
-  [/subtype|sub.?type|industry/i, "enterprise_subtype"],
-  [/tier|level|branch.?type|structure/i, "enterprise_tier"],
-  [/parent.?id|parent|hq.?id/i, "parent_enterprise_id"],
-  [/^status$|active.?status/i, "status"],
-  [/operating.?status|ops.?status|open.?status/i, "operating_status"],
-  [/sic.?id|naics.?id|sector.?id/i, "sic_sector_id"],
-  [/sic.?name|naics.?name|sector.?name|^sector$/i, "sic_sector_name"],
-  [/sic.?division|division/i, "sic_division"],
-  [/phone|telephone|contact.?phone|tel/i, "phone"],
-  [/^email$|contact.?email|e.?mail/i, "email"],
-  [/website|url|^web$/i, "website"],
-  [/^address$|street|address.?line|primary.?address/i, "primary_address"],
-  [/^city$|town|location/i, "city"],
-  [/region|state|state.?region|province/i, "region"],
-  [/^country$|nation/i, "country"],
-  [/zip|zip.?code|postal.?code|postcode/i, "zip_code"],
-  [/^lat$|latitude/i, "latitude"],
-  [/^lon$|^lng$|longitude/i, "longitude"],
-  [/founded|year.?founded|established/i, "founded_year"],
-  [/^license$|licence|license.?number|permit/i, "license_number"],
-  [/accreditation|accredited.?by|certification/i, "accreditation"],
-  [/legal.?structure/i, "legal_structure"],
-  [/registration|reg.?no|company.?no/i, "registration_number"],
-  [/tax|vat/i, "tax_number"],
-  [/ownership/i, "ownership_type"],
-  [/description/i, "description"],
-  [/notes/i, "internal_notes"],
-  [/company.?id|tenant|workspace/i, "company_id"],
+  // Most specific first — prevent wrong rule stealing the column
+  [/parent.?enterprise.?id|parent.?id|hq.?id/i,              "parent_enterprise_id"],
+  [/^enterprise.?id$|^external.?id$|^branch.?id$/i,          "enterprise_id"],
+  [/^enterprise.?name$|^company.?name$|^org.?name$/i,        "enterprise_name"],
+  [/^enterprise.?type$|^org.?type$|^business.?type$/i,       "enterprise_type"],
+  [/enterprise.?subtype|^subtype$|^sub.?type$|^industry$/i,  "enterprise_subtype"],
+  [/enterprise.?tier|^tier$|^level$/i,                       "enterprise_tier"],
+  [/^company.?id$|^tenant$|^workspace$/i,                    "company_id"],
+
+  // SIC / NAICS — specific before general "sector"
+  [/sic.?sector.?id|naics.?id|sector.?id/i,                 "sic_sector_id"],
+  [/sic.?sector.?name|naics.?name|sector.?name/i,           "sic_sector_name"],
+  [/sic.?division|^division$/i,                             "sic_division"],
+
+  // Status fields
+  [/^status$/i,                                              "status"],
+  [/operating.?status|ops.?status|open.?status/i,           "operating_status"],
+
+  // Contact
+  [/^phone$|^mobile$|^telephone$|contact.?phone|^tel$/i,    "phone"],
+  [/^email$|contact.?email/i,                               "email"],
+  [/^website$|^url$|^web$/i,                                "website"],
+
+  // Address — zip_code must come before short_name (which also matches "code")
+  [/zip.?code|^zip$|postal.?code|^postcode$/i,              "zip_code"],
+  [/^address$|^street$|address.?line|primary.?address/i,    "primary_address"],
+  [/^city$|^town$|^location$/i,                             "city"],
+  [/^region$|^state$|state.?region|^province$/i,            "region"],
+  [/^country$|^nation$/i,                                   "country"],
+  [/^lat$|^latitude$/i,                                     "latitude"],
+  [/^lon$|^lng$|^longitude$/i,                              "longitude"],
+
+  // Short name — after zip_code so "code" doesn't steal zip_code
+  [/^short.?name$|^abbreviation$|^code$/i,                  "short_name"],
+
+  // Dates and founding
+  [/^founded.?year$|^year.?founded$|^established$/i,        "founded_year"],
+
+  // Legal / compliance
+  [/^license.?number$|^licence$|^permit$/i,                 "license_number"],
+  [/^accreditation$|^accredited.?by$|^certification$/i,     "accreditation"],
+  [/^legal.?structure$/i,                                   "legal_structure"],
+  [/^registration.?number$|^reg.?no$|^company.?no$/i,       "registration_number"],
+  [/^tax.?number$|^vat$/i,                                  "tax_number"],
+  [/^ownership.?type$|^ownership$/i,                        "ownership_type"],
+
+  // Free text — broadest patterns last
+  [/^description$/i,                                        "description"],
+  [/^internal.?notes$|^notes$/i,                            "internal_notes"],
 ];
 
 export const ENTERPRISE_TEMPLATE_EXAMPLE = {
