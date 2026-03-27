@@ -129,9 +129,44 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
     setUploading(false);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSubmit(form);
+    const savedProduct = await onSubmit(form);
+    const productName = form.name;
+
+    // Create relationship records for assigned enterprises
+    for (const assignment of (form.assigned_enterprises || [])) {
+      if (assignment.enterprise_name) {
+        try {
+          await base44.entities.Relationship.create({
+            relationship_type: "item_enterprise",
+            status: "active",
+            enterprise_name: assignment.enterprise_name,
+            item_name: productName,
+            role: assignment.role || "Stocks",
+            company_id: currentUser?.company_id,
+            start_date: new Date().toISOString().split("T")[0],
+          });
+        } catch (e) { console.error("Relationship create failed", e); }
+      }
+    }
+
+    // Create relationship records for assigned people
+    for (const assignment of (form.assigned_persons || [])) {
+      if (assignment.person_name) {
+        try {
+          await base44.entities.Relationship.create({
+            relationship_type: "item_person",
+            status: "active",
+            person_name: assignment.person_name,
+            item_name: productName,
+            role: assignment.role || "Uses",
+            company_id: currentUser?.company_id,
+            start_date: new Date().toISOString().split("T")[0],
+          });
+        } catch (e) { console.error("Relationship create failed", e); }
+      }
+    }
   };
 
   const renderTab = () => {
