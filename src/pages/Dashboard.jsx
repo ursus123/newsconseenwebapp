@@ -29,6 +29,16 @@ import { useEntityListFn } from "@/components/shared/useDataQuery";
 import { useTerminology } from "@/hooks/useTerminology";
 import { REVENUE_TYPES } from "@/config/transactionTypes";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+
+const fetchSummary = async (endpoint, companyId) => {
+  try {
+    const res = await fetch(`${RAILWAY_URL}${endpoint}?company_id=${companyId}`);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch { return []; }
+};
+
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
   normal: "bg-blue-50 text-blue-700",
@@ -281,25 +291,60 @@ function AdminDashboard({ user }) {
   const companyId = user?.company_id;
   const { t } = useTerminology(user);
 
-  const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person) });
+  // Operational queries — needed for UI rendering (enterprise health cards, alerts, charts, activity feed)
   const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId], queryFn: () => listFn(base44.entities.Enterprise) });
-  const { data: products = [] } = useQuery({ queryKey: ["products", companyId], queryFn: () => listFn(base44.entities.Product) });
   const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service) });
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks-dash", companyId], queryFn: () => listFn(base44.entities.Task) });
   const { data: transactions = [] } = useQuery({ queryKey: ["transactions-dash", companyId], queryFn: () => listFn(base44.entities.Transaction) });
   const { data: relationships = [] } = useQuery({ queryKey: ["relationships-dash", companyId], queryFn: () => listFn(base44.entities.Relationship) });
+  const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person) });
+  // Products kept for operational UI: LowStockAlert (item-level display), StockHealthChart, NotificationsBell
+  const { data: products = [] } = useQuery({ queryKey: ["products", companyId], queryFn: () => listFn(base44.entities.Product) });
 
-  const overdueCount = tasks.filter((t) => t.due_date && t.status !== "completed" && t.status !== "cancelled" && isPast(parseISO(t.due_date))).length;
-  const draftTxCount = transactions.filter((t) => !t.status || t.status === "draft").length;
-  const lowStockCount = products.filter((p) => p.min_stock_level != null && p.stock_quantity != null && p.stock_quantity < p.min_stock_level).length;
+  // Analytics queries — read from python_layer summaries (Layer 3 compliance)
+  const { data: peopleSummary = [] } = useQuery({
+    queryKey: ["analytics-people", companyId],
+    queryFn: () => fetchSummary("/people-summary", companyId),
+    enabled: !!companyId,
+  });
+  const { data: taskSummary = [] } = useQuery({
+    queryKey: ["analytics-tasks", companyId],
+    queryFn: () => fetchSummary("/task-summary", companyId),
+    enabled: !!companyId,
+  });
+  const { data: productSummary = [] } = useQuery({
+    queryKey: ["analytics-products", companyId],
+    queryFn: () => fetchSummary("/product-summary", companyId),
+    enabled: !!companyId,
+  });
+  const { data: transactionSummary = [] } = useQuery({
+    queryKey: ["analytics-transactions", companyId],
+    queryFn: () => fetchSummary("/transaction-summary", companyId),
+    enabled: !!companyId,
+  });
+
+  // Aggregations derived from python_layer summaries
+  const overdueCount = taskSummary.reduce((sum, row) => sum + (row.overdue_count || 0), 0);
+  const lowStockCount = productSummary.reduce((sum, row) => sum + (row.items_below_reorder || 0), 0);
+  const draftTxCount = transactionSummary.reduce((sum, row) => sum + (row.draft_count || 0), 0);
+
+  const activeStaff = peopleSummary.filter(row => row.person_type === "staff").reduce((sum, row) => sum + (row.active_count || 0), 0);
+  const activeClients = peopleSummary.filter(row => row.person_type === "client").reduce((sum, row) => sum + (row.active_count || 0), 0);
+  const totalPeople = peopleSummary.reduce((sum, row) => sum + (row.total_count || 0), 0);
+  const totalProducts = productSummary.reduce((sum, row) => sum + (row.total_count || 0), 0);
+  const activeProducts = productSummary.reduce((sum, row) => sum + (row.active_count || 0), 0);
+  const totalTasks = taskSummary.reduce((sum, row) => sum + (row.total_count || 0), 0);
+  const openTasks = taskSummary.reduce((sum, row) => sum + (row.open_count || 0), 0);
+  const totalTransactions = transactionSummary.reduce((sum, row) => sum + (row.total_count || 0), 0);
+  const postedTransactions = transactionSummary.reduce((sum, row) => sum + (row.posted_count || 0), 0);
 
   const onboardingDone = {
     enterprise: enterprises.length > 0,
     person: people.length > 0,
-    product: products.length > 0,
+    product: totalProducts > 0,
     service: services.length > 0,
-    task: tasks.length > 0,
-    transaction: transactions.length > 0,
+    task: totalTasks > 0,
+    transaction: totalTransactions > 0,
     report: false, // user must manually confirm
   };
 
@@ -320,19 +365,19 @@ function AdminDashboard({ user }) {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        <StatCard title={t("person_plural")} value={people.length} icon={Users} color="blue" subtitle={`${people.filter((p) => p.status === "active").length} active`} />
+        <StatCard title={t("person_plural")} value={totalPeople} icon={Users} color="blue" subtitle={`${activeStaff} staff · ${activeClients} clients`} />
         <StatCard title="Enterprises" value={enterprises.length} icon={Building2} color="purple" subtitle={`${enterprises.filter((e) => e.status === "active").length} active`} />
-        <StatCard title={t("product_plural")} value={products.length} icon={Package} color="amber"
-          subtitle={lowStockCount > 0 ? `${lowStockCount} low stock` : `${products.filter((p) => p.status === "active").length} active`}
+        <StatCard title={t("product_plural")} value={totalProducts} icon={Package} color="amber"
+          subtitle={lowStockCount > 0 ? `${lowStockCount} low stock` : `${activeProducts} active`}
           subtitleColor={lowStockCount > 0 ? "text-amber-600" : undefined}
         />
         <StatCard title={t("service_plural")} value={services.length} icon={Wrench} color="teal" subtitle={`${services.filter((s) => s.status === "active").length} active`} />
-        <StatCard title={t("task_plural")} value={tasks.length} icon={ClipboardList} color="emerald"
-          subtitle={overdueCount > 0 ? `${overdueCount} overdue` : `${tasks.filter((t) => t.status === "open").length} open`}
+        <StatCard title={t("task_plural")} value={totalTasks} icon={ClipboardList} color="emerald"
+          subtitle={overdueCount > 0 ? `${overdueCount} overdue` : `${openTasks} open`}
           subtitleColor={overdueCount > 0 ? "text-rose-600" : undefined}
         />
-        <StatCard title={t("transaction_plural")} value={transactions.length} icon={ArrowLeftRight} color="rose"
-          subtitle={draftTxCount > 0 ? `${draftTxCount} pending draft${draftTxCount !== 1 ? "s" : ""}` : `${transactions.filter((t) => t.status === "posted").length} posted`}
+        <StatCard title={t("transaction_plural")} value={totalTransactions} icon={ArrowLeftRight} color="rose"
+          subtitle={draftTxCount > 0 ? `${draftTxCount} pending draft${draftTxCount !== 1 ? "s" : ""}` : `${postedTransactions} posted`}
           subtitleColor={draftTxCount > 0 ? "text-amber-600" : undefined}
         />
       </div>
