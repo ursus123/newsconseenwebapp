@@ -133,13 +133,6 @@ const NAV_CONFIG = {
       ],
     },
     {
-      section: "Pipelines",
-      items: [
-        { name: "Pipelines",      icon: GitBranch },
-        { name: "network",        label: "Network",        icon: Globe, requiresNetwork: true },
-      ],
-    },
-    {
       section: "Applications",
       items: [{ name: "Applications", icon: Grid3x3 }],
     },
@@ -150,6 +143,8 @@ const NAV_CONFIG = {
         { name: "Permissions",    icon: Shield },
         { name: "EntityGraph",    label: "Enterprise Intelligence", icon: Network },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },
+        { name: "Pipelines",      icon: GitBranch },
+        { name: "network",        label: "Network",        icon: Globe, requiresNetwork: true },
         { name: "Billing",        icon: CreditCard },
       ],
     },
