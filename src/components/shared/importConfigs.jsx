@@ -2,63 +2,150 @@
 
 // ── PEOPLE ────────────────────────────────────────────────────────────────
 export const PEOPLE_FIELDS = [
-  { key: "first_name", label: "First Name *", required: true },
-  { key: "last_name", label: "Last Name *", required: true },
-  { key: "preferred_name", label: "Preferred Name" },
-  { key: "person_type", label: "Person Type" },
-  { key: "status", label: "Status" },
-  { key: "primary_role", label: "Primary Role" },
-  { key: "role_category", label: "Role Category" },
-  { key: "phone", label: "Phone" },
-  { key: "email", label: "Email" },
-  { key: "gender", label: "Gender" },
-  { key: "date_of_birth", label: "Date of Birth" },
-  { key: "national_id", label: "National ID" },
-  { key: "address", label: "Address" },
-  { key: "city", label: "City" },
-  { key: "region", label: "Region" },
-  { key: "country", label: "Country" },
-  { key: "engagement_type", label: "Engagement Type" },
-  { key: "start_date", label: "Start Date" },
-  { key: "end_date", label: "End Date" },
-  { key: "cost_rate", label: "Cost Rate" },
-  { key: "payment_type", label: "Payment Type" },
-  { key: "availability_status", label: "Availability Status" },
-  { key: "skills", label: "Skills" },
-  { key: "certification_name", label: "Certification Name" },
-  { key: "certification_expiry", label: "Certification Expiry" },
-  { key: "license_number", label: "License Number" },
-  { key: "internal_notes", label: "Internal Notes" },
+  { key: "first_name",                label: "First Name *",               required: true },
+  { key: "last_name",                 label: "Last Name *",                required: true },
+  { key: "preferred_name",            label: "Preferred Name" },
+  { key: "person_id",                 label: "Person ID (External)" },
+  { key: "person_type",               label: "Person Type" },
+  { key: "person_subtype",            label: "Person Subtype" },
+  { key: "primary_role",              label: "Primary Role" },
+  { key: "role_category",             label: "Role Category" },
+  { key: "engagement_model",          label: "Engagement Model" },
+  { key: "status",                    label: "Status" },
+  { key: "availability_status",       label: "Availability Status" },
+  { key: "phone",                     label: "Phone" },
+  { key: "email",                     label: "Email" },
+  { key: "gender",                    label: "Gender" },
+  { key: "date_of_birth",             label: "Date of Birth" },
+  { key: "national_id",               label: "National ID" },
+  { key: "address",                   label: "Address" },
+  { key: "city",                      label: "City" },
+  { key: "region",                    label: "Region / State" },
+  { key: "country",                   label: "Country" },
+  { key: "zip_code",                  label: "ZIP Code" },
+  { key: "start_date",                label: "Start Date" },
+  { key: "end_date",                  label: "End Date" },
+  { key: "intake_date",               label: "Intake Date" },
+  { key: "discharge_date",            label: "Discharge Date" },
+  { key: "discharge_reason",          label: "Discharge Reason" },
+  { key: "cost_rate",                 label: "Cost Rate" },
+  { key: "hourly_rate",               label: "Hourly Rate" },
+  { key: "weekly_hours",              label: "Weekly Hours" },
+  { key: "overtime_eligible",         label: "Overtime Eligible" },
+  { key: "payment_type",              label: "Payment Type" },
+  { key: "certification_name",        label: "Certification Name" },
+  { key: "certifications",            label: "Certifications (multi)" },
+  { key: "certification_expiry",      label: "Certification Expiry" },
+  { key: "license_number",            label: "License Number" },
+  { key: "skills",                    label: "Skills" },
+  { key: "emergency_contact",         label: "Emergency Contact" },
+  { key: "emergency_phone",           label: "Emergency Phone" },
+  { key: "shift_schedule",            label: "Shift Schedule" },
+  { key: "availability_notes",        label: "Availability Notes" },
+  { key: "height_cm",                 label: "Height (cm)" },
+  { key: "weight_kg",                 label: "Weight (kg)" },
+  { key: "organization",              label: "Organization" },
+  { key: "branch_id",                 label: "Branch ID" },
+  { key: "assigned_branch",           label: "Assigned Branch" },
+  { key: "assigned_caregiver_id",     label: "Assigned Caregiver ID" },
+  { key: "payer_type",                label: "Payer Type" },
+  { key: "referral_source",           label: "Referral Source" },
+  { key: "primary_diagnosis",         label: "Primary Diagnosis" },
+  { key: "secondary_diagnosis",       label: "Secondary Diagnosis" },
+  { key: "functional_score",          label: "Functional Score" },
+  { key: "caregiver_continuity_pct",  label: "Caregiver Continuity %" },
+  { key: "age_at_intake",             label: "Age at Intake" },
+  { key: "relationship_to_org",       label: "Relationship to Organization" },
+  { key: "active_since",              label: "Active Since" },
+  { key: "company_id",                label: "Company ID" },
+  { key: "internal_notes",            label: "Internal Notes" },
 ];
 
 export const PEOPLE_MAPPING_RULES = [
-  [/first.?name|given.?name|forename/i, "first_name"],
-  [/last.?name|surname|family.?name/i, "last_name"],
-  [/preferred.?name|nickname|display.?name/i, "preferred_name"],
-  [/^type$|person.?type|employee.?type/i, "person_type"],
-  [/^status$/i, "status"],
-  [/^role$|position|job.?title|primary.?role/i, "primary_role"],
-  [/role.?category/i, "role_category"],
-  [/phone|mobile|tel/i, "phone"],
-  [/^email$|email.?address/i, "email"],
-  [/gender|sex/i, "gender"],
-  [/date.?of.?birth|dob|birth.?date/i, "date_of_birth"],
-  [/national.?id|id.?number|passport/i, "national_id"],
-  [/^address$|street/i, "address"],
-  [/^city$|town/i, "city"],
-  [/region|state|province/i, "region"],
-  [/^country$/i, "country"],
-  [/engagement.?type/i, "engagement_type"],
-  [/^start$|hire.?date|join.?date|start.?date/i, "start_date"],
-  [/^end$|end.?date|termination/i, "end_date"],
-  [/^cost$|rate|salary|cost.?rate/i, "cost_rate"],
-  [/payment.?type/i, "payment_type"],
-  [/availability/i, "availability_status"],
-  [/skills?/i, "skills"],
-  [/certification|cert.?name/i, "certification_name"],
-  [/cert.?expiry|cert.?date/i, "certification_expiry"],
-  [/license/i, "license_number"],
-  [/notes/i, "internal_notes"],
+  // Identity — anchored to prevent partial grabs
+  [/^first.?name$|^given.?name$|^forename$/i,                "first_name"],
+  [/^last.?name$|^surname$|^family.?name$/i,                 "last_name"],
+  [/^preferred.?name$|^nickname$|^display.?name$/i,          "preferred_name"],
+  [/^person.?id$|^external.?id$|^source.?id$/i,              "person_id"],
+
+  // Person classification
+  [/^person.?type$|^employee.?type$|^contact.?type$/i,       "person_type"],
+  [/^person.?subtype$|^subtype$|^sub.?type$/i,               "person_subtype"],
+  [/^primary.?role$|^job.?title$|^position$/i,               "primary_role"],
+  [/^role.?category$|^role.?group$/i,                        "role_category"],
+  [/^engagement.?model$|^engagement.?type$|^contract.?type$/i, "engagement_model"],
+
+  // Status
+  [/^status$/i,                                              "status"],
+  [/^availability.?status$|^availability$/i,                 "availability_status"],
+
+  // Contact
+  [/^phone$|^mobile$|^telephone$|^tel$/i,                    "phone"],
+  [/^email$|^email.?address$/i,                              "email"],
+  [/^emergency.?contact$|^next.?of.?kin$/i,                  "emergency_contact"],
+  [/^emergency.?phone$|^emergency.?mobile$/i,                "emergency_phone"],
+
+  // Demographics
+  [/^gender$|^sex$/i,                                        "gender"],
+  [/^date.?of.?birth$|^dob$|^birth.?date$/i,                "date_of_birth"],
+  [/^national.?id$|^passport$|^ssn$/i,                       "national_id"],
+  [/^age.?at.?intake$|^age$/i,                               "age_at_intake"],
+  [/^height.?cm$|^height$/i,                                 "height_cm"],
+  [/^weight.?kg$|^weight$/i,                                 "weight_kg"],
+
+  // Address — zip before region to avoid partial grabs
+  [/^zip.?code$|^zip$|^postal.?code$|^postcode$/i,           "zip_code"],
+  [/^address$|^street.?address$|^address.?line$/i,           "address"],
+  [/^city$|^town$/i,                                         "city"],
+  [/^region$|^state$|^state.?region$|^province$/i,           "region"],
+  [/^country$/i,                                             "country"],
+
+  // Dates
+  [/^start.?date$|^hire.?date$|^join.?date$/i,               "start_date"],
+  [/^end.?date$|^termination.?date$|^leave.?date$/i,         "end_date"],
+  [/^intake.?date$|^admission.?date$|^enrollment.?date$/i,   "intake_date"],
+  [/^discharge.?date$|^exit.?date$/i,                        "discharge_date"],
+  [/^discharge.?reason$|^exit.?reason$|^termination.?reason$/i, "discharge_reason"],
+  [/^active.?since$|^member.?since$|^partner.?since$/i,      "active_since"],
+
+  // Pay and hours — hourly_rate before cost_rate, rate before generic
+  [/^hourly.?rate$|^hour.?rate$/i,                           "hourly_rate"],
+  [/^weekly.?hours$|^hours.?per.?week$/i,                    "weekly_hours"],
+  [/^overtime.?eligible$|^ot.?eligible$/i,                   "overtime_eligible"],
+  [/^cost.?rate$|^cost$|^salary$|^pay.?rate$/i,              "cost_rate"],
+  [/^payment.?type$|^pay.?type$/i,                           "payment_type"],
+
+  // Certifications — certifications (multi) before certification_name (single)
+  [/^certifications$|^certs$|^qualifications$/i,             "certifications"],
+  [/^certification.?name$|^cert.?name$|^certificate$/i,      "certification_name"],
+  [/^certification.?expiry$|^cert.?expiry$|^cert.?date$/i,   "certification_expiry"],
+  [/^license.?number$|^licence$|^license$/i,                 "license_number"],
+  [/^skills?$|^competencies$/i,                              "skills"],
+
+  // Scheduling
+  [/^shift.?schedule$|^shift$/i,                             "shift_schedule"],
+  [/^availability.?notes$/i,                                 "availability_notes"],
+
+  // Clinical — client specific
+  [/^primary.?diagnosis$|^main.?diagnosis$|^diagnosis$/i,    "primary_diagnosis"],
+  [/^secondary.?diagnosis$|^second.?diagnosis$/i,            "secondary_diagnosis"],
+  [/^functional.?score$|^function.?score$|^adl.?score$/i,    "functional_score"],
+  [/^payer.?type$|^insurance.?type$|^payment.?source$/i,     "payer_type"],
+  [/^referral.?source$|^referred.?by$|^source$/i,            "referral_source"],
+  [/^caregiver.?continuity|^continuity.?pct$/i,              "caregiver_continuity_pct"],
+
+  // Branch / org links
+  [/^branch.?id$|^branch$/i,                                 "branch_id"],
+  [/^assigned.?branch$|^home.?branch$/i,                     "assigned_branch"],
+  [/^assigned.?caregiver.?id$|^caregiver.?id$/i,             "assigned_caregiver_id"],
+  [/^organization$|^org.?name$|^company.?name$/i,            "organization"],
+  [/^relationship.?to|^relationship.?type$/i,                "relationship_to_org"],
+
+  // Tenant
+  [/^company.?id$|^tenant$|^workspace$/i,                    "company_id"],
+
+  // Free text — broadest last
+  [/^internal.?notes$|^notes$|^comments$/i,                  "internal_notes"],
 ];
 
 export const PEOPLE_TEMPLATE_EXAMPLE = {
@@ -104,22 +191,120 @@ export function detectPersonType(role = "") {
   return "employee";
 }
 
-export function transformPerson(row) {
-  if (!row.person_type) row.person_type = detectPersonType(row.primary_role);
-  if (row.cost_rate) { const n = parseFloat(row.cost_rate); row.cost_rate = isNaN(n) ? undefined : n; }
+export function transformPerson(row, currentUser) {
+  // Enforce person_type enum
+  const VALID_TYPES = ["staff","client","contact","volunteer"];
+  if (!row.person_type || !VALID_TYPES.includes(row.person_type)) {
+    row.person_type = detectPersonType(row.primary_role);
+  }
+
+  // Enforce engagement_model enum
+  const VALID_ENGAGEMENT = ["employed","contracted","freelance","volunteer","elected","appointed","enrolled","subscribed"];
+  if (row.engagement_model && !VALID_ENGAGEMENT.includes(row.engagement_model)) {
+    row.engagement_model = "employed";
+  }
+
+  // Enforce gender enum
+  const VALID_GENDERS = ["male","female","non_binary","prefer_not_to_say"];
+  if (row.gender && !VALID_GENDERS.includes(row.gender?.toLowerCase())) {
+    row.gender = "prefer_not_to_say";
+  } else if (row.gender) {
+    row.gender = row.gender.toLowerCase();
+  }
+
+  // hourly_rate → cost_rate if cost_rate is blank
+  if (!row.cost_rate && row.hourly_rate) {
+    row.cost_rate = parseFloat(row.hourly_rate) || undefined;
+  }
+  if (row.cost_rate) {
+    const n = parseFloat(row.cost_rate);
+    row.cost_rate = isNaN(n) ? undefined : n;
+  }
+
+  // functional_score → number
+  if (row.functional_score) {
+    const n = parseFloat(row.functional_score);
+    row.functional_score = isNaN(n) ? undefined : n;
+  }
+
+  // Collect fields with no direct entity field into internal_notes
+  const notes = [];
+  if (row.person_id)               notes.push(`External ID: ${row.person_id}`);
+  if (row.zip_code)                notes.push(`Zip: ${row.zip_code}`);
+  if (row.age_at_intake)           notes.push(`Age at intake: ${row.age_at_intake}`);
+  if (row.weekly_hours)            notes.push(`Weekly hours: ${row.weekly_hours}`);
+  if (row.overtime_eligible)       notes.push(`Overtime eligible: ${row.overtime_eligible}`);
+  if (row.branch_id)               notes.push(`Branch ID: ${row.branch_id}`);
+  if (row.assigned_branch)         notes.push(`Assigned branch: ${row.assigned_branch}`);
+  if (row.assigned_caregiver_id)   notes.push(`Assigned caregiver: ${row.assigned_caregiver_id}`);
+  if (row.payer_type)              notes.push(`Payer type: ${row.payer_type}`);
+  if (row.referral_source)         notes.push(`Referral source: ${row.referral_source}`);
+  if (row.primary_diagnosis)       notes.push(`Dx: ${row.primary_diagnosis}`);
+  if (row.secondary_diagnosis)     notes.push(`Secondary Dx: ${row.secondary_diagnosis}`);
+  if (row.functional_score)        notes.push(`Functional score: ${row.functional_score}`);
+  if (row.caregiver_continuity_pct) notes.push(`Caregiver continuity: ${row.caregiver_continuity_pct}`);
+  if (row.discharge_reason)        notes.push(`Discharge reason: ${row.discharge_reason}`);
+  if (row.relationship_to_org)     notes.push(`Relationship: ${row.relationship_to_org}`);
+  if (row.organization)            notes.push(`Organization: ${row.organization}`);
+
+  // Handle certifications (multi-value semicolon-separated → certification_name)
+  if (row.certifications && !row.certification_name) {
+    const certs = row.certifications.split(/[;,]/).map(s => s.trim()).filter(Boolean);
+    row.certification_name = certs[0] || undefined;
+    if (certs.length > 1) notes.push(`Additional certs: ${certs.slice(1).join(", ")}`);
+  }
+
+  // Merge with any existing internal_notes
+  const existing = row.internal_notes ? [row.internal_notes] : [];
+  row.internal_notes = [...existing, ...notes].join(" | ") || undefined;
+
+  // Map intake_date → start_date for clients if start_date is blank
+  if (!row.start_date && row.intake_date) {
+    row.start_date = row.intake_date;
+  }
+  // Map discharge_date → end_date if end_date is blank
+  if (!row.end_date && row.discharge_date) {
+    row.end_date = row.discharge_date;
+  }
+
+  row.company_id = row.company_id || currentUser?.company_id;
+
   return row;
 }
 
 export function validatePerson(row) {
   const errors = [], warnings = [];
   if (!row.first_name) errors.push("first_name required");
-  if (!row.last_name) errors.push("last_name required");
-  const validTypes = ["employee","contractor","freelancer","vendor","client","patient","external_partner"];
-  if (row.person_type && !validTypes.includes(row.person_type)) errors.push(`Invalid person_type: ${row.person_type}`);
+  if (!row.last_name)  errors.push("last_name required");
+
+  const validTypes = ["staff","client","contact","volunteer"];
+  if (row.person_type && !validTypes.includes(row.person_type)) {
+    warnings.push(`person_type "${row.person_type}" not recognised — will default to "staff"`);
+  }
+
   const validStatuses = ["active","inactive","on_leave"];
-  if (row.status && !validStatuses.includes(row.status)) warnings.push(`Unknown status "${row.status}" — defaulting to active`);
-  if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) errors.push("Invalid email format");
-  if (row.date_of_birth && isNaN(Date.parse(row.date_of_birth))) warnings.push("date_of_birth format unclear");
+  if (row.status && !validStatuses.includes(row.status)) {
+    warnings.push(`status "${row.status}" not recognised — defaulting to "active"`);
+  }
+
+  const validEngagement = ["employed","contracted","freelance","volunteer","elected","appointed","enrolled","subscribed"];
+  if (row.engagement_model && !validEngagement.includes(row.engagement_model)) {
+    warnings.push(`engagement_model "${row.engagement_model}" not recognised — defaulting to "employed"`);
+  }
+
+  if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
+    errors.push(`email "${row.email}" is not valid`);
+  }
+  if (row.date_of_birth && isNaN(Date.parse(row.date_of_birth))) {
+    warnings.push("date_of_birth format unclear — use YYYY-MM-DD");
+  }
+  if (row.cost_rate && isNaN(parseFloat(row.cost_rate))) {
+    errors.push("cost_rate must be a number");
+  }
+  if (row.hourly_rate && isNaN(parseFloat(row.hourly_rate))) {
+    errors.push("hourly_rate must be a number");
+  }
+
   return { errors, warnings };
 }
 
