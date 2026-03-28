@@ -19,6 +19,7 @@ import TaskPerformanceMetrics from "../components/tasks/TaskPerformanceMetrics";
 import TaskDetailPanel from "../components/tasks/TaskDetailPanel";
 import OutcomeDialog from "../components/tasks/OutcomeDialog";
 import TaskTimelineView from "../components/tasks/TaskTimelineView";
+import TaskCalendarView from "../components/tasks/TaskCalendarView";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -380,7 +381,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
           )}
         </PageHeader>
         <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-          {[{ key: "kanban", icon: LayoutGrid, label: "Kanban" }, { key: "list", icon: List, label: "List" }, { key: "timeline", icon: CalendarDays, label: "Timeline" }].map(({ key, icon: Icon, label }) => (
+          {[{ key: "kanban", icon: LayoutGrid, label: "Kanban" }, { key: "list", icon: List, label: "List" }, { key: "timeline", icon: CalendarDays, label: "Timeline" }, { key: "calendar", icon: Calendar, label: "Calendar" }].map(({ key, icon: Icon, label }) => (
             <button key={key} onClick={() => setViewMode(key)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === key ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700"}`}>
               <Icon className="w-3.5 h-3.5" /> {label}
@@ -503,6 +504,10 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
 
       {viewMode === "timeline" && (
         <TaskTimelineView tasks={filtered} renderCard={(task) => renderCard(task, true)} />
+      )}
+
+      {viewMode === "calendar" && (
+        <TaskCalendarView tasks={tasks} />
       )}
 
       <TaskForm
