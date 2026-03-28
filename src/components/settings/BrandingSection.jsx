@@ -143,9 +143,10 @@ export default function BrandingSection({ user, enterprise }) {
   const logoInputRef = useRef();
   const faviconInputRef = useRef();
 
+  const isSuperAdmin = user?.role === "super_admin";
   const tier = enterprise?.subscription_tier || "professional";
-  const isConsultant = tier === "consultant";
-  const isPro = tier === "professional" || tier === "consultant";
+  const isConsultant = isSuperAdmin || tier === "consultant";
+  const isPro = isSuperAdmin || tier === "professional" || tier === "consultant";
 
   const [appName, setAppName] = useState(enterprise?.brand_name || "");
   const [tagline, setTagline] = useState(enterprise?.brand_tagline || "");
