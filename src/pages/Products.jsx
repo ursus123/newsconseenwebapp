@@ -270,8 +270,6 @@ export default function Products() {
         onArchive={handleArchive} initialData={editing} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name} />
       <BulkImportDialog
-        open={importOpen}
-        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["products"] }); }}
         entityName="Products"
         fields={PRODUCT_FIELDS}
         mappingRules={PRODUCT_MAPPING_RULES}
@@ -281,16 +279,22 @@ export default function Products() {
         validateRow={validateProduct}
         transformRow={(row) => transformProduct(row, currentUser)}
         entityFetchFn={() => listFn(base44.entities.Product)}
-        onImport={async (row) => base44.entities.Product.create(withScope(row))}
+        onImport={async (row) => base44.entities.Product.create({ ...row, company_id: currentUser?.company_id })}
         currentUser={currentUser}
         previewColumns={[
-          { label: "Product Name", render: (r) => r.name || <span className="text-rose-500">MISSING</span> },
+          { label: "Product Name", render: (r) => r.product_name || <span className="text-rose-500">MISSING</span> },
           { label: "Type",         render: (r) => r.item_type    || "—" },
-          { label: "Class",        render: (r) => (r.item_class?.[0] || r.item_class) || "—" },
+          { label: "Class",        render: (r) => r.item_class   || "—" },
           { label: "UOM",          render: (r) => r.unit_of_measure || "—" },
           { label: "Status",       render: (r) => r.status       || "active" },
         ]}
-        requiredField="name"
+        requiredField="product_name"
+        open={importOpen}
+        onClose={() => {
+          setImportOpen(false);
+          qc.invalidateQueries({ queryKey: ["products"] });
+          qc.refetchQueries({ queryKey: ["products"] });
+        }}
       />
     </div>
   );
