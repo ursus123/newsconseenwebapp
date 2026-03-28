@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-SYSTEM_PROMPT = """You are an operational intelligence assistant for a home healthcare business.
+# System prompt is built at runtime from operator Enterprise record — see build_system_prompt()
 You have access to real-time data tools that query the business's PostgreSQL analytics database.
 
 ALWAYS use the available tools before answering any question about:
