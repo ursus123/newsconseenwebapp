@@ -272,6 +272,7 @@ export default function BulkImportDialog({
       try {
         const created = await onImport(row);
         succeeded.push({ id: created?.id || "", ...row });
+        await new Promise(resolve => setTimeout(resolve, 200)); // pace requests to avoid rate limit
       } catch (err) {
         failed.push({ row: rowNum, ...row, error: err?.message || "Unknown error" });
       }
