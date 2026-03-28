@@ -399,6 +399,17 @@ export default function BulkImportDialog({
       setProgress((p) => ({ ...p, current: p.current + 1 }));
     }
 
+    // Save import record to localStorage for undo
+    const importedIds = succeeded.map(r => r.id).filter(Boolean);
+    if (importedIds.length > 0) {
+      localStorage.setItem("lastBulkImport", JSON.stringify({
+        entityName,
+        ids: importedIds,
+        importedAt: new Date().toISOString(),
+      }));
+      window.dispatchEvent(new Event("lastBulkImportChanged"));
+    }
+
     setImportResult({
       imported: succeeded,
       failed,

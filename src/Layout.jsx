@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
+import UndoImportButton from "@/components/layout/UndoImportButton";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import TenantGuard from "@/components/shared/TenantGuard";
@@ -462,6 +463,9 @@ export default function Layout({ children, currentPageName }) {
                 ) : null
               )}
             </div>
+
+            {/* Undo last import */}
+            <UndoImportButton />
 
             {/* User menu */}
             {currentUser && (
