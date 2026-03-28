@@ -94,7 +94,7 @@ const ALL_TABS = [
   { id: "notifications", label: "Notifications", icon: Bell,          adminOnly: false },
   { id: "sessions",      label: "Sessions",      icon: Monitor,       adminOnly: false },
   { id: "network",       label: "Network",       icon: Globe,         adminOnly: false },
-  { id: "branding",      label: "Branding",      icon: Palette,       adminOnly: true  },
+  { id: "branding",      label: "Brand Settings", icon: Palette,       superAdminOnly: true },
   { id: "error_log",     label: "Error Log",     icon: Bug,           adminOnly: true  },
   { id: "danger",        label: "Danger Zone",   icon: AlertTriangle, adminOnly: false },
 ];
@@ -125,7 +125,12 @@ export default function Settings() {
     (user?.company_id ? enterprises.find((e) => e.enterprise_name === user.company_id) : null);
 
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
-  const TABS = ALL_TABS.filter((t) => !t.adminOnly || isAdmin);
+  const isSuperAdmin = user?.role === "super_admin";
+  const TABS = ALL_TABS.filter((t) => {
+    if (t.superAdminOnly) return isSuperAdmin;
+    if (t.adminOnly) return isAdmin;
+    return true;
+  });
 
   if (!user) return (
     <div className="flex items-center justify-center h-64">
