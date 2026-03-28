@@ -767,18 +767,27 @@ export function transformAddress(row, currentUser) {
 
 export function validateAddress(row) {
   const errors = [], warnings = [];
+
   const line1 = row.address_line1 || row.address_line;
-  if (!line1)      errors.push("address_line1 is required");
-  if (!row.city)   errors.push("city is required");
-  if (!row.country)errors.push("country is required");
+  if (!line1)       errors.push("address_line1 is required");
+  if (!row.city)    errors.push("city is required");
+  if (!row.country) errors.push("country is required");
+
+  const VALID_STATUS = ["active","archived"];
+  if (row.status && !VALID_STATUS.includes(row.status)) {
+    warnings.push(`status "${row.status}" not recognised — will default to "active"`);
+  }
   if (row.latitude != null && row.latitude !== "") {
     const n = parseFloat(row.latitude);
-    if (isNaN(n) || n < -90 || n > 90) errors.push("latitude must be between -90 and 90");
+    if (isNaN(n) || n < -90 || n > 90)
+      errors.push("latitude must be between -90 and 90");
   }
   if (row.longitude != null && row.longitude !== "") {
     const n = parseFloat(row.longitude);
-    if (isNaN(n) || n < -180 || n > 180) errors.push("longitude must be between -180 and 180");
+    if (isNaN(n) || n < -180 || n > 180)
+      errors.push("longitude must be between -180 and 180");
   }
+
   return { errors, warnings };
 }
 
@@ -1332,7 +1341,10 @@ export function transformProduct(row, currentUser) {
 
 export function validateProduct(row) {
   const errors = [], warnings = [];
-  if (!row.product_name?.trim()) errors.push("product_name is required");
+
+  if (!row.product_name?.trim()) {
+    errors.push("product_name is required");
+  }
   const VALID_TYPES = ["physical","living","digital","service_package","financial_instrument"];
   if (row.item_type && !VALID_TYPES.includes(row.item_type)) {
     warnings.push(`item_type "${row.item_type}" not recognised — will default to "service_package"`);
@@ -1342,9 +1354,27 @@ export function validateProduct(row) {
   if (row.item_class && !VALID_CLASS.includes(row.item_class)) {
     warnings.push(`item_class "${row.item_class}" not recognised`);
   }
-  if (row.stock_quantity && isNaN(parseFloat(row.stock_quantity))) errors.push("stock_quantity must be a number");
-  if (row.reorder_level  && isNaN(parseFloat(row.reorder_level)))  errors.push("reorder_level must be a number");
-  if (row.expiry_date    && isNaN(Date.parse(row.expiry_date)))    warnings.push("expiry_date format unclear — use YYYY-MM-DD");
+  const VALID_UOM = ["piece","box","carton","pallet","bag","sachet","bottle","vial","kg","g",
+                     "mg","ton","lb","oz","liter","ml","gallon","meter","cm","head","flock",
+                     "herd","acre","hectare","license_seat","user_account","session","hour",
+                     "day","month","year","unit","kit","shift"];
+  if (row.unit_of_measure && !VALID_UOM.includes(row.unit_of_measure)) {
+    warnings.push(`unit_of_measure "${row.unit_of_measure}" not recognised`);
+  }
+  const VALID_STATUS = ["active","inactive","archived"];
+  if (row.status && !VALID_STATUS.includes(row.status)) {
+    warnings.push(`status "${row.status}" not recognised — will default to "active"`);
+  }
+  if (row.stock_quantity && isNaN(parseFloat(row.stock_quantity))) {
+    errors.push("stock_quantity must be a number");
+  }
+  if (row.reorder_level && isNaN(parseFloat(row.reorder_level))) {
+    errors.push("reorder_level must be a number");
+  }
+  if (row.expiry_date && isNaN(Date.parse(row.expiry_date))) {
+    warnings.push("expiry_date format unclear — use YYYY-MM-DD");
+  }
+
   return { errors, warnings };
 }
 

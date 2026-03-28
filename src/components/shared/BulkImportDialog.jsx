@@ -33,28 +33,65 @@ function buildAutoMapper(mappingRules) {
 }
 
 // ── Duplicate detection ────────────────────────────────────────────────────
-function isDuplicate(existing, incoming, entityName) {
+function rowsMatch(a, b, entityName) {
   switch (entityName) {
     case "People":
     case "Person":
-      if (existing.email && incoming.email &&
-          existing.email.toLowerCase() === incoming.email.toLowerCase()) {
-        return true;
-      }
-      const existingName = `${existing.first_name || ""} ${existing.last_name || ""}`.toLowerCase().trim();
-      const incomingName = `${incoming.first_name || ""} ${incoming.last_name || ""}`.toLowerCase().trim();
-      return existingName === incomingName && existingName !== "";
+      if (a.email && b.email)
+        return a.email.toLowerCase().trim() === b.email.toLowerCase().trim();
+      const nameA = `${a.first_name || ""} ${a.last_name || ""}`.toLowerCase().trim();
+      const nameB = `${b.first_name || ""} ${b.last_name || ""}`.toLowerCase().trim();
+      return nameA.length > 1 && nameA === nameB;
+
     case "Enterprises":
     case "Enterprise":
-      return existing.enterprise_name?.toLowerCase().trim() ===
-             incoming.enterprise_name?.toLowerCase().trim();
+      return a.enterprise_name?.toLowerCase().trim() ===
+             b.enterprise_name?.toLowerCase().trim();
+
     case "Products":
     case "Product":
-      return (existing.name?.toLowerCase().trim() === incoming.name?.toLowerCase().trim() ||
-              existing.product_name?.toLowerCase().trim() === incoming.product_name?.toLowerCase().trim());
+      return (a.product_name || a.name)?.toLowerCase().trim() ===
+             (b.product_name || b.name)?.toLowerCase().trim();
+
+    case "Relationships":
+    case "Relationship":
+      return a.relationship_type === b.relationship_type &&
+             a.person_name?.toLowerCase().trim() === b.person_name?.toLowerCase().trim() &&
+             a.enterprise_name?.toLowerCase().trim() === b.enterprise_name?.toLowerCase().trim();
+
+    case "Transactions":
+    case "Transaction":
+      if (a.invoice_number && b.invoice_number)
+        return a.invoice_number.trim() === b.invoice_number.trim();
+      if (a.transaction_id && b.transaction_id)
+        return a.transaction_id.trim() === b.transaction_id.trim();
+      return false;
+
+    case "Tasks":
+    case "Task":
+      return a.title?.toLowerCase().trim() === b.title?.toLowerCase().trim() &&
+             a.scheduled_date?.toString() === b.scheduled_date?.toString() &&
+             (a.client_name || a.related_person)?.toLowerCase().trim() ===
+             (b.client_name || b.related_person)?.toLowerCase().trim();
+
+    case "Addresses":
+    case "Address": {
+      const addrA = `${a.address_line1 || a.address_line || ""} ${a.city || ""} ${a.country || ""}`.toLowerCase().trim();
+      const addrB = `${b.address_line1 || b.address_line || ""} ${b.city || ""} ${b.country || ""}`.toLowerCase().trim();
+      return addrA.length > 5 && addrA === addrB;
+    }
+
     default:
       return false;
   }
+}
+
+function isDuplicateInBatch(row, batchRows, index, entityName) {
+  return batchRows.slice(0, index).some(prev => rowsMatch(prev, row, entityName));
+}
+
+function isDuplicateInSystem(row, existingRecords, entityName) {
+  return existingRecords.some(existing => rowsMatch(existing, row, entityName));
 }
 
 // ── Row display name helper ────────────────────────────────────────────────
@@ -294,12 +331,12 @@ export default function BulkImportDialog({
       }
 
       // 3. Duplicate in batch (earlier rows)
-      const batchDup = mapped.slice(0, idx).some(prev => isDuplicate(prev, row, entityName));
-      if (batchDup) issues.push({ type: "duplicate", message: "Duplicate within this import batch" });
+      const inBatch = isDuplicateInBatch(row, mapped, idx, entityName);
+      if (inBatch) issues.push({ type: "duplicate", message: "Duplicate in this file" });
 
       // 4. Duplicate in system
-      const systemDup = existing.some(ex => isDuplicate(ex, row, entityName));
-      if (systemDup) issues.push({ type: "duplicate", message: "Already exists in the system" });
+      const inSystem = isDuplicateInSystem(row, existing, entityName);
+      if (inSystem) issues.push({ type: "duplicate", message: "Already exists in system" });
 
       // Determine status
       const hasError = issues.some(i => i.type === "error");
