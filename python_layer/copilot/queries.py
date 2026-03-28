@@ -77,7 +77,6 @@ def get_client_retention_risk(company_id: str, top_n: int = 10) -> dict:
     """
     Returns clients who show retention risk signals:
     - inactive clients discharged in last 90 days
-    - clients with low caregiver continuity
     - clients with recent discharge reason
     Used for: "which clients are at risk", "who might leave"
     """
@@ -86,7 +85,7 @@ def get_client_retention_risk(company_id: str, top_n: int = 10) -> dict:
             first_name || ' ' || last_name   AS client_name,
             person_subtype,
             status,
-            end_date                          AS discharge_date,
+            end_date,
             internal_notes,
             enterprise_name,
             company_id
@@ -105,10 +104,11 @@ def get_client_retention_risk(company_id: str, top_n: int = 10) -> dict:
     # Parse discharge reason from internal_notes
     for r in rows:
         notes = r.get("internal_notes") or ""
-        if "Discharge reason:" in notes:
-            r["discharge_reason"] = notes.split("Discharge reason:")[-1].split("|")[0].strip()
-        else:
-            r["discharge_reason"] = "Unknown"
+        r["end_reason"] = "Not recorded"
+        for prefix in ["End reason:", "Discharge reason:", "Exit reason:", "Left reason:"]:
+            if prefix in notes:
+                r["end_reason"] = notes.split(prefix)[-1].split("|")[0].strip()
+                break
 
     return {
         "at_risk_clients": rows,
@@ -305,8 +305,7 @@ def get_visit_outcomes(company_id: str, days_back: int = 30) -> dict:
             ROUND(COUNT(*) * 100.0 / NULLIF(SUM(COUNT(*)) OVER(), 0), 1) AS pct
         FROM analytics.task_summary
         WHERE company_id = :company_id
-          AND task_type  IN ('care_visit', 'assessment', 'wound_care',
-                             'therapy_session', 'medication_management')
+          AND (:task_type IS NULL OR task_type = :task_type)
           AND scheduled_date >= CURRENT_DATE - (:days_back || ' days')::INTERVAL
         GROUP BY outcome
         ORDER BY count DESC
@@ -463,7 +462,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "get_client_retention_risk",
-        "description": "Get clients who show discharge or retention risk signals — recently inactive, discharged in last 90 days, or with retention risk notes. Use for 'at risk clients', 'who might leave', 'churn risk'.",
+        "description": "Get people showing attrition/churn risk — recently ended or inactive in last 90 days. Works for any person_type. Use for retention, dropout, membership loss questions.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -476,12 +475,12 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "get_staff_availability",
-        "description": "Get staff availability status — who is available, busy, or on leave. Filter by branch or role. Use for 'who is available', 'staffing coverage', 'available nurses'.",
+        "description": "Get active staff availability breakdown — available, busy, on leave. Filter by branch or role subtype (operator-defined).",
         "input_schema": {
             "type": "object",
             "properties": {
                 "branch_id":      {"type": "string", "description": "Filter by branch enterprise ID"},
-                "person_subtype": {"type": "string", "description": "Filter by role e.g. 'Registered Nurse', 'Home Health Aide'"},
+                "person_subtype": {"type": "string", "description": "Filter by role subtype (operator-defined, e.g. specific job title)"},
             },
         },
     },
@@ -512,7 +511,7 @@ TOOL_DEFINITIONS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "task_type": {"type": "string", "description": "Filter by task type e.g. 'care_visit', 'wound_care', 'medication_management'"},
+                "task_type": {"type": "string", "description": "Filter by task type (operator-defined)"},
                 "days_back": {"type": "integer", "description": "Days back to analyse. Default 30."},
             },
         },
