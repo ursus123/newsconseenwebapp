@@ -345,6 +345,7 @@ export default function People() {
         templateFileName="newsconseen_people_import_template.xlsx"
         templateExample={PEOPLE_TEMPLATE_EXAMPLE}
         templateInstructions={PEOPLE_TEMPLATE_INSTRUCTIONS}
+        entityFetchFn={() => listFn(base44.entities.Person)}
         validateRow={validatePerson}
         transformRow={transformPerson}
         onImport={(row) => base44.entities.Person.create(withScope(row))}

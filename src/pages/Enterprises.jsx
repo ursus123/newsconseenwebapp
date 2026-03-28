@@ -341,6 +341,7 @@ export default function Enterprises() {
         templateFileName="newsconseen_enterprises_import_template.xlsx"
         templateExample={ENTERPRISE_TEMPLATE_EXAMPLE}
         templateInstructions={ENTERPRISE_TEMPLATE_INSTRUCTIONS}
+        entityFetchFn={() => listFn(base44.entities.Enterprise)}
         validateRow={validateEnterprise}
         transformRow={transformEnterprise}
         onImport={async (row) => {

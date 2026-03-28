@@ -276,6 +276,7 @@ export default function Relationships() {
         entityName="Relationships" fields={RELATIONSHIP_FIELDS} mappingRules={RELATIONSHIP_MAPPING_RULES}
         templateFileName="newsconseen_relationships_import_template.xlsx"
         templateExample={RELATIONSHIP_TEMPLATE_EXAMPLE} templateInstructions={RELATIONSHIP_TEMPLATE_INSTRUCTIONS}
+        entityFetchFn={() => listFn(base44.entities.Relationship)}
         validateRow={(row) => validateRelationship(row, { people, enterprises, products, services })}
         onImport={(row) => base44.entities.Relationship.create(withScope(row))}
         currentUser={currentUser} previewColumns={REL_PREVIEW_COLS} requiredField="relationship_type"

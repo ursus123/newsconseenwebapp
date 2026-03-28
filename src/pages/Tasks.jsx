@@ -193,7 +193,7 @@ const TASK_PREVIEW_COLS = [
   { label: "Assigned To", render: (r) => r.assigned_to_name || r.assigned_to_email || "—" },
 ];
 
-function AdminTasksView({ tasks, appUsers, enterprises, products, services, people, addresses, companyId, isSuperAdmin, currentUser }) {
+function AdminTasksView({ tasks, appUsers, enterprises, products, services, people, addresses, companyId, isSuperAdmin, currentUser, listFn }) {
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -546,6 +546,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         templateFileName="newsconseen_tasks_import_template.xlsx"
         templateExample={TASK_TEMPLATE_EXAMPLE}
         templateInstructions={TASK_TEMPLATE_INSTRUCTIONS}
+        entityFetchFn={() => listFn(base44.entities.Task)}
         validateRow={validateTask}
         transformRow={transformTask}
         onImport={(row) => base44.entities.Task.create(withScope({ ...row, app_source: "import" }))}
@@ -599,6 +600,7 @@ export default function Tasks() {
         products={products} services={services} people={people}
         addresses={addresses} companyId={companyId}
         isSuperAdmin={isSuperAdmin} currentUser={currentUser}
+        listFn={listFn}
       />
     );
   }

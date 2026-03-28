@@ -607,6 +607,7 @@ export default function Transactions() {
         templateFileName="newsconseen_transactions_import_template.xlsx"
         templateExample={TRANSACTION_TEMPLATE_EXAMPLE}
         templateInstructions={TRANSACTION_TEMPLATE_INSTRUCTIONS}
+        entityFetchFn={() => listFn(base44.entities.Transaction)}
         validateRow={validateTransaction}
         transformRow={transformTransaction}
         onImport={(row) => base44.entities.Transaction.create(withScope(row))}
