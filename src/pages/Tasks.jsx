@@ -78,7 +78,8 @@ const KANBAN_COLUMNS = [
 
 function isDuePast(task) {
   if (!task.due_date) return false;
-  return isPast(parseISO(task.due_date)) && task.status !== "completed" && task.status !== "cancelled";
+  try { return isPast(parseISO(task.due_date)) && task.status !== "completed" && task.status !== "cancelled"; }
+  catch { return false; }
 }
 
 function TaskCard({ task, onEdit, onDelete, isAdmin, selectable, selected, onSelect, onOpen }) {
@@ -110,13 +111,13 @@ function TaskCard({ task, onEdit, onDelete, isAdmin, selectable, selected, onSel
               {task.enterprise && (
                 <Badge variant="outline" className="text-xs gap-1"><Building2 className="w-3 h-3" />{task.enterprise}</Badge>
               )}
-              {task.due_date && (
+              {task.due_date && (() => { try { const d = parseISO(task.due_date); return (
                 <Badge variant="outline" className={`text-xs gap-1 ${overdue ? "border-rose-300 text-rose-600 bg-rose-50" : ""}`}>
                   {overdue ? <AlertCircle className="w-3 h-3" /> : <Calendar className="w-3 h-3" />}
-                  {isToday(parseISO(task.due_date)) ? "Today" : format(parseISO(task.due_date), "MMM d")}
+                  {isToday(d) ? "Today" : format(d, "MMM d")}
                   {task.due_time && ` ${task.due_time}`}
                 </Badge>
-              )}
+              ); } catch { return null; } })()}
               {task.trigger_transaction && (
                 <Badge className="bg-violet-50 text-violet-700 text-xs">→ Transaction</Badge>
               )}
@@ -267,7 +268,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
     list = list.filter((t) => {
       if (filter === "open" && t.status !== "open" && t.status !== "in_progress") return false;
       if (filter === "overdue" && !isDuePast(t)) return false;
-      if (filter === "today" && !(t.due_date && isToday(parseISO(t.due_date)))) return false;
+      if (filter === "today" && !(t.due_date && (() => { try { return isToday(parseISO(t.due_date)); } catch { return false; } })())) return false;
       if (filter === "completed" && t.status !== "completed") return false;
       if (filterPerson && t.assigned_to_name !== filterPerson && t.assigned_to_email !== filterPerson) return false;
       if (filterEnterprise && t.enterprise !== filterEnterprise) return false;
