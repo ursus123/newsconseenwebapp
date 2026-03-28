@@ -5,7 +5,15 @@ import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import ProductForm from "../components/products/ProductForm";
-import ProductImportDialog from "../components/products/ProductImportDialog";
+import BulkImportDialog from "../components/shared/BulkImportDialog";
+import {
+  PRODUCT_FIELDS,
+  PRODUCT_MAPPING_RULES,
+  PRODUCT_TEMPLATE_EXAMPLE,
+  PRODUCT_TEMPLATE_INSTRUCTIONS,
+  validateProduct,
+  transformProduct,
+} from "@/components/shared/importConfigs";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { usePermissions } from "@/components/shared/usePermissions";
@@ -261,7 +269,29 @@ export default function Products() {
         onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)}
         onArchive={handleArchive} initialData={editing} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name} />
-      <ProductImportDialog open={importOpen} onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["products"] }); }} onImport={(row) => base44.entities.Product.create(withScope(row))} currentUser={currentUser} />
+      <BulkImportDialog
+        open={importOpen}
+        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["products"] }); }}
+        entityName="Products"
+        fields={PRODUCT_FIELDS}
+        mappingRules={PRODUCT_MAPPING_RULES}
+        templateFileName="newsconseen_products_import_template.xlsx"
+        templateExample={PRODUCT_TEMPLATE_EXAMPLE}
+        templateInstructions={PRODUCT_TEMPLATE_INSTRUCTIONS}
+        validateRow={validateProduct}
+        transformRow={(row) => transformProduct(row, currentUser)}
+        entityFetchFn={() => listFn(base44.entities.Product)}
+        onImport={async (row) => base44.entities.Product.create(withScope(row))}
+        currentUser={currentUser}
+        previewColumns={[
+          { label: "Product Name", render: (r) => r.name || <span className="text-rose-500">MISSING</span> },
+          { label: "Type",         render: (r) => r.item_type    || "—" },
+          { label: "Class",        render: (r) => (r.item_class?.[0] || r.item_class) || "—" },
+          { label: "UOM",          render: (r) => r.unit_of_measure || "—" },
+          { label: "Status",       render: (r) => r.status       || "active" },
+        ]}
+        requiredField="name"
+      />
     </div>
   );
 }

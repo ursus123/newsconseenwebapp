@@ -917,6 +917,169 @@ export const RELATIONSHIP_TEMPLATE_INSTRUCTIONS = [
   ["status","No","Status","active, ended, archived"],
 ];
 
+// ── PRODUCTS / ITEMS ──────────────────────────────────────────────────────
+export const PRODUCT_FIELDS = [
+  { key: "product_name",      label: "Product Name *",     required: true },
+  { key: "product_id",        label: "Product ID (External)" },
+  { key: "item_type",         label: "Item Type" },
+  { key: "item_subtype",      label: "Item Subtype" },
+  { key: "item_class",        label: "Item Class" },
+  { key: "item_brand",        label: "Brand" },
+  { key: "item_variant",      label: "Variant" },
+  { key: "unit_of_measure",   label: "Unit of Measure" },
+  { key: "stock_quantity",    label: "Stock Quantity" },
+  { key: "reorder_level",     label: "Reorder Level" },
+  { key: "expiry_date",       label: "Expiry Date" },
+  { key: "status",            label: "Status" },
+  { key: "description",       label: "Description" },
+  { key: "service_line",      label: "Service Line" },
+  { key: "billing_code",      label: "Billing Code" },
+  { key: "unit_price",        label: "Unit Price" },
+  { key: "min_hours",         label: "Min Hours" },
+  { key: "max_hours_per_day", label: "Max Hours Per Day" },
+  { key: "requires_license",  label: "Requires License" },
+  { key: "payer_eligible",    label: "Payer Eligible" },
+  { key: "internal_notes",    label: "Internal Notes" },
+  { key: "company_id",        label: "Company ID" },
+];
+
+export const PRODUCT_MAPPING_RULES = [
+  [/^product.?name$|^item.?name$|^name$|^title$/i,             "product_name"],
+  [/^product.?id$|^item.?id$|^sku$|^external.?id$/i,           "product_id"],
+  [/^item.?type$|^product.?type$|^type$/i,                     "item_type"],
+  [/^item.?subtype$|^subtype$|^sub.?type$|^category$/i,        "item_subtype"],
+  [/^item.?class$|^class$|^classification$/i,                  "item_class"],
+  [/^item.?brand$|^brand$|^manufacturer$/i,                    "item_brand"],
+  [/^item.?variant$|^variant$|^variation$|^model$/i,           "item_variant"],
+  [/^unit.?of.?measure$|^uom$|^unit.?type$|^billing.?unit$/i,  "unit_of_measure"],
+  [/^stock.?quantity$|^quantity$|^qty$|^on.?hand$/i,           "stock_quantity"],
+  [/^reorder.?level$|^reorder.?point$|^min.?stock$/i,          "reorder_level"],
+  [/^expiry.?date$|^expiration$|^expires$/i,                   "expiry_date"],
+  [/^status$/i,                                                "status"],
+  [/^service.?line$|^care.?line$/i,                            "service_line"],
+  [/^billing.?code$|^procedure.?code$|^cpt.?code$/i,           "billing_code"],
+  [/^unit.?price$|^price$|^rate$|^cost$/i,                     "unit_price"],
+  [/^min.?hours$|^minimum.?hours$/i,                           "min_hours"],
+  [/^max.?hours.?per.?day$|^max.?hours$|^daily.?limit$/i,      "max_hours_per_day"],
+  [/^requires.?license$|^licensed$|^needs.?license$/i,         "requires_license"],
+  [/^payer.?eligible$|^payers$|^insurance.?eligible$/i,        "payer_eligible"],
+  [/^description$|^details$|^summary$/i,                       "description"],
+  [/^internal.?notes$|^notes$|^comments$/i,                    "internal_notes"],
+  [/^company.?id$|^tenant$|^workspace$/i,                      "company_id"],
+];
+
+export const PRODUCT_TEMPLATE_EXAMPLE = {
+  product_id:        "SVC-001",
+  product_name:      "Companion Care - Standard",
+  item_type:         "service_package",
+  item_subtype:      "Consultation",
+  item_class:        "unrestricted",
+  service_line:      "Companion Care",
+  billing_code:      "S5125",
+  unit_of_measure:   "hour",
+  unit_price:        28,
+  min_hours:         2,
+  max_hours_per_day: 8,
+  requires_license:  "No",
+  payer_eligible:    "Private Pay; Long-Term Care Insurance",
+  status:            "active",
+  company_id:        "BRIGHTSTAR",
+};
+
+export const PRODUCT_TEMPLATE_INSTRUCTIONS = `
+Excel import instructions for Products / Items:
+
+REQUIRED: product_name
+
+ENUMS — use exact values:
+  item_type:        physical | living | digital | service_package | financial_instrument
+  item_class:       perishable | non_perishable | hazardous | controlled | regulated |
+                    unrestricted | serialized | non_serialized | consumable | reusable | returnable
+  unit_of_measure:  piece | box | kg | g | mg | liter | ml | hour | day | month | year |
+                    session | unit | kit | shift | head | flock | herd | license_seat
+  status:           active | inactive | archived
+
+NOTES:
+  • product_id     — your source system ID, stored in internal_notes as "External ID: XXX"
+  • unit_price     — stored in internal_notes as "Unit price: XX" (no price field in schema)
+  • service_line   — stored in internal_notes as "Service line: XXX"
+  • billing_code   — stored in internal_notes as "Billing code: XXX"
+  • min_hours      — stored in internal_notes
+  • max_hours_per_day — stored in internal_notes
+  • requires_license  — stored in internal_notes
+  • payer_eligible    — stored in internal_notes
+  • company_id     — auto-fills from your session if blank
+`;
+
+export function transformProduct(row, currentUser) {
+  const notes = [];
+  if (row.product_id)        notes.push(`External ID: ${row.product_id}`);
+  if (row.service_line)      notes.push(`Service line: ${row.service_line}`);
+  if (row.billing_code)      notes.push(`Billing code: ${row.billing_code}`);
+  if (row.unit_price)        notes.push(`Unit price: ${row.unit_price}`);
+  if (row.min_hours)         notes.push(`Min hours: ${row.min_hours}`);
+  if (row.max_hours_per_day) notes.push(`Max hours/day: ${row.max_hours_per_day}`);
+  if (row.requires_license)  notes.push(`Requires license: ${row.requires_license}`);
+  if (row.payer_eligible)    notes.push(`Payer eligible: ${row.payer_eligible}`);
+
+  const VALID_TYPES = ["physical","living","digital","service_package","financial_instrument"];
+  const itemType = VALID_TYPES.includes(row.item_type) ? row.item_type : "service_package";
+
+  const VALID_CLASS = ["perishable","non_perishable","hazardous","controlled","regulated",
+                       "unrestricted","serialized","non_serialized","consumable","reusable","returnable"];
+  const itemClass = VALID_CLASS.includes(row.item_class) ? row.item_class : undefined;
+
+  const VALID_UOM = ["piece","box","carton","pallet","bag","sachet","bottle","vial","kg","g",
+                     "mg","ton","lb","oz","liter","ml","gallon","meter","cm","head","flock",
+                     "herd","acre","hectare","license_seat","user_account","session","hour",
+                     "day","month","year","unit","kit","shift"];
+  const uom = VALID_UOM.includes(row.unit_of_measure) ? row.unit_of_measure : undefined;
+
+  const VALID_STATUS = ["active","inactive","archived"];
+  const status = VALID_STATUS.includes(row.status) ? row.status : "active";
+
+  const stockQty   = row.stock_quantity != null ? parseFloat(row.stock_quantity) : undefined;
+  const reorderLvl = row.reorder_level  != null ? parseFloat(row.reorder_level)  : undefined;
+
+  const existing = row.internal_notes ? [row.internal_notes] : [];
+  const internal_notes = [...existing, ...notes].join(" | ") || undefined;
+
+  return {
+    name:            row.product_name,
+    item_type:       itemType,
+    item_subtype:    row.item_subtype   || undefined,
+    item_class:      itemClass ? [itemClass] : undefined,
+    item_brand:      row.item_brand     || undefined,
+    item_variant:    row.item_variant   || undefined,
+    unit_of_measure: uom,
+    stock_quantity:  isNaN(stockQty)   ? undefined : stockQty,
+    min_stock_level: isNaN(reorderLvl) ? undefined : reorderLvl,
+    expiry_date:     row.expiry_date   || undefined,
+    status,
+    description:     row.description   || undefined,
+    internal_notes,
+    company_id:      row.company_id    || currentUser?.company_id,
+  };
+}
+
+export function validateProduct(row) {
+  const errors = [], warnings = [];
+  if (!row.product_name?.trim()) errors.push("product_name is required");
+  const VALID_TYPES = ["physical","living","digital","service_package","financial_instrument"];
+  if (row.item_type && !VALID_TYPES.includes(row.item_type)) {
+    warnings.push(`item_type "${row.item_type}" not recognised — will default to "service_package"`);
+  }
+  const VALID_CLASS = ["perishable","non_perishable","hazardous","controlled","regulated",
+                       "unrestricted","serialized","non_serialized","consumable","reusable","returnable"];
+  if (row.item_class && !VALID_CLASS.includes(row.item_class)) {
+    warnings.push(`item_class "${row.item_class}" not recognised`);
+  }
+  if (row.stock_quantity && isNaN(parseFloat(row.stock_quantity))) errors.push("stock_quantity must be a number");
+  if (row.reorder_level  && isNaN(parseFloat(row.reorder_level)))  errors.push("reorder_level must be a number");
+  if (row.expiry_date    && isNaN(Date.parse(row.expiry_date)))    warnings.push("expiry_date format unclear — use YYYY-MM-DD");
+  return { errors, warnings };
+}
+
 export function validateRelationship(row, { people = [], enterprises = [], products = [], services = [] } = {}) {
   const errors = [], warnings = [];
   const validTypes = ["person_enterprise","item_enterprise","item_person","person_service","enterprise_service","person_address","enterprise_address"];
