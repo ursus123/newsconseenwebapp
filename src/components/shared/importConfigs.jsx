@@ -646,31 +646,63 @@ export function validateService(row) {
 
 // ── ADDRESSES ─────────────────────────────────────────────────────────────
 export const ADDRESS_FIELDS = [
-  { key: "label", label: "Label" },
-  { key: "address_line1", label: "Address Line 1 *", required: true },
-  { key: "address_line2", label: "Address Line 2" },
-  { key: "city", label: "City *", required: true },
-  { key: "state_region", label: "State / Region" },
-  { key: "postal_code", label: "Postal Code" },
-  { key: "country", label: "Country *", required: true },
-  { key: "latitude", label: "Latitude" },
-  { key: "longitude", label: "Longitude" },
-  { key: "status", label: "Status" },
-  { key: "internal_notes", label: "Internal Notes" },
+  { key: "address_line1",        label: "Address Line 1 *", required: true },
+  { key: "city",                 label: "City *",           required: true },
+  { key: "country",              label: "Country *",        required: true },
+  { key: "address_id",           label: "Address ID (External)" },
+  { key: "address_line",         label: "Address Line" },
+  { key: "address_line2",        label: "Address Line 2" },
+  { key: "label",                label: "Label" },
+  { key: "state_region",         label: "State / Region" },
+  { key: "zip_code",             label: "ZIP Code" },
+  { key: "postal_code",          label: "Postal Code" },
+  { key: "latitude",             label: "Latitude" },
+  { key: "longitude",            label: "Longitude" },
+  { key: "has_coordinates",      label: "Has Coordinates" },
+  { key: "linked_enterprise_id", label: "Linked Enterprise ID" },
+  { key: "linked_person_id",     label: "Linked Person ID" },
+  { key: "is_primary",           label: "Is Primary" },
+  { key: "is_active",            label: "Is Active" },
+  { key: "status",               label: "Status" },
+  { key: "internal_notes",       label: "Internal Notes" },
+  { key: "company_id",           label: "Company ID" },
 ];
 
 export const ADDRESS_MAPPING_RULES = [
-  [/^label$|^name$|^title$/i, "label"],
-  [/^address$|address.?line.?1|street/i, "address_line1"],
-  [/address.?line.?2|suite|apt|unit/i, "address_line2"],
-  [/^city$|^town$/i, "city"],
-  [/state|region|province/i, "state_region"],
-  [/zip|postal|post.?code/i, "postal_code"],
-  [/^country$/i, "country"],
-  [/^lat$|latitude/i, "latitude"],
-  [/^lon$|^long$|longitude/i, "longitude"],
-  [/^status$/i, "status"],
-  [/notes/i, "internal_notes"],
+  // ID
+  [/^address.?id$|^external.?id$/i,                          "address_id"],
+
+  // Label
+  [/^label$|^address.?label$|^location.?name$/i,             "label"],
+
+  // Address lines — zip/postal BEFORE address so "address" doesn't steal them
+  [/^zip.?code$|^zip$|^zip.?code$/i,                         "zip_code"],
+  [/^postal.?code$|^postcode$|^post.?code$/i,                "postal_code"],
+  [/^address.?line$|^address.?line.?1$|^street$|^address$/i, "address_line1"],
+  [/^address.?line.?2$|^suite$|^apt$|^unit$/i,               "address_line2"],
+
+  // Location
+  [/^city$|^town$|^locality$/i,                              "city"],
+  [/^state.?region$|^state$|^region$|^province$/i,           "state_region"],
+  [/^country$|^nation$/i,                                    "country"],
+
+  // Coordinates
+  [/^latitude$|^lat$/i,                                      "latitude"],
+  [/^longitude$|^lon$|^lng$/i,                               "longitude"],
+  [/^has.?coordinates$|^geocoded$/i,                         "has_coordinates"],
+
+  // Linked entities
+  [/^linked.?enterprise.?id$|^enterprise.?id$|^branch.?id$/i,"linked_enterprise_id"],
+  [/^linked.?person.?id$|^person.?id$|^client.?id$/i,        "linked_person_id"],
+
+  // Flags
+  [/^is.?primary$|^primary.?address$/i,                      "is_primary"],
+  [/^is.?active$|^active$/i,                                 "is_active"],
+  [/^status$/i,                                              "status"],
+
+  // Text — broadest last
+  [/^internal.?notes$|^notes$|^comments$/i,                  "internal_notes"],
+  [/^company.?id$|^tenant$|^workspace$/i,                    "company_id"],
 ];
 
 export const ADDRESS_TEMPLATE_EXAMPLE = {
@@ -692,18 +724,53 @@ export const ADDRESS_TEMPLATE_INSTRUCTIONS = [
   ["status","No","Status","active, archived"],
 ];
 
-export function transformAddress(row) {
-  ["latitude","longitude"].forEach((k) => {
-    if (row[k]) { const n = parseFloat(row[k]); row[k] = isNaN(n) ? undefined : n; }
+export function transformAddress(row, currentUser) {
+  const notes = [];
+  if (row.address_id)           notes.push(`External ID: ${row.address_id}`);
+  if (row.linked_enterprise_id) notes.push(`Linked enterprise: ${row.linked_enterprise_id}`);
+  if (row.linked_person_id)     notes.push(`Linked person: ${row.linked_person_id}`);
+  if (row.has_coordinates)      notes.push(`Has coordinates: ${row.has_coordinates}`);
+
+  // address_line maps to address_line1
+  const line1 = row.address_line1 || row.address_line || undefined;
+
+  // zip_code maps to postal_code if postal_code blank
+  const postal = row.postal_code || row.zip_code || undefined;
+
+  // is_active → status
+  let status = row.status;
+  if (!status) status = row.is_active === false || row.is_active === "false"
+    ? "archived" : "active";
+
+  ["latitude","longitude"].forEach(k => {
+    if (row[k] != null && row[k] !== "") {
+      const n = parseFloat(row[k]); row[k] = isNaN(n) ? undefined : n;
+    }
   });
-  return row;
+
+  const existing = row.internal_notes ? [row.internal_notes] : [];
+  return {
+    label:          row.label         || undefined,
+    address_line1:  line1,
+    address_line2:  row.address_line2 || undefined,
+    city:           row.city,
+    state_region:   row.state_region  || undefined,
+    postal_code:    postal,
+    country:        row.country,
+    latitude:       row.latitude      || undefined,
+    longitude:      row.longitude     || undefined,
+    status:         ["active","archived"].includes(status) ? status : "active",
+    internal_notes: [...existing, ...notes].join(" | ") || undefined,
+    company_id:     row.company_id || currentUser?.company_id,
+  };
 }
 
 export function validateAddress(row) {
   const errors = [], warnings = [];
-  if (!row.address_line1) errors.push("address_line1 required");
-  if (!row.city) errors.push("city required");
-  if (!row.country) errors.push("country required");
+  const line1 = row.address_line1 || row.address_line;
+  if (!line1)      errors.push("address_line1 is required");
+  if (!row.city)   errors.push("city is required");
+  if (!row.country)errors.push("country is required");
   if (row.latitude != null && row.latitude !== "") {
     const n = parseFloat(row.latitude);
     if (isNaN(n) || n < -90 || n > 90) errors.push("latitude must be between -90 and 90");
@@ -717,41 +784,84 @@ export function validateAddress(row) {
 
 // ── TASKS ─────────────────────────────────────────────────────────────────
 export const TASK_FIELDS = [
-  { key: "task_type", label: "Task Type *", required: true },
-  { key: "title", label: "Title *", required: true },
-  { key: "status", label: "Status" },
-  { key: "priority", label: "Priority" },
-  { key: "assigned_to_name", label: "Assigned To Name" },
+  { key: "task_type",         label: "Task Type *",     required: true },
+  { key: "title",             label: "Title *",         required: true },
+  { key: "task_id",           label: "Task ID (External)" },
+  { key: "description",       label: "Description" },
+  { key: "status",            label: "Status" },
+  { key: "priority",          label: "Priority" },
+  { key: "assigned_to_id",    label: "Assigned To ID" },
+  { key: "assigned_to_name",  label: "Assigned To Name" },
   { key: "assigned_to_email", label: "Assigned To Email" },
-  { key: "enterprise", label: "Enterprise" },
-  { key: "related_person", label: "Related Person" },
-  { key: "related_item", label: "Related Item" },
-  { key: "scheduled_date", label: "Scheduled Date" },
-  { key: "scheduled_time", label: "Scheduled Time" },
-  { key: "due_date", label: "Due Date" },
-  { key: "due_time", label: "Due Time" },
-  { key: "outcome", label: "Outcome" },
-  { key: "outcome_notes", label: "Outcome Notes" },
-  { key: "internal_notes", label: "Internal Notes" },
+  { key: "client_id",         label: "Client ID (External)" },
+  { key: "client_name",       label: "Client Name" },
+  { key: "enterprise_id",     label: "Enterprise ID (External)" },
+  { key: "enterprise_name",   label: "Enterprise Name" },
+  { key: "enterprise",        label: "Enterprise" },
+  { key: "service_line",      label: "Service Line" },
+  { key: "scheduled_date",    label: "Scheduled Date" },
+  { key: "due_date",          label: "Due Date" },
+  { key: "completed_date",    label: "Completed Date" },
+  { key: "duration_hours",    label: "Duration (Hours)" },
+  { key: "outcome",           label: "Outcome" },
+  { key: "outcome_notes",     label: "Outcome Notes" },
+  { key: "related_person",    label: "Related Person" },
+  { key: "related_item",      label: "Related Item" },
+  { key: "internal_notes",    label: "Internal Notes" },
+  { key: "company_id",        label: "Company ID" },
 ];
 
 export const TASK_MAPPING_RULES = [
-  [/task.?type|^type$/i, "task_type"],
-  [/^title$|summary|description/i, "title"],
-  [/^status$/i, "status"],
-  [/priority/i, "priority"],
-  [/assigned.?to.?name|assignee.?name/i, "assigned_to_name"],
-  [/assigned.?to.?email|assignee.?email/i, "assigned_to_email"],
-  [/enterprise|company/i, "enterprise"],
-  [/person|client|patient/i, "related_person"],
-  [/item|product/i, "related_item"],
-  [/scheduled.?date|schedule.?date/i, "scheduled_date"],
-  [/scheduled.?time|schedule.?time/i, "scheduled_time"],
-  [/due.?date/i, "due_date"],
-  [/due.?time/i, "due_time"],
-  [/outcome.?notes|result.?notes/i, "outcome_notes"],
-  [/^outcome$|result/i, "outcome"],
-  [/notes/i, "internal_notes"],
+  // Type and ID — most specific first
+  [/^task.?type$|^type$/i,                               "task_type"],
+  [/^task.?id$|^external.?id$/i,                         "task_id"],
+
+  // Title — anchored so description doesn't get captured here
+  [/^title$|^subject$|^name$/i,                          "title"],
+
+  // Description — separate from title
+  [/^description$|^detail$|^summary$/i,                  "description"],
+
+  // Status and priority
+  [/^status$/i,                                          "status"],
+  [/^priority$|^urgency$/i,                              "priority"],
+
+  // Assignment — ID before name
+  [/^assigned.?to.?id$|^assignee.?id$|^staff.?id$/i,    "assigned_to_id"],
+  [/^assigned.?to.?name$|^assignee.?name$|^assigned.?to$/i, "assigned_to_name"],
+  [/^assigned.?to.?email$|^assignee.?email$/i,           "assigned_to_email"],
+
+  // Client — ID before name, anchored to avoid stealing enterprise fields
+  [/^client.?id$|^patient.?id$|^person.?id$/i,          "client_id"],
+  [/^client.?name$|^patient.?name$|^person.?name$/i,     "client_name"],
+
+  // Enterprise — ID before name, anchored so company_id not captured here
+  [/^enterprise.?id$|^branch.?id$|^location.?id$/i,     "enterprise_id"],
+  [/^enterprise.?name$|^branch.?name$/i,                 "enterprise_name"],
+  [/^enterprise$|^company$|^branch$/i,                   "enterprise"],
+
+  // Service
+  [/^service.?line$|^care.?line$/i,                      "service_line"],
+
+  // Dates — completed before scheduled/due to avoid partial match confusion
+  [/^completed.?date$|^finish.?date$|^done.?date$/i,     "completed_date"],
+  [/^scheduled.?date$|^schedule.?date$|^planned.?date$/i,"scheduled_date"],
+  [/^due.?date$|^deadline$/i,                            "due_date"],
+
+  // Duration
+  [/^duration.?hours$|^hours$|^duration$/i,              "duration_hours"],
+
+  // Outcome — notes before outcome so outcome_notes doesn't match outcome
+  [/^outcome.?notes$|^result.?notes$/i,                  "outcome_notes"],
+  [/^outcome$|^result$/i,                                "outcome"],
+
+  // Related entities
+  [/^related.?person$|^linked.?person$/i,                "related_person"],
+  [/^related.?item$|^linked.?item$|^product$/i,          "related_item"],
+
+  // Text — broadest last
+  [/^internal.?notes$|^notes$|^comments$/i,              "internal_notes"],
+  [/^company.?id$|^tenant$|^workspace$/i,                "company_id"],
 ];
 
 export const TASK_TEMPLATE_EXAMPLE = {
@@ -776,59 +886,144 @@ export const TASK_TEMPLATE_INSTRUCTIONS = [
 
 export function validateTask(row) {
   const errors = [], warnings = [];
-  if (!row.task_type) errors.push("task_type required");
-  if (!row.title) errors.push("title required");
-  const validStatuses = ["open","in_progress","completed","cancelled"];
-  if (row.status && !validStatuses.includes(row.status)) warnings.push(`Unknown status "${row.status}" — defaulting to open`);
-  const validPriorities = ["low","normal","high","urgent"];
-  if (row.priority && !validPriorities.includes(row.priority)) warnings.push(`Unknown priority "${row.priority}" — defaulting to normal`);
-  if (row.scheduled_date && isNaN(Date.parse(row.scheduled_date))) warnings.push("scheduled_date format unclear");
-  if (row.due_date && isNaN(Date.parse(row.due_date))) warnings.push("due_date format unclear");
+  if (!row.task_type) errors.push("task_type is required");
+  if (!row.title)     errors.push("title is required");
+  const VALID_STATUSES = ["open","in_progress","completed","cancelled"];
+  if (row.status && !VALID_STATUSES.includes(row.status))
+    warnings.push(`status "${row.status}" not recognised — defaulting to "open"`);
+  const VALID_PRIORITIES = ["low","normal","high","urgent"];
+  if (row.priority && !VALID_PRIORITIES.includes(row.priority))
+    warnings.push(`priority "${row.priority}" not recognised — defaulting to "normal"`);
+  if (row.scheduled_date && isNaN(Date.parse(row.scheduled_date)))
+    warnings.push("scheduled_date format unclear — use YYYY-MM-DD");
+  if (row.due_date && isNaN(Date.parse(row.due_date)))
+    warnings.push("due_date format unclear — use YYYY-MM-DD");
   return { errors, warnings };
 }
 
-export function transformTask(row) {
-  if (!row.status) row.status = "open";
-  if (!row.priority) row.priority = "normal";
-  if (!row.outcome) row.outcome = "pending";
-  return row;
+export function transformTask(row, currentUser) {
+  const notes = [];
+  if (row.task_id)        notes.push(`External ID: ${row.task_id}`);
+  if (row.client_id)      notes.push(`Client ID: ${row.client_id}`);
+  if (row.enterprise_id)  notes.push(`Enterprise ID: ${row.enterprise_id}`);
+  if (row.service_line)   notes.push(`Service line: ${row.service_line}`);
+  if (row.duration_hours) notes.push(`Duration: ${row.duration_hours}h`);
+
+  // Merge client_name → related_person if not already set
+  const relatedPerson = row.related_person || row.client_name || undefined;
+  // Merge enterprise_name → enterprise if not already set
+  const enterprise = row.enterprise || row.enterprise_name || undefined;
+
+  const VALID_TYPES = ["clock_in","clock_out","stock_counting","maintenance",
+                       "medication_admin","other","care_visit","assessment",
+                       "wound_care","therapy_session","supervision",
+                       "documentation","medication_management"];
+  const taskType = VALID_TYPES.includes(row.task_type) ? row.task_type : "other";
+
+  const existing = row.internal_notes ? [row.internal_notes] : [];
+  return {
+    task_type:        taskType,
+    title:            row.title,
+    description:      row.description      || undefined,
+    status:           ["open","in_progress","completed","cancelled"].includes(row.status)
+                        ? row.status : "open",
+    priority:         ["low","normal","high","urgent"].includes(row.priority)
+                        ? row.priority : "normal",
+    assigned_to_name: row.assigned_to_name || undefined,
+    assigned_to_email:row.assigned_to_email|| undefined,
+    enterprise,
+    related_person:   relatedPerson,
+    scheduled_date:   row.scheduled_date   || undefined,
+    due_date:         row.due_date         || undefined,
+    outcome:          row.outcome          || "pending",
+    outcome_notes:    row.outcome_notes    || undefined,
+    internal_notes:   [...existing, ...notes].join(" | ") || undefined,
+    company_id:       row.company_id || currentUser?.company_id,
+  };
 }
 
 // ── TRANSACTIONS ───────────────────────────────────────────────────────────
 export const TRANSACTION_FIELDS = [
-  { key: "transaction_type", label: "Transaction Type *", required: true },
-  { key: "date", label: "Date *", required: true },
-  { key: "status", label: "Status" },
-  { key: "enterprise", label: "Enterprise" },
-  { key: "primary_person", label: "Primary Person" },
-  { key: "counterparty", label: "Counterparty" },
-  { key: "description", label: "Description" },
-  { key: "amount", label: "Amount" },
-  { key: "tax_amount", label: "Tax Amount" },
-  { key: "payment_method", label: "Payment Method" },
-  { key: "payment_status", label: "Payment Status" },
-  { key: "amount_paid", label: "Amount Paid" },
-  { key: "due_date", label: "Due Date" },
-  { key: "reference_number", label: "Reference Number" },
-  { key: "internal_notes", label: "Internal Notes" },
+  { key: "transaction_type",  label: "Transaction Type *", required: true },
+  { key: "date",              label: "Date *",             required: true },
+  { key: "transaction_id",    label: "Transaction ID (External)" },
+  { key: "transaction_date",  label: "Transaction Date" },
+  { key: "status",            label: "Status" },
+  { key: "payment_status",    label: "Payment Status" },
+  { key: "amount",            label: "Amount" },
+  { key: "currency",          label: "Currency" },
+  { key: "due_date",          label: "Due Date" },
+  { key: "enterprise",        label: "Enterprise Name" },
+  { key: "branch_id",         label: "Branch ID" },
+  { key: "primary_person",    label: "Primary Person" },
+  { key: "counterparty",      label: "Counterparty" },
+  { key: "client_id",         label: "Client ID (External)" },
+  { key: "client_name",       label: "Client Name" },
+  { key: "service_id",        label: "Service ID" },
+  { key: "service_name",      label: "Service Name" },
+  { key: "service_line",      label: "Service Line" },
+  { key: "payer_type",        label: "Payer Type" },
+  { key: "billing_code",      label: "Billing Code" },
+  { key: "hours_billed",      label: "Hours Billed" },
+  { key: "rate_per_hour",     label: "Rate Per Hour" },
+  { key: "invoice_number",    label: "Invoice Number" },
+  { key: "reference_number",  label: "Reference Number" },
+  { key: "tax_amount",        label: "Tax Amount" },
+  { key: "amount_paid",       label: "Amount Paid" },
+  { key: "payment_method",    label: "Payment Method" },
+  { key: "description",       label: "Description" },
+  { key: "internal_notes",    label: "Internal Notes" },
+  { key: "company_id",        label: "Company ID" },
 ];
 
 export const TRANSACTION_MAPPING_RULES = [
-  [/transaction.?type|^type$/i, "transaction_type"],
-  [/^date$|transaction.?date|event.?date/i, "date"],
-  [/^status$/i, "status"],
-  [/enterprise|company|branch/i, "enterprise"],
-  [/primary.?person|staff|employee/i, "primary_person"],
-  [/counterparty|customer|supplier|vendor|patient/i, "counterparty"],
-  [/description|reason/i, "description"],
-  [/^amount$|total|gross/i, "amount"],
-  [/tax/i, "tax_amount"],
-  [/payment.?method|method/i, "payment_method"],
-  [/payment.?status/i, "payment_status"],
-  [/amount.?paid|paid/i, "amount_paid"],
-  [/due.?date/i, "due_date"],
-  [/reference|ref.?no|invoice.?no/i, "reference_number"],
-  [/notes/i, "internal_notes"],
+  // Type and ID — most specific first
+  [/^transaction.?type$|^tx.?type$|^type$/i,           "transaction_type"],
+  [/^transaction.?id$|^tx.?id$|^external.?id$/i,       "transaction_id"],
+
+  // Date — transaction_date before generic date
+  [/^transaction.?date$|^tx.?date$/i,                   "transaction_date"],
+  [/^date$|^event.?date$/i,                             "date"],
+  [/^due.?date$/i,                                      "due_date"],
+
+  // Status fields — anchored
+  [/^status$/i,                                         "status"],
+  [/^payment.?status$|^pay.?status$/i,                  "payment_status"],
+  [/^payment.?method$|^pay.?method$|^method$/i,         "payment_method"],
+
+  // Amounts — specific before generic
+  [/^amount.?paid$|^paid.?amount$/i,                    "amount_paid"],
+  [/^tax.?amount$|^tax$/i,                              "tax_amount"],
+  [/^amount$|^total$|^gross.?amount$/i,                 "amount"],
+  [/^currency$|^currency.?code$/i,                      "currency"],
+
+  // BrightStar billing fields
+  [/^hours.?billed$|^billed.?hours$/i,                  "hours_billed"],
+  [/^rate.?per.?hour$|^hourly.?rate$|^rate$/i,          "rate_per_hour"],
+  [/^invoice.?number$|^invoice.?no$|^inv.?no$/i,        "invoice_number"],
+  [/^billing.?code$|^procedure.?code$/i,                "billing_code"],
+  [/^payer.?type$|^payer$|^insurance.?type$/i,          "payer_type"],
+  [/^service.?line$|^care.?line$/i,                     "service_line"],
+
+  // IDs before names — prevents _id being captured by _name rule
+  [/^client.?id$|^patient.?id$/i,                       "client_id"],
+  [/^client.?name$|^patient.?name$/i,                   "client_name"],
+  [/^service.?id$|^product.?id$/i,                      "service_id"],
+  [/^service.?name$|^product.?name$/i,                  "service_name"],
+  [/^branch.?id$|^location.?id$/i,                      "branch_id"],
+
+  // Enterprise — anchored, after branch_id
+  [/^enterprise.?name$|^enterprise$|^company.?name$/i,  "enterprise"],
+  [/^primary.?person$|^staff.?name$|^assigned.?to$/i,   "primary_person"],
+  [/^counterparty$|^customer$|^vendor$|^supplier$/i,    "counterparty"],
+
+  // Reference
+  [/^reference.?number$|^ref.?no$|^reference$/i,        "reference_number"],
+
+  // Text — broadest last
+  [/^description$|^reason$/i,                           "description"],
+  [/^internal.?notes$|^notes$|^comments$/i,             "internal_notes"],
+  [/^company.?id$|^tenant$|^workspace$/i,               "company_id"],
 ];
 
 export const TRANSACTION_TEMPLATE_EXAMPLE = {
@@ -854,49 +1049,122 @@ export const TRANSACTION_TEMPLATE_INSTRUCTIONS = [
 
 export function validateTransaction(row) {
   const errors = [], warnings = [];
-  if (!row.transaction_type) errors.push("transaction_type required");
-  if (!row.date) errors.push("date required");
-  if (row.date && isNaN(Date.parse(row.date))) errors.push("date format invalid — use YYYY-MM-DD");
-  const validTypes = ["stock_in","stock_out","stock_transfer","item_assignment","item_return","sale_service","expense","adjustment","attendance"];
-  if (row.transaction_type && !validTypes.includes(row.transaction_type)) errors.push(`Invalid transaction_type: ${row.transaction_type}`);
-  if (row.amount && isNaN(parseFloat(row.amount))) errors.push("amount must be numeric");
+  if (!row.transaction_type) errors.push("transaction_type is required");
+  const date = row.date || row.transaction_date;
+  if (!date) errors.push("date is required");
+  else if (isNaN(Date.parse(date))) errors.push("date format invalid — use YYYY-MM-DD");
+  const VALID_TYPES = ["stock_in","stock_out","stock_transfer","item_assignment",
+                       "item_return","sale_service","expense","adjustment",
+                       "attendance","product_sale","payroll","service_fee",
+                       "contractor_payment","utility_expense","supply_purchase"];
+  if (row.transaction_type && !VALID_TYPES.includes(row.transaction_type))
+    warnings.push(`transaction_type "${row.transaction_type}" not in standard list — will import as-is`);
+  if (row.amount && isNaN(parseFloat(row.amount))) errors.push("amount must be a number");
   return { errors, warnings };
 }
 
-export function transformTransaction(row) {
-  if (!row.status) row.status = "draft";
-  if (!row.payment_status) row.payment_status = "na";
-  ["amount","tax_amount","amount_paid"].forEach((k) => {
-    if (row[k] != null && row[k] !== "") { const n = parseFloat(row[k]); row[k] = isNaN(n) ? undefined : n; }
+export function transformTransaction(row, currentUser) {
+  const notes = [];
+  if (row.transaction_id)  notes.push(`External ID: ${row.transaction_id}`);
+  if (row.client_id)       notes.push(`Client ID: ${row.client_id}`);
+  if (row.service_id)      notes.push(`Service ID: ${row.service_id}`);
+  if (row.branch_id)       notes.push(`Branch ID: ${row.branch_id}`);
+  if (row.service_line)    notes.push(`Service line: ${row.service_line}`);
+  if (row.billing_code)    notes.push(`Billing code: ${row.billing_code}`);
+  if (row.hours_billed)    notes.push(`Hours billed: ${row.hours_billed}`);
+  if (row.rate_per_hour)   notes.push(`Rate/hr: ${row.rate_per_hour}`);
+  if (row.payer_type)      notes.push(`Payer: ${row.payer_type}`);
+  if (row.currency && row.currency !== "USD")
+    notes.push(`Currency: ${row.currency}`);
+
+  // Use transaction_date if date is blank
+  const txDate = row.date || row.transaction_date;
+
+  // Use client_name as counterparty if counterparty blank
+  const counterparty = row.counterparty || row.client_name || undefined;
+
+  // Use invoice_number as reference_number if blank
+  const reference = row.reference_number || row.invoice_number || undefined;
+
+  const VALID_TYPES = ["stock_in","stock_out","stock_transfer","item_assignment",
+                       "item_return","sale_service","expense","adjustment",
+                       "attendance","product_sale","payroll","service_fee",
+                       "contractor_payment","utility_expense","supply_purchase"];
+  const txType = VALID_TYPES.includes(row.transaction_type)
+    ? row.transaction_type : "sale_service";
+
+  ["amount","tax_amount","amount_paid","hours_billed","rate_per_hour"].forEach(k => {
+    if (row[k] != null && row[k] !== "") {
+      const n = parseFloat(row[k]);
+      row[k] = isNaN(n) ? undefined : n;
+    }
   });
-  return row;
+
+  const existing = row.internal_notes ? [row.internal_notes] : [];
+  return {
+    transaction_type: txType,
+    date:             txDate,
+    status:           ["draft","posted","voided"].includes(row.status)
+                        ? row.status : "draft",
+    payment_status:   ["paid","unpaid","partial","na"].includes(row.payment_status)
+                        ? row.payment_status : "na",
+    amount:           row.amount,
+    tax_amount:       row.tax_amount,
+    amount_paid:      row.amount_paid,
+    due_date:         row.due_date       || undefined,
+    enterprise:       row.enterprise     || undefined,
+    primary_person:   row.primary_person || undefined,
+    counterparty,
+    description:      row.description   || undefined,
+    reference_number: reference,
+    payment_method:   row.payment_method || undefined,
+    internal_notes:   [...existing, ...notes].join(" | ") || undefined,
+    company_id:       row.company_id || currentUser?.company_id,
+  };
 }
 
 // ── RELATIONSHIPS ─────────────────────────────────────────────────────────
 export const RELATIONSHIP_FIELDS = [
-  { key: "relationship_type", label: "Relationship Type *", required: true },
-  { key: "person_name", label: "Person Name" },
-  { key: "enterprise_name", label: "Enterprise Name" },
-  { key: "item_name", label: "Item Name" },
-  { key: "service_name", label: "Service Name" },
-  { key: "role", label: "Role" },
-  { key: "start_date", label: "Start Date" },
-  { key: "end_date", label: "End Date" },
-  { key: "status", label: "Status" },
-  { key: "notes", label: "Notes" },
+  { key: "relationship_type",  label: "Relationship Type *", required: true },
+  { key: "relationship_id",    label: "Relationship ID (External)" },
+  { key: "person_name",        label: "Person Name" },
+  { key: "person_id",          label: "Person ID (External)" },
+  { key: "enterprise_name",    label: "Enterprise Name" },
+  { key: "enterprise_id",      label: "Enterprise ID (External)" },
+  { key: "item_name",          label: "Item Name" },
+  { key: "item_id",            label: "Item ID (External)" },
+  { key: "role",               label: "Role" },
+  { key: "start_date",         label: "Start Date" },
+  { key: "end_date",           label: "End Date" },
+  { key: "status",             label: "Status" },
+  { key: "notes",              label: "Notes" },
+  { key: "company_id",         label: "Company ID" },
 ];
 
 export const RELATIONSHIP_MAPPING_RULES = [
-  [/relationship.?type|^type$/i, "relationship_type"],
-  [/person.?name|person/i, "person_name"],
-  [/enterprise.?name|enterprise|company/i, "enterprise_name"],
-  [/item.?name|item|product/i, "item_name"],
-  [/service.?name|service/i, "service_name"],
-  [/^role$|position/i, "role"],
-  [/start.?date|^start$/i, "start_date"],
-  [/end.?date|^end$/i, "end_date"],
-  [/^status$/i, "status"],
-  [/notes/i, "notes"],
+  // Type — most specific first
+  [/^relationship.?type$|^rel.?type$/i,            "relationship_type"],
+  [/^relationship.?id$|^rel.?id$|^external.?id$/i, "relationship_id"],
+
+  // Person — ID before NAME so person_id doesn't match person_name rule
+  [/^person.?id$|^client.?id$|^staff.?id$|^contact.?id$/i, "person_id"],
+  [/^person.?name$|^client.?name$|^staff.?name$/i,          "person_name"],
+
+  // Enterprise — ID before NAME
+  [/^enterprise.?id$|^branch.?id$|^org.?id$/i,     "enterprise_id"],
+  [/^enterprise.?name$|^branch.?name$|^org.?name$/i,"enterprise_name"],
+
+  // Item — ID before NAME
+  [/^item.?id$|^product.?id$|^service.?id$/i,      "item_id"],
+  [/^item.?name$|^product.?name$|^service.?name$/i, "item_name"],
+
+  // Other fields
+  [/^role$|^position$|^relationship.?role$/i,       "role"],
+  [/^start.?date$|^from.?date$/i,                   "start_date"],
+  [/^end.?date$|^to.?date$/i,                       "end_date"],
+  [/^status$/i,                                     "status"],
+  [/^company.?id$|^tenant$|^workspace$/i,           "company_id"],
+  [/^notes$|^internal.?notes$|^comments$/i,         "notes"],
 ];
 
 export const RELATIONSHIP_TEMPLATE_EXAMPLE = {
@@ -1080,30 +1348,51 @@ export function validateProduct(row) {
   return { errors, warnings };
 }
 
-export function validateRelationship(row, { people = [], enterprises = [], products = [], services = [] } = {}) {
+export function transformRelationship(row, currentUser) {
+  const notes = [];
+  if (row.relationship_id) notes.push(`External ID: ${row.relationship_id}`);
+  if (row.person_id)       notes.push(`Person external ID: ${row.person_id}`);
+  if (row.enterprise_id)   notes.push(`Enterprise external ID: ${row.enterprise_id}`);
+  if (row.item_id)         notes.push(`Item external ID: ${row.item_id}`);
+
+  const VALID_TYPES = ["person_enterprise","item_enterprise","item_person",
+                       "person_service","enterprise_service","person_address",
+                       "enterprise_address","person_item","enterprise_item",
+                       "person_person","enterprise_enterprise"];
+  const relType = VALID_TYPES.includes(row.relationship_type)
+    ? row.relationship_type : "person_enterprise";
+
+  const existing = row.notes ? [row.notes] : [];
+  return {
+    relationship_type: relType,
+    person_name:       row.person_name   || undefined,
+    enterprise_name:   row.enterprise_name || undefined,
+    item_name:         row.item_name     || undefined,
+    service_name:      row.service_name  || undefined,
+    role:              row.role          || undefined,
+    start_date:        row.start_date    || undefined,
+    end_date:          row.end_date      || undefined,
+    status:            ["active","ended","archived"].includes(row.status)
+                         ? row.status : "active",
+    notes:             [...existing, ...notes].join(" | ") || undefined,
+    company_id:        row.company_id || currentUser?.company_id,
+  };
+}
+
+export function validateRelationship(row) {
   const errors = [], warnings = [];
-  const validTypes = ["person_enterprise","item_enterprise","item_person","person_service","enterprise_service","person_address","enterprise_address"];
-  if (!row.relationship_type) { errors.push("relationship_type required"); return { errors, warnings }; }
-  if (!validTypes.includes(row.relationship_type)) errors.push(`Invalid relationship_type: ${row.relationship_type}`);
-
-  const type = row.relationship_type;
-  if (type.includes("person") && !row.person_name) errors.push("person_name required for this type");
-  if (type.includes("enterprise") && !row.enterprise_name) errors.push("enterprise_name required for this type");
-  if (type.includes("item") && !row.item_name) errors.push("item_name required for this type");
-
-  // Existence checks (warnings, not errors)
-  if (row.person_name && people.length && !people.find((p) => `${p.first_name} ${p.last_name}`.trim() === row.person_name.trim())) {
-    warnings.push(`Person "${row.person_name}" not found — will be imported as-is`);
+  const VALID_TYPES = ["person_enterprise","item_enterprise","item_person",
+                       "person_service","enterprise_service","person_address",
+                       "enterprise_address","person_item","enterprise_item",
+                       "person_person","enterprise_enterprise"];
+  if (!row.relationship_type) {
+    errors.push("relationship_type is required");
+  } else if (!VALID_TYPES.includes(row.relationship_type)) {
+    errors.push(`relationship_type "${row.relationship_type}" not valid`);
   }
-  if (row.enterprise_name && enterprises.length && !enterprises.find((e) => e.enterprise_name === row.enterprise_name)) {
-    warnings.push(`Enterprise "${row.enterprise_name}" not found — will be imported as-is`);
-  }
-  if (row.item_name && products.length && !products.find((p) => p.name === row.item_name)) {
-    warnings.push(`Item "${row.item_name}" not found — will be imported as-is`);
-  }
-
-  if (row.start_date && isNaN(Date.parse(row.start_date))) errors.push("start_date invalid format");
-  if (row.end_date && row.start_date && new Date(row.end_date) < new Date(row.start_date)) errors.push("end_date must be after start_date");
-
+  if (row.start_date && isNaN(Date.parse(row.start_date)))
+    warnings.push("start_date format unclear — use YYYY-MM-DD");
+  if (row.end_date && row.start_date && new Date(row.end_date) < new Date(row.start_date))
+    errors.push("end_date must be after start_date");
   return { errors, warnings };
 }
