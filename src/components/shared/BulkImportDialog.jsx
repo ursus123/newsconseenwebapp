@@ -227,6 +227,13 @@ export default function BulkImportDialog({
   const [existingRecords, setExistingRecords] = useState([]);
   const [fetchingExisting, setFetchingExisting] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set());
+  const [auditPage, setAuditPage] = useState(0);
+  const AUDIT_PAGE_SIZE = 50;
+  const auditPageCount = Math.ceil(auditRows.length / AUDIT_PAGE_SIZE);
+  const visibleAuditRows = auditRows.slice(
+    auditPage * AUDIT_PAGE_SIZE,
+    (auditPage + 1) * AUDIT_PAGE_SIZE
+  );
 
   // Import state
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -359,6 +366,12 @@ export default function BulkImportDialog({
   // ── Proceed to audit step ─────────────────────────────────────────────
   const goToAudit = async () => {
     const mapped = buildMappedRows();
+
+    // Warn for very large datasets
+    if (mapped.length > 500) {
+      console.info(`Large import: ${mapped.length} rows. Audit table will paginate.`);
+    }
+
     setPreview(mapped);
     setStep("audit");
     setFetchingExisting(true);
@@ -377,6 +390,9 @@ export default function BulkImportDialog({
       runAudit(preview, existingRecords);
     }
   }, [existingRecords, fetchingExisting]);
+
+  // Reset audit page when rows change
+  useEffect(() => { setAuditPage(0); }, [auditRows.length]);
 
   // ── Audit selection helpers ───────────────────────────────────────────
   const toggleRow = (idx) => {
@@ -403,15 +419,23 @@ export default function BulkImportDialog({
   const selectedCount = auditRows.filter(r => r.selected).length;
 
   // ── Import ────────────────────────────────────────────────────────────
+  const CHUNK_SIZE = 10;
+  const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+
   const handleImport = async () => {
     cancelRef.current = false;
     const rowsToImport = auditRows.filter(r => r.selected);
     setProgress({ current: 0, total: rowsToImport.length });
     setStep("importing");
 
-    const succeeded = [];
-    const failed = [];
-    const warnings = [];
+    // Change 4: Save progress to sessionStorage for crash recovery
+    sessionStorage.setItem("bulkImportInProgress", JSON.stringify({
+      entityName,
+      total: rowsToImport.length,
+      startedAt: new Date().toISOString(),
+    }));
+
+    const succeeded = [], failed = [], warnings = [];
 
     for (let i = 0; i < rowsToImport.length; i++) {
       if (cancelRef.current) break;
@@ -429,31 +453,44 @@ export default function BulkImportDialog({
       try {
         const created = await onImport(cleanRow);
         succeeded.push({ id: created?.id || "", ...cleanRow });
-        await new Promise(resolve => setTimeout(resolve, 200)); // pace requests to avoid rate limit
+        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (err) {
         failed.push({ row: rowNum, ...cleanRow, error: err?.message || "Unknown error" });
       }
-      setProgress((p) => ({ ...p, current: p.current + 1 }));
+
+      setProgress(p => ({ ...p, current: p.current + 1 }));
+
+      // Yield to browser every CHUNK_SIZE rows to prevent freeze
+      if ((i + 1) % CHUNK_SIZE === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
+      // Trigger ETL every 100 rows so data appears even if import is interrupted
+      if ((i + 1) % 100 === 0) {
+        fetch(`${RAILWAY_URL}/load/${entityName.toLowerCase()}-summary`, { method: "POST" }).catch(() => {});
+      }
     }
+
+    // Final ETL trigger
+    fetch(`${RAILWAY_URL}/load/${entityName.toLowerCase()}-summary`, { method: "POST" }).catch(() => {});
 
     // Save import record to localStorage for undo
     const importedIds = succeeded.map(r => r.id).filter(Boolean);
     if (importedIds.length > 0) {
       localStorage.setItem("lastBulkImport", JSON.stringify({
-        entityName,
-        ids: importedIds,
-        importedAt: new Date().toISOString(),
+        entityName, ids: importedIds, importedAt: new Date().toISOString(),
       }));
       window.dispatchEvent(new Event("lastBulkImportChanged"));
     }
 
     setImportResult({
-      imported: succeeded,
-      failed,
-      warnings,
+      imported: succeeded, failed, warnings,
       skipped: auditRows.filter(r => !r.selected).length,
       fileName: file?.name,
     });
+
+    // Change 4: Clear crash recovery session
+    sessionStorage.removeItem("bulkImportInProgress");
     setStep("done");
   };
 
@@ -503,6 +540,23 @@ export default function BulkImportDialog({
           {/* ── Step 1: Upload ── */}
           {step === "upload" && (
             <div className="p-6 space-y-5">
+              {/* Change 4: Crash recovery banner */}
+              {(() => {
+                const interrupted = JSON.parse(sessionStorage.getItem("bulkImportInProgress") || "null");
+                if (!interrupted) return null;
+                return (
+                  <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-700">
+                    <span>
+                      A previous {interrupted.entityName} import ({interrupted.total} rows) may not have completed.
+                      Your data may be partially imported in the system.
+                    </span>
+                    <Button size="sm" variant="ghost" className="text-amber-600 h-6 shrink-0 ml-2"
+                      onClick={() => { sessionStorage.removeItem("bulkImportInProgress"); window.location.reload(); }}>
+                      Dismiss
+                    </Button>
+                  </div>
+                );
+              })()}
               <div
                 className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-colors ${dragOver ? "border-emerald-400 bg-emerald-50" : "border-slate-200 hover:border-emerald-300 hover:bg-slate-50"}`}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -585,6 +639,17 @@ export default function BulkImportDialog({
                 </div>
               ) : (
                 <>
+                  {/* Change 3: Large dataset warning */}
+                  {auditRows.length > 500 && (
+                    <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-700">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>
+                        Large dataset ({auditRows.length} rows). Showing {AUDIT_PAGE_SIZE} rows per page.
+                        Import will take approximately {Math.ceil(auditRows.filter(r => r.selected).length * 0.2 / 60)} minutes.
+                      </span>
+                    </div>
+                  )}
+
                   {/* Summary bar */}
                   <div className="flex flex-wrap gap-3 p-3 bg-slate-50 rounded-xl text-sm">
                     <span className="flex items-center gap-1.5 text-emerald-700 font-medium">
@@ -623,51 +688,76 @@ export default function BulkImportDialog({
                       <span>Issues</span>
                       <span></span>
                     </div>
+                    {/* Change 1: Paginated audit rows */}
                     <div className="divide-y divide-slate-50 max-h-[420px] overflow-y-auto">
-                      {auditRows.map((ar, idx) => (
-                        <div key={idx}>
-                          <div className={`grid grid-cols-[32px_80px_1fr_160px_40px] items-center px-3 py-2 gap-2 text-xs ${
-                            ar.status === "error" ? "bg-rose-50/40" :
-                            ar.status === "duplicate" ? "bg-blue-50/30" :
-                            ar.status === "warning" ? "bg-amber-50/30" : "hover:bg-slate-50"
-                          }`}>
-                            <input
-                              type="checkbox"
-                              checked={ar.selected}
-                              onChange={() => toggleRow(idx)}
-                              className="w-3.5 h-3.5 accent-emerald-600 cursor-pointer"
-                            />
-                            <StatusBadge status={ar.status} />
-                            <span className="text-slate-700 font-medium truncate">{getRowTitle(ar.row, entityName)}</span>
-                            <span className="text-slate-500 truncate">
-                              {ar.issues.length === 0 ? "—" : ar.issues[0].message}
-                              {ar.issues.length > 1 && <span className="text-slate-400 ml-1">+{ar.issues.length - 1}</span>}
-                            </span>
-                            {ar.issues.length > 0 ? (
-                              <button
-                                onClick={() => toggleExpand(idx)}
-                                className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
-                              >
-                                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expandedRows.has(idx) ? "rotate-180" : ""}`} />
-                              </button>
-                            ) : <span />}
-                          </div>
-                          {expandedRows.has(idx) && ar.issues.length > 0 && (
-                            <div className="px-10 pb-2 space-y-1">
-                              {ar.issues.map((issue, j) => (
-                                <div key={j} className={`text-[11px] flex items-start gap-1.5 ${
-                                  issue.type === "error" ? "text-rose-600" :
-                                  issue.type === "duplicate" ? "text-blue-600" : "text-amber-700"
-                                }`}>
-                                  <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
-                                  {issue.message}
-                                </div>
-                              ))}
+                      {visibleAuditRows.map((ar, pageIdx) => {
+                        const idx = auditPage * AUDIT_PAGE_SIZE + pageIdx;
+                        return (
+                          <div key={idx}>
+                            <div className={`grid grid-cols-[32px_80px_1fr_160px_40px] items-center px-3 py-2 gap-2 text-xs ${
+                              ar.status === "error" ? "bg-rose-50/40" :
+                              ar.status === "duplicate" ? "bg-blue-50/30" :
+                              ar.status === "warning" ? "bg-amber-50/30" : "hover:bg-slate-50"
+                            }`}>
+                              <input
+                                type="checkbox"
+                                checked={ar.selected}
+                                onChange={() => toggleRow(idx)}
+                                className="w-3.5 h-3.5 accent-emerald-600 cursor-pointer"
+                              />
+                              <StatusBadge status={ar.status} />
+                              <span className="text-slate-700 font-medium truncate">{getRowTitle(ar.row, entityName)}</span>
+                              <span className="text-slate-500 truncate">
+                                {ar.issues.length === 0 ? "—" : ar.issues[0].message}
+                                {ar.issues.length > 1 && <span className="text-slate-400 ml-1">+{ar.issues.length - 1}</span>}
+                              </span>
+                              {ar.issues.length > 0 ? (
+                                <button
+                                  onClick={() => toggleExpand(idx)}
+                                  className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+                                >
+                                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expandedRows.has(idx) ? "rotate-180" : ""}`} />
+                                </button>
+                              ) : <span />}
                             </div>
-                          )}
-                        </div>
-                      ))}
+                            {expandedRows.has(idx) && ar.issues.length > 0 && (
+                              <div className="px-10 pb-2 space-y-1">
+                                {ar.issues.map((issue, j) => (
+                                  <div key={j} className={`text-[11px] flex items-start gap-1.5 ${
+                                    issue.type === "error" ? "text-rose-600" :
+                                    issue.type === "duplicate" ? "text-blue-600" : "text-amber-700"
+                                  }`}>
+                                    <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                                    {issue.message}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
+                    {/* Pagination controls */}
+                    {auditPageCount > 1 && (
+                      <div className="flex items-center justify-between px-3 py-2 border-t border-slate-100 text-xs text-slate-500">
+                        <span>
+                          Showing rows {auditPage * AUDIT_PAGE_SIZE + 1}–
+                          {Math.min((auditPage + 1) * AUDIT_PAGE_SIZE, auditRows.length)} of {auditRows.length}
+                        </span>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="outline" className="h-6 text-xs rounded-lg px-2"
+                            disabled={auditPage === 0}
+                            onClick={() => setAuditPage(p => p - 1)}>
+                            Prev
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-6 text-xs rounded-lg px-2"
+                            disabled={auditPage >= auditPageCount - 1}
+                            onClick={() => setAuditPage(p => p + 1)}>
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
