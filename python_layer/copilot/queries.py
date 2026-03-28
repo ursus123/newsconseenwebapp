@@ -1,527 +1,585 @@
-# ==============================================================
-# Newsconseen Operational Copilot — Query Engine
-# ==============================================================
-# Translates structured intent + filters into python_layer
-# analytics API calls. Returns typed data the LLM uses to
-# ground its answers.
-#
-# Every query function:
-#   1. Calls the appropriate analytics endpoint
-#   2. Filters by company_id (tenant isolation)
-#   3. Applies any additional filters from the intent
-#   4. Returns structured data with metadata
-#
-# The LLM never hits the database directly.
-# All data flows through these functions.
-# ==============================================================
+"""
+python_layer/copilot/queries.py
+================================
+All query tools available to the copilot.
+Each function hits the real PostgreSQL analytics tables
+and returns structured data the LLM can reason over.
+
+Every function signature matches the tool definition in engine.py.
+"""
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
-
-import requests
-
-from config.settings import settings
+from typing import Optional
+from sqlalchemy import text
+from database import get_engine_safe
 
 logger = logging.getLogger(__name__)
 
-RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app"
+# ── DB helper ────────────────────────────────────────────────────────────────
+
+def _run(sql: str, params: dict) -> list[dict]:
+    """Execute SQL and return list of dicts. Returns [] on any error."""
+    engine = get_engine_safe()
+    if not engine:
+        return []
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(sql), params)
+            cols = result.keys()
+            return [dict(zip(cols, row)) for row in result.fetchall()]
+    except Exception as e:
+        logger.warning("Copilot query failed: %s", e)
+        return []
 
 
-class QueryEngine:
+# ═══════════════════════════════════════════════════════════════════════════════
+# PEOPLE QUERIES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_people_summary(company_id: str, person_type: Optional[str] = None) -> dict:
     """
-    Executes structured queries against python_layer analytics endpoints.
-
-    Instantiated per copilot request with the company's scope.
-    All methods return dicts with:
-        data:     list of records
-        count:    number of records
-        metadata: query context (filters applied, endpoint called)
-        error:    error message if query failed
+    Returns headcount breakdown by person_type and status.
+    Used for: "how many staff do we have", "how many active clients"
     """
+    sql = """
+        SELECT
+            person_type,
+            status,
+            COUNT(*)            AS count,
+            COUNT(*) FILTER (WHERE status = 'active')   AS active_count,
+            COUNT(*) FILTER (WHERE status = 'inactive') AS inactive_count
+        FROM analytics.people_summary
+        WHERE company_id = :company_id
+          AND (:person_type IS NULL OR person_type = :person_type)
+        GROUP BY person_type, status
+        ORDER BY person_type, status
+    """
+    rows = _run(sql, {"company_id": company_id, "person_type": person_type})
 
-    def __init__(self, company_id: str, base_url: str = RAILWAY_URL):
-        self.company_id = company_id
-        self.base_url   = base_url
+    # Aggregate totals
+    totals = {}
+    for r in rows:
+        pt = r["person_type"] or "unknown"
+        if pt not in totals:
+            totals[pt] = {"total": 0, "active": 0, "inactive": 0}
+        totals[pt]["total"]    += r["count"]
+        totals[pt]["active"]   += r["active_count"] or 0
+        totals[pt]["inactive"] += r["inactive_count"] or 0
 
-    # ----------------------------------------------------------
-    # People queries
-    # ----------------------------------------------------------
+    return {
+        "summary":    totals,
+        "rows":       rows,
+        "total_people": sum(v["total"] for v in totals.values()),
+    }
 
-    def query_people(
-        self,
-        person_type:    Optional[str] = None,
-        person_subtype: Optional[str] = None,
-        status:         Optional[str] = None,
-        enterprise_id:  Optional[str] = None,
-        is_staff:       Optional[bool] = None,
-        is_participant: Optional[bool] = None,
-    ) -> dict:
-        """
-        Query people_summary analytics.
 
-        Examples:
-            query_people(person_type="staff")
-            query_people(person_type="client", person_subtype="Student Customer")
-            query_people(is_staff=True, status="active")
-        """
-        data = self._fetch("/people-summary")
-        if data.get("error"):
-            return data
+def get_client_retention_risk(company_id: str, top_n: int = 10) -> dict:
+    """
+    Returns clients who show retention risk signals:
+    - inactive clients discharged in last 90 days
+    - clients with low caregiver continuity
+    - clients with recent discharge reason
+    Used for: "which clients are at risk", "who might leave"
+    """
+    sql = """
+        SELECT
+            first_name || ' ' || last_name   AS client_name,
+            person_subtype,
+            status,
+            end_date                          AS discharge_date,
+            internal_notes,
+            enterprise_name,
+            company_id
+        FROM analytics.people_summary
+        WHERE company_id    = :company_id
+          AND person_type   = 'client'
+          AND (
+              status = 'inactive'
+              OR end_date >= CURRENT_DATE - INTERVAL '90 days'
+          )
+        ORDER BY end_date DESC NULLS LAST
+        LIMIT :top_n
+    """
+    rows = _run(sql, {"company_id": company_id, "top_n": top_n})
 
-        records = data["data"]
-
-        # Apply filters
-        if person_type:
-            from config.taxonomy import PERSON_TYPE_SETS, normalize_person_type
-            canonical = normalize_person_type(person_type)
-            allowed   = PERSON_TYPE_SETS.get(canonical, {canonical})
-            records = [r for r in records if r.get("person_type", "").lower() in allowed]
-
-        if person_subtype:
-            records = [
-                r for r in records
-                if person_subtype.lower() in (r.get("person_subtype") or "").lower()
-            ]
-
-        if status:
-            records = [r for r in records if r.get("status", "").lower() == status.lower()]
-
-        if enterprise_id:
-            records = [r for r in records if r.get("enterprise_id") == enterprise_id]
-
-        if is_staff is not None:
-            records = [r for r in records if r.get("is_staff") == is_staff]
-
-        if is_participant is not None:
-            records = [r for r in records if r.get("is_participant") == is_participant]
-
-        return self._result(records, {
-            "person_type": person_type, "person_subtype": person_subtype,
-            "status": status, "enterprise_id": enterprise_id,
-        })
-
-    def query_people_summary(self) -> dict:
-        """High-level people summary across all types."""
-        data = self._fetch("/people-summary")
-        if data.get("error"):
-            return data
-
-        records = data["data"]
-        total_active   = sum(r.get("active_count", 0) for r in records)
-        total_people   = sum(r.get("people_count", 0) for r in records)
-        total_staff    = sum(r.get("people_count", 0) for r in records if r.get("is_staff"))
-        total_clients  = sum(r.get("people_count", 0) for r in records if r.get("is_participant"))
-        new_last_7d    = sum(r.get("new_last_7d", 0) for r in records)
-        new_last_30d   = sum(r.get("new_last_30d", 0) for r in records)
-
-        return self._result(records, {}, summary={
-            "total_people":   total_people,
-            "active":         total_active,
-            "staff":          total_staff,
-            "clients":        total_clients,
-            "new_last_7d":    new_last_7d,
-            "new_last_30d":   new_last_30d,
-            "retention_avg":  round(
-                sum(r.get("retention_rate_pct", 0) for r in records) / max(len(records), 1), 1
-            ),
-        })
-
-    # ----------------------------------------------------------
-    # Product / inventory queries
-    # ----------------------------------------------------------
-
-    def query_products(
-        self,
-        item_type:    Optional[str] = None,
-        item_subtype: Optional[str] = None,
-        enterprise_id:Optional[str] = None,
-        low_stock:    bool = False,
-        expiring:     bool = False,
-        expiry_days:  int  = 30,
-    ) -> dict:
-        """
-        Query product_summary analytics.
-
-        Examples:
-            query_products(item_type="physical", item_subtype="Medication")
-            query_products(low_stock=True)
-            query_products(expiring=True, expiry_days=7)
-        """
-        data = self._fetch("/product-summary")
-        if data.get("error"):
-            return data
-
-        records = data["data"]
-
-        if item_type:
-            from config.taxonomy import ITEM_TYPE_SETS, normalize_item_type
-            canonical = normalize_item_type(item_type)
-            allowed   = ITEM_TYPE_SETS.get(canonical, {canonical})
-            records = [r for r in records if r.get("item_type", "").lower() in allowed]
-
-        if item_subtype:
-            records = [
-                r for r in records
-                if item_subtype.lower() in (r.get("item_subtype") or "").lower()
-            ]
-
-        if enterprise_id:
-            records = [r for r in records if r.get("enterprise_id") == enterprise_id]
-
-        if low_stock:
-            records = [r for r in records if r.get("low_stock_count", 0) > 0]
-
-        if expiring:
-            col = "expiring_7d_count" if expiry_days <= 7 else "expiring_30d_count"
-            records = [r for r in records if r.get(col, 0) > 0]
-
-        # Compute summary
-        total_low_stock = sum(r.get("low_stock_count", 0) for r in records)
-        total_expiring  = sum(r.get("expiring_30d_count", 0) for r in records)
-        total_critical  = sum(r.get("expiring_7d_count", 0) for r in records)
-        out_of_stock    = sum(r.get("out_of_stock_count", 0) for r in records)
-
-        return self._result(records, {
-            "item_type": item_type, "item_subtype": item_subtype,
-            "low_stock": low_stock, "expiring": expiring,
-        }, summary={
-            "low_stock_items":     total_low_stock,
-            "expiring_30d":        total_expiring,
-            "expiring_7d":         total_critical,
-            "out_of_stock":        out_of_stock,
-            "total_inventory_value": sum(r.get("total_inventory_value", 0) for r in records),
-        })
-
-    def query_expiring_medications(self, days: int = 30) -> dict:
-        """Convenience: medications expiring within N days."""
-        return self.query_products(
-            item_type="physical",
-            item_subtype="Medication",
-            expiring=True,
-            expiry_days=days,
-        )
-
-    def query_low_stock(self, item_type: Optional[str] = None) -> dict:
-        """Convenience: all items at or below reorder level."""
-        return self.query_products(item_type=item_type, low_stock=True)
-
-    # ----------------------------------------------------------
-    # Task queries
-    # ----------------------------------------------------------
-
-    def query_tasks(
-        self,
-        task_type:    Optional[str] = None,
-        enterprise_id:Optional[str] = None,
-        overdue_only: bool = False,
-    ) -> dict:
-        """
-        Query task_summary analytics.
-
-        Examples:
-            query_tasks(task_type="attendance")
-            query_tasks(overdue_only=True)
-        """
-        data = self._fetch("/task-summary")
-        if data.get("error"):
-            return data
-
-        records = data["data"]
-
-        if task_type:
-            records = [
-                r for r in records
-                if task_type.lower() in (r.get("task_type") or "").lower()
-            ]
-
-        if enterprise_id:
-            records = [r for r in records if r.get("enterprise_id") == enterprise_id]
-
-        if overdue_only:
-            records = [r for r in records if r.get("overdue_tasks", 0) > 0]
-
-        total_tasks     = sum(r.get("total_tasks", 0) for r in records)
-        completed       = sum(r.get("completed_tasks", 0) for r in records)
-        overdue         = sum(r.get("overdue_tasks", 0) for r in records)
-        completion_rate = round(completed / max(total_tasks, 1) * 100, 1)
-
-        return self._result(records, {
-            "task_type": task_type, "overdue_only": overdue_only,
-        }, summary={
-            "total_tasks":      total_tasks,
-            "completed":        completed,
-            "overdue":          overdue,
-            "completion_rate":  completion_rate,
-            "tasks_last_7d":    sum(r.get("tasks_last_7d", 0) for r in records),
-        })
-
-    # ----------------------------------------------------------
-    # Transaction queries
-    # ----------------------------------------------------------
-
-    def query_transactions(
-        self,
-        revenue_only:  bool = False,
-        expense_only:  bool = False,
-        enterprise_id: Optional[str] = None,
-        period:        str = "all",  # "7d", "30d", "all"
-    ) -> dict:
-        """
-        Query transaction_summary analytics.
-
-        Examples:
-            query_transactions(revenue_only=True)
-            query_transactions(expense_only=True, period="30d")
-        """
-        data = self._fetch("/transaction-summary")
-        if data.get("error"):
-            return data
-
-        records = data["data"]
-
-        if revenue_only:
-            records = [r for r in records if r.get("is_revenue")]
-
-        if expense_only:
-            records = [r for r in records if r.get("is_expense")]
-
-        if enterprise_id:
-            records = [r for r in records if r.get("enterprise_id") == enterprise_id]
-
-        # Compute period-specific totals
-        if period == "7d":
-            total_revenue = sum(r.get("revenue_last_7d", 0) for r in records if r.get("is_revenue"))
-        elif period == "30d":
-            total_revenue  = sum(r.get("revenue_last_30d", 0) for r in records if r.get("is_revenue"))
-            total_expenses = sum(r.get("expense_last_30d", 0) for r in records if r.get("is_expense"))
+    # Parse discharge reason from internal_notes
+    for r in rows:
+        notes = r.get("internal_notes") or ""
+        if "Discharge reason:" in notes:
+            r["discharge_reason"] = notes.split("Discharge reason:")[-1].split("|")[0].strip()
         else:
-            total_revenue  = sum(r.get("total_amount", 0) for r in records if r.get("is_revenue"))
-            total_expenses = sum(r.get("total_amount", 0) for r in records if r.get("is_expense"))
+            r["discharge_reason"] = "Unknown"
 
-        net_flow = total_revenue - (total_expenses if period != "7d" else 0)
+    return {
+        "at_risk_clients": rows,
+        "count":           len(rows),
+    }
 
-        return self._result(records, {
-            "revenue_only": revenue_only,
-            "expense_only": expense_only,
-            "period": period,
-        }, summary={
-            "total_revenue":       round(total_revenue, 2),
-            "total_expenses":      round(total_expenses if period != "7d" else 0, 2),
-            "net_cashflow":        round(net_flow, 2),
-            "transaction_count":   sum(r.get("total_transactions", 0) for r in records),
-            "outstanding_amount":  round(sum(r.get("outstanding_amount", 0) for r in records), 2),
-        })
 
-    # ----------------------------------------------------------
-    # Relationship queries
-    # ----------------------------------------------------------
+def get_staff_availability(
+    company_id:    str,
+    branch_id:     Optional[str] = None,
+    person_subtype:Optional[str] = None,
+) -> dict:
+    """
+    Returns staff availability status breakdown.
+    Used for: "who is available", "how many nurses are on shift"
+    """
+    sql = """
+        SELECT
+            first_name || ' ' || last_name AS staff_name,
+            person_subtype                  AS role,
+            availability_status,
+            enterprise_name                 AS branch,
+            phone,
+            email
+        FROM analytics.people_summary
+        WHERE company_id  = :company_id
+          AND person_type = 'staff'
+          AND status      = 'active'
+          AND (:branch_id      IS NULL OR enterprise_id   = :branch_id)
+          AND (:person_subtype IS NULL OR person_subtype  = :person_subtype)
+        ORDER BY availability_status, person_subtype
+    """
+    rows = _run(sql, {
+        "company_id":     company_id,
+        "branch_id":      branch_id,
+        "person_subtype": person_subtype,
+    })
 
-    def query_relationships(
-        self,
-        category:      Optional[str] = None,
-        enterprise_name:Optional[str] = None,
-        person_name:   Optional[str] = None,
-        active_only:   bool = True,
-    ) -> dict:
-        """Query relationship_summary analytics."""
-        params = {}
-        if category:
-            params["category"] = category
-        if active_only:
-            params["active_only"] = "true"
+    by_status = {}
+    for r in rows:
+        s = r["availability_status"] or "unknown"
+        by_status.setdefault(s, []).append(r)
 
-        data = self._fetch("/relationship-summary", params)
-        if data.get("error"):
-            return data
+    return {
+        "by_availability": by_status,
+        "available_count": len(by_status.get("available", [])),
+        "total_active":    len(rows),
+    }
 
-        records = data["data"]
 
-        if enterprise_name:
-            records = [
-                r for r in records
-                if enterprise_name.lower() in (r.get("enterprise_name") or "").lower()
-            ]
+# ═══════════════════════════════════════════════════════════════════════════════
+# TRANSACTION QUERIES
+# ═══════════════════════════════════════════════════════════════════════════════
 
-        if person_name:
-            records = [
-                r for r in records
-                if person_name.lower() in (r.get("person_name") or "").lower()
-            ]
+def get_transaction_summary(
+    company_id:       str,
+    months_back:      int = 3,
+    transaction_type: Optional[str] = None,
+) -> dict:
+    """
+    Returns revenue and transaction metrics for recent months.
+    Used for: "how much revenue", "what are our earnings", "financial overview"
+    """
+    sql = """
+        SELECT
+            DATE_TRUNC('month', date)   AS month,
+            transaction_type,
+            COUNT(*)                    AS count,
+            SUM(amount)                 AS total_amount,
+            SUM(CASE WHEN payment_status = 'paid'   THEN amount ELSE 0 END) AS paid_amount,
+            SUM(CASE WHEN payment_status = 'unpaid' THEN amount ELSE 0 END) AS unpaid_amount,
+            COUNT(CASE WHEN status = 'draft'  THEN 1 END) AS draft_count,
+            COUNT(CASE WHEN status = 'posted' THEN 1 END) AS posted_count
+        FROM analytics.transaction_summary
+        WHERE company_id = :company_id
+          AND date      >= CURRENT_DATE - (:months_back || ' months')::INTERVAL
+          AND (:transaction_type IS NULL OR transaction_type = :transaction_type)
+        GROUP BY DATE_TRUNC('month', date), transaction_type
+        ORDER BY month DESC, total_amount DESC
+    """
+    rows = _run(sql, {
+        "company_id":       company_id,
+        "months_back":      months_back,
+        "transaction_type": transaction_type,
+    })
 
-        return self._result(records, {
-            "category": category,
-            "enterprise_name": enterprise_name,
-            "person_name": person_name,
-        })
+    total_revenue  = sum(r["total_amount"]  or 0 for r in rows)
+    total_unpaid   = sum(r["unpaid_amount"] or 0 for r in rows)
+    total_draft    = sum(r["draft_count"]   or 0 for r in rows)
 
-    # ----------------------------------------------------------
-    # Enterprise queries
-    # ----------------------------------------------------------
+    return {
+        "monthly_breakdown": rows,
+        "total_revenue":     round(total_revenue,  2),
+        "total_unpaid":      round(total_unpaid,   2),
+        "pending_drafts":    total_draft,
+        "months_analysed":   months_back,
+    }
 
-    def query_enterprises(
-        self,
-        enterprise_type: Optional[str] = None,
-        active_only:     bool = True,
-        is_root:         Optional[bool] = None,
-    ) -> dict:
-        """Query enterprise_summary analytics."""
-        data = self._fetch("/enterprise-summary")
-        if data.get("error"):
-            return data
 
-        records = data["data"]
+def get_overdue_invoices(company_id: str, top_n: int = 20) -> dict:
+    """
+    Returns unpaid posted invoices past their due date.
+    Used for: "what invoices are overdue", "who owes us money"
+    """
+    sql = """
+        SELECT
+            counterparty,
+            enterprise,
+            amount,
+            amount - COALESCE(amount_paid, 0) AS outstanding,
+            due_date,
+            CURRENT_DATE - due_date            AS days_overdue,
+            reference_number,
+            transaction_type
+        FROM analytics.transaction_summary
+        WHERE company_id     = :company_id
+          AND payment_status = 'unpaid'
+          AND status         = 'posted'
+          AND due_date       < CURRENT_DATE
+        ORDER BY days_overdue DESC
+        LIMIT :top_n
+    """
+    rows = _run(sql, {"company_id": company_id, "top_n": top_n})
+    total_outstanding = sum(r["outstanding"] or 0 for r in rows)
 
-        if enterprise_type:
-            from config.taxonomy import normalize_enterprise_type
-            canonical = normalize_enterprise_type(enterprise_type)
-            records = [r for r in records if r.get("enterprise_type", "").lower() == canonical]
+    return {
+        "overdue_invoices":    rows,
+        "count":               len(rows),
+        "total_outstanding":   round(total_outstanding, 2),
+    }
 
-        if active_only:
-            records = [r for r in records if r.get("is_active")]
 
-        if is_root is not None:
-            records = [r for r in records if r.get("is_root") == is_root]
+# ═══════════════════════════════════════════════════════════════════════════════
+# TASK / VISIT QUERIES
+# ═══════════════════════════════════════════════════════════════════════════════
 
-        return self._result(records, {
-            "enterprise_type": enterprise_type, "active_only": active_only,
-        }, summary={
-            "total":  len(records),
-            "active": sum(1 for r in records if r.get("is_active")),
-            "cities": list({r.get("city") for r in records if r.get("city")}),
-        })
+def get_task_summary(
+    company_id:  str,
+    task_type:   Optional[str] = None,
+    days_back:   int = 30,
+) -> dict:
+    """
+    Returns task completion rates, overdue tasks, outcomes.
+    Used for: "how are visits going", "completion rate", "what tasks are overdue"
+    """
+    sql = """
+        SELECT
+            task_type,
+            status,
+            outcome,
+            enterprise_name                            AS branch,
+            COUNT(*)                                   AS count,
+            COUNT(*) FILTER (WHERE status = 'completed')  AS completed_count,
+            COUNT(*) FILTER (WHERE status = 'open'
+              AND due_date < CURRENT_DATE)              AS overdue_count
+        FROM analytics.task_summary
+        WHERE company_id = :company_id
+          AND (:task_type IS NULL OR task_type = :task_type)
+          AND (scheduled_date >= CURRENT_DATE - (:days_back || ' days')::INTERVAL
+               OR scheduled_date IS NULL)
+        GROUP BY task_type, status, outcome, enterprise_name
+        ORDER BY count DESC
+    """
+    rows = _run(sql, {
+        "company_id": company_id,
+        "task_type":  task_type,
+        "days_back":  days_back,
+    })
 
-    # ----------------------------------------------------------
-    # Network overview — cross-entity summary
-    # ----------------------------------------------------------
+    total       = sum(r["count"]           or 0 for r in rows)
+    completed   = sum(r["completed_count"] or 0 for r in rows)
+    overdue     = sum(r["overdue_count"]   or 0 for r in rows)
+    rate        = round(completed / total * 100, 1) if total > 0 else 0
 
-    def query_network_overview(self) -> dict:
-        """
-        Fetch a high-level cross-entity summary.
-        Used for "how are we doing overall" type questions.
-        """
-        people_data  = self.query_people_summary()
-        product_data = self.query_products()
-        task_data    = self.query_tasks()
-        tx_data      = self.query_transactions(period="30d")
-        ent_data     = self.query_enterprises()
+    return {
+        "breakdown":        rows,
+        "total_tasks":      total,
+        "completed":        completed,
+        "overdue":          overdue,
+        "completion_rate":  rate,
+        "days_analysed":    days_back,
+    }
 
-        alerts = []
 
-        # Stock alerts
-        prod_summary = product_data.get("summary", {})
-        if prod_summary.get("expiring_7d", 0) > 0:
-            alerts.append({
-                "level":   "critical",
-                "type":    "stock_expiry",
-                "message": f"{prod_summary['expiring_7d']} items expiring within 7 days",
-            })
-        if prod_summary.get("out_of_stock", 0) > 0:
-            alerts.append({
-                "level":   "critical",
-                "type":    "out_of_stock",
-                "message": f"{prod_summary['out_of_stock']} item categories out of stock",
-            })
-        if prod_summary.get("low_stock_items", 0) > 0:
-            alerts.append({
-                "level":   "warning",
-                "type":    "low_stock",
-                "message": f"{prod_summary['low_stock_items']} item categories below reorder level",
-            })
+def get_visit_outcomes(company_id: str, days_back: int = 30) -> dict:
+    """
+    Returns breakdown of care visit outcomes.
+    Used for: "how many visits were missed", "caregiver no-shows"
+    """
+    sql = """
+        SELECT
+            outcome,
+            COUNT(*)   AS count,
+            ROUND(COUNT(*) * 100.0 / NULLIF(SUM(COUNT(*)) OVER(), 0), 1) AS pct
+        FROM analytics.task_summary
+        WHERE company_id = :company_id
+          AND task_type  IN ('care_visit', 'assessment', 'wound_care',
+                             'therapy_session', 'medication_management')
+          AND scheduled_date >= CURRENT_DATE - (:days_back || ' days')::INTERVAL
+        GROUP BY outcome
+        ORDER BY count DESC
+    """
+    rows = _run(sql, {"company_id": company_id, "days_back": days_back})
 
-        # Task alerts
-        task_summary = task_data.get("summary", {})
-        if task_summary.get("overdue", 0) > 0:
-            alerts.append({
-                "level":   "warning",
-                "type":    "overdue_tasks",
-                "message": f"{task_summary['overdue']} overdue tasks",
-            })
-        if task_summary.get("completion_rate", 100) < 70:
-            alerts.append({
-                "level":   "warning",
-                "type":    "low_completion",
-                "message": f"Task completion rate is {task_summary['completion_rate']}%",
-            })
+    return {
+        "outcomes":     rows,
+        "days_analysed": days_back,
+    }
 
-        # Financial alerts
-        tx_summary = tx_data.get("summary", {})
-        if tx_summary.get("net_cashflow", 0) < 0:
-            alerts.append({
-                "level":   "warning",
-                "type":    "negative_cashflow",
-                "message": f"Negative cash flow: {tx_summary['net_cashflow']:,.0f} this month",
-            })
 
-        return {
-            "data": [],
-            "count": 0,
-            "metadata": {"query": "network_overview"},
-            "summary": {
-                "people":       people_data.get("summary", {}),
-                "inventory":    prod_summary,
-                "tasks":        task_summary,
-                "financials":   tx_summary,
-                "enterprises":  ent_data.get("summary", {}),
-                "alerts":       alerts,
-                "alert_count":  len(alerts),
-                "critical_count": sum(1 for a in alerts if a["level"] == "critical"),
+# ═══════════════════════════════════════════════════════════════════════════════
+# PRODUCT / INVENTORY QUERIES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_product_summary(
+    company_id: str,
+    item_type:  Optional[str] = None,
+) -> dict:
+    """
+    Returns inventory status, low stock alerts, expiry warnings.
+    Used for: "what stock do we have", "what is expiring", "low stock items"
+    """
+    sql = """
+        SELECT
+            product_name,
+            item_type,
+            item_subtype,
+            item_class,
+            stock_quantity,
+            reorder_level,
+            expiry_date,
+            status,
+            CASE
+                WHEN stock_quantity <= 0              THEN 'out_of_stock'
+                WHEN stock_quantity <= reorder_level  THEN 'low_stock'
+                ELSE 'ok'
+            END AS stock_status,
+            CASE
+                WHEN expiry_date <= CURRENT_DATE              THEN 'expired'
+                WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'expiring_soon'
+                ELSE 'ok'
+            END AS expiry_status
+        FROM analytics.product_summary
+        WHERE company_id = :company_id
+          AND status     = 'active'
+          AND (:item_type IS NULL OR item_type = :item_type)
+        ORDER BY stock_status DESC, expiry_status DESC, product_name
+    """
+    rows = _run(sql, {"company_id": company_id, "item_type": item_type})
+
+    out_of_stock   = [r for r in rows if r["stock_status"]  == "out_of_stock"]
+    low_stock      = [r for r in rows if r["stock_status"]  == "low_stock"]
+    expiring_soon  = [r for r in rows if r["expiry_status"] == "expiring_soon"]
+    expired        = [r for r in rows if r["expiry_status"] == "expired"]
+
+    return {
+        "all_products":   rows,
+        "out_of_stock":   out_of_stock,
+        "low_stock":      low_stock,
+        "expiring_soon":  expiring_soon,
+        "expired":        expired,
+        "alerts": {
+            "out_of_stock_count":  len(out_of_stock),
+            "low_stock_count":     len(low_stock),
+            "expiring_soon_count": len(expiring_soon),
+            "expired_count":       len(expired),
+        },
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ENTERPRISE / NETWORK QUERIES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_enterprise_overview(company_id: str) -> dict:
+    """
+    Returns enterprise / branch structure and operating status.
+    Used for: "how many branches", "which locations are open"
+    """
+    sql = """
+        SELECT
+            enterprise_name,
+            enterprise_type,
+            enterprise_tier,
+            operating_status,
+            status,
+            city,
+            region,
+            country
+        FROM analytics.enterprise_summary
+        WHERE company_id = :company_id
+        ORDER BY enterprise_tier, enterprise_name
+    """
+    rows = _run(sql, {"company_id": company_id})
+
+    open_branches = [r for r in rows if r["operating_status"] == "open"]
+
+    return {
+        "enterprises":     rows,
+        "total_count":     len(rows),
+        "open_count":      len(open_branches),
+        "by_tier": {
+            tier: [r for r in rows if r["enterprise_tier"] == tier]
+            for tier in set(r["enterprise_tier"] for r in rows if r["enterprise_tier"])
+        },
+    }
+
+
+def get_network_overview(company_id: str) -> dict:
+    """
+    Returns a cross-enterprise summary if the operator is part of a network.
+    Used for: "how is the network doing", "compare branches"
+    """
+    sql = """
+        SELECT
+            e.enterprise_name,
+            e.enterprise_tier,
+            COUNT(DISTINCT p.id)  FILTER (WHERE p.person_type = 'client' AND p.status = 'active') AS active_clients,
+            COUNT(DISTINCT p.id)  FILTER (WHERE p.person_type = 'staff'  AND p.status = 'active') AS active_staff,
+            COUNT(DISTINCT t.id)  FILTER (WHERE t.status = 'open')                                 AS open_tasks,
+            COALESCE(SUM(tx.amount) FILTER (WHERE tx.status = 'posted'), 0)                        AS revenue_posted
+        FROM analytics.enterprise_summary   e
+        LEFT JOIN analytics.people_summary  p  ON p.enterprise_id = e.id AND p.company_id = e.company_id
+        LEFT JOIN analytics.task_summary    t  ON t.enterprise_id = e.id AND t.company_id = e.company_id
+        LEFT JOIN analytics.transaction_summary tx ON tx.enterprise = e.enterprise_name AND tx.company_id = e.company_id
+        WHERE e.company_id = :company_id
+        GROUP BY e.enterprise_name, e.enterprise_tier
+        ORDER BY e.enterprise_tier, active_clients DESC
+    """
+    rows = _run(sql, {"company_id": company_id})
+    return {"network_summary": rows, "branch_count": len(rows)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TOOL DEFINITIONS — registered with Anthropic API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+TOOL_DEFINITIONS = [
+    {
+        "name": "get_people_summary",
+        "description": "Get headcount breakdown by person_type (staff, client, contact) and status. Use for questions about team size, client count, staffing levels.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "person_type": {
+                    "type": "string",
+                    "enum": ["staff", "client", "contact", "volunteer"],
+                    "description": "Filter by person type. Leave null for all types.",
+                },
             },
-        }
-
-    # ----------------------------------------------------------
-    # Internal helpers
-    # ----------------------------------------------------------
-
-    def _fetch(self, endpoint: str, params: dict = None) -> dict:
-        """Fetch data from a python_layer analytics endpoint."""
-        try:
-            p = {"company_id": self.company_id}
-            if params:
-                p.update(params)
-
-            resp = requests.get(
-                f"{self.base_url}{endpoint}",
-                params=p,
-                timeout=15,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            records = data if isinstance(data, list) else data.get("data", data)
-
-            logger.debug(
-                "QueryEngine._fetch: %s → %d records", endpoint, len(records)
-            )
-            return {"data": records, "error": None}
-
-        except requests.exceptions.ConnectionError:
-            logger.error("QueryEngine: python_layer unreachable at %s", self.base_url)
-            return {
-                "data": [], "error": "Analytics service unavailable. "
-                "Please check that python_layer is running.",
-            }
-        except requests.exceptions.HTTPError as e:
-            logger.error("QueryEngine._fetch: HTTP %s for %s", e.response.status_code, endpoint)
-            return {"data": [], "error": f"Analytics query failed: {e.response.status_code}"}
-        except Exception as e:
-            logger.error("QueryEngine._fetch: %s — %s", endpoint, e)
-            return {"data": [], "error": str(e)}
-
-    def _result(
-        self,
-        records: list,
-        filters: dict,
-        summary: dict = None,
-    ) -> dict:
-        """Package query results with metadata."""
-        return {
-            "data":     records,
-            "count":    len(records),
-            "metadata": {
-                "filters":    {k: v for k, v in filters.items() if v is not None},
-                "company_id": self.company_id,
-                "fetched_at": datetime.now(timezone.utc).isoformat(),
+        },
+    },
+    {
+        "name": "get_client_retention_risk",
+        "description": "Get clients who show discharge or retention risk signals — recently inactive, discharged in last 90 days, or with retention risk notes. Use for 'at risk clients', 'who might leave', 'churn risk'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "top_n": {
+                    "type": "integer",
+                    "description": "Max number of at-risk clients to return. Default 10.",
+                },
             },
-            "summary":  summary or {},
-            "error":    None,
-        }
+        },
+    },
+    {
+        "name": "get_staff_availability",
+        "description": "Get staff availability status — who is available, busy, or on leave. Filter by branch or role. Use for 'who is available', 'staffing coverage', 'available nurses'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "branch_id":      {"type": "string", "description": "Filter by branch enterprise ID"},
+                "person_subtype": {"type": "string", "description": "Filter by role e.g. 'Registered Nurse', 'Home Health Aide'"},
+            },
+        },
+    },
+    {
+        "name": "get_transaction_summary",
+        "description": "Get revenue and transaction metrics for recent months. Returns monthly breakdown, totals, paid vs unpaid amounts. Use for financial questions, revenue, earnings.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "months_back":      {"type": "integer", "description": "How many months back to analyse. Default 3."},
+                "transaction_type": {"type": "string",  "description": "Filter by type e.g. 'product_sale', 'service_fee', 'payroll'"},
+            },
+        },
+    },
+    {
+        "name": "get_overdue_invoices",
+        "description": "Get unpaid invoices that are past their due date. Returns client name, amount outstanding, days overdue. Use for 'overdue invoices', 'who owes us', 'accounts receivable'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "top_n": {"type": "integer", "description": "Max invoices to return. Default 20."},
+            },
+        },
+    },
+    {
+        "name": "get_task_summary",
+        "description": "Get task and care visit metrics — completion rates, overdue tasks, outcomes by branch. Use for 'task completion', 'how are visits going', 'overdue tasks'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_type": {"type": "string", "description": "Filter by task type e.g. 'care_visit', 'wound_care', 'medication_management'"},
+                "days_back": {"type": "integer", "description": "Days back to analyse. Default 30."},
+            },
+        },
+    },
+    {
+        "name": "get_visit_outcomes",
+        "description": "Get breakdown of care visit outcomes — completed, not home, caregiver no-show, rescheduled. Use for 'missed visits', 'no-shows', 'visit quality'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days_back": {"type": "integer", "description": "Days back to analyse. Default 30."},
+            },
+        },
+    },
+    {
+        "name": "get_product_summary",
+        "description": "Get inventory status — stock levels, low stock alerts, expiring items. Use for 'stock levels', 'what is expiring', 'inventory alerts', 'supplies'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "item_type": {"type": "string", "enum": ["physical", "digital", "service_package", "living"], "description": "Filter by item type"},
+            },
+        },
+    },
+    {
+        "name": "get_enterprise_overview",
+        "description": "Get branch and enterprise structure — locations, operating status, tiers. Use for 'how many branches', 'which locations are open', 'office overview'.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_network_overview",
+        "description": "Get cross-branch summary comparing clients, staff, tasks, and revenue across all branches. Use for 'network overview', 'compare branches', 'consolidated view'.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+]
+
+
+# ── Tool dispatcher ───────────────────────────────────────────────────────────
+
+def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
+    """
+    Called by the engine when Claude selects a tool.
+    Injects company_id (never from user input) and dispatches to the right function.
+    """
+    # Inject company_id — never trust it from tool_input
+    kwargs = {k: v for k, v in tool_input.items() if k != "company_id"}
+    kwargs["company_id"] = company_id
+
+    dispatch = {
+        "get_people_summary":        get_people_summary,
+        "get_client_retention_risk": get_client_retention_risk,
+        "get_staff_availability":    get_staff_availability,
+        "get_transaction_summary":   get_transaction_summary,
+        "get_overdue_invoices":      get_overdue_invoices,
+        "get_task_summary":          get_task_summary,
+        "get_visit_outcomes":        get_visit_outcomes,
+        "get_product_summary":       get_product_summary,
+        "get_enterprise_overview":   get_enterprise_overview,
+        "get_network_overview":      get_network_overview,
+    }
+
+    fn = dispatch.get(tool_name)
+    if not fn:
+        return {"error": f"Unknown tool: {tool_name}"}
+
+    try:
+        return fn(**kwargs)
+    except TypeError as e:
+        logger.warning("Tool %s called with bad args %s: %s", tool_name, kwargs, e)
+        return {"error": str(e)}
