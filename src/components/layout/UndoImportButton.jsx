@@ -46,12 +46,10 @@ export default function UndoImportButton() {
     return () => window.removeEventListener("lastBulkImportChanged", readFromStorage);
   }, []);
 
-  if (!lastImport) return null;
-
-  const entityKey = ENTITY_MAP[lastImport.entityName];
   const entity = entityKey && base44.entities[entityKey];
 
   const handleUndo = async () => {
+    if (!lastImport) return;
     if (!confirm) { setConfirm(true); return; }
     if (!entity) { alert("Cannot undo: entity not found."); return; }
     setUndoing(true);
@@ -70,18 +68,27 @@ export default function UndoImportButton() {
     }
   };
 
+  const hasImport = !!lastImport;
+
   return (
     <div className="flex items-center gap-1.5">
-      {confirm && !undoing && (
+      {confirm && !undoing && hasImport && (
         <span className="text-xs text-rose-600 font-medium hidden sm:block whitespace-nowrap">
           Delete {lastImport.ids.length} {lastImport.entityName}?
         </span>
       )}
       <button
-        onClick={undoing ? undefined : handleUndo}
-        title={confirm ? `Confirm: delete ${lastImport.ids.length} imported ${lastImport.entityName}` : `Undo last import (${lastImport.ids.length} ${lastImport.entityName})`}
+        onClick={undoing ? undefined : (hasImport ? handleUndo : undefined)}
+        title={
+          !hasImport ? "No recent import to undo" :
+          confirm ? `Confirm: delete ${lastImport.ids.length} imported ${lastImport.entityName}` :
+          `Undo last import (${lastImport.ids.length} ${lastImport.entityName})`
+        }
+        disabled={!hasImport && !undoing}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all border ${
-          confirm
+          !hasImport
+            ? "bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed opacity-50"
+            : confirm
             ? "bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100"
             : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
         } ${undoing ? "opacity-60 cursor-not-allowed" : ""}`}
@@ -94,7 +101,7 @@ export default function UndoImportButton() {
           {undoing ? "Undoing…" : confirm ? "Confirm Undo" : "Undo Import"}
         </span>
       </button>
-      {confirm && !undoing && (
+      {confirm && !undoing && hasImport && (
         <button
           onClick={() => setConfirm(false)}
           className="text-xs text-slate-400 hover:text-slate-600 px-1"
