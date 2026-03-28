@@ -39,6 +39,8 @@ export default function Desktop() {
   const [iconContextMenuOpen, setIconContextMenuOpen] = useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [profileSwitcherOpen, setProfileSwitcherOpen] = useState(false);
+  const [navOpen, setNavOpen]         = useState(false);
+  const navRef                        = useRef(null);
   const profileSwitcherPopupRef = useRef(null);
   const quickActionsRef = useRef(null);
 
@@ -91,6 +93,9 @@ export default function Desktop() {
       }
       if (profileSwitcherPopupRef.current && !profileSwitcherPopupRef.current.contains(e.target)) {
         setProfileSwitcherOpen(false);
+      }
+      if (navRef.current && !navRef.current.contains(e.target)) {
+        setNavOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -245,20 +250,130 @@ export default function Desktop() {
         style={{ background: topBarBg, backdropFilter: "blur(12px)", borderBottom: topBarBorder }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Logo pill */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: 6,
-          padding: "2px 10px 2px 6px",
-          borderRadius: 20,
-          background: isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)",
-          border: isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.1)",
-          flexShrink: 0,
-        }}>
+        {/* Logo pill — clickable to open nav */}
+        <button
+          ref={navRef}
+          onClick={(e) => { e.stopPropagation(); setNavOpen(v => !v); }}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "2px 10px 2px 6px",
+            borderRadius: 20,
+            background: navOpen
+              ? (isLight ? "rgba(0,0,0,0.13)" : "rgba(255,255,255,0.18)")
+              : (isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)"),
+            border: isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.1)",
+            flexShrink: 0, cursor: "pointer",
+            transition: "background 0.15s",
+          }}
+        >
           <span style={{ fontSize: 14 }}>🖥️</span>
           <span style={{ fontWeight: 700, fontSize: 11, letterSpacing: "0.05em", color: textColor }}>
             Newsconseen
           </span>
-        </div>
+        </button>
+
+        {/* ── System nav panel ─────────────────────────────────────────── */}
+        {navOpen && (
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: "absolute",
+              top: "calc(100% + 2px)",
+              left: 0,
+              width: 260,
+              background: isLight ? "rgba(248,250,252,0.95)" : "rgba(8,14,28,0.97)",
+              border: isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.1)",
+              borderTop: "none",
+              borderRadius: "0 0 14px 14px",
+              backdropFilter: "blur(24px)",
+              boxShadow: "0 20px 48px rgba(0,0,0,0.4)",
+              overflow: "hidden",
+              zIndex: 99999,
+            }}
+          >
+            {/* User header */}
+            {user && (
+              <div style={{
+                padding: "14px 16px 10px",
+                borderBottom: isLight ? "1px solid rgba(0,0,0,0.07)" : "1px solid rgba(255,255,255,0.07)",
+                display: "flex", alignItems: "center", gap: 10,
+              }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: "50%",
+                  background: "linear-gradient(135deg,#10b981,#3b82f6)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 13, fontWeight: 700, color: "white", flexShrink: 0,
+                }}>
+                  {(user.full_name || user.email || "?")[0].toUpperCase()}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: textColor, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user.full_name || user.email}
+                  </div>
+                  <div style={{ fontSize: 10, color: mutedColor }}>{user.role}</div>
+                </div>
+              </div>
+            )}
+
+            {/* App grid grouped by category */}
+            {Object.entries(
+              DESKTOP_APPS.reduce((acc, app) => {
+                (acc[app.category] = acc[app.category] || []).push(app);
+                return acc;
+              }, {})
+            ).map(([cat, apps]) => (
+              <div key={cat}>
+                <div style={{ padding: "8px 16px 4px", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: mutedColor }}>
+                  {cat}
+                </div>
+                {apps.map(app => (
+                  <button
+                    key={app.id}
+                    onClick={() => { handleOpenApp(app); setNavOpen(false); }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      width: "100%", padding: "7px 16px",
+                      background: "none", border: "none", cursor: "pointer",
+                      color: isLight ? "#374151" : "#e2e8f0",
+                      fontSize: 13, textAlign: "left",
+                      transition: "background 0.1s",
+                    }}
+                    onMouseEnter={ev => ev.currentTarget.style.background = isLight ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.07)"}
+                    onMouseLeave={ev => ev.currentTarget.style.background = "none"}
+                  >
+                    <span style={{
+                      width: 24, height: 24, borderRadius: 7, flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: app.color + "22", fontSize: 13,
+                    }}>
+                      {app.icon}
+                    </span>
+                    <span style={{ fontWeight: 500 }}>{app.name}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+
+            {/* Footer */}
+            <div style={{ height: 1, background: isLight ? "rgba(0,0,0,0.07)" : "rgba(255,255,255,0.07)", margin: "6px 0" }} />
+            <button
+              onClick={() => { base44.auth.logout(); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                width: "100%", padding: "9px 16px 12px",
+                background: "none", border: "none", cursor: "pointer",
+                color: "#f87171", fontSize: 13, textAlign: "left",
+              }}
+              onMouseEnter={ev => ev.currentTarget.style.background = "rgba(248,113,113,0.08)"}
+              onMouseLeave={ev => ev.currentTarget.style.background = "none"}
+            >
+              <span style={{ width: 24, height: 24, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(248,113,113,0.15)", fontSize: 13 }}>
+                🚪
+              </span>
+              <span style={{ fontWeight: 500 }}>Sign Out</span>
+            </button>
+          </div>
+        )}
 
         {/* Divider */}
         <div style={{ width: 1, height: 16, background: isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)", flexShrink: 0 }} />
