@@ -539,7 +539,11 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
 
       <BulkImportDialog
         open={importOpen}
-        onClose={() => { setImportOpen(false); invalidate(); }}
+        onClose={() => {
+          setImportOpen(false);
+          qc.invalidateQueries({ queryKey: ["tasks"] });
+          qc.refetchQueries({ queryKey: ["tasks"] });
+        }}
         entityName="Tasks"
         fields={TASK_FIELDS}
         mappingRules={TASK_MAPPING_RULES}
@@ -572,7 +576,7 @@ export default function Tasks() {
   const listFn = useEntityListFn(currentUser);
   const qcRoot = useQueryClient();
 
-  const { data: tasks = [] } = useQuery({ queryKey: ["tasks", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Task), enabled: currentUser !== null });
+  const { data: tasks = [], isLoading } = useQuery({ queryKey: ["tasks", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Task), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
   const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.User.list() : base44.entities.User.filter({ company_id: companyId }), enabled: isAdmin });
   const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Enterprise), enabled: isAdmin });
   const { data: products = [] } = useQuery({ queryKey: ["products", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Product), enabled: isAdmin });
@@ -584,6 +588,16 @@ export default function Tasks() {
     const unsub = base44.entities.Enterprise.subscribe(() => qcRoot.invalidateQueries({ queryKey: ["enterprises"] }));
     return unsub;
   }, []);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        qcRoot.refetchQueries({ queryKey: ["tasks"] });
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [qcRoot]);
 
   if (loadingUser) {
     return (
