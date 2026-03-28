@@ -3,22 +3,14 @@ import { Undo2, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
 const ENTITY_MAP = {
-  People:        "Person",
-  Person:        "Person",
-  Enterprises:   "Enterprise",
-  Enterprise:    "Enterprise",
-  Products:      "Product",
-  Product:       "Product",
-  Services:      "Service",
-  Service:       "Service",
-  Addresses:     "Address",
-  Address:       "Address",
-  Tasks:         "Task",
-  Task:          "Task",
-  Transactions:  "Transaction",
-  Transaction:   "Transaction",
-  Relationships: "Relationship",
-  Relationship:  "Relationship",
+  People: "Person", Person: "Person",
+  Enterprises: "Enterprise", Enterprise: "Enterprise",
+  Products: "Product", Product: "Product",
+  Services: "Service", Service: "Service",
+  Addresses: "Address", Address: "Address",
+  Tasks: "Task", Task: "Task",
+  Transactions: "Transaction", Transaction: "Transaction",
+  Relationships: "Relationship", Relationship: "Relationship",
 };
 
 export default function UndoImportButton() {
@@ -31,7 +23,6 @@ export default function UndoImportButton() {
       const raw = localStorage.getItem("lastBulkImport");
       if (!raw) { setLastImport(null); return; }
       const data = JSON.parse(raw);
-      // Only show undo for imports within the last 24 hours
       const age = Date.now() - new Date(data.importedAt).getTime();
       if (age > 24 * 60 * 60 * 1000) { localStorage.removeItem("lastBulkImport"); setLastImport(null); return; }
       setLastImport(data);
@@ -46,7 +37,9 @@ export default function UndoImportButton() {
     return () => window.removeEventListener("lastBulkImportChanged", readFromStorage);
   }, []);
 
-  const entity = entityKey && base44.entities[entityKey];
+  const hasImport = !!lastImport;
+  const entityKey = lastImport ? ENTITY_MAP[lastImport.entityName] : null;
+  const entity = entityKey ? base44.entities[entityKey] : null;
 
   const handleUndo = async () => {
     if (!lastImport) return;
@@ -68,8 +61,6 @@ export default function UndoImportButton() {
     }
   };
 
-  const hasImport = !!lastImport;
-
   return (
     <div className="flex items-center gap-1.5">
       {confirm && !undoing && hasImport && (
@@ -78,13 +69,13 @@ export default function UndoImportButton() {
         </span>
       )}
       <button
-        onClick={undoing ? undefined : (hasImport ? handleUndo : undefined)}
+        onClick={undoing ? undefined : handleUndo}
+        disabled={!hasImport || undoing}
         title={
           !hasImport ? "No recent import to undo" :
           confirm ? `Confirm: delete ${lastImport.ids.length} imported ${lastImport.entityName}` :
           `Undo last import (${lastImport.ids.length} ${lastImport.entityName})`
         }
-        disabled={!hasImport && !undoing}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all border ${
           !hasImport
             ? "bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed opacity-50"
@@ -93,19 +84,13 @@ export default function UndoImportButton() {
             : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
         } ${undoing ? "opacity-60 cursor-not-allowed" : ""}`}
       >
-        {undoing
-          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          : <Undo2 className="w-3.5 h-3.5" />
-        }
+        {undoing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}
         <span className="hidden sm:inline">
           {undoing ? "Undoing…" : confirm ? "Confirm Undo" : "Undo Import"}
         </span>
       </button>
       {confirm && !undoing && hasImport && (
-        <button
-          onClick={() => setConfirm(false)}
-          className="text-xs text-slate-400 hover:text-slate-600 px-1"
-        >
+        <button onClick={() => setConfirm(false)} className="text-xs text-slate-400 hover:text-slate-600 px-1">
           ✕
         </button>
       )}
