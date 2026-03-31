@@ -8,6 +8,7 @@ from config import settings
 from config.taxonomy import (
     ENTERPRISE_ACTIVE_STATUSES as ACTIVE_STATUSES,
     ENTERPRISE_INACTIVE_STATUSES as INACTIVE_STATUSES,
+    normalize_enterprise_type,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,16 @@ def transform_enterprises(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # ----------------------------------------------------------
+    # Normalise enterprise_type to canonical taxonomy values
+    # Maps "business" → "commercial", "ngo" → "nonprofit", etc.
+    # ----------------------------------------------------------
+    enterprise_type_col = df.get("enterprise_type")
+    if enterprise_type_col is not None:
+        enterprise_type_col = enterprise_type_col.apply(
+            lambda x: normalize_enterprise_type(x) if pd.notna(x) and x else x
+        )
+
+    # ----------------------------------------------------------
     # Select and order output columns.
     # Use .get() pattern for every column so missing fields
     # produce NaN rows rather than KeyErrors.
@@ -102,7 +113,7 @@ def transform_enterprises(df: pd.DataFrame) -> pd.DataFrame:
         "id":               df.get("id"),
         "company_id":       df.get("company_id"),
         "name":             df.get("name"),
-        "enterprise_type":  df.get("enterprise_type"),
+        "enterprise_type":  enterprise_type_col,
         "status":           df.get("status"),
         "operating_status": df["operating_status"],
         "is_active":        df["is_active"],

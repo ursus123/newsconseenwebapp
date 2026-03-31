@@ -7,6 +7,7 @@ from etl.base import fetch_json_to_df
 from config import settings
 from config.taxonomy import (
     PERSON_TYPE_SETS,
+    PERSON_TYPE_MAP,
     ACTIVE_STATUSES,
     INACTIVE_STATUSES,
 )
@@ -76,6 +77,40 @@ def transform_people(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     # ----------------------------------------------------------
+    # Debug: log column names so we can verify company_id and
+    # enterprise_id are present in the Base44 response
+    # ----------------------------------------------------------
+    logger.info(
+        "transform_people: raw columns from Base44: %s",
+        sorted(df.columns.tolist()),
+    )
+    if "company_id" in df.columns:
+        logger.info(
+            "transform_people: company_id present — %d non-null values",
+            df["company_id"].notna().sum(),
+        )
+    else:
+        logger.warning("transform_people: company_id NOT in Base44 response")
+
+    if "enterprise_id" not in df.columns:
+        logger.warning("transform_people: enterprise_id NOT in Base44 response — will be null in analytics")
+        df["enterprise_id"] = None
+
+    # ----------------------------------------------------------
+    # Normalise person_type to canonical taxonomy values
+    # Maps "employee" → "staff", "patient" → "client", etc.
+    # Uses PERSON_TYPE_MAP from taxonomy so analytics tables store
+    # canonical values regardless of what Base44 returns.
+    # ----------------------------------------------------------
+    person_type_raw = (
+        df.get("person_type", pd.Series("", index=df.index))
+        .fillna("").str.lower().str.strip()
+    )
+    df["person_type"] = person_type_raw.map(
+        lambda x: PERSON_TYPE_MAP.get(x, x) if x else "staff"
+    )
+
+    # ----------------------------------------------------------
     # Normalise status to lowercase for consistent matching
     # ----------------------------------------------------------
     df["status"] = (
@@ -92,12 +127,10 @@ def transform_people(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # ----------------------------------------------------------
-    # Derived columns
+    # Derived columns — use raw aliases for classification so all
+    # legacy values (employee, patient, vendor) are correctly bucketed
     # ----------------------------------------------------------
-    person_type = (
-        df.get("person_type", pd.Series("", index=df.index))
-        .fillna("").str.lower().str.strip()
-    )
+    person_type = person_type_raw  # use raw for isin() checks (sets include aliases)
 
     df["is_staff"]       = person_type.isin(STAFF_TYPES)
     df["is_participant"] = person_type.isin(PARTICIPANT_TYPES)
@@ -163,7 +196,7 @@ def transform_people(df: pd.DataFrame) -> pd.DataFrame:
     summary["retention_rate_pct"] = (
         (summary["active_count"] / summary["people_count"].replace(0, pd.NA))
         * 100
-    ).round(1).fillna(0.0)
+    ).fillna(0.0).round(1)
 
     # ----------------------------------------------------------
     # Re-derive classification flags on summary rows
@@ -181,7 +214,7 @@ def transform_people(df: pd.DataFrame) -> pd.DataFrame:
     # ----------------------------------------------------------
     # Clean up numeric types
     # ----------------------------------------------------------
-    summary["avg_tenure_days"] = summary["avg_tenure_days"].round(1).fillna(0.0)
+    summary["avg_tenure_days"] = summary["avg_tenure_days"].fillna(0.0).round(1)
 
     for col in ["people_count", "active_count", "inactive_count",
                 "new_last_7d", "new_last_30d"]:

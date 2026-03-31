@@ -199,7 +199,7 @@ def transform_transactions(df: pd.DataFrame) -> pd.DataFrame:
     # Round monetary columns to 2 decimal places
     # ----------------------------------------------------------
     for col in ["total_amount", "avg_amount", "outstanding_amount"]:
-        summary[col] = summary[col].round(2).fillna(0.0)
+        summary[col] = summary[col].fillna(0.0).round(2)
 
     # Cast integer columns
     for col in ["total_transactions", "revenue_last_7d",
