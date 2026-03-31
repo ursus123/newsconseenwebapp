@@ -240,6 +240,12 @@ export default function Transactions() {
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
+  useEffect(() => {
+    const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["transactions"] }); };
+    document.addEventListener("visibilitychange", fn);
+    return () => document.removeEventListener("visibilitychange", fn);
+  }, [qc]);
+
   const isAdmin   = currentUser?.role === "admin" || currentUser?.role === "super_admin";
   const companyId = currentUser?.company_id;
   const perms     = usePermissions(currentUser);
@@ -259,6 +265,8 @@ export default function Transactions() {
     queryKey: ["transactions", companyId, currentUser?.email],
     queryFn: () => listFn(base44.entities.Transaction, "-date"),
     enabled: currentUser !== null,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: enterprises = [] } = useQuery({
@@ -600,7 +608,7 @@ export default function Transactions() {
 
       <BulkImportDialog
         open={importOpen}
-        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["transactions"] }); }}
+        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); }}
         entityName="Transactions"
         fields={TRANSACTION_FIELDS}
         mappingRules={TRANSACTION_MAPPING_RULES}

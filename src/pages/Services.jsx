@@ -77,6 +77,12 @@ export default function Services() {
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
+  useEffect(() => {
+    const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["services"] }); };
+    document.addEventListener("visibilitychange", fn);
+    return () => document.removeEventListener("visibilitychange", fn);
+  }, [qc]);
+
   const listFn = useEntityListFn(currentUser);
   const withScope = useWithScope(currentUser);
 
@@ -84,6 +90,8 @@ export default function Services() {
     queryKey: ["services", currentUser?.company_id, currentUser?.email],
     queryFn: () => listFn(base44.entities.Service),
     enabled: currentUser !== null,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const createMut = useMutation({ mutationFn: (d) => base44.entities.Service.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setFormOpen(false); } });
@@ -182,7 +190,7 @@ export default function Services() {
       <ServiceForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }} onSubmit={handleSubmit} onArchive={handleArchive} initialData={editing} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name} />
       <BulkImportDialog
-        open={importOpen} onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["services"] }); }}
+        open={importOpen} onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); }}
         entityName="Services" fields={SERVICE_FIELDS} mappingRules={SERVICE_MAPPING_RULES}
         templateFileName="newsconseen_services_import_template.xlsx"
         templateExample={SERVICE_TEMPLATE_EXAMPLE} templateInstructions={SERVICE_TEMPLATE_INSTRUCTIONS}

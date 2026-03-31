@@ -302,16 +302,29 @@ function AdminDashboard({ user }) {
   const listFn = useEntityListFn(user);
   const companyId = user?.company_id;
   const { t } = useTerminology(user);
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    const fn = () => {
+      if (document.visibilityState === "visible") {
+        ["enterprises", "services", "tasks-dash", "transactions-dash", "relationships-dash", "people", "products"].forEach(
+          (key) => qc.refetchQueries({ queryKey: [key, companyId] })
+        );
+      }
+    };
+    document.addEventListener("visibilitychange", fn);
+    return () => document.removeEventListener("visibilitychange", fn);
+  }, [qc, companyId]);
 
   // Operational queries — needed for UI rendering (enterprise health cards, alerts, charts, activity feed)
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId], queryFn: () => listFn(base44.entities.Enterprise) });
-  const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service) });
-  const { data: tasks = [] } = useQuery({ queryKey: ["tasks-dash", companyId], queryFn: () => listFn(base44.entities.Task) });
-  const { data: transactions = [] } = useQuery({ queryKey: ["transactions-dash", companyId], queryFn: () => listFn(base44.entities.Transaction) });
-  const { data: relationships = [] } = useQuery({ queryKey: ["relationships-dash", companyId], queryFn: () => listFn(base44.entities.Relationship) });
-  const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person) });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId], queryFn: () => listFn(base44.entities.Enterprise), staleTime: 0, refetchOnMount: "always" });
+  const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service), staleTime: 0, refetchOnMount: "always" });
+  const { data: tasks = [] } = useQuery({ queryKey: ["tasks-dash", companyId], queryFn: () => listFn(base44.entities.Task), staleTime: 0, refetchOnMount: "always" });
+  const { data: transactions = [] } = useQuery({ queryKey: ["transactions-dash", companyId], queryFn: () => listFn(base44.entities.Transaction), staleTime: 0, refetchOnMount: "always" });
+  const { data: relationships = [] } = useQuery({ queryKey: ["relationships-dash", companyId], queryFn: () => listFn(base44.entities.Relationship), staleTime: 0, refetchOnMount: "always" });
+  const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person), staleTime: 0, refetchOnMount: "always" });
   // Products kept for operational UI: LowStockAlert (item-level display), StockHealthChart, NotificationsBell
-  const { data: products = [] } = useQuery({ queryKey: ["products", companyId], queryFn: () => listFn(base44.entities.Product) });
+  const { data: products = [] } = useQuery({ queryKey: ["products", companyId], queryFn: () => listFn(base44.entities.Product), staleTime: 0, refetchOnMount: "always" });
 
   // Analytics queries — read from python_layer summaries (Layer 3 compliance)
   const { data: peopleSummary = [] } = useQuery({

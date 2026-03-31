@@ -80,6 +80,12 @@ export default function Addresses() {
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
+  useEffect(() => {
+    const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["addresses"] }); };
+    document.addEventListener("visibilitychange", fn);
+    return () => document.removeEventListener("visibilitychange", fn);
+  }, [qc]);
+
   const listFn = useEntityListFn(currentUser);
   const withScope = useWithScope(currentUser);
 
@@ -87,6 +93,8 @@ export default function Addresses() {
     queryKey: ["addresses", currentUser?.company_id, currentUser?.email],
     queryFn: () => listFn(base44.entities.Address),
     enabled: currentUser !== null,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const createMut = useMutation({
@@ -281,7 +289,7 @@ export default function Addresses() {
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.label || "this address"} />
       <BulkImportDialog
         open={importOpen}
-        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["addresses"] }); }}
+        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["addresses"] }); qc.refetchQueries({ queryKey: ["addresses"] }); }}
         entityName="Addresses" fields={ADDRESS_FIELDS} mappingRules={ADDRESS_MAPPING_RULES}
         templateFileName="newsconseen_addresses_import_template.xlsx"
         templateExample={ADDRESS_TEMPLATE_EXAMPLE} templateInstructions={ADDRESS_TEMPLATE_INSTRUCTIONS}

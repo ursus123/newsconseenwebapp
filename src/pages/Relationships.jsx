@@ -110,11 +110,18 @@ export default function Relationships() {
   const { toast } = useToast();
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
+
+  useEffect(() => {
+    const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["relationships"] }); };
+    document.addEventListener("visibilitychange", fn);
+    return () => document.removeEventListener("visibilitychange", fn);
+  }, [qc]);
+
   const perms = usePermissions(currentUser);
   const listFn = useEntityListFn(currentUser);
   const withScope = useWithScope(currentUser);
 
-  const { data: relationships = [] } = useQuery({ queryKey: ["relationships", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Relationship), enabled: currentUser !== null });
+  const { data: relationships = [] } = useQuery({ queryKey: ["relationships", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Relationship), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
   const { data: people = [] } = useQuery({ queryKey: ["people", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Person), enabled: currentUser !== null });
   const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Enterprise), enabled: currentUser !== null });
   const { data: products = [] } = useQuery({ queryKey: ["products", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Product), enabled: currentUser !== null });
@@ -272,7 +279,7 @@ export default function Relationships() {
       />
 
       <BulkImportDialog
-        open={importOpen} onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["relationships"] }); }}
+        open={importOpen} onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["relationships"] }); qc.refetchQueries({ queryKey: ["relationships"] }); }}
         entityName="Relationships" fields={RELATIONSHIP_FIELDS} mappingRules={RELATIONSHIP_MAPPING_RULES}
         templateFileName="newsconseen_relationships_import_template.xlsx"
         templateExample={RELATIONSHIP_TEMPLATE_EXAMPLE} templateInstructions={RELATIONSHIP_TEMPLATE_INSTRUCTIONS}

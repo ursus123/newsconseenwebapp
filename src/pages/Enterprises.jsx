@@ -130,6 +130,12 @@ export default function Enterprises() {
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
+  useEffect(() => {
+    const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["enterprises"] }); };
+    document.addEventListener("visibilitychange", fn);
+    return () => document.removeEventListener("visibilitychange", fn);
+  }, [qc]);
+
   const companyId  = currentUser?.company_id;
   const { t } = useTerminology(currentUser);
   const perms      = usePermissions(currentUser);

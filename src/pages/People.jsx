@@ -150,6 +150,12 @@ export default function People() {
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
+  useEffect(() => {
+    const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["people"] }); };
+    document.addEventListener("visibilitychange", fn);
+    return () => document.removeEventListener("visibilitychange", fn);
+  }, [qc]);
+
   const companyId  = currentUser?.company_id;
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
@@ -160,6 +166,8 @@ export default function People() {
     queryKey: ["people", companyId, currentUser?.email],
     queryFn: () => listFn(base44.entities.Person),
     enabled: currentUser !== null,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const createMut = useMutation({
@@ -338,7 +346,7 @@ export default function People() {
       />
       <BulkImportDialog
         open={importOpen}
-        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["people"] }); }}
+        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["people"] }); qc.refetchQueries({ queryKey: ["people"] }); }}
         entityName="People"
         fields={PEOPLE_FIELDS}
         mappingRules={PEOPLE_MAPPING_RULES}

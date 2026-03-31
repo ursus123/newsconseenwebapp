@@ -128,6 +128,12 @@ export default function Products() {
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
+  useEffect(() => {
+    const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["products"] }); };
+    document.addEventListener("visibilitychange", fn);
+    return () => document.removeEventListener("visibilitychange", fn);
+  }, [qc]);
+
   const companyId = currentUser?.company_id;
   const perms = usePermissions(currentUser);
   const listFn = useEntityListFn(currentUser);
@@ -137,6 +143,8 @@ export default function Products() {
     queryKey: ["products", companyId, currentUser?.email],
     queryFn: () => listFn(base44.entities.Product),
     enabled: currentUser !== null,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   useEffect(() => {
