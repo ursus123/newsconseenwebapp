@@ -3,14 +3,17 @@ import { base44 } from "@/api/base44Client";
 
 const STORAGE_KEY = "active_enterprise_id";
 
-export default function EnterpriseContextSwitcher({ isLight }) {
+export default function EnterpriseContextSwitcher({ isLight, currentUser }) {
   const [enterprises, setEnterprises] = useState([]);
   const [activeId, setActiveId] = useState(() => localStorage.getItem(STORAGE_KEY) || null);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
-    base44.entities.Enterprise.filter({ status: "active" })
+    if (!currentUser) return;
+    const filters = { status: "active" };
+    if (currentUser.company_id) filters.company_id = currentUser.company_id;
+    base44.entities.Enterprise.filter(filters)
       .then(list => {
         setEnterprises(list);
         // If no active enterprise is set yet, default to first
@@ -20,7 +23,7 @@ export default function EnterpriseContextSwitcher({ isLight }) {
         }
       })
       .catch(() => {});
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     const handler = (e) => {

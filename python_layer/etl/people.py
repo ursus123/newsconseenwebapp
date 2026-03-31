@@ -5,70 +5,24 @@ import pandas as pd
 
 from etl.base import fetch_json_to_df
 from config import settings
+from config.taxonomy import (
+    PERSON_TYPE_SETS,
+    ACTIVE_STATUSES,
+    INACTIVE_STATUSES,
+)
 
 logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------------
-# Person type classification
-# Three buckets cover all enterprise verticals:
-#   STAFF_TYPES       — people who work for or within the enterprise
-#   PARTICIPANT_TYPES — people the enterprise serves or enrolls
-#   CONTACT_TYPES     — external people linked to the enterprise
-#                       (vendors, partners, board members, guarantors)
-#
-# Types not in any bucket get is_staff=False, is_participant=False,
-# is_contact=False and are counted but not classified. This is
-# intentional — unknown types surface in dashboards as "unclassified"
-# rather than silently disappearing.
-#
-# Keep these in sync with person_type values used in Base44.
+# Person type classification — imported from config.taxonomy
+# PERSON_TYPE_SETS["staff"]     — staff, employee, contractor, etc.
+# PERSON_TYPE_SETS["client"]    — client, patient, student, etc.
+# PERSON_TYPE_SETS["contact"]   — vendor, partner, donor, etc.
+# PERSON_TYPE_SETS["volunteer"] — volunteer, community_worker, etc.
 # ----------------------------------------------------------
-STAFF_TYPES = {
-    # Operations
-    "staff", "employee", "contractor", "consultant", "temp",
-    # Management
-    "manager", "supervisor", "admin", "coordinator", "director",
-    # Healthcare
-    "caregiver", "nurse", "doctor", "therapist", "pharmacist",
-    # Education
-    "teacher", "instructor", "tutor", "coach", "trainer",
-    # Community
-    "volunteer", "intern",
-}
-
-PARTICIPANT_TYPES = {
-    # Services
-    "client", "customer", "patient", "resident",
-    # Education
-    "student", "learner", "trainee", "attendee",
-    # Membership / programs
-    "member", "participant", "beneficiary", "enrollee",
-    "subscriber", "applicant",
-}
-
-CONTACT_TYPES = {
-    # External relationships
-    "vendor", "supplier", "partner", "donor", "sponsor",
-    # Governance
-    "board_member", "trustee", "shareholder", "investor",
-    # Personal links
-    "guarantor", "next_of_kin", "emergency_contact", "guardian",
-    # Other external
-    "referral", "prospect", "lead",
-}
-
-# Statuses that count as active — covers naming variations
-# across different enterprise verticals
-ACTIVE_STATUSES = {
-    "active", "live", "current", "enrolled", "approved",
-    "open", "engaged", "confirmed",
-}
-
-# Statuses that count as inactive
-INACTIVE_STATUSES = {
-    "inactive", "archived", "closed", "terminated", "discharged",
-    "withdrawn", "suspended", "expired", "left", "graduated",
-}
+STAFF_TYPES       = PERSON_TYPE_SETS["staff"]
+PARTICIPANT_TYPES = PERSON_TYPE_SETS["client"]
+CONTACT_TYPES     = PERSON_TYPE_SETS["contact"]
 
 REQUIRED_COLUMNS = {"id", "status"}
 

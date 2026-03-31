@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { Search, X, Users, Building2, ClipboardList, ArrowLeftRight } from "lucide-react";
 import { createPageUrl } from "@/utils";
 
-export default function GlobalSearchBar() {
+export default function GlobalSearchBar({ currentUser }) {
   const [input, setInput] = useState("");
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
@@ -25,11 +25,13 @@ export default function GlobalSearchBar() {
     const query = input.toLowerCase();
     let mounted = true;
 
+    const companyId = currentUser?.company_id;
+    const scope = companyId ? { company_id: companyId } : {};
     Promise.all([
-      base44.entities.Person.list(undefined, 10).catch(() => []),
-      base44.entities.Enterprise.list(undefined, 10).catch(() => []),
-      base44.entities.Task.list(undefined, 10).catch(() => []),
-      base44.entities.Transaction.list(undefined, 10).catch(() => []),
+      base44.entities.Person.filter(scope, undefined, 50).catch(() => []),
+      base44.entities.Enterprise.filter(scope, undefined, 50).catch(() => []),
+      base44.entities.Task.filter(scope, undefined, 50).catch(() => []),
+      base44.entities.Transaction.filter(scope, undefined, 50).catch(() => []),
     ]).then(([people, enterprises, tasks, transactions]) => {
       if (!mounted) return;
 

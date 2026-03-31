@@ -97,20 +97,24 @@ def run_geospatial_summary():
 #
 # Execution order:
 #
-#   t1 (tasks)
-#   t2 (transactions)
-#   t3 (services)
-#   t4 (enterprises)        ─┐
-#   t5 (people)             ─┤─► t8 (relationships)
-#   t6 (products)            │
-#   t7 (addresses)          ─┘─► t9 (geospatial)
+#   t1 (tasks)                           — independent
+#   t2 (transactions)                    — independent
+#   t3 (services)                        — independent
+#   t4 (enterprises) ─┐
+#   t5 (people)      ─┤─► t8 (relationships)
+#   t6 (products)    ─┤
+#   t7 (addresses)   ─┼─► t8 (relationships)
+#                    └──► t9 (geospatial)
+#   t4 (enterprises) ────► t9 (geospatial)
 #
 # Rationale:
-#   - Core entities (t1–t7) run in parallel where possible
-#   - relationships (t8) waits for enterprises, people, addresses
-#     so its join keys resolve to fresh data
-#   - geospatial (t9) waits for addresses so coordinates are
-#     available in address_summary before clustering runs
+#   - tasks, transactions, services have no downstream deps — run freely
+#   - relationships (t8) waits for enterprises, people, products, addresses
+#     so all entity summaries are from the same generation before the
+#     relationship join backbone is written
+#   - geospatial (t9) waits for addresses (coordinates in address_summary)
+#     AND enterprises (entity data read from same Base44 source) so that
+#     geospatial_summary reflects a consistent snapshot
 # ----------------------------------------------------------
 
 with DAG(
@@ -135,11 +139,8 @@ with DAG(
     t8 = PythonOperator(task_id="relationship_summary", python_callable=run_relationship_summary)
     t9 = PythonOperator(task_id="geospatial_summary",   python_callable=run_geospatial_summary)
 
-    # Core entities can run in parallel
-    # relationships waits for enterprises, people, addresses
-    # geospatial waits for addresses
-    [t4, t5, t7] >> t8
-    t7 >> t9
+    [t4, t5, t6, t7] >> t8
+    [t4, t7] >> t9
 
     # tasks, transactions, services, products have no dependencies
     # they run independently alongside the above

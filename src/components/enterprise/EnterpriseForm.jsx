@@ -56,13 +56,13 @@ function Sel({ value, onChange, options, placeholder }) {
 }
 
 // Person picker with search + create fallback
-function PersonPicker({ onSelect, excludeNames = [] }) {
+function PersonPicker({ onSelect, excludeNames = [], companyId = null }) {
   const [query, setQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
 
   const { data: people = [] } = useQuery({
-    queryKey: ["people-picker"],
-    queryFn: () => base44.entities.Person.list(),
+    queryKey: ["people-picker", companyId],
+    queryFn: () => base44.entities.Person.filter(companyId ? { company_id: companyId } : {}),
   });
 
   const filtered = people.filter((p) => {
@@ -467,6 +467,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
                   <PersonPicker
                     excludeNames={(form.owners || []).map((o) => o.person_name)}
                     onSelect={handleOwnerSelect}
+                    companyId={currentUser?.company_id}
                   />
                 </div>
               )}
@@ -496,6 +497,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
                   <PersonPicker
                     excludeNames={(form.management_roles || []).map((r) => r.assigned_person)}
                     onSelect={(sel) => handleMgmtSelect(sel, "")}
+                    companyId={currentUser?.company_id}
                   />
                 </div>
               )}
@@ -514,7 +516,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
         );
 
       case "org_management":
-        return <OrgManagementTab form={form} set={set} addItem={addItem} removeItem={removeItem} updateItem={updateItem} />;
+        return <OrgManagementTab form={form} set={set} addItem={addItem} removeItem={removeItem} updateItem={updateItem} currentUser={currentUser} />;
 
 
       case "operations":

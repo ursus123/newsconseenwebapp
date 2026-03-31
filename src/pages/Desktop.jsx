@@ -379,7 +379,7 @@ export default function Desktop() {
         <div style={{ width: 1, height: 16, background: isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)", flexShrink: 0 }} />
 
         {/* Enterprise context switcher */}
-        <EnterpriseContextSwitcher isLight={isLight} />
+        <EnterpriseContextSwitcher isLight={isLight} currentUser={user} />
 
         {/* Divider */}
         <div style={{ width: 1, height: 16, background: isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)", flexShrink: 0 }} />
@@ -505,7 +505,7 @@ export default function Desktop() {
         {/* Daily Briefing — shown when no windows are open */}
         {wm.windows.length === 0 && (
           <div style={{ pointerEvents: "all" }}>
-            <DailyBriefing isLight={isLight} />
+            <DailyBriefing isLight={isLight} currentUser={user} />
           </div>
         )}
       </div>

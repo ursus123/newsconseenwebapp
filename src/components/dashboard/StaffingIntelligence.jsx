@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { TYPE_ALIASES } from "@/utils/typeAliases";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -13,7 +14,7 @@ function StaffClientRatio({ people, enterprises }) {
     const name = e.enterprise_name;
     const staff = people.filter(p =>
       p.status === "active" &&
-      ["employee", "contractor", "freelancer"].includes(p.person_type) &&
+      TYPE_ALIASES.staff.includes(p.person_type) &&
       p.primary_role &&
       (p.assigned_enterprises || []).some(ae => ae.enterprise_name === name)
     ).length;
@@ -159,7 +160,7 @@ function TaskLoadDistribution({ people, tasks }) {
 
   const staffList = people.filter(p =>
     p.status === "active" &&
-    ["employee", "contractor", "freelancer"].includes(p.person_type)
+    TYPE_ALIASES.staff.includes(p.person_type)
   );
 
   const staffLoad = staffList.map(p => {

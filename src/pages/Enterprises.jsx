@@ -327,6 +327,7 @@ export default function Enterprises() {
         onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)}
         onArchive={handleArchive}
         initialData={editing}
+        currentUser={currentUser}
       />
       <DeleteDialog
         open={!!deleting}

@@ -39,13 +39,13 @@ export default function StaffSchedule() {
   // Data queries
   const { data: people = [], isLoading: peopleLoading } = useQuery({
     queryKey: ["sched-people", user?.company_id],
-    queryFn: () => base44.entities.Person.filter({ status: "active" }),
+    queryFn: () => base44.entities.Person.filter({ status: "active", company_id: user?.company_id }),
     enabled: !!user,
   });
 
   const { data: enterprises = [] } = useQuery({
-    queryKey: ["sched-enterprises"],
-    queryFn: () => base44.entities.Enterprise.filter({ status: "active" }),
+    queryKey: ["sched-enterprises", user?.company_id],
+    queryFn: () => base44.entities.Enterprise.filter({ status: "active", company_id: user?.company_id }),
     enabled: !!user,
   });
 
@@ -54,21 +54,22 @@ export default function StaffSchedule() {
   const weekEnd = format(weekDays[6], "yyyy-MM-dd");
 
   const { data: shifts = [], isLoading: shiftsLoading } = useQuery({
-    queryKey: ["shift-tasks", weekStart, weekEnd, selectedEnterprise],
-    queryFn: () => base44.entities.Task.filter({ task_type: "shift" }, "-scheduled_date", 500),
+    queryKey: ["shift-tasks", weekStart, weekEnd, selectedEnterprise, user?.company_id],
+    queryFn: () => base44.entities.Task.filter({ task_type: "shift", company_id: user?.company_id }, "-scheduled_date", 500),
     enabled: !!user,
   });
 
   const { data: leaveTasks = [] } = useQuery({
-    queryKey: ["leave-tasks-sched"],
-    queryFn: () => base44.entities.Task.filter({ task_type: "leave_request", status: "completed" }, "-scheduled_date", 200),
+    queryKey: ["leave-tasks-sched", user?.company_id],
+    queryFn: () => base44.entities.Task.filter({ task_type: "leave_request", status: "completed", company_id: user?.company_id }, "-scheduled_date", 200),
     enabled: !!user,
   });
 
   const { data: clockTasks = [] } = useQuery({
-    queryKey: ["clock-tasks-sched", weekStart, weekEnd],
+    queryKey: ["clock-tasks-sched", weekStart, weekEnd, user?.company_id],
     queryFn: () => base44.entities.Task.filter({
       scheduled_date: { $gte: weekStart, $lte: weekEnd },
+      company_id: user?.company_id,
     }, "-scheduled_date", 500).then((tasks) => tasks.filter((t) => ["clock_in", "clock_out"].includes(t.task_type))),
     enabled: !!user,
   });

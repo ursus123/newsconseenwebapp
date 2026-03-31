@@ -33,6 +33,57 @@ def _run(sql: str, params: dict) -> list[dict]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# OPERATOR CONTEXT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_operator_context(company_id: str) -> dict:
+    """
+    Returns the root enterprise record — name, type, description, sector.
+    Used by build_system_prompt() to ground the copilot in the operator's
+    specific business context.
+    Called first in every conversation so Claude knows who it is talking to.
+    """
+    sql = """
+        SELECT
+            name,
+            enterprise_type,
+            status,
+            operating_status,
+            phone,
+            email,
+            website,
+            created_date
+        FROM analytics.enterprise_summary
+        WHERE company_id = :company_id
+          AND is_root    = TRUE
+        ORDER BY created_date ASC
+        LIMIT 1
+    """
+    rows = _run(sql, {"company_id": company_id})
+
+    if rows:
+        ctx = rows[0]
+        return {
+            "name":            ctx.get("name") or "this organisation",
+            "enterprise_type": ctx.get("enterprise_type") or "commercial",
+            "operating_status": ctx.get("operating_status") or "active",
+            "phone":           ctx.get("phone"),
+            "email":           ctx.get("email"),
+            "website":         ctx.get("website"),
+        }
+
+    # Fallback when no enterprise record exists yet
+    return {
+        "name":            "this organisation",
+        "enterprise_type": "commercial",
+        "operating_status": "active",
+        "phone":           None,
+        "email":           None,
+        "website":         None,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # PEOPLE QUERIES
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -73,12 +124,11 @@ def get_people_summary(company_id: str, person_type: Optional[str] = None) -> di
     }
 
 
-def get_client_retention_risk(company_id: str, top_n: int = 10) -> dict:
+def get_person_churn_risk(company_id: str, top_n: int = 10) -> dict:
     """
-    Returns clients who show retention risk signals:
-    - inactive clients discharged in last 90 days
-    - clients with recent discharge reason
-    Used for: "which clients are at risk", "who might leave"
+    Returns people who show churn/attrition risk signals:
+    - any person_type inactive or with an end_date in last 90 days
+    Used for: "which clients are at risk", "who might leave", "recent exits"
     """
     sql = """
         SELECT
@@ -111,8 +161,8 @@ def get_client_retention_risk(company_id: str, top_n: int = 10) -> dict:
                 break
 
     return {
-        "at_risk_clients": rows,
-        "count":           len(rows),
+        "at_risk_people": rows,
+        "count":          len(rows),
     }
 
 
@@ -293,10 +343,14 @@ def get_task_summary(
     }
 
 
-def get_visit_outcomes(company_id: str, days_back: int = 30) -> dict:
+def get_task_outcomes(
+    company_id: str,
+    task_type:  Optional[str] = None,
+    days_back:  int = 30,
+) -> dict:
     """
-    Returns breakdown of care visit outcomes.
-    Used for: "how many visits were missed", "caregiver no-shows"
+    Returns breakdown of task outcomes (completed, no-show, rescheduled, etc).
+    Used for: "how many visits were missed", "no-shows", "task outcome breakdown"
     """
     sql = """
         SELECT
@@ -310,10 +364,14 @@ def get_visit_outcomes(company_id: str, days_back: int = 30) -> dict:
         GROUP BY outcome
         ORDER BY count DESC
     """
-    rows = _run(sql, {"company_id": company_id, "days_back": days_back})
+    rows = _run(sql, {
+        "company_id": company_id,
+        "task_type":  task_type,
+        "days_back":  days_back,
+    })
 
     return {
-        "outcomes":     rows,
+        "outcomes":      rows,
         "days_analysed": days_back,
     }
 
@@ -447,6 +505,11 @@ def get_network_overview(company_id: str) -> dict:
 
 TOOL_DEFINITIONS = [
     {
+        "name": "get_operator_context",
+        "description": "Get the operator's enterprise name, type, and operating status. Call this first whenever you need to personalise your response or understand the business context.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "get_people_summary",
         "description": "Get headcount breakdown by person_type (staff, client, contact) and status. Use for questions about team size, client count, staffing levels.",
         "input_schema": {
@@ -461,14 +524,14 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "get_client_retention_risk",
+        "name": "get_person_churn_risk",
         "description": "Get people showing attrition/churn risk — recently ended or inactive in last 90 days. Works for any person_type. Use for retention, dropout, membership loss questions.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "top_n": {
                     "type": "integer",
-                    "description": "Max number of at-risk clients to return. Default 10.",
+                    "description": "Max number of at-risk people to return. Default 10.",
                 },
             },
         },
@@ -517,11 +580,12 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "get_visit_outcomes",
-        "description": "Get breakdown of care visit outcomes — completed, not home, caregiver no-show, rescheduled. Use for 'missed visits', 'no-shows', 'visit quality'.",
+        "name": "get_task_outcomes",
+        "description": "Get breakdown of task outcomes — completed, no-show, rescheduled, missed. Use for 'missed visits', 'no-shows', 'task outcome breakdown', 'visit quality'.",
         "input_schema": {
             "type": "object",
             "properties": {
+                "task_type": {"type": "string", "description": "Filter by task type (operator-defined). Null for all types."},
                 "days_back": {"type": "integer", "description": "Days back to analyse. Default 30."},
             },
         },
@@ -561,16 +625,17 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
     kwargs["company_id"] = company_id
 
     dispatch = {
-        "get_people_summary":        get_people_summary,
-        "get_client_retention_risk": get_client_retention_risk,
-        "get_staff_availability":    get_staff_availability,
-        "get_transaction_summary":   get_transaction_summary,
-        "get_overdue_invoices":      get_overdue_invoices,
-        "get_task_summary":          get_task_summary,
-        "get_visit_outcomes":        get_visit_outcomes,
-        "get_product_summary":       get_product_summary,
-        "get_enterprise_overview":   get_enterprise_overview,
-        "get_network_overview":      get_network_overview,
+        "get_operator_context":    get_operator_context,
+        "get_people_summary":      get_people_summary,
+        "get_person_churn_risk":   get_person_churn_risk,
+        "get_staff_availability":  get_staff_availability,
+        "get_transaction_summary": get_transaction_summary,
+        "get_overdue_invoices":    get_overdue_invoices,
+        "get_task_summary":        get_task_summary,
+        "get_task_outcomes":       get_task_outcomes,
+        "get_product_summary":     get_product_summary,
+        "get_enterprise_overview": get_enterprise_overview,
+        "get_network_overview":    get_network_overview,
     }
 
     fn = dispatch.get(tool_name)

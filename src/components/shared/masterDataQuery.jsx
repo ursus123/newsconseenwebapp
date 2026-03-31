@@ -47,9 +47,10 @@ function stripPersonFields(person, tier = 1) {
  * Query active people — scoped by enterprise if provided.
  * Returns field-limited records (Tier 1 by default).
  */
-export async function queryPeople({ enterpriseName = null, personType = null, tier = 1 } = {}) {
+export async function queryPeople({ enterpriseName = null, personType = null, tier = 1, companyId = null } = {}) {
   const filters = { status: "active" };
   if (personType) filters.person_type = personType;
+  if (companyId) filters.company_id = companyId;
 
   const records = await base44.entities.Person.filter(filters, "first_name", 200);
   return records.map((p) => stripPersonFields(p, tier));
@@ -59,10 +60,14 @@ export async function queryPeople({ enterpriseName = null, personType = null, ti
  * Query active patients specifically (for MedAdmin).
  * Falls back to all active people if no patients exist.
  */
-export async function queryPatients() {
-  const patients = await base44.entities.Person.filter({ status: "active", person_type: "patient" }, "first_name");
+export async function queryPatients(companyId = null) {
+  const baseFilters = { status: "active", person_type: "patient" };
+  if (companyId) baseFilters.company_id = companyId;
+  const patients = await base44.entities.Person.filter(baseFilters, "first_name");
   if (patients.length > 0) return patients.map((p) => stripPersonFields(p, 2)); // Tier 2 for med app
-  const all = await base44.entities.Person.filter({ status: "active" }, "first_name");
+  const fallbackFilters = { status: "active" };
+  if (companyId) fallbackFilters.company_id = companyId;
+  const all = await base44.entities.Person.filter(fallbackFilters, "first_name");
   return all.map((p) => stripPersonFields(p, 1));
 }
 
@@ -92,8 +97,10 @@ function stripEnterpriseFields(enterprise) {
 /**
  * Query active enterprises for app use (context selection, validation).
  */
-export async function queryEnterprises({ status = "active" } = {}) {
-  const records = await base44.entities.Enterprise.filter({ status }, "enterprise_name");
+export async function queryEnterprises({ status = "active", companyId = null } = {}) {
+  const filters = { status };
+  if (companyId) filters.company_id = companyId;
+  const records = await base44.entities.Enterprise.filter(filters, "enterprise_name");
   return records.map(stripEnterpriseFields);
 }
 
@@ -134,9 +141,10 @@ function stripProductFields(product, tier = 1) {
 /**
  * Query active items. Use tier=2 for medical/inventory apps needing expiry/condition.
  */
-export async function queryProducts({ itemType = null, tier = 1 } = {}) {
+export async function queryProducts({ itemType = null, tier = 1, companyId = null } = {}) {
   const filters = { status: "active" };
   if (itemType) filters.item_type = itemType;
+  if (companyId) filters.company_id = companyId;
   const records = await base44.entities.Product.filter(filters, "name");
   return records.map((p) => stripProductFields(p, tier));
 }
@@ -162,8 +170,10 @@ function stripServiceFields(service) {
   // Strips: price, billing_unit, internal_notes, attachment_urls
 }
 
-export async function queryServices() {
-  const records = await base44.entities.Service.filter({ status: "active" }, "name");
+export async function queryServices(companyId = null) {
+  const filters = { status: "active" };
+  if (companyId) filters.company_id = companyId;
+  const records = await base44.entities.Service.filter(filters, "name");
   return records.map(stripServiceFields);
 }
 
@@ -187,7 +197,9 @@ function stripAddressFields(address) {
   // Strips: linked_people, linked_enterprises, internal_notes, attachment_urls
 }
 
-export async function queryAddresses() {
-  const records = await base44.entities.Address.filter({ status: "active" }, "label");
+export async function queryAddresses(companyId = null) {
+  const filters = { status: "active" };
+  if (companyId) filters.company_id = companyId;
+  const records = await base44.entities.Address.filter(filters, "label");
   return records.map(stripAddressFields);
 }

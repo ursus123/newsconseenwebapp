@@ -36,20 +36,22 @@ function KpiCard({ label, value, sub, color, icon, isLight, loading }) {
   );
 }
 
-export default function DailyBriefing({ isLight }) {
+export default function DailyBriefing({ isLight, currentUser }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!currentUser) return;
     let mounted = true;
+    const companyId = currentUser.company_id;
     async function fetch() {
       try {
         const [tasks, people, enterprises, products, transactions] = await Promise.all([
-          base44.entities.Task.list("-created_date", 500),
-          base44.entities.Person.filter({ status: "active" }),
-          base44.entities.Enterprise.filter({ status: "active" }),
-          base44.entities.Product.filter({ status: "active" }),
-          base44.entities.Transaction.list("-created_date", 500),
+          base44.entities.Task.filter({ company_id: companyId }, "-created_date", 500),
+          base44.entities.Person.filter({ status: "active", company_id: companyId }),
+          base44.entities.Enterprise.filter({ status: "active", company_id: companyId }),
+          base44.entities.Product.filter({ status: "active", company_id: companyId }),
+          base44.entities.Transaction.filter({ company_id: companyId }, "-created_date", 500),
         ]);
 
         const today = new Date().toISOString().split("T")[0];
@@ -77,7 +79,7 @@ export default function DailyBriefing({ isLight }) {
     }
     fetch();
     return () => { mounted = false; };
-  }, []);
+  }, [currentUser]);
 
   const textMain = isLight ? "#1e293b" : "#f1f5f9";
   const textSub = isLight ? "#64748b" : "#94a3b8";

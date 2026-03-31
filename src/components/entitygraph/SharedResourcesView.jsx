@@ -1,8 +1,9 @@
 import React from "react";
+import { TYPE_ALIASES } from "@/utils/typeAliases";
 
 export default function SharedResourcesView({ enterprises, people, products, services }) {
   const staffByName = {};
-  people.filter(p => p.person_type === "employee").forEach(p => {
+  people.filter(p => TYPE_ALIASES.staff.includes(p.person_type)).forEach(p => {
     const key = `${p.first_name} ${p.last_name}`;
     if (!staffByName[key]) staffByName[key] = [];
     if (p.enterprise && !staffByName[key].includes(p.enterprise)) staffByName[key].push(p.enterprise);

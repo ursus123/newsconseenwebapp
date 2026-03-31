@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { TYPE_ALIASES } from "@/utils/typeAliases";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
@@ -197,12 +198,6 @@ export default function People() {
   };
 
   // Type tab pre-filter with migration support
-  const TYPE_ALIASES = {
-    staff:     ["staff", "employee", "contractor", "freelancer"],
-    client:    ["client", "patient", "student", "member"],
-    contact:   ["contact", "vendor", "supplier", "external_partner"],
-    volunteer: ["volunteer"],
-  };
 
   const typeFiltered = activeTypeTab === "all"
     ? people

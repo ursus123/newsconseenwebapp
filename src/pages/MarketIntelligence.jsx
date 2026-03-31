@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { TYPE_ALIASES } from "@/utils/typeAliases";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import ResearchInputBar from "@/components/marketintelligence/ResearchInputBar";
@@ -535,7 +536,7 @@ export default function MarketIntelligence() {
         const people = allPeople.filter(p => enterpriseNames.includes(p.enterprise));
         setOperationalContext({
           enterprises:       nearbyEnterprises.length,
-          total_staff:       people.filter(p => p.person_type === "employee").length,
+          total_staff:       people.filter(p => TYPE_ALIASES.staff.includes(p.person_type)).length,
           total_clients:     people.filter(p => p.person_type === "client").length,
           total_revenue:     txns.reduce((s, t) => s + (t.amount || 0), 0),
           task_completion:   tasks.length > 0 ? Math.round(tasks.filter(t => t.status === "completed").length / tasks.length * 100) : null,

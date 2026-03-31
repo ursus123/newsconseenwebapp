@@ -59,26 +59,26 @@ export default function MedAdmin() {
   }, [notifications, alertNotification]);
 
   const { data: people = [] } = useQuery({
-    queryKey: ["med-people"],
-    queryFn: () => queryPatients(),
+    queryKey: ["med-people", user?.company_id],
+    queryFn: () => queryPatients(user?.company_id),
     enabled: !!user,
   });
 
   const { data: products = [] } = useQuery({
-    queryKey: ["med-products"],
-    queryFn: () => queryProducts({ tier: 2 }),
+    queryKey: ["med-products", user?.company_id],
+    queryFn: () => queryProducts({ tier: 2, companyId: user?.company_id }),
     enabled: !!user,
   });
 
   const { data: enterprises = [] } = useQuery({
-    queryKey: ["med-enterprises"],
-    queryFn: () => queryEnterprises({ status: "active" }),
+    queryKey: ["med-enterprises", user?.company_id],
+    queryFn: () => queryEnterprises({ status: "active", companyId: user?.company_id }),
     enabled: !!user,
   });
 
   const { data: addresses = [] } = useQuery({
-    queryKey: ["med-addresses"],
-    queryFn: () => queryAddresses(),
+    queryKey: ["med-addresses", user?.company_id],
+    queryFn: () => queryAddresses(user?.company_id),
     enabled: !!user,
   });
 
@@ -86,18 +86,19 @@ export default function MedAdmin() {
   // (remove previous auto-select logic)
 
   const { data: allTasks = [], refetch } = useQuery({
-    queryKey: ["med-tasks", selectedClient?.id],
+    queryKey: ["med-tasks", selectedClient?.id, user?.company_id],
     queryFn: () => base44.entities.Task.filter({
       related_person: selectedClient ? `${selectedClient.first_name} ${selectedClient.last_name}` : undefined,
       task_type: "medication_admin",
+      company_id: user?.company_id,
     }, "-scheduled_date", 500),
     enabled: !!selectedClient,
   });
 
   // All tasks for client switcher stats (broader query)
   const { data: allClientTasks = [] } = useQuery({
-    queryKey: ["med-tasks-all-clients"],
-    queryFn: () => base44.entities.Task.filter({ task_type: "medication_admin", scheduled_date: format(new Date(), "yyyy-MM-dd") }, "-created_date", 200),
+    queryKey: ["med-tasks-all-clients", user?.company_id],
+    queryFn: () => base44.entities.Task.filter({ task_type: "medication_admin", scheduled_date: format(new Date(), "yyyy-MM-dd"), company_id: user?.company_id }, "-created_date", 200),
     enabled: !!user,
   });
 

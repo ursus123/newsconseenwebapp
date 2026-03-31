@@ -450,7 +450,7 @@ export default function Layout({ children, currentPageName }) {
             </button>
             <div className="ml-2 lg:ml-0 flex items-center gap-3 flex-1 min-w-0">
               <h2 className="text-lg font-semibold text-slate-800 shrink-0">{currentPageName}</h2>
-              <GlobalSearchBar />
+              <GlobalSearchBar currentUser={currentUser} />
               {currentUser && (
                 currentUser.role === "super_admin" ? (
                   <span className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold shrink-0">

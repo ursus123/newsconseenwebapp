@@ -8,6 +8,7 @@ import { Plus, Trash2, Upload, Search } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import OrgChartBuilder from "@/components/enterprise/OrgChartBuilder";
+import { TYPE_ALIASES } from "@/utils/typeAliases";
 
 function Field({ label, children }) {
   return (
@@ -73,15 +74,17 @@ function PeoplePicker({ value, onChange, people }) {
   );
 }
 
-export default function OrgManagementTab({ form, set, addItem, removeItem, updateItem }) {
+export default function OrgManagementTab({ form, set, addItem, removeItem, updateItem, currentUser }) {
+  const companyId = currentUser?.company_id;
+
   const { data: allPeople = [] } = useQuery({
-    queryKey: ["people-org"],
-    queryFn: () => base44.entities.Person.list(),
+    queryKey: ["people-org", companyId],
+    queryFn: () => base44.entities.Person.filter(companyId ? { company_id: companyId } : {}),
   });
 
   const { data: allServices = [] } = useQuery({
-    queryKey: ["services-org"],
-    queryFn: () => base44.entities.Service.list(),
+    queryKey: ["services-org", companyId],
+    queryFn: () => base44.entities.Service.filter(companyId ? { company_id: companyId } : {}),
   });
 
   const linkedServiceIds = (form.linked_service_ids || []);
@@ -257,7 +260,7 @@ export default function OrgManagementTab({ form, set, addItem, removeItem, updat
           <div className="text-xs text-slate-400 bg-slate-50 rounded-xl px-4 py-3">No people found. Add people in the People page first.</div>
         ) : (
           <div className="flex flex-wrap gap-2 mb-3">
-            {allPeople.filter((p) => p.person_type === "employee" || p.person_type === "contractor" || p.person_type === "freelancer" || !p.person_type).map((person) => {
+            {allPeople.filter((p) => TYPE_ALIASES.staff.includes(p.person_type) || !p.person_type).map((person) => {
               const linked = linkedEmployeeIds.includes(person.id);
               return (
                 <button key={person.id} type="button" onClick={() => toggleEmployee(person)}

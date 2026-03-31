@@ -10,13 +10,13 @@ import json
 import logging
 import os
 import anthropic
-from .queries import TOOL_DEFINITIONS, execute_tool
+from .queries import TOOL_DEFINITIONS, execute_tool, get_operator_context
 
 logger = logging.getLogger(__name__)
 
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-# System prompt is built at runtime from operator Enterprise record — see build_system_prompt()
+_BASE_INSTRUCTIONS = """\
 You have access to real-time data tools that query the business's PostgreSQL analytics database.
 
 ALWAYS use the available tools before answering any question about:
@@ -33,6 +33,24 @@ Never make up numbers. If a tool returns no data, say so clearly.
 Keep answers concise — operators are busy. Use bullet points for lists."""
 
 
+def build_system_prompt(company_id: str) -> str:
+    """
+    Build the system prompt at request time using the operator's Enterprise record.
+    Grounds the copilot in the specific business context — name, type, status.
+    Falls back gracefully if the enterprise record is not yet populated.
+    """
+    ctx = get_operator_context(company_id)
+    name   = ctx.get("name", "this organisation")
+    etype  = ctx.get("enterprise_type", "commercial")
+    status = ctx.get("operating_status", "active")
+
+    identity = (
+        f"You are an operational assistant for {name} "
+        f"({etype}, currently {status})."
+    )
+    return f"{identity}\n\n{_BASE_INSTRUCTIONS}"
+
+
 async def ask(question: str, company_id: str, history: list = None) -> str:
     """
     Full grounded copilot call with tool loop.
@@ -46,7 +64,7 @@ async def ask(question: str, company_id: str, history: list = None) -> str:
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
+            system=build_system_prompt(company_id),
             tools=TOOL_DEFINITIONS,
             messages=messages,
         )

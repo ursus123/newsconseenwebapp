@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { TYPE_ALIASES } from "@/utils/typeAliases";
 import { X, Search, User, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 
@@ -47,7 +48,7 @@ export default function ClientSwitcher({ people, allTasks = [], current, onSelec
 
   const clients = useMemo(() => {
     return people
-      .filter((p) => p.person_type === "client" || p.person_type === "patient")
+      .filter((p) => TYPE_ALIASES.client.includes(p.person_type))
       .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`));
   }, [people]);
 
@@ -108,7 +109,7 @@ export default function ClientSwitcher({ people, allTasks = [], current, onSelec
                     {isActive && <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full">Current</span>}
                   </div>
                   <p className="text-xs text-gray-400 truncate">
-                    {p.primary_role || (p.person_type === "patient" ? "Patient" : "Client")}
+                    {p.primary_role || "Client"}
                     {p.city && ` · ${p.city}`}
                   </p>
                   <div className="flex items-center gap-2 mt-0.5">

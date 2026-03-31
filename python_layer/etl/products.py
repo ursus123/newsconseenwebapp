@@ -5,30 +5,23 @@ import pandas as pd
 
 from etl.base import fetch_json_to_df
 from config import settings
+from config.taxonomy import (
+    ITEM_TYPE_SETS,
+    ITEM_ACTIVE_STATUSES as ACTIVE_STATUSES,
+    ITEM_INACTIVE_STATUSES as INACTIVE_STATUSES,
+)
 
 logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------------
 # Item type classification
-# Three buckets cover all enterprise verticals:
-#   PHYSICAL_TYPES    — tangible items with stock quantities,
-#                       prices, and reorder levels
-#   PERISHABLE_TYPES  — physical items that also expire
-#                       (medications, food, produce, vaccines)
-#   LIVESTOCK_TYPES   — living assets tracked by head count,
-#                       not unit price or stock quantity
-#
-# Per the universal data model: heartbeat + no agency = Product.
-# Livestock sits in products, not people.
-#
-# Types not in any bucket are counted but not classified.
-# They surface in dashboards as "unclassified" — log warns
-# the operator so they can extend the lists.
+# Living and digital buckets imported from config.taxonomy.
+# Medication/food/equipment/supply remain local because
+# taxonomy classifies these as subtypes of "physical" — there
+# are no dedicated taxonomy sets at the item_type level yet.
 # ----------------------------------------------------------
-LIVESTOCK_TYPES = {
-    "livestock", "cattle", "poultry", "swine", "sheep",
-    "goat", "pig", "horse", "fish", "rabbit",
-}
+LIVESTOCK_TYPES = ITEM_TYPE_SETS["living"]
+DIGITAL_TYPES   = ITEM_TYPE_SETS["digital"]
 
 MEDICATION_TYPES = {
     "medication", "medicine", "drug", "pharmaceutical",
@@ -43,12 +36,6 @@ FOOD_TYPES = {
 # Perishable = anything with an expiry date that matters
 PERISHABLE_TYPES = MEDICATION_TYPES | FOOD_TYPES
 
-# Digital / non-physical items — no stock, no expiry
-DIGITAL_TYPES = {
-    "software", "license", "subscription", "digital",
-    "course", "ebook", "template", "service_package",
-}
-
 # Equipment and fixed assets — stock tracked but no expiry
 EQUIPMENT_TYPES = {
     "equipment", "machinery", "vehicle", "furniture",
@@ -59,18 +46,6 @@ EQUIPMENT_TYPES = {
 SUPPLY_TYPES = {
     "supply", "consumable", "stationery", "uniform",
     "packaging", "raw_material", "component", "part",
-}
-
-# Active item statuses
-ACTIVE_STATUSES = {
-    "active", "available", "in_stock", "live",
-    "enabled", "approved", "listed",
-}
-
-# Inactive item statuses
-INACTIVE_STATUSES = {
-    "inactive", "discontinued", "archived", "out_of_stock",
-    "recalled", "expired", "delisted", "suspended",
 }
 
 # ----------------------------------------------------------

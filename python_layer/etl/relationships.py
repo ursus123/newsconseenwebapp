@@ -5,6 +5,10 @@ import pandas as pd
 
 from etl.base import fetch_json_to_df
 from config import settings
+from config.taxonomy import (
+    RELATIONSHIP_ACTIVE_STATUSES,
+    RELATIONSHIP_ENDED_STATUSES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +62,9 @@ ALL_KNOWN_TYPES = (
     | ADDRESS_TYPES
 )
 
-# Active relationship statuses
-ACTIVE_STATUSES = {"active", "open", "live", "current"}
-
-# Ended/inactive statuses
-ENDED_STATUSES = {"ended", "inactive", "archived", "closed", "terminated"}
+# Active/ended relationship statuses — imported from config.taxonomy
+ACTIVE_STATUSES = RELATIONSHIP_ACTIVE_STATUSES
+ENDED_STATUSES  = RELATIONSHIP_ENDED_STATUSES
 
 # ----------------------------------------------------------
 # Required columns for a meaningful transform

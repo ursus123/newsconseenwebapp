@@ -5,14 +5,12 @@ import pandas as pd
 
 from etl.base import fetch_json_to_df
 from config import settings
+from config.taxonomy import (
+    ENTERPRISE_ACTIVE_STATUSES as ACTIVE_STATUSES,
+    ENTERPRISE_INACTIVE_STATUSES as INACTIVE_STATUSES,
+)
 
 logger = logging.getLogger(__name__)
-
-# ----------------------------------------------------------
-# Operating status classification
-# ----------------------------------------------------------
-ACTIVE_STATUSES = {"active", "open", "operating", "live"}
-INACTIVE_STATUSES = {"inactive", "closed", "suspended", "archived"}
 
 REQUIRED_COLUMNS = {"id"}
 
