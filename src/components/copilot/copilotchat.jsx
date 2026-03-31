@@ -6,6 +6,7 @@ import { Send, Loader2, Sparkles, ThumbsUp, ThumbsDown,
 import { Button } from "@/components/ui/button";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 
 // ----------------------------------------------------------
 // Sample questions shown before first message
@@ -207,7 +208,7 @@ export default function CopilotChat({ currentUser, className = "" }) {
   // Load copilot context on mount
   useEffect(() => {
     if (!companyId) return;
-    fetch(`${RAILWAY_URL}/copilot/context?company_id=${companyId}`)
+    fetch(`${RAILWAY_URL}/copilot/context?company_id=${companyId}`, { headers: { "x-api-key": RAILWAY_API_KEY } })
       .then(r => r.json())
       .then(setContext)
       .catch(() => setContext(null));
@@ -249,7 +250,7 @@ export default function CopilotChat({ currentUser, className = "" }) {
 
       const resp = await fetch(`${RAILWAY_URL}/copilot/ask`, {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-api-key": RAILWAY_API_KEY },
         body: JSON.stringify({
           question,
           company_id:      companyId,
@@ -298,7 +299,7 @@ export default function CopilotChat({ currentUser, className = "" }) {
     try {
       await fetch(`${RAILWAY_URL}/copilot/feedback`, {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-api-key": RAILWAY_API_KEY },
         body: JSON.stringify({
           question,
           answer:     msg?.content || "",

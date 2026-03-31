@@ -237,7 +237,7 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
       const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
       fetch(`${RAILWAY_URL}/load/people-summary`, {
         method: "POST",
-        headers: { "x-cron-secret": process.env.CRON_SECRET || "" },
+        headers: { "x-api-key": import.meta.env.VITE_RAILWAY_API_KEY || "" },
       }).catch(() => {});
     } finally {
       setSaving(false);

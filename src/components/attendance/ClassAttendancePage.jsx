@@ -6,9 +6,12 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const triggerETL = (entity) => {
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
-};
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: { "x-api-key": RAILWAY_API_KEY },
+  }).catch(() => {});
 
 const STUDENT_SUBTYPES = [
   "Student Customer",
@@ -116,8 +119,9 @@ export default function ClassAttendancePage({ classObj, currentUser, onBack, onO
       }
 
       // Fire and forget refresh
-      fetch("https://newsconseenwebapp-production.up.railway.app/load/task-summary", {
+      fetch(`${RAILWAY_URL}/load/task-summary`, {
         method: "POST",
+        headers: { "x-api-key": RAILWAY_API_KEY },
       }).catch(() => {});
 
       triggerETL("task");

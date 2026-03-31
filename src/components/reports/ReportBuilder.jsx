@@ -230,9 +230,10 @@ export default function ReportBuilder({ report, folders, charts, currentUser, on
       "address-summary", "relationship-summary",
     ];
     const API = "https://newsconseenwebapp-production.up.railway.app";
+    const apiKey = import.meta.env.VITE_RAILWAY_API_KEY || "";
     for (const ep of endpoints) {
       try {
-        const res = await fetch(`${API}/load/${ep}?company_id=${encodeURIComponent(id)}`, { method: "POST" });
+        const res = await fetch(`${API}/load/${ep}?company_id=${encodeURIComponent(id)}`, { method: "POST", headers: { "x-api-key": apiKey } });
         if (!res.ok) console.warn(`ETL failed for ${ep}`);
       } catch (e) {
         console.error(`ETL error for ${ep}:`, e);

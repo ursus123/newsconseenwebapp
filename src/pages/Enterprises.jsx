@@ -25,9 +25,12 @@ import {
 } from "@/components/shared/importConfigs";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const triggerETL = (entity) => {
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
-};
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: { "x-api-key": RAILWAY_API_KEY },
+  }).catch(() => {});
 
 // ── Status colors ──────────────────────────────────────────────────
 const statusColor = (s) => ({

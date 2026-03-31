@@ -3,6 +3,8 @@ import { UploadedDataStore } from "./UploadedDataStore";
 import { fetchOpenDataTable, OPEN_DATA_TABLES } from "./openDataAPIs";
 
 const RAILWAY_BASE = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
+const RAILWAY_HEADERS = { "x-api-key": RAILWAY_API_KEY };
 
 export const MASTER_TABLES = {
   enterprises:        { entity: "Enterprise",        label: "Enterprises" },
@@ -202,7 +204,7 @@ export async function fetchAllAnalytics(companyId) {
         const url = companyId
           ? `${RAILWAY_BASE}${cfg.endpoint}?company_id=${encodeURIComponent(companyId)}`
           : `${RAILWAY_BASE}${cfg.endpoint}`;
-        const res = await fetch(url);
+        const res = await fetch(url, { headers: RAILWAY_HEADERS });
         if (res.ok) {
           const data = await res.json();
           results[key] = Array.isArray(data) ? data : (data.data || data.results || []);
@@ -227,7 +229,7 @@ async function fetchAnalyticsTable(name, companyId) {
     const url = companyId
       ? `${RAILWAY_BASE}${cfg.endpoint}?company_id=${encodeURIComponent(companyId)}`
       : `${RAILWAY_BASE}${cfg.endpoint}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { headers: RAILWAY_HEADERS });
     if (!res.ok) return [];
     const data = await res.json();
     const rows = Array.isArray(data) ? data : (data.data || data.results || []);

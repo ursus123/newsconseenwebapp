@@ -25,9 +25,12 @@ import { useToast } from "@/components/ui/use-toast";
 import { Upload, Package, AlertTriangle, Pill, DollarSign } from "lucide-react";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const triggerETL = (entity) => {
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
-};
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: { "x-api-key": RAILWAY_API_KEY },
+  }).catch(() => {});
 
 const statusColor = (s) => ({ active: "bg-emerald-50 text-emerald-700", discontinued: "bg-slate-100 text-slate-600", out_of_stock: "bg-rose-50 text-rose-700", archived: "bg-slate-100 text-slate-400" }[s] || "bg-slate-100 text-slate-600");
 const itemTypeColor = (t) => ({
@@ -151,7 +154,7 @@ export default function Products() {
     const medications = products.filter((p) => p.item_type === "medication");
     medications.forEach(async (med) => {
       try {
-        const res = await fetch(`https://newsconseenwebapp-production.up.railway.app/medications/recalls?name=${encodeURIComponent(med.name)}`);
+        const res = await fetch(`${RAILWAY_URL}/medications/recalls?name=${encodeURIComponent(med.name)}`, { headers: { "x-api-key": RAILWAY_API_KEY } });
         const data = await res.json();
         if (data?.has_active_recall) setRecalls((prev) => ({ ...prev, [med.id]: data }));
       } catch {}

@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Building2, Users, ClipboardList, ArrowLeftRight, ExternalLink, RefreshCw } from "lucide-react";
 
 const API_BASE = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
+const API_HEADERS = { "x-api-key": RAILWAY_API_KEY };
 const SUPERSET_URL = "http://localhost:8089";
 
 const sumField = (arr, field) => (arr || []).reduce((acc, row) => acc + (Number(row[field]) || 0), 0);
@@ -40,10 +42,10 @@ export default function AnalyticsDashboard() {
     setError(null);
     try {
       const [entRes, peopleRes, taskRes, txRes] = await Promise.all([
-        fetch(`${API_BASE}/enterprise-summary`),
-        fetch(`${API_BASE}/people-summary`),
-        fetch(`${API_BASE}/task-summary`),
-        fetch(`${API_BASE}/transaction-summary`),
+        fetch(`${API_BASE}/enterprise-summary`, { headers: API_HEADERS }),
+        fetch(`${API_BASE}/people-summary`,     { headers: API_HEADERS }),
+        fetch(`${API_BASE}/task-summary`,        { headers: API_HEADERS }),
+        fetch(`${API_BASE}/transaction-summary`, { headers: API_HEADERS }),
       ]);
       const [ent, people, tasks, tx] = await Promise.all([
         entRes.json(), peopleRes.json(), taskRes.json(), txRes.json(),

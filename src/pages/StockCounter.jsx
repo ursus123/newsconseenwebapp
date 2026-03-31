@@ -16,9 +16,12 @@ import { createStockTransaction } from "@/utils/createTransaction";
 import { useToast } from "@/components/ui/use-toast";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const triggerETL = (entity) => {
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
-};
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: { "x-api-key": RAILWAY_API_KEY },
+  }).catch(() => {});
 
 const TABS = [
   { id: "sheet",   label: "Count Sheet", icon: ClipboardList },
