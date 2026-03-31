@@ -284,7 +284,7 @@ def transform_products(df: pd.DataFrame) -> pd.DataFrame:
     # ----------------------------------------------------------
     for col in ["avg_price", "avg_cost_price", "total_inventory_value",
                 "avg_gross_margin_pct"]:
-        summary[col] = summary[col].round(2).fillna(0.0)
+        summary[col] = summary[col].fillna(0.0).round(2)
 
     # Cast integer columns
     for col in ["total_products", "total_stock", "low_stock_count",

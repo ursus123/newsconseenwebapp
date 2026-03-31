@@ -7,6 +7,45 @@ from sqlalchemy import text
 logger = logging.getLogger(__name__)
 
 
+def _ensure_columns(engine, schema: str, table_name: str, df: pd.DataFrame) -> None:
+    """
+    Add any columns present in df that are missing from the existing table.
+    Runs silently if the table does not yet exist (to_sql will create it).
+    """
+    from sqlalchemy import inspect as sa_inspect
+
+    try:
+        inspector = sa_inspect(engine)
+        existing = {c["name"] for c in inspector.get_columns(table_name, schema=schema)}
+    except Exception:
+        return  # table doesn't exist yet — to_sql will create it
+
+    missing = [c for c in df.columns if c not in existing]
+    if not missing:
+        return
+
+    type_map = {
+        "i": "BIGINT",
+        "u": "BIGINT",
+        "f": "DOUBLE PRECISION",
+        "b": "BOOLEAN",
+    }
+
+    with engine.connect() as conn:
+        for col in missing:
+            kind = df[col].dtype.kind
+            sql_type = type_map.get(kind, "TEXT")
+            conn.execute(text(
+                f'ALTER TABLE {schema}.{table_name} '
+                f'ADD COLUMN IF NOT EXISTS "{col}" {sql_type}'
+            ))
+            logger.info(
+                "load_dataframe: added missing column %s (%s) to %s.%s",
+                col, sql_type, schema, table_name,
+            )
+        conn.commit()
+
+
 def load_dataframe(
     df: pd.DataFrame,
     table_name: str,
@@ -99,6 +138,14 @@ def load_dataframe(
                 "load_dataframe: %s.%s does not exist yet — will be created",
                 schema, table_name,
             )
+
+    # ----------------------------------------------------------
+    # Schema evolution: add any columns that exist in df but are
+    # missing from the existing table. This handles cases where the
+    # ETL transform produces new columns after the table was created
+    # with an older schema (e.g. people_summary gaining active_count).
+    # ----------------------------------------------------------
+    _ensure_columns(engine, schema, table_name, df)
 
     # ----------------------------------------------------------
     # Append this snapshot.

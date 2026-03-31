@@ -127,7 +127,7 @@ def transform_services(df: pd.DataFrame) -> pd.DataFrame:
     # Round monetary columns
     # ----------------------------------------------------------
     for col in ["total_billable_value", "avg_rate", "max_rate", "min_rate"]:
-        summary[col] = summary[col].round(2).fillna(0.0)
+        summary[col] = summary[col].fillna(0.0).round(2)
 
     # Cast integer columns
     for col in ["service_count", "active_service_count",
