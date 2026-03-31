@@ -35,15 +35,6 @@ class Settings(BaseSettings):
     database_url: str | None = None
 
     # ----------------------------------------------------------
-    # Tenant scoping — single-tenant deployments
-    # Set COMPANY_ID in Railway Variables to restrict the ETL to
-    # only fetch and store records belonging to this tenant.
-    # When unset, the ETL processes all records from Base44 and
-    # separates them by company_id grouping in the analytics tables.
-    # ----------------------------------------------------------
-    company_id: Optional[str] = None
-
-    # ----------------------------------------------------------
     # Cron protection
     # ----------------------------------------------------------
     cron_secret: str = ""

@@ -226,18 +226,6 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     if not settings.cron_secret or x_cron_secret != settings.cron_secret:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
-    # Tenant scoping: if COMPANY_ID is set in Railway Variables, only
-    # process records for that company. This prevents cross-tenant data
-    # mixing and is required before going live with a second operator.
-    company_filter = settings.company_id or None
-    if company_filter:
-        logger.info("Cron: scoping ETL to company_id=%s", company_filter)
-    else:
-        logger.warning(
-            "Cron: COMPANY_ID not set — processing ALL records from Base44. "
-            "Set COMPANY_ID in Railway Variables before adding a second operator."
-        )
-
     results  = {}
     entity_map = {
         "tasks":         (tasks.extract_tasks,               tasks.transform_tasks),
@@ -252,19 +240,15 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
 
     for name, (extract_fn, transform_fn) in entity_map.items():
         try:
-            raw = extract_fn()
-            if company_filter:
-                raw = filter_by_company(raw, company_filter)
+            raw     = extract_fn()
             summary = transform_fn(raw)
-            results[name] = load_dataframe(summary, f"{name}_summary", company_id=company_filter)
+            results[name] = load_dataframe(summary, f"{name}_summary")
         except Exception as e:
             results[name] = {"status": "error", "detail": str(e)}
             logger.error("Cron: %s ETL failed — %s", name, e)
 
     try:
-        raw = geospatial.extract_geospatial()
-        if company_filter:
-            raw = filter_by_company(raw, company_filter)
+        raw     = geospatial.extract_geospatial()
         summary = geospatial.transform_geospatial(raw)
         results["geospatial"] = load_dataframe_replace(summary, "geospatial_summary")
     except Exception as e:
