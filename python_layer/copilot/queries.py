@@ -647,3 +647,79 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
     except TypeError as e:
         logger.warning("Tool %s called with bad args %s: %s", tool_name, kwargs, e)
         return {"error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# QueryEngine — class wrapper used by CopilotEngine and routes.py
+#
+# Wraps the module-level query functions with company_id bound at construction.
+# routes.py accesses this via engine.query_engine.<method>().
+#
+# Reshaping notes:
+#   query_enterprises()      → returns {"data": [...]} where each item has
+#                              id, name, enterprise_type keys (routes.py shape)
+#   query_network_overview() → returns raw get_network_overview() result;
+#                              routes.py reads .get("summary", {}) which safely
+#                              returns {} when the key is absent.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class QueryEngine:
+    def __init__(self, company_id: str):
+        self.company_id = company_id
+
+    def query_operator_context(self) -> dict:
+        return get_operator_context(self.company_id)
+
+    def query_people_summary(self, person_type: str = None) -> dict:
+        return get_people_summary(self.company_id, person_type)
+
+    def query_churn_risk(self, top_n: int = 10) -> dict:
+        return get_person_churn_risk(self.company_id, top_n)
+
+    def query_staff_availability(
+        self, branch_id: str = None, person_subtype: str = None
+    ) -> dict:
+        return get_staff_availability(self.company_id, branch_id, person_subtype)
+
+    def query_transaction_summary(
+        self, months_back: int = 3, transaction_type: str = None
+    ) -> dict:
+        return get_transaction_summary(self.company_id, months_back, transaction_type)
+
+    def query_overdue_invoices(self, top_n: int = 20) -> dict:
+        return get_overdue_invoices(self.company_id, top_n)
+
+    def query_task_summary(self, task_type: str = None, days_back: int = 30) -> dict:
+        return get_task_summary(self.company_id, task_type, days_back)
+
+    def query_task_outcomes(self, task_type: str = None, days_back: int = 30) -> dict:
+        return get_task_outcomes(self.company_id, task_type, days_back)
+
+    def query_product_summary(self, item_type: str = None) -> dict:
+        return get_product_summary(self.company_id, item_type)
+
+    def query_enterprise_overview(self) -> dict:
+        return get_enterprise_overview(self.company_id)
+
+    def query_enterprises(self) -> dict:
+        """
+        Reshape get_enterprise_overview() into the shape routes.py expects:
+            {"data": [{"id": ..., "name": ..., "enterprise_type": ...}, ...]}
+        """
+        result = get_enterprise_overview(self.company_id)
+        data = [
+            {
+                "id":              e.get("id"),
+                "name":            e.get("enterprise_name") or e.get("name"),
+                "enterprise_type": e.get("enterprise_type"),
+            }
+            for e in result.get("enterprises", [])
+        ]
+        return {"data": data}
+
+    def query_network_overview(self) -> dict:
+        """
+        Returns get_network_overview() result.
+        routes.py reads .get("summary", {}) → safely returns {} when absent.
+        """
+        return get_network_overview(self.company_id)

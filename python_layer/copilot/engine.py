@@ -10,7 +10,7 @@ import json
 import logging
 import os
 import anthropic
-from .queries import TOOL_DEFINITIONS, execute_tool, get_operator_context
+from .queries import TOOL_DEFINITIONS, execute_tool, get_operator_context, QueryEngine
 
 logger = logging.getLogger(__name__)
 
@@ -132,3 +132,81 @@ async def ask_stream(question: str, company_id: str, history: list = None):
     chunk_size = 6
     for i in range(0, len(full_answer), chunk_size):
         yield full_answer[i:i + chunk_size]
+
+
+class CopilotEngine:
+    """
+    Per-request wrapper used by routes.py.
+
+    Instantiated with company_id + optional metadata.
+    ask() is synchronous — routes.py calls it without await in both
+    def and async def route handlers. The async module-level ask() is
+    run in a ThreadPoolExecutor so asyncio.run() always gets a fresh
+    event loop, avoiding conflicts with FastAPI's running loop.
+
+    query_engine is a QueryEngine instance bound to company_id.
+    routes.py uses it for /copilot/context data.
+    """
+
+    def __init__(
+        self,
+        company_id: str,
+        enterprise_name: str = "",
+        backend: str = "anthropic",
+        railway_url: str = "",
+    ):
+        self.company_id      = company_id
+        self.enterprise_name = enterprise_name
+        self.backend         = backend
+        self.railway_url     = railway_url
+        self.query_engine    = QueryEngine(company_id)
+
+    def ask(
+        self,
+        question: str,
+        history: list = None,
+        context: dict = None,
+    ) -> dict:
+        """
+        Synchronous call — returns dict with answer, tools_called, data, intent.
+        Runs the async ask() in a thread to avoid event-loop conflicts.
+
+        context (dict) is flattened into the question prefix when non-empty
+        so the LLM has that information without needing a separate tool call.
+        """
+        import asyncio
+        import concurrent.futures
+
+        # Flatten context dict into question prefix
+        full_question = question
+        if context:
+            ctx_str = "; ".join(f"{k}: {v}" for k, v in context.items() if v)
+            if ctx_str:
+                full_question = f"[Context: {ctx_str}]\n\n{question}"
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(
+                    asyncio.run,
+                    ask(full_question, self.company_id, history or []),
+                )
+                answer_text = future.result(timeout=120)
+
+            return {
+                "answer":       answer_text,
+                "tools_called": [],
+                "data":         {},
+                "intent":       "",
+                "company_id":   self.company_id,
+                "backend":      self.backend,
+            }
+
+        except Exception as exc:
+            logger.error("CopilotEngine.ask failed: %s", exc)
+            return {
+                "answer":       "",
+                "error":        str(exc),
+                "tools_called": [],
+                "data":         {},
+                "intent":       "",
+            }
