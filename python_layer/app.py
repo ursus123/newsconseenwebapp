@@ -244,7 +244,8 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
             summary = transform_fn(raw)
             results[name] = load_dataframe(summary, f"{name}_summary")
         except Exception as e:
-            results[name] = {"status": "error", "detail": str(e)}
+            import traceback
+            results[name] = {"status": "error", "detail": str(e), "traceback": traceback.format_exc()}
             logger.error("Cron: %s ETL failed — %s", name, e)
 
     try:
