@@ -239,6 +239,20 @@ POST /load/geospatial-summary
 GET  /health                        Status + last run timestamps + counts
 ```
 
+### ETL multi-tenancy rule — CRITICAL
+The ETL pipeline is shared across ALL tenants. It must:
+- Extract ALL records from Base44 (no company_id filter on extract)
+- Stamp each analytics row with the company_id FROM the source record
+- Load all rows for all companies into the same analytics tables
+
+Tenant isolation happens ONLY at read time:
+- Copilot tools: WHERE company_id = :company_id
+- Dashboard endpoints: filter by authenticated user's company_id
+- Alert engine: evaluates only records matching operator's company_id
+
+Never scope the ETL to a single tenant. Adding a new client requires
+zero ETL configuration changes — their data loads automatically.
+
 ### ETL trigger pattern — fires after every mutation
 ```javascript
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
@@ -484,6 +498,10 @@ Fix: add variables to Railway OR make them Optional[str] = None in settings.py.
 - Trust company_id from user input in the copilot
 - Use a custom dropdown where TaxonomySelect should be used
 - Hardcode industry-specific terminology in shared components
+- Hardcode any client name (BrightStar, BRIGHTSTAR, etc.) anywhere in code
+- Filter ETL by a single company_id — ETL loads ALL tenants, isolation is at READ time
+- Add a COMPANY_ID environment variable to scope ETL to one tenant
+- Suggest any Railway variable or config that assumes a single client
 
 ### Always
 - Trigger ETL after every entity mutation
