@@ -74,7 +74,11 @@ def extract_relationships() -> pd.DataFrame:
     """
     Extract all relationship records from Base44.
     Returns raw DataFrame — no transformation applied here.
+    Returns empty DataFrame if BASE44_RELATIONSHIPS_URL is not configured.
     """
+    if not settings.base44_relationships_url:
+        logger.warning("BASE44_RELATIONSHIPS_URL not set — skipping relationship extract")
+        return pd.DataFrame()
     return fetch_json_to_df(settings.base44_relationships_url)
 
 

@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic_settings import BaseSettings
 
 
@@ -12,8 +14,8 @@ class Settings(BaseSettings):
     base44_enterprises_url:    str
     base44_people_url:         str
     base44_products_url:       str
-    base44_relationships_url:  str
-    base44_addresses_url:      str
+    base44_relationships_url:  Optional[str] = None
+    base44_addresses_url:      Optional[str] = None
 
     # ----------------------------------------------------------
     # Base44 authentication

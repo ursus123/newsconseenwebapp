@@ -61,7 +61,11 @@ def extract_addresses() -> pd.DataFrame:
     """
     Extract all address records from Base44.
     Returns raw DataFrame — no transformation applied here.
+    Returns empty DataFrame if BASE44_ADDRESSES_URL is not configured.
     """
+    if not settings.base44_addresses_url:
+        logger.warning("BASE44_ADDRESSES_URL not set — skipping address extract")
+        return pd.DataFrame()
     return fetch_json_to_df(settings.base44_addresses_url)
 
 
