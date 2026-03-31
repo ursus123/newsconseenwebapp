@@ -72,7 +72,10 @@ def transform_services(df: pd.DataFrame) -> pd.DataFrame:
     # Parse and clean numeric fields
     # rate is the billable amount per service delivery
     # ----------------------------------------------------------
-    df["rate"] = pd.to_numeric(df.get("rate"), errors="coerce").fillna(0)
+    df["rate"] = pd.to_numeric(
+        df["rate"] if "rate" in df.columns else pd.Series(0.0, index=df.index),
+        errors="coerce",
+    ).fillna(0)
 
     # ----------------------------------------------------------
     # Parse dates

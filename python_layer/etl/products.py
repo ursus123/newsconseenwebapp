@@ -123,19 +123,23 @@ def transform_products(df: pd.DataFrame) -> pd.DataFrame:
     # errors="coerce" so bad values become NaN rather than crash
     # ----------------------------------------------------------
     df["stock_quantity"] = pd.to_numeric(
-        df.get("stock_quantity"), errors="coerce"
+        df["stock_quantity"] if "stock_quantity" in df.columns else pd.Series(0.0, index=df.index),
+        errors="coerce",
     ).fillna(0)
 
     df["unit_price"] = pd.to_numeric(
-        df.get("unit_price"), errors="coerce"
+        df["unit_price"] if "unit_price" in df.columns else pd.Series(0.0, index=df.index),
+        errors="coerce",
     ).fillna(0)
 
     df["cost_price"] = pd.to_numeric(
-        df.get("cost_price"), errors="coerce"
+        df["cost_price"] if "cost_price" in df.columns else pd.Series(0.0, index=df.index),
+        errors="coerce",
     ).fillna(0)
 
     df["reorder_level"] = pd.to_numeric(
-        df.get("reorder_level"), errors="coerce"
+        df["reorder_level"] if "reorder_level" in df.columns else pd.Series(DEFAULT_REORDER_LEVEL, index=df.index),
+        errors="coerce",
     ).fillna(DEFAULT_REORDER_LEVEL)
 
     # ----------------------------------------------------------
