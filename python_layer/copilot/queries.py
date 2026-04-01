@@ -92,77 +92,74 @@ def get_people_summary(company_id: str, person_type: Optional[str] = None) -> di
     Returns headcount breakdown by person_type and status.
     Used for: "how many staff do we have", "how many active clients"
     """
+    # people_summary is pre-aggregated: one row per (person_type, status, snapshot_date).
+    # Use SUM(people_count) / SUM(active_count) — never COUNT(*).
+    # snapshot_date filter keeps only the latest snapshot per group.
     sql = """
         SELECT
             person_type,
             status,
-            COUNT(*)            AS count,
-            COUNT(*) FILTER (WHERE status = 'active')   AS active_count,
-            COUNT(*) FILTER (WHERE status = 'inactive') AS inactive_count
+            SUM(people_count)  AS count,
+            SUM(active_count)  AS active_count,
+            SUM(inactive_count) AS inactive_count
         FROM analytics.people_summary
         WHERE company_id = :company_id
           AND (:person_type IS NULL OR person_type = :person_type)
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date) FROM analytics.people_summary
+              WHERE company_id = :company_id
+          )
         GROUP BY person_type, status
         ORDER BY person_type, status
     """
     rows = _run(sql, {"company_id": company_id, "person_type": person_type})
 
-    # Aggregate totals
+    # Aggregate totals across person_type groups
     totals = {}
     for r in rows:
         pt = r["person_type"] or "unknown"
         if pt not in totals:
             totals[pt] = {"total": 0, "active": 0, "inactive": 0}
-        totals[pt]["total"]    += r["count"]
+        totals[pt]["total"]    += r["count"] or 0
         totals[pt]["active"]   += r["active_count"] or 0
         totals[pt]["inactive"] += r["inactive_count"] or 0
 
     return {
-        "summary":    totals,
-        "rows":       rows,
+        "summary":      totals,
+        "rows":         rows,
         "total_people": sum(v["total"] for v in totals.values()),
     }
 
 
 def get_person_churn_risk(company_id: str, top_n: int = 10) -> dict:
     """
-    Returns people who show churn/attrition risk signals:
-    - any person_type inactive or with an end_date in last 90 days
+    Returns person_type groups with inactive status — churn/attrition signal.
     Used for: "which clients are at risk", "who might leave", "recent exits"
+    people_summary is aggregated by (person_type, status) — no individual rows.
     """
     sql = """
         SELECT
-            first_name || ' ' || last_name   AS client_name,
-            person_subtype,
+            person_type,
             status,
-            end_date,
-            internal_notes,
-            enterprise_name,
-            company_id
+            SUM(people_count)  AS count,
+            SUM(inactive_count) AS inactive_count
         FROM analytics.people_summary
-        WHERE company_id    = :company_id
-          AND person_type   = 'client'
-          AND (
-              status = 'inactive'
-              OR end_date >= CURRENT_DATE - INTERVAL '90 days'
+        WHERE company_id  = :company_id
+          AND status      = 'inactive'
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date) FROM analytics.people_summary
+              WHERE company_id = :company_id
           )
-        ORDER BY end_date DESC NULLS LAST
+        GROUP BY person_type, status
+        ORDER BY count DESC
         LIMIT :top_n
     """
     rows = _run(sql, {"company_id": company_id, "top_n": top_n})
-
-    # Parse discharge reason from internal_notes
-    for r in rows:
-        notes = r.get("internal_notes") or ""
-        r["end_reason"] = "Not recorded"
-        for prefix in ["End reason:", "Discharge reason:", "Exit reason:", "Left reason:"]:
-            if prefix in notes:
-                r["end_reason"] = notes.split(prefix)[-1].split("|")[0].strip()
-                break
+    total = sum(r["count"] or 0 for r in rows)
 
     return {
         "at_risk_people": rows,
-        "count":          len(rows),
+        "count":          total,
     }
 
 
@@ -172,40 +169,33 @@ def get_staff_availability(
     person_subtype:Optional[str] = None,
 ) -> dict:
     """
-    Returns staff availability status breakdown.
-    Used for: "who is available", "how many nurses are on shift"
+    Returns active staff count from the aggregated people_summary.
+    Used for: "how many staff are active", "who is on shift"
+    people_summary is aggregated — individual availability_status not stored.
     """
     sql = """
         SELECT
-            first_name || ' ' || last_name AS staff_name,
-            person_subtype                  AS role,
-            availability_status,
-            enterprise_name                 AS branch,
-            phone,
-            email
+            person_type,
+            status,
+            SUM(people_count) AS count,
+            SUM(active_count) AS active_count
         FROM analytics.people_summary
         WHERE company_id  = :company_id
-          AND person_type = 'staff'
-          AND status      = 'active'
-          AND (:branch_id      IS NULL OR enterprise_id   = :branch_id)
-          AND (:person_subtype IS NULL OR person_subtype  = :person_subtype)
-        ORDER BY availability_status, person_subtype
+          AND is_staff     = TRUE
+          AND status       = 'active'
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date) FROM analytics.people_summary
+              WHERE company_id = :company_id
+          )
+        GROUP BY person_type, status
     """
-    rows = _run(sql, {
-        "company_id":     company_id,
-        "branch_id":      branch_id,
-        "person_subtype": person_subtype,
-    })
-
-    by_status = {}
-    for r in rows:
-        s = r["availability_status"] or "unknown"
-        by_status.setdefault(s, []).append(r)
+    rows = _run(sql, {"company_id": company_id})
+    total_active = sum(r["active_count"] or 0 for r in rows)
 
     return {
-        "by_availability": by_status,
-        "available_count": len(by_status.get("available", [])),
-        "total_active":    len(rows),
+        "by_availability": {"active": rows},
+        "available_count": total_active,
+        "total_active":    total_active,
     }
 
 
@@ -222,22 +212,29 @@ def get_transaction_summary(
     Returns revenue and transaction metrics for recent months.
     Used for: "how much revenue", "what are our earnings", "financial overview"
     """
+    # transaction_summary columns: transaction_type, status, total_transactions,
+    # total_amount, avg_amount, outstanding_amount, is_revenue, is_expense,
+    # revenue_last_7d, revenue_last_30d, expense_last_30d, snapshot_date
     sql = """
         SELECT
-            DATE_TRUNC('month', date)   AS month,
             transaction_type,
-            COUNT(*)                    AS count,
-            SUM(amount)                 AS total_amount,
-            SUM(CASE WHEN payment_status = 'paid'   THEN amount ELSE 0 END) AS paid_amount,
-            SUM(CASE WHEN payment_status = 'unpaid' THEN amount ELSE 0 END) AS unpaid_amount,
-            COUNT(CASE WHEN status = 'draft'  THEN 1 END) AS draft_count,
-            COUNT(CASE WHEN status = 'posted' THEN 1 END) AS posted_count
+            status,
+            SUM(total_transactions) AS count,
+            SUM(total_amount)       AS total_amount,
+            SUM(outstanding_amount) AS unpaid_amount,
+            SUM(revenue_last_30d)   AS revenue_last_30d,
+            SUM(expense_last_30d)   AS expense_last_30d,
+            bool_or(is_revenue)     AS is_revenue,
+            bool_or(is_expense)     AS is_expense
         FROM analytics.transaction_summary
         WHERE company_id = :company_id
-          AND date      >= CURRENT_DATE - (:months_back || ' months')::INTERVAL
           AND (:transaction_type IS NULL OR transaction_type = :transaction_type)
-        GROUP BY DATE_TRUNC('month', date), transaction_type
-        ORDER BY month DESC, total_amount DESC
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date) FROM analytics.transaction_summary
+              WHERE company_id = :company_id
+          )
+        GROUP BY transaction_type, status
+        ORDER BY total_amount DESC
     """
     rows = _run(sql, {
         "company_id":       company_id,
@@ -245,15 +242,16 @@ def get_transaction_summary(
         "transaction_type": transaction_type,
     })
 
-    total_revenue  = sum(r["total_amount"]  or 0 for r in rows)
-    total_unpaid   = sum(r["unpaid_amount"] or 0 for r in rows)
-    total_draft    = sum(r["draft_count"]   or 0 for r in rows)
+    revenue_rows = [r for r in rows if r.get("is_revenue")]
+    expense_rows = [r for r in rows if r.get("is_expense")]
+    total_revenue = sum(r["total_amount"] or 0 for r in revenue_rows)
+    total_unpaid  = sum(r["unpaid_amount"] or 0 for r in rows)
 
     return {
         "monthly_breakdown": rows,
-        "total_revenue":     round(total_revenue,  2),
-        "total_unpaid":      round(total_unpaid,   2),
-        "pending_drafts":    total_draft,
+        "total_revenue":     round(total_revenue, 2),
+        "total_unpaid":      round(total_unpaid,  2),
+        "pending_drafts":    0,
         "months_analysed":   months_back,
     }
 
@@ -263,31 +261,33 @@ def get_overdue_invoices(company_id: str, top_n: int = 20) -> dict:
     Returns unpaid posted invoices past their due date.
     Used for: "what invoices are overdue", "who owes us money"
     """
+    # transaction_summary is aggregated — no individual invoice rows.
+    # Return total outstanding amount for posted revenue transactions.
     sql = """
         SELECT
-            counterparty,
-            enterprise,
-            amount,
-            amount - COALESCE(amount_paid, 0) AS outstanding,
-            due_date,
-            CURRENT_DATE - due_date            AS days_overdue,
-            reference_number,
-            transaction_type
+            transaction_type,
+            SUM(total_transactions) AS count,
+            SUM(outstanding_amount) AS total_outstanding
         FROM analytics.transaction_summary
-        WHERE company_id     = :company_id
-          AND payment_status = 'unpaid'
-          AND status         = 'posted'
-          AND due_date       < CURRENT_DATE
-        ORDER BY days_overdue DESC
+        WHERE company_id  = :company_id
+          AND is_revenue   = TRUE
+          AND status       = 'posted'
+          AND outstanding_amount > 0
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date) FROM analytics.transaction_summary
+              WHERE company_id = :company_id
+          )
+        GROUP BY transaction_type
+        ORDER BY total_outstanding DESC
         LIMIT :top_n
     """
     rows = _run(sql, {"company_id": company_id, "top_n": top_n})
-    total_outstanding = sum(r["outstanding"] or 0 for r in rows)
+    total_outstanding = sum(r["total_outstanding"] or 0 for r in rows)
 
     return {
-        "overdue_invoices":    rows,
-        "count":               len(rows),
-        "total_outstanding":   round(total_outstanding, 2),
+        "overdue_invoices":  rows,
+        "count":             sum(r["count"] or 0 for r in rows),
+        "total_outstanding": round(total_outstanding, 2),
     }
 
 
@@ -304,23 +304,25 @@ def get_task_summary(
     Returns task completion rates, overdue tasks, outcomes.
     Used for: "how are visits going", "completion rate", "what tasks are overdue"
     """
+    # task_summary columns: task_type, status, total_tasks, completed_tasks,
+    # completion_rate_pct, overdue_tasks, tasks_last_7d, tasks_last_30d
     sql = """
         SELECT
             task_type,
             status,
-            outcome,
-            enterprise_name                            AS branch,
-            COUNT(*)                                   AS count,
-            COUNT(*) FILTER (WHERE status = 'completed')  AS completed_count,
-            COUNT(*) FILTER (WHERE status = 'open'
-              AND due_date < CURRENT_DATE)              AS overdue_count
+            SUM(total_tasks)        AS total_tasks,
+            SUM(completed_tasks)    AS completed_tasks,
+            SUM(overdue_tasks)      AS overdue_tasks,
+            ROUND(AVG(completion_rate_pct), 1) AS completion_rate_pct
         FROM analytics.task_summary
         WHERE company_id = :company_id
           AND (:task_type IS NULL OR task_type = :task_type)
-          AND (scheduled_date >= CURRENT_DATE - (:days_back || ' days')::INTERVAL
-               OR scheduled_date IS NULL)
-        GROUP BY task_type, status, outcome, enterprise_name
-        ORDER BY count DESC
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date) FROM analytics.task_summary
+              WHERE company_id = :company_id
+          )
+        GROUP BY task_type, status
+        ORDER BY total_tasks DESC
     """
     rows = _run(sql, {
         "company_id": company_id,
@@ -328,18 +330,18 @@ def get_task_summary(
         "days_back":  days_back,
     })
 
-    total       = sum(r["count"]           or 0 for r in rows)
-    completed   = sum(r["completed_count"] or 0 for r in rows)
-    overdue     = sum(r["overdue_count"]   or 0 for r in rows)
-    rate        = round(completed / total * 100, 1) if total > 0 else 0
+    total     = sum(r["total_tasks"]     or 0 for r in rows)
+    completed = sum(r["completed_tasks"] or 0 for r in rows)
+    overdue   = sum(r["overdue_tasks"]   or 0 for r in rows)
+    rate      = round(completed / total * 100, 1) if total > 0 else 0
 
     return {
-        "breakdown":        rows,
-        "total_tasks":      total,
-        "completed":        completed,
-        "overdue":          overdue,
-        "completion_rate":  rate,
-        "days_analysed":    days_back,
+        "breakdown":       rows,
+        "total_tasks":     total,
+        "completed":       completed,
+        "overdue":         overdue,
+        "completion_rate": rate,
+        "days_analysed":   days_back,
     }
 
 
@@ -349,19 +351,31 @@ def get_task_outcomes(
     days_back:  int = 30,
 ) -> dict:
     """
-    Returns breakdown of task outcomes (completed, no-show, rescheduled, etc).
+    Returns breakdown of task outcomes by status and task_type from the
+    pre-aggregated task_summary table.
     Used for: "how many visits were missed", "no-shows", "task outcome breakdown"
     """
     sql = """
         SELECT
-            outcome,
-            COUNT(*)   AS count,
-            ROUND(COUNT(*) * 100.0 / NULLIF(SUM(COUNT(*)) OVER(), 0), 1) AS pct
+            status,
+            task_type,
+            SUM(total_tasks)     AS count,
+            SUM(completed_tasks) AS completed,
+            SUM(overdue_tasks)   AS overdue,
+            ROUND(AVG(completion_rate_pct), 1) AS completion_rate_pct,
+            ROUND(
+                SUM(total_tasks) * 100.0 / NULLIF(SUM(SUM(total_tasks)) OVER(), 0),
+                1
+            ) AS pct_of_total
         FROM analytics.task_summary
         WHERE company_id = :company_id
           AND (:task_type IS NULL OR task_type = :task_type)
-          AND scheduled_date >= CURRENT_DATE - (:days_back || ' days')::INTERVAL
-        GROUP BY outcome
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date)
+              FROM analytics.task_summary
+              WHERE company_id = :company_id
+          )
+        GROUP BY status, task_type
         ORDER BY count DESC
     """
     rows = _run(sql, {
@@ -370,9 +384,16 @@ def get_task_outcomes(
         "days_back":  days_back,
     })
 
+    completed = sum(r.get("completed", 0) or 0 for r in rows)
+    overdue   = sum(r.get("overdue",    0) or 0 for r in rows)
+    total     = sum(r.get("count",      0) or 0 for r in rows)
+
     return {
-        "outcomes":      rows,
-        "days_analysed": days_back,
+        "outcomes":        rows,
+        "total_tasks":     total,
+        "completed_tasks": completed,
+        "overdue_tasks":   overdue,
+        "days_analysed":   days_back,
     }
 
 
@@ -385,53 +406,54 @@ def get_product_summary(
     item_type:  Optional[str] = None,
 ) -> dict:
     """
-    Returns inventory status, low stock alerts, expiry warnings.
+    Returns inventory status, low stock alerts, expiry warnings from the
+    pre-aggregated product_summary table.
     Used for: "what stock do we have", "what is expiring", "low stock items"
     """
     sql = """
         SELECT
-            product_name,
             item_type,
-            item_subtype,
-            item_class,
-            stock_quantity,
-            reorder_level,
-            expiry_date,
             status,
-            CASE
-                WHEN stock_quantity <= 0              THEN 'out_of_stock'
-                WHEN stock_quantity <= reorder_level  THEN 'low_stock'
-                ELSE 'ok'
-            END AS stock_status,
-            CASE
-                WHEN expiry_date <= CURRENT_DATE              THEN 'expired'
-                WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'expiring_soon'
-                ELSE 'ok'
-            END AS expiry_status
+            SUM(total_products)       AS total_products,
+            SUM(total_stock)          AS total_stock,
+            ROUND(AVG(avg_price), 2)  AS avg_price,
+            SUM(low_stock_count)      AS low_stock_count,
+            SUM(out_of_stock_count)   AS out_of_stock_count,
+            SUM(expiring_7d_count)    AS expiring_7d_count,
+            SUM(expiring_30d_count)   AS expiring_30d_count,
+            SUM(new_last_30d)         AS new_last_30d,
+            BOOL_OR(is_medication)    AS has_medications,
+            BOOL_OR(is_livestock)     AS has_livestock,
+            BOOL_OR(is_perishable)    AS has_perishables
         FROM analytics.product_summary
         WHERE company_id = :company_id
-          AND status     = 'active'
           AND (:item_type IS NULL OR item_type = :item_type)
-        ORDER BY stock_status DESC, expiry_status DESC, product_name
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date)
+              FROM analytics.product_summary
+              WHERE company_id = :company_id
+          )
+        GROUP BY item_type, status
+        ORDER BY total_products DESC
     """
     rows = _run(sql, {"company_id": company_id, "item_type": item_type})
 
-    out_of_stock   = [r for r in rows if r["stock_status"]  == "out_of_stock"]
-    low_stock      = [r for r in rows if r["stock_status"]  == "low_stock"]
-    expiring_soon  = [r for r in rows if r["expiry_status"] == "expiring_soon"]
-    expired        = [r for r in rows if r["expiry_status"] == "expired"]
+    total_low_stock    = sum(r.get("low_stock_count",    0) or 0 for r in rows)
+    total_out_of_stock = sum(r.get("out_of_stock_count", 0) or 0 for r in rows)
+    total_expiring_7d  = sum(r.get("expiring_7d_count",  0) or 0 for r in rows)
+    total_expiring_30d = sum(r.get("expiring_30d_count", 0) or 0 for r in rows)
+    total_products     = sum(r.get("total_products",     0) or 0 for r in rows)
+    total_stock        = sum(r.get("total_stock",        0) or 0 for r in rows)
 
     return {
-        "all_products":   rows,
-        "out_of_stock":   out_of_stock,
-        "low_stock":      low_stock,
-        "expiring_soon":  expiring_soon,
-        "expired":        expired,
+        "by_type":           rows,
+        "total_products":    total_products,
+        "total_stock_units": total_stock,
         "alerts": {
-            "out_of_stock_count":  len(out_of_stock),
-            "low_stock_count":     len(low_stock),
-            "expiring_soon_count": len(expiring_soon),
-            "expired_count":       len(expired),
+            "low_stock_count":    total_low_stock,
+            "out_of_stock_count": total_out_of_stock,
+            "expiring_7d_count":  total_expiring_7d,
+            "expiring_30d_count": total_expiring_30d,
         },
     }
 
@@ -447,56 +469,135 @@ def get_enterprise_overview(company_id: str) -> dict:
     """
     sql = """
         SELECT
-            enterprise_name,
+            id,
+            name,
             enterprise_type,
-            enterprise_tier,
             operating_status,
             status,
-            city,
-            region,
-            country
+            is_active,
+            is_root,
+            parent_id,
+            primary_address,
+            days_since_created
         FROM analytics.enterprise_summary
         WHERE company_id = :company_id
-        ORDER BY enterprise_tier, enterprise_name
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date)
+              FROM analytics.enterprise_summary
+              WHERE company_id = :company_id
+          )
+        ORDER BY is_root DESC, name
     """
     rows = _run(sql, {"company_id": company_id})
 
-    open_branches = [r for r in rows if r["operating_status"] == "open"]
+    active_count = sum(1 for r in rows if r.get("is_active"))
+    root_ents    = [r for r in rows if r.get("is_root")]
+    branches     = [r for r in rows if not r.get("is_root")]
 
     return {
         "enterprises":     rows,
         "total_count":     len(rows),
-        "open_count":      len(open_branches),
-        "by_tier": {
-            tier: [r for r in rows if r["enterprise_tier"] == tier]
-            for tier in set(r["enterprise_tier"] for r in rows if r["enterprise_tier"])
+        "active_count":    active_count,
+        "root_count":      len(root_ents),
+        "branch_count":    len(branches),
+        "by_type": {
+            etype: [r for r in rows if r.get("enterprise_type") == etype]
+            for etype in set(r.get("enterprise_type") for r in rows if r.get("enterprise_type"))
         },
     }
 
 
 def get_network_overview(company_id: str) -> dict:
     """
-    Returns a cross-enterprise summary if the operator is part of a network.
-    Used for: "how is the network doing", "compare branches"
+    Returns a cross-enterprise summary for the tenant network.
+    Pulls from each pre-aggregated summary table using the latest snapshot.
+    Used for: "how is the network doing", "network overview", "compare branches"
     """
-    sql = """
+    # Enterprise list
+    ent_sql = """
+        SELECT name, enterprise_type, operating_status, is_active, is_root
+        FROM analytics.enterprise_summary
+        WHERE company_id = :company_id
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date)
+              FROM analytics.enterprise_summary
+              WHERE company_id = :company_id
+          )
+        ORDER BY is_root DESC, name
+    """
+    enterprises = _run(ent_sql, {"company_id": company_id})
+
+    # People totals
+    people_sql = """
         SELECT
-            e.enterprise_name,
-            e.enterprise_tier,
-            COUNT(DISTINCT p.id)  FILTER (WHERE p.person_type = 'client' AND p.status = 'active') AS active_clients,
-            COUNT(DISTINCT p.id)  FILTER (WHERE p.person_type = 'staff'  AND p.status = 'active') AS active_staff,
-            COUNT(DISTINCT t.id)  FILTER (WHERE t.status = 'open')                                 AS open_tasks,
-            COALESCE(SUM(tx.amount) FILTER (WHERE tx.status = 'posted'), 0)                        AS revenue_posted
-        FROM analytics.enterprise_summary   e
-        LEFT JOIN analytics.people_summary  p  ON p.enterprise_id = e.id AND p.company_id = e.company_id
-        LEFT JOIN analytics.task_summary    t  ON t.enterprise_id = e.id AND t.company_id = e.company_id
-        LEFT JOIN analytics.transaction_summary tx ON tx.enterprise = e.enterprise_name AND tx.company_id = e.company_id
-        WHERE e.company_id = :company_id
-        GROUP BY e.enterprise_name, e.enterprise_tier
-        ORDER BY e.enterprise_tier, active_clients DESC
+            person_type,
+            SUM(people_count)   AS total,
+            SUM(active_count)   AS active
+        FROM analytics.people_summary
+        WHERE company_id = :company_id
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date)
+              FROM analytics.people_summary
+              WHERE company_id = :company_id
+          )
+        GROUP BY person_type
     """
-    rows = _run(sql, {"company_id": company_id})
-    return {"network_summary": rows, "branch_count": len(rows)}
+    people = _run(people_sql, {"company_id": company_id})
+
+    # Task totals
+    task_sql = """
+        SELECT
+            SUM(total_tasks)      AS total_tasks,
+            SUM(completed_tasks)  AS completed_tasks,
+            SUM(overdue_tasks)    AS overdue_tasks,
+            ROUND(AVG(completion_rate_pct), 1) AS avg_completion_rate
+        FROM analytics.task_summary
+        WHERE company_id = :company_id
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date)
+              FROM analytics.task_summary
+              WHERE company_id = :company_id
+          )
+    """
+    tasks = _run(task_sql, {"company_id": company_id})
+
+    # Transaction totals
+    tx_sql = """
+        SELECT
+            SUM(total_transactions) AS total_transactions,
+            SUM(total_amount)       AS total_revenue,
+            SUM(outstanding_amount) AS outstanding_amount
+        FROM analytics.transaction_summary
+        WHERE company_id = :company_id
+          AND is_revenue  = TRUE
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date)
+              FROM analytics.transaction_summary
+              WHERE company_id = :company_id
+          )
+    """
+    transactions = _run(tx_sql, {"company_id": company_id})
+
+    task_totals = tasks[0] if tasks else {}
+    tx_totals   = transactions[0] if transactions else {}
+
+    return {
+        "enterprises":      enterprises,
+        "enterprise_count": len(enterprises),
+        "active_count":     sum(1 for e in enterprises if e.get("is_active")),
+        "people_by_type":   people,
+        "tasks": {
+            "total":           task_totals.get("total_tasks",        0),
+            "completed":       task_totals.get("completed_tasks",    0),
+            "overdue":         task_totals.get("overdue_tasks",      0),
+            "completion_rate": task_totals.get("avg_completion_rate", 0),
+        },
+        "financials": {
+            "total_transactions": tx_totals.get("total_transactions", 0),
+            "total_revenue":      tx_totals.get("total_revenue",      0),
+            "outstanding":        tx_totals.get("outstanding_amount", 0),
+        },
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -710,7 +811,7 @@ class QueryEngine:
         data = [
             {
                 "id":              e.get("id"),
-                "name":            e.get("enterprise_name") or e.get("name"),
+                "name":            e.get("name"),
                 "enterprise_type": e.get("enterprise_type"),
             }
             for e in result.get("enterprises", [])
