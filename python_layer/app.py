@@ -3,8 +3,9 @@ from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import pandas as pd
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 # Config — from config package (backward compatible with old config.py)
 from config import settings
@@ -95,6 +96,33 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ----------------------------------------------------------
+# API Key middleware — enforced only when API_KEY is set
+# Allows: /, /health, /docs, /openapi.json, /redoc (always)
+# Allows: /load/*, /cron/* (use x-cron-secret instead)
+# ----------------------------------------------------------
+_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc"}
+_CRON_PREFIXES = ("/load/", "/cron/")
+
+
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    expected = settings.api_key
+    if not expected:
+        return await call_next(request)
+
+    path = request.url.path
+    if path in _PUBLIC_PATHS or any(path.startswith(p) for p in _CRON_PREFIXES):
+        return await call_next(request)
+
+    provided = request.headers.get("x-api-key", "")
+    if provided != expected:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Missing or invalid x-api-key header"},
+        )
+    return await call_next(request)
 
 # ----------------------------------------------------------
 # Mount all routers

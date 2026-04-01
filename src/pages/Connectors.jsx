@@ -635,10 +635,533 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
 }
 
 
+// ── FileConnectModal ─────────────────────────────────────────────────────────
+// Handles excel, csv, json_xml connectors via file upload
+function FileConnectModal({ connector, companyId, onClose }) {
+  const { toast } = useToast();
+  const [step, setStep]           = useState("upload"); // upload | preview | result
+  const [file, setFile]           = useState(null);
+  const [entityType, setEntityType] = useState("people");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [suggestion, setSuggestion] = useState(null);
+  const [running, setRunning]     = useState(false);
+  const [runResult, setRunResult] = useState(null);
+
+  const isJson = connector?.id === "json_xml";
+  const accept = isJson
+    ? ".json,.xml,application/json,text/xml,application/xml"
+    : ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
+
+  async function analyzeFile() {
+    if (!file) return;
+    setAnalyzing(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("entity_type", entityType);
+      form.append("connector_id", connector.id);
+      const res = await fetch(`${RAILWAY_URL}/connectors/suggest-columns`, {
+        method: "POST",
+        headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setSuggestion(data);
+      setStep("preview");
+    } catch (e) {
+      toast({ title: "Failed to read file", description: e.message, variant: "destructive" });
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function runSync(dryRun = false) {
+    if (!file) return;
+    setRunning(true);
+    try {
+      const form = new FormData();
+      form.append("company_id", companyId);
+      form.append("connector_id", connector.id);
+      form.append("entity_type", entityType);
+      form.append("file", file);
+      form.append("dry_run", dryRun ? "true" : "false");
+      const res = await fetch(`${RAILWAY_URL}/connectors/run`, {
+        method: "POST",
+        headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+        body: form,
+      });
+      const data = await res.json();
+      setRunResult(data);
+      setStep("result");
+      if (!dryRun && data.status !== "error") {
+        toast({ title: `Import complete — ${data.created || 0} created, ${data.updated || 0} updated` });
+      }
+    } catch (e) {
+      toast({ title: "Import failed", description: e.message, variant: "destructive" });
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+              <HardDrive className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-800">{connector?.name}</p>
+              <p className="text-xs text-slate-400">Import file into Base44</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+        </div>
+
+        {/* Steps */}
+        <div className="flex items-center gap-1 px-6 pt-4 pb-2">
+          {["upload", "preview", "result"].map((s, i) => (
+            <React.Fragment key={s}>
+              <div className={`text-[10px] font-semibold px-2 py-1 rounded-full capitalize ${
+                step === s ? "bg-indigo-100 text-indigo-700"
+                  : ["upload", "preview", "result"].indexOf(step) > i ? "bg-emerald-100 text-emerald-700"
+                  : "bg-slate-100 text-slate-400"
+              }`}>{s}</div>
+              {i < 2 && <ChevronRight className="w-3 h-3 text-slate-300" />}
+            </React.Fragment>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {step === "upload" && (
+            <>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">What are you importing?</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {ENTITY_TYPES.map(et => (
+                    <button key={et.id} onClick={() => setEntityType(et.id)}
+                      className={`text-left px-3 py-2 rounded-xl border text-xs font-medium transition-colors ${
+                        entityType === et.id
+                          ? "border-indigo-400 bg-indigo-50 text-indigo-700"
+                          : "border-slate-200 text-slate-600 hover:border-slate-300"
+                      }`}>
+                      {et.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Select file</label>
+                <label className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-xl px-6 py-10 cursor-pointer transition-colors ${
+                  file ? "border-emerald-400 bg-emerald-50" : "border-slate-300 hover:border-indigo-400 hover:bg-indigo-50/40"
+                }`}>
+                  <HardDrive className={`w-8 h-8 ${file ? "text-emerald-500" : "text-slate-400"}`} />
+                  {file ? (
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-emerald-700">{file.name}</p>
+                      <p className="text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-slate-600">Drop file here or click to browse</p>
+                      <p className="text-xs text-slate-400 mt-1">{isJson ? "JSON or XML files" : "Excel (.xlsx, .xls) or CSV files"}</p>
+                    </div>
+                  )}
+                  <input type="file" accept={accept} className="hidden"
+                    onChange={e => setFile(e.target.files?.[0] || null)} />
+                </label>
+              </div>
+            </>
+          )}
+
+          {step === "preview" && suggestion && (
+            <>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-slate-700">
+                  {suggestion.row_count?.toLocaleString()} rows · <span className="text-indigo-600">{suggestion.file_name}</span>
+                </p>
+                <span className="text-[10px] px-2 py-1 bg-slate-100 text-slate-500 rounded-full">
+                  Detected: {suggestion.detected_entity}
+                </span>
+              </div>
+              {suggestion.preview_rows?.length > 0 && (
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        {suggestion.columns.slice(0, 6).map(col => (
+                          <th key={col} className="px-3 py-2 text-left font-semibold text-slate-600 whitespace-nowrap">{col}</th>
+                        ))}
+                        {suggestion.columns.length > 6 && <th className="px-3 py-2 text-slate-400">+{suggestion.columns.length - 6}</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {suggestion.preview_rows.slice(0, 3).map((row, i) => (
+                        <tr key={i} className="border-b border-slate-100">
+                          {suggestion.columns.slice(0, 6).map(col => (
+                            <td key={col} className="px-3 py-1.5 text-slate-700 max-w-[120px] truncate">
+                              {row[col] == null ? <span className="text-slate-300">—</span> : String(row[col])}
+                            </td>
+                          ))}
+                          {suggestion.columns.length > 6 && <td />}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div className="rounded-xl border border-slate-200 p-3">
+                <p className="text-xs font-semibold text-slate-700 mb-2">
+                  {Object.keys(suggestion.suggested_mappings || {}).length} columns auto-mapped
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(suggestion.suggested_mappings || {}).slice(0, 8).map(([src, tgt]) => (
+                    <span key={src} className="text-[10px] px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full font-mono">
+                      {src} → {tgt}
+                    </span>
+                  ))}
+                  {Object.keys(suggestion.suggested_mappings || {}).length > 8 && (
+                    <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">
+                      +{Object.keys(suggestion.suggested_mappings || {}).length - 8} more
+                    </span>
+                  )}
+                </div>
+                {suggestion.unmapped_columns?.length > 0 && (
+                  <p className="text-[10px] text-amber-600 mt-2">
+                    {suggestion.unmapped_columns.length} unmapped: {suggestion.unmapped_columns.slice(0, 4).join(", ")}{suggestion.unmapped_columns.length > 4 ? " …" : ""}
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+
+          {step === "result" && runResult && (
+            <div className={`rounded-xl border p-4 text-sm ${
+              runResult.status === "dry_run" ? "bg-amber-50 border-amber-200"
+                : runResult.status === "error" ? "bg-rose-50 border-rose-200"
+                : "bg-emerald-50 border-emerald-200"
+            }`}>
+              <p className="font-bold text-slate-800 mb-2">
+                {runResult.status === "dry_run" ? "Dry run — no data written"
+                  : runResult.status === "error" ? "Import failed"
+                  : "Import complete"}
+              </p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {runResult.extracted    != null && <div><span className="text-slate-500">Extracted:</span> <strong>{runResult.extracted}</strong></div>}
+                {runResult.would_create != null && <div><span className="text-slate-500">Would create:</span> <strong>{runResult.would_create}</strong></div>}
+                {runResult.created      != null && <div><span className="text-slate-500">Created:</span> <strong>{runResult.created}</strong></div>}
+                {runResult.updated      != null && <div><span className="text-slate-500">Updated:</span> <strong>{runResult.updated}</strong></div>}
+                {runResult.skipped      != null && <div><span className="text-slate-500">Skipped:</span> <strong>{runResult.skipped}</strong></div>}
+              </div>
+              {runResult.detail && <p className="mt-2 text-xs text-rose-700">{runResult.detail}</p>}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+          <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+          <div className="flex items-center gap-2">
+            {step === "upload" && (
+              <Button onClick={analyzeFile} disabled={!file || analyzing}
+                className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs">
+                {analyzing
+                  ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Analysing…</>
+                  : <><Eye className="w-3.5 h-3.5 mr-1.5" /> Preview Data</>}
+              </Button>
+            )}
+            {step === "preview" && (
+              <>
+                <Button variant="outline" onClick={() => setStep("upload")} className="rounded-xl text-xs">Back</Button>
+                <Button variant="outline" onClick={() => runSync(true)} disabled={running}
+                  className="rounded-xl text-xs border-amber-300 text-amber-700 hover:bg-amber-50">
+                  {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Dry Run"}
+                </Button>
+                <Button onClick={() => runSync(false)} disabled={running}
+                  className="bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs">
+                  {running
+                    ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Importing…</>
+                    : <><Play className="w-3.5 h-3.5 mr-1.5" /> Import to Base44</>}
+                </Button>
+              </>
+            )}
+            {step === "result" && (
+              <>
+                <Button variant="outline" onClick={() => { setStep("upload"); setFile(null); setSuggestion(null); setRunResult(null); }}
+                  className="rounded-xl text-xs">
+                  Import another
+                </Button>
+                <Button onClick={onClose} className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs">Done</Button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ── GoogleSheetsModal ────────────────────────────────────────────────────────
+// Fetches a public Google Sheet via CSV export and imports it
+function GoogleSheetsModal({ connector, companyId, onClose }) {
+  const { toast } = useToast();
+  const [step, setStep]             = useState("url"); // url | preview | result
+  const [sheetUrl, setSheetUrl]     = useState("");
+  const [entityType, setEntityType] = useState("people");
+  const [analyzing, setAnalyzing]   = useState(false);
+  const [suggestion, setSuggestion] = useState(null);
+  const [fetchedFile, setFetchedFile] = useState(null);
+  const [running, setRunning]       = useState(false);
+  const [runResult, setRunResult]   = useState(null);
+
+  function extractSheetId(url) {
+    const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+    return m ? m[1] : null;
+  }
+
+  async function analyzeSheet() {
+    const sheetId = extractSheetId(sheetUrl);
+    if (!sheetId) {
+      toast({ title: "Invalid URL", description: "Paste the full Google Sheets URL from your browser.", variant: "destructive" });
+      return;
+    }
+    setAnalyzing(true);
+    try {
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+      const csvRes = await fetch(csvUrl);
+      if (!csvRes.ok) throw new Error("Could not access sheet — make sure it is shared as 'Anyone with the link can view'.");
+      const csvBlob = await csvRes.blob();
+      const file = new File([csvBlob], `sheet_${sheetId}.csv`, { type: "text/csv" });
+      setFetchedFile(file);
+
+      const form = new FormData();
+      form.append("file", file);
+      form.append("entity_type", entityType);
+      form.append("connector_id", "csv");
+      const res = await fetch(`${RAILWAY_URL}/connectors/suggest-columns`, {
+        method: "POST",
+        headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+        body: form,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setSuggestion(data);
+      setStep("preview");
+    } catch (e) {
+      toast({ title: "Could not fetch sheet", description: e.message, variant: "destructive" });
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function runSync(dryRun = false) {
+    if (!fetchedFile) return;
+    setRunning(true);
+    try {
+      const form = new FormData();
+      form.append("company_id", companyId);
+      form.append("connector_id", "csv");
+      form.append("entity_type", entityType);
+      form.append("file", fetchedFile);
+      form.append("dry_run", dryRun ? "true" : "false");
+      const res = await fetch(`${RAILWAY_URL}/connectors/run`, {
+        method: "POST",
+        headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+        body: form,
+      });
+      const data = await res.json();
+      setRunResult(data);
+      setStep("result");
+      if (!dryRun && data.status !== "error") {
+        toast({ title: `Import complete — ${data.created || 0} created, ${data.updated || 0} updated` });
+      }
+    } catch (e) {
+      toast({ title: "Import failed", description: e.message, variant: "destructive" });
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+              <Cloud className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-800">Google Sheets</p>
+              <p className="text-xs text-slate-400">Import from a public Google Sheet</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+        </div>
+
+        {/* Steps */}
+        <div className="flex items-center gap-1 px-6 pt-4 pb-2">
+          {["Sheet URL", "Preview", "Result"].map((label, i) => {
+            const s = ["url", "preview", "result"][i];
+            return (
+              <React.Fragment key={s}>
+                <div className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
+                  step === s ? "bg-indigo-100 text-indigo-700"
+                    : ["url", "preview", "result"].indexOf(step) > i ? "bg-emerald-100 text-emerald-700"
+                    : "bg-slate-100 text-slate-400"
+                }`}>{label}</div>
+                {i < 2 && <ChevronRight className="w-3 h-3 text-slate-300" />}
+              </React.Fragment>
+            );
+          })}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {step === "url" && (
+            <>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Google Sheets URL</label>
+                <input type="url" value={sheetUrl} onChange={e => setSheetUrl(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-indigo-400"
+                  placeholder="https://docs.google.com/spreadsheets/d/..." />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Sheet must be shared as <strong>Anyone with the link can view</strong>.
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">What are you importing?</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {ENTITY_TYPES.map(et => (
+                    <button key={et.id} onClick={() => setEntityType(et.id)}
+                      className={`text-left px-3 py-2 rounded-xl border text-xs font-medium transition-colors ${
+                        entityType === et.id ? "border-indigo-400 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600 hover:border-slate-300"
+                      }`}>
+                      {et.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {step === "preview" && suggestion && (
+            <>
+              <p className="text-xs font-semibold text-slate-700">
+                {suggestion.row_count?.toLocaleString()} rows · {suggestion.columns?.length} columns
+              </p>
+              {suggestion.preview_rows?.length > 0 && (
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="bg-slate-50 border-b">
+                        {suggestion.columns.slice(0, 5).map(c => (
+                          <th key={c} className="px-3 py-2 text-left font-semibold text-slate-600 whitespace-nowrap">{c}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {suggestion.preview_rows.slice(0, 3).map((row, i) => (
+                        <tr key={i} className="border-b border-slate-100">
+                          {suggestion.columns.slice(0, 5).map(c => (
+                            <td key={c} className="px-3 py-1.5 text-slate-700 max-w-[120px] truncate">
+                              {row[c] == null ? "—" : String(row[c])}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div className="rounded-xl border border-slate-200 p-3">
+                <p className="text-xs font-semibold text-slate-700 mb-1">
+                  {Object.keys(suggestion.suggested_mappings || {}).length} columns auto-mapped
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(suggestion.suggested_mappings || {}).slice(0, 6).map(([src, tgt]) => (
+                    <span key={src} className="text-[10px] px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full font-mono">
+                      {src} → {tgt}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {step === "result" && runResult && (
+            <div className={`rounded-xl border p-4 text-sm ${
+              runResult.status === "dry_run" ? "bg-amber-50 border-amber-200"
+                : runResult.status === "error" ? "bg-rose-50 border-rose-200"
+                : "bg-emerald-50 border-emerald-200"
+            }`}>
+              <p className="font-bold text-slate-800 mb-2">
+                {runResult.status === "dry_run" ? "Dry run — no data written"
+                  : runResult.status === "error" ? "Import failed"
+                  : "Import complete"}
+              </p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {runResult.extracted != null && <div><span className="text-slate-500">Extracted:</span> <strong>{runResult.extracted}</strong></div>}
+                {runResult.created   != null && <div><span className="text-slate-500">Created:</span> <strong>{runResult.created}</strong></div>}
+                {runResult.updated   != null && <div><span className="text-slate-500">Updated:</span> <strong>{runResult.updated}</strong></div>}
+              </div>
+              {runResult.detail && <p className="mt-2 text-xs text-rose-700">{runResult.detail}</p>}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+          <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+          <div className="flex items-center gap-2">
+            {step === "url" && (
+              <Button onClick={analyzeSheet} disabled={!sheetUrl || analyzing}
+                className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs">
+                {analyzing
+                  ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Fetching…</>
+                  : <><Eye className="w-3.5 h-3.5 mr-1.5" /> Preview Sheet</>}
+              </Button>
+            )}
+            {step === "preview" && (
+              <>
+                <Button variant="outline" onClick={() => setStep("url")} className="rounded-xl text-xs">Back</Button>
+                <Button variant="outline" onClick={() => runSync(true)} disabled={running}
+                  className="rounded-xl text-xs border-amber-300 text-amber-700 hover:bg-amber-50">
+                  {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Dry Run"}
+                </Button>
+                <Button onClick={() => runSync(false)} disabled={running}
+                  className="bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs">
+                  {running
+                    ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Importing…</>
+                    : <><Play className="w-3.5 h-3.5 mr-1.5" /> Import to Base44</>}
+                </Button>
+              </>
+            )}
+            {step === "result" && (
+              <Button onClick={onClose} className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs">Done</Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ── Main Connectors page ─────────────────────────────────────────────────────
 export default function Connectors() {
-  const [currentUser, setCurrentUser]           = useState(null);
-  const [dbModalConnector, setDbModalConnector] = useState(null);
+  const [currentUser, setCurrentUser]             = useState(null);
+  const [dbModalConnector, setDbModalConnector]   = useState(null);
+  const [fileModalConnector, setFileModalConnector] = useState(null);
+  const [sheetsModalConnector, setSheetsModalConnector] = useState(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -725,8 +1248,12 @@ export default function Connectors() {
   function handleConnect(conn) {
     if (DB_CONNECTOR_IDS.has(conn.id) || conn.category === "database") {
       setDbModalConnector(conn);
+    } else if (conn.id === "google_sheets") {
+      setSheetsModalConnector(conn);
+    } else if (conn.category === "file" && conn.status === "available") {
+      setFileModalConnector(conn);
     } else {
-      toast({ title: `${conn.name} coming soon`, description: "This connector is not yet available." });
+      toast({ title: conn.name, description: "This connector is coming soon." });
     }
   }
 
@@ -747,6 +1274,24 @@ export default function Connectors() {
           connector={dbModalConnector}
           companyId={currentUser.company_id}
           onClose={() => setDbModalConnector(null)}
+        />
+      )}
+
+      {/* File upload modal (excel, csv, json_xml) */}
+      {fileModalConnector && (
+        <FileConnectModal
+          connector={fileModalConnector}
+          companyId={currentUser.company_id}
+          onClose={() => setFileModalConnector(null)}
+        />
+      )}
+
+      {/* Google Sheets modal */}
+      {sheetsModalConnector && (
+        <GoogleSheetsModal
+          connector={sheetsModalConnector}
+          companyId={currentUser.company_id}
+          onClose={() => setSheetsModalConnector(null)}
         />
       )}
 
@@ -814,14 +1359,16 @@ export default function Connectors() {
                           onClick={() => handleConnect(conn)}
                           disabled={!available}
                           className={`w-full text-xs rounded-xl ${
-                            isDb && available
-                              ? "bg-indigo-600 hover:bg-indigo-700"
-                              : ""
+                            available ? "bg-indigo-600 hover:bg-indigo-700" : ""
                           }`}
                           variant={available ? "default" : "outline"}
                         >
                           {isDb && available ? (
                             <><Database className="w-3.5 h-3.5 mr-1.5" /> Connect Database</>
+                          ) : conn.id === "google_sheets" && available ? (
+                            <><Cloud className="w-3.5 h-3.5 mr-1.5" /> Connect Sheet</>
+                          ) : conn.category === "file" && available ? (
+                            <><HardDrive className="w-3.5 h-3.5 mr-1.5" /> Import File</>
                           ) : "Connect"}
                         </Button>
                       </div>

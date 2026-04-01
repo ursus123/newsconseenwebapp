@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     nominatim_contact_email: str = "contact@newsconseen.com"
 
     # ----------------------------------------------------------
+    # Public API key (x-api-key header)
+    # If set, all non-health endpoints require this key.
+    # ----------------------------------------------------------
+    api_key: Optional[str] = None
+
+    # ----------------------------------------------------------
     # ML feature flag
     # ----------------------------------------------------------
     ml_enabled: str = "false"

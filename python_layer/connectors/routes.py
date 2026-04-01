@@ -89,10 +89,16 @@ async def suggest_columns(
     filename = file.filename or "upload.csv"
 
     try:
-        from connectors.file.excel import ExcelConnector
+        ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+        is_json_xml = ext in ("json", "xml")
+
+        if is_json_xml:
+            from connectors.file.jason_xml import JsonXmlConnector as FileConn
+        else:
+            from connectors.file.excel import ExcelConnector as FileConn  # type: ignore[assignment]
 
         # Parse file to get columns and preview rows
-        connector = ExcelConnector(
+        connector = FileConn(
             company_id="preview",
             credentials={
                 "file_content": content,
@@ -108,10 +114,15 @@ async def suggest_columns(
 
         columns = list(raw_records[0].keys())
 
-        # Auto-detect entity type if not provided
-        detected_entity = entity_type or connector._detect_entity_type(columns)
+        # Auto-detect entity type if not provided; ExcelConnector has this method
+        if is_json_xml:
+            from connectors.file.excel import ExcelConnector
+            detected_entity = entity_type or ExcelConnector._detect_entity_type(None, columns)  # type: ignore[arg-type]
+        else:
+            detected_entity = entity_type or connector._detect_entity_type(columns)  # type: ignore[attr-defined]
 
-        # Suggest column mappings
+        # Suggest column mappings (always via ExcelConnector helper)
+        from connectors.file.excel import ExcelConnector
         suggestions = ExcelConnector.suggest_column_mappings(columns, detected_entity)
 
         return {
