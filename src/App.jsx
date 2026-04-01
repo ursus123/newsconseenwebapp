@@ -87,7 +87,7 @@ const AuthenticatedApp = () => {
       {/* Onboarding — no layout wrapper */}
       <Route path="/onboarding" element={<Onboarding />} />
 
-      <Route path="/" element={
+      <Route path="/app" element={
         <LayoutWrapper currentPageName={mainPageKey}>
           <MainPage />
         </LayoutWrapper>
