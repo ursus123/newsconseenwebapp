@@ -174,6 +174,45 @@ def load_dataframe(
     }
 
 
+def _sanitize_for_sql(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert any column that contains Python dicts or lists into JSON strings.
+
+    Base44 returns nested objects in some fields (e.g. address sub-objects,
+    relationship arrays). PostgreSQL cannot INSERT a Python dict directly.
+    Storing as TEXT preserves the data for JSON-based queries.
+
+    Also handles timezone-aware timestamps: converts to UTC naive to avoid
+    SQLAlchemy/psycopg2 timezone insertion issues.
+    """
+    import json
+
+    df = df.copy()
+    for col in df.columns:
+        if df[col].dtype != object:
+            continue
+        # Check sample for dict/list values
+        sample = df[col].dropna().head(10)
+        if any(isinstance(v, (dict, list)) for v in sample):
+            df[col] = df[col].apply(
+                lambda x: json.dumps(x, default=str)
+                if isinstance(x, (dict, list))
+                else x
+            )
+        # Strip timezone from tz-aware datetime columns stored as object
+        elif any(hasattr(v, "tzinfo") for v in sample if not isinstance(v, float)):
+            try:
+                df[col] = pd.to_datetime(df[col], errors="coerce", utc=True).dt.tz_localize(None)
+            except Exception:
+                pass
+
+    # Normalise proper datetime columns with timezone to UTC naive
+    for col in df.select_dtypes(include=["datetimetz"]).columns:
+        df[col] = df[col].dt.tz_localize(None)
+
+    return df
+
+
 def load_raw(
     df: pd.DataFrame,
     table_name: str,
@@ -220,7 +259,7 @@ def load_raw(
 
     engine = get_engine()
 
-    df = df.copy()
+    df = _sanitize_for_sql(df)
     df["_loaded_at"] = pd.Timestamp.now()
 
     df.to_sql(

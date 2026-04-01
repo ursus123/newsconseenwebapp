@@ -246,18 +246,28 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
 
     # ── Step 1: Extract all entities once (all tenants, no filtering) ─────────
     # One API call per entity regardless of tenant count.
-    # Raw data is stored to raw.* so the full individual records are preserved
-    # for ML models, advanced queries, and data-equivalence validation.
+    # Extract and raw-write are separate try blocks so a DB write failure
+    # never loses the in-memory DataFrame needed for the transform step.
     raw_data: dict[str, pd.DataFrame] = {}
     for name, (extract_fn, _) in entity_map.items():
+        # 1a. Extract from Base44
         try:
             df = extract_fn()
             raw_data[name] = df
-            load_raw(df, name)
-            logger.info("Cron: raw.%s — %d records", name, len(df))
         except Exception as e:
-            logger.error("Cron: %s extract/raw load failed — %s", name, e)
+            logger.error("Cron: %s extract failed — %s", name, e)
             raw_data[name] = pd.DataFrame()
+            continue
+
+        # 1b. Persist raw records — failure here does NOT lose raw_data
+        try:
+            load_raw(df, name)
+            logger.info("Cron: raw.%s — %d records written", name, len(df))
+        except Exception as e:
+            logger.warning(
+                "Cron: raw.%s write failed (data still available for transform) — %s",
+                name, e,
+            )
 
     # ── Step 2: Discover all company_ids from enterprise extract ──────────────
     # Multi-tenancy: run the transform once per company so every analytics
@@ -299,12 +309,23 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     # ── Step 4: Geospatial (company-agnostic spatial clustering) ─────────────
     try:
         geo_raw = geospatial.extract_geospatial()
-        load_raw(geo_raw, "geospatial")
-        geo_summary = geospatial.transform_geospatial(geo_raw)
-        results["geospatial"] = load_dataframe_replace(geo_summary, "geospatial_summary")
     except Exception as e:
-        results["geospatial"] = {"status": "error", "detail": str(e)}
-        logger.error("Cron: geospatial failed — %s", e)
+        results["geospatial"] = {"status": "error", "detail": f"extract failed: {e}"}
+        logger.error("Cron: geospatial extract failed — %s", e)
+        geo_raw = pd.DataFrame()
+
+    if not geo_raw.empty:
+        try:
+            load_raw(geo_raw, "geospatial")
+        except Exception as e:
+            logger.warning("Cron: raw.geospatial write failed — %s", e)
+
+        try:
+            geo_summary = geospatial.transform_geospatial(geo_raw)
+            results["geospatial"] = load_dataframe_replace(geo_summary, "geospatial_summary")
+        except Exception as e:
+            results["geospatial"] = {"status": "error", "detail": str(e)}
+            logger.error("Cron: geospatial transform/load failed — %s", e)
 
     success_count = sum(1 for r in results.values() if r.get("status") == "success")
     return {
