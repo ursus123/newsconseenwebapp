@@ -52,12 +52,16 @@ def get_engine_safe() -> Engine | None:
 
 def ensure_analytics_schema(engine: Engine) -> None:
     """
-    Create the 'analytics' schema in Railway PostgreSQL if it
-    does not already exist.
+    Create the 'analytics' and 'raw' schemas in Railway PostgreSQL
+    if they do not already exist.
 
-    Called once at app startup so every subsequent load_dataframe()
-    call can assume the schema is there without re-creating it.
+    Called once at app startup so every subsequent load call
+    can assume both schemas are present.
+
+    - analytics.*  — aggregated snapshots (time-series, trend analysis)
+    - raw.*        — full individual records from Base44 (ML, advanced queries)
     """
     with engine.connect() as conn:
         conn.execute(text("CREATE SCHEMA IF NOT EXISTS analytics;"))
+        conn.execute(text("CREATE SCHEMA IF NOT EXISTS raw;"))
         conn.commit()

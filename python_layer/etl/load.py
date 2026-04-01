@@ -174,6 +174,75 @@ def load_dataframe(
     }
 
 
+def load_raw(
+    df: pd.DataFrame,
+    table_name: str,
+    schema: str = "raw",
+) -> dict:
+    """
+    Replace the raw table with the full extract from Base44.
+
+    The 'raw' schema stores individual entity records with no aggregation —
+    one row per person, product, task, transaction, etc. This is the
+    source-of-truth mirror of Base44 in PostgreSQL.
+
+    Why this matters:
+        - ML models need individual records (features per person/product)
+        - Advanced copilot queries need to filter by name, ID, date range
+        - Data validation: compare raw row count to Base44 entity count
+        - analytics.* summaries are derived FROM raw.* — not the reverse
+
+    This is a full REPLACE on every ETL run (not an append). The raw schema
+    is always the current state of Base44, not a time-series history.
+    Use analytics.* tables for trend analysis.
+
+    Args:
+        df:         Full extracted DataFrame from any etl/*.extract_*() call
+        table_name: Target table, e.g. "people", "tasks", "products"
+        schema:     PostgreSQL schema, default "raw"
+
+    Returns:
+        Dict with status, rows_loaded, table
+    """
+    from database import get_engine
+
+    if df.empty:
+        logger.warning(
+            "load_raw: skipping empty DataFrame for %s.%s",
+            schema, table_name,
+        )
+        return {
+            "status":      "skipped",
+            "reason":      "empty dataframe",
+            "rows_loaded": 0,
+            "table":       f"{schema}.{table_name}",
+        }
+
+    engine = get_engine()
+
+    df = df.copy()
+    df["_loaded_at"] = pd.Timestamp.now()
+
+    df.to_sql(
+        table_name,
+        engine,
+        schema=schema,
+        if_exists="replace",
+        index=False,
+    )
+
+    logger.info(
+        "load_raw: replaced %s.%s with %d records",
+        schema, table_name, len(df),
+    )
+
+    return {
+        "status":      "success",
+        "rows_loaded": len(df),
+        "table":       f"{schema}.{table_name}",
+    }
+
+
 def load_dataframe_replace(
     df: pd.DataFrame,
     table_name: str,

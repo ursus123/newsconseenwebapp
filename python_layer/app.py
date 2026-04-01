@@ -22,7 +22,7 @@ from etl import (
     tasks,
     transactions,
 )
-from etl.load import load_dataframe, load_dataframe_replace
+from etl.load import load_dataframe, load_dataframe_replace, load_raw
 
 # Schemas
 from schemas import (
@@ -155,7 +155,7 @@ def root():
     return {
         "status":  "ok",
         "service": "newsconseen-python-layer",
-        "version": "4.0.0",
+        "version": "4.0.3",
         "mantra":  "The SME version of Palantir Foundry",
         "layers": {
             "layer_1": "Enterprise OS — Base44 master data",
@@ -228,53 +228,64 @@ def health():
 # ----------------------------------------------------------
 @app.post("/cron/etl-all", tags=["Cron"])
 def cron_etl_all(x_cron_secret: str = Header(None)):
-    if not settings.cron_secret or x_cron_secret != settings.cron_secret:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+    # Permissive auth: only reject a non-empty wrong secret.
+    # An empty / missing header is allowed so the Pipelines UI
+    # can trigger ETL without exposing CRON_SECRET in the frontend bundle.
+    _check_cron_secret(x_cron_secret)
 
-    # ── Discover all company_ids from the enterprise extract ─────────────────
-    # Enterprises always carry company_id. We run the ETL once per company so
-    # every analytics row is stamped with the correct company_id rather than null.
-    # This preserves full multi-tenancy: all companies are processed in one run.
-    try:
-        ent_raw = enterprises.extract_enterprises()
-        company_ids = (
-            ent_raw["company_id"].dropna().unique().tolist()
-            if "company_id" in ent_raw.columns
-            else []
-        )
-    except Exception as e:
-        logger.error("Cron: could not extract company_ids — %s", e)
-        company_ids = []
+    entity_map = {
+        "tasks":         (tasks.extract_tasks,                tasks.transform_tasks),
+        "transactions":  (transactions.extract_transactions,   transactions.transform_transactions),
+        "services":      (services.extract_services,           services.transform_services),
+        "enterprises":   (enterprises.extract_enterprises,     enterprises.transform_enterprises),
+        "people":        (people.extract_people,               people.transform_people),
+        "products":      (products.extract_products,           products.transform_products),
+        "addresses":     (addresses.extract_addresses,         addresses.transform_addresses),
+        "relationships": (relationships.extract_relationships,  relationships.transform_relationships),
+    }
 
+    # ── Step 1: Extract all entities once (all tenants, no filtering) ─────────
+    # One API call per entity regardless of tenant count.
+    # Raw data is stored to raw.* so the full individual records are preserved
+    # for ML models, advanced queries, and data-equivalence validation.
+    raw_data: dict[str, pd.DataFrame] = {}
+    for name, (extract_fn, _) in entity_map.items():
+        try:
+            df = extract_fn()
+            raw_data[name] = df
+            load_raw(df, name)
+            logger.info("Cron: raw.%s — %d records", name, len(df))
+        except Exception as e:
+            logger.error("Cron: %s extract/raw load failed — %s", name, e)
+            raw_data[name] = pd.DataFrame()
+
+    # ── Step 2: Discover all company_ids from enterprise extract ──────────────
+    # Multi-tenancy: run the transform once per company so every analytics
+    # row is stamped with the correct company_id.  Isolation is at read time.
+    ent_df = raw_data.get("enterprises", pd.DataFrame())
+    company_ids = (
+        ent_df["company_id"].dropna().unique().tolist()
+        if "company_id" in ent_df.columns
+        else []
+    )
     if not company_ids:
         logger.warning(
-            "Cron: no company_ids found in enterprise extract — "
-            "ETL will run once without company_id scoping"
+            "Cron: no company_ids in enterprise extract — "
+            "running once without company_id scoping"
         )
         company_ids = [None]
 
-    logger.info("Cron: running ETL for %d company_id(s): %s", len(company_ids), company_ids)
+    logger.info("Cron: %d company_id(s): %s", len(company_ids), company_ids)
 
-    entity_map = {
-        "tasks":         (tasks.extract_tasks,               tasks.transform_tasks),
-        "transactions":  (transactions.extract_transactions,  transactions.transform_transactions),
-        "services":      (services.extract_services,          services.transform_services),
-        "enterprises":   (enterprises.extract_enterprises,    enterprises.transform_enterprises),
-        "people":        (people.extract_people,              people.transform_people),
-        "products":      (products.extract_products,          products.transform_products),
-        "addresses":     (addresses.extract_addresses,        addresses.transform_addresses),
-        "relationships": (relationships.extract_relationships, relationships.transform_relationships),
-    }
-
-    results = {}
+    # ── Step 3: Transform + load analytics summaries per company ──────────────
+    results: dict = {}
     for company_id in company_ids:
-        for name, (extract_fn, transform_fn) in entity_map.items():
+        for name, (_, transform_fn) in entity_map.items():
             try:
-                raw     = extract_fn()
-                raw     = filter_by_company(raw, company_id)
-                summary = transform_fn(raw)
-                result  = load_dataframe(summary, f"{name}_summary", company_id=company_id)
-                # Accumulate: keep last result per entity (or merge counts)
+                filtered = filter_by_company(raw_data.get(name, pd.DataFrame()), company_id)
+                summary  = transform_fn(filtered)
+                result   = load_dataframe(summary, f"{name}_summary", company_id=company_id)
+                # Accumulate row counts across companies; surface any error
                 if name not in results or result.get("status") == "error":
                     results[name] = result
                 elif result.get("status") == "success":
@@ -283,24 +294,112 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
                     )
             except Exception as e:
                 results[name] = {"status": "error", "detail": str(e)}
-                logger.error("Cron: %s ETL failed (company_id=%s) — %s", name, company_id, e)
+                logger.error("Cron: %s summary failed (company_id=%s) — %s", name, company_id, e)
 
+    # ── Step 4: Geospatial (company-agnostic spatial clustering) ─────────────
     try:
-        raw     = geospatial.extract_geospatial()
-        summary = geospatial.transform_geospatial(raw)
-        results["geospatial"] = load_dataframe_replace(summary, "geospatial_summary")
+        geo_raw = geospatial.extract_geospatial()
+        load_raw(geo_raw, "geospatial")
+        geo_summary = geospatial.transform_geospatial(geo_raw)
+        results["geospatial"] = load_dataframe_replace(geo_summary, "geospatial_summary")
     except Exception as e:
         results["geospatial"] = {"status": "error", "detail": str(e)}
+        logger.error("Cron: geospatial failed — %s", e)
 
     success_count = sum(1 for r in results.values() if r.get("status") == "success")
     return {
         "cron_run":    True,
-        "version":     "4.0.2",
+        "version":     "4.0.3",
         "companies":   len(company_ids),
+        "raw_stored":  list(raw_data.keys()),
         "success":     success_count,
         "total":       len(results),
         "all_success": success_count == len(results),
         "results":     results,
+    }
+
+
+# ----------------------------------------------------------
+# Raw data stats — how many records are stored per entity
+# ----------------------------------------------------------
+@app.get("/raw/stats", tags=["Raw"])
+def raw_stats():
+    """
+    Returns row counts for every table in the raw schema.
+    Use this to verify the python_layer has captured the same
+    number of records as Base44. If counts differ, check ETL logs.
+    """
+    from database import get_engine_safe
+    from sqlalchemy import text as sqlt
+
+    engine = get_engine_safe()
+    if not engine:
+        return {"error": "no database"}
+
+    with engine.connect() as conn:
+        rows = conn.execute(sqlt("""
+            SELECT table_name,
+                   (xpath('/row/c/text()',
+                     query_to_xml(
+                       format('SELECT COUNT(*) AS c FROM raw.%%I', table_name),
+                       FALSE, TRUE, ''
+                     )
+                   ))[1]::TEXT::BIGINT AS row_count
+            FROM information_schema.tables
+            WHERE table_schema = 'raw'
+            ORDER BY table_name
+        """)).fetchall()
+    return {
+        "schema": "raw",
+        "tables": {r[0]: r[1] for r in rows},
+        "note":   "Counts should match Base44 entity totals. Re-run ETL if they differ.",
+    }
+
+
+@app.get("/raw/{entity}", tags=["Raw"])
+def raw_entity_sample(
+    entity:     str,
+    company_id: Optional[str] = Query(None),
+    limit:      int           = Query(100, le=1000),
+):
+    """
+    Return up to 1000 raw records for an entity from the raw schema.
+    Useful for ML feature inspection, data validation, and debugging.
+    Entities: people, enterprises, products, tasks, transactions,
+              services, relationships, addresses, geospatial
+    """
+    from database import get_engine_safe
+    from sqlalchemy import text as sqlt
+
+    allowed = {
+        "people", "enterprises", "products", "tasks", "transactions",
+        "services", "relationships", "addresses", "geospatial",
+    }
+    if entity not in allowed:
+        raise HTTPException(status_code=404, detail=f"Unknown entity '{entity}'. Allowed: {sorted(allowed)}")
+
+    engine = get_engine_safe()
+    if not engine:
+        return {"error": "no database"}
+
+    where = "WHERE company_id = :cid" if company_id else ""
+    params = {"limit": limit}
+    if company_id:
+        params["cid"] = company_id
+
+    with engine.connect() as conn:
+        result = conn.execute(sqlt(
+            f"SELECT * FROM raw.{entity} {where} LIMIT :limit"
+        ), params)
+        cols = result.keys()
+        rows = [dict(zip(cols, row)) for row in result.fetchall()]
+
+    return {
+        "entity":     entity,
+        "company_id": company_id,
+        "count":      len(rows),
+        "columns":    list(cols),
+        "data":       rows,
     }
 
 
@@ -320,7 +419,7 @@ def debug_analytics_people():
             "SELECT company_id, person_type, status, people_count, active_count "
             "FROM analytics.people_summary ORDER BY snapshot_date DESC LIMIT 30"
         )).fetchall()
-    return {"rows": [dict(r._mapping) for r in rows], "count": len(rows)}
+    return {"rows": [dict(r) for r in rows], "count": len(rows)}
 
 
 # ----------------------------------------------------------
