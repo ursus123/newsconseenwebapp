@@ -182,12 +182,10 @@ def health():
 
     copilot_backend = os.getenv("COPILOT_BACKEND", "")
     copilot_key_set = bool(
-        os.getenv("DASHSCOPE_API_KEY") or
         os.getenv("ANTHROPIC_API_KEY") or
         os.getenv("OPENAI_API_KEY")
     )
     backend_display = {
-        "qwen":      "qwen",
         "anthropic": "claude",
         "claude":    "claude",
         "openai":    "openai",
