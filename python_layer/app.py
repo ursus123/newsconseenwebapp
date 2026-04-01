@@ -231,7 +231,30 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     if not settings.cron_secret or x_cron_secret != settings.cron_secret:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
-    results  = {}
+    # ── Discover all company_ids from the enterprise extract ─────────────────
+    # Enterprises always carry company_id. We run the ETL once per company so
+    # every analytics row is stamped with the correct company_id rather than null.
+    # This preserves full multi-tenancy: all companies are processed in one run.
+    try:
+        ent_raw = enterprises.extract_enterprises()
+        company_ids = (
+            ent_raw["company_id"].dropna().unique().tolist()
+            if "company_id" in ent_raw.columns
+            else []
+        )
+    except Exception as e:
+        logger.error("Cron: could not extract company_ids — %s", e)
+        company_ids = []
+
+    if not company_ids:
+        logger.warning(
+            "Cron: no company_ids found in enterprise extract — "
+            "ETL will run once without company_id scoping"
+        )
+        company_ids = [None]
+
+    logger.info("Cron: running ETL for %d company_id(s): %s", len(company_ids), company_ids)
+
     entity_map = {
         "tasks":         (tasks.extract_tasks,               tasks.transform_tasks),
         "transactions":  (transactions.extract_transactions,  transactions.transform_transactions),
@@ -243,14 +266,24 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         "relationships": (relationships.extract_relationships, relationships.transform_relationships),
     }
 
-    for name, (extract_fn, transform_fn) in entity_map.items():
-        try:
-            raw     = extract_fn()
-            summary = transform_fn(raw)
-            results[name] = load_dataframe(summary, f"{name}_summary")
-        except Exception as e:
-            results[name] = {"status": "error", "detail": str(e)}
-            logger.error("Cron: %s ETL failed — %s", name, e)
+    results = {}
+    for company_id in company_ids:
+        for name, (extract_fn, transform_fn) in entity_map.items():
+            try:
+                raw     = extract_fn()
+                raw     = filter_by_company(raw, company_id)
+                summary = transform_fn(raw)
+                result  = load_dataframe(summary, f"{name}_summary", company_id=company_id)
+                # Accumulate: keep last result per entity (or merge counts)
+                if name not in results or result.get("status") == "error":
+                    results[name] = result
+                elif result.get("status") == "success":
+                    results[name]["rows_loaded"] = (
+                        results[name].get("rows_loaded", 0) + result.get("rows_loaded", 0)
+                    )
+            except Exception as e:
+                results[name] = {"status": "error", "detail": str(e)}
+                logger.error("Cron: %s ETL failed (company_id=%s) — %s", name, company_id, e)
 
     try:
         raw     = geospatial.extract_geospatial()
@@ -262,7 +295,8 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     success_count = sum(1 for r in results.values() if r.get("status") == "success")
     return {
         "cron_run":    True,
-        "version":     "4.0.0",
+        "version":     "4.0.2",
+        "companies":   len(company_ids),
         "success":     success_count,
         "total":       len(results),
         "all_success": success_count == len(results),
