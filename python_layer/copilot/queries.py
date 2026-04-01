@@ -613,6 +613,23 @@ TOOL_DEFINITIONS = [
 ]
 
 
+# ── OpenAI-compatible tool definitions (for Qwen via DashScope) ──────────────
+# Converts Anthropic format (input_schema) to OpenAI format (parameters).
+# Keeps TOOL_DEFINITIONS as the single source of truth — no duplication.
+
+TOOL_DEFINITIONS_OPENAI = [
+    {
+        "type": "function",
+        "function": {
+            "name":        t["name"],
+            "description": t["description"],
+            "parameters":  t["input_schema"],
+        },
+    }
+    for t in TOOL_DEFINITIONS
+]
+
+
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
 
 def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:

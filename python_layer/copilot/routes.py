@@ -64,13 +64,21 @@ def copilot_status():
     backend_available = False
     backend_note      = ""
 
-    if backend in ("anthropic", "claude"):
+    if backend == "qwen":
         try:
-            import anthropic
+            import openai  # noqa: F401
+            backend_available = bool(os.getenv("DASHSCOPE_API_KEY"))
+            backend_note = "Set DASHSCOPE_API_KEY in Railway environment variables"
+        except ImportError:
+            backend_note = "Install openai: pip install openai"
+
+    elif backend in ("anthropic", "claude"):
+        try:
+            import openai  # noqa: F401  (openai SDK used for DashScope too)
             backend_available = bool(os.getenv("ANTHROPIC_API_KEY"))
             backend_note = "Set ANTHROPIC_API_KEY in Railway environment variables"
         except ImportError:
-            backend_note = "Install anthropic: pip install anthropic"
+            backend_note = "Install openai: pip install openai"
 
     elif backend == "openai":
         try:

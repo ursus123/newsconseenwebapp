@@ -19,7 +19,8 @@ requests
 python-multipart
 
 # AI / LLM
-anthropic
+# openai SDK used for Qwen via Alibaba DashScope OpenAI-compatible API
+openai
 
 # Data processing
 pandas

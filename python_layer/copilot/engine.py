@@ -1,20 +1,43 @@
 """
 python_layer/copilot/engine.py
 ================================
-The grounded copilot engine.
-Passes TOOL_DEFINITIONS to the Anthropic API so Claude can
-call real PostgreSQL query functions before answering.
+Grounded copilot engine — Qwen via Alibaba DashScope OpenAI-compatible API.
+
+Uses the openai Python SDK pointed at DashScope's OpenAI-compatible endpoint
+so the tool loop works identically to any OpenAI function-calling integration.
+
+Layer 3 rule: reads from Layer 2 (analytics tables) only. Never touches Base44.
+company_id is always injected server-side in execute_tool(). Never from user input.
 """
 
 import json
 import logging
 import os
-import anthropic
-from .queries import TOOL_DEFINITIONS, execute_tool, get_operator_context, QueryEngine
+
+import openai
+
+from .queries import TOOL_DEFINITIONS_OPENAI, execute_tool, get_operator_context, QueryEngine
 
 logger = logging.getLogger(__name__)
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+# ── Qwen client via DashScope OpenAI-compatible endpoint ─────────────────────
+# Client is constructed lazily (inside ask()) so a missing key at import time
+# does not crash the app — it will fail at call time with a clear error.
+
+DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+QWEN_MODEL         = os.getenv("QWEN_MODEL", "qwen-plus")
+
+
+def _get_client() -> openai.OpenAI:
+    """Return an OpenAI client configured for Qwen / DashScope."""
+    api_key = os.getenv("DASHSCOPE_API_KEY", "")
+    if not api_key:
+        raise RuntimeError(
+            "DASHSCOPE_API_KEY is not set. "
+            "Add it to Railway Variables to enable the Qwen copilot."
+        )
+    return openai.OpenAI(api_key=api_key, base_url=DASHSCOPE_BASE_URL)
+
 
 _BASE_INSTRUCTIONS = """\
 You have access to real-time data tools that query the business's PostgreSQL analytics database.
@@ -39,7 +62,7 @@ def build_system_prompt(company_id: str) -> str:
     Grounds the copilot in the specific business context — name, type, status.
     Falls back gracefully if the enterprise record is not yet populated.
     """
-    ctx = get_operator_context(company_id)
+    ctx    = get_operator_context(company_id)
     name   = ctx.get("name", "this organisation")
     etype  = ctx.get("enterprise_type", "commercial")
     status = ctx.get("operating_status", "active")
@@ -54,67 +77,90 @@ def build_system_prompt(company_id: str) -> str:
 async def ask(question: str, company_id: str, history: list = None) -> str:
     """
     Full grounded copilot call with tool loop.
-    Returns a final text answer grounded in real data.
+    Uses Qwen via DashScope OpenAI-compatible API with function calling.
+    Returns a final text answer grounded in real analytics data.
+
+    Follows the three-layer rule: queries go to analytics.* tables (Layer 2).
+    company_id is injected into every tool call server-side.
     """
-    messages = list(history or [])
+    client  = _get_client()
+    system  = build_system_prompt(company_id)
+
+    # Build message list — system prompt + history + new question
+    messages = [{"role": "system", "content": system}]
+    for h in (history or []):
+        if h.get("role") in ("user", "assistant"):
+            messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": question})
 
     # ── Tool loop — up to 5 rounds ───────────────────────────────────────────
+    response = None
     for _ in range(5):
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
-            system=build_system_prompt(company_id),
-            tools=TOOL_DEFINITIONS,
+        response = client.chat.completions.create(
+            model=QWEN_MODEL,
             messages=messages,
+            tools=TOOL_DEFINITIONS_OPENAI,
+            tool_choice="auto",
         )
 
-        # If Claude is done (no more tool calls) return the text
-        if response.stop_reason == "end_turn":
-            text_blocks = [b.text for b in response.content if hasattr(b, "text")]
-            return "\n".join(text_blocks)
+        choice = response.choices[0]
 
-        # If Claude wants to call tools — execute them all
-        if response.stop_reason == "tool_use":
-            # Add Claude's response (with tool_use blocks) to messages
-            messages.append({"role": "assistant", "content": response.content})
+        # Done — no more tool calls
+        if choice.finish_reason == "stop":
+            return choice.message.content or ""
 
-            # Execute each tool call and collect results
-            tool_results = []
-            for block in response.content:
-                if block.type != "tool_use":
-                    continue
+        # Qwen wants to call tools
+        if choice.finish_reason == "tool_calls":
+            tool_calls = choice.message.tool_calls or []
 
+            # Add assistant message (with tool_calls) to history
+            messages.append({
+                "role":       "assistant",
+                "content":    choice.message.content or "",
+                "tool_calls": [
+                    {
+                        "id":       tc.id,
+                        "type":     "function",
+                        "function": {
+                            "name":      tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in tool_calls
+                ],
+            })
+
+            # Execute each tool and append results
+            for tc in tool_calls:
                 logger.info(
-                    "Copilot calling tool: %s with input: %s",
-                    block.name,
-                    block.input,
+                    "Copilot calling tool: %s with args: %s",
+                    tc.function.name, tc.function.arguments,
                 )
+                try:
+                    tool_input = json.loads(tc.function.arguments)
+                except json.JSONDecodeError:
+                    tool_input = {}
 
                 result = execute_tool(
-                    tool_name=block.name,
-                    tool_input=block.input,
-                    company_id=company_id,  # always injected server-side
+                    tool_name=tc.function.name,
+                    tool_input=tool_input,
+                    company_id=company_id,   # always injected server-side
                 )
 
-                tool_results.append({
-                    "type":        "tool_result",
-                    "tool_use_id": block.id,
-                    "content":     json.dumps(result, default=str),
+                messages.append({
+                    "role":         "tool",
+                    "tool_call_id": tc.id,
+                    "content":      json.dumps(result, default=str),
                 })
 
-            # Add tool results to messages and loop again
-            messages.append({"role": "user", "content": tool_results})
             continue
 
-        # Unexpected stop reason
+        # Unexpected finish_reason — exit loop
         break
 
-    # Fallback — extract any text from last response
-    if response and response.content:
-        text_blocks = [b.text for b in response.content if hasattr(b, "text")]
-        if text_blocks:
-            return "\n".join(text_blocks)
+    # Fallback — return whatever text is in the last response
+    if response and response.choices:
+        return response.choices[0].message.content or ""
 
     return "I was unable to retrieve the data needed to answer your question."
 
@@ -122,14 +168,10 @@ async def ask(question: str, company_id: str, history: list = None) -> str:
 async def ask_stream(question: str, company_id: str, history: list = None):
     """
     Streaming version — yields text chunks as they arrive.
-    Tool calls are executed silently, then the final answer streams.
+    Runs the full tool loop first, then yields the final answer in chunks.
     """
-    # Run the full tool loop first (non-streaming)
-    # then stream the final answer for UX
     full_answer = await ask(question, company_id, history)
-
-    # Simulate streaming by yielding the answer in chunks
-    chunk_size = 6
+    chunk_size  = 6
     for i in range(0, len(full_answer), chunk_size):
         yield full_answer[i:i + chunk_size]
 
@@ -150,10 +192,10 @@ class CopilotEngine:
 
     def __init__(
         self,
-        company_id: str,
+        company_id:      str,
         enterprise_name: str = "",
-        backend: str = "anthropic",
-        railway_url: str = "",
+        backend:         str = "qwen",
+        railway_url:     str = "",
     ):
         self.company_id      = company_id
         self.enterprise_name = enterprise_name
@@ -164,8 +206,8 @@ class CopilotEngine:
     def ask(
         self,
         question: str,
-        history: list = None,
-        context: dict = None,
+        history:  list = None,
+        context:  dict = None,
     ) -> dict:
         """
         Synchronous call — returns dict with answer, tools_called, data, intent.
@@ -177,7 +219,6 @@ class CopilotEngine:
         import asyncio
         import concurrent.futures
 
-        # Flatten context dict into question prefix
         full_question = question
         if context:
             ctx_str = "; ".join(f"{k}: {v}" for k, v in context.items() if v)
