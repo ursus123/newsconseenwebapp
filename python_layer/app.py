@@ -269,23 +269,31 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
                 name, e,
             )
 
-    # ── Step 2: Discover all company_ids from enterprise extract ──────────────
-    # Multi-tenancy: run the transform once per company so every analytics
-    # row is stamped with the correct company_id.  Isolation is at read time.
-    ent_df = raw_data.get("enterprises", pd.DataFrame())
-    company_ids = (
-        ent_df["company_id"].dropna().unique().tolist()
-        if "company_id" in ent_df.columns
-        else []
-    )
+    # ── Step 2: Discover all company_ids from ALL entity extracts ────────────
+    # Robust multi-tenant discovery: scan every raw DataFrame for a company_id
+    # column, collect the union of all distinct values.  Enterprises is the
+    # canonical source but any entity that carries company_id will do.
+    # This means a single-entity failure (e.g. enterprises raw write crashed)
+    # cannot prevent the ETL from running for the other tenants.
+    all_company_ids: set = set()
+    for name, df in raw_data.items():
+        if "company_id" in df.columns:
+            ids = df["company_id"].dropna().unique().tolist()
+            if ids:
+                logger.info("Cron: found %d company_id(s) in raw.%s: %s", len(ids), name, ids)
+                all_company_ids.update(ids)
+
+    company_ids = list(all_company_ids)
     if not company_ids:
         logger.warning(
-            "Cron: no company_ids in enterprise extract — "
-            "running once without company_id scoping"
+            "Cron: no company_ids found in ANY entity extract — "
+            "running once without company_id scoping. "
+            "Analytics rows will have NULL company_id and will NOT be queryable by the copilot. "
+            "Check that Base44 entity records include a company_id field."
         )
         company_ids = [None]
 
-    logger.info("Cron: %d company_id(s): %s", len(company_ids), company_ids)
+    logger.info("Cron: %d company_id(s) discovered: %s", len(company_ids), company_ids)
 
     # ── Step 3: Transform + load analytics summaries per company ──────────────
     results: dict = {}

@@ -253,6 +253,97 @@ def submit_feedback(request: FeedbackRequest):
     }
 
 
+@router.get("/diagnose")
+def diagnose(company_id: str = Query(...)):
+    """
+    Runs all 10 copilot query tools for the given company_id and reports
+    how many rows each tool returned.  Use this to confirm the analytics
+    tables are populated and the copilot can reach data.
+
+    A tool showing count=0 means either:
+      - The analytics table has no rows for this company_id (re-run ETL)
+      - The ETL ran with company_id=NULL (check Cron: company_id log lines)
+      - The Base44 entity has no records yet (create some data first)
+    """
+    from copilot.queries import (
+        get_operator_context, get_people_summary, get_person_churn_risk,
+        get_staff_availability, get_transaction_summary, get_overdue_invoices,
+        get_task_summary, get_task_outcomes, get_product_summary,
+        get_enterprise_overview, get_network_overview,
+    )
+    from sqlalchemy import text
+    from database import get_engine_safe
+
+    # Check raw table row counts alongside analytics
+    raw_counts: dict = {}
+    engine = get_engine_safe()
+    if engine:
+        tables = ["people", "enterprises", "products", "tasks", "transactions",
+                  "services", "relationships", "addresses", "geospatial"]
+        with engine.connect() as conn:
+            for t in tables:
+                try:
+                    row = conn.execute(text(f"SELECT COUNT(*) FROM raw.{t}")).scalar()
+                    raw_counts[t] = row
+                except Exception:
+                    raw_counts[t] = None   # table does not exist yet
+
+    # Check distinct company_ids in each analytics table
+    analytics_companies: dict = {}
+    if engine:
+        atables = ["people_summary", "enterprise_summary", "product_summary",
+                   "task_summary", "transaction_summary", "service_summary",
+                   "relationship_summary", "address_summary"]
+        with engine.connect() as conn:
+            for t in atables:
+                try:
+                    rows = conn.execute(text(
+                        f"SELECT DISTINCT company_id FROM analytics.{t} LIMIT 20"
+                    )).fetchall()
+                    analytics_companies[t] = [r[0] for r in rows]
+                except Exception:
+                    analytics_companies[t] = None
+
+    # Run each copilot tool and report row counts
+    tools: dict = {}
+    tool_fns = {
+        "get_operator_context":   lambda: get_operator_context(company_id),
+        "get_people_summary":     lambda: get_people_summary(company_id),
+        "get_person_churn_risk":  lambda: get_person_churn_risk(company_id),
+        "get_staff_availability": lambda: get_staff_availability(company_id),
+        "get_transaction_summary":lambda: get_transaction_summary(company_id),
+        "get_overdue_invoices":   lambda: get_overdue_invoices(company_id),
+        "get_task_summary":       lambda: get_task_summary(company_id),
+        "get_task_outcomes":      lambda: get_task_outcomes(company_id),
+        "get_product_summary":    lambda: get_product_summary(company_id),
+        "get_enterprise_overview":lambda: get_enterprise_overview(company_id),
+    }
+    for name, fn in tool_fns.items():
+        try:
+            result = fn()
+            # Count rows in any list-valued key
+            count = 0
+            for v in result.values():
+                if isinstance(v, list):
+                    count = max(count, len(v))
+            tools[name] = {"ok": True, "row_count": count, "result": result}
+        except Exception as e:
+            tools[name] = {"ok": False, "error": str(e)}
+
+    any_data = any(t.get("row_count", 0) > 0 for t in tools.values() if t.get("ok"))
+
+    return {
+        "company_id":          company_id,
+        "has_data":            any_data,
+        "diagnosis":           "Data found — copilot should work" if any_data
+                               else "No data found for this company_id. "
+                                    "Re-run ETL after confirming Railway is redeployed.",
+        "raw_row_counts":      raw_counts,
+        "analytics_companies": analytics_companies,
+        "tools":               tools,
+    }
+
+
 @router.get("/sample-questions")
 def sample_questions(company_id: Optional[str] = Query(None)):
     """
