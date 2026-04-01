@@ -8,7 +8,7 @@ export default defineConfig({
   logLevel: 'error',
   plugins: [
     base44({
-      legacySDKImports: (typeof process !== 'undefined' && process.env?.BASE44_LEGACY_SDK_IMPORTS) === 'true',
+      legacySDKImports: false,
     }),
     react(),
   ],

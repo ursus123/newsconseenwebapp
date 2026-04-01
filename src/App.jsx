@@ -140,6 +140,7 @@ function App() {
           <Router>
             <Routes>
               {/* Public routes — no auth required */}
+              <Route path="/" element={<Landing />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/landing" element={<Landing />} />
               {/* All other routes go through auth */}
