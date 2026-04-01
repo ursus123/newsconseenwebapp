@@ -193,7 +193,7 @@ def health():
 
     return {
         "status":   "ok" if db_status == "connected" else "degraded",
-        "version":  "4.0.1",
+        "version":  "4.0.2",
         "api":      "ok",
         "database": db_status,
 
