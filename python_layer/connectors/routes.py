@@ -17,6 +17,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
+from pydantic import BaseModel
 
 from connectors.registry import (
     CONNECTOR_CATALOG,
@@ -263,6 +264,135 @@ def save_taxonomy_mapping(payload: dict):
         "source_value":  payload["source_value"],
         "taxonomy_value":payload["taxonomy_value"],
     }
+
+
+# ── Database connector endpoints ─────────────────────────────────────────────
+
+class DbCredentials(BaseModel):
+    engine_type: str           # postgresql | mysql | mssql | sqlite
+    host:        str = ""
+    port:        Optional[int] = None
+    database:    str = ""
+    username:    str = ""
+    password:    str = ""
+    schema_name: Optional[str] = None   # renamed to avoid pydantic clash with schema
+    ssl:         bool = False
+    table:       Optional[str] = None
+    query:       Optional[str] = None
+    entity_type: Optional[str] = "people"
+    column_map:  Optional[dict] = {}
+
+    def to_credentials_dict(self) -> dict:
+        return {
+            "engine_type": self.engine_type,
+            "host":        self.host,
+            "port":        self.port,
+            "database":    self.database,
+            "username":    self.username,
+            "password":    self.password,
+            "schema":      self.schema_name,
+            "ssl":         self.ssl,
+            "table":       self.table,
+            "query":       self.query,
+            "entity_type": self.entity_type,
+            "column_map":  self.column_map or {},
+        }
+
+
+@router.post("/db/test")
+def db_test_connection(creds: DbCredentials):
+    """
+    Test an external database connection without extracting any data.
+    Returns {ok, message, engine, server_version}.
+    Called by the Connect modal after the user fills in credentials.
+    """
+    from connectors.database.sql import test_connection
+    return test_connection(creds.to_credentials_dict())
+
+
+@router.post("/db/tables")
+def db_list_tables(creds: DbCredentials):
+    """
+    List all tables and views in the connected database/schema.
+    Called by the Connect modal after a successful connection test.
+    Lets the user pick a table instead of writing raw SQL.
+    """
+    from connectors.database.sql import list_tables
+    return list_tables(creds.to_credentials_dict())
+
+
+@router.post("/db/preview")
+def db_preview(creds: DbCredentials, limit: int = Query(10, le=100)):
+    """
+    Run the query/table from credentials and return the first N rows.
+    Called by the Connect modal to show a preview before column mapping.
+    Returns {ok, columns, rows, total_estimate, sql_used}.
+    """
+    from connectors.database.sql import preview_query
+    return preview_query(creds.to_credentials_dict(), limit=limit)
+
+
+@router.post("/db/run")
+def db_run_sync(
+    creds:      DbCredentials,
+    company_id: str = Query(...),
+    dry_run:    bool = Query(False),
+):
+    """
+    Extract rows from the external database and load them into Base44.
+
+    Steps:
+      1. Connect to external DB and run query/table
+      2. Apply column_map to translate source columns → entity fields
+      3. Load records into Base44 (or dry_run to preview without writing)
+
+    Returns the standard connector run summary.
+    """
+    from connectors.database.sql import SqlDatabaseConnector
+    from connectors.mapping_engine import MappingEngine
+
+    engine = MappingEngine(company_id=company_id)
+    connector = SqlDatabaseConnector(
+        company_id=company_id,
+        credentials=creds.to_credentials_dict(),
+        mappings=engine._mappings,
+    )
+
+    try:
+        raw = connector.extract()
+        if not raw:
+            return {
+                "status":     "skipped",
+                "reason":     "query returned no rows",
+                "company_id": company_id,
+            }
+
+        transformed = connector.transform(raw)
+
+        if dry_run:
+            total = sum(len(v) for v in transformed.values())
+            return {
+                "status":       "dry_run",
+                "extracted":    len(raw),
+                "would_load":   total,
+                "entity_type":  creds.entity_type,
+                "unmapped":     connector.run_stats.get("unmapped", []),
+                "preview":      {k: v[:5] for k, v in transformed.items() if v},
+            }
+
+        result = connector.load(transformed)
+        return {
+            **result,
+            "connector":    f"{creds.engine_type}_db",
+            "company_id":   company_id,
+            "entity_type":  creds.entity_type,
+            "rows_extracted": len(raw),
+            "unmapped":     connector.run_stats.get("unmapped", []),
+        }
+
+    except Exception as e:
+        logger.error("db_run_sync failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/categories")

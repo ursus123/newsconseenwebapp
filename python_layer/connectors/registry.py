@@ -339,6 +339,63 @@ CONNECTOR_CATALOG = {
         "icon":        "shopping-cart",
     },
 
+    # ── Database / Data Warehouse connectors ─────────────
+    "postgresql_db": {
+        "id":          "postgresql_db",
+        "name":        "PostgreSQL",
+        "category":    "database",
+        "description": "Connect to any PostgreSQL database — on-prem, cloud, or local",
+        "sprint":      1,
+        "status":      "available",
+        "auth_type":   "connection_string",
+        "entities":    ["people", "enterprises", "products", "transactions", "tasks"],
+        "icon":        "database",
+    },
+    "mysql_db": {
+        "id":          "mysql_db",
+        "name":        "MySQL / MariaDB",
+        "category":    "database",
+        "description": "Connect to MySQL or MariaDB — any version, any host",
+        "sprint":      1,
+        "status":      "available",
+        "auth_type":   "connection_string",
+        "entities":    ["people", "enterprises", "products", "transactions", "tasks"],
+        "icon":        "database",
+    },
+    "aws_rds": {
+        "id":          "aws_rds",
+        "name":        "AWS RDS / Aurora",
+        "category":    "database",
+        "description": "Connect to Amazon RDS or Aurora (PostgreSQL or MySQL engine)",
+        "sprint":      1,
+        "status":      "available",
+        "auth_type":   "connection_string",
+        "entities":    ["people", "enterprises", "products", "transactions", "tasks"],
+        "icon":        "cloud",
+    },
+    "mssql_db": {
+        "id":          "mssql_db",
+        "name":        "SQL Server / Azure SQL",
+        "category":    "database",
+        "description": "Connect to Microsoft SQL Server or Azure SQL Database",
+        "sprint":      1,
+        "status":      "available",
+        "auth_type":   "connection_string",
+        "entities":    ["people", "enterprises", "products", "transactions", "tasks"],
+        "icon":        "database",
+    },
+    "sqlite_db": {
+        "id":          "sqlite_db",
+        "name":        "SQLite",
+        "category":    "database",
+        "description": "Connect to a local SQLite database file",
+        "sprint":      1,
+        "status":      "available",
+        "auth_type":   "file_path",
+        "entities":    ["people", "enterprises", "products", "transactions", "tasks"],
+        "icon":        "hard-drive",
+    },
+
     # ── Sprint 8 — Government ─────────────────────────────
     "kra": {
         "id":          "kra",
@@ -432,3 +489,9 @@ def _ensure_connectors_loaded():
         _REGISTRY["json_xml"] = JsonXmlConnector
     except ImportError:
         pass
+    try:
+        from connectors.database.sql import SqlDatabaseConnector
+        for _db_id in ("postgresql_db", "mysql_db", "aws_rds", "mssql_db", "sqlite_db"):
+            _REGISTRY[_db_id] = SqlDatabaseConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load database connectors — %s", e)
