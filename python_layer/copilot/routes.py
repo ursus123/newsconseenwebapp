@@ -64,7 +64,7 @@ def copilot_status():
     backend_available = False
     backend_note      = ""
 
-    if backend == "anthropic":
+    if backend in ("anthropic", "claude"):
         try:
             import anthropic
             backend_available = bool(os.getenv("ANTHROPIC_API_KEY"))

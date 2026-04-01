@@ -185,6 +185,11 @@ def health():
         os.getenv("ANTHROPIC_API_KEY") or
         os.getenv("OPENAI_API_KEY")
     )
+    backend_display = {
+        "anthropic": "claude",
+        "claude":    "claude",
+        "openai":    "openai",
+    }.get(copilot_backend, copilot_backend)
 
     return {
         "status":   "ok" if db_status == "connected" else "degraded",
@@ -200,7 +205,7 @@ def health():
 
         # Layer 3A — Copilot
         "copilot_enabled":  bool(copilot_backend and copilot_key_set),
-        "copilot_backend":  copilot_backend or "not configured",
+        "copilot_backend":  backend_display or "not configured",
 
         # Layer 3B — Alerts
         "alerts_enabled": True,
