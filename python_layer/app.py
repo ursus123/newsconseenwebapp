@@ -271,6 +271,25 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
 
 
 # ----------------------------------------------------------
+# Debug — analytics table contents (temporary, remove after diagnosis)
+# ----------------------------------------------------------
+@app.get("/debug/analytics/people", tags=["Debug"])
+def debug_analytics_people():
+    """Show what is actually stored in analytics.people_summary."""
+    from database import get_engine_safe
+    from sqlalchemy import text as sqlt
+    engine = get_engine_safe()
+    if not engine:
+        return {"error": "no database"}
+    with engine.connect() as conn:
+        rows = conn.execute(sqlt(
+            "SELECT company_id, person_type, status, people_count, active_count "
+            "FROM analytics.people_summary ORDER BY snapshot_date DESC LIMIT 30"
+        )).fetchall()
+    return {"rows": [dict(r._mapping) for r in rows], "count": len(rows)}
+
+
+# ----------------------------------------------------------
 # Debug Endpoints — raw extraction snapshots
 # ----------------------------------------------------------
 @app.get("/debug/enterprises",   tags=["Debug"])
