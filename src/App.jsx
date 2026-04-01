@@ -29,6 +29,7 @@ import Copilot from './pages/Copilot';
 import AlertsPageWrapper from './pages/AlertsPageWrapper';
 import NetworkPage from './pages/NetworkPage';
 import Connectors from './pages/Connectors';
+import Landing from './pages/Landing';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
@@ -140,6 +141,7 @@ function App() {
             <Routes>
               {/* Public routes — no auth required */}
               <Route path="/pricing" element={<Pricing />} />
+              <Route path="/landing" element={<Landing />} />
               {/* All other routes go through auth */}
               <Route path="/*" element={<AuthenticatedApp />} />
             </Routes>

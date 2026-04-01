@@ -32,17 +32,15 @@ function coloredIcon(color) {
 }
 
 export default function InfrastructureSection({ data, location, loading }) {
-  if (loading) return <SectionSkeleton title="Infrastructure" rows={5} />;
-  if (!data) return null;
-
-  const overall = data.find(r => r.infrastructure_type === "OVERALL SCORE");
-  const rows = data.filter(r => r.infrastructure_type !== "OVERALL SCORE");
+  const overall = data?.find(r => r.infrastructure_type === "OVERALL SCORE");
+  const rows = data?.filter(r => r.infrastructure_type !== "OVERALL SCORE") ?? [];
   const score = parseInt(overall?.availability) || 0;
 
-  const mapCenter = useMemo(() => {
-    // We don't have lat/lon per infra row, so just show the count table
-    return null;
-  }, []);
+  // eslint-disable-next-line no-unused-vars
+  const mapCenter = useMemo(() => null, []);
+
+  if (loading) return <SectionSkeleton title="Infrastructure" rows={5} />;
+  if (!data) return null;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">

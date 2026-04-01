@@ -252,15 +252,6 @@ export default function Transactions() {
   const listFn    = useEntityListFn(currentUser);
   const withScope = useWithScope(currentUser);
 
-  if (currentUser && !perms.l4_view && !isAdmin) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-400">
-        <Lock className="w-8 h-8" />
-        <p className="font-medium">You don't have access to Transactions.</p>
-      </div>
-    );
-  }
-
   const { data: transactions = [] } = useQuery({
     queryKey: ["transactions", companyId, currentUser?.email],
     queryFn: () => listFn(base44.entities.Transaction, "-date"),
@@ -422,6 +413,15 @@ export default function Transactions() {
   const activeTabConfig = TABS.find(t => t.id === activeTab);
   const searchFiltered = search ? fuzzyFilter(filtered, search, ["description", "enterprise", "primary_person", "invoice_number", "counterparty", "service_name"]) : filtered;
   const tabTransactions = searchFiltered.filter(activeTabConfig?.filter || (() => true));
+
+  if (currentUser && !perms.l4_view && !isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-400">
+        <Lock className="w-8 h-8" />
+        <p className="font-medium">You don't have access to Transactions.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
