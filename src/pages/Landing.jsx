@@ -567,8 +567,10 @@ export default function Landing() {
             <span className="text-white font-bold">Newsconseen</span>
             <span className="text-slate-600 text-xs">The universal enterprise operating system</span>
           </div>
-          <div className="flex items-center gap-6 text-sm text-slate-600">
-            <a href="mailto:support@newsconseen.com" className="hover:text-slate-400 transition-colors">support@newsconseen.com</a>
+          <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm text-slate-500">
+            <span>140 River Rd, Apt 3, Orrington, ME 04474</span>
+            <a href="tel:6823731189" className="hover:text-slate-400 transition-colors">(682) 373-1189</a>
+            <a href="mailto:anewsconseen@gmail.com" className="hover:text-slate-400 transition-colors">anewsconseen@gmail.com</a>
             <button onClick={() => navigate("/pricing")} className="hover:text-slate-400 transition-colors">Pricing</button>
             <span>© {new Date().getFullYear()} Newsconseen</span>
           </div>
