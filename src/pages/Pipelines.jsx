@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -6,6 +6,8 @@ import {
   Clock, Activity, Zap, Building2, Users, Package, Wrench,
   CheckSquare, Receipt, MapPin, Loader2, Info, Link2, Globe,
 } from "lucide-react";
+import { base44 } from "@/api/base44Client";
+import PipelineBuilder from "@/components/pipelines/PipelineBuilder";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const CRON_SECRET = import.meta.env.VITE_CRON_SECRET || "";
@@ -26,7 +28,12 @@ export default function Pipelines() {
   const [etlLoading, setEtlLoading] = useState(false);
   const [etlResult, setEtlResult] = useState(null);
   const [lastTriggered, setLastTriggered] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    base44.auth.me().then(setCurrentUser).catch(() => {});
+  }, []);
 
   const triggerEtl = async () => {
     setEtlLoading(true);
@@ -243,6 +250,9 @@ export default function Pipelines() {
           </a>
         </div>
       </div>
+
+      {/* ── Pipeline Builder ── */}
+      <PipelineBuilder currentUser={currentUser} />
 
     </div>
   );

@@ -30,6 +30,7 @@ import {
   Sparkles,
   Bell,
   Plug,
+  Brain,
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
@@ -78,7 +79,10 @@ const NAV_CONFIG = {
     },
     {
       section: "Applications",
-      items: [{ name: "Applications", icon: Grid3x3 }],
+      items: [
+        { name: "Applications", icon: Grid3x3 },
+        { name: "MLModels", label: "ML Models", icon: Brain },
+      ],
     },
     {
       section: "Admin Tools",
@@ -130,7 +134,10 @@ const NAV_CONFIG = {
     },
     {
       section: "Applications",
-      items: [{ name: "Applications", icon: Grid3x3 }],
+      items: [
+        { name: "Applications", icon: Grid3x3 },
+        { name: "MLModels", label: "ML Models", icon: Brain },
+      ],
     },
     {
       section: "Admin",
