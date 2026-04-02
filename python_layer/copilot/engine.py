@@ -9,12 +9,29 @@ call real PostgreSQL query functions before answering.
 import json
 import logging
 import os
-import anthropic
 from .queries import TOOL_DEFINITIONS, execute_tool, get_operator_context, QueryEngine
 
 logger = logging.getLogger(__name__)
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+# Lazy-initialised — do NOT create at module level.
+# Creating anthropic.Anthropic() at import time crashes the whole module
+# (and every /copilot/* route) if ANTHROPIC_API_KEY is missing.
+_anthropic_client = None
+
+
+def _get_client():
+    """Return a cached Anthropic client, or raise a clear error if key is missing."""
+    global _anthropic_client
+    if _anthropic_client is None:
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY is not set. "
+                "Add it to Railway environment variables to enable the copilot."
+            )
+        import anthropic as _anthropic
+        _anthropic_client = _anthropic.Anthropic(api_key=api_key)
+    return _anthropic_client
 
 _BASE_INSTRUCTIONS = """\
 You have access to real-time data tools that query the business's PostgreSQL analytics database.
@@ -58,6 +75,8 @@ async def ask(question: str, company_id: str, history: list = None) -> str:
     """
     messages = list(history or [])
     messages.append({"role": "user", "content": question})
+
+    client = _get_client()
 
     # ── Tool loop — up to 5 rounds ───────────────────────────────────────────
     for _ in range(5):

@@ -1,16 +1,29 @@
 import React, { useState, useEffect } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import CopilotChat from "@/components/copilot/copilotchat";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 const COPILOT_BACKEND = import.meta.env.VITE_COPILOT_BACKEND || "anthropic";
 const BACKEND_LABEL = COPILOT_BACKEND === "openai" ? "Powered by GPT-4o" : "Powered by Claude";
 
 export default function Copilot() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [backendStatus, setBackendStatus]   = useState(null); // null | "ok" | "degraded" | "unreachable"
 
   useEffect(() => {
     base44.auth.me().then(setCurrentUser).catch(() => {});
+  }, []);
+
+  // Check copilot backend on mount
+  useEffect(() => {
+    fetch(`${RAILWAY_URL}/copilot/status`, {
+      headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+    })
+      .then(r => r.json())
+      .then(d => setBackendStatus(d.backend_available ? "ok" : "degraded"))
+      .catch(() => setBackendStatus("unreachable"));
   }, []);
 
   return (
@@ -28,10 +41,30 @@ export default function Copilot() {
             </p>
           </div>
         </div>
-        <span className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold shrink-0">
-          <Sparkles className="w-3 h-3" />
-          {BACKEND_LABEL}
-        </span>
+
+        <div className="hidden sm:flex items-center gap-2 shrink-0">
+          {/* Backend status badge */}
+          {backendStatus === "ok" && (
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
+              <CheckCircle2 className="w-3 h-3" /> {BACKEND_LABEL}
+            </span>
+          )}
+          {backendStatus === "degraded" && (
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold">
+              <AlertTriangle className="w-3 h-3" /> ANTHROPIC_API_KEY not set in Railway
+            </span>
+          )}
+          {backendStatus === "unreachable" && (
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
+              <AlertTriangle className="w-3 h-3" /> python_layer unreachable
+            </span>
+          )}
+          {backendStatus === null && (
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 border border-slate-200 text-slate-500 text-xs">
+              <Sparkles className="w-3 h-3 animate-pulse" /> Checking…
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Chat — fills remaining height */}

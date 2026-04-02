@@ -26,6 +26,10 @@ import {
 import { createTransaction, TRANSACTION_SOURCES } from "@/utils/createTransaction";
 import { generateInvoiceNumber } from "@/utils/autoInvoice";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
+
 const STOCK_IMPACT_TYPES = ["stock_out", "item_assignment"];
 const STOCK_IN_TYPES = ["stock_in", "item_return"];
 
@@ -292,13 +296,13 @@ export default function Transactions() {
       existingTransactions: transactions,
       enterprise:      enterprises.find(e => e.enterprise_name === data.enterprise),
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setFormOpen(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setFormOpen(false); triggerETL("transaction"); },
     onError: (e) => toast({ title: "Failed to create transaction", description: e.message, variant: "destructive" }),
   });
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Transaction.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); triggerETL("transaction"); },
   });
 
   // Period filtering

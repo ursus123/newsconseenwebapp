@@ -260,7 +260,13 @@ export default function CopilotChat({ currentUser, className = "" }) {
       });
 
       if (!resp.ok) {
-        throw new Error(`Copilot error: ${resp.status}`);
+        // Try to extract detail from FastAPI error body
+        let detail = `HTTP ${resp.status}`;
+        try {
+          const errBody = await resp.json();
+          detail = errBody.detail || detail;
+        } catch { /* ignore parse errors */ }
+        throw new Error(detail);
       }
 
       const result = await resp.json();
@@ -280,7 +286,14 @@ export default function CopilotChat({ currentUser, className = "" }) {
       ]);
 
     } catch (err) {
-      setError("Could not reach the copilot. Make sure python_layer is running.");
+      const msg = err.message || "";
+      // If it's a real network failure (no response at all)
+      const isNetworkError = msg === "Failed to fetch" || msg === "Network request failed";
+      setError(
+        isNetworkError
+          ? "Could not reach python_layer. Check that Railway is running."
+          : msg
+      );
       setMessages(prev => prev.filter(m => m.type !== "thinking"));
     } finally {
       setLoading(false);

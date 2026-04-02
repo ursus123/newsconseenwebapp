@@ -139,8 +139,26 @@ def ask(request: AskRequest):
         context=request.context or {},
     )
 
+    # Never raise 500 for engine errors — return 200 with the error as the
+    # answer so the chat UI can display it instead of "Could not reach copilot".
     if result.get("error") and not result.get("answer"):
-        raise HTTPException(status_code=500, detail=result["error"])
+        error_msg = result["error"]
+
+        # Friendly messages for known error types
+        if "ANTHROPIC_API_KEY" in error_msg:
+            friendly = (
+                "The Copilot is not configured yet.\n\n"
+                "To enable it, add ANTHROPIC_API_KEY to the Railway environment variables "
+                "for the python_layer service.\n\n"
+                "Once set, redeploy and the Copilot will be available."
+            )
+        else:
+            friendly = (
+                f"The Copilot encountered an error:\n\n{error_msg}\n\n"
+                "If this persists, check the python_layer logs on Railway."
+            )
+
+        result["answer"] = friendly
 
     return result
 

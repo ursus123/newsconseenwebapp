@@ -33,6 +33,10 @@ import { format, isToday, isPast, parseISO } from "date-fns";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
+
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
   normal: "bg-blue-50 text-blue-700",
@@ -243,7 +247,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
 
   const createMut = useMutation({
     mutationFn: async (d) => base44.entities.Task.create(withScope({ ...d, app_source: d.app_source || "manual" })),
-    onSuccess: () => { setFormOpen(false); invalidate(); },
+    onSuccess: () => { setFormOpen(false); invalidate(); triggerETL("task"); },
   });
   const updateMut = useMutation({
     mutationFn: async ({ id, data }) => {
@@ -259,9 +263,9 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
       }
       return task;
     },
-    onSuccess: () => { setFormOpen(false); setEditing(null); invalidate(); },
+    onSuccess: () => { setFormOpen(false); setEditing(null); invalidate(); triggerETL("task"); },
   });
-  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Task.delete(id), onSuccess: () => { invalidate(); setDeleting(null); } });
+  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Task.delete(id), onSuccess: () => { invalidate(); setDeleting(null); triggerETL("task"); } });
 
   const filtered = (() => {
     let list = search ? fuzzyFilter(tasks, search, ["title", "enterprise", "assigned_to_name", "related_person", "outcome_notes"]) : [...tasks];
