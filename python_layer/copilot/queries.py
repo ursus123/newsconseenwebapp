@@ -601,6 +601,58 @@ def get_network_overview(company_id: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# ML PREDICTIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_ml_predictions(company_id: str, model: Optional[str] = None) -> dict:
+    """
+    Returns the most recent stored ML model predictions for this tenant.
+    Used for: "what is the retention risk", "LTV segments", "staffing forecast",
+              "who is at risk of leaving", "ML insights", "model predictions"
+
+    Reads from raw.ml_predictions — populated after each model run via
+    POST /ml/retention-risk, /ml/ltv-segmentation, etc.
+    """
+    filters = ["company_id = :company_id"]
+    params: dict = {"company_id": company_id}
+    if model:
+        filters.append("model = :model")
+        params["model"] = model
+
+    sql = f"""
+        SELECT DISTINCT ON (model)
+            model, result_json, computed_at
+        FROM raw.ml_predictions
+        WHERE {' AND '.join(filters)}
+        ORDER BY model, computed_at DESC
+    """
+    rows = _run(sql, params)
+
+    predictions = []
+    for r in rows:
+        try:
+            import json as _json
+            result = _json.loads(r.get("result_json") or "{}")
+        except Exception:
+            result = {}
+        predictions.append({
+            "model":       r.get("model"),
+            "computed_at": str(r.get("computed_at", "")),
+            "result":      result,
+        })
+
+    return {
+        "predictions":       predictions,
+        "count":             len(predictions),
+        "models_available":  [p["model"] for p in predictions],
+        "note": (
+            "No ML predictions stored yet — run POST /ml/retention-risk or /ml/ltv-segmentation first."
+            if not predictions else None
+        ),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # TOOL DEFINITIONS — registered with Anthropic API
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -711,6 +763,20 @@ TOOL_DEFINITIONS = [
         "description": "Get cross-branch summary comparing clients, staff, tasks, and revenue across all branches. Use for 'network overview', 'compare branches', 'consolidated view'.",
         "input_schema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "get_ml_predictions",
+        "description": "Get the most recent machine learning model predictions for this organisation — retention risk scores, LTV segments, staffing forecasts, shift demand. Use for 'who is at risk of leaving', 'client segments', 'staffing forecast', 'ML insights', 'predictions', 'risk scores'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "model": {
+                    "type": "string",
+                    "enum": ["retention-risk", "ltv-segmentation", "staffing-forecast", "shift-demand"],
+                    "description": "Filter by model name. Leave null to return all available predictions.",
+                },
+            },
+        },
+    },
 ]
 
 
@@ -737,6 +803,7 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "get_product_summary":     get_product_summary,
         "get_enterprise_overview": get_enterprise_overview,
         "get_network_overview":    get_network_overview,
+        "get_ml_predictions":      get_ml_predictions,
     }
 
     fn = dispatch.get(tool_name)
@@ -824,3 +891,6 @@ class QueryEngine:
         routes.py reads .get("summary", {}) → safely returns {} when absent.
         """
         return get_network_overview(self.company_id)
+
+    def query_ml_predictions(self, model: str = None) -> dict:
+        return get_ml_predictions(self.company_id, model)

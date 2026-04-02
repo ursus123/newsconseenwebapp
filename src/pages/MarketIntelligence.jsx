@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { TYPE_ALIASES } from "@/utils/typeAliases";
+
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import ResearchInputBar from "@/components/marketintelligence/ResearchInputBar";
@@ -28,6 +28,11 @@ import { createPageUrl } from "@/utils";
 
 // ─── Print styles ────────────────────────────────────────────────────────────
 const PRINT_STYLES = `@media print { .no-print { display: none !important; } body { font-size: 12px; } }`;
+
+const RAILWAY_URL     = "https://newsconseenwebapp-production.up.railway.app";
+/* eslint-disable-next-line */
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const RAIL_HEADERS    = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const HISTORY_KEY_PREFIX = "mi_history_";
@@ -73,11 +78,6 @@ const BIZ_TO_STOCK = {
   church: null, ngo_program: null, childcare: null, other: null,
 };
 
-const REVENUE_TYPES = [
-  "service_fee","tuition","donation","tithe","grant",
-  "livestock_sale","crop_sale","product_sale","income",
-  "event_income","membership_fee","sale_service",
-];
 
 const AGRICULTURAL_TYPES = ["livestock_farm","crop_farm","animal_barn","aquaculture"];
 
@@ -420,7 +420,8 @@ export default function MarketIntelligence() {
 
     setResults(prev => ({ ...prev, loading: false, isUS, stateName, isAgricultural }));
 
-    const marketRows = allSettledResults[8]?.value;
+    const marketResult = allSettledResults[8];
+    const marketRows = marketResult?.status === "fulfilled" ? marketResult.value : [];
     const score = Array.isArray(marketRows) ? marketRows[0]?.opportunity_score : undefined;
     if (score !== undefined) saveToHistory(loc, biz, score);
 
@@ -520,31 +521,52 @@ export default function MarketIntelligence() {
       )
     : [];
 
+  // Fetch operational analytics from python_layer (Layer 2) — never query Base44 directly for stats
   useEffect(() => {
-    if (!nearbyEnterprises?.length || !currentUser) return;
+    if (!currentUser?.company_id) return;
     setOperationalContext(null);
-    const enterpriseNames = nearbyEnterprises.map(e => e.enterprise_name);
+    const cid = encodeURIComponent(currentUser.company_id);
     (async () => {
       try {
-        const [allTasks, allTxns, allPeople] = await Promise.all([
-          base44.entities.Task.filter({ company_id: currentUser.company_id }),
-          base44.entities.Transaction.filter({ company_id: currentUser.company_id }),
-          base44.entities.Person.filter({ company_id: currentUser.company_id }),
+        const [peopleRes, taskRes, txnRes, mlRes] = await Promise.allSettled([
+          fetch(`${RAILWAY_URL}/people-summary?company_id=${cid}`,      { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
+          fetch(`${RAILWAY_URL}/task-summary?company_id=${cid}`,        { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
+          fetch(`${RAILWAY_URL}/transaction-summary?company_id=${cid}`, { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
+          fetch(`${RAILWAY_URL}/ml/predictions?company_id=${cid}&limit=4`, { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
         ]);
-        const tasks  = allTasks.filter(t => enterpriseNames.includes(t.enterprise));
-        const txns   = allTxns.filter(t => enterpriseNames.includes(t.enterprise) && REVENUE_TYPES.includes(t.transaction_type) && t.payment_status === "paid");
-        const people = allPeople.filter(p => enterpriseNames.includes(p.enterprise));
+
+        const people = peopleRes.status === "fulfilled" ? peopleRes.value : null;
+        const tasks  = taskRes.status  === "fulfilled" ? taskRes.value  : null;
+        const txns   = txnRes.status   === "fulfilled" ? txnRes.value   : null;
+        const ml     = mlRes.status    === "fulfilled" ? mlRes.value    : null;
+
+        // people_summary rows: {person_type, status, people_count, active_count}
+        const peopleRows = Array.isArray(people) ? people : (people?.data || []);
+        const taskRows   = Array.isArray(tasks)  ? tasks  : (tasks?.data  || []);
+        const txnRows    = Array.isArray(txns)   ? txns   : (txns?.data   || []);
+
+        const total_staff    = peopleRows.filter(r => r.is_staff).reduce((s, r) => s + (r.active_count || r.people_count || 0), 0);
+        const total_clients  = peopleRows.filter(r => r.is_participant || r.person_type === "client").reduce((s, r) => s + (r.people_count || 0), 0);
+        const total_revenue  = txnRows.filter(r => r.is_revenue).reduce((s, r) => s + (r.total_amount || r.revenue_last_30d || 0), 0);
+        const total_tasks    = taskRows.reduce((s, r) => s + (r.total_tasks || 0), 0);
+        const done_tasks     = taskRows.reduce((s, r) => s + (r.completed_tasks || 0), 0);
+        const task_completion = total_tasks > 0 ? Math.round(done_tasks / total_tasks * 100) : null;
+        const overdue_tasks  = taskRows.reduce((s, r) => s + (r.overdue_tasks || 0), 0);
+
         setOperationalContext({
-          enterprises:       nearbyEnterprises.length,
-          total_staff:       people.filter(p => TYPE_ALIASES.staff.includes(p.person_type)).length,
-          total_clients:     people.filter(p => p.person_type === "client").length,
-          total_revenue:     txns.reduce((s, t) => s + (t.amount || 0), 0),
-          task_completion:   tasks.length > 0 ? Math.round(tasks.filter(t => t.status === "completed").length / tasks.length * 100) : null,
-          total_tasks:       tasks.length,
+          enterprises:      nearbyEnterprises.length || 1,
+          total_staff,
+          total_clients,
+          total_revenue,
+          task_completion,
+          total_tasks,
+          overdue_tasks,
+          ml_predictions:   ml?.predictions || [],
+          data_source:      "analytics",
         });
-      } catch {}
+      } catch { /* python_layer unreachable — show nothing */ }
     })();
-  }, [nearbyEnterprises?.length, currentUser?.company_id]);
+  }, [currentUser?.company_id]);
 
   // ── Forecasting data prep ──────────────────────────────────────────────────
   const forecastBlock = results?.market?.[0]?.opportunity_score != null ? (() => {
@@ -705,15 +727,16 @@ export default function MarketIntelligence() {
                 <ForecastingModule baseScore={forecastBlock.baseScore} baseRadarData={forecastBlock.radarData} />
               )}
 
-              {/* 11. Your Operations Nearby */}
-              {nearbyEnterprises.length > 0 && (
+              {/* 11. Enterprise Intelligence — always shown when user is logged in */}
+              {operationalContext && (
                 <div className="bg-white border border-slate-200 rounded-2xl p-5">
                   <h3 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
                     <Building2 className="w-4 h-4 text-emerald-500" />
-                    Your Operations in This Area
+                    Your Enterprise Intelligence
+                    <span className="ml-auto text-[10px] font-normal text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Live from python_layer</span>
                   </h3>
                   <div className="flex flex-col gap-3">
-                    {nearbyEnterprises.map(e => (
+                    {nearbyEnterprises.length > 0 && nearbyEnterprises.map(e => (
                       <div key={e.id} className="flex items-start justify-between gap-4 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
                         <div>
                           <p className="font-semibold text-slate-800 text-sm">{e.enterprise_name}</p>
@@ -726,23 +749,42 @@ export default function MarketIntelligence() {
                       </div>
                     ))}
 
-                    {operationalContext && (
-                      <div className="grid grid-cols-2 gap-3 mt-1 pt-3 border-t border-slate-100">
-                        {[
-                          { label: "Clients",   value: operationalContext.total_clients, color: "text-slate-800" },
-                          { label: "Staff",     value: operationalContext.total_staff,   color: "text-slate-800" },
-                          { label: "Revenue",   value: operationalContext.total_revenue > 0 ? `$${operationalContext.total_revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—", color: "text-emerald-600" },
-                          { label: "Task Done", value: operationalContext.task_completion != null ? `${operationalContext.task_completion}%` : "—", color: "text-blue-600" },
-                        ].map(({ label, value, color }) => (
-                          <div key={label} className="text-center">
-                            <p className={`text-lg font-black ${color}`}>{value}</p>
-                            <p className="text-xs text-slate-400">{label}</p>
+                    {/* Analytics stats grid */}
+                    <div className="grid grid-cols-3 gap-3 mt-1 pt-3 border-t border-slate-100">
+                      {[
+                        { label: "Clients",     value: operationalContext.total_clients,   color: "text-slate-800" },
+                        { label: "Active Staff", value: operationalContext.total_staff,    color: "text-slate-800" },
+                        { label: "Tasks Total",  value: operationalContext.total_tasks,    color: "text-slate-800" },
+                        { label: "Task Done",    value: operationalContext.task_completion != null ? `${operationalContext.task_completion}%` : "—", color: "text-emerald-600" },
+                        { label: "Overdue",      value: operationalContext.overdue_tasks || 0, color: operationalContext.overdue_tasks > 0 ? "text-rose-600" : "text-slate-400" },
+                        { label: "Revenue",      value: operationalContext.total_revenue > 0 ? `$${operationalContext.total_revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—", color: "text-emerald-600" },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="text-center bg-slate-50 rounded-xl py-2">
+                          <p className={`text-lg font-black ${color}`}>{value ?? "—"}</p>
+                          <p className="text-[10px] text-slate-400">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* ML Predictions */}
+                    {operationalContext.ml_predictions?.length > 0 && (
+                      <div className="mt-1 pt-3 border-t border-slate-100 space-y-2">
+                        <p className="text-xs font-bold text-indigo-700 flex items-center gap-1.5">🤖 ML Predictions</p>
+                        {operationalContext.ml_predictions.map((pred) => (
+                          <div key={pred.model} className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2">
+                            <p className="text-[11px] font-bold text-indigo-700 capitalize">{pred.model.replace(/-/g, " ")}</p>
+                            <p className="text-[10px] text-indigo-500 mt-0.5">
+                              Computed: {pred.computed_at ? new Date(pred.computed_at).toLocaleDateString() : "—"}
+                              {pred.result?.status && <span className="ml-2">· {pred.result.status}</span>}
+                              {pred.result?.scored?.length > 0 && <span className="ml-2">· {pred.result.scored.length} entities scored</span>}
+                              {pred.result?.segments?.length > 0 && <span className="ml-2">· {pred.result.segments.length} segments</span>}
+                            </p>
                           </div>
                         ))}
                       </div>
                     )}
 
-                    {operationalContext && results?.market?.[0] && (
+                    {results?.market?.[0] && (
                       <div className="mt-1 pt-3 border-t border-slate-100 bg-blue-50 rounded-xl p-3">
                         <p className="text-xs font-bold text-blue-700 mb-1">📊 Market vs Your Performance</p>
                         <p className="text-xs text-blue-600">Market score: <strong>{results.market[0].opportunity_score}/100</strong></p>

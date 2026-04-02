@@ -39,6 +39,37 @@ const DB_CONNECTOR_IDS = new Set([
   "postgresql_db", "mysql_db", "aws_rds", "mssql_db", "sqlite_db",
 ]);
 
+// Static fallback catalog — renders even when Railway is unreachable.
+// Database connectors are always "available"; coming-soon entries are
+// included so the full grid always appears.
+const STATIC_CATALOG = [
+  { id: "postgresql_db", name: "PostgreSQL",          category: "database",     description: "Connect any PostgreSQL database — on-prem, cloud, or local", sprint: 1, status: "available",   icon: "database" },
+  { id: "mysql_db",      name: "MySQL / MariaDB",      category: "database",     description: "Connect MySQL or MariaDB — any version, any host",             sprint: 1, status: "available",   icon: "database" },
+  { id: "aws_rds",       name: "AWS RDS / Aurora",     category: "database",     description: "Connect Amazon RDS or Aurora (PostgreSQL or MySQL engine)",      sprint: 1, status: "available",   icon: "cloud" },
+  { id: "mssql_db",      name: "SQL Server / Azure",   category: "database",     description: "Connect Microsoft SQL Server or Azure SQL Database",             sprint: 1, status: "available",   icon: "database" },
+  { id: "sqlite_db",     name: "SQLite",               category: "database",     description: "Connect a local SQLite database file",                           sprint: 1, status: "available",   icon: "hard-drive" },
+  { id: "excel",         name: "Excel / CSV Import",   category: "file",         description: "Import people, enterprises, or items from Excel or CSV",          sprint: 1, status: "available",   icon: "table" },
+  { id: "csv",           name: "CSV Import",           category: "file",         description: "Import from CSV — same as Excel connector",                       sprint: 1, status: "available",   icon: "file-text" },
+  { id: "google_sheets", name: "Google Sheets",        category: "file",         description: "Sync from a Google Sheet — live or snapshot",                    sprint: 1, status: "available",   icon: "grid" },
+  { id: "json_xml",      name: "JSON / XML Import",    category: "file",         description: "Import from any JSON or XML data export",                         sprint: 1, status: "available",   icon: "code" },
+  { id: "mpesa",         name: "M-Pesa",               category: "mobile_money", description: "Ingest M-Pesa transaction statements via Daraja API",            sprint: 2, status: "coming_soon", icon: "smartphone" },
+  { id: "mtn_momo",      name: "MTN Mobile Money",     category: "mobile_money", description: "Ingest MTN MoMo transaction data",                               sprint: 2, status: "coming_soon", icon: "smartphone" },
+  { id: "stripe",        name: "Stripe",               category: "mobile_money", description: "Sync Stripe payment transactions and customers",                  sprint: 2, status: "coming_soon", icon: "credit-card" },
+  { id: "quickbooks",    name: "QuickBooks Online",    category: "accounting",   description: "Sync invoices, payments, vendors, and customers from QuickBooks", sprint: 4, status: "coming_soon", icon: "dollar-sign" },
+  { id: "xero",          name: "Xero",                 category: "accounting",   description: "Sync financial records from Xero",                               sprint: 4, status: "coming_soon", icon: "dollar-sign" },
+  { id: "sage",          name: "Sage",                 category: "accounting",   description: "Sync financial records from Sage",                               sprint: 4, status: "coming_soon", icon: "dollar-sign" },
+  { id: "adp",           name: "ADP",                  category: "hr_payroll",   description: "Sync employees, payroll runs, and departments from ADP",         sprint: 3, status: "coming_soon", icon: "users" },
+  { id: "bamboohr",      name: "BambooHR",             category: "hr_payroll",   description: "Sync employee records and org chart from BambooHR",              sprint: 3, status: "coming_soon", icon: "users" },
+  { id: "openmrs",       name: "OpenMRS",              category: "health",       description: "Sync patients, visits, and drug orders from OpenMRS",            sprint: 5, status: "coming_soon", icon: "heart" },
+  { id: "epic_fhir",     name: "Epic (FHIR)",          category: "health",       description: "Sync patients, encounters, and medications via FHIR",             sprint: 5, status: "coming_soon", icon: "heart" },
+  { id: "google_classroom", name: "Google Classroom",  category: "education",    description: "Sync students, teachers, classes, and assignments",              sprint: 6, status: "coming_soon", icon: "book" },
+  { id: "powerschool",   name: "PowerSchool",          category: "education",    description: "Sync students, staff, enrollment, and attendance",               sprint: 6, status: "coming_soon", icon: "book" },
+  { id: "square",        name: "Square",               category: "pos",          description: "Sync sales, inventory, and customers from Square POS",           sprint: 7, status: "coming_soon", icon: "shopping-cart" },
+  { id: "shopify",       name: "Shopify",              category: "pos",          description: "Sync orders, products, and customers from Shopify",              sprint: 7, status: "coming_soon", icon: "shopping-cart" },
+  { id: "kra",           name: "KRA (Kenya)",          category: "government",   description: "Validate business registration and tax compliance via KRA",       sprint: 8, status: "coming_soon", icon: "shield" },
+  { id: "nigeria_cac",   name: "Nigeria CAC",          category: "government",   description: "Validate business registration via Nigeria CAC",                 sprint: 8, status: "coming_soon", icon: "shield" },
+];
+
 // ── DatabaseConnectModal ─────────────────────────────────────────────────────
 function DatabaseConnectModal({ connector, companyId, onClose }) {
   const { toast } = useToast();
@@ -1169,16 +1200,25 @@ export default function Connectors() {
     base44.auth.me().then(setCurrentUser).catch(() => {});
   }, []);
 
-  const { data: catalogData = { connectors: [] }, isLoading: catalogLoading } = useQuery({
+  const { data: catalogData = { connectors: STATIC_CATALOG }, isLoading: catalogLoading } = useQuery({
     queryKey: ["connector-catalog"],
     queryFn: async () => {
       try {
-        const res = await fetch(`${RAILWAY_URL}/connectors/catalog`);
-        return res.json();
+        const res = await fetch(`${RAILWAY_URL}/connectors/catalog`, { headers: API_HEADERS });
+        if (!res.ok) return { connectors: STATIC_CATALOG };
+        const data = await res.json();
+        // Merge: API wins for connectors it returns; static covers any gaps
+        const apiIds = new Set((data.connectors || []).map(c => c.id));
+        const merged = [
+          ...(data.connectors || []),
+          ...STATIC_CATALOG.filter(c => !apiIds.has(c.id)),
+        ];
+        return { connectors: merged };
       } catch {
-        return { connectors: [] };
+        return { connectors: STATIC_CATALOG };
       }
     },
+    staleTime: 60_000,
   });
 
   const connectorsByCategory = catalogData.connectors.reduce((acc, conn) => {

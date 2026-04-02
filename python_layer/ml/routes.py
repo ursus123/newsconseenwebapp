@@ -90,15 +90,22 @@ def _check_ml_enabled():
         )
 
 
-def _load_summary_from_railway(table: str) -> "pd.DataFrame":
+def _load_raw_from_railway(entity: str, company_id: str = None) -> "pd.DataFrame":
     """
-    Load a summary table from Railway PostgreSQL for ML input.
+    Load individual raw records from raw.{entity} in Railway PostgreSQL.
 
-    The ML models need the full time-series history from Railway,
-    not just the latest Base44 extract. This is what makes the
-    models meaningful — they train on weeks or months of snapshots.
+    ML models receive per-entity feature rows (one row per person / product /
+    transaction) rather than aggregated group summaries.  This gives models
+    the full feature set needed for meaningful predictions.
 
-    Falls back to a live Base44 extract if Railway is unavailable.
+    The raw.* tables are written by the ETL cron on every run via load_raw().
+    They are always a full snapshot of the current Base44 state.
+
+    Args:
+        entity:     Table name inside the raw schema, e.g. "people", "tasks"
+        company_id: Optional tenant filter applied at query time.
+
+    Falls back to empty DataFrame if the raw table does not yet exist.
     """
     import pandas as pd
     from sqlalchemy import text
@@ -106,19 +113,33 @@ def _load_summary_from_railway(table: str) -> "pd.DataFrame":
     try:
         from database import get_engine
         engine = get_engine()
+        where = "WHERE company_id = :cid" if company_id else ""
+        params = {"cid": company_id} if company_id else {}
         with engine.connect() as conn:
             df = pd.read_sql(
-                text(f"SELECT * FROM analytics.{table} ORDER BY snapshot_date ASC"),
+                text(f"SELECT * FROM raw.{entity} {where}"),
                 conn,
+                params=params,
             )
-        logger.info("_load_summary_from_railway: loaded %d rows from %s", len(df), table)
+        logger.info(
+            "_load_raw_from_railway: loaded %d rows from raw.%s (company_id=%s)",
+            len(df), entity, company_id,
+        )
         return df
     except Exception as e:
         logger.warning(
-            "_load_summary_from_railway: Railway unavailable for %s (%s) "
-            "— falling back to live Base44 extract", table, e
+            "_load_raw_from_railway: raw.%s unavailable (%s) — returning empty DataFrame",
+            entity, e,
         )
         return pd.DataFrame()
+
+
+# Keep backward-compat alias so any internal callers still work
+def _load_summary_from_railway(table: str) -> "pd.DataFrame":
+    """Alias → _load_raw_from_railway. Kept for compatibility."""
+    # Map analytics table names to raw entity names
+    entity = table.replace("_summary", "")
+    return _load_raw_from_railway(entity)
 
 
 # ----------------------------------------------------------
@@ -169,23 +190,23 @@ def retention_risk(
     from ml.survival import run_retention_model
 
     try:
-        people_df = _load_summary_from_railway("people_summary")
-        task_df = _load_summary_from_railway("task_summary")
+        people_df = _load_raw_from_railway("people", company_id)
+        task_df   = _load_raw_from_railway("tasks",  company_id)
 
         if people_df.empty:
-            logger.info("/ml/retention-risk: using live Base44 people extract")
+            logger.info("/ml/retention-risk: raw.people empty — falling back to live Base44 extract")
+            import pandas as pd
             raw = people.extract_people()
-            people_df = people.transform_people(raw)
+            people_df = pd.DataFrame(raw) if isinstance(raw, list) else raw
+            if company_id and "company_id" in people_df.columns:
+                people_df = people_df[people_df["company_id"] == company_id]
 
         if task_df.empty:
-            logger.info("/ml/retention-risk: using live Base44 task extract")
+            logger.info("/ml/retention-risk: raw.tasks empty — falling back to live Base44 extract")
+            import pandas as pd
             raw = tasks.extract_tasks()
-            task_df = tasks.transform_tasks(raw)
-
-        if company_id:
-            if "company_id" in people_df.columns:
-                people_df = people_df[people_df["company_id"] == company_id]
-            if "company_id" in task_df.columns:
+            task_df = pd.DataFrame(raw) if isinstance(raw, list) else raw
+            if company_id and "company_id" in task_df.columns:
                 task_df = task_df[task_df["company_id"] == company_id]
 
         result = run_retention_model(people_df, task_df, horizon_days=horizon_days)
@@ -221,12 +242,14 @@ def staffing_forecast(
     from ml.forecast import run_staffing_forecast
 
     try:
-        task_df = _load_summary_from_railway("task_summary")
+        task_df = _load_raw_from_railway("tasks")
+        if not task_df.empty and enterprise_id and "enterprise_id" in task_df.columns:
+            task_df = task_df[task_df["enterprise_id"] == enterprise_id]
 
         if task_df.empty:
             return {
                 "status": "skipped",
-                "reason": "no Railway history available — run ETL first",
+                "reason": "no task data in raw.tasks — run ETL first",
                 "forecast": [],
             }
 
@@ -269,24 +292,9 @@ def ltv_segmentation(
     from ml.segmentation import run_ltv_segmentation
 
     try:
-        people_df = _load_summary_from_railway("people_summary")
-        transaction_df = _load_summary_from_railway("transaction_summary")
-        task_df = _load_summary_from_railway("task_summary")
-
-        if people_df.empty:
-            raw = people.extract_people()
-            people_df = people.transform_people(raw)
-        if transaction_df.empty:
-            raw = transactions.extract_transactions()
-            transaction_df = transactions.transform_transactions(raw)
-        if task_df.empty:
-            raw = tasks.extract_tasks()
-            task_df = tasks.transform_tasks(raw)
-
-        if company_id:
-            for df in [people_df, transaction_df, task_df]:
-                if "company_id" in df.columns:
-                    df.drop(df[df["company_id"] != company_id].index, inplace=True)
+        people_df      = _load_raw_from_railway("people",       company_id)
+        transaction_df = _load_raw_from_railway("transactions", company_id)
+        task_df        = _load_raw_from_railway("tasks",        company_id)
 
         result = run_ltv_segmentation(
             people_df, transaction_df, task_df, n_clusters=n_clusters
@@ -324,13 +332,20 @@ def shift_demand(
     from ml.demand import run_demand_model
 
     try:
-        task_df = _load_summary_from_railway("task_summary")
-        people_df = _load_summary_from_railway("people_summary")
+        task_df   = _load_raw_from_railway("tasks")
+        people_df = _load_raw_from_railway("people")
+
+        # Apply enterprise filter on the DataFrames
+        if enterprise_id:
+            if not task_df.empty and "enterprise_id" in task_df.columns:
+                task_df = task_df[task_df["enterprise_id"] == enterprise_id]
+            if not people_df.empty and "enterprise_id" in people_df.columns:
+                people_df = people_df[people_df["enterprise_id"] == enterprise_id]
 
         if task_df.empty or people_df.empty:
             return {
                 "status": "skipped",
-                "reason": "no Railway history available — run ETL first",
+                "reason": "no task/people data in raw tables — run ETL first",
                 "forecast": [],
             }
 

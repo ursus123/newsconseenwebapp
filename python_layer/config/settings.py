@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------
     # ML feature flag
     # ----------------------------------------------------------
-    ml_enabled: str = "false"
+    ml_enabled: str = "true"
 
     class Config:
         env_file       = ".env"

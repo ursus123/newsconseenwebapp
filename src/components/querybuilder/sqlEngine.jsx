@@ -167,6 +167,160 @@ export const ANALYTICS_TABLES = {
   },
 };
 
+// ── Raw individual-record tables (python_layer raw.* schema) ──────────────
+// Endpoint: GET /raw/{entity}?company_id=...&limit=...
+// Returns full per-row records from Base44 — no aggregation, no transforms.
+// Use these when a user needs to query, chart, or report on individual records.
+export const RAW_TABLES = {
+  raw_people: {
+    entity: "people",
+    label: "Raw People (individual records)",
+    columns: [
+      { col: "id", type: "VARCHAR" },
+      { col: "company_id", type: "VARCHAR" },
+      { col: "full_name", type: "VARCHAR" },
+      { col: "person_type", type: "ENUM" },
+      { col: "person_subtype", type: "VARCHAR" },
+      { col: "status", type: "ENUM" },
+      { col: "engagement_model", type: "ENUM" },
+      { col: "availability_status", type: "ENUM" },
+      { col: "email", type: "VARCHAR" },
+      { col: "phone", type: "VARCHAR" },
+      { col: "enterprise_id", type: "VARCHAR" },
+      { col: "start_date", type: "DATE" },
+      { col: "end_date", type: "DATE" },
+      { col: "created_date", type: "DATE" },
+    ],
+  },
+  raw_enterprises: {
+    entity: "enterprises",
+    label: "Raw Enterprises (individual records)",
+    columns: [
+      { col: "id", type: "VARCHAR" },
+      { col: "company_id", type: "VARCHAR" },
+      { col: "name", type: "VARCHAR" },
+      { col: "enterprise_type", type: "ENUM" },
+      { col: "enterprise_tier", type: "ENUM" },
+      { col: "status", type: "ENUM" },
+      { col: "operating_status", type: "ENUM" },
+      { col: "parent_id", type: "VARCHAR" },
+      { col: "primary_address", type: "VARCHAR" },
+      { col: "created_date", type: "DATE" },
+    ],
+  },
+  raw_products: {
+    entity: "products",
+    label: "Raw Products (individual records)",
+    columns: [
+      { col: "id", type: "VARCHAR" },
+      { col: "company_id", type: "VARCHAR" },
+      { col: "name", type: "VARCHAR" },
+      { col: "item_type", type: "ENUM" },
+      { col: "item_class", type: "ENUM" },
+      { col: "item_subtype", type: "VARCHAR" },
+      { col: "status", type: "ENUM" },
+      { col: "price", type: "FLOAT" },
+      { col: "stock_quantity", type: "INT" },
+      { col: "unit_of_measure", type: "VARCHAR" },
+      { col: "expiry_date", type: "DATE" },
+      { col: "created_date", type: "DATE" },
+    ],
+  },
+  raw_tasks: {
+    entity: "tasks",
+    label: "Raw Tasks (individual records)",
+    columns: [
+      { col: "id", type: "VARCHAR" },
+      { col: "company_id", type: "VARCHAR" },
+      { col: "task_type", type: "VARCHAR" },
+      { col: "status", type: "ENUM" },
+      { col: "title", type: "VARCHAR" },
+      { col: "enterprise_id", type: "VARCHAR" },
+      { col: "assigned_to", type: "VARCHAR" },
+      { col: "due_date", type: "DATE" },
+      { col: "completed_date", type: "DATE" },
+      { col: "created_date", type: "DATE" },
+    ],
+  },
+  raw_transactions: {
+    entity: "transactions",
+    label: "Raw Transactions (individual records)",
+    columns: [
+      { col: "id", type: "VARCHAR" },
+      { col: "company_id", type: "VARCHAR" },
+      { col: "transaction_type", type: "ENUM" },
+      { col: "status", type: "ENUM" },
+      { col: "amount", type: "FLOAT" },
+      { col: "currency", type: "VARCHAR" },
+      { col: "enterprise_id", type: "VARCHAR" },
+      { col: "person_id", type: "VARCHAR" },
+      { col: "invoice_date", type: "DATE" },
+      { col: "due_date", type: "DATE" },
+      { col: "created_date", type: "DATE" },
+    ],
+  },
+  raw_services: {
+    entity: "services",
+    label: "Raw Services (individual records)",
+    columns: [
+      { col: "id", type: "VARCHAR" },
+      { col: "company_id", type: "VARCHAR" },
+      { col: "name", type: "VARCHAR" },
+      { col: "service_type", type: "VARCHAR" },
+      { col: "status", type: "ENUM" },
+      { col: "rate", type: "FLOAT" },
+      { col: "enterprise_id", type: "VARCHAR" },
+      { col: "created_date", type: "DATE" },
+    ],
+  },
+  raw_relationships: {
+    entity: "relationships",
+    label: "Raw Relationships (individual records)",
+    columns: [
+      { col: "id", type: "VARCHAR" },
+      { col: "company_id", type: "VARCHAR" },
+      { col: "relationship_type", type: "VARCHAR" },
+      { col: "relationship_category", type: "VARCHAR" },
+      { col: "person_id", type: "VARCHAR" },
+      { col: "enterprise_id", type: "VARCHAR" },
+      { col: "item_id", type: "VARCHAR" },
+      { col: "status", type: "ENUM" },
+      { col: "start_date", type: "DATE" },
+      { col: "end_date", type: "DATE" },
+      { col: "created_date", type: "DATE" },
+    ],
+  },
+  raw_addresses: {
+    entity: "addresses",
+    label: "Raw Addresses (individual records)",
+    columns: [
+      { col: "id", type: "VARCHAR" },
+      { col: "company_id", type: "VARCHAR" },
+      { col: "label", type: "VARCHAR" },
+      { col: "street", type: "VARCHAR" },
+      { col: "city", type: "VARCHAR" },
+      { col: "state_region", type: "VARCHAR" },
+      { col: "country", type: "VARCHAR" },
+      { col: "postal_code", type: "VARCHAR" },
+      { col: "address_type", type: "ENUM" },
+      { col: "latitude", type: "FLOAT" },
+      { col: "longitude", type: "FLOAT" },
+      { col: "created_date", type: "DATE" },
+    ],
+  },
+  raw_ml_predictions: {
+    entity: "ml_predictions",
+    label: "ML Predictions (stored model results)",
+    columns: [
+      { col: "id", type: "INT" },
+      { col: "company_id", type: "VARCHAR" },
+      { col: "model", type: "VARCHAR" },
+      { col: "result_json", type: "VARCHAR" },
+      { col: "computed_at", type: "DATE" },
+    ],
+  },
+};
+
 // ── External API virtual tables ────────────────────────────────────────────
 export const EXTERNAL_TABLES = {
   medications_api: {
@@ -193,8 +347,9 @@ export const EXTERNAL_TABLES = {
   },
 };
 
-// In-memory analytics cache
+// In-memory caches
 let analyticsCache = {};
+let rawCache = {};
 
 export async function fetchAllAnalytics(companyId) {
   const results = {};
@@ -218,6 +373,28 @@ export async function fetchAllAnalytics(companyId) {
   );
   analyticsCache = results;
   return results;
+}
+
+async function fetchRawTable(name, companyId) {
+  const cacheKey = companyId ? `${name}__${companyId}` : name;
+  if (rawCache[cacheKey]) return rawCache[cacheKey];
+  const cfg = RAW_TABLES[name];
+  if (!cfg) return [];
+  try {
+    const params = new URLSearchParams({ limit: "1000" });
+    if (companyId) params.set("company_id", companyId);
+    const res = await fetch(
+      `${RAILWAY_BASE}/raw/${cfg.entity}?${params}`,
+      { headers: RAILWAY_HEADERS }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    const rows = Array.isArray(data) ? data : (data.data || data.results || []);
+    rawCache[cacheKey] = rows;
+    return rows;
+  } catch {
+    return [];
+  }
 }
 
 async function fetchAnalyticsTable(name, companyId) {
@@ -1401,6 +1578,9 @@ async function loadTable(name, uploadedTables, companyId) {
   }
   if (ANALYTICS_TABLES[lower]) {
     return fetchAnalyticsTable(lower, companyId);
+  }
+  if (RAW_TABLES[lower]) {
+    return fetchRawTable(lower, companyId);
   }
   return null;
 }

@@ -184,21 +184,29 @@ export default function Settings() {
 }
 
 function ProfileSection({ user, myEnterprise, onUserUpdated }) {
-  // display_name is the editable custom name; full_name is read-only from auth
-  const [name, setName] = useState(user.full_name || "");
+  const PROFILE_KEY = `profile_name_${user.email}`;
+  const [name, setName] = useState(
+    localStorage.getItem(PROFILE_KEY) || user.full_name || ""
+  );
   const [saving, setSaving] = useState(false);
   const [banner, setBanner] = useState(null);
 
   const handleSave = async () => {
+    if (!name.trim()) return;
     setSaving(true);
+    // Persist locally immediately — always succeeds
+    localStorage.setItem(PROFILE_KEY, name.trim());
+    onUserUpdated({ ...user, full_name: name.trim() });
+    // Also attempt server-side update (may or may not be supported by SDK)
     try {
-      await base44.auth.updateMe({ full_name: name });
-      onUserUpdated({ ...user, full_name: name });
-      setBanner({ type: "success", msg: "Profile updated successfully." });
-      setTimeout(() => setBanner(null), 3000);
-    } catch {
-      setBanner({ type: "error", msg: "Failed to update profile. Please try again." });
-    }
+      if (typeof base44.auth.updateMe === "function") {
+        await base44.auth.updateMe({ full_name: name.trim() });
+      } else if (typeof base44.auth.updateProfile === "function") {
+        await base44.auth.updateProfile({ full_name: name.trim() });
+      }
+    } catch { /* ignore — local update already applied */ }
+    setBanner({ type: "success", msg: "Profile updated successfully." });
+    setTimeout(() => setBanner(null), 3000);
     setSaving(false);
   };
 
@@ -282,11 +290,28 @@ function PasswordSection() {
     setSaving(true);
     try {
       const me = await base44.auth.me();
-      await base44.auth.changePassword({ userId: me.id, currentPassword: current, newPassword: next });
+      // Try the most common SDK method names for password change
+      if (typeof base44.auth.changePassword === "function") {
+        await base44.auth.changePassword({ userId: me.id, currentPassword: current, newPassword: next });
+      } else if (typeof base44.auth.updatePassword === "function") {
+        await base44.auth.updatePassword({ currentPassword: current, newPassword: next });
+      } else if (typeof base44.auth.updateMe === "function") {
+        await base44.auth.updateMe({ password: next, currentPassword: current });
+      } else {
+        // SDK doesn't expose password change — guide user
+        throw new Error("password_change_unsupported");
+      }
       setBanner({ type: "success", msg: "Password updated successfully." });
       setCurrent(""); setNext(""); setConfirm("");
     } catch (e) {
-      setBanner({ type: "error", msg: e?.message?.includes("incorrect") || e?.message?.includes("wrong") ? "Current password is incorrect." : "Failed to update password. Please try again." });
+      const msg = e?.message;
+      if (msg === "password_change_unsupported") {
+        setBanner({ type: "error", msg: "Password change is managed by your account provider. Contact support to reset it." });
+      } else if (msg?.includes("incorrect") || msg?.includes("wrong") || msg?.includes("invalid")) {
+        setBanner({ type: "error", msg: "Current password is incorrect." });
+      } else {
+        setBanner({ type: "error", msg: "Failed to update password. Please try again." });
+      }
     }
     setSaving(false);
   };

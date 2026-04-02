@@ -2,11 +2,34 @@ import React, { useState, useEffect } from "react";
 import {
   Upload, Globe, Code2, ChevronDown, ChevronRight,
   Zap, Plus, CheckCircle, Trash2, MapPin,
-  TrendingUp, Briefcase, Newspaper, Leaf,
+  TrendingUp, Briefcase, Newspaper, Leaf, Database, Sparkles,
 } from "lucide-react";
 import UploadPanel from "./UploadPanel";
 import NotebookModal from "./NotebookModal";
 import { NotebookStore } from "./NotebookStore";
+
+const ANALYTICS_TABLES_LIST = [
+  { table: "analytics_people",        label: "People Summary",       desc: "Headcount by type/status — aggregated",        sample: "SELECT person_type, status, people_count, active_count\nFROM analytics_people\nORDER BY people_count DESC" },
+  { table: "analytics_tasks",         label: "Task Summary",         desc: "Completion rates, overdue tasks — aggregated",  sample: "SELECT task_type, total_tasks, completed_tasks, completion_rate_pct, overdue_tasks\nFROM analytics_tasks\nORDER BY total_tasks DESC" },
+  { table: "analytics_transactions",  label: "Transaction Summary",  desc: "Revenue, outstanding amounts — aggregated",     sample: "SELECT transaction_type, total_amount, outstanding_amount, revenue_last_30d\nFROM analytics_transactions\nWHERE is_revenue = true\nORDER BY total_amount DESC" },
+  { table: "analytics_products",      label: "Product Summary",      desc: "Stock levels, expiry alerts — aggregated",      sample: "SELECT item_type, total_products, total_stock, low_stock_count, out_of_stock_count\nFROM analytics_products\nORDER BY total_products DESC" },
+  { table: "analytics_enterprises",   label: "Enterprise Summary",   desc: "Branch structure, operating status — aggregated",sample: "SELECT name, enterprise_type, operating_status, is_active\nFROM analytics_enterprises\nORDER BY name" },
+  { table: "analytics_services",      label: "Services Summary",     desc: "Service count, billable value — aggregated",    sample: "SELECT service_type, service_count, total_billable_value, avg_rate\nFROM analytics_services\nORDER BY service_count DESC" },
+  { table: "analytics_relationships", label: "Relationships Summary",desc: "Active relationships by type — aggregated",     sample: "SELECT relationship_type, relationship_category, status, duration_days\nFROM analytics_relationships\nORDER BY duration_days DESC" },
+  { table: "analytics_addresses",     label: "Address Summary",      desc: "Address types and geocoding status",            sample: "SELECT city, country, address_type, has_coordinates\nFROM analytics_addresses\nORDER BY city" },
+];
+
+const RAW_TABLES_LIST = [
+  { table: "raw_people",        label: "People (raw)",        desc: "Individual person records from Base44",       sample: "SELECT id, full_name, person_type, status, enterprise_id\nFROM raw_people\nLIMIT 100" },
+  { table: "raw_enterprises",   label: "Enterprises (raw)",   desc: "Individual enterprise records from Base44",   sample: "SELECT id, name, enterprise_type, status, operating_status\nFROM raw_enterprises\nLIMIT 100" },
+  { table: "raw_products",      label: "Products (raw)",      desc: "Individual product records from Base44",      sample: "SELECT id, name, item_type, status, price, stock_quantity\nFROM raw_products\nLIMIT 100" },
+  { table: "raw_tasks",         label: "Tasks (raw)",         desc: "Individual task records from Base44",         sample: "SELECT id, task_type, status, title, enterprise_id, due_date\nFROM raw_tasks\nLIMIT 100" },
+  { table: "raw_transactions",  label: "Transactions (raw)",  desc: "Individual transaction records from Base44",  sample: "SELECT id, transaction_type, status, amount, currency, enterprise_id\nFROM raw_transactions\nLIMIT 100" },
+  { table: "raw_services",      label: "Services (raw)",      desc: "Individual service records from Base44",      sample: "SELECT id, name, service_type, status, rate\nFROM raw_services\nLIMIT 100" },
+  { table: "raw_relationships", label: "Relationships (raw)", desc: "Individual relationship records from Base44", sample: "SELECT id, relationship_type, person_id, enterprise_id, status\nFROM raw_relationships\nLIMIT 100" },
+  { table: "raw_addresses",     label: "Addresses (raw)",     desc: "Individual address records from Base44",      sample: "SELECT id, label, street, city, country, address_type\nFROM raw_addresses\nLIMIT 100" },
+  { table: "raw_ml_predictions",label: "ML Predictions",      desc: "Stored ML model results (retention, LTV…)",   sample: "SELECT model, computed_at, result_json\nFROM raw_ml_predictions\nORDER BY computed_at DESC\nLIMIT 10" },
+];
 
 const FINANCIAL_TABLES = [
   { table: "stock_quote",      label: "Stock Quote",       desc: "Real-time stock price & signals",      sample: "SELECT * FROM stock_quote WHERE symbol = 'JNJ'" },
@@ -127,6 +150,44 @@ export default function DataSourcesPanel({ uploadedTables, onTablesChange, onUse
                 <UploadPanel uploadedTables={uploadedTables} onTablesChange={onTablesChange} />
               </div>
             )}
+          </div>
+        </Section>
+
+        {/* Analytics — aggregated summaries from python_layer */}
+        <Section title="Analytics (8 tables)" icon={Database} iconColor="text-indigo-400" defaultOpen={false}>
+          <div className="px-2 space-y-0.5">
+            <p className="text-[9px] text-slate-500 px-2 pb-1 font-mono uppercase tracking-widest">Pre-aggregated daily snapshots</p>
+            {ANALYTICS_TABLES_LIST.map(({ table, label, desc, sample }) => (
+              <div key={table} className="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-indigo-500/5 transition-all">
+                <Database className="w-3 h-3 text-indigo-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[10px] text-slate-300 block truncate">{table}</span>
+                  <span className="text-[9px] text-slate-600">{desc}</span>
+                </div>
+                <button onClick={() => onUseInQuery(sample)} title="Use sample query" className="hidden group-hover:flex p-1 rounded hover:bg-indigo-500/20 text-slate-500 hover:text-indigo-400 transition-colors">
+                  <Zap className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* Raw data — individual records from python_layer */}
+        <Section title="Raw Data (9 tables)" icon={Sparkles} iconColor="text-emerald-400" defaultOpen={false}>
+          <div className="px-2 space-y-0.5">
+            <p className="text-[9px] text-slate-500 px-2 pb-1 font-mono uppercase tracking-widest">Individual records — full feature set</p>
+            {RAW_TABLES_LIST.map(({ table, label, desc, sample }) => (
+              <div key={table} className="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-emerald-500/5 transition-all">
+                <Sparkles className="w-3 h-3 text-emerald-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[10px] text-slate-300 block truncate">{table}</span>
+                  <span className="text-[9px] text-slate-600">{desc}</span>
+                </div>
+                <button onClick={() => onUseInQuery(sample)} title="Use sample query" className="hidden group-hover:flex p-1 rounded hover:bg-emerald-500/20 text-slate-500 hover:text-emerald-400 transition-colors">
+                  <Zap className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
           </div>
         </Section>
 

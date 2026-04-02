@@ -256,6 +256,42 @@ function VisualQueryBuilder({ onQueryGenerated }) {
 
 const ENTITIES = ["Enterprise", "Person", "Task", "Transaction", "Product", "Service"];
 
+// ─── Quick-source templates (SQL + label) shown in the "Browse Sources" panel ─
+const QUICK_SOURCES = [
+  {
+    group: "Analytics (aggregated summaries)",
+    color: "indigo",
+    items: [
+      { label: "People summary",       sql: "SELECT person_type, status, people_count, active_count\nFROM analytics_people\nORDER BY people_count DESC" },
+      { label: "Task completion",      sql: "SELECT task_type, total_tasks, completed_tasks, completion_rate_pct, overdue_tasks\nFROM analytics_tasks\nORDER BY total_tasks DESC" },
+      { label: "Revenue breakdown",    sql: "SELECT transaction_type, total_transactions, total_amount, outstanding_amount\nFROM analytics_transactions\nWHERE is_revenue = true\nORDER BY total_amount DESC" },
+      { label: "Product inventory",    sql: "SELECT item_type, total_products, total_stock, low_stock_count, out_of_stock_count\nFROM analytics_products\nORDER BY total_products DESC" },
+      { label: "Enterprise overview",  sql: "SELECT name, enterprise_type, operating_status, is_active\nFROM analytics_enterprises\nORDER BY name" },
+      { label: "Services summary",     sql: "SELECT service_type, service_count, total_billable_value, avg_rate\nFROM analytics_services\nORDER BY service_count DESC" },
+    ],
+  },
+  {
+    group: "Raw data (individual records)",
+    color: "emerald",
+    items: [
+      { label: "All people",           sql: "SELECT id, full_name, person_type, status, engagement_model, enterprise_id\nFROM raw_people\nLIMIT 200" },
+      { label: "All tasks",            sql: "SELECT id, task_type, status, title, enterprise_id, due_date, completed_date\nFROM raw_tasks\nLIMIT 200" },
+      { label: "All transactions",     sql: "SELECT id, transaction_type, status, amount, currency, enterprise_id, invoice_date\nFROM raw_transactions\nLIMIT 200" },
+      { label: "ML predictions",       sql: "SELECT model, computed_at, result_json\nFROM raw_ml_predictions\nORDER BY computed_at DESC\nLIMIT 10" },
+    ],
+  },
+  {
+    group: "Public APIs (live data)",
+    color: "amber",
+    items: [
+      { label: "Weather — city",       sql: "SELECT * FROM weather_current\nWHERE city = 'Nairobi'" },
+      { label: "Nearby pharmacies",    sql: "SELECT name, lat, lon, phone FROM osm_nearby\nWHERE type = 'pharmacy' AND lat = '-1.28' AND lon = '36.82' AND radius_km = 5" },
+      { label: "Place search",         sql: "SELECT name, type, lat, lon, country FROM osm_places\nWHERE query = 'hospital Nairobi'" },
+      { label: "Medication lookup",    sql: "SELECT name, synonym, tty_label FROM medications_api\nWHERE name = 'metformin'" },
+    ],
+  },
+];
+
 function MiniChartPreview({ chartType, data, xKey, yKey, colorScheme }) {
   const color = SCHEME_COLOR[colorScheme] || "#10b981";
   if (!data || data.length === 0) return (
@@ -338,6 +374,43 @@ function MiniChartPreview({ chartType, data, xKey, yKey, colorScheme }) {
         <Bar dataKey={yKey} fill={color} radius={[3, 3, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
+  );
+}
+
+// ─── Browse Sources panel — click any template to load it into the SQL editor ─
+function BrowseSourcesPanel({ onInsert }) {
+  const [open, setOpen] = useState(false);
+  const COLOR = { indigo: "text-indigo-600 bg-indigo-50 border-indigo-200", emerald: "text-emerald-700 bg-emerald-50 border-emerald-200", amber: "text-amber-700 bg-amber-50 border-amber-200" };
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-600 transition-colors"
+      >
+        <span className="flex items-center gap-1.5"><Database className="w-3.5 h-3.5 text-slate-400" /> Browse data sources</span>
+        {open ? <ChevronDown className="w-3.5 h-3.5 text-slate-400" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />}
+      </button>
+      {open && (
+        <div className="p-3 space-y-4 max-h-64 overflow-y-auto">
+          {QUICK_SOURCES.map(({ group, color, items }) => (
+            <div key={group}>
+              <p className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${COLOR[color].split(" ")[0]}`}>{group}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {items.map(({ label, sql }) => (
+                  <button
+                    key={label}
+                    onClick={() => { onInsert(sql); setOpen(false); }}
+                    className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-colors hover:opacity-80 ${COLOR[color]}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -564,9 +637,13 @@ Respond with just the insight text, no headers or bullet points.`,
                 {/* Raw SQL editor */}
                 {dataMode === "sql" && (
                   <>
-                    <h3 className="text-sm font-semibold text-slate-700 mb-3">Data Source — SQL Query</h3>
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Data Source — SQL Query</h3>
+
+                    {/* Browse Sources accordion */}
+                    <BrowseSourcesPanel onInsert={(template) => setSql(template)} />
+
                     <textarea
-                      className="w-full h-48 font-mono text-xs bg-slate-950 text-emerald-400 rounded-xl p-4 resize-none outline-none border-0"
+                      className="w-full h-40 font-mono text-xs bg-slate-950 text-emerald-400 rounded-xl p-4 resize-none outline-none border-0 mt-3"
                       value={sql}
                       onChange={(e) => setSql(e.target.value)}
                       placeholder="SELECT enterprise, COUNT(*) as count FROM tasks GROUP BY enterprise"
