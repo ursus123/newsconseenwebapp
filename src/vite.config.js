@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import path from 'path'
 
-// Cache bust: 2026-03-26T04
+// Cache bust: 2026-04-02T01
 export default defineConfig({
   logLevel: 'error',
   plugins: [
@@ -20,5 +20,6 @@ export default defineConfig({
   },
   optimizeDeps: {
     force: true,
+    include: ['react', 'react-dom'],
   },
 })
