@@ -13,6 +13,7 @@ import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
 import { Upload, Building2, CheckCircle, Clock, Globe } from "lucide-react";
+import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { useToast } from "@/components/ui/use-toast";
 import SubEnterprisesPanel from "@/components/enterprise/SubEnterprisesPanel";
@@ -239,6 +240,11 @@ export default function Enterprises() {
             <Upload className="w-4 h-4 mr-2" /> Import
           </Button>
         )}
+        <ExportCSVButton
+          data={processedEnterprises}
+          fields={["enterprise_name","short_name","enterprise_type","status","phone","email","city","region","country","operating_status"]}
+          filename="enterprises_export"
+        />
       </PageHeader>
 
       {/* Stats row */}

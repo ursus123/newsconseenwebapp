@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Upload, Package, AlertTriangle, Pill, DollarSign } from "lucide-react";
+import ExportCSVButton from "@/components/shared/ExportCSVButton";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
@@ -213,6 +214,11 @@ export default function Products() {
             <Upload className="w-4 h-4 mr-2" /> Import
           </Button>
         )}
+        <ExportCSVButton
+          data={processedProducts}
+          fields={["name","sku","item_type","category","status","stock_quantity","unit_of_measure","unit_price","cost_price","supplier","expiry_date"]}
+          filename="products_export"
+        />
       </PageHeader>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

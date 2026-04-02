@@ -16,6 +16,7 @@ import BulkImportDialog from "../components/shared/BulkImportDialog";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Upload, Users, CheckCircle, Clock, Heart } from "lucide-react";
+import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import {
@@ -246,6 +247,11 @@ export default function People() {
             <Upload className="w-4 h-4 mr-2" /> Import
           </Button>
         )}
+        <ExportCSVButton
+          data={processedPeople}
+          fields={["first_name","last_name","preferred_name","person_type","primary_role","email","phone","status","availability_status","city","country","start_date"]}
+          filename="people_export"
+        />
       </PageHeader>
 
       {/* Stats row */}
