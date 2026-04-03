@@ -23,6 +23,10 @@ import {
   ADDRESS_TEMPLATE_INSTRUCTIONS, validateAddress, transformAddress,
 } from "@/components/shared/importConfigs";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
+
 const statusColor = (s) => ({
   active: "bg-emerald-50 text-emerald-700",
   archived: "bg-slate-100 text-slate-400",
@@ -106,7 +110,7 @@ export default function Addresses() {
       }
       return base44.entities.Address.create(withScope(data));
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); setFormOpen(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); triggerETL("address"); setFormOpen(false); },
   });
 
   const updateMut = useMutation({
@@ -121,6 +125,7 @@ export default function Addresses() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["addresses"] });
+      triggerETL("address");
       setFormOpen(false); setEditing(null);
       if (detailAddress) setDetailAddress(null);
     },
@@ -128,7 +133,7 @@ export default function Addresses() {
 
   const deleteMut = useMutation({
     mutationFn: (id) => base44.entities.Address.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); setDeleting(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); triggerETL("address"); setDeleting(null); },
   });
 
   const handleSubmit = (data, saveAndNew = false) => {
@@ -168,6 +173,7 @@ export default function Addresses() {
     setBulkDeleting(true);
     for (const id of selectedIds) await base44.entities.Address.delete(id);
     qc.invalidateQueries({ queryKey: ["addresses"] });
+    triggerETL("address");
     toast({ title: `${selectedIds.length} addresses deleted` });
     setSelectedIds([]);
     setBulkDeleting(false);

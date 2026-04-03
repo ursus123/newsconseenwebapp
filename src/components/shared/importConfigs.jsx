@@ -397,30 +397,30 @@ export const ENTERPRISE_MAPPING_RULES = [
 ];
 
 export const ENTERPRISE_TEMPLATE_EXAMPLE = {
-  enterprise_id: "BSC-001",
-  enterprise_name: "BrightStar Bethesda",
+  enterprise_id: "ENT-001",
+  enterprise_name: "Acme Head Office",
   enterprise_type: "commercial",
-  enterprise_subtype: "Home Health Agency",
+  enterprise_subtype: "Retail",
   enterprise_tier: "headquarters",
   parent_enterprise_id: "",
   status: "active",
   operating_status: "open",
-  sic_sector_id: 16,
-  sic_sector_name: "Health Care and Social Assistance",
-  sic_division: "K_education_health_social",
-  phone: "+1-301-854-2824",
-  email: "info@brightstar-bethesda.brightstarcare.com",
-  website: "https://www.brightstarcare.com",
-  city: "Bethesda",
-  region: "MD",
+  sic_sector_id: 7,
+  sic_sector_name: "Retail Trade",
+  sic_division: "G_retail_trade",
+  phone: "+1-555-000-1234",
+  email: "info@acme-example.com",
+  website: "https://www.example.com",
+  city: "Springfield",
+  region: "IL",
   country: "USA",
-  zip_code: "20859",
-  latitude: 38.984,
-  longitude: -77.095,
-  founded_year: 2009,
-  license_number: "HHA-42098",
-  accreditation: "Joint Commission",
-  company_id: "BRIGHTSTAR",
+  zip_code: "62701",
+  latitude: 39.798,
+  longitude: -89.654,
+  founded_year: 2010,
+  license_number: "BIZ-00001",
+  accreditation: "",
+  company_id: "",
 };
 
 export const ENTERPRISE_TEMPLATE_INSTRUCTIONS = `
@@ -547,6 +547,7 @@ export function transformEnterprise(raw, currentUser) {
 
 export function validateEnterprise(row) {
   const errors = [];
+  const warnings = [];
   if (!row.enterprise_name?.trim()) {
     errors.push("enterprise_name is required");
   }
@@ -557,7 +558,7 @@ export function validateEnterprise(row) {
   if (row.email && !row.email.includes("@")) {
     errors.push(`email "${row.email}" does not look valid`);
   }
-  return errors;
+  return { errors, warnings };
 }
 
 // ── SERVICES ──────────────────────────────────────────────────────────────
@@ -1006,7 +1007,7 @@ export const TRANSACTION_MAPPING_RULES = [
   [/^amount$|^total$|^gross.?amount$/i,                 "amount"],
   [/^currency$|^currency.?code$/i,                      "currency"],
 
-  // BrightStar billing fields
+  // Billing fields
   [/^hours.?billed$|^billed.?hours$/i,                  "hours_billed"],
   [/^rate.?per.?hour$|^hourly.?rate$|^rate$/i,          "rate_per_hour"],
   [/^invoice.?number$|^invoice.?no$|^inv.?no$/i,        "invoice_number"],

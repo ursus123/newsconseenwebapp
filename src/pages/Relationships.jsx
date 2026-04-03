@@ -26,6 +26,10 @@ import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
+
 const TYPE_CONFIG = {
   person_enterprise:    { label: "Person → Enterprise",    color: "bg-blue-50 text-blue-700" },
   item_enterprise:      { label: "Item → Enterprise",      color: "bg-purple-50 text-purple-700" },
@@ -133,13 +137,17 @@ export default function Relationships() {
     mutationFn: ({ id, data }) => base44.entities.Relationship.update(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["relationships"] });
+      triggerETL("relationship");
       setFormOpen(false);
       setEditing(null);
       setEndTarget(null);
       toast({ title: "Relationship updated" });
     },
   });
-  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Relationship.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); setDeleting(null); } });
+  const deleteMut = useMutation({
+    mutationFn: (id) => base44.entities.Relationship.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); triggerETL("relationship"); setDeleting(null); },
+  });
 
   const handleSubmit = (data, saveAndNew = false) => {
     if (editing) {
@@ -147,6 +155,7 @@ export default function Relationships() {
     } else {
       base44.entities.Relationship.create(withScope(data)).then(() => {
         qc.invalidateQueries({ queryKey: ["relationships"] });
+        triggerETL("relationship");
         toast({ title: "Relationship created" });
         if (saveAndNew) {
           setEditing(null);
@@ -167,12 +176,14 @@ export default function Relationships() {
   const handleBulkAssign = async (pairs) => {
     for (const pair of pairs) await base44.entities.Relationship.create(withScope(pair));
     qc.invalidateQueries({ queryKey: ["relationships"] });
+    triggerETL("relationship");
     toast({ title: `${pairs.length} relationship${pairs.length !== 1 ? "s" : ""} created` });
   };
 
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Relationship.delete(id);
     qc.invalidateQueries({ queryKey: ["relationships"] });
+    triggerETL("relationship");
     toast({ title: `${selectedIds.length} relationships deleted` });
     setSelectedIds([]);
   };
