@@ -13,13 +13,13 @@ export default defineConfig({
     react(),
   ],
   resolve: {
-    dedupe: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query', 'framer-motion'],
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react-router-dom', '@tanstack/react-query', 'framer-motion'],
     alias: {
       '@': path.resolve('./src'),
     },
   },
   optimizeDeps: {
     force: true,
-    include: ['react', 'react-dom'],
+    include: ['react', 'react-dom', 'react/jsx-runtime'],
   },
 })
