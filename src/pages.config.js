@@ -54,22 +54,17 @@ import ClockInOut from './pages/ClockInOut';
 import Dashboard from './pages/Dashboard';
 import DataModels from './pages/DataModels';
 import Enterprises from './pages/Enterprises';
-import EntityGraph from './pages/EntityGraph';
 import InviteUser from './pages/InviteUser';
 import MedAdmin from './pages/MedAdmin';
-import PdfToExcel from './pages/PdfToExcel';
 import People from './pages/People';
 import Permissions from './pages/Permissions';
 import Products from './pages/Products';
-import QueryBuilder from './pages/QueryBuilder';
 import Relationships from './pages/Relationships';
 import Reports from './pages/Reports.jsx';
 import Services from './pages/Services';
 import Tasks from './pages/Tasks';
 import Transactions from './pages/Transactions';
 import UserManagement from './pages/UserManagement';
-import Pipelines from './pages/Pipelines';
-import Billing from './pages/Billing';
 import StaffSchedule from './pages/StaffSchedule';
 import BarcodeScanner from './pages/BarcodeScanner';
 import __Layout from './Layout.jsx';
@@ -83,22 +78,17 @@ export const PAGES = {
     "Dashboard": Dashboard,
     "DataModels": DataModels,
     "Enterprises": Enterprises,
-    "EntityGraph": EntityGraph,
     "InviteUser": InviteUser,
     "MedAdmin": MedAdmin,
-    "PdfToExcel": PdfToExcel,
     "People": People,
     "Permissions": Permissions,
     "Products": Products,
-    "QueryBuilder": QueryBuilder,
     "Relationships": Relationships,
     "Reports": Reports,
     "Services": Services,
     "Tasks": Tasks,
     "Transactions": Transactions,
     "UserManagement": UserManagement,
-    "Pipelines": Pipelines,
-    "Billing": Billing,
     "StaffSchedule": StaffSchedule,
     "BarcodeScanner": BarcodeScanner,
 }
