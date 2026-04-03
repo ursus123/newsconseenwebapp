@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import IntelligenceHub from "@/components/marketintelligence/IntelligenceHub";
 
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
@@ -20,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import {
   BookmarkPlus, Loader2, Download, Building2, ExternalLink,
   Code2, ChevronDown, X, FileText, CheckCircle2, AlertCircle,
-  TrendingUp, Lightbulb,
+  TrendingUp, Lightbulb, Search,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Link } from "react-router-dom";
@@ -312,6 +313,7 @@ function AnalysisProgressBar({ sections, results }) {
 // ─── Main component ──────────────────────────────────────────────────────────
 export default function MarketIntelligence() {
   const [currentUser, setCurrentUser]         = useState(null);
+  const [pageMode, setPageMode]               = useState("intelligence"); // "intelligence" | "research"
   const [params, setParams]                   = useState({ location: "", businessType: "home_healthcare", radiusKm: 30 });
   const [running, setRunning]                 = useState(false);
   const [saving, setSaving]                   = useState(false);
@@ -595,6 +597,30 @@ export default function MarketIntelligence() {
   return (
     <div className="flex flex-col gap-0 min-h-full">
       <style>{PRINT_STYLES}</style>
+
+      {/* ── Mode switcher ── */}
+      <div className="flex gap-2 mb-4 no-print">
+        <button
+          onClick={() => setPageMode("intelligence")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${pageMode === "intelligence" ? "bg-slate-800 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+        >
+          <TrendingUp className="w-4 h-4" /> Intelligence Hub
+        </button>
+        <button
+          onClick={() => setPageMode("research")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${pageMode === "research" ? "bg-slate-800 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+        >
+          <Search className="w-4 h-4" /> Location Research
+        </button>
+      </div>
+
+      {/* ── Intelligence Hub mode ── */}
+      {pageMode === "intelligence" && (
+        <IntelligenceHub currentUser={currentUser} />
+      )}
+
+      {/* ── Location Research mode ── */}
+      {pageMode === "research" && <>
 
       {/* ── Sticky input bar ── */}
       <div className="sticky top-0 z-30 bg-white border-b border-slate-100 pb-3 pt-2 shadow-sm no-print">
@@ -925,6 +951,7 @@ export default function MarketIntelligence() {
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }

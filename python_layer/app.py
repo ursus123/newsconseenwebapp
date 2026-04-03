@@ -53,6 +53,15 @@ from alerts.routes import router as alerts_router
 # Phase 3C — Network Intelligence
 from network.routes import router as network_router
 
+# Market Intelligence Layer
+try:
+    from market.routes import router as market_router
+    _market_ok = True
+except Exception as _market_err:
+    market_router = None
+    _market_ok = False
+    logger.warning("market layer import failed — disabled: %s", _market_err)
+
 # Phase 4 — Kinetic Layer (write-back + audit log)
 try:
     from kinetic.routes import router as kinetic_router
@@ -158,6 +167,10 @@ app.include_router(alerts_router)
 
 # Phase 3C — Network Intelligence
 app.include_router(network_router)
+
+# Market Intelligence
+if _market_ok and market_router is not None:
+    app.include_router(market_router)
 
 # Phase 4 — Kinetic Layer
 if _kinetic_ok and kinetic_router is not None:
