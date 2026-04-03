@@ -67,8 +67,6 @@ import Transactions from './pages/Transactions';
 import UserManagement from './pages/UserManagement';
 import StaffSchedule from './pages/StaffSchedule';
 import BarcodeScanner from './pages/BarcodeScanner';
-import __Layout from './Layout.jsx';
-
 
 export const PAGES = {
     "AddClient": AddClient,
@@ -96,5 +94,4 @@ export const PAGES = {
 export const pagesConfig = {
     mainPage: "Dashboard",
     Pages: PAGES,
-    Layout: __Layout,
 };
