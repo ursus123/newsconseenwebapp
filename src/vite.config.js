@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import path from 'path'
 
-// Cache bust: 2026-04-03T01
+// Cache bust: 2026-04-03T02
 export default defineConfig({
   logLevel: 'error',
   plugins: [
@@ -16,10 +16,13 @@ export default defineConfig({
     dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react-router-dom', '@tanstack/react-query', 'framer-motion'],
     alias: {
       '@': path.resolve('./src'),
+      'react': path.resolve('./node_modules/react'),
+      'react-dom': path.resolve('./node_modules/react-dom'),
     },
   },
   optimizeDeps: {
     force: true,
     include: ['react', 'react-dom', 'react/jsx-runtime'],
+    exclude: [],
   },
 })
