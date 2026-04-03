@@ -72,6 +72,7 @@ import Pipelines from './pages/Pipelines';
 import Billing from './pages/Billing';
 import StaffSchedule from './pages/StaffSchedule';
 import BarcodeScanner from './pages/BarcodeScanner';
+import MLModels from './pages/MLModels';
 import __Layout from './Layout.jsx';
 
 
@@ -101,6 +102,7 @@ export const PAGES = {
     "Billing": Billing,
     "StaffSchedule": StaffSchedule,
     "BarcodeScanner": BarcodeScanner,
+    "MLModels": MLModels,
 }
 
 export const pagesConfig = {
