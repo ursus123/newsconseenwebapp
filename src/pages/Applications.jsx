@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Search, LayoutGrid } from "lucide-react";
+import { Search, LayoutGrid, Layers, Users, Building2, Package, CheckSquare, Receipt, Link2, MapPin, Zap, ChevronRight } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { APP_REGISTRY, CATEGORIES, PLAN_ORDER, APPS_BY_ENTERPRISE_CATEGORY } from "@/components/applications/appRegistry";
@@ -10,6 +10,52 @@ import AppCard from "@/components/applications/AppCard";
 import ComingSoonModal from "@/components/applications/ComingSoonModal";
 import RecentlyUsed from "@/components/applications/RecentlyUsed";
 import UpgradeModal from "@/components/shared/UpgradeModal";
+
+// Ontology object type icons — apps are "built on" these objects
+const ONTOLOGY_TYPES = [
+  { key: "Person",       icon: Users,       color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200"   },
+  { key: "Enterprise",   icon: Building2,   color: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-200"  },
+  { key: "Product",      icon: Package,     color: "text-rose-600",    bg: "bg-rose-50",    border: "border-rose-200"   },
+  { key: "Task",         icon: CheckSquare, color: "text-violet-600",  bg: "bg-violet-50",  border: "border-violet-200" },
+  { key: "Transaction",  icon: Receipt,     color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200"},
+  { key: "Relationship", icon: Link2,       color: "text-indigo-600",  bg: "bg-indigo-50",  border: "border-indigo-200" },
+  { key: "Address",      icon: MapPin,      color: "text-teal-600",    bg: "bg-teal-50",    border: "border-teal-200"   },
+];
+const ONTOLOGY_MAP = Object.fromEntries(ONTOLOGY_TYPES.map(t => [t.key, t]));
+
+// Ontology object type annotations per app (which objects each app reads/writes)
+const APP_ONTOLOGY = {
+  "staff-schedule":      ["Person", "Task", "Enterprise"],
+  "clock-in-out":        ["Person", "Task"],
+  "attendance":          ["Person", "Task", "Enterprise"],
+  "attendance-register": ["Person", "Task", "Enterprise"],
+  "med-admin":           ["Person", "Product", "Task"],
+  "stock-counter":       ["Product"],
+  "barcode-scanner":     ["Product", "Transaction"],
+  "client-onboarding":   ["Person", "Relationship", "Enterprise"],
+  "add-client":          ["Person", "Relationship"],
+  "map-explorer":        ["Address", "Enterprise", "Person"],
+  "data-repair":         ["Person", "Enterprise", "Product", "Task", "Transaction"],
+  "reports":             ["Person", "Enterprise", "Product", "Task", "Transaction"],
+  "query-builder":       ["Person", "Enterprise", "Product", "Task", "Transaction", "Relationship", "Address"],
+  "copilot":             ["Person", "Enterprise", "Task", "Transaction"],
+  "alerts":              ["Person", "Enterprise", "Task", "Transaction"],
+  "connectors":          ["Person", "Enterprise", "Product", "Transaction"],
+  "ml-models":           ["Person", "Task", "Transaction", "Product"],
+  "pipelines":           ["Person", "Enterprise", "Product", "Task", "Transaction", "Relationship", "Address"],
+  "pdf-excel":           ["Person", "Enterprise", "Transaction"],
+};
+
+function OntologyObjectBadge({ typeKey }) {
+  const t = ONTOLOGY_MAP[typeKey];
+  if (!t) return null;
+  const Icon = t.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${t.bg} ${t.color} border ${t.border}`}>
+      <Icon className="w-2 h-2" />{typeKey}
+    </span>
+  );
+}
 
 const RECENTLY_USED_KEY = (email) => `recently_used_apps_${email}`;
 const MAX_RECENT = 4;
@@ -139,15 +185,40 @@ export default function Applications() {
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Applications</h1>
-          <p className="text-sm text-slate-500 mt-0.5">All your operational tools in one place</p>
+          <p className="text-sm text-slate-500 mt-0.5">Ontology-powered operational tools — every app is built on the universal object model</p>
         </div>
         <div className="flex items-center gap-2 text-sm text-slate-400 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
           <LayoutGrid className="w-4 h-4" />
           <span>{visibleApps.length} applications available</span>
         </div>
+      </div>
+
+      {/* Ontology foundation banner */}
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-4 mb-6 flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2 shrink-0">
+          <Layers className="w-5 h-5 text-violet-400" />
+          <span className="text-sm font-bold text-white">Universal Ontology</span>
+          <span className="text-[10px] font-semibold text-slate-400 bg-slate-700 px-2 py-0.5 rounded-full">7 object types</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5 flex-1">
+          {ONTOLOGY_TYPES.map(t => {
+            const Icon = t.icon;
+            return (
+              <span key={t.key} className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg ${t.bg} ${t.color} border ${t.border}`}>
+                <Icon className="w-3 h-3" /> {t.key}
+              </span>
+            );
+          })}
+        </div>
+        <button
+          onClick={() => navigate(createPageUrl("ObjectExplorer"))}
+          className="flex items-center gap-1.5 text-[11px] font-bold text-violet-300 hover:text-violet-200 transition-colors shrink-0"
+        >
+          <Search className="w-3.5 h-3.5" /> Explore Objects <ChevronRight className="w-3 h-3" />
+        </button>
       </div>
 
       {/* Search */}

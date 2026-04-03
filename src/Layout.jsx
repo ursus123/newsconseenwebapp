@@ -31,6 +31,9 @@ import {
   Bell,
   Plug,
   Brain,
+  Search,
+  Zap,
+  Layers,
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
@@ -75,6 +78,14 @@ const NAV_CONFIG = {
         { name: "copilot",             label: "Copilot",              icon: Sparkles },
         { name: "alerts",              label: "Alerts",               icon: Bell, badge: "alerts" },
         { name: "Connectors",          icon: Plug },
+      ],
+    },
+    {
+      section: "Ontology",
+      items: [
+        { name: "ObjectExplorer", label: "Object Explorer", icon: Search },
+        { name: "KineticLayer",   label: "Kinetic Layer",   icon: Zap },
+        { name: "ObjectViews",    label: "Object Views",    icon: Layers },
       ],
     },
     {
@@ -130,6 +141,14 @@ const NAV_CONFIG = {
         { name: "copilot",            label: "Copilot",             icon: Sparkles },
         { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
         { name: "Connectors",         icon: Plug },
+      ],
+    },
+    {
+      section: "Ontology",
+      items: [
+        { name: "ObjectExplorer", label: "Object Explorer", icon: Search },
+        { name: "KineticLayer",   label: "Kinetic Layer",   icon: Zap },
+        { name: "ObjectViews",    label: "Object Views",    icon: Layers },
       ],
     },
     {

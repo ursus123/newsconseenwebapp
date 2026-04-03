@@ -53,6 +53,9 @@ from alerts.routes import router as alerts_router
 # Phase 3C — Network Intelligence
 from network.routes import router as network_router
 
+# Phase 4 — Kinetic Layer (write-back + audit log)
+from kinetic.routes import router as kinetic_router
+
 logger = logging.getLogger(__name__)
 
 
@@ -146,6 +149,9 @@ app.include_router(alerts_router)
 
 # Phase 3C — Network Intelligence
 app.include_router(network_router)
+
+# Phase 4 — Kinetic Layer
+app.include_router(kinetic_router)
 
 
 # ----------------------------------------------------------

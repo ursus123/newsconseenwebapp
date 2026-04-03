@@ -30,6 +30,9 @@ import AlertsPageWrapper from './pages/AlertsPageWrapper';
 import NetworkPage from './pages/NetworkPage';
 import Connectors from './pages/Connectors';
 import MLModels from './pages/MLModels';
+import ObjectExplorer from './pages/ObjectExplorer';
+import KineticLayer from './pages/KineticLayer';
+import ObjectViews from './pages/ObjectViews';
 import Landing from './pages/Landing';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
@@ -123,6 +126,9 @@ const AuthenticatedApp = () => {
       <Route path="/network" element={<LayoutWrapper currentPageName="Network"><NetworkPage /></LayoutWrapper>} />
       <Route path="/Connectors" element={<LayoutWrapper currentPageName="Connectors"><Connectors /></LayoutWrapper>} />
       <Route path="/MLModels" element={<LayoutWrapper currentPageName="ML Models"><MLModels /></LayoutWrapper>} />
+      <Route path="/ObjectExplorer" element={<LayoutWrapper currentPageName="Object Explorer"><ObjectExplorer /></LayoutWrapper>} />
+      <Route path="/KineticLayer" element={<LayoutWrapper currentPageName="Kinetic Layer"><KineticLayer /></LayoutWrapper>} />
+      <Route path="/ObjectViews" element={<LayoutWrapper currentPageName="Object Views"><ObjectViews /></LayoutWrapper>} />
       {/* Desktop Shell — NO layout wrapper, full screen */}
       <Route path="/Desktop" element={<Desktop />} />
       <Route path="/DesktopSettings" element={<DesktopSettings />} />

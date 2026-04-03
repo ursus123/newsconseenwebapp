@@ -35,6 +35,15 @@ const ENTITY_TYPES = [
   { id: "tasks",        label: "Tasks / Visits" },
 ];
 
+// Maps connector entity_type → ontology object type metadata
+const ENTITY_TO_ONTOLOGY = {
+  people:       { type: "Person",       color: "text-blue-700",    bg: "bg-blue-50",    border: "border-blue-200"   },
+  enterprises:  { type: "Enterprise",   color: "text-amber-700",   bg: "bg-amber-50",   border: "border-amber-200"  },
+  products:     { type: "Product",      color: "text-rose-700",    bg: "bg-rose-50",    border: "border-rose-200"   },
+  transactions: { type: "Transaction",  color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200"},
+  tasks:        { type: "Task",         color: "text-violet-700",  bg: "bg-violet-50",  border: "border-violet-200" },
+};
+
 const DB_CONNECTOR_IDS = new Set([
   "postgresql_db", "mysql_db", "aws_rds", "mssql_db", "sqlite_db",
 ]);
@@ -563,6 +572,18 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
                 {syncResult.updated       != null && <div><span className="text-slate-500">Updated:</span> <strong>{syncResult.updated}</strong></div>}
                 {syncResult.failed        != null && <div><span className="text-slate-500">Failed:</span> <strong>{syncResult.failed}</strong></div>}
               </div>
+              {/* Typed ontology object badge */}
+              {ENTITY_TO_ONTOLOGY[entityType] && (
+                <div className="mt-3 pt-3 border-t border-black/5">
+                  <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1.5">Ontology Object Type</p>
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border ${ENTITY_TO_ONTOLOGY[entityType].bg} ${ENTITY_TO_ONTOLOGY[entityType].color} ${ENTITY_TO_ONTOLOGY[entityType].border}`}>
+                    {ENTITY_TO_ONTOLOGY[entityType].type}
+                  </span>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Synced records are stored as <strong>{ENTITY_TO_ONTOLOGY[entityType].type}</strong> objects in the universal ontology
+                  </p>
+                </div>
+              )}
               {syncResult.unmapped?.length > 0 && (
                 <p className="mt-2 text-xs text-amber-700">
                   {syncResult.unmapped.length} unmapped values — review in the Unmapped Values section below.
