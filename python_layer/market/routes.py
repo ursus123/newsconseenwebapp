@@ -165,38 +165,96 @@ def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 
 
 def _load_analytics(table: str, company_id: Optional[str] = None):
-    """Load from analytics.* table, filtered by company_id at read time."""
+    """
+    Load from analytics.* table (Layer 2), filtered by company_id at read time.
+    Falls back to _load_raw() if the analytics table is empty or unavailable.
+    """
     import pandas as pd
     try:
         from database import get_engine_safe
         from sqlalchemy import text as sqlt
         engine = get_engine_safe()
-        if not engine:
-            return pd.DataFrame()
-        where = "WHERE company_id = :cid" if company_id else ""
-        params = {"cid": company_id} if company_id else {}
-        with engine.connect() as conn:
-            return pd.read_sql(sqlt(f"SELECT * FROM analytics.{table} {where}"), conn, params=params)
+        if engine:
+            where = "WHERE company_id = :cid" if company_id else ""
+            params = {"cid": company_id} if company_id else {}
+            with engine.connect() as conn:
+                df = pd.read_sql(sqlt(f"SELECT * FROM analytics.{table} {where}"), conn, params=params)
+            if not df.empty:
+                return df
+            logger.info("_load_analytics: analytics.%s empty — trying raw fallback", table)
     except Exception as e:
         logger.warning("_load_analytics: analytics.%s unavailable — %s", table, e)
-        return pd.DataFrame()
+
+    # Fallback: try raw schema
+    return _load_raw(table, company_id)
 
 
 def _load_raw(table: str, company_id: Optional[str] = None):
-    """Load from raw.* table, filtered by company_id at read time."""
+    """
+    Load from raw.* table (Layer 2), filtered by company_id at read time.
+    Falls back to _fetch_from_base44() if the raw table is empty or unavailable.
+    """
     import pandas as pd
+    # raw table name → Base44 settings URL attribute
+    _RAW_TO_URL = {
+        "enterprises":   "base44_enterprises_url",
+        "people":        "base44_people_url",
+        "products":      "base44_products_url",
+        "tasks":         "base44_tasks_url",
+        "transactions":  "base44_transactions_url",
+        "relationships": "base44_relationships_url",
+        "addresses":     "base44_addresses_url",
+        "services":      "base44_services_url",
+    }
     try:
         from database import get_engine_safe
         from sqlalchemy import text as sqlt
         engine = get_engine_safe()
-        if not engine:
-            return pd.DataFrame()
-        where = "WHERE company_id = :cid" if company_id else ""
-        params = {"cid": company_id} if company_id else {}
-        with engine.connect() as conn:
-            return pd.read_sql(sqlt(f"SELECT * FROM raw.{table} {where}"), conn, params=params)
+        if engine:
+            where = "WHERE company_id = :cid" if company_id else ""
+            params = {"cid": company_id} if company_id else {}
+            with engine.connect() as conn:
+                df = pd.read_sql(sqlt(f"SELECT * FROM raw.{table} {where}"), conn, params=params)
+            if not df.empty:
+                return df
+            logger.info("_load_raw: raw.%s empty — trying Base44 live fallback", table)
     except Exception as e:
         logger.warning("_load_raw: raw.%s unavailable — %s", table, e)
+
+    # Fallback: fetch live from Base44 API
+    url_attr = _RAW_TO_URL.get(table)
+    if url_attr:
+        return _fetch_from_base44(url_attr, company_id)
+    return pd.DataFrame()
+
+
+def _fetch_from_base44(url_attr: str, company_id: Optional[str] = None):
+    """
+    Live fallback: fetch all records directly from Base44 API.
+    Uses the same fetch_json_to_df + HEADERS pattern as the ETL modules.
+    Filters by company_id client-side after fetch (Base44 API has no server filter).
+    """
+    import pandas as pd
+    try:
+        from config import settings, HEADERS
+        from etl.base import fetch_json_to_df
+        url = getattr(settings, url_attr, None)
+        if not url:
+            logger.warning("_fetch_from_base44: %s not set in settings", url_attr)
+            return pd.DataFrame()
+        df = fetch_json_to_df(url)
+        if df.empty:
+            return df
+        # Tenant isolation at read time — filter by company_id if provided
+        if company_id and "company_id" in df.columns:
+            df = df[df["company_id"] == company_id].copy()
+        logger.info(
+            "_fetch_from_base44: fetched %d rows from Base44 (%s, company_id=%s)",
+            len(df), url_attr, company_id,
+        )
+        return df
+    except Exception as e:
+        logger.warning("_fetch_from_base44: %s failed — %s", url_attr, e)
         return pd.DataFrame()
 
 
@@ -314,27 +372,129 @@ def get_my_enterprises(
     company_id: str = Query(...),
 ):
     """
-    Return own enterprises from the analytics layer (Layer 2).
-    Only returns enterprises with geocoordinates for the map.
-    """
-    df = _load_analytics("enterprise_summary", company_id)
-    if df.empty:
-        return {"company_id": company_id, "count": 0, "enterprises": []}
+    Return own enterprises with geocoordinates.
 
-    cols = [c for c in [
-        "id", "enterprise_name", "enterprise_type", "enterprise_tier",
+    Three-tier data resolution (analytics → raw → Base44 live):
+    1. analytics.enterprise_summary  — post-ETL enriched table (preferred)
+    2. raw.enterprises               — ETL snapshot table
+    3. Base44 live API               — direct fetch if DB unavailable / empty
+
+    Geocoordinates: if not on enterprise record itself, attempts to join
+    addresses (same three-tier resolution) using enterprise_id.
+    """
+    import pandas as pd
+    import numpy as np
+
+    # ── 1. Load enterprise records ─────────────────────────────────────────
+    # Try analytics summary first (has normalised columns), then raw, then Base44
+    df = _load_analytics("enterprise_summary", company_id)
+    source = "analytics.enterprise_summary"
+
+    if df.empty:
+        df = _load_raw("enterprises", company_id)
+        source = "raw.enterprises / Base44 live"
+
+    if df.empty:
+        return {"company_id": company_id, "count": 0, "enterprises": [], "source": "no data"}
+
+    # Normalise enterprise_name — raw Base44 records use "name" field
+    if "enterprise_name" not in df.columns and "name" in df.columns:
+        df = df.rename(columns={"name": "enterprise_name"})
+
+    # ── 2. Attach geocoordinates from Addresses if missing ─────────────────
+    has_lat = "latitude" in df.columns and df["latitude"].notna().any()
+    has_lng = "longitude" in df.columns and df["longitude"].notna().any()
+
+    if not (has_lat and has_lng):
+        # Try to join from addresses using enterprise_id
+        addr_df = _load_analytics("address_summary", company_id)
+        if addr_df.empty:
+            addr_df = _load_raw("addresses", company_id)
+
+        if not addr_df.empty:
+            join_col = next(
+                (c for c in ["enterprise_id", "linked_enterprise_id", "parent_id"]
+                 if c in addr_df.columns),
+                None,
+            )
+            lat_col = next((c for c in ["latitude", "lat"] if c in addr_df.columns), None)
+            lng_col = next((c for c in ["longitude", "lng", "lon"] if c in addr_df.columns), None)
+
+            if join_col and lat_col and lng_col:
+                addr_coords = (
+                    addr_df[[join_col, lat_col, lng_col]]
+                    .dropna(subset=[lat_col, lng_col])
+                    .rename(columns={join_col: "id", lat_col: "latitude", lng_col: "longitude"})
+                    .drop_duplicates(subset=["id"])
+                )
+                ent_id_col = next((c for c in ["id", "enterprise_id"] if c in df.columns), None)
+                if ent_id_col:
+                    df = df.merge(
+                        addr_coords,
+                        left_on=ent_id_col,
+                        right_on="id",
+                        how="left",
+                        suffixes=("", "_addr"),
+                    )
+                    if "latitude_addr" in df.columns:
+                        df["latitude"]  = df["latitude"].fillna(df["latitude_addr"])
+                        df["longitude"] = df["longitude"].fillna(df["longitude_addr"])
+                        df.drop(columns=["latitude_addr", "longitude_addr"], inplace=True, errors="ignore")
+
+    # ── 3. Geocode missing enterprises via Nominatim ───────────────────────
+    # For enterprises that still have no coordinates, try Nominatim lookup
+    # using enterprise_name + city/country fields. Limited to 10 per call.
+    name_col = "enterprise_name" if "enterprise_name" in df.columns else None
+    if name_col:
+        missing_mask = df.get("latitude", pd.Series(dtype=float)).isna()
+        to_geocode = df[missing_mask].head(10)
+        for idx, row in to_geocode.iterrows():
+            query_parts = [str(row.get(name_col, "") or "")]
+            for field in ("city", "country", "address_line_1"):
+                val = row.get(field)
+                if val:
+                    query_parts.append(str(val))
+            query = ", ".join(p for p in query_parts if p)
+            if not query.strip():
+                continue
+            try:
+                resp = requests.get(
+                    NOMINATIM_URL,
+                    params={"q": query, "format": "json", "limit": 1},
+                    headers={"User-Agent": "newsconseen-market/1.0 (contact@newsconseen.com)"},
+                    timeout=6,
+                )
+                hits = resp.json()
+                if hits:
+                    df.at[idx, "latitude"]  = float(hits[0]["lat"])
+                    df.at[idx, "longitude"] = float(hits[0]["lon"])
+                    df.at[idx, "_geocoded"] = True
+                    logger.info("Nominatim geocoded '%s'", query[:60])
+                time.sleep(1.1)  # Nominatim rate limit: 1 rps
+            except Exception as ge:
+                logger.debug("Nominatim geocode failed for '%s': %s", query[:40], ge)
+
+    # ── 4. Return all enterprises (with or without coords) ─────────────────
+    want_cols = [c for c in [
+        "id", "enterprise_name", "name", "enterprise_type", "enterprise_tier",
         "operating_status", "status", "latitude", "longitude",
         "city", "country", "phone", "email", "website",
+        "company_id", "_geocoded",
     ] if c in df.columns]
 
-    df = df[cols].dropna(subset=[c for c in ["latitude", "longitude"] if c in df.columns])
+    result_df = df[want_cols].copy()
+    # Convert numpy types for JSON serialisation
+    result_df = result_df.where(result_df.notna(), other=None)
 
-    records = df.to_dict(orient="records")
+    records = result_df.to_dict(orient="records")
+    geocoded_count = sum(1 for r in records if r.get("latitude") is not None)
+
     return {
-        "company_id": company_id,
-        "count":      len(records),
-        "enterprises": records,
-        "source":     "analytics.enterprise_summary",
+        "company_id":     company_id,
+        "count":          len(records),
+        "geocoded_count": geocoded_count,
+        "enterprises":    records,
+        "source":     source,
     }
 
 
