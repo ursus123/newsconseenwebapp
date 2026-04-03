@@ -54,7 +54,13 @@ from alerts.routes import router as alerts_router
 from network.routes import router as network_router
 
 # Phase 4 — Kinetic Layer (write-back + audit log)
-from kinetic.routes import router as kinetic_router
+try:
+    from kinetic.routes import router as kinetic_router
+    _kinetic_ok = True
+except Exception as _kinetic_err:
+    kinetic_router = None
+    _kinetic_ok = False
+    logger.warning("kinetic layer import failed — disabled: %s", _kinetic_err)
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +111,10 @@ app.add_middleware(
 # Allows: /, /health, /docs, /openapi.json, /redoc (always)
 # Allows: /load/*, /cron/* (use x-cron-secret instead)
 # ----------------------------------------------------------
-_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc"}
+_PUBLIC_PATHS = {
+    "/", "/health", "/docs", "/openapi.json", "/redoc",
+    "/copilot/status", "/alerts/status", "/network/status",
+}
 _CRON_PREFIXES = ("/load/", "/cron/")
 
 
@@ -151,7 +160,8 @@ app.include_router(alerts_router)
 app.include_router(network_router)
 
 # Phase 4 — Kinetic Layer
-app.include_router(kinetic_router)
+if _kinetic_ok and kinetic_router is not None:
+    app.include_router(kinetic_router)
 
 
 # ----------------------------------------------------------
