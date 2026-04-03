@@ -162,15 +162,16 @@ export default function Products() {
     });
   }, [products]);
 
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Product.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); triggerETL("product"); setFormOpen(false); } });
-  const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Product.update(id, withScope(data)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); triggerETL("product"); setFormOpen(false); setEditing(null); } });
-  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Product.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); setDeleting(null); } });
+  const createMut = useMutation({ mutationFn: (d) => base44.entities.Product.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); setFormOpen(false); } });
+  const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Product.update(id, withScope(data)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); setFormOpen(false); setEditing(null); } });
+  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Product.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); setDeleting(null); } });
 
   const handleArchive = (item) => { updateMut.mutate({ id: item.id, data: { ...item, status: "archived" } }); setFormOpen(false); setEditing(null); };
 
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Product.delete(id);
     qc.invalidateQueries({ queryKey: ["products"] });
+    qc.refetchQueries({ queryKey: ["products"] });
     toast({ title: `${selectedIds.length} items deleted` });
     setSelectedIds([]);
   };

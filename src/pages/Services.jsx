@@ -94,9 +94,9 @@ export default function Services() {
     refetchOnMount: "always",
   });
 
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Service.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setFormOpen(false); } });
-  const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Service.update(id, withScope(data)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setFormOpen(false); setEditing(null); } });
-  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Service.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setDeleting(null); } });
+  const createMut = useMutation({ mutationFn: (d) => base44.entities.Service.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); setFormOpen(false); } });
+  const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Service.update(id, withScope(data)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); setFormOpen(false); setEditing(null); } });
+  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Service.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); setDeleting(null); } });
 
   const handleSubmit = (data, saveAndNew = false) => {
     if (editing) { updateMut.mutate({ id: editing.id, data }); }
@@ -108,6 +108,7 @@ export default function Services() {
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Service.delete(id);
     qc.invalidateQueries({ queryKey: ["services"] });
+    qc.refetchQueries({ queryKey: ["services"] });
     toast({ title: `${selectedIds.length} services deleted` });
     setSelectedIds([]);
   };

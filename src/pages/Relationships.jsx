@@ -137,6 +137,7 @@ export default function Relationships() {
     mutationFn: ({ id, data }) => base44.entities.Relationship.update(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["relationships"] });
+      qc.refetchQueries({ queryKey: ["relationships"] });
       triggerETL("relationship");
       setFormOpen(false);
       setEditing(null);
@@ -146,7 +147,7 @@ export default function Relationships() {
   });
   const deleteMut = useMutation({
     mutationFn: (id) => base44.entities.Relationship.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); triggerETL("relationship"); setDeleting(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); qc.refetchQueries({ queryKey: ["relationships"] }); triggerETL("relationship"); setDeleting(null); },
   });
 
   const handleSubmit = (data, saveAndNew = false) => {
@@ -155,6 +156,7 @@ export default function Relationships() {
     } else {
       base44.entities.Relationship.create(withScope(data)).then(() => {
         qc.invalidateQueries({ queryKey: ["relationships"] });
+        qc.refetchQueries({ queryKey: ["relationships"] });
         triggerETL("relationship");
         toast({ title: "Relationship created" });
         if (saveAndNew) {
@@ -176,6 +178,7 @@ export default function Relationships() {
   const handleBulkAssign = async (pairs) => {
     for (const pair of pairs) await base44.entities.Relationship.create(withScope(pair));
     qc.invalidateQueries({ queryKey: ["relationships"] });
+    qc.refetchQueries({ queryKey: ["relationships"] });
     triggerETL("relationship");
     toast({ title: `${pairs.length} relationship${pairs.length !== 1 ? "s" : ""} created` });
   };
@@ -183,6 +186,7 @@ export default function Relationships() {
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Relationship.delete(id);
     qc.invalidateQueries({ queryKey: ["relationships"] });
+    qc.refetchQueries({ queryKey: ["relationships"] });
     triggerETL("relationship");
     toast({ title: `${selectedIds.length} relationships deleted` });
     setSelectedIds([]);

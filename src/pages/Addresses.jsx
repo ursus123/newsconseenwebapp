@@ -125,6 +125,7 @@ export default function Addresses() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["addresses"] });
+      qc.refetchQueries({ queryKey: ["addresses"] });
       triggerETL("address");
       setFormOpen(false); setEditing(null);
       if (detailAddress) setDetailAddress(null);

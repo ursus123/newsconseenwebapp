@@ -219,7 +219,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const withScope = useWithScope(currentUser);
   const { toast } = useToast();
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
+  const invalidate = () => { qc.invalidateQueries({ queryKey: ["tasks"] }); qc.refetchQueries({ queryKey: ["tasks"] }); };
 
   const completeTask = async (task, outcomeData) => {
     const updated = await base44.entities.Task.update(task.id, {

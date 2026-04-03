@@ -169,17 +169,17 @@ export default function Enterprises() {
       }
       return { ...created, company_id: workspaceId };
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); setFormOpen(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); qc.refetchQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); setFormOpen(false); },
   });
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Enterprise.update(id, withScope(data)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); setFormOpen(false); setEditing(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); qc.refetchQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); setFormOpen(false); setEditing(null); },
   });
 
   const deleteMut = useMutation({
     mutationFn: (id) => base44.entities.Enterprise.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); setDeleting(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); qc.refetchQueries({ queryKey: ["enterprises"] }); setDeleting(null); },
   });
 
   const processedEnterprises = useMemo(() => {
@@ -203,6 +203,7 @@ export default function Enterprises() {
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Enterprise.delete(id);
     qc.invalidateQueries({ queryKey: ["enterprises"] });
+    qc.refetchQueries({ queryKey: ["enterprises"] });
     toast({ title: `${selectedIds.length} enterprises deleted` });
     setSelectedIds([]);
   };

@@ -179,6 +179,7 @@ export default function People() {
     mutationFn: (d) => base44.entities.Person.create(withCompany(d)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["people"] });
+      qc.refetchQueries({ queryKey: ["people"] });
       qc.invalidateQueries({ queryKey: ["addresses"] });
       qc.invalidateQueries({ queryKey: ["relationships"] });
       triggerETL("people");
@@ -187,16 +188,17 @@ export default function People() {
   });
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Person.update(id, withScope(data)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); triggerETL("people"); setFormOpen(false); setEditing(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); qc.refetchQueries({ queryKey: ["people"] }); triggerETL("people"); setFormOpen(false); setEditing(null); },
   });
   const deleteMut = useMutation({
     mutationFn: (id) => base44.entities.Person.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); setDeleting(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); qc.refetchQueries({ queryKey: ["people"] }); setDeleting(null); },
   });
 
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Person.delete(id);
     qc.invalidateQueries({ queryKey: ["people"] });
+    qc.refetchQueries({ queryKey: ["people"] });
     toast({ title: `${selectedIds.length} people deleted` });
     setSelectedIds([]);
   };

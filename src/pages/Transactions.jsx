@@ -296,13 +296,13 @@ export default function Transactions() {
       existingTransactions: transactions,
       enterprise:      enterprises.find(e => e.enterprise_name === data.enterprise),
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setFormOpen(false); triggerETL("transaction"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); setFormOpen(false); triggerETL("transaction"); },
     onError: (e) => toast({ title: "Failed to create transaction", description: e.message, variant: "destructive" }),
   });
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Transaction.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); triggerETL("transaction"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); triggerETL("transaction"); },
   });
 
   // Period filtering
@@ -357,7 +357,9 @@ export default function Transactions() {
     }
 
     qc.invalidateQueries({ queryKey: ["transactions"] });
+    qc.refetchQueries({ queryKey: ["transactions"] });
     qc.invalidateQueries({ queryKey: ["products"] });
+    qc.refetchQueries({ queryKey: ["products"] });
     setPostTarget(null);
     toast({ title: `Invoice ${invoiceNumber} posted`, description: `$${tx.amount} invoice posted.` });
   };
@@ -383,7 +385,9 @@ export default function Transactions() {
       }
     }
     qc.invalidateQueries({ queryKey: ["transactions"] });
+    qc.refetchQueries({ queryKey: ["transactions"] });
     qc.invalidateQueries({ queryKey: ["products"] });
+    qc.refetchQueries({ queryKey: ["products"] });
     setVoidTarget(null);
     toast({ title: "Transaction voided" });
   };
@@ -395,6 +399,7 @@ export default function Transactions() {
       status:         "reconciled",
     });
     qc.invalidateQueries({ queryKey: ["transactions"] });
+    qc.refetchQueries({ queryKey: ["transactions"] });
     toast({ title: "Payment recorded", description: `${tx.invoice_number || "Transaction"} marked as paid.` });
   };
 
@@ -403,6 +408,7 @@ export default function Transactions() {
       await base44.entities.Transaction.update(id, { status: "voided", voided_by: currentUser?.email, voided_date: new Date().toISOString() });
     }
     qc.invalidateQueries({ queryKey: ["transactions"] });
+    qc.refetchQueries({ queryKey: ["transactions"] });
     toast({ title: `${selectedIds.length} transactions voided` });
     setSelectedIds([]);
   };
@@ -410,6 +416,7 @@ export default function Transactions() {
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Transaction.delete(id);
     qc.invalidateQueries({ queryKey: ["transactions"] });
+    qc.refetchQueries({ queryKey: ["transactions"] });
     toast({ title: `${selectedIds.length} transactions deleted` });
     setSelectedIds([]);
   };
