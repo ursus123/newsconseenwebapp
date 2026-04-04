@@ -144,6 +144,7 @@ def run_ltv_segmentation(
     transaction_df: pd.DataFrame,
     task_df: pd.DataFrame,
     n_clusters: int = N_CLUSTERS,
+    research_mode: bool = False,
 ) -> dict:
     """
     Full pipeline: build features → normalise → K-Means → label segments.
@@ -185,27 +186,47 @@ def run_ltv_segmentation(
             f for f in CLUSTER_FEATURES if f in features_df.columns
         ]
 
+        RESEARCH_NOTE = (
+            "Illustrative segmentation based on available data. "
+            "Not statistically validated — use for research and exploration only. "
+            "Segments reflect relative differences within your dataset, not market benchmarks."
+        )
+
         if len(available_features) < 2:
-            return {
-                "status":   "skipped",
-                "reason":   (
-                    f"only {len(available_features)} feature columns available "
-                    f"— need at least 2"
-                ),
-                "segments": [],
-            }
+            if not research_mode or len(available_features) < 1:
+                return {
+                    "status":   "skipped",
+                    "reason":   (
+                        f"only {len(available_features)} feature columns available "
+                        f"— need at least 2 (or 1 in research mode)"
+                    ),
+                    "segments": [],
+                }
+            # Research mode: pad with a synthetic variance column so clustering works
+            logger.info("ml/segmentation: research mode — only 1 feature, padding with tenure jitter")
+            features_df["_research_pad"] = np.random.default_rng(42).uniform(0, 0.01, len(features_df))
+            available_features.append("_research_pad")
 
         X = features_df[available_features].fillna(0).values
 
         if len(X) < n_clusters:
-            return {
-                "status":   "skipped",
-                "reason":   (
-                    f"only {len(X)} rows — need at least {n_clusters} "
-                    f"for {n_clusters} clusters"
-                ),
-                "segments": [],
-            }
+            if research_mode:
+                # Auto-reduce clusters to fit available data
+                n_clusters = max(2, len(X))
+                logger.info("ml/segmentation: research mode — reducing to %d clusters for %d rows", n_clusters, len(X))
+                # Update label map
+                labels = {0: "high_value", 1: "mid_value", 2: "low_engagement"}
+                global SEGMENT_LABELS
+                SEGMENT_LABELS = {i: list(labels.values())[min(i, 2)] for i in range(n_clusters)}
+            else:
+                return {
+                    "status":   "skipped",
+                    "reason":   (
+                        f"only {len(X)} rows — need at least {n_clusters} "
+                        f"for {n_clusters} clusters"
+                    ),
+                    "segments": [],
+                }
 
         # Normalise features — K-Means is distance-based, scale matters
         scaler = StandardScaler()
@@ -311,14 +332,18 @@ def run_ltv_segmentation(
             len(features_df), n_clusters, order_col,
         )
 
-        return {
+        result = {
             "status":          "success",
             "segments":        features_df[output_cols].to_dict(orient="records"),
             "segment_summary": segment_summary,
             "n_clusters":      n_clusters,
             "features_used":   available_features,
             "ordered_by":      order_col,
+            "research_mode":   research_mode,
         }
+        if research_mode:
+            result["note"] = RESEARCH_NOTE
+        return result
 
     except Exception as e:
         logger.error("ml/segmentation: run_ltv_segmentation failed — %s", e)

@@ -173,6 +173,7 @@ def ml_status():
 def retention_risk(
     company_id: Optional[str] = Query(None, description="Tenant filter"),
     horizon_days: int = Query(30, ge=7, le=90, description="Risk horizon in days"),
+    research_mode: bool = Query(False, description="Enable research mode — produces illustrative projections on sparse/synthetic data"),
 ):
     """
     Score active clients by predicted discharge risk using Cox PH.
@@ -209,7 +210,7 @@ def retention_risk(
             if company_id and "company_id" in task_df.columns:
                 task_df = task_df[task_df["company_id"] == company_id]
 
-        result = run_retention_model(people_df, task_df, horizon_days=horizon_days)
+        result = run_retention_model(people_df, task_df, horizon_days=horizon_days, research_mode=research_mode)
         _store_predictions(company_id, "retention-risk", result)
         return result
 
@@ -229,6 +230,8 @@ def staffing_forecast(
     enterprise_id: str = Query(..., description="Enterprise to forecast"),
     forecast_days: int = Query(30, ge=7, le=90, description="Days ahead to forecast"),
     metric: str = Query("tasks_last_30d", description="Metric to forecast"),
+    research_mode: bool = Query(False, description="Enable research mode — synthesizes forecast from available data"),
+    company_id: Optional[str] = Query(None, description="Tenant filter for Base44 fallback"),
 ):
     """
     Forecast care visit volume for the next N days using Prophet.
@@ -247,10 +250,42 @@ def staffing_forecast(
             task_df = task_df[task_df["enterprise_id"] == enterprise_id]
 
         if task_df.empty:
+            # Try Base44 live fallback
+            try:
+                import pandas as pd
+                raw = tasks.extract_tasks()
+                task_df = pd.DataFrame(raw) if isinstance(raw, list) else raw
+                if company_id and "company_id" in task_df.columns:
+                    task_df = task_df[task_df["company_id"] == company_id]
+                if enterprise_id and "enterprise_id" in task_df.columns:
+                    task_df = task_df[task_df["enterprise_id"] == enterprise_id]
+            except Exception:
+                pass
+
+        if task_df.empty:
+            if not research_mode:
+                return {
+                    "status": "skipped",
+                    "reason": "no task data available — run ETL or enable research_mode=true for a synthetic forecast",
+                    "forecast": [],
+                }
+            # Research mode: synthesize a flat forecast from task count
+            import pandas as pd
+            from datetime import datetime, timedelta, timezone
+            logger.info("/ml/staffing-forecast: research mode — synthesizing flat forecast")
+            base_date = datetime.now(timezone.utc)
+            forecast = [
+                {"ds": (base_date + timedelta(days=i)).strftime("%Y-%m-%d"),
+                 "yhat": 1.0, "yhat_lower": 0.5, "yhat_upper": 2.0}
+                for i in range(forecast_days)
+            ]
             return {
-                "status": "skipped",
-                "reason": "no task data in raw.tasks — run ETL first",
-                "forecast": [],
+                "status": "success",
+                "research_mode": True,
+                "note": "Synthetic flat forecast — no historical task data available. Add task records for a data-driven forecast.",
+                "forecast": forecast,
+                "enterprise_id": enterprise_id,
+                "forecast_days": forecast_days,
             }
 
         result = run_staffing_forecast(
@@ -276,6 +311,7 @@ def staffing_forecast(
 def ltv_segmentation(
     company_id: Optional[str] = Query(None, description="Tenant filter"),
     n_clusters: int = Query(3, ge=2, le=5, description="Number of segments"),
+    research_mode: bool = Query(False, description="Enable research mode — works on sparse/synthetic datasets"),
 ):
     """
     Segment clients into LTV tiers using K-Means clustering.
@@ -297,7 +333,7 @@ def ltv_segmentation(
         task_df        = _load_raw_from_railway("tasks",        company_id)
 
         result = run_ltv_segmentation(
-            people_df, transaction_df, task_df, n_clusters=n_clusters
+            people_df, transaction_df, task_df, n_clusters=n_clusters, research_mode=research_mode
         )
         _store_predictions(company_id, "ltv-segmentation", result)
         return result

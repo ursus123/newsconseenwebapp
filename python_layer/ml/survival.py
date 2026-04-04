@@ -275,10 +275,44 @@ def predict_retention_risk(
     return result
 
 
+def _research_risk_scores(features: pd.DataFrame, horizon_days: int) -> pd.DataFrame:
+    """
+    Rule-based risk scoring for research/sparse data mode.
+
+    Used when Cox PH cannot fit (all-active data, fewer than 5 rows, or
+    no historical event variance). Produces illustrative risk tiers based
+    on tenure and activity heuristics rather than statistical fitting:
+
+        low tenure  + low activity  → high risk (new/disengaged)
+        mid tenure  + some activity → medium risk
+        high tenure + high activity → low risk (established/engaged)
+    """
+    df = features.copy()
+    # Normalise tenure 0–1
+    t_max = df["T"].max() or 1
+    df["_t_norm"] = df["T"] / t_max
+
+    # Normalise activity (tasks_last_30d) 0–1
+    a_max = df["tasks_last_30d"].max() or 1
+    df["_a_norm"] = df["tasks_last_30d"] / a_max
+
+    # Heuristic engagement score: higher = more stable
+    df["_engagement"] = (df["_t_norm"] * 0.6 + df["_a_norm"] * 0.4).clip(0, 1)
+
+    # Map engagement → illustrative discharge probability
+    prob_col = f"discharge_prob_{horizon_days}d"
+    df[prob_col] = (1 - df["_engagement"]).round(3)
+    df["risk_tier"] = df[prob_col].apply(_assign_risk_tier)
+    df["concordance_index"] = None  # not applicable in research mode
+
+    return df.drop(columns=["_t_norm", "_a_norm", "_engagement"], errors="ignore")
+
+
 def run_retention_model(
     people_df: pd.DataFrame,
     task_df: pd.DataFrame,
     horizon_days: int = 30,
+    research_mode: bool = False,
 ) -> dict:
     """
     Full pipeline: build features → fit Cox PH → score active entities.
@@ -292,26 +326,68 @@ def run_retention_model(
         horizon_days    — scoring horizon used
         status          — "success", "skipped", or "error"
     """
+    RESEARCH_NOTE = (
+        "Illustrative projection based on tenure and activity heuristics. "
+        "Not statistically validated — use for research and exploration only. "
+        "Run with real longitudinal data to get statistically fitted risk scores."
+    )
+
     try:
         features = build_survival_features(people_df, task_df)
 
         if features.empty:
-            return {
-                "status":      "skipped",
-                "reason":      "insufficient data for survival model",
-                "predictions": [],
-            }
+            if not research_mode:
+                return {
+                    "status":      "skipped",
+                    "reason":      "insufficient data for survival model",
+                    "predictions": [],
+                }
+            # Research mode: synthesize minimal features from raw people_df
+            logger.info("ml/survival: research mode — synthesizing features from raw people_df")
+            features = people_df.copy()
+            features["T"]              = features.get("avg_tenure_days", pd.Series(30, index=features.index)).fillna(30).clip(lower=1)
+            features["E"]              = 0
+            features["tasks_last_30d"] = features.get("tasks_last_30d", pd.Series(0, index=features.index)).fillna(0)
+            features["overdue_tasks"]  = 0
+            features["completion_rate_pct"] = 0
 
+        prob_col = f"discharge_prob_{horizon_days}d"
+
+        # Attempt statistical Cox PH fit
         cph = fit_cox_model(features)
 
         if cph is None:
+            if not research_mode:
+                return {
+                    "status":      "skipped",
+                    "reason":      (
+                        "model fitting failed — need both active and ended "
+                        "entities in history, and at least 5 complete rows"
+                    ),
+                    "predictions": [],
+                }
+            # Research mode fallback — heuristic scoring
+            logger.info("ml/survival: research mode — using heuristic risk scoring")
+            predictions = _research_risk_scores(features, horizon_days)
+            if predictions.empty:
+                return {"status": "skipped", "reason": "no rows to score", "predictions": []}
+
+            output_cols = [c for c in [
+                "enterprise_id", "company_id", "person_type", "status",
+                "people_count", "active_count", "avg_tenure_days",
+                prob_col, "risk_tier", "concordance_index",
+            ] if c in predictions.columns]
+
             return {
-                "status":      "skipped",
-                "reason":      (
-                    "model fitting failed — need both active and ended "
-                    "entities in history, and at least 5 complete rows"
-                ),
-                "predictions": [],
+                "status":          "success",
+                "research_mode":   True,
+                "note":            RESEARCH_NOTE,
+                "predictions":     predictions[output_cols].to_dict(orient="records"),
+                "model_quality":   None,
+                "high_risk_count": int((predictions["risk_tier"] == "high").sum()),
+                "total_scored":    len(predictions),
+                "horizon_days":    horizon_days,
+                "prob_column":     prob_col,
             }
 
         predictions = predict_retention_risk(cph, features, horizon_days)
@@ -323,10 +399,9 @@ def run_retention_model(
                 "predictions": [],
             }
 
-        prob_col = f"discharge_prob_{horizon_days}d"
-
         return {
             "status":          "success",
+            "research_mode":   research_mode,
             "predictions":     predictions.to_dict(orient="records"),
             "model_quality":   round(cph.concordance_index_, 3),
             "high_risk_count": int((predictions["risk_tier"] == "high").sum()),

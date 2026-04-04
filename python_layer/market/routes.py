@@ -516,9 +516,10 @@ def ml_market_segment(req: MLRequest):
     except ImportError:
         raise HTTPException(status_code=503, detail="scikit-learn not installed")
 
-    company_id = req.company_id
-    n_clusters = req.options.get("n_clusters", 3)
-    object_type = req.options.get("object_type", "Person")
+    company_id    = req.company_id
+    n_clusters    = req.options.get("n_clusters", 3)
+    object_type   = req.options.get("object_type", "Person")
+    research_mode = bool(req.options.get("research_mode", False))
 
     result: Dict[str, Any] = {"status": "success", "object_type": object_type, "segments": [], "summary": []}
 
@@ -527,7 +528,7 @@ def ml_market_segment(req: MLRequest):
         tx_df      = _load_analytics("transaction_summary",  company_id)
         task_df    = _load_analytics("task_summary",         company_id)
         from ml.segmentation import run_ltv_segmentation
-        seg = run_ltv_segmentation(people_df, tx_df, task_df, n_clusters=n_clusters)
+        seg = run_ltv_segmentation(people_df, tx_df, task_df, n_clusters=n_clusters, research_mode=research_mode)
         result.update(seg)
 
     elif object_type == "Product":

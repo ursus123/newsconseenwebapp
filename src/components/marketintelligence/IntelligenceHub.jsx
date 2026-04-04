@@ -611,6 +611,8 @@ export default function IntelligenceHub({ currentUser }) {
   );
 
   // ── Tab: ML ───────────────────────────────────────────────────────────────
+  const [researchMode, setResearchMode] = useState(false);
+
   const MLTab = () => (
     <div className="space-y-4">
       <SectionHeader
@@ -620,6 +622,29 @@ export default function IntelligenceHub({ currentUser }) {
         badge="scikit-learn"
       />
 
+      {/* Research Mode toggle */}
+      <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3">
+        <div>
+          <p className="text-xs font-semibold text-indigo-800">Research Mode</p>
+          <p className="text-[10px] text-indigo-600 mt-0.5">
+            Enables ML models on sparse or synthetic datasets. Results are illustrative projections, not statistically validated predictions.
+          </p>
+        </div>
+        <button
+          onClick={() => setResearchMode(v => !v)}
+          className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors ${researchMode ? "bg-indigo-600" : "bg-slate-300"}`}
+        >
+          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${researchMode ? "translate-x-4" : "translate-x-0"}`} />
+        </button>
+      </div>
+
+      {researchMode && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-xs text-amber-800 flex items-center gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          Research mode active — models will produce illustrative projections. Label all outputs accordingly in reports.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Customer segmentation */}
@@ -627,7 +652,7 @@ export default function IntelligenceHub({ currentUser }) {
           title="Customer Segmentation"
           description="KMeans clustering of your clients by tenure, revenue, and activity (Person ontology)"
           endpoint="/market/ml/segment"
-          body={{ company_id: companyId, options: { object_type: "Person", n_clusters: 3 } }}
+          body={{ company_id: companyId, options: { object_type: "Person", n_clusters: 3, research_mode: researchMode } }}
           resultRenderer={r => r.segments?.length ? (
             <div className="mt-3 space-y-2">
               <p className="text-[10px] font-bold text-slate-500 uppercase">Segment Summary</p>
@@ -651,7 +676,7 @@ export default function IntelligenceHub({ currentUser }) {
           title="Product Segmentation"
           description="Segment products by price, cost, and stock level (Product ontology)"
           endpoint="/market/ml/segment"
-          body={{ company_id: companyId, options: { object_type: "Product", n_clusters: 3 } }}
+          body={{ company_id: companyId, options: { object_type: "Product", n_clusters: 3, research_mode: researchMode } }}
           resultRenderer={r => r.segments?.length ? (
             <div className="mt-3 space-y-2">
               <p className="text-[10px] font-bold text-slate-500 uppercase">Product Segments</p>
@@ -673,7 +698,7 @@ export default function IntelligenceHub({ currentUser }) {
           title="Geographic Segmentation"
           description="KMeans clustering of enterprise locations into market zones (Enterprise + Address)"
           endpoint="/market/ml/segment"
-          body={{ company_id: companyId, options: { object_type: "Geography", n_clusters: 3 } }}
+          body={{ company_id: companyId, options: { object_type: "Geography", n_clusters: 3, research_mode: researchMode } }}
           resultRenderer={r => r.segments?.length ? (
             <div className="mt-3 space-y-2">
               <p className="text-[10px] font-bold text-slate-500 uppercase">Geographic Zones</p>
