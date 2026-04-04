@@ -57,6 +57,113 @@ const { data } = useQuery({ queryFn: () => fetchSummary("/people-summary", compa
 
 ---
 
+## PostgreSQL role — clean data export, not primary source
+
+PostgreSQL (Layer 2) is NOT the authoritative data store. Base44 (Layer 1) is.
+
+PostgreSQL serves two purposes:
+1. **Analytics acceleration** — pre-aggregated tables for fast stat cards, charts, copilot queries
+2. **Clean data export** — a structured, clean mirror of Base44 data that operators can connect to
+   external tools (BI tools, Excel, custom databases) without touching Base44 directly
+
+**Base44 is always the fallback. Every single feature must show complete data even when python_layer
+is unreachable, cold-starting, or has empty tables.**
+
+### How the data actually flows
+
+```
+User enters data → Base44 stores it (Layer 1)
+                        │
+                        ▼
+python_layer GET /people-summary
+  → calls extract_people() → fetches from Base44 live
+  → returns JSON to frontend
+  (does NOT read PostgreSQL on GET requests)
+
+python_layer POST /load/people-summary
+  → ETL: extract + transform + write to PostgreSQL analytics.*
+  (only writes to PostgreSQL — this is for export + acceleration)
+
+Frontend
+  → tries python_layer first
+  → if unreachable or empty → falls back to base44.entities.* directly
+  → user ALWAYS sees their data
+```
+
+This means: **if ETL has not run (analytics tables are empty), every feature must still work**
+by falling back to Base44 live data.
+
+### Three-tier fallback chain (applies to ALL features)
+
+```
+Tier 1 — analytics.*          PostgreSQL analytics tables (fast, aggregated)
+           ↓ if empty or unavailable
+Tier 2 — raw.*                PostgreSQL raw tables (full records, still fast)
+           ↓ if empty or unavailable
+Tier 3 — Base44 live API      Direct Base44 entity query (always available)
+```
+
+This applies to:
+- Dashboard stat cards
+- Query Builder SQL
+- Reports & Charts
+- Market Intelligence ML models
+- Copilot tool queries
+- All python_layer GET endpoints
+
+### python_layer fallback pattern (server-side)
+```python
+def _load_analytics(table, company_id=None):
+    engine = get_engine_safe()
+    if engine:
+        try:
+            df = pd.read_sql(f"SELECT * FROM analytics.{table}", engine)
+            if not df.empty:
+                return filter_by_company(df, company_id)
+        except Exception:
+            pass
+    return _load_raw(table, company_id)
+
+def _load_raw(table, company_id=None):
+    engine = get_engine_safe()
+    if engine:
+        try:
+            df = pd.read_sql(f"SELECT * FROM raw.{table}", engine)
+            if not df.empty:
+                return filter_by_company(df, company_id)
+        except Exception:
+            pass
+    return _fetch_from_base44(table, company_id)
+
+def _fetch_from_base44(url_attr, company_id=None):
+    url = getattr(settings, url_attr, None)
+    if not url:
+        return pd.DataFrame()
+    df = fetch_json_to_df(url, HEADERS)
+    if company_id and "company_id" in df.columns:
+        df = df[df["company_id"] == company_id]
+    return df
+```
+
+### Frontend fallback pattern
+```javascript
+// Always try python_layer first; fall back to Base44 if 404/empty
+async function fetchWithFallback(endpoint, base44Fn, companyId) {
+  try {
+    const res = await fetch(`${RAILWAY_URL}${endpoint}?company_id=${companyId}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) ? data.length > 0 : Object.keys(data).length > 0)
+        return data;
+    }
+  } catch (_) {}
+  // Fallback to Base44 live
+  return base44Fn();
+}
+```
+
+---
+
 ## Repository structure
 
 ```
@@ -491,7 +598,9 @@ Fix: add variables to Railway OR make them Optional[str] = None in settings.py.
 
 ### Never
 - Hardcode person_type values like "employee", "student", "vendor"
-- Query Base44 entities directly for analytics stat card values
+- Query Base44 entities directly for analytics stat card values when python_layer is available
+- Show 0 or empty on any stat card, chart, or ML feature if Base44 entities have data
+- Build any data-reading feature without a Base44 fallback
 - Create a new entity when Person/Enterprise/Product covers the use case
 - Change entity schema when only the import config needs updating
 - Return a plain array from a validate function
@@ -510,6 +619,8 @@ Fix: add variables to Railway OR make them Optional[str] = None in settings.py.
 - Use staleTime:0 + refetchOnMount:always on list pages
 - Add entityFetchFn to every BulkImportDialog
 - Make new settings.py fields Optional[str] = None
+- Implement three-tier fallback (analytics → raw → Base44 live) in every data-reading feature
+- Use PostgreSQL for analytics acceleration and clean data export — never as the sole data source
 
 ### Protected files — ask before modifying
 ```

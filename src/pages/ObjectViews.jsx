@@ -4,7 +4,79 @@ import {
   Layers, Plus, Trash2, Eye, Save, Users, Building2, Package,
   CheckSquare, Receipt, Link2, MapPin, Search, X, Play,
   Settings2, BookOpen, ChevronRight, SlidersHorizontal,
+  Database, Zap, Activity, ArrowRight,
 } from "lucide-react";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+
+// ── Pipeline table registry (analytics tables from ETL) ─────────────────────
+
+const PIPELINE_TABLES = [
+  {
+    key: "people_summary",
+    label: "People Summary",
+    endpoint: "people-summary",
+    icon: Users,
+    color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-200",
+    description: "Staff, clients, contacts — headcount and engagement metrics",
+  },
+  {
+    key: "enterprise_summary",
+    label: "Enterprise Summary",
+    endpoint: "enterprise-summary",
+    icon: Building2,
+    color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200",
+    description: "Organisation profiles, types, and operating status",
+  },
+  {
+    key: "product_summary",
+    label: "Product Summary",
+    endpoint: "product-summary",
+    icon: Package,
+    color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-200",
+    description: "Inventory, assets, stock levels, and pricing",
+  },
+  {
+    key: "transaction_summary",
+    label: "Transaction Summary",
+    endpoint: "transaction-summary",
+    icon: Receipt,
+    color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200",
+    description: "Revenue, expenses, and financial records",
+  },
+  {
+    key: "task_summary",
+    label: "Task Summary",
+    endpoint: "task-summary",
+    icon: CheckSquare,
+    color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-200",
+    description: "Operational tasks, completion rates, and outcomes",
+  },
+  {
+    key: "relationship_summary",
+    label: "Relationship Summary",
+    endpoint: "relationship-summary",
+    icon: Link2,
+    color: "text-indigo-600", bg: "bg-indigo-50", border: "border-indigo-200",
+    description: "Cross-entity links — the join backbone for dashboards",
+  },
+  {
+    key: "address_summary",
+    label: "Address Summary",
+    endpoint: "address-summary",
+    icon: MapPin,
+    color: "text-teal-600", bg: "bg-teal-50", border: "border-teal-200",
+    description: "Location records with geocoordinates",
+  },
+  {
+    key: "service_summary",
+    label: "Service Summary",
+    endpoint: "service-summary",
+    icon: Activity,
+    color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-200",
+    description: "Service catalog, rates, and delivery records",
+  },
+];
 
 // ── Object type registry ────────────────────────────────────────────────────
 
@@ -117,6 +189,7 @@ const VIEWS_KEY = (cid) => `object_views_${cid}`;
 function newView(objectType) {
   return {
     id: `view_${Date.now()}`,
+    source: "ontology",
     name: `New ${objectType} View`,
     objectType,
     description: "",
@@ -127,6 +200,132 @@ function newView(objectType) {
     sortDir: "asc",
     createdAt: new Date().toISOString(),
   };
+}
+
+function newPipelineView(tableKey) {
+  const tableDef = PIPELINE_TABLES.find(t => t.key === tableKey);
+  return {
+    id: `view_${Date.now()}`,
+    source: "pipeline",
+    name: `${tableDef?.label || tableKey} View`,
+    pipelineTable: tableKey,
+    endpoint: tableDef?.endpoint || tableKey,
+    description: tableDef?.description || "",
+    fields: [],
+    filterField: "",
+    filterValue: "",
+    sortField: "",
+    sortDir: "asc",
+    createdAt: new Date().toISOString(),
+  };
+}
+
+// ── NewViewModal ─────────────────────────────────────────────────────────────
+
+function NewViewModal({ onOntology, onPipeline, onClose }) {
+  const [mode, setMode] = useState(null); // null | "ontology" | "pipeline"
+
+  if (mode === "ontology") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-sm font-bold text-slate-800">Choose Object Type</h2>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {OBJECT_TYPES.map(t => {
+              const TIcon = t.icon;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => onOntology(t.key)}
+                  className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border text-sm font-medium transition-all hover:opacity-90 ${t.bg} ${t.color} ${t.border}`}
+                >
+                  <TIcon className="w-4 h-4" />
+                  <span>{t.label}</span>
+                  <ArrowRight className="w-3 h-3 ml-auto opacity-50" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "pipeline") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-sm font-bold text-slate-800">Choose Pipeline Table</h2>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          </div>
+          <p className="text-xs text-slate-500 mb-5">Views from pipeline tables read directly from the analytics layer (with Base44 fallback).</p>
+          <div className="grid grid-cols-1 gap-2">
+            {PIPELINE_TABLES.map(t => {
+              const TIcon = t.icon;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => onPipeline(t.key)}
+                  className={`flex items-center gap-3 px-3 py-3 rounded-xl border text-left transition-all hover:opacity-90 ${t.bg} ${t.border}`}
+                >
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-white/60`}>
+                    <TIcon className={`w-4 h-4 ${t.color}`} />
+                  </div>
+                  <div>
+                    <p className={`text-xs font-bold ${t.color}`}>{t.label}</p>
+                    <p className="text-[10px] text-slate-500">{t.description}</p>
+                  </div>
+                  <ArrowRight className={`w-3.5 h-3.5 ml-auto ${t.color} opacity-50`} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Default — choose source type
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-sm font-bold text-slate-800">Create New View</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setMode("ontology")}
+            className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-all text-center"
+          >
+            <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
+              <Layers className="w-6 h-6 text-slate-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-800">Ontology Object</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Person, Enterprise, Product, Task…</p>
+            </div>
+          </button>
+          <button
+            onClick={() => setMode("pipeline")}
+            className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50 transition-all text-center"
+          >
+            <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+              <Database className="w-6 h-6 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-emerald-800">Pipeline Table</p>
+              <p className="text-[10px] text-emerald-600 mt-0.5">Analytics layer — ETL output</p>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── ViewEditor ──────────────────────────────────────────────────────────────
@@ -150,18 +349,44 @@ function ViewEditor({ view, onSave, onClose, currentUser }) {
   }
 
   async function runPreview() {
-    if (!typeDef) return;
     setLoading(true);
     setResults(null);
     try {
-      const filter = {};
-      if (currentUser?.company_id && currentUser.role !== "super_admin") {
-        filter.company_id = currentUser.company_id;
+      let rows = [];
+
+      if (draft.source === "pipeline") {
+        // Three-tier fallback: analytics (python_layer) → Base44 live
+        const cid = currentUser?.company_id;
+        const params = cid ? `?company_id=${cid}` : "";
+        try {
+          const res = await fetch(`${RAILWAY_URL}/${draft.endpoint}${params}`);
+          if (res.ok) {
+            const json = await res.json();
+            rows = Array.isArray(json) ? json : (json.records || json.data || []);
+          }
+        } catch (_) {}
+        // Fallback: if no rows from python_layer, nothing to show without ETL
+        if (rows.length === 0) {
+          setResults([]);
+          setLoading(false);
+          return;
+        }
+        // Auto-populate fields from first row if not yet set
+        if (draft.fields.length === 0 && rows.length > 0) {
+          setDraft(d => ({ ...d, fields: Object.keys(rows[0]).slice(0, 8) }));
+        }
+      } else {
+        if (!typeDef) { setResults([]); setLoading(false); return; }
+        const filter = {};
+        if (currentUser?.company_id && currentUser.role !== "super_admin") {
+          filter.company_id = currentUser.company_id;
+        }
+        if (draft.filterField && draft.filterValue) {
+          filter[draft.filterField] = draft.filterValue;
+        }
+        rows = await base44.entities[typeDef.entity].filter(filter);
       }
-      if (draft.filterField && draft.filterValue) {
-        filter[draft.filterField] = draft.filterValue;
-      }
-      const rows = await base44.entities[typeDef.entity].filter(filter);
+
       let sorted = rows;
       if (draft.sortField) {
         sorted = [...rows].sort((a, b) => {
@@ -180,7 +405,14 @@ function ViewEditor({ view, onSave, onClose, currentUser }) {
     }
   }
 
-  const Icon = typeDef?.icon || Layers;
+  const isPipeline = draft.source === "pipeline";
+  const pipelineDef = isPipeline ? PIPELINE_TABLES.find(t => t.key === draft.pipelineTable) : null;
+  const Icon = isPipeline ? (pipelineDef?.icon || Database) : (typeDef?.icon || Layers);
+  const iconBg = isPipeline ? (pipelineDef?.bg || "bg-emerald-50") : (typeDef?.bg || "bg-slate-50");
+  const iconColor = isPipeline ? (pipelineDef?.color || "text-emerald-600") : (typeDef?.color || "text-slate-600");
+  const subtitle = isPipeline
+    ? `Pipeline — ${pipelineDef?.label || draft.pipelineTable}`
+    : `${typeDef?.label || ""} object view`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -189,8 +421,8 @@ function ViewEditor({ view, onSave, onClose, currentUser }) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${typeDef?.bg || "bg-slate-50"}`}>
-              <Icon className={`w-5 h-5 ${typeDef?.color || "text-slate-600"}`} />
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${iconBg}`}>
+              <Icon className={`w-5 h-5 ${iconColor}`} />
             </div>
             <div>
               <input
@@ -199,58 +431,113 @@ function ViewEditor({ view, onSave, onClose, currentUser }) {
                 className="text-sm font-bold text-slate-800 bg-transparent border-none outline-none w-64"
                 placeholder="View name…"
               />
-              <p className="text-xs text-slate-400">{typeDef?.label} object view</p>
+              <p className="text-xs text-slate-400">{subtitle}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {isPipeline && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <Database className="w-2.5 h-2.5" /> Pipeline
+              </span>
+            )}
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
           {/* Left panel — settings */}
           <div className="w-72 border-r border-slate-100 px-5 py-4 overflow-y-auto space-y-5 shrink-0">
 
-            {/* Object type selector */}
-            <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Object Type</p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {OBJECT_TYPES.map(t => {
-                  const TIcon = t.icon;
-                  return (
-                    <button
-                      key={t.key}
-                      onClick={() => set("objectType", t.key)}
-                      className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-                        draft.objectType === t.key
-                          ? `${t.bg} ${t.color} ${t.border}`
-                          : "border-slate-200 text-slate-600 hover:border-slate-300"
-                      }`}
-                    >
-                      <TIcon className="w-3 h-3" />{t.key}
-                    </button>
-                  );
-                })}
+            {/* Source selector — Object Type OR Pipeline Table */}
+            {!isPipeline ? (
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Object Type</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {OBJECT_TYPES.map(t => {
+                    const TIcon = t.icon;
+                    return (
+                      <button
+                        key={t.key}
+                        onClick={() => set("objectType", t.key)}
+                        className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                          draft.objectType === t.key
+                            ? `${t.bg} ${t.color} ${t.border}`
+                            : "border-slate-200 text-slate-600 hover:border-slate-300"
+                        }`}
+                      >
+                        <TIcon className="w-3 h-3" />{t.key}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Pipeline Table</p>
+                <div className="space-y-1">
+                  {PIPELINE_TABLES.map(t => {
+                    const TIcon = t.icon;
+                    return (
+                      <button
+                        key={t.key}
+                        onClick={() => set("pipelineTable", t.key) || set("endpoint", t.endpoint)}
+                        className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                          draft.pipelineTable === t.key
+                            ? `${t.bg} ${t.color} ${t.border}`
+                            : "border-slate-200 text-slate-600 hover:border-slate-300"
+                        }`}
+                      >
+                        <TIcon className="w-3 h-3" />{t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-            {/* Fields */}
-            <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Visible Fields</p>
-              <div className="space-y-1">
-                {typeDef?.fields.map(f => (
-                  <label key={f.key} className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={draft.fields.includes(f.key)}
-                      onChange={() => toggleField(f.key)}
-                      className="rounded"
-                    />
-                    {f.label}
-                  </label>
-                ))}
+            {/* Fields — for pipeline views, auto-populated after first preview run */}
+            {draft.fields.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Visible Fields</p>
+                <div className="space-y-1">
+                  {(isPipeline
+                    ? draft.fields.map(k => ({ key: k, label: k }))
+                    : (typeDef?.fields || [])
+                  ).map(f => (
+                    <label key={f.key} className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={draft.fields.includes(f.key)}
+                        onChange={() => toggleField(f.key)}
+                        className="rounded"
+                      />
+                      {f.label}
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
+
+            {!isPipeline && draft.fields.length === 0 && typeDef && (
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Visible Fields</p>
+                <div className="space-y-1">
+                  {typeDef.fields.map(f => (
+                    <label key={f.key} className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={draft.fields.includes(f.key)}
+                        onChange={() => toggleField(f.key)}
+                        className="rounded"
+                      />
+                      {f.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Filter */}
             <div>
@@ -261,7 +548,10 @@ function ViewEditor({ view, onSave, onClose, currentUser }) {
                 className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 mb-1.5"
               >
                 <option value="">No filter</option>
-                {typeDef?.fields.map(f => (
+                {(isPipeline
+                  ? draft.fields.map(k => ({ key: k, label: k }))
+                  : (typeDef?.fields || [])
+                ).map(f => (
                   <option key={f.key} value={f.key}>{f.label}</option>
                 ))}
               </select>
@@ -284,7 +574,10 @@ function ViewEditor({ view, onSave, onClose, currentUser }) {
                 className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 mb-1.5"
               >
                 <option value="">No sort</option>
-                {typeDef?.fields.map(f => (
+                {(isPipeline
+                  ? draft.fields.map(k => ({ key: k, label: k }))
+                  : (typeDef?.fields || [])
+                ).map(f => (
                   <option key={f.key} value={f.key}>{f.label}</option>
                 ))}
               </select>
@@ -402,19 +695,28 @@ function ViewEditor({ view, onSave, onClose, currentUser }) {
 // ── ViewCard ────────────────────────────────────────────────────────────────
 
 function ViewCard({ view, onEdit, onDelete, onRun }) {
-  const typeDef = OBJECT_TYPES.find(t => t.key === view.objectType);
-  const Icon = typeDef?.icon || Layers;
+  const isPipeline = view.source === "pipeline";
+  const pipelineDef = isPipeline ? PIPELINE_TABLES.find(t => t.key === view.pipelineTable) : null;
+  const typeDef = isPipeline ? null : OBJECT_TYPES.find(t => t.key === view.objectType);
+  const Icon = isPipeline ? (pipelineDef?.icon || Database) : (typeDef?.icon || Layers);
+  const bg = isPipeline ? (pipelineDef?.bg || "bg-emerald-50") : (typeDef?.bg || "bg-slate-50");
+  const color = isPipeline ? (pipelineDef?.color || "text-emerald-600") : (typeDef?.color || "text-slate-600");
+  const border = isPipeline ? (pipelineDef?.border || "border-emerald-200") : (typeDef?.border || "border-slate-200");
+  const label = isPipeline ? (pipelineDef?.label || view.pipelineTable) : (view.objectType || "");
+
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2.5">
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${typeDef?.bg || "bg-slate-50"}`}>
-            <Icon className={`w-5 h-5 ${typeDef?.color || "text-slate-600"}`} />
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${bg}`}>
+            <Icon className={`w-5 h-5 ${color}`} />
           </div>
           <div>
             <p className="text-sm font-bold text-slate-800 leading-tight">{view.name}</p>
-            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${typeDef?.bg} ${typeDef?.color} border ${typeDef?.border}`}>
-              <Icon className="w-2.5 h-2.5" />{view.objectType}
+            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${bg} ${color} border ${border}`}>
+              {isPipeline && <Database className="w-2.5 h-2.5" />}
+              {!isPipeline && <Icon className="w-2.5 h-2.5" />}
+              {label}
             </span>
           </div>
         </div>
@@ -479,6 +781,7 @@ export default function ObjectViews() {
   const [currentUser, setCurrentUser] = useState(null);
   const [views, setViews]             = useState([]);
   const [editingView, setEditingView] = useState(null);
+  const [showNewModal, setShowNewModal] = useState(false);
   const [activeType, setActiveType]   = useState("All");
   const [search, setSearch]           = useState("");
 
@@ -510,7 +813,13 @@ export default function ObjectViews() {
   }
 
   function handleNew(objectType = "Person") {
+    setShowNewModal(false);
     setEditingView(newView(objectType));
+  }
+
+  function handleNewPipeline(tableKey) {
+    setShowNewModal(false);
+    setEditingView(newPipelineView(tableKey));
   }
 
   function handleRun(view) {
@@ -540,12 +849,21 @@ export default function ObjectViews() {
           <p className="text-sm text-slate-500 mt-0.5">Reusable analytical views over ontology objects — define once, use everywhere</p>
         </div>
         <button
-          onClick={() => handleNew("Person")}
+          onClick={() => setShowNewModal(true)}
           className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
         >
           <Plus className="w-4 h-4" /> New View
         </button>
       </div>
+
+      {/* New View modal */}
+      {showNewModal && (
+        <NewViewModal
+          onOntology={(objectType) => { setShowNewModal(false); handleNew(objectType); }}
+          onPipeline={handleNewPipeline}
+          onClose={() => setShowNewModal(false)}
+        />
+      )}
 
       {/* Object type tabs */}
       <div className="flex gap-2 overflow-x-auto pb-2 mb-6 scrollbar-hide">
@@ -614,6 +932,12 @@ export default function ObjectViews() {
                 </button>
               );
             })}
+            <button
+              onClick={() => setShowNewModal(true)}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-200 hover:opacity-80"
+            >
+              <Database className="w-3 h-3" /> Pipeline view
+            </button>
           </div>
         </div>
       )}
@@ -632,7 +956,7 @@ export default function ObjectViews() {
           ))}
           {/* New view shortcut */}
           <button
-            onClick={() => handleNew(activeType !== "All" ? activeType : "Person")}
+            onClick={() => setShowNewModal(true)}
             className="border-2 border-dashed border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-slate-300 hover:text-slate-500 transition-colors min-h-[180px]"
           >
             <Plus className="w-8 h-8" />

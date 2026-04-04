@@ -40,9 +40,38 @@ function MLInsightsPanel({ currentUser, onBack }) {
   const { data: rawStats = {} } = useQuery({
     queryKey: ["raw-stats", companyId],
     queryFn: async () => {
-      const r = await fetch(`${RAILWAY_URL}/raw/stats`, { headers: RAIL_HEADERS });
-      return r.json();
+      try {
+        const r = await fetch(`${RAILWAY_URL}/raw/stats`, { headers: RAIL_HEADERS });
+        if (r.ok) {
+          const data = await r.json();
+          if (data && data.tables && Object.keys(data.tables).length > 0) return data;
+        }
+      } catch (_) {}
+      // Base44 fallback — derive counts from live entities
+      try {
+        const [people, enterprises, products, transactions, tasks] = await Promise.allSettled([
+          base44.entities.Person.filter({ company_id: companyId }),
+          base44.entities.Enterprise.filter({ company_id: companyId }),
+          base44.entities.Product.filter({ company_id: companyId }),
+          base44.entities.Transaction.filter({ company_id: companyId }),
+          base44.entities.Task.filter({ company_id: companyId }),
+        ]);
+        return {
+          tables: {
+            people:       people.status      === "fulfilled" ? people.value.length      : 0,
+            enterprises:  enterprises.status === "fulfilled" ? enterprises.value.length : 0,
+            products:     products.status    === "fulfilled" ? products.value.length    : 0,
+            transactions: transactions.status=== "fulfilled" ? transactions.value.length: 0,
+            tasks:        tasks.status       === "fulfilled" ? tasks.value.length       : 0,
+          },
+          source: "base44",
+        };
+      } catch (_) {
+        return {};
+      }
     },
+    enabled: !!companyId,
+    staleTime: 0,
   });
 
   const MODEL_META = {
@@ -93,7 +122,8 @@ function MLInsightsPanel({ currentUser, onBack }) {
       {rawStats.tables && (
         <div>
           <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-            <Database className="w-4 h-4 text-slate-400" /> Data in python_layer
+            <Database className="w-4 h-4 text-slate-400" />
+            {rawStats.source === "base44" ? "Live Data (Base44)" : "Data in python_layer"}
           </h3>
           <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
             {Object.entries(rawStats.tables || {}).map(([table, count]) => (

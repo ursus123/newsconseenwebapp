@@ -32,6 +32,78 @@ def _run(sql: str, params: dict) -> list[dict]:
         return []
 
 
+# ── Base44 live-data helpers (fallback when analytics tables are empty) ───────
+#
+# Each _b44_* function calls the same extract_*() used by the ETL pipeline.
+# extract_*() fetches from Base44 live — so this is always current data.
+# Tenant isolation: filter DataFrame by company_id after fetch.
+
+def _b44_people(company_id: str):
+    """Return Base44 people as a DataFrame, filtered to company_id."""
+    try:
+        from etl.people import extract_people
+        df = extract_people()
+        if not df.empty and company_id:
+            df = df[df["company_id"] == company_id].copy()
+        return df
+    except Exception as e:
+        logger.warning("_b44_people fallback failed: %s", e)
+        import pandas as pd
+        return pd.DataFrame()
+
+
+def _b44_enterprises(company_id: str):
+    try:
+        from etl.enterprises import extract_enterprises
+        df = extract_enterprises()
+        if not df.empty and company_id:
+            df = df[df["company_id"] == company_id].copy()
+        return df
+    except Exception as e:
+        logger.warning("_b44_enterprises fallback failed: %s", e)
+        import pandas as pd
+        return pd.DataFrame()
+
+
+def _b44_transactions(company_id: str):
+    try:
+        from etl.transactions import extract_transactions
+        df = extract_transactions()
+        if not df.empty and company_id:
+            df = df[df["company_id"] == company_id].copy()
+        return df
+    except Exception as e:
+        logger.warning("_b44_transactions fallback failed: %s", e)
+        import pandas as pd
+        return pd.DataFrame()
+
+
+def _b44_tasks(company_id: str):
+    try:
+        from etl.tasks import extract_tasks
+        df = extract_tasks()
+        if not df.empty and company_id:
+            df = df[df["company_id"] == company_id].copy()
+        return df
+    except Exception as e:
+        logger.warning("_b44_tasks fallback failed: %s", e)
+        import pandas as pd
+        return pd.DataFrame()
+
+
+def _b44_products(company_id: str):
+    try:
+        from etl.products import extract_products
+        df = extract_products()
+        if not df.empty and company_id:
+            df = df[df["company_id"] == company_id].copy()
+        return df
+    except Exception as e:
+        logger.warning("_b44_products fallback failed: %s", e)
+        import pandas as pd
+        return pd.DataFrame()
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # OPERATOR CONTEXT
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -64,15 +136,29 @@ def get_operator_context(company_id: str) -> dict:
     if rows:
         ctx = rows[0]
         return {
-            "name":            ctx.get("name") or "this organisation",
-            "enterprise_type": ctx.get("enterprise_type") or "commercial",
+            "name":             ctx.get("name") or "this organisation",
+            "enterprise_type":  ctx.get("enterprise_type") or "commercial",
             "operating_status": ctx.get("operating_status") or "active",
-            "phone":           ctx.get("phone"),
-            "email":           ctx.get("email"),
-            "website":         ctx.get("website"),
+            "phone":            ctx.get("phone"),
+            "email":            ctx.get("email"),
+            "website":          ctx.get("website"),
         }
 
-    # Fallback when no enterprise record exists yet
+    # Base44 live fallback — analytics table empty (ETL not yet run)
+    df = _b44_enterprises(company_id)
+    if not df.empty:
+        # Prefer the root/headquarters record; otherwise take the first row
+        root = df[df.get("enterprise_tier", "").eq("headquarters")] if "enterprise_tier" in df.columns else df.iloc[:0]
+        row = root.iloc[0] if not root.empty else df.iloc[0]
+        return {
+            "name":             row.get("enterprise_name") or row.get("name") or "this organisation",
+            "enterprise_type":  row.get("enterprise_type") or "commercial",
+            "operating_status": row.get("operating_status") or "active",
+            "phone":            row.get("phone"),
+            "email":            row.get("email"),
+            "website":          row.get("website"),
+        }
+
     return {
         "name":            "this organisation",
         "enterprise_type": "commercial",
@@ -114,15 +200,30 @@ def get_people_summary(company_id: str, person_type: Optional[str] = None) -> di
     """
     rows = _run(sql, {"company_id": company_id, "person_type": person_type})
 
-    # Aggregate totals across person_type groups
+    if not rows:
+        # Base44 live fallback
+        df = _b44_people(company_id)
+        if not df.empty:
+            if person_type and "person_type" in df.columns:
+                df = df[df["person_type"] == person_type]
+            for col in ("person_type", "status"):
+                if col not in df.columns:
+                    df[col] = "unknown"
+            grouped = df.groupby(["person_type", "status"]).size().reset_index(name="count")
+            rows = grouped.to_dict(orient="records")
+            for r in rows:
+                r["active_count"]   = r["count"] if r.get("status") == "active" else 0
+                r["inactive_count"] = r["count"] if r.get("status") != "active" else 0
+            logger.info("get_people_summary: using Base44 fallback (%d rows)", len(df))
+
     totals = {}
     for r in rows:
-        pt = r["person_type"] or "unknown"
+        pt = r.get("person_type") or "unknown"
         if pt not in totals:
             totals[pt] = {"total": 0, "active": 0, "inactive": 0}
-        totals[pt]["total"]    += r["count"] or 0
-        totals[pt]["active"]   += r["active_count"] or 0
-        totals[pt]["inactive"] += r["inactive_count"] or 0
+        totals[pt]["total"]    += r.get("count") or 0
+        totals[pt]["active"]   += r.get("active_count") or 0
+        totals[pt]["inactive"] += r.get("inactive_count") or 0
 
     return {
         "summary":      totals,
@@ -155,8 +256,19 @@ def get_person_churn_risk(company_id: str, top_n: int = 10) -> dict:
         LIMIT :top_n
     """
     rows = _run(sql, {"company_id": company_id, "top_n": top_n})
-    total = sum(r["count"] or 0 for r in rows)
 
+    if not rows:
+        df = _b44_people(company_id)
+        if not df.empty and "status" in df.columns:
+            inactive = df[df["status"] == "inactive"]
+            if "person_type" in inactive.columns:
+                grouped = inactive.groupby("person_type").size().reset_index(name="count")
+                rows = grouped.nlargest(top_n, "count").to_dict(orient="records")
+                for r in rows:
+                    r["inactive_count"] = r["count"]
+            logger.info("get_person_churn_risk: using Base44 fallback (%d inactive)", len(inactive))
+
+    total = sum(r.get("count") or 0 for r in rows)
     return {
         "at_risk_people": rows,
         "count":          total,
@@ -190,8 +302,22 @@ def get_staff_availability(
         GROUP BY person_type, status
     """
     rows = _run(sql, {"company_id": company_id})
-    total_active = sum(r["active_count"] or 0 for r in rows)
 
+    if not rows:
+        df = _b44_people(company_id)
+        if not df.empty:
+            from config.taxonomy import PERSON_TYPE_SETS
+            staff_types = PERSON_TYPE_SETS.get("staff", {"staff"})
+            if "person_type" in df.columns:
+                staff = df[df["person_type"].isin(staff_types)]
+            else:
+                staff = df
+            active_staff = staff[staff["status"] == "active"] if "status" in staff.columns else staff
+            rows = [{"person_type": "staff", "status": "active",
+                     "count": len(active_staff), "active_count": len(active_staff)}]
+            logger.info("get_staff_availability: using Base44 fallback (%d active staff)", len(active_staff))
+
+    total_active = sum(r.get("active_count") or 0 for r in rows)
     return {
         "by_availability": {"active": rows},
         "available_count": total_active,
@@ -242,10 +368,34 @@ def get_transaction_summary(
         "transaction_type": transaction_type,
     })
 
-    revenue_rows = [r for r in rows if r.get("is_revenue")]
-    expense_rows = [r for r in rows if r.get("is_expense")]
-    total_revenue = sum(r["total_amount"] or 0 for r in revenue_rows)
-    total_unpaid  = sum(r["unpaid_amount"] or 0 for r in rows)
+    if not rows:
+        df = _b44_transactions(company_id)
+        if not df.empty:
+            if transaction_type and "transaction_type" in df.columns:
+                df = df[df["transaction_type"] == transaction_type]
+            from config.taxonomy import REVENUE_TYPES, EXPENSE_TYPES
+            revenue_types = REVENUE_TYPES if "REVENUE_TYPES" in dir() else {"invoice", "payment", "sale"}
+            expense_types = EXPENSE_TYPES if "EXPENSE_TYPES" in dir() else {"expense", "bill", "purchase"}
+            for col in ("transaction_type", "status", "amount"):
+                if col not in df.columns:
+                    df[col] = None
+            grouped = df.groupby(["transaction_type", "status"]).agg(
+                count=("id", "count"),
+                total_amount=("amount", "sum"),
+            ).reset_index()
+            rows = grouped.to_dict(orient="records")
+            for r in rows:
+                tt = (r.get("transaction_type") or "").lower()
+                r["is_revenue"]       = tt in revenue_types
+                r["is_expense"]       = tt in expense_types
+                r["unpaid_amount"]    = 0
+                r["revenue_last_30d"] = r["count"] if r.get("is_revenue") else 0
+                r["expense_last_30d"] = r["count"] if r.get("is_expense") else 0
+            logger.info("get_transaction_summary: using Base44 fallback (%d rows)", len(df))
+
+    revenue_rows  = [r for r in rows if r.get("is_revenue")]
+    total_revenue = sum(r.get("total_amount") or 0 for r in revenue_rows)
+    total_unpaid  = sum(r.get("unpaid_amount") or 0 for r in rows)
 
     return {
         "monthly_breakdown": rows,
@@ -282,11 +432,28 @@ def get_overdue_invoices(company_id: str, top_n: int = 20) -> dict:
         LIMIT :top_n
     """
     rows = _run(sql, {"company_id": company_id, "top_n": top_n})
-    total_outstanding = sum(r["total_outstanding"] or 0 for r in rows)
 
+    if not rows:
+        df = _b44_transactions(company_id)
+        if not df.empty:
+            overdue_statuses = {"overdue", "unpaid", "outstanding"}
+            revenue_types    = {"invoice", "sale", "payment_due"}
+            mask = (
+                df.get("status", "").isin(overdue_statuses) |
+                (df.get("status", "") == "posted")
+            ) if "status" in df.columns else df.index.isin([])
+            if "transaction_type" in df.columns:
+                mask = mask & df["transaction_type"].isin(revenue_types)
+            overdue_df = df[mask] if mask.any() else df.head(0)
+            total_amt = float(overdue_df["amount"].sum()) if "amount" in overdue_df.columns else 0.0
+            rows = [{"transaction_type": "invoice", "count": len(overdue_df),
+                     "total_outstanding": total_amt}] if not overdue_df.empty else []
+            logger.info("get_overdue_invoices: using Base44 fallback (%d overdue)", len(overdue_df))
+
+    total_outstanding = sum(r.get("total_outstanding") or 0 for r in rows)
     return {
         "overdue_invoices":  rows,
-        "count":             sum(r["count"] or 0 for r in rows),
+        "count":             sum(r.get("count") or 0 for r in rows),
         "total_outstanding": round(total_outstanding, 2),
     }
 
@@ -330,9 +497,42 @@ def get_task_summary(
         "days_back":  days_back,
     })
 
-    total     = sum(r["total_tasks"]     or 0 for r in rows)
-    completed = sum(r["completed_tasks"] or 0 for r in rows)
-    overdue   = sum(r["overdue_tasks"]   or 0 for r in rows)
+    if not rows:
+        df = _b44_tasks(company_id)
+        if not df.empty:
+            if task_type and "task_type" in df.columns:
+                df = df[df["task_type"] == task_type]
+            for col in ("task_type", "status"):
+                if col not in df.columns:
+                    df[col] = "unknown"
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            def _is_overdue(row):
+                if row.get("status") in ("completed", "cancelled"):
+                    return False
+                due = row.get("due_date")
+                if due:
+                    try:
+                        from dateutil.parser import parse
+                        return parse(str(due)).replace(tzinfo=timezone.utc) < now
+                    except Exception:
+                        pass
+                return False
+            df["_overdue"] = df.apply(_is_overdue, axis=1)
+            grouped = df.groupby(["task_type", "status"]).agg(
+                total_tasks=("id", "count"),
+                overdue_tasks=("_overdue", "sum"),
+            ).reset_index()
+            grouped["completed_tasks"] = grouped.apply(
+                lambda r: r["total_tasks"] if r["status"] == "completed" else 0, axis=1)
+            grouped["completion_rate_pct"] = grouped.apply(
+                lambda r: 100.0 if r["status"] == "completed" else 0.0, axis=1)
+            rows = grouped.to_dict(orient="records")
+            logger.info("get_task_summary: using Base44 fallback (%d rows)", len(df))
+
+    total     = sum(r.get("total_tasks")     or 0 for r in rows)
+    completed = sum(r.get("completed_tasks") or 0 for r in rows)
+    overdue   = sum(r.get("overdue_tasks")   or 0 for r in rows)
     rate      = round(completed / total * 100, 1) if total > 0 else 0
 
     return {
@@ -383,6 +583,23 @@ def get_task_outcomes(
         "task_type":  task_type,
         "days_back":  days_back,
     })
+
+    if not rows:
+        df = _b44_tasks(company_id)
+        if not df.empty:
+            if task_type and "task_type" in df.columns:
+                df = df[df["task_type"] == task_type]
+            for col in ("status", "task_type"):
+                if col not in df.columns:
+                    df[col] = "unknown"
+            grouped = df.groupby(["status", "task_type"]).size().reset_index(name="count")
+            total_all = len(df)
+            grouped["completed"]         = grouped.apply(lambda r: r["count"] if r["status"] == "completed" else 0, axis=1)
+            grouped["overdue"]           = 0
+            grouped["completion_rate_pct"] = grouped.apply(lambda r: 100.0 if r["status"] == "completed" else 0.0, axis=1)
+            grouped["pct_of_total"]      = grouped["count"].apply(lambda c: round(c / total_all * 100, 1) if total_all else 0)
+            rows = grouped.to_dict(orient="records")
+            logger.info("get_task_outcomes: using Base44 fallback (%d rows)", len(df))
 
     completed = sum(r.get("completed", 0) or 0 for r in rows)
     overdue   = sum(r.get("overdue",    0) or 0 for r in rows)
@@ -438,6 +655,44 @@ def get_product_summary(
     """
     rows = _run(sql, {"company_id": company_id, "item_type": item_type})
 
+    if not rows:
+        df = _b44_products(company_id)
+        if not df.empty:
+            if item_type and "item_type" in df.columns:
+                df = df[df["item_type"] == item_type]
+            for col in ("item_type", "status", "stock_quantity", "min_stock_level", "unit_price"):
+                if col not in df.columns:
+                    df[col] = 0 if col in ("stock_quantity", "min_stock_level", "unit_price") else "unknown"
+            from datetime import datetime, timezone, timedelta
+            now = datetime.now(timezone.utc)
+            def _days_to_expiry(val):
+                if not val:
+                    return None
+                try:
+                    from dateutil.parser import parse
+                    return (parse(str(val)).replace(tzinfo=timezone.utc) - now).days
+                except Exception:
+                    return None
+            if "expiry_date" in df.columns:
+                df["_days_exp"] = df["expiry_date"].apply(_days_to_expiry)
+            else:
+                df["_days_exp"] = None
+            df["_low_stock"]  = (df["stock_quantity"] > 0) & (df["min_stock_level"] > 0) & (df["stock_quantity"] <= df["min_stock_level"])
+            df["_out_stock"]  = df["stock_quantity"] == 0
+            df["_exp7"]       = df["_days_exp"].apply(lambda d: d is not None and 0 <= d <= 7)
+            df["_exp30"]      = df["_days_exp"].apply(lambda d: d is not None and 0 <= d <= 30)
+            grouped = df.groupby(["item_type", "status"]).agg(
+                total_products=("id", "count"),
+                total_stock=("stock_quantity", "sum"),
+                avg_price=("unit_price", "mean"),
+                low_stock_count=("_low_stock", "sum"),
+                out_of_stock_count=("_out_stock", "sum"),
+                expiring_7d_count=("_exp7", "sum"),
+                expiring_30d_count=("_exp30", "sum"),
+            ).reset_index()
+            rows = grouped.to_dict(orient="records")
+            logger.info("get_product_summary: using Base44 fallback (%d products)", len(df))
+
     total_low_stock    = sum(r.get("low_stock_count",    0) or 0 for r in rows)
     total_out_of_stock = sum(r.get("out_of_stock_count", 0) or 0 for r in rows)
     total_expiring_7d  = sum(r.get("expiring_7d_count",  0) or 0 for r in rows)
@@ -490,6 +745,22 @@ def get_enterprise_overview(company_id: str) -> dict:
     """
     rows = _run(sql, {"company_id": company_id})
 
+    if not rows:
+        df = _b44_enterprises(company_id)
+        if not df.empty:
+            for col in ("enterprise_type", "operating_status", "status"):
+                if col not in df.columns:
+                    df[col] = "unknown"
+            # Detect root: headquarters tier or first row
+            is_root_mask = df.get("enterprise_tier", "").eq("headquarters") if "enterprise_tier" in df.columns else df.index.isin([df.index[0]])
+            df["is_root"]   = is_root_mask
+            df["is_active"] = df["status"].eq("active") if "status" in df.columns else True
+            rows = df[[c for c in (
+                "id", "enterprise_name", "enterprise_type", "operating_status",
+                "status", "is_active", "is_root", "parent_id",
+            ) if c in df.columns]].rename(columns={"enterprise_name": "name"}).to_dict(orient="records")
+            logger.info("get_enterprise_overview: using Base44 fallback (%d enterprises)", len(df))
+
     active_count = sum(1 for r in rows if r.get("is_active"))
     root_ents    = [r for r in rows if r.get("is_root")]
     branches     = [r for r in rows if not r.get("is_root")]
@@ -526,6 +797,19 @@ def get_network_overview(company_id: str) -> dict:
         ORDER BY is_root DESC, name
     """
     enterprises = _run(ent_sql, {"company_id": company_id})
+    if not enterprises:
+        df_ent = _b44_enterprises(company_id)
+        if not df_ent.empty:
+            for col in ("enterprise_type", "operating_status", "status"):
+                if col not in df_ent.columns:
+                    df_ent[col] = "unknown"
+            is_root_mask = df_ent.get("enterprise_tier", "").eq("headquarters") if "enterprise_tier" in df_ent.columns else df_ent.index.isin([df_ent.index[0]] if not df_ent.empty else [])
+            df_ent["is_root"]   = is_root_mask
+            df_ent["is_active"] = df_ent["status"].eq("active") if "status" in df_ent.columns else True
+            enterprises = df_ent[[c for c in (
+                "enterprise_name", "enterprise_type", "operating_status", "is_active", "is_root",
+            ) if c in df_ent.columns]].rename(columns={"enterprise_name": "name"}).to_dict(orient="records")
+            logger.info("get_network_overview: enterprises from Base44 fallback (%d)", len(enterprises))
 
     # People totals
     people_sql = """
@@ -543,6 +827,15 @@ def get_network_overview(company_id: str) -> dict:
         GROUP BY person_type
     """
     people = _run(people_sql, {"company_id": company_id})
+    if not people:
+        df_p = _b44_people(company_id)
+        if not df_p.empty and "person_type" in df_p.columns:
+            grp = df_p.groupby("person_type").agg(
+                total=("id", "count"),
+                active=("status", lambda s: (s == "active").sum()),
+            ).reset_index()
+            people = grp.to_dict(orient="records")
+            logger.info("get_network_overview: people from Base44 fallback (%d groups)", len(people))
 
     # Task totals
     task_sql = """
@@ -560,6 +853,15 @@ def get_network_overview(company_id: str) -> dict:
           )
     """
     tasks = _run(task_sql, {"company_id": company_id})
+    if not tasks:
+        df_t = _b44_tasks(company_id)
+        if not df_t.empty:
+            total = len(df_t)
+            completed = int((df_t.get("status", "") == "completed").sum()) if "status" in df_t.columns else 0
+            rate = round(completed / total * 100, 1) if total else 0
+            tasks = [{"total_tasks": total, "completed_tasks": completed,
+                      "overdue_tasks": 0, "avg_completion_rate": rate}]
+            logger.info("get_network_overview: tasks from Base44 fallback (total=%d)", total)
 
     # Transaction totals
     tx_sql = """
@@ -577,6 +879,18 @@ def get_network_overview(company_id: str) -> dict:
           )
     """
     transactions = _run(tx_sql, {"company_id": company_id})
+    if not transactions:
+        df_tx = _b44_transactions(company_id)
+        if not df_tx.empty:
+            revenue_types = {"invoice", "sale", "payment_due", "payment"}
+            if "transaction_type" in df_tx.columns:
+                rev_df = df_tx[df_tx["transaction_type"].isin(revenue_types)]
+            else:
+                rev_df = df_tx
+            total_rev = float(rev_df["amount"].sum()) if "amount" in rev_df.columns else 0.0
+            transactions = [{"total_transactions": len(rev_df),
+                              "total_revenue": total_rev, "outstanding_amount": 0.0}]
+            logger.info("get_network_overview: transactions from Base44 fallback (total=%d)", len(rev_df))
 
     task_totals = tasks[0] if tasks else {}
     tx_totals   = transactions[0] if transactions else {}

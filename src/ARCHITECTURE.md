@@ -217,6 +217,92 @@ aggregations, trends, and cross-entity queries. Running analytical queries direc
 against an operational system degrades performance for both. The ETL separates the
 concerns cleanly.
 
+---
+
+## 8. The Base44 Fallback Doctrine
+
+**This is a mandatory architectural rule. Every feature that reads data must follow it.**
+
+### The data flow
+
+```
+Base44 (Layer 1)
+   │  forms write master data here
+   │  ETL pulls from here on every mutation
+   ▼
+python_layer (Layer 2)
+   │  GET /people-summary → extract_people() from Base44 live → return JSON
+   │  POST /load/people-summary → ETL write to PostgreSQL analytics.*
+   │  GET /raw/{entity} → read from PostgreSQL raw.* schema
+   ▼
+Frontend / Intelligence (Layer 3)
+   │  reads from python_layer
+   │  if python_layer unreachable or returns empty → must fall back to Base44
+   ▼
+User sees complete data always
+```
+
+**Key fact:** python_layer GET summary endpoints (`/people-summary`, `/enterprise-summary`, etc.)
+already call `extract_*()` from Base44 live on every request — they do NOT read from PostgreSQL.
+PostgreSQL is only written to by the POST `/load/*` ETL endpoints, and read by the analytics
+Query Builder tables (`analytics_*`).
+
+### When does data go missing?
+
+1. Railway is cold-starting or unreachable → GET requests fail → frontend gets `[]`
+2. A user enters new data in Base44 and goes to the dashboard immediately — before python_layer
+   responds, the frontend has `[]` from a failed or slow request
+3. Query Builder queries `analytics_people` or `raw_people` — if ETL has not run, these
+   PostgreSQL tables are empty even though Base44 has data
+
+### The mandatory fallback pattern
+
+**Every data-reading feature must implement this chain:**
+
+```
+Tier 1: Try python_layer endpoint
+         ↓ if empty or unreachable
+Tier 2: Fall back to Base44 entities directly (already loaded or fetched live)
+         ↓ (never show 0 if Base44 has data)
+Tier 3: Show empty state only if Base44 also returns nothing
+```
+
+### Frontend implementation rule
+
+```javascript
+// WRONG — shows 0 whenever Railway is slow or unreachable
+const totalPeople = peopleSummary.reduce((sum, r) => sum + (r.total_count || 0), 0);
+
+// CORRECT — falls back to already-loaded Base44 entities when summary is empty
+const totalPeople = peopleSummary.length > 0
+  ? peopleSummary.reduce((sum, r) => sum + (r.total_count || 0), 0)
+  : people.length;  // people = base44.entities.Person already loaded
+```
+
+### Query Builder rule
+
+When `analytics_*` or `raw_*` table returns empty from python_layer, fall back to
+the equivalent Base44 entity:
+
+```javascript
+// analytics_people / raw_people empty → base44.entities.Person.list()
+// analytics_enterprises / raw_enterprises empty → base44.entities.Enterprise.list()
+// etc.
+```
+
+### This applies to ALL features without exception
+
+- Dashboard stat cards ✓
+- Query Builder analytics_* and raw_* tables ✓
+- Reports / Charts ✓
+- Market Intelligence ML models ✓
+- Copilot tool queries ✓
+- Object Views pipeline tables ✓
+- Any future feature reading from python_layer ✓
+
+PostgreSQL is for clean data export to exterior databases and for analytical performance
+acceleration. It is never the sole data source. Base44 is always the fallback.
+
 ### Why does taxonomy normalization happen in the ETL and API?
 
 Because the frontend cannot be trusted to normalize consistently across every

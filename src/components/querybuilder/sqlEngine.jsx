@@ -375,11 +375,25 @@ export async function fetchAllAnalytics(companyId) {
   return results;
 }
 
+// Maps raw table entity name → Base44 entity key (for fallback)
+const RAW_TO_BASE44 = {
+  people:        "Person",
+  enterprises:   "Enterprise",
+  products:      "Product",
+  tasks:         "Task",
+  transactions:  "Transaction",
+  services:      "Service",
+  relationships: "Relationship",
+  addresses:     "Address",
+};
+
 async function fetchRawTable(name, companyId) {
   const cacheKey = companyId ? `${name}__${companyId}` : name;
   if (rawCache[cacheKey]) return rawCache[cacheKey];
   const cfg = RAW_TABLES[name];
   if (!cfg) return [];
+
+  // Tier 1 — python_layer raw.* schema
   try {
     const params = new URLSearchParams({ limit: "1000" });
     if (companyId) params.set("company_id", companyId);
@@ -387,34 +401,77 @@ async function fetchRawTable(name, companyId) {
       `${RAILWAY_BASE}/raw/${cfg.entity}?${params}`,
       { headers: RAILWAY_HEADERS }
     );
-    if (!res.ok) return [];
-    const data = await res.json();
-    const rows = Array.isArray(data) ? data : (data.data || data.results || []);
-    rawCache[cacheKey] = rows;
-    return rows;
-  } catch {
-    return [];
+    if (res.ok) {
+      const data = await res.json();
+      const rows = Array.isArray(data) ? data : (data.data || data.results || []);
+      if (rows.length > 0) {
+        rawCache[cacheKey] = rows;
+        return rows;
+      }
+    }
+  } catch { /* fall through */ }
+
+  // Tier 2 — Base44 live fallback
+  const entityKey = RAW_TO_BASE44[cfg.entity];
+  if (entityKey && base44.entities[entityKey]) {
+    try {
+      const filter = companyId ? { company_id: companyId } : {};
+      const rows = await base44.entities[entityKey].filter(filter);
+      if (rows.length > 0) {
+        rawCache[cacheKey] = rows;
+        return rows;
+      }
+    } catch { /* return empty */ }
   }
+
+  return [];
 }
+
+// Maps analytics table name → raw table name (for cascading fallback)
+const ANALYTICS_TO_RAW = {
+  analytics_people:        "raw_people",
+  analytics_enterprises:   "raw_enterprises",
+  analytics_products:      "raw_products",
+  analytics_tasks:         "raw_tasks",
+  analytics_transactions:  "raw_transactions",
+  analytics_services:      "raw_services",
+  analytics_relationships: "raw_relationships",
+  analytics_addresses:     "raw_addresses",
+};
 
 async function fetchAnalyticsTable(name, companyId) {
   const cacheKey = companyId ? `${name}__${companyId}` : name;
   if (analyticsCache[cacheKey]) return analyticsCache[cacheKey];
   const cfg = ANALYTICS_TABLES[name];
   if (!cfg) return [];
+
+  // Tier 1 — python_layer analytics.* (GET endpoint fetches Base44 live and transforms)
   try {
     const url = companyId
       ? `${RAILWAY_BASE}${cfg.endpoint}?company_id=${encodeURIComponent(companyId)}`
       : `${RAILWAY_BASE}${cfg.endpoint}`;
     const res = await fetch(url, { headers: RAILWAY_HEADERS });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const rows = Array.isArray(data) ? data : (data.data || data.results || []);
-    analyticsCache[cacheKey] = rows;
-    return rows;
-  } catch {
-    return [];
+    if (res.ok) {
+      const data = await res.json();
+      const rows = Array.isArray(data) ? data : (data.data || data.results || []);
+      if (rows.length > 0) {
+        analyticsCache[cacheKey] = rows;
+        return rows;
+      }
+    }
+  } catch { /* fall through */ }
+
+  // Tier 2 — raw table fallback (includes Base44 live fallback inside fetchRawTable)
+  const rawName = ANALYTICS_TO_RAW[name];
+  if (rawName) {
+    const rows = await fetchRawTable(rawName, companyId);
+    if (rows.length > 0) {
+      analyticsCache[cacheKey] = rows;
+      return rows;
+    }
   }
+
+  return [];
 }
 
 // ── parseWhere helper for virtual tables ───────────────────────────────────

@@ -348,20 +348,55 @@ function AdminDashboard({ user }) {
     enabled: !!companyId,
   });
 
-  // Aggregations derived from python_layer summaries
-  const overdueCount = taskSummary.reduce((sum, row) => sum + (row.overdue_count || 0), 0);
-  const lowStockCount = productSummary.reduce((sum, row) => sum + (row.items_below_reorder || 0), 0);
-  const draftTxCount = transactionSummary.reduce((sum, row) => sum + (row.draft_count || 0), 0);
+  // Aggregations — python_layer summaries first, Base44 entities as fallback.
+  // When Railway is unreachable or cold-starting, summaries return [].
+  // Base44 entities (people, tasks, products, transactions) are already loaded above.
+  const _useSummary = {
+    people:       peopleSummary.length > 0,
+    tasks:        taskSummary.length > 0,
+    products:     productSummary.length > 0,
+    transactions: transactionSummary.length > 0,
+  };
 
-  const activeStaff = peopleSummary.filter(row => row.person_type === "staff").reduce((sum, row) => sum + (row.active_count || 0), 0);
-  const activeClients = peopleSummary.filter(row => row.person_type === "client").reduce((sum, row) => sum + (row.active_count || 0), 0);
-  const totalPeople = peopleSummary.reduce((sum, row) => sum + (row.total_count || 0), 0);
-  const totalProducts = productSummary.reduce((sum, row) => sum + (row.total_count || 0), 0);
-  const activeProducts = productSummary.reduce((sum, row) => sum + (row.active_count || 0), 0);
-  const totalTasks = taskSummary.reduce((sum, row) => sum + (row.total_count || 0), 0);
-  const openTasks = taskSummary.reduce((sum, row) => sum + (row.open_count || 0), 0);
-  const totalTransactions = transactionSummary.reduce((sum, row) => sum + (row.total_count || 0), 0);
-  const postedTransactions = transactionSummary.reduce((sum, row) => sum + (row.posted_count || 0), 0);
+  const totalPeople      = _useSummary.people
+    ? peopleSummary.reduce((s, r) => s + (r.total_count || 0), 0)
+    : people.length;
+  const activeStaff      = _useSummary.people
+    ? peopleSummary.filter(r => r.person_type === "staff").reduce((s, r) => s + (r.active_count || 0), 0)
+    : people.filter(p => p.person_type === "staff" && p.status === "active").length;
+  const activeClients    = _useSummary.people
+    ? peopleSummary.filter(r => r.person_type === "client").reduce((s, r) => s + (r.active_count || 0), 0)
+    : people.filter(p => p.person_type === "client" && p.status === "active").length;
+
+  const totalProducts    = _useSummary.products
+    ? productSummary.reduce((s, r) => s + (r.total_count || 0), 0)
+    : products.length;
+  const activeProducts   = _useSummary.products
+    ? productSummary.reduce((s, r) => s + (r.active_count || 0), 0)
+    : products.filter(p => p.status === "active").length;
+  const lowStockCount    = _useSummary.products
+    ? productSummary.reduce((s, r) => s + (r.items_below_reorder || 0), 0)
+    : products.filter(p => p.min_stock_level > 0 && (p.stock_quantity || 0) <= p.min_stock_level).length;
+
+  const totalTasks       = _useSummary.tasks
+    ? taskSummary.reduce((s, r) => s + (r.total_count || 0), 0)
+    : tasks.length;
+  const openTasks        = _useSummary.tasks
+    ? taskSummary.reduce((s, r) => s + (r.open_count || 0), 0)
+    : tasks.filter(t => t.status !== "completed" && t.status !== "cancelled").length;
+  const overdueCount     = _useSummary.tasks
+    ? taskSummary.reduce((s, r) => s + (r.overdue_count || 0), 0)
+    : tasks.filter(t => t.due_date && t.status !== "completed" && t.status !== "cancelled" && isPast(parseISO(t.due_date))).length;
+
+  const totalTransactions = _useSummary.transactions
+    ? transactionSummary.reduce((s, r) => s + (r.total_count || 0), 0)
+    : transactions.length;
+  const postedTransactions = _useSummary.transactions
+    ? transactionSummary.reduce((s, r) => s + (r.posted_count || 0), 0)
+    : transactions.filter(t => t.status === "posted").length;
+  const draftTxCount     = _useSummary.transactions
+    ? transactionSummary.reduce((s, r) => s + (r.draft_count || 0), 0)
+    : transactions.filter(t => !t.status || t.status === "draft").length;
 
   const onboardingDone = {
     enterprise: enterprises.length > 0,

@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 
+// Module-level cache — persists for the browser session.
+// Key: "entityType:fieldName:parentValue:companyId"
+// Prevents repeated API calls when the same TaxonomySelect re-renders.
+const _taxonomyCache = new Map();
+
 const SYSTEM_DEFAULTS = {
   person_subtype: {
     staff: [
@@ -144,6 +149,13 @@ export function useTaxonomy(entityType, fieldName, parentValue, companyId) {
 
   useEffect(() => {
     if (!companyId || !parentValue) return;
+
+    const cacheKey = `${entityType}:${fieldName}:${parentValue}:${companyId}`;
+    if (_taxonomyCache.has(cacheKey)) {
+      setCustomOptions(_taxonomyCache.get(cacheKey));
+      return;
+    }
+
     setLoading(true);
     base44.entities.MasterDataOption.filter({
       entity_type: entityType,
@@ -152,7 +164,11 @@ export function useTaxonomy(entityType, fieldName, parentValue, companyId) {
       company_id: companyId,
       is_system_default: false,
     })
-      .then(results => setCustomOptions(results.map(r => r.value)))
+      .then(results => {
+        const values = results.map(r => r.value);
+        _taxonomyCache.set(cacheKey, values);
+        setCustomOptions(values);
+      })
       .catch(() => setCustomOptions([]))
       .finally(() => setLoading(false));
   }, [entityType, fieldName, parentValue, companyId]);
@@ -170,7 +186,10 @@ export function useTaxonomy(entityType, fieldName, parentValue, companyId) {
         company_id: companyId,
         is_system_default: false,
       });
-      setCustomOptions(prev => [...prev, value]);
+      const updated = [...customOptions, value];
+      const cacheKey = `${entityType}:${fieldName}:${parentValue}:${companyId}`;
+      _taxonomyCache.set(cacheKey, updated);
+      setCustomOptions(updated);
     } catch (e) {
       console.error("Failed to save custom taxonomy option", e);
     }
