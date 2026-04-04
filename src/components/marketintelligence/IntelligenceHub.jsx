@@ -18,7 +18,8 @@
  *   Transaction  → demand forecasting, brand awareness
  *   Address      → geocoding, service gap detection
  */
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { base44 } from "@/api/base44Client";
 import { MapContainer, TileLayer, Marker, Popup, Circle } from "react-leaflet";
 import L from "leaflet";
 import {
@@ -211,22 +212,122 @@ export default function IntelligenceHub({ currentUser }) {
   const [scoredCompetitors, setScoredCompetitors] = useState([]);
 
   const companyId = currentUser?.company_id;
+  const [manualLat, setManualLat] = useState("");
+  const [manualLng, setManualLng] = useState("");
+  const [geocoding, setGeocoding] = useState(false);
 
-  // Load own enterprises from python_layer analytics
+  // ── Nominatim geocode helper ─────────────────────────────────────────────
+  async function geocodeAddress(query) {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+        { headers: { "User-Agent": "newsconseen-app/1.0" } }
+      );
+      const hits = await res.json();
+      if (hits?.length) return { lat: parseFloat(hits[0].lat), lng: parseFloat(hits[0].lon) };
+    } catch (_) {}
+    return null;
+  }
+
+  // ── Normalize a Base44 enterprise record to match python_layer shape ─────
+  function normalizeEnterprise(e) {
+    return {
+      id:               e.id,
+      enterprise_name:  e.enterprise_name || e.name || "Unnamed",
+      enterprise_type:  e.enterprise_type,
+      enterprise_tier:  e.enterprise_tier,
+      operating_status: e.operating_status,
+      status:           e.status,
+      city:             e.city,
+      region:           e.region,
+      country:          e.country,
+      latitude:         e.latitude  || null,
+      longitude:        e.longitude || null,
+      _needsGeocode:    !e.latitude || !e.longitude,
+    };
+  }
+
+  // Load own enterprises — python_layer first, then Base44 live fallback
   useEffect(() => {
     if (!companyId) return;
-    apiFetch(`/market/my-enterprises?company_id=${companyId}`)
-      .then(d => setMyEnterprises(d.enterprises || []))
-      .catch(() => {});
+    (async () => {
+      // Try python_layer
+      try {
+        const d = await apiFetch(`/market/my-enterprises?company_id=${companyId}`);
+        const ents = d.enterprises || [];
+        if (ents.length > 0) {
+          // Also include any that have no coordinates — python_layer filters them out
+          // so merge with Base44 to catch the ones it dropped
+          let all = [...ents];
+          try {
+            const b44 = await base44.entities.Enterprise.filter({ company_id: companyId });
+            b44.forEach(e => {
+              if (!all.find(a => a.id === e.id)) all.push(normalizeEnterprise(e));
+            });
+          } catch (_) {}
+          setMyEnterprises(all);
+          return;
+        }
+      } catch (_) {}
+      // Full Base44 fallback
+      try {
+        const b44 = await base44.entities.Enterprise.filter({ company_id: companyId });
+        setMyEnterprises(b44.map(normalizeEnterprise));
+      } catch (_) {}
+    })();
   }, [companyId]);
+
+  // Auto-geocode enterprises that are missing coordinates using city/country
+  useEffect(() => {
+    if (!myEnterprises.length) return;
+    const missing = myEnterprises.filter(e => e._needsGeocode && (e.city || e.country));
+    if (!missing.length) return;
+    (async () => {
+      const updated = [...myEnterprises];
+      for (const ent of missing) {
+        const query = [ent.enterprise_name, ent.city, ent.region, ent.country].filter(Boolean).join(", ");
+        const coords = await geocodeAddress(query);
+        if (coords) {
+          const idx = updated.findIndex(e => e.id === ent.id);
+          if (idx !== -1) {
+            updated[idx] = { ...updated[idx], latitude: coords.lat, longitude: coords.lng, _needsGeocode: false };
+          }
+        }
+      }
+      setMyEnterprises(updated);
+    })();
+  }, [myEnterprises.length]);
+
+  // Geocode selected enterprise on-demand if still missing coords
+  async function ensureCoords(ent) {
+    if (ent?.latitude && ent?.longitude) return ent;
+    // Try manual input first
+    const lat = parseFloat(manualLat);
+    const lng = parseFloat(manualLng);
+    if (!isNaN(lat) && !isNaN(lng)) return { ...ent, latitude: lat, longitude: lng };
+    // Try Nominatim
+    if (ent?.city || ent?.country) {
+      setGeocoding(true);
+      const query = [ent?.enterprise_name, ent?.city, ent?.region, ent?.country].filter(Boolean).join(", ");
+      const coords = await geocodeAddress(query);
+      setGeocoding(false);
+      if (coords) {
+        const enriched = { ...ent, latitude: coords.lat, longitude: coords.lng, _needsGeocode: false };
+        setMyEnterprises(prev => prev.map(e => e.id === ent.id ? enriched : e));
+        return enriched;
+      }
+    }
+    return null;
+  }
 
   // Load nearby competitors when an enterprise is selected
   const loadCompetitors = useCallback(async (ent) => {
-    if (!ent?.latitude || !ent?.longitude) return;
+    const located = await ensureCoords(ent);
+    if (!located?.latitude || !located?.longitude) return;
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        lat: ent.latitude, lng: ent.longitude,
+        lat: located.latitude, lng: located.longitude,
         radius_km: radiusKm,
         ...(typeFilter ? { enterprise_type: typeFilter } : {}),
         ...(companyId ? { company_id: companyId } : {}),
@@ -242,9 +343,9 @@ export default function IntelligenceHub({ currentUser }) {
           company_id: companyId,
           options: {
             competitors: data.businesses || [],
-            enterprise_type: ent.enterprise_type,
-            lat: ent.latitude,
-            lng: ent.longitude,
+            enterprise_type: located.enterprise_type,
+            lat: located.latitude,
+            lng: located.longitude,
             radius_km: radiusKm,
           },
         }),
@@ -277,12 +378,12 @@ export default function IntelligenceHub({ currentUser }) {
     apiFetch("/market/apis-catalog").then(setApisCatalog).catch(() => {});
   }, [activeTab, apisCatalog]);
 
-  // Map centre
+  // Map centre — use selected enterprise, first geocoded enterprise, or world centre
   const mapCenter = selectedEnterprise?.latitude
     ? [parseFloat(selectedEnterprise.latitude), parseFloat(selectedEnterprise.longitude)]
-    : myEnterprises[0]?.latitude
-    ? [parseFloat(myEnterprises[0].latitude), parseFloat(myEnterprises[0].longitude)]
-    : [-26.2, 28.04];
+    : myEnterprises.find(e => e.latitude)?.latitude
+    ? [parseFloat(myEnterprises.find(e => e.latitude).latitude), parseFloat(myEnterprises.find(e => e.latitude).longitude)]
+    : [20, 0]; // world centre — works for any country
 
   const isSuperAdmin = currentUser?.role === "super_admin";
 
@@ -312,7 +413,9 @@ export default function IntelligenceHub({ currentUser }) {
             <option value="">— Select enterprise —</option>
             {myEnterprises.map(e => (
               <option key={e.id} value={e.id}>
-                {e.enterprise_name} {e.enterprise_type ? `(${e.enterprise_type})` : ""}
+                {e.enterprise_name}
+                {e.enterprise_type ? ` (${e.enterprise_type})` : ""}
+                {!e.latitude ? " 📍?" : ""}
               </option>
             ))}
           </select>
@@ -358,9 +461,45 @@ export default function IntelligenceHub({ currentUser }) {
       </div>
 
       {myEnterprises.length === 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          No geocoded enterprises found. Add latitude/longitude to your Enterprise records and run ETL.
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">No enterprises found.</p>
+            <p className="mt-0.5">Go to <strong>Enterprises</strong> and create your first enterprise record. Once saved it will appear here automatically. Adding a city or country enables automatic geocoding.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Manual coordinates fallback — shown when selected enterprise has no geocoords yet */}
+      {selectedEnterprise && !selectedEnterprise.latitude && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 space-y-2">
+          <p className="text-xs font-semibold text-blue-800 flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5" />
+            {geocoding ? "Geocoding from city/country…" : "No coordinates on this enterprise — enter them manually or we'll try to geocode from city/country."}
+          </p>
+          {!geocoding && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                type="number" step="any" placeholder="Latitude (e.g. 43.66)"
+                value={manualLat}
+                onChange={e => setManualLat(e.target.value)}
+                className="text-xs border border-blue-300 rounded-lg px-2 py-1.5 w-36 bg-white"
+              />
+              <input
+                type="number" step="any" placeholder="Longitude (e.g. -70.26)"
+                value={manualLng}
+                onChange={e => setManualLng(e.target.value)}
+                className="text-xs border border-blue-300 rounded-lg px-2 py-1.5 w-36 bg-white"
+              />
+              <button
+                onClick={() => loadCompetitors(selectedEnterprise)}
+                disabled={(!manualLat || !manualLng) && !selectedEnterprise.city}
+                className="text-xs bg-blue-700 text-white font-semibold px-3 py-1.5 rounded-lg disabled:opacity-40"
+              >
+                Search this location
+              </button>
+            </div>
+          )}
         </div>
       )}
 
