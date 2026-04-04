@@ -1,6 +1,8 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { createContext, useState, useContext, useEffect } from 'react';
 import { appParams } from '@/lib/app-params';
+
+// Lazy getter — avoids pulling @base44/sdk into the React module init chain
+const getBase44 = () => import('@/api/base44Client').then(m => m.base44);
 
 const AuthContext = createContext();
 
@@ -93,6 +95,7 @@ export const AuthProvider = ({ children }) => {
     try {
       // Now check if the user is authenticated
       setIsLoadingAuth(true);
+      const base44 = await getBase44();
       const currentUser = await base44.auth.me();
       setUser(currentUser);
       setIsAuthenticated(true);
@@ -112,27 +115,26 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = (shouldRedirect = true) => {
+  const logout = async (shouldRedirect = true) => {
     setUser(null);
     setIsAuthenticated(false);
-    
+    const base44 = await getBase44();
     if (shouldRedirect) {
-      // Use the SDK's logout method which handles token cleanup and redirect
       base44.auth.logout(window.location.href);
     } else {
-      // Just remove the token without redirect
       base44.auth.logout();
     }
   };
 
-  const navigateToLogin = () => {
-    // Use the SDK's redirectToLogin method
+  const navigateToLogin = async () => {
+    const base44 = await getBase44();
     base44.auth.redirectToLogin(window.location.href);
   };
 
   // Refresh user data (e.g. after onboarding_complete is set)
   const refreshUser = async () => {
     try {
+      const base44 = await getBase44();
       const u = await base44.auth.me();
       setUser(u);
     } catch (_) {}
