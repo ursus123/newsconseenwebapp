@@ -733,7 +733,11 @@ def get_enterprise_overview(company_id: str) -> dict:
             is_root,
             parent_id,
             primary_address,
-            days_since_created
+            days_since_created,
+            naics_code,
+            naics_title,
+            sic_code,
+            sic_description
         FROM analytics.enterprise_summary
         WHERE company_id = :company_id
           AND snapshot_date = (
@@ -758,12 +762,21 @@ def get_enterprise_overview(company_id: str) -> dict:
             rows = df[[c for c in (
                 "id", "enterprise_name", "enterprise_type", "operating_status",
                 "status", "is_active", "is_root", "parent_id",
+                "naics_code", "naics_title", "sic_code", "sic_description",
             ) if c in df.columns]].rename(columns={"enterprise_name": "name"}).to_dict(orient="records")
             logger.info("get_enterprise_overview: using Base44 fallback (%d enterprises)", len(df))
 
     active_count = sum(1 for r in rows if r.get("is_active"))
     root_ents    = [r for r in rows if r.get("is_root")]
     branches     = [r for r in rows if not r.get("is_root")]
+
+    # Group by NAICS code — enables industry-level context in copilot responses
+    by_naics: dict = {}
+    for r in rows:
+        code = r.get("naics_code")
+        if code:
+            by_naics.setdefault(code, {"naics_title": r.get("naics_title"), "enterprises": []})
+            by_naics[code]["enterprises"].append(r.get("name"))
 
     return {
         "enterprises":     rows,
@@ -775,6 +788,7 @@ def get_enterprise_overview(company_id: str) -> dict:
             etype: [r for r in rows if r.get("enterprise_type") == etype]
             for etype in set(r.get("enterprise_type") for r in rows if r.get("enterprise_type"))
         },
+        "by_naics":        by_naics,
     }
 
 

@@ -374,6 +374,53 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
                 })}
               </div>
             </Field>
+
+            {/* Industry Classification */}
+            <div className="border-t border-slate-100 pt-4">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Industry Classification</p>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="NAICS Code">
+                  <Input
+                    value={form.naics_code || ""}
+                    onChange={(e) => set("naics_code", e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="e.g. 446110"
+                    className="rounded-xl font-mono"
+                    maxLength={6}
+                  />
+                </Field>
+                <Field label="NAICS Title">
+                  <Input
+                    value={form.naics_title || ""}
+                    onChange={(e) => set("naics_title", e.target.value)}
+                    placeholder="e.g. Pharmacies and Drug Stores"
+                    className="rounded-xl"
+                  />
+                </Field>
+                <Field label="SIC Code">
+                  <Input
+                    value={form.sic_code || ""}
+                    onChange={(e) => set("sic_code", e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    placeholder="e.g. 5912"
+                    className="rounded-xl font-mono"
+                    maxLength={4}
+                  />
+                </Field>
+                <Field label="SIC Description">
+                  <Input
+                    value={form.sic_description || ""}
+                    onChange={(e) => set("sic_description", e.target.value)}
+                    placeholder="e.g. Drug Stores and Proprietary Stores"
+                    className="rounded-xl"
+                  />
+                </Field>
+              </div>
+              <p className="text-xs text-slate-400 mt-2">
+                Find codes at{" "}
+                <a href="https://www.census.gov/naics" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">census.gov/naics</a>
+                {" "}or{" "}
+                <a href="https://www.osha.gov/sic-manual" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">osha.gov/sic-manual</a>
+              </p>
+            </div>
           </div>
         );
 

@@ -47,6 +47,10 @@ def transform_enterprises(df: pd.DataFrame) -> pd.DataFrame:
         created_date        — when this enterprise was created
         days_since_created  — age of the enterprise record in days
         operating_status    — normalized to "active" or "inactive"
+        naics_code          — 2–6 digit NAICS industry code (optional)
+        naics_title         — NAICS industry title (optional)
+        sic_code            — 4-digit SIC code (optional)
+        sic_description     — SIC industry description (optional)
 
     Snapshot date and loaded_at are added by load_dataframe().
     """
@@ -125,6 +129,10 @@ def transform_enterprises(df: pd.DataFrame) -> pd.DataFrame:
         "website":          df.get("website"),
         "created_date":     df.get("created_date"),
         "days_since_created": df["days_since_created"],
+        "naics_code":       df.get("naics_code"),
+        "naics_title":      df.get("naics_title"),
+        "sic_code":         df.get("sic_code"),
+        "sic_description":  df.get("sic_description"),
     }
 
     summary = pd.DataFrame({
@@ -160,4 +168,8 @@ def _empty_summary() -> pd.DataFrame:
         "website",
         "created_date",
         "days_since_created",
+        "naics_code",
+        "naics_title",
+        "sic_code",
+        "sic_description",
     ])

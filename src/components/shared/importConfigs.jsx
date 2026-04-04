@@ -319,6 +319,10 @@ export const ENTERPRISE_FIELDS = [
   { key: "parent_enterprise_id", label: "Parent Enterprise ID" },
   { key: "status", label: "Status" },
   { key: "operating_status", label: "Operating Status" },
+  { key: "naics_code", label: "NAICS Code" },
+  { key: "naics_title", label: "NAICS Title" },
+  { key: "sic_code", label: "SIC Code" },
+  { key: "sic_description", label: "SIC Description" },
   { key: "sic_sector_id", label: "SIC Sector ID" },
   { key: "sic_sector_name", label: "SIC Sector Name" },
   { key: "sic_division", label: "SIC Division" },
@@ -354,9 +358,13 @@ export const ENTERPRISE_MAPPING_RULES = [
   [/enterprise.?tier|^tier$|^level$/i,                       "enterprise_tier"],
   [/^company.?id$|^tenant$|^workspace$/i,                    "company_id"],
 
-  // SIC / NAICS — specific before general "sector"
+  // NAICS / SIC — most specific first (6-digit code before sector/division)
+  [/^naics.?code$|^naics$/i,                                "naics_code"],
+  [/^naics.?title$|^naics.?description$|^naics.?name$/i,    "naics_title"],
+  [/^sic.?code$|^sic$/i,                                    "sic_code"],
+  [/^sic.?description$|^sic.?desc$|^sic.?name$/i,          "sic_description"],
   [/sic.?sector.?id|naics.?id|sector.?id/i,                 "sic_sector_id"],
-  [/sic.?sector.?name|naics.?name|sector.?name/i,           "sic_sector_name"],
+  [/sic.?sector.?name|sector.?name/i,                       "sic_sector_name"],
   [/sic.?division|^division$/i,                             "sic_division"],
 
   // Status fields
@@ -405,6 +413,10 @@ export const ENTERPRISE_TEMPLATE_EXAMPLE = {
   parent_enterprise_id: "",
   status: "active",
   operating_status: "open",
+  naics_code: "441110",
+  naics_title: "New Car Dealers",
+  sic_code: "5511",
+  sic_description: "Motor Vehicle Dealers (New and Used)",
   sic_sector_id: 7,
   sic_sector_name: "Retail Trade",
   sic_division: "G_retail_trade",
@@ -434,6 +446,13 @@ ENUMS — use exact values:
   status:             active | inactive | prospect | archived
   operating_status:   open | closed | temporarily_closed | seasonal
   sic_division:       K_education_health_social | I_services | H_finance_insurance_real_estate | A_agriculture_forestry_fishing | B_mining | C_construction | D_manufacturing | E_transport_communications_utilities | F_wholesale_trade | G_retail_trade | J_public_administration | L_nonprofit_religious | M_household_individual
+
+INDUSTRY CLASSIFICATION (optional but recommended):
+  naics_code    — 2–6 digit NAICS code (e.g. 446110 = Pharmacies and Drug Stores)
+  naics_title   — NAICS industry title (e.g. "Pharmacies and Drug Stores")
+  sic_code      — 4-digit SIC code (e.g. 5912 = Drug Stores and Proprietary Stores)
+  sic_description — SIC industry description
+  Find codes at: census.gov/naics  |  osha.gov/sic-manual
 
 NOTES:
   • enterprise_id — your source system ID, stored in internal_notes as "External ID: XXX"
@@ -530,6 +549,10 @@ export function transformEnterprise(raw, currentUser) {
                             ? raw.status : "active",
     operating_status:     ["open", "closed", "temporarily_closed", "seasonal"].includes(raw.operating_status)
                             ? raw.operating_status : "open",
+    naics_code:           raw.naics_code ? String(raw.naics_code).trim() : undefined,
+    naics_title:          raw.naics_title || undefined,
+    sic_code:             raw.sic_code ? String(raw.sic_code).trim() : undefined,
+    sic_description:      raw.sic_description || undefined,
     sic_sector_id:        raw.sic_sector_id ? Number(raw.sic_sector_id) : undefined,
     sic_sector_name:      raw.sic_sector_name || undefined,
     sic_division:         sicDivision,
@@ -557,6 +580,12 @@ export function validateEnterprise(row) {
   }
   if (row.email && !row.email.includes("@")) {
     errors.push(`email "${row.email}" does not look valid`);
+  }
+  if (row.naics_code && !/^\d{2,6}$/.test(String(row.naics_code).trim())) {
+    warnings.push(`naics_code "${row.naics_code}" should be a 2–6 digit number (e.g. 446110)`);
+  }
+  if (row.sic_code && !/^\d{2,4}$/.test(String(row.sic_code).trim())) {
+    warnings.push(`sic_code "${row.sic_code}" should be a 2–4 digit number (e.g. 5912)`);
   }
   return { errors, warnings };
 }
