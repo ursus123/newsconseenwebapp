@@ -8,11 +8,319 @@ import ReportBuilder from "@/components/reports/ReportBuilder";
 import ReportViewer from "@/components/reports/ReportViewer";
 import WelcomeSetup from "@/components/reports/WelcomeSetup";
 import ChartViewer from "@/components/reports/ChartViewer.jsx";
-import { Loader2, RefreshCw, Sparkles, TrendingUp, Users, AlertCircle, ChevronRight, Database } from "lucide-react";
+import { Loader2, RefreshCw, Sparkles, TrendingUp, Users, AlertCircle, ChevronRight, Database, FileText, Download, CheckCircle2, Circle, Play, Globe, Building2, BarChart2, Brain } from "lucide-react";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = typeof import.meta !== "undefined" ? (import.meta.env?.VITE_RAILWAY_API_KEY || "") : "";
 const RAIL_HEADERS = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
+
+// ── MarketAnalysisTemplate ───────────────────────────────────────────────────
+// Auto-populates a 10-section market analysis report from:
+//   - Market Intelligence runs (competitor data, economic context)
+//   - ML model results (segmentation, retention risk)
+//   - Copilot answers (synthesized narrative)
+//   - Public data connectors (CMS, NPPES, state pharmacy)
+function MarketAnalysisTemplate({ currentUser, onBack, onSaveReport }) {
+  const companyId = currentUser?.company_id;
+
+  const SECTIONS = [
+    { id: "executive_summary",   title: "1. Executive Summary",              icon: FileText,    source: "copilot",    description: "AI-generated synthesis of all findings" },
+    { id: "market_overview",     title: "2. Market Overview",                icon: Globe,       source: "auto",       description: "5-city Market Intelligence comparison" },
+    { id: "competitor_density",  title: "3. Competitor Density",             icon: Building2,   source: "auto",       description: "Competitor counts from OpenStreetMap" },
+    { id: "competitor_database", title: "4. Competitor Database",            icon: Database,    source: "enterprises", description: "Your catalogued competitor enterprises" },
+    { id: "segment_analysis",    title: "5. Market Segment Analysis",        icon: Users,       source: "ml",         description: "LTV segmentation from ML model" },
+    { id: "demand_risk",         title: "6. Demand Risk & Switching",        icon: AlertCircle, source: "ml",         description: "Retention risk scores by segment" },
+    { id: "capacity_forecast",   title: "7. Capacity & Demand Forecast",     icon: TrendingUp,  source: "ml",         description: "Staffing forecast from ML model" },
+    { id: "economic_context",    title: "8. Economic & Labor Context",       icon: BarChart2,   source: "economic",   description: "Census, BLS, World Bank indicators" },
+    { id: "public_data",         title: "9. Public Data Intelligence",       icon: Globe,       source: "public",     description: "CMS pharmacy data, NPPES, state licenses" },
+    { id: "recommendations",     title: "10. Recommendations & Opportunities", icon: Brain,    source: "copilot",    description: "AI-generated strategic recommendations" },
+  ];
+
+  const [sectionData, setSectionData]   = useState({});
+  const [loading, setLoading]           = useState({});
+  const [config, setConfig]             = useState({ location: "Maine", industry: "pharmacy", state: "ME" });
+  const [generating, setGenerating]     = useState(false);
+  const [reportText, setReportText]     = useState({});
+  const [savedReport, setSavedReport]   = useState(null);
+
+  // ── Fetch a section ────────────────────────────────────────────────────────
+  async function fetchSection(sectionId) {
+    setLoading(prev => ({ ...prev, [sectionId]: true }));
+    try {
+      let data = null;
+
+      if (sectionId === "competitor_density" || sectionId === "market_overview") {
+        // Market Intelligence — OSM pharmacy counts per city
+        const cities = ["Portland Maine", "Bangor Maine", "Lewiston Maine", "Augusta Maine"];
+        const results = await Promise.allSettled(cities.map(city =>
+          fetch(`${RAILWAY_URL}/market/nearby?lat=44.0&lng=-70.5&radius_km=20&enterprise_type=commercial&limit=30&company_id=${companyId}`)
+            .then(r => r.ok ? r.json() : null).catch(() => null)
+        ));
+        data = { cities, results: results.map(r => r.value), source: "OpenStreetMap via Market Intelligence" };
+      }
+
+      else if (sectionId === "competitor_database") {
+        const enterprises = await base44.entities.Enterprise.filter({ company_id: companyId });
+        data = { enterprises: enterprises.slice(0, 50), total: enterprises.length };
+      }
+
+      else if (sectionId === "segment_analysis") {
+        const r = await fetch(`${RAILWAY_URL}/ml/ltv-segmentation?company_id=${companyId}&research_mode=true`, { method: "POST", headers: RAIL_HEADERS });
+        data = r.ok ? await r.json() : { status: "unavailable" };
+      }
+
+      else if (sectionId === "demand_risk") {
+        const r = await fetch(`${RAILWAY_URL}/ml/retention-risk?company_id=${companyId}&research_mode=true`, { method: "POST", headers: RAIL_HEADERS });
+        data = r.ok ? await r.json() : { status: "unavailable" };
+      }
+
+      else if (sectionId === "capacity_forecast") {
+        const enterprises = await base44.entities.Enterprise.filter({ company_id: companyId });
+        const entId = enterprises[0]?.id || "unknown";
+        const r = await fetch(`${RAILWAY_URL}/ml/staffing-forecast?enterprise_id=${entId}&company_id=${companyId}&research_mode=true`, { method: "POST", headers: RAIL_HEADERS });
+        data = r.ok ? await r.json() : { status: "unavailable" };
+      }
+
+      else if (sectionId === "economic_context") {
+        const [census, worldBank] = await Promise.allSettled([
+          fetch(`${RAILWAY_URL}/market/economic-context?country_code=US&company_id=${companyId}`, { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
+          fetch(`${RAILWAY_URL}/market/labor-context?country_code=US&company_id=${companyId}`, { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
+        ]);
+        data = { economic: census.value, labor: worldBank.value };
+      }
+
+      else if (sectionId === "public_data") {
+        const [cms, dea, state] = await Promise.allSettled([
+          fetch(`${RAILWAY_URL}/public-data/cms/pharmacies?state=${config.state}&limit=50`, { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
+          fetch(`${RAILWAY_URL}/public-data/dea/pharmacy-count?state=${config.state}`, { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
+          fetch(`${RAILWAY_URL}/public-data/state/summary?state=${config.state}`, { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
+        ]);
+        data = { cms: cms.value, dea: dea.value, state_board: state.value };
+      }
+
+      else if (sectionId === "executive_summary" || sectionId === "recommendations") {
+        // Copilot-generated text
+        const question = sectionId === "executive_summary"
+          ? `I am conducting a ${config.industry} market analysis in ${config.location}. Using your web search and public data tools, give me a concise executive summary of the ${config.industry} market in ${config.location}: market size, key players, economic conditions, and 3 key findings. Use search_public_data with cms_pharmacy, dea_pharmacy, and web_search.`
+          : `Based on all available data about the ${config.industry} market in ${config.location}, what are the top 5 strategic recommendations and market opportunities? Consider competitor density, economic conditions, and demographic data. Be specific and actionable.`;
+
+        const r = await fetch(`${RAILWAY_URL}/copilot/ask`, {
+          method: "POST",
+          headers: { ...RAIL_HEADERS, "Content-Type": "application/json" },
+          body: JSON.stringify({ question, company_id: companyId }),
+        });
+        if (r.ok) {
+          const resp = await r.json();
+          data = { text: resp.answer || resp.response || resp.text || "No response", source: "Copilot + Web Search" };
+          setReportText(prev => ({ ...prev, [sectionId]: data.text }));
+        } else {
+          data = { text: "Copilot unavailable — run the query manually in the Copilot tab.", source: "unavailable" };
+        }
+      }
+
+      setSectionData(prev => ({ ...prev, [sectionId]: data }));
+    } catch (e) {
+      setSectionData(prev => ({ ...prev, [sectionId]: { error: e.message } }));
+    } finally {
+      setLoading(prev => ({ ...prev, [sectionId]: false }));
+    }
+  }
+
+  async function generateAll() {
+    setGenerating(true);
+    for (const section of SECTIONS) {
+      await fetchSection(section.id);
+    }
+    setGenerating(false);
+  }
+
+  async function saveAsReport() {
+    try {
+      // Build report content from all sections
+      const content = SECTIONS.map(s => {
+        const data = sectionData[s.id];
+        const text = reportText[s.id] || "";
+        let sectionContent = `## ${s.title}\n\n`;
+        if (text) sectionContent += text + "\n\n";
+        if (data && !data.error) {
+          if (data.enterprises) sectionContent += `**Enterprises catalogued:** ${data.total}\n`;
+          if (data.segments) sectionContent += `**Segments identified:** ${data.segments?.length || 0}\n`;
+          if (data.forecast) sectionContent += `**Forecast days:** ${data.forecast?.length || 0}\n`;
+          if (data.cms?.count) sectionContent += `**CMS pharmacies found:** ${data.cms.count}\n`;
+          if (data.state_board?.total) sectionContent += `**State licensed pharmacies:** ${data.state_board.total}\n`;
+        }
+        return sectionContent;
+      }).join("\n---\n\n");
+
+      // Find or create Market Research folder
+      let folders = await base44.entities.ChartFolder.filter({ name: "Market Research", company_id: companyId });
+      let folderId = folders[0]?.id;
+      if (!folderId) {
+        const f = await base44.entities.ChartFolder.create({ name: "Market Research", icon: "🌍", color: "#10b981", company_id: companyId });
+        folderId = f.id;
+      }
+
+      const report = await base44.entities.Report.create({
+        name: `${config.location} ${config.industry} Market Analysis`,
+        content,
+        status: "published",
+        folder_id: folderId,
+        company_id: companyId,
+      });
+      setSavedReport(report);
+      if (onSaveReport) onSaveReport(report);
+    } catch (e) {
+      console.error("Save report failed:", e);
+    }
+  }
+
+  const completed = SECTIONS.filter(s => sectionData[s.id] && !sectionData[s.id]?.error).length;
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="text-slate-400 hover:text-slate-600">
+            <ChevronRight className="w-4 h-4 rotate-180" />
+          </button>
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+            <FileText className="w-5 h-5 text-emerald-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">Market Analysis Template</h2>
+            <p className="text-xs text-slate-500">Auto-populated 10-section report — {completed}/{SECTIONS.length} sections ready</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={generateAll}
+            disabled={generating}
+            className="flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50"
+          >
+            {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+            {generating ? "Generating…" : "Generate All"}
+          </button>
+          {completed >= 5 && (
+            <button
+              onClick={saveAsReport}
+              className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-white font-semibold px-3 py-1.5 rounded-lg"
+            >
+              <Download className="w-3.5 h-3.5" /> Save Report
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Config */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-wrap gap-4">
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Market Location</label>
+          <input
+            value={config.location}
+            onChange={e => setConfig(c => ({ ...c, location: e.target.value }))}
+            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white w-40"
+            placeholder="e.g. Maine"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Industry / Sector</label>
+          <input
+            value={config.industry}
+            onChange={e => setConfig(c => ({ ...c, industry: e.target.value }))}
+            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white w-36"
+            placeholder="e.g. pharmacy"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">State Code</label>
+          <input
+            value={config.state}
+            onChange={e => setConfig(c => ({ ...c, state: e.target.value.toUpperCase().slice(0, 2) }))}
+            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white w-20"
+            placeholder="ME"
+            maxLength={2}
+          />
+        </div>
+      </div>
+
+      {savedReport && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-xs text-emerald-800 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" /> Report saved as "<strong>{savedReport.name}</strong>" in Market Research folder.
+        </div>
+      )}
+
+      {/* Progress bar */}
+      <div className="w-full bg-slate-100 rounded-full h-1.5">
+        <div className="bg-emerald-500 h-1.5 rounded-full transition-all" style={{ width: `${(completed / SECTIONS.length) * 100}%` }} />
+      </div>
+
+      {/* Sections */}
+      <div className="space-y-3">
+        {SECTIONS.map(section => {
+          const Icon    = section.icon;
+          const data    = sectionData[section.id];
+          const isLoading = loading[section.id];
+          const isDone  = !!data && !data?.error;
+          const hasError = data?.error;
+
+          return (
+            <div key={section.id} className={`rounded-xl border p-4 transition-colors ${isDone ? "border-emerald-200 bg-emerald-50/30" : "border-slate-200 bg-white"}`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isDone ? "bg-emerald-100" : "bg-slate-100"}`}>
+                    {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <Icon className="w-4 h-4 text-slate-500" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800">{section.title}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{section.description}</p>
+
+                    {/* Data preview */}
+                    {isDone && (
+                      <div className="mt-2 text-xs text-slate-600 space-y-1">
+                        {data.text && (
+                          <p className="line-clamp-3 text-slate-700 bg-white rounded-lg p-2 border border-slate-100">{data.text}</p>
+                        )}
+                        {data.enterprises && (
+                          <p className="text-emerald-700 font-medium">{data.total} enterprises · {data.enterprises.slice(0, 3).map(e => e.enterprise_name || e.name).join(", ")}{data.total > 3 ? "…" : ""}</p>
+                        )}
+                        {data.segments?.length > 0 && (
+                          <p className="text-emerald-700 font-medium">{data.segments.length} segments identified · status: {data.status}</p>
+                        )}
+                        {data.predictions?.length > 0 && (
+                          <p className="text-emerald-700 font-medium">{data.predictions.length} predictions · {data.high_risk_count ?? 0} high risk</p>
+                        )}
+                        {data.forecast?.length > 0 && (
+                          <p className="text-emerald-700 font-medium">{data.forecast.length}-day forecast generated</p>
+                        )}
+                        {data.cms?.count && (
+                          <p className="text-emerald-700 font-medium">CMS: {data.cms.count} pharmacies · DEA/NPPES: {data.dea?.count ?? "—"} · State board: {data.state_board?.total ?? "—"}</p>
+                        )}
+                        {data.source && <p className="text-slate-400 text-[10px]">Source: {data.source}</p>}
+                      </div>
+                    )}
+
+                    {hasError && (
+                      <p className="mt-1 text-xs text-rose-600">{data.error}</p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => fetchSection(section.id)}
+                  disabled={isLoading}
+                  className="shrink-0 flex items-center gap-1 text-xs border border-slate-200 hover:border-emerald-300 text-slate-600 hover:text-emerald-700 px-2.5 py-1.5 rounded-lg disabled:opacity-50"
+                >
+                  {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                  {isDone ? "Refresh" : "Fetch"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // ── MLInsightsPanel ──────────────────────────────────────────────────────────
 // Shows AI predictions and analytics data from python_layer
@@ -255,7 +563,7 @@ function canUserSee(item, currentUser) {
 export default function Reports() {
   const [currentUser, setCurrentUser] = useState(null);
   const [selected, setSelected] = useState({ type: "all-charts", id: "all-charts" });
-  const [view, setView] = useState("folders"); // folders | chart-builder | report-builder | report-viewer | chart-viewer | ml-insights
+  const [view, setView] = useState("folders"); // folders | chart-builder | report-builder | report-viewer | chart-viewer | ml-insights | market-template
   const [editingChart, setEditingChart] = useState(null);
   const [editingReport, setEditingReport] = useState(null);
   const [viewingReport, setViewingReport] = useState(null);
@@ -473,6 +781,12 @@ export default function Reports() {
             >
               <Sparkles className="w-3.5 h-3.5" /> AI Insights
             </button>
+            <button
+              onClick={() => setView("market-template")}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-t-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" /> Market Analysis
+            </button>
           </div>
         )}
         <div className="flex-1 overflow-hidden flex">
@@ -480,6 +794,15 @@ export default function Reports() {
           <WelcomeSetup currentUser={currentUser} onComplete={() => setSetupDone(true)} />
         ) : view === "ml-insights" ? (
           <MLInsightsPanel currentUser={currentUser} onBack={() => setView("folders")} />
+        ) : view === "market-template" ? (
+          <MarketAnalysisTemplate
+            currentUser={currentUser}
+            onBack={() => setView("folders")}
+            onSaveReport={(report) => {
+              qc.invalidateQueries({ queryKey: ["reports"] });
+              setView("folders");
+            }}
+          />
         ) : view === "chart-builder" ? (
           <ChartBuilder
             chart={editingChart}
