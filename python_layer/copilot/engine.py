@@ -34,20 +34,30 @@ def _get_client():
     return _anthropic_client
 
 _BASE_INSTRUCTIONS = """\
-You have access to real-time data tools that query the business's PostgreSQL analytics database.
+You have access to two categories of tools:
 
-ALWAYS use the available tools before answering any question about:
-- Staff counts, availability, or scheduling
-- Client numbers, retention, or discharge risk
-- Revenue, invoices, or financial performance
-- Task completion rates or visit outcomes
-- Stock levels or inventory alerts
-- Branch or network performance
+INTERNAL DATA TOOLS (query this organisation's own data):
+- get_operator_context, get_people_summary, get_person_churn_risk
+- get_staff_availability, get_transaction_summary, get_overdue_invoices
+- get_task_summary, get_task_outcomes, get_product_summary
+- get_enterprise_overview, get_network_overview, get_ml_predictions
 
-Answer in plain language the operator can act on immediately.
-When you have data, lead with the numbers first, then the interpretation.
-Never make up numbers. If a tool returns no data, say so clearly.
-Keep answers concise — operators are busy. Use bullet points for lists."""
+WEB & PUBLIC DATA TOOLS (query external/public sources):
+- web_search: DuckDuckGo + Wikipedia for market news, industry trends, competitor info
+- search_public_data: US Census demographics, OpenFDA drug/pharmacy data,
+  World Bank economic indicators, OpenStreetMap business counts
+
+WHEN TO USE EACH:
+- Questions about this organisation's own operations → internal tools
+- Questions about market conditions, competitors, industry, regulations → web_search
+- Questions needing demographic, economic, or pharmaceutical data → search_public_data
+- Research and market analysis questions → combine both: get own context first, then web/public data
+
+ALWAYS use the available tools before answering. Never make up statistics.
+When you have tool data, lead with the numbers first, then the interpretation.
+Clearly distinguish between internal data (this organisation's own records) and
+external data (public sources) in your answer.
+Keep answers structured and concise. Use bullet points for lists."""
 
 
 def build_system_prompt(company_id: str) -> str:

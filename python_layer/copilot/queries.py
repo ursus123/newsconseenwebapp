@@ -967,6 +967,230 @@ def get_ml_predictions(company_id: str, model: Optional[str] = None) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# WEB-GROUNDED TOOLS — public data sources, no API key required
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def web_search(query: str, company_id: str, max_results: int = 5) -> dict:
+    """
+    Search the web for market intelligence, industry news, or public data.
+    Uses DuckDuckGo Instant Answer API (no key required).
+    Falls back to Wikipedia summary for factual/encyclopaedic queries.
+
+    Used for: industry research, competitor news, market context,
+              regulatory updates, economic conditions, public statistics.
+    """
+    import urllib.request
+    import urllib.parse
+    import json as _json
+    import re
+
+    results = []
+
+    # ── DuckDuckGo Instant Answer ─────────────────────────────────────────
+    try:
+        ddg_url = f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json&no_redirect=1&no_html=1&skip_disambig=1"
+        req = urllib.request.Request(ddg_url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = _json.loads(resp.read().decode())
+
+        # Abstract (best single answer)
+        if data.get("Abstract"):
+            results.append({
+                "source":  data.get("AbstractSource", "DuckDuckGo"),
+                "title":   data.get("Heading", query),
+                "snippet": data["Abstract"][:600],
+                "url":     data.get("AbstractURL", ""),
+            })
+
+        # Related topics
+        for topic in data.get("RelatedTopics", [])[:max_results - len(results)]:
+            text = topic.get("Text", "")
+            url  = topic.get("FirstURL", "")
+            if text:
+                results.append({
+                    "source":  "DuckDuckGo",
+                    "title":   text[:80],
+                    "snippet": text[:400],
+                    "url":     url,
+                })
+
+    except Exception as e:
+        logger.warning("web_search DuckDuckGo failed: %s", e)
+
+    # ── Wikipedia summary fallback ────────────────────────────────────────
+    if len(results) < 2:
+        try:
+            wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(query.replace(' ', '_'))}"
+            req = urllib.request.Request(wiki_url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                wiki = _json.loads(resp.read().decode())
+            if wiki.get("extract"):
+                results.insert(0, {
+                    "source":  "Wikipedia",
+                    "title":   wiki.get("title", query),
+                    "snippet": wiki["extract"][:800],
+                    "url":     wiki.get("content_urls", {}).get("desktop", {}).get("page", ""),
+                })
+        except Exception as e:
+            logger.warning("web_search Wikipedia fallback failed: %s", e)
+
+    if not results:
+        return {
+            "query":   query,
+            "results": [],
+            "note":    "No web results found. Try a more specific query.",
+        }
+
+    logger.info("web_search: %d results for '%s'", len(results), query[:60])
+    return {
+        "query":   query,
+        "results": results[:max_results],
+        "count":   len(results[:max_results]),
+    }
+
+
+def search_public_data(dataset: str, query: str, company_id: str, location: str = "") -> dict:
+    """
+    Query structured public datasets relevant to market research.
+    Supported datasets:
+      - "us_census"   : US Census Bureau QuickFacts (population, income, demographics)
+      - "bls"         : US Bureau of Labor Statistics industry employment/wages
+      - "world_bank"  : World Bank economic indicators (GDP, poverty, health spending)
+      - "open_fda"    : OpenFDA drug/device/facility data (for healthcare/pharmacy)
+      - "osm_count"   : OpenStreetMap business category count in a location
+
+    Returns structured data directly usable in analysis.
+    """
+    import urllib.request
+    import urllib.parse
+    import json as _json
+
+    dataset = dataset.lower().strip()
+
+    # ── US Census QuickFacts ──────────────────────────────────────────────
+    if dataset == "us_census":
+        try:
+            # Census QuickFacts API — state/county level statistics
+            place = (location or query).replace(" ", "_")
+            url = f"https://api.census.gov/data/2022/acs/acs5/profile?get=NAME,DP03_0062E,DP05_0001E,DP03_0087E&for=state:*"
+            req = urllib.request.Request(url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                raw = _json.loads(resp.read().decode())
+            headers = raw[0]
+            rows = [dict(zip(headers, r)) for r in raw[1:]]
+            # Filter by state name if location provided
+            if location:
+                loc_lower = location.lower()
+                rows = [r for r in rows if loc_lower in r.get("NAME", "").lower()]
+            return {
+                "dataset":  "us_census_acs5",
+                "location": location or "all states",
+                "fields":   {"DP03_0062E": "median_household_income", "DP05_0001E": "total_population", "DP03_0087E": "mean_travel_time"},
+                "data":     rows[:10],
+                "note":     "Source: US Census Bureau ACS 5-Year Estimates 2022",
+            }
+        except Exception as e:
+            logger.warning("search_public_data us_census failed: %s", e)
+            return {"dataset": "us_census", "error": str(e), "data": []}
+
+    # ── OpenFDA — pharmacy/drug data ──────────────────────────────────────
+    elif dataset == "open_fda":
+        try:
+            search_term = urllib.parse.quote(query or location or "pharmacy")
+            url = f"https://api.fda.gov/drug/label.json?search={search_term}&limit=5"
+            req = urllib.request.Request(url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                raw = _json.loads(resp.read().decode())
+            results = raw.get("results", [])
+            simplified = [
+                {
+                    "brand_name":     r.get("openfda", {}).get("brand_name", [""])[0],
+                    "generic_name":   r.get("openfda", {}).get("generic_name", [""])[0],
+                    "manufacturer":   r.get("openfda", {}).get("manufacturer_name", [""])[0],
+                    "product_type":   r.get("openfda", {}).get("product_type", [""])[0],
+                    "route":          r.get("openfda", {}).get("route", [""])[0],
+                }
+                for r in results
+            ]
+            return {
+                "dataset": "open_fda_drug_labels",
+                "query":   query,
+                "results": simplified,
+                "count":   len(simplified),
+                "note":    "Source: FDA Open Data — drug label database",
+            }
+        except Exception as e:
+            logger.warning("search_public_data open_fda failed: %s", e)
+            return {"dataset": "open_fda", "error": str(e), "data": []}
+
+    # ── World Bank indicators ─────────────────────────────────────────────
+    elif dataset == "world_bank":
+        try:
+            # Map common query terms to World Bank indicator codes
+            INDICATORS = {
+                "gdp": "NY.GDP.MKTP.CD",
+                "health spending": "SH.XPD.CHEX.PC.CD",
+                "hospital beds": "SH.MED.BEDS.ZS",
+                "pharmacists": "SH.MED.PHYS.ZS",
+                "population": "SP.POP.TOTL",
+                "income": "NY.GNP.PCAP.CD",
+            }
+            indicator = next((v for k, v in INDICATORS.items() if k in query.lower()), "NY.GDP.MKTP.CD")
+            country   = location[:2].upper() if location and len(location) >= 2 else "US"
+            url = f"https://api.worldbank.org/v2/country/{country}/indicator/{indicator}?format=json&mrv=5"
+            req = urllib.request.Request(url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                raw = _json.loads(resp.read().decode())
+            data = [{"year": r["date"], "value": r["value"], "country": r["country"]["value"]}
+                    for r in (raw[1] or []) if r.get("value") is not None]
+            return {
+                "dataset":   "world_bank",
+                "indicator": indicator,
+                "query":     query,
+                "country":   country,
+                "data":      data[:5],
+                "note":      "Source: World Bank Open Data",
+            }
+        except Exception as e:
+            logger.warning("search_public_data world_bank failed: %s", e)
+            return {"dataset": "world_bank", "error": str(e), "data": []}
+
+    # ── OpenStreetMap business count ──────────────────────────────────────
+    elif dataset == "osm_count":
+        try:
+            # Use Nominatim + Overpass to count a business type in a location
+            nominatim_url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(location or query)}&format=json&limit=1"
+            req = urllib.request.Request(nominatim_url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                hits = _json.loads(resp.read().decode())
+            if not hits:
+                return {"dataset": "osm_count", "error": "location not found", "data": []}
+            bbox = hits[0]["boundingbox"]  # [min_lat, max_lat, min_lon, max_lon]
+            # Count pharmacy amenities in bounding box
+            term = query.lower()
+            amenity = "pharmacy" if "pharmac" in term else ("hospital" if "hospital" in term else "shop")
+            overpass = f'[out:json][timeout:10];node["amenity"="{amenity}"]({bbox[0]},{bbox[2]},{bbox[1]},{bbox[3]});out count;'
+            overpass_url = f"https://overpass-api.de/api/interpreter?data={urllib.parse.quote(overpass)}"
+            req2 = urllib.request.Request(overpass_url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+            with urllib.request.urlopen(req2, timeout=10) as resp2:
+                count_data = _json.loads(resp2.read().decode())
+            count = count_data.get("elements", [{}])[0].get("tags", {}).get("total", "unknown")
+            return {
+                "dataset":  "osm_count",
+                "location": location or query,
+                "amenity":  amenity,
+                "count":    count,
+                "bbox":     bbox,
+                "note":     "Source: OpenStreetMap via Overpass API",
+            }
+        except Exception as e:
+            logger.warning("search_public_data osm_count failed: %s", e)
+            return {"dataset": "osm_count", "error": str(e), "data": []}
+
+    return {"error": f"Unknown dataset: {dataset}. Use: us_census, bls, world_bank, open_fda, osm_count"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # TOOL DEFINITIONS — registered with Anthropic API
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1091,6 +1315,60 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "name": "web_search",
+        "description": (
+            "Search the web for market intelligence, industry news, competitor information, "
+            "regulations, or any public knowledge. Use this when the user asks about: "
+            "industry trends, market conditions, specific companies, public statistics, "
+            "regulations, best practices, or any topic beyond the organisation's own data. "
+            "Returns snippets from DuckDuckGo and Wikipedia."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["query"],
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query. Be specific — e.g. 'pharmacy market size Maine 2024' not just 'pharmacy'.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max results to return. Default 5.",
+                },
+            },
+        },
+    },
+    {
+        "name": "search_public_data",
+        "description": (
+            "Query structured public datasets for market research. "
+            "Use this for: US demographics and income data (us_census), "
+            "FDA drug and pharmacy data (open_fda), "
+            "World Bank economic indicators like health spending and GDP (world_bank), "
+            "OpenStreetMap business counts in a location (osm_count). "
+            "Always pair with web_search for context around the numbers."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["dataset", "query"],
+            "properties": {
+                "dataset": {
+                    "type": "string",
+                    "enum": ["us_census", "open_fda", "world_bank", "osm_count"],
+                    "description": "Which dataset to query.",
+                },
+                "query": {
+                    "type": "string",
+                    "description": "What to search for within the dataset (e.g. 'pharmacy', 'health spending', 'gdp').",
+                },
+                "location": {
+                    "type": "string",
+                    "description": "Location filter — city, state, or country (e.g. 'Maine', 'US', 'Portland Maine').",
+                },
+            },
+        },
+    },
 ]
 
 
@@ -1118,6 +1396,9 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "get_enterprise_overview": get_enterprise_overview,
         "get_network_overview":    get_network_overview,
         "get_ml_predictions":      get_ml_predictions,
+        # Web-grounded tools — company_id injected but not used (public data)
+        "web_search":              web_search,
+        "search_public_data":      search_public_data,
     }
 
     fn = dispatch.get(tool_name)
