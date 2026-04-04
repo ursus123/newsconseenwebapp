@@ -6,20 +6,22 @@ import path from 'path'
 
 // Resolve relative to project root, not src/
 const projectRoot  = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const reactPath      = path.resolve(projectRoot, 'node_modules/react/index.js')
-const reactDomPath   = path.resolve(projectRoot, 'node_modules/react-dom/index.js')
-const reactJsxPath   = path.resolve(projectRoot, 'node_modules/react/jsx-runtime.js')
-const reactDomClient = path.resolve(projectRoot, 'node_modules/react-dom/client.js')
+const reactPath         = path.resolve(projectRoot, 'node_modules/react/index.js')
+const reactDomPath      = path.resolve(projectRoot, 'node_modules/react-dom/index.js')
+const reactJsxPath      = path.resolve(projectRoot, 'node_modules/react/jsx-runtime.js')
+const reactJsxDevPath   = path.resolve(projectRoot, 'node_modules/react/jsx-dev-runtime.js')
+const reactDomClient    = path.resolve(projectRoot, 'node_modules/react-dom/client.js')
 
 function dedupeReactPlugin() {
   return {
     name: 'dedupe-react',
     enforce: 'pre',
     resolveId(id) {
-      if (id === 'react')             return { id: reactPath,      moduleSideEffects: false }
-      if (id === 'react-dom')         return { id: reactDomPath,   moduleSideEffects: false }
-      if (id === 'react/jsx-runtime') return { id: reactJsxPath,   moduleSideEffects: false }
-      if (id === 'react-dom/client')  return { id: reactDomClient, moduleSideEffects: false }
+      if (id === 'react')                 return { id: reactPath,       moduleSideEffects: false }
+      if (id === 'react-dom')             return { id: reactDomPath,    moduleSideEffects: false }
+      if (id === 'react/jsx-runtime')     return { id: reactJsxPath,    moduleSideEffects: false }
+      if (id === 'react/jsx-dev-runtime') return { id: reactJsxDevPath, moduleSideEffects: false }
+      if (id === 'react-dom/client')      return { id: reactDomClient,  moduleSideEffects: false }
       return null
     },
   }
@@ -37,9 +39,7 @@ export default defineConfig({
   resolve: {
     dedupe: ['react', 'react-dom', 'react/jsx-runtime', '@tanstack/react-query'],
     alias: {
-      react:       reactPath,
-      'react-dom': reactDomPath,
-      '@':         path.resolve(projectRoot, 'src'),
+      '@': path.resolve(projectRoot, 'src'),
     },
   },
   optimizeDeps: {
