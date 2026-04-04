@@ -3,31 +3,9 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import path from 'path'
 
-const reactPath = path.resolve('./node_modules/react/index.js')
-const reactDomPath = path.resolve('./node_modules/react-dom/index.js')
-const reactJsxPath = path.resolve('./node_modules/react/jsx-runtime.js')
-const reactDomClientPath = path.resolve('./node_modules/react-dom/client.js')
-
-// Force all react imports to the single root copy, including inside node_modules
-function dedupeReactPlugin() {
-  return {
-    name: 'dedupe-react',
-    enforce: 'pre',
-    resolveId(id) {
-      if (id === 'react') return { id: reactPath, moduleSideEffects: false }
-      if (id === 'react-dom') return { id: reactDomPath, moduleSideEffects: false }
-      if (id === 'react/jsx-runtime') return { id: reactJsxPath, moduleSideEffects: false }
-      if (id === 'react-dom/client') return { id: reactDomClientPath, moduleSideEffects: false }
-      return null
-    },
-  }
-}
-
-// Cache bust: 2026-04-03T04
+// Cache bust: 2026-04-04T01
 export default defineConfig({
-  logLevel: 'error',
   plugins: [
-    dedupeReactPlugin(),
     base44({
       legacySDKImports: false,
     }),
@@ -36,10 +14,20 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve('./src'),
+      // Hard-redirect every react import to the single root copy
+      'react': path.resolve('./node_modules/react/index.js'),
+      'react-dom': path.resolve('./node_modules/react-dom/index.js'),
+      'react/jsx-runtime': path.resolve('./node_modules/react/jsx-runtime.js'),
+      'react-dom/client': path.resolve('./node_modules/react-dom/client.js'),
     },
+    // Vite's built-in deduplication — ensures only one copy is resolved
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react-dom/client'],
   },
   optimizeDeps: {
     force: true,
+    // Pre-bundle react itself so only one optimized copy exists
     include: ['react', 'react-dom', 'react/jsx-runtime', 'react-dom/client'],
+    // Exclude the SDK from pre-bundling so it goes through resolve.alias above
+    exclude: ['@base44/sdk'],
   },
 })
