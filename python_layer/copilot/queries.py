@@ -1187,7 +1187,62 @@ def search_public_data(dataset: str, query: str, company_id: str, location: str 
             logger.warning("search_public_data osm_count failed: %s", e)
             return {"dataset": "osm_count", "error": str(e), "data": []}
 
-    return {"error": f"Unknown dataset: {dataset}. Use: us_census, bls, world_bank, open_fda, osm_count"}
+    # ── CMS pharmacy providers ────────────────────────────────────────────
+    elif dataset == "cms_pharmacy":
+        try:
+            from connectors.public_data.cms_medicare import CMSMedicareConnector
+            state = (location or query or "")[:2].upper() or "ME"
+            conn  = CMSMedicareConnector()
+            df    = conn.get_pharmacy_providers(state=state, limit=100)
+            if df.empty:
+                return {"dataset": "cms_pharmacy", "state": state, "data": [], "note": "No CMS pharmacy data found for this state"}
+            return {
+                "dataset": "cms_pharmacy",
+                "state":   state,
+                "count":   len(df),
+                "data":    df.head(20).to_dict(orient="records"),
+                "note":    "Source: CMS Provider of Services — certified pharmacy locations",
+            }
+        except Exception as e:
+            logger.warning("search_public_data cms_pharmacy failed: %s", e)
+            return {"dataset": "cms_pharmacy", "error": str(e), "data": []}
+
+    # ── State pharmacy license data ───────────────────────────────────────
+    elif dataset == "state_pharmacy":
+        try:
+            from connectors.public_data.state_pharmacy import StatePharmacyConnector
+            state = (location or query or "")[:2].upper() or "ME"
+            conn  = StatePharmacyConnector()
+            summary = conn.get_license_summary(state=state)
+            return {
+                "dataset": "state_pharmacy",
+                "state":   state,
+                "summary": summary,
+                "note":    "Source: State Pharmacy Board / NABP / CMS NPPES",
+            }
+        except Exception as e:
+            logger.warning("search_public_data state_pharmacy failed: %s", e)
+            return {"dataset": "state_pharmacy", "error": str(e), "data": []}
+
+    # ── DEA/NPPES pharmacy count ──────────────────────────────────────────
+    elif dataset == "dea_pharmacy":
+        try:
+            from connectors.public_data.dea_registrant import DEARegistrantConnector
+            state = (location or query or "")[:2].upper() or "ME"
+            conn  = DEARegistrantConnector()
+            df    = conn.get_pharmacy_count_by_city(state=state)
+            return {
+                "dataset": "dea_pharmacy",
+                "state":   state,
+                "count":   len(df),
+                "data":    df.head(20).to_dict(orient="records"),
+                "note":    "Source: DEA/NPPES NPI Registry — pharmacy count by city",
+            }
+        except Exception as e:
+            logger.warning("search_public_data dea_pharmacy failed: %s", e)
+            return {"dataset": "dea_pharmacy", "error": str(e), "data": []}
+
+    return {"error": f"Unknown dataset: {dataset}. Use: us_census, world_bank, open_fda, osm_count, cms_pharmacy, state_pharmacy, dea_pharmacy"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1346,8 +1401,11 @@ TOOL_DEFINITIONS = [
             "Use this for: US demographics and income data (us_census), "
             "FDA drug and pharmacy data (open_fda), "
             "World Bank economic indicators like health spending and GDP (world_bank), "
-            "OpenStreetMap business counts in a location (osm_count). "
-            "Always pair with web_search for context around the numbers."
+            "OpenStreetMap business counts in a location (osm_count), "
+            "CMS-certified pharmacy locations by state (cms_pharmacy), "
+            "state pharmacy board license data (state_pharmacy), "
+            "DEA/NPPES pharmacy count by city (dea_pharmacy). "
+            "For pharmacy market research always use cms_pharmacy, state_pharmacy, and dea_pharmacy together."
         ),
         "input_schema": {
             "type": "object",
@@ -1355,8 +1413,8 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "dataset": {
                     "type": "string",
-                    "enum": ["us_census", "open_fda", "world_bank", "osm_count"],
-                    "description": "Which dataset to query.",
+                    "enum": ["us_census", "open_fda", "world_bank", "osm_count", "cms_pharmacy", "state_pharmacy", "dea_pharmacy"],
+                    "description": "Which dataset to query. cms_pharmacy=CMS-certified pharmacy locations, state_pharmacy=state board licenses, dea_pharmacy=NPPES pharmacy count by city.",
                 },
                 "query": {
                     "type": "string",

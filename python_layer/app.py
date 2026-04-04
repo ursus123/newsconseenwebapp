@@ -172,6 +172,14 @@ app.include_router(network_router)
 if _market_ok and market_router is not None:
     app.include_router(market_router)
 
+# Public Data Connectors (CMS, DEA/NPPES, State Pharmacy Board)
+try:
+    from connectors.public_data.routes import router as public_data_router
+    app.include_router(public_data_router)
+except Exception as _pd_err:
+    import logging as _logging
+    _logging.getLogger(__name__).warning("Public data connectors not loaded: %s", _pd_err)
+
 # Phase 4 — Kinetic Layer
 if _kinetic_ok and kinetic_router is not None:
     app.include_router(kinetic_router)
