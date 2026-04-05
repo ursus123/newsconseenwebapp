@@ -6,21 +6,42 @@ import path from 'path'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// Plugin that removes any broken react aliases injected by other plugins
+const fixReactAliases = {
+  name: 'fix-react-aliases',
+  enforce: 'post',
+  config(config) {
+    if (!config.resolve) return;
+    const aliases = config.resolve.alias;
+    if (!aliases) return;
+
+    const fixAlias = (list) => {
+      if (!Array.isArray(list)) return list;
+      return list.filter(entry => {
+        if (typeof entry.replacement === 'string' && entry.replacement.includes('/app_temp/')) {
+          return false;
+        }
+        return true;
+      });
+    };
+
+    if (Array.isArray(aliases)) {
+      config.resolve.alias = fixAlias(aliases);
+    }
+  },
+};
+
 export default defineConfig({
   plugins: [
     base44({ legacySDKImports: false }),
     react(),
+    fixReactAliases,
   ],
   resolve: {
-    dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime', '@tanstack/react-query'],
-    alias: [
-      { find: 'react/jsx-runtime',     replacement: '/app/node_modules/react/jsx-runtime.js' },
-      { find: 'react/jsx-dev-runtime', replacement: '/app/node_modules/react/jsx-dev-runtime.js' },
-      { find: 'react-dom/client',      replacement: '/app/node_modules/react-dom/client.js' },
-      { find: 'react-dom',             replacement: '/app/node_modules/react-dom/index.js' },
-      { find: 'react',                 replacement: '/app/node_modules/react/index.js' },
-      { find: '@',                     replacement: path.resolve(__dirname, 'src') },
-    ],
+    dedupe: ['react', 'react-dom', '@tanstack/react-query'],
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+    },
   },
   optimizeDeps: {
     force: true,
