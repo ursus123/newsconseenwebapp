@@ -3,48 +3,48 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import { createRequire } from 'module'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const require = createRequire(import.meta.url)
 
-// Plugin that removes any broken react aliases injected by other plugins
-const fixReactAliases = {
-  name: 'fix-react-aliases',
+const reactDir = path.dirname(require.resolve('react/package.json'))
+const reactDomDir = path.dirname(require.resolve('react-dom/package.json'))
+
+// This plugin runs after all others and fixes any react alias pointing to a file instead of a directory
+const fixReactAlias = {
+  name: 'fix-react-alias',
   enforce: 'post',
-  config(config) {
-    if (!config.resolve) return;
-    const aliases = config.resolve.alias;
-    if (!aliases) return;
-
-    const fixAlias = (list) => {
-      if (!Array.isArray(list)) return list;
-      return list.filter(entry => {
-        if (typeof entry.replacement === 'string' && entry.replacement.includes('/app_temp/')) {
-          return false;
+  configResolved(config) {
+    const aliases = config.resolve.alias
+    if (!Array.isArray(aliases)) return
+    for (const entry of aliases) {
+      if (entry.find === 'react' || entry.find?.source === '^react$') {
+        // If replacement ends with .js it's a file path — replace with directory
+        if (typeof entry.replacement === 'string' && entry.replacement.endsWith('.js')) {
+          entry.replacement = reactDir
         }
-        return true;
-      });
-    };
-
-    if (Array.isArray(aliases)) {
-      config.resolve.alias = fixAlias(aliases);
+      }
     }
   },
-};
+}
 
 export default defineConfig({
   plugins: [
     base44({ legacySDKImports: false }),
     react(),
-    fixReactAliases,
+    fixReactAlias,
   ],
   resolve: {
-    dedupe: ['react', 'react-dom', '@tanstack/react-query'],
-    alias: {
-      '@': path.resolve(__dirname, 'src'),
-    },
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime', '@tanstack/react-query'],
+    alias: [
+      { find: 'react', replacement: reactDir },
+      { find: 'react-dom', replacement: reactDomDir },
+      { find: '@', replacement: path.resolve(__dirname, 'src') },
+    ],
   },
   optimizeDeps: {
-    force: true,
+    include: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
     exclude: ['@base44/sdk'],
   },
 })
