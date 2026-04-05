@@ -12,10 +12,15 @@ export default defineConfig({
     react(),
   ],
   resolve: {
-    dedupe: ['react', 'react-dom', '@tanstack/react-query'],
-    alias: {
-      '@': path.resolve(__dirname, 'src'),
-    },
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime', '@tanstack/react-query'],
+    alias: [
+      { find: 'react/jsx-runtime',     replacement: '/app/node_modules/react/jsx-runtime.js' },
+      { find: 'react/jsx-dev-runtime', replacement: '/app/node_modules/react/jsx-dev-runtime.js' },
+      { find: 'react-dom/client',      replacement: '/app/node_modules/react-dom/client.js' },
+      { find: 'react-dom',             replacement: '/app/node_modules/react-dom/index.js' },
+      { find: 'react',                 replacement: '/app/node_modules/react/index.js' },
+      { find: '@',                     replacement: path.resolve(__dirname, 'src') },
+    ],
   },
   optimizeDeps: {
     force: true,

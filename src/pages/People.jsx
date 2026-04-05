@@ -17,6 +17,8 @@ import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Upload, Users, CheckCircle, Clock, Heart } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
+import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
+import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import {
@@ -150,6 +152,8 @@ export default function People() {
   const [activeTypeTab, setActiveTypeTab] = useState("all");
   const [currentUser, setCurrentUser] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [heatmapOn, setHeatmapOn] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -203,6 +207,13 @@ export default function People() {
     setSelectedIds([]);
   };
 
+  const handleDeleteAll = async () => {
+    for (const p of people) await base44.entities.Person.delete(p.id);
+    qc.invalidateQueries({ queryKey: ["people"] });
+    qc.refetchQueries({ queryKey: ["people"] });
+    toast({ title: `All ${people.length} people deleted` });
+  };
+
   // Type tab pre-filter with migration support
 
   const typeFiltered = activeTypeTab === "all"
@@ -254,6 +265,11 @@ export default function People() {
           fields={["first_name","last_name","preferred_name","person_type","primary_role","email","phone","status","availability_status","city","country","start_date"]}
           filename="people_export"
         />
+        {perms.can_delete && people.length > 0 && (
+          <Button variant="outline" size="sm" className="rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => setDeleteAllOpen(true)}>
+            🗑️ Delete All
+          </Button>
+        )}
       </PageHeader>
 
       {/* Stats row */}
@@ -296,6 +312,21 @@ export default function People() {
         onClear={() => setSelectedIds([])}
         onDeleteSelected={perms.can_delete ? handleBulkDelete : undefined}
         canDelete={perms.can_delete}
+      />
+
+      <SpreadsheetToolbar
+        data={processedPeople}
+        numericFields={[
+          { key: "cost_rate", label: "Cost Rate" },
+          { key: "height_cm", label: "Height (cm)" },
+          { key: "weight_kg", label: "Weight (kg)" },
+        ]}
+        heatmapField="cost_rate"
+        heatmapOn={heatmapOn}
+        onHeatmapToggle={() => setHeatmapOn((h) => !h)}
+        selectedIds={selectedIds}
+        onSelectAll={() => setSelectedIds(processedPeople.map((r) => r.id))}
+        onClearSelect={() => setSelectedIds([])}
       />
 
       {/* Empty state */}
@@ -349,6 +380,13 @@ export default function People() {
         onClose={() => setDeleting(null)}
         onConfirm={() => deleteMut.mutate(deleting.id)}
         itemName={deleting ? `${deleting.first_name} ${deleting.last_name}` : ""}
+      />
+      <DeleteAllDialog
+        open={deleteAllOpen}
+        onClose={() => setDeleteAllOpen(false)}
+        onConfirm={handleDeleteAll}
+        entityLabel="People"
+        count={people.length}
       />
       <BulkImportDialog
         open={importOpen}

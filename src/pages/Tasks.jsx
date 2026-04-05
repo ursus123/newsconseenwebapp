@@ -28,6 +28,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Pencil, Trash2, Calendar, User, Building2, CheckCircle, AlertCircle, Clock, ShieldCheck, Filter, LayoutGrid, List, CalendarDays, X, Upload, Search, Tag } from "lucide-react";
 import { tagColor } from "@/components/shared/TagInput";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
+import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
+import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { format, isToday, isPast, parseISO } from "date-fns";
 import { motion } from "framer-motion";
@@ -214,6 +216,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkAssignee, setBulkAssignee] = useState("");
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const qc = useQueryClient();
   const perms = usePermissions(currentUser);
   const withScope = useWithScope(currentUser);
@@ -351,6 +354,12 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
     toast({ title: `${deleted} task${deleted !== 1 ? "s" : ""} deleted` });
   };
 
+  const handleDeleteAll = async () => {
+    for (const t of tasks) { try { await base44.entities.Task.delete(t.id); } catch {} }
+    invalidate();
+    toast({ title: `All ${tasks.length} tasks deleted` });
+  };
+
   const renderCard = (task, selectable = false) => (
     <TaskCard
       key={task.id}
@@ -384,6 +393,11 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
               <Upload className="w-4 h-4 mr-2" /> Import
             </Button>
           )}
+          {perms.can_delete && tasks.length > 0 && (
+            <Button variant="outline" size="sm" className="rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => setDeleteAllOpen(true)}>
+              🗑️ Delete All
+            </Button>
+          )}
         </PageHeader>
         <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
           {[{ key: "kanban", icon: LayoutGrid, label: "Kanban" }, { key: "list", icon: List, label: "List" }, { key: "timeline", icon: CalendarDays, label: "Timeline" }, { key: "calendar", icon: Calendar, label: "Calendar" }].map(({ key, icon: Icon, label }) => (
@@ -397,6 +411,14 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
 
       <TaskSummaryCards tasks={tasks} />
       <TaskPerformanceMetrics tasks={tasks} />
+
+      <SpreadsheetToolbar
+        data={filtered}
+        numericFields={[]}
+        selectedIds={selectedIds}
+        onSelectAll={() => setSelectedIds(filtered.map((t) => t.id))}
+        onClearSelect={clearSelection}
+      />
 
       <div className="flex flex-wrap gap-2 mb-3">
         {FILTERS.map((f) => (
@@ -547,6 +569,13 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         onConfirm={handleOutcomeConfirm}
       />
 
+      <DeleteAllDialog
+        open={deleteAllOpen}
+        onClose={() => setDeleteAllOpen(false)}
+        onConfirm={handleDeleteAll}
+        entityLabel="Tasks"
+        count={tasks.length}
+      />
       <BulkImportDialog
         open={importOpen}
         onClose={() => {

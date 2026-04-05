@@ -14,6 +14,8 @@ import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
 import { Upload, Building2, CheckCircle, Clock, Globe } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
+import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
+import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { useToast } from "@/components/ui/use-toast";
 import SubEnterprisesPanel from "@/components/enterprise/SubEnterprisesPanel";
@@ -129,6 +131,8 @@ export default function Enterprises() {
   const [filters, setFilters]       = useState({ status: "", enterprise_type: "", operating_status: "", country: "" });
   const [viewMode, setViewMode]     = useState("table");
   const [selectedIds, setSelectedIds] = useState([]);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [heatmapOn, setHeatmapOn] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -208,6 +212,13 @@ export default function Enterprises() {
     setSelectedIds([]);
   };
 
+  const handleDeleteAll = async () => {
+    for (const e of enterprises) await base44.entities.Enterprise.delete(e.id);
+    qc.invalidateQueries({ queryKey: ["enterprises"] });
+    qc.refetchQueries({ queryKey: ["enterprises"] });
+    toast({ title: `All ${enterprises.length} enterprises deleted` });
+  };
+
   const handleArchive = (enterprise) => {
     updateMut.mutate({ id: enterprise.id, data: { ...enterprise, status: "archived" } });
     setFormOpen(false);
@@ -246,6 +257,11 @@ export default function Enterprises() {
           fields={["enterprise_name","short_name","enterprise_type","status","phone","email","city","region","country","operating_status"]}
           filename="enterprises_export"
         />
+        {perms.can_delete && enterprises.length > 0 && (
+          <Button variant="outline" size="sm" className="rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => setDeleteAllOpen(true)}>
+            🗑️ Delete All
+          </Button>
+        )}
       </PageHeader>
 
       {/* Stats row */}
@@ -270,6 +286,15 @@ export default function Enterprises() {
       )}
 
       <BulkActionBar selectedIds={selectedIds} onClear={() => setSelectedIds([])} onDeleteSelected={perms.can_delete ? handleBulkDelete : undefined} canDelete={perms.can_delete} />
+
+      <SpreadsheetToolbar
+        data={processedEnterprises}
+        numericFields={[]}
+        heatmapField={null}
+        selectedIds={selectedIds}
+        onSelectAll={() => setSelectedIds(processedEnterprises.map((r) => r.id))}
+        onClearSelect={() => setSelectedIds([])}
+      />
 
       {/* Toolbar + view toggle */}
       <div className="space-y-3">
@@ -330,6 +355,13 @@ export default function Enterprises() {
         />
       )}
 
+      <DeleteAllDialog
+        open={deleteAllOpen}
+        onClose={() => setDeleteAllOpen(false)}
+        onConfirm={handleDeleteAll}
+        entityLabel="Enterprises"
+        count={enterprises.length}
+      />
       {/* Forms & dialogs */}
       <EnterpriseForm
         open={formOpen}

@@ -13,6 +13,8 @@ import { Lock, Upload, ChevronDown, ChevronUp, Plus, Search, X } from "lucide-re
 import { tagColor } from "@/components/shared/TagInput";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkActionBar from "../components/shared/BulkActionBar";
+import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
+import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import {
@@ -239,6 +241,7 @@ export default function Transactions() {
   const [filterTag, setFilterTag]               = useState("all");
   const [search, setSearch]                     = useState("");
   const [selectedIds, setSelectedIds]           = useState([]);
+  const [deleteAllOpen, setDeleteAllOpen]       = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -421,6 +424,13 @@ export default function Transactions() {
     setSelectedIds([]);
   };
 
+  const handleDeleteAll = async () => {
+    for (const t of transactions) await base44.entities.Transaction.delete(t.id);
+    qc.invalidateQueries({ queryKey: ["transactions"] });
+    qc.refetchQueries({ queryKey: ["transactions"] });
+    toast({ title: `All ${transactions.length} transactions deleted` });
+  };
+
   const activeTabConfig = TABS.find(t => t.id === activeTab);
   const searchFiltered = search ? fuzzyFilter(filtered, search, ["description", "enterprise", "primary_person", "invoice_number", "counterparty", "service_name"]) : filtered;
   const tabTransactions = searchFiltered.filter(activeTabConfig?.filter || (() => true));
@@ -445,6 +455,11 @@ export default function Transactions() {
         {perms.l4_create_draft && (
           <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
             <Upload className="w-4 h-4 mr-2" /> Import
+          </Button>
+        )}
+        {perms.l4_void && transactions.length > 0 && (
+          <Button variant="outline" size="sm" className="rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => setDeleteAllOpen(true)}>
+            🗑️ Delete All
           </Button>
         )}
       </PageHeader>
@@ -548,6 +563,19 @@ export default function Transactions() {
         })}
       </div>
 
+      <SpreadsheetToolbar
+        data={tabTransactions}
+        numericFields={[
+          { key: "amount",     label: "Amount" },
+          { key: "net_amount", label: "Net Amount" },
+          { key: "tax_amount", label: "Tax" },
+          { key: "discount_amount", label: "Discount" },
+        ]}
+        selectedIds={selectedIds}
+        onSelectAll={() => setSelectedIds(tabTransactions.map((t) => t.id))}
+        onClearSelect={() => setSelectedIds([])}
+      />
+
       <BulkActionBar
         selectedIds={selectedIds}
         onClear={() => setSelectedIds([])}
@@ -595,6 +623,13 @@ export default function Transactions() {
         )}
       </div>
 
+      <DeleteAllDialog
+        open={deleteAllOpen}
+        onClose={() => setDeleteAllOpen(false)}
+        onConfirm={handleDeleteAll}
+        entityLabel="Transactions"
+        count={transactions.length}
+      />
       <TransactionForm
         open={formOpen}
         onClose={() => { setFormOpen(false); setEditing(null); }}

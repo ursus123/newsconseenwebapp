@@ -24,6 +24,8 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Upload, Package, AlertTriangle, Pill, DollarSign } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
+import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
+import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
@@ -127,6 +129,8 @@ export default function Products() {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ status: "", item_type: "", category: "" });
   const [selectedIds, setSelectedIds] = useState([]);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [heatmapOn, setHeatmapOn] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -176,6 +180,13 @@ export default function Products() {
     setSelectedIds([]);
   };
 
+  const handleDeleteAll = async () => {
+    for (const p of products) await base44.entities.Product.delete(p.id);
+    qc.invalidateQueries({ queryKey: ["products"] });
+    qc.refetchQueries({ queryKey: ["products"] });
+    toast({ title: `All ${products.length} items deleted` });
+  };
+
   const lowStockItems = products.filter((p) => p.stock_quantity != null && p.min_stock_level != null && p.stock_quantity <= p.min_stock_level && p.status === "active");
   const totalStockValue = "$" + products.reduce((sum, p) => sum + ((parseFloat(p.stock_quantity) || 0) * (parseFloat(p.cost_price) || 0)), 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
 
@@ -220,6 +231,11 @@ export default function Products() {
           fields={["name","sku","item_type","category","status","stock_quantity","unit_of_measure","unit_price","cost_price","supplier","expiry_date"]}
           filename="products_export"
         />
+        {perms.can_delete && products.length > 0 && (
+          <Button variant="outline" size="sm" className="rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => setDeleteAllOpen(true)}>
+            🗑️ Delete All
+          </Button>
+        )}
       </PageHeader>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -265,6 +281,22 @@ export default function Products() {
 
       <BulkActionBar selectedIds={selectedIds} onClear={() => setSelectedIds([])} onDeleteSelected={perms.can_delete ? handleBulkDelete : undefined} canDelete={perms.can_delete} />
 
+      <SpreadsheetToolbar
+        data={processedProducts}
+        numericFields={[
+          { key: "stock_quantity", label: "Stock Qty" },
+          { key: "unit_price",     label: "Unit Price" },
+          { key: "cost_price",     label: "Cost Price" },
+          { key: "min_stock_level", label: "Min Stock" },
+        ]}
+        heatmapField="stock_quantity"
+        heatmapOn={heatmapOn}
+        onHeatmapToggle={() => setHeatmapOn((h) => !h)}
+        selectedIds={selectedIds}
+        onSelectAll={() => setSelectedIds(processedProducts.map((r) => r.id))}
+        onClearSelect={() => setSelectedIds([])}
+      />
+
       {!isLoading && products.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
           <Package className="w-10 h-10 text-slate-200 mb-3" />
@@ -283,6 +315,13 @@ export default function Products() {
         />
       )}
 
+      <DeleteAllDialog
+        open={deleteAllOpen}
+        onClose={() => setDeleteAllOpen(false)}
+        onConfirm={handleDeleteAll}
+        entityLabel="Products"
+        count={products.length}
+      />
       <ProductForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }}
         onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)}
         onArchive={handleArchive} initialData={editing} />
