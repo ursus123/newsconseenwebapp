@@ -11,19 +11,30 @@ const require = createRequire(import.meta.url)
 const reactDir = path.dirname(require.resolve('react/package.json'))
 const reactDomDir = path.dirname(require.resolve('react-dom/package.json'))
 
-// Map of broken-path patterns to real file paths
-function fixId(id) {
-  if (id === 'react/jsx-runtime')     return path.join(reactDir, 'jsx-runtime.js')
-  if (id === 'react/jsx-dev-runtime') return path.join(reactDir, 'jsx-dev-runtime.js')
-  if (id === 'react-dom/client')      return path.join(reactDomDir, 'client.js')
-  if (id === 'react-dom/server')      return path.join(reactDomDir, 'server.js')
+const jsxRuntime     = path.join(reactDir, 'jsx-runtime.js')
+const jsxDevRuntime  = path.join(reactDir, 'jsx-dev-runtime.js')
+const reactDomClient = path.join(reactDomDir, 'client.js')
+const reactDomServer = path.join(reactDomDir, 'server.js')
 
-  // Catch broken absolute paths: /path/react/index.js/jsx-dev-runtime
-  const brokenReact = id.match(/\/react\/index\.js\/(.+)$/)
-  if (brokenReact) return path.join(reactDir, `${brokenReact[1]}.js`)
+function resolveReactSubpath(id) {
+  // Direct sub-path imports
+  if (id === 'react/jsx-dev-runtime') return jsxDevRuntime
+  if (id === 'react/jsx-runtime')     return jsxRuntime
+  if (id === 'react-dom/client')      return reactDomClient
+  if (id === 'react-dom/server')      return reactDomServer
 
-  const brokenReactDom = id.match(/\/react-dom\/index\.js\/(.+)$/)
-  if (brokenReactDom) return path.join(reactDomDir, `${brokenReactDom[1]}.js`)
+  // Broken absolute paths: /path/to/react/index.js/jsx-runtime (no extension)
+  // or /path/to/react/index.js/jsx-runtime.js (with extension)
+  const mReact = id.match(/\/react\/index\.js\/(.+?)(?:\.js)?$/)
+  if (mReact) {
+    const candidate = path.join(reactDir, mReact[1] + '.js')
+    if (fs.existsSync(candidate)) return candidate
+  }
+  const mReactDom = id.match(/\/react-dom\/index\.js\/(.+?)(?:\.js)?$/)
+  if (mReactDom) {
+    const candidate = path.join(reactDomDir, mReactDom[1] + '.js')
+    if (fs.existsSync(candidate)) return candidate
+  }
 
   return null
 }
@@ -32,20 +43,12 @@ const fixReactPaths = {
   name: 'fix-react-paths',
   enforce: 'pre',
   resolveId(id) {
-    return fixId(id) || null
+    return resolveReactSubpath(id)
   },
   load(id) {
-    const fixed = fixId(id)
-    if (fixed && fs.existsSync(fixed)) {
-      return fs.readFileSync(fixed, 'utf-8')
-    }
-    // Also handle if the id itself is the broken path
-    if (id.match(/\/react\/index\.js\//) || id.match(/\/react-dom\/index\.js\//)) {
-      const fixed2 = fixId(id)
-      if (fixed2 && fs.existsSync(fixed2)) {
-        return fs.readFileSync(fixed2, 'utf-8')
-      }
-    }
+    // Last resort: if the broken path slipped through resolveId, serve the file content
+    const fixed = resolveReactSubpath(id)
+    if (fixed && fs.existsSync(fixed)) return fs.readFileSync(fixed, 'utf-8')
     return null
   }
 }
@@ -57,7 +60,12 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src'),
+      // Only alias sub-paths — NOT bare 'react'/'react-dom' to avoid base44 conflict
+      'react/jsx-dev-runtime': jsxDevRuntime,
+      'react/jsx-runtime':     jsxRuntime,
+      'react-dom/client':      reactDomClient,
+      'react-dom/server':      reactDomServer,
+      '@':                     path.resolve(__dirname, 'src'),
     },
   },
 })
