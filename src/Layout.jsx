@@ -34,6 +34,7 @@ import {
   Search,
   Zap,
   Layers,
+  Tags,
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
@@ -163,6 +164,7 @@ const NAV_CONFIG = {
       items: [
         { name: "UserManagement", label: "User Management", icon: UserCog },
         { name: "Permissions",    icon: Shield },
+        { name: "TaxonomyAdmin",  label: "Taxonomy Admin",  icon: Tags },
         { name: "EntityGraph",    label: "Enterprise Intelligence", icon: Network },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },
         { name: "Pipelines",      icon: GitBranch },

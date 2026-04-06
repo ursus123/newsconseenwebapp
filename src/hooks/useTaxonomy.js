@@ -1,11 +1,21 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 
-// Module-level cache — persists for the browser session.
+// ── Session-level cache ───────────────────────────────────────────────────────
 // Key: "entityType:fieldName:parentValue:companyId"
-// Prevents repeated API calls when the same TaxonomySelect re-renders.
+// Value: MasterDataOption[] — full objects so usage_count is always fresh
 const _taxonomyCache = new Map();
 
+// ── FREQUENT threshold ────────────────────────────────────────────────────────
+// A custom option is "frequent" (shown in the Frequently Used section of
+// TaxonomySelect) when its usage_count meets or exceeds this value.
+const FREQUENT_THRESHOLD = 3;
+
+// ── SYSTEM_DEFAULTS ───────────────────────────────────────────────────────────
+// Curated lists per (fieldName, parentValue).
+// These are shown in the "Standard" section of TaxonomySelect.
+// They are organised so the most universally relevant options come first —
+// that ordering doubles as the "Common" ordering inside the Standard section.
 const SYSTEM_DEFAULTS = {
   person_subtype: {
     staff: [
@@ -143,57 +153,120 @@ const SYSTEM_DEFAULTS = {
   },
 };
 
+// ── Number of system options shown in "Common" sub-group ──────────────────────
+// The first COMMON_COUNT options in each SYSTEM_DEFAULTS list are surfaced
+// as "Common" inside the Standard section.  The rest are folded under "More".
+const COMMON_COUNT = 8;
+
 export function useTaxonomy(entityType, fieldName, parentValue, companyId) {
-  const [customOptions, setCustomOptions] = useState([]);
-  const [loading, setLoading] = useState(false);
+  // Full MasterDataOption objects — kept in state so incrementUsage can update them
+  const [customObjects, setCustomObjects]   = useState([]);
+  const [loading, setLoading]               = useState(false);
 
   useEffect(() => {
-    if (!companyId || !parentValue) return;
+    if (!companyId || !parentValue) {
+      setCustomObjects([]);
+      return;
+    }
 
     const cacheKey = `${entityType}:${fieldName}:${parentValue}:${companyId}`;
     if (_taxonomyCache.has(cacheKey)) {
-      setCustomOptions(_taxonomyCache.get(cacheKey));
+      setCustomObjects(_taxonomyCache.get(cacheKey));
       return;
     }
 
     setLoading(true);
     base44.entities.MasterDataOption.filter({
-      entity_type: entityType,
-      field_name: fieldName,
-      parent_value: parentValue,
-      company_id: companyId,
+      entity_type:       entityType,
+      field_name:        fieldName,
+      parent_value:      parentValue,
+      company_id:        companyId,
       is_system_default: false,
     })
       .then(results => {
-        const values = results.map(r => r.value);
-        _taxonomyCache.set(cacheKey, values);
-        setCustomOptions(values);
+        // Only active options; sort most-used first
+        const active = results
+          .filter(r => r.is_active !== false)
+          .sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0));
+        _taxonomyCache.set(cacheKey, active);
+        setCustomObjects(active);
       })
-      .catch(() => setCustomOptions([]))
+      .catch(() => setCustomObjects([]))
       .finally(() => setLoading(false));
   }, [entityType, fieldName, parentValue, companyId]);
 
-  const systemOptions = (SYSTEM_DEFAULTS[fieldName]?.[parentValue] || []);
+  // ── Derived values ──────────────────────────────────────────────────────────
 
+  // Plain string arrays for backward compatibility
+  const customOptions = customObjects.map(o => o.value);
+
+  // System defaults (plain strings, curated order = common-first)
+  const systemOptions = SYSTEM_DEFAULTS[fieldName]?.[parentValue] || [];
+
+  // Frequent custom options — those used >= FREQUENT_THRESHOLD times
+  const frequentCustom = customObjects
+    .filter(o => (o.usage_count || 0) >= FREQUENT_THRESHOLD)
+    .map(o => o.value);
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
+
+  /**
+   * addCustomOption — create a new MasterDataOption and prepend to the list.
+   */
   const addCustomOption = async (value) => {
     if (!value || !companyId) return;
     try {
-      await base44.entities.MasterDataOption.create({
-        entity_type: entityType,
-        field_name: fieldName,
+      const created = await base44.entities.MasterDataOption.create({
+        entity_type:       entityType,
+        field_name:        fieldName,
         value,
-        parent_value: parentValue,
-        company_id: companyId,
+        parent_value:      parentValue,
+        company_id:        companyId,
         is_system_default: false,
+        usage_count:       1,
+        is_active:         true,
       });
-      const updated = [...customOptions, value];
+      const updated = [created, ...customObjects];
       const cacheKey = `${entityType}:${fieldName}:${parentValue}:${companyId}`;
       _taxonomyCache.set(cacheKey, updated);
-      setCustomOptions(updated);
+      setCustomObjects(updated);
     } catch (e) {
       console.error("Failed to save custom taxonomy option", e);
     }
   };
 
-  return { systemOptions, customOptions, loading, addCustomOption };
+  /**
+   * incrementUsage — fire-and-forget usage counter bump.
+   * Called by TaxonomySelect every time the user selects an option.
+   * Only custom options are tracked (system defaults are static).
+   */
+  const incrementUsage = async (value) => {
+    const obj = customObjects.find(o => o.value === value);
+    if (!obj) return; // system default — not tracked here
+    const newCount = (obj.usage_count || 0) + 1;
+    // Optimistic local update
+    const updated = customObjects.map(o =>
+      o.id === obj.id ? { ...o, usage_count: newCount } : o
+    );
+    const cacheKey = `${entityType}:${fieldName}:${parentValue}:${companyId}`;
+    _taxonomyCache.set(cacheKey, updated);
+    setCustomObjects(updated);
+    // Persist asynchronously — UI is never blocked
+    try {
+      await base44.entities.MasterDataOption.update(obj.id, { usage_count: newCount });
+    } catch (_) { /* silent — count is best-effort */ }
+  };
+
+  return {
+    // Backward-compatible string arrays
+    systemOptions,
+    customOptions,
+    loading,
+    addCustomOption,
+    // New
+    frequentCustom,   // string[] — custom values used >= FREQUENT_THRESHOLD times
+    customObjects,    // MasterDataOption[] — full objects for admin use
+    incrementUsage,   // (value: string) => void — call on selection
+    COMMON_COUNT,     // number — how many system options are "common"
+  };
 }
