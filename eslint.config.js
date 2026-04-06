@@ -3,6 +3,7 @@ import pluginJs from "@eslint/js";
 import pluginReact from "eslint-plugin-react";
 import pluginReactHooks from "eslint-plugin-react-hooks";
 import pluginUnusedImports from "eslint-plugin-unused-imports";
+import { newsconseenPlugin } from "./src/eslint-rules/no-hardcoded-taxonomy.js";
 
 export default [
   {
@@ -33,6 +34,9 @@ export default [
       react: pluginReact,
       "react-hooks": pluginReactHooks,
       "unused-imports": pluginUnusedImports,
+      // Newsconseen taxonomy discipline rules
+      // Docs: src/ARCHITECTURE.md § 13 — Taxonomy Governance
+      "newsconseen": newsconseenPlugin,
     },
     rules: {
       "no-unused-vars": "off",
@@ -55,6 +59,15 @@ export default [
         { ignore: ["cmdk-input-wrapper", "toast-close"] },
       ],
       "react-hooks/rules-of-hooks": "error",
+
+      // ── Taxonomy discipline ──────────────────────────────────────────────
+      // ERROR: legacy type values in comparisons (employee, student, vendor…)
+      // Must use TYPE_ALIASES or canonical values (staff, client, contact…)
+      "newsconseen/no-legacy-type-value": "error",
+
+      // WARNING: native <select> used for taxonomy fields
+      // Must use <TaxonomySelect fieldName="person_subtype" … />
+      "newsconseen/no-select-for-taxonomy-field": "warn",
     },
   },
 ];

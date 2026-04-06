@@ -958,9 +958,229 @@ Before saving any file, verify every item. If any item cannot be checked — sto
 - [ ] No vertical-specific type strings hardcoded in component logic
 - [ ] python_layer config/taxonomy.py used for all type normalization in ETL
 
+**Code review checklist (taxonomy)**
+- [ ] No hardcoded subtype values (`"Nurse"`, `"Student"`) in JSX or filter logic
+- [ ] No native `<select>` used for `person_subtype`, `enterprise_subtype`, or `item_subtype`
+- [ ] No legacy type strings (`"employee"`, `"student"`, `"vendor"`) in comparisons
+- [ ] ESLint passes with zero errors — `npm run lint` must exit 0 before merging
+- [ ] New taxonomy values added via MasterDataOption, not hardcoded in components
+
 ---
 
-## 19. Summary
+## 19. Taxonomy Governance — Rules, Anti-Patterns, and Automated Enforcement
+
+This section is the binding contract for taxonomy discipline.
+It is enforced in three places: this document, the ESLint rules, and the CI pipeline.
+
+---
+
+### 19.1 The taxonomy module boundaries
+
+There are exactly two authoritative taxonomy sources.
+**Nothing else defines types.**
+
+| Layer | File | Responsibility |
+|---|---|---|
+| Frontend | `src/hooks/useTaxonomy.js` | Loads `SYSTEM_DEFAULTS` + `MasterDataOption` records. Returns `systemOptions`, `customOptions`, `addCustomOption`. |
+| Frontend | `src/components/shared/TaxonomySelect.jsx` | Combobox UI. Every taxonomy field in every form uses this. No exceptions. |
+| Backend | `python_layer/config/taxonomy.py` | Canonical type sets, normalization functions, sector maps. All ETL modules import from here. |
+
+**Do not:**
+- Add taxonomy-like constants to any component file
+- Build a custom dropdown that duplicates `TaxonomySelect`
+- Hardcode subtype strings in form JSX
+- Add type normalization logic anywhere outside `taxonomy.py`
+
+---
+
+### 19.2 The canonical type values (frontend)
+
+These are the ONLY values that should appear in comparisons and filters.
+
+**person_type** (4 values — canonical)
+```javascript
+"staff" | "client" | "contact" | "volunteer"
+```
+
+**enterprise_type** (6 values — canonical)
+```javascript
+"commercial" | "nonprofit" | "government" | "household" | "cooperative" | "trust"
+```
+
+**item_type** (5 values — canonical)
+```javascript
+"physical" | "living" | "digital" | "service_package" | "financial_instrument"
+```
+
+**sub-types** — operator-defined at runtime via `MasterDataOption`.
+Never hardcode. Never enumerate. Always load via `useTaxonomy`.
+
+---
+
+### 19.3 Anti-patterns — do not write these
+
+**Anti-pattern 1: Legacy type value in comparison**
+```javascript
+// ✗ WRONG — "employee" is a legacy alias, not a canonical value
+if (person.person_type === "employee") { ... }
+if (["student", "patient"].includes(person.person_type)) { ... }
+
+// ✓ CORRECT — use TYPE_ALIASES for backward compatibility
+import { TYPE_ALIASES } from "@/utils/typeAliases";
+if ((TYPE_ALIASES["staff"] || ["staff"]).includes(person.person_type)) { ... }
+if ((TYPE_ALIASES["client"] || ["client"]).includes(person.person_type)) { ... }
+```
+
+**Anti-pattern 2: Native `<select>` for a taxonomy field**
+```jsx
+// ✗ WRONG — native select with hardcoded options
+<select onChange={e => set("person_subtype", e.target.value)}>
+  <option value="Nurse">Nurse</option>
+  <option value="Doctor">Doctor</option>
+  <option value="Pharmacist">Pharmacist</option>
+</select>
+
+// ✓ CORRECT — TaxonomySelect loads options at runtime from MasterDataOption
+<TaxonomySelect
+  entityType="person"
+  fieldName="person_subtype"
+  parentValue={form.person_type}
+  companyId={currentUser?.company_id}
+  value={form.person_subtype}
+  onChange={(v) => set("person_subtype", v)}
+/>
+```
+
+**Anti-pattern 3: Hardcoded subtype constant in a component**
+```javascript
+// ✗ WRONG — hardcoded list breaks across verticals
+const NURSE_SUBTYPES = ["Registered Nurse", "Clinical Nurse", "Ward Sister"];
+const isNurse = NURSE_SUBTYPES.includes(person.person_subtype);
+
+// ✓ CORRECT — filter by person_type, let the operator define subtypes
+const isNurse = person.person_type === "staff" && person.person_subtype === "Nurse";
+// Or better: pass the subtype as a prop from the parent (prop-driven)
+<AttendanceDashboard personType="staff" personSubtype="Nurse" />
+```
+
+**Anti-pattern 4: Taxonomy logic outside the designated files**
+```javascript
+// ✗ WRONG — normalization in a component
+const normalized = raw === "vendor" ? "contact" : raw;
+
+// ✓ CORRECT — normalization in taxonomy.py (ETL) or TYPE_ALIASES (frontend)
+// The ETL normalizes at ingest. The frontend uses TYPE_ALIASES for display.
+```
+
+---
+
+### 19.4 Patterns — write these instead
+
+**Pattern: filtering a list by type with backward compatibility**
+```javascript
+import { TYPE_ALIASES } from "@/utils/typeAliases";
+
+// Staff tab — includes legacy "employee", "contractor", "freelancer"
+const staffList = people.filter(p =>
+  (TYPE_ALIASES["staff"] || ["staff"]).includes(p.person_type)
+);
+
+// Client tab — includes legacy "patient", "student", "member"
+const clientList = people.filter(p =>
+  (TYPE_ALIASES["client"] || ["client"]).includes(p.person_type)
+);
+```
+
+**Pattern: prop-driven taxonomy filter (app isolation)**
+```jsx
+// App component receives taxonomy filter as props — never hardcodes internally
+function AttendanceDashboard({ personType = "client", personSubtype = null }) {
+  const students = people.filter(p =>
+    (TYPE_ALIASES[personType] || [personType]).includes(p.person_type) &&
+    (personSubtype ? p.person_subtype === personSubtype : true)
+  );
+}
+
+// Caller passes the filter
+<AttendanceDashboard personType="client" personSubtype="Student Customer" />
+<AttendanceDashboard personType="client" personSubtype="Patient" />
+```
+
+**Pattern: custom taxonomy value with sync notification**
+```javascript
+// When a form containing new taxonomy values is saved, trigger ETL
+import { useTaxonomySync } from "@/hooks/useTaxonomySync";
+
+const { syncState, notifyTaxonomyChange } = useTaxonomySync();
+
+// In mutation onSuccess:
+notifyTaxonomyChange("person", currentUser?.company_id);
+
+// In JSX header:
+<ETLSyncBanner syncState={syncState} entityType="person" />
+```
+
+---
+
+### 19.5 Python / ETL — taxonomy rules
+
+**All normalization lives in `config/taxonomy.py`.**
+
+```python
+# ✗ WRONG — type strings hardcoded in ETL module
+if row["person_type"] in ["employee", "contractor"]:
+    row["person_type"] = "staff"
+
+# ✓ CORRECT — import and call the centralized normalizer
+from config.taxonomy import normalize_person_type
+row["person_type"] = normalize_person_type(row.get("person_type", ""))
+```
+
+The `normalize_person_type()` function in `taxonomy.py` maps every legacy and
+alias value to the canonical value.  Adding a new alias requires changing only
+that one file — no ETL modules, no frontend code.
+
+---
+
+### 19.6 Automated enforcement — ESLint rules
+
+Two custom ESLint rules enforce the above at lint time.
+Location: `src/eslint-rules/no-hardcoded-taxonomy.js`
+Configuration: `eslint.config.js`
+
+| Rule | Severity | What it catches |
+|---|---|---|
+| `newsconseen/no-legacy-type-value` | **error** | `=== "employee"`, `=== "student"`, `["vendor"].includes(...)` and similar legacy values in comparisons |
+| `newsconseen/no-select-for-taxonomy-field` | **warn** | `<select>` with `name="person_subtype"` or `onChange={e => set("person_subtype", ...)}` |
+
+Run locally:
+```bash
+npm run lint          # errors + warnings
+npm run lint:fix      # auto-fix where possible
+```
+
+These rules run in CI on every push and pull request.
+**A merge with `no-legacy-type-value` errors is blocked by CI.**
+
+---
+
+### 19.7 CI enforcement — GitHub Actions
+
+Workflow: `.github/workflows/frontend-lint.yml`
+
+Triggers: push to `main`, PR targeting `main` (when `src/` or `eslint.config.js` changes).
+
+The CI job runs `npx eslint . --quiet --max-warnings=0`.
+A single taxonomy error or warning fails the check and blocks the merge.
+
+To see what would fail before pushing:
+```bash
+npm run lint
+```
+
+---
+
+## 20. Summary
 
 Newsconseen is not a collection of apps.
 

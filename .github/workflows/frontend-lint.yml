@@ -1,0 +1,57 @@
+name: Frontend Lint
+
+# Runs on every push to main and on every pull request targeting main.
+# A lint failure blocks the merge — keeping taxonomy discipline enforced in CI.
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "src/**"
+      - "eslint.config.js"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/**"
+      - "eslint.config.js"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: ESLint — taxonomy + code quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        # --quiet  suppresses warnings; remove it to also fail on warnings.
+        # Currently: errors (no-legacy-type-value) block merge.
+        #            warnings (no-select-for-taxonomy-field) are visible but not blocking.
+        # To make warnings blocking too, change to: npm run lint (without --quiet override)
+        run: npx eslint . --quiet --max-warnings=0
+        # ^ --max-warnings=0 means any warning also fails the check.
+        #   Adjust to a higher number if you want warnings to be advisory only.
+        #   Remove --max-warnings entirely to let warnings through silently.
+
+      - name: Report summary
+        if: failure()
+        run: |
+          echo "::error::ESLint found violations. See the lint output above."
+          echo ""
+          echo "Common fixes:"
+          echo "  no-legacy-type-value      → replace with TYPE_ALIASES or canonical value"
+          echo "  no-select-for-taxonomy-field → replace <select> with <TaxonomySelect>"
+          echo ""
+          echo "Reference: src/ARCHITECTURE.md § 13 — Taxonomy Governance"
