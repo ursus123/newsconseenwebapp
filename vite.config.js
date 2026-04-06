@@ -6,25 +6,28 @@ import path from 'path'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const reactPath         = path.resolve(__dirname, 'node_modules/react/index.js')
-const reactDomPath      = path.resolve(__dirname, 'node_modules/react-dom/index.js')
-const reactJsxPath      = path.resolve(__dirname, 'node_modules/react/jsx-runtime.js')
-const reactJsxDevPath   = path.resolve(__dirname, 'node_modules/react/jsx-dev-runtime.js')
-const reactDomClient    = path.resolve(__dirname, 'node_modules/react-dom/client.js')
+// All paths point to the single root node_modules copy of React.
+// Sub-paths (react/jsx-dev-runtime) must come BEFORE the base package
+// (react) in the alias array — Vite/rollup does prefix matching, so
+// 'react' would otherwise steal 'react/jsx-dev-runtime' first.
+const reactPath        = path.resolve(__dirname, 'node_modules/react/index.js')
+const reactDomPath     = path.resolve(__dirname, 'node_modules/react-dom/index.js')
+const reactJsxPath     = path.resolve(__dirname, 'node_modules/react/jsx-runtime.js')
+const reactJsxDevPath  = path.resolve(__dirname, 'node_modules/react/jsx-dev-runtime.js')
+const reactDomClient   = path.resolve(__dirname, 'node_modules/react-dom/client.js')
 
-// Force every module — including pre-bundled SDK packages — to resolve
-// to the single root React copy.  Using resolveId (enforce:'pre') catches
-// bare specifiers that resolve.alias misses when Vite pre-bundles deps.
+// resolveId hook as a secondary defence — alias handles the primary case
+// but this catches anything that slips through pre-bundling.
 function dedupeReactPlugin() {
   return {
     name: 'dedupe-react',
     enforce: 'pre',
     resolveId(id) {
-      if (id === 'react')                 return { id: reactPath,       moduleSideEffects: false }
-      if (id === 'react-dom')             return { id: reactDomPath,    moduleSideEffects: false }
-      if (id === 'react/jsx-runtime')     return { id: reactJsxPath,    moduleSideEffects: false }
       if (id === 'react/jsx-dev-runtime') return { id: reactJsxDevPath, moduleSideEffects: false }
+      if (id === 'react/jsx-runtime')     return { id: reactJsxPath,    moduleSideEffects: false }
       if (id === 'react-dom/client')      return { id: reactDomClient,  moduleSideEffects: false }
+      if (id === 'react-dom')             return { id: reactDomPath,    moduleSideEffects: false }
+      if (id === 'react')                 return { id: reactPath,       moduleSideEffects: false }
       return null
     },
   }
@@ -44,17 +47,33 @@ export default defineConfig({
     react(),
   ],
   resolve: {
-    dedupe: ['react', 'react-dom', 'react/jsx-runtime', '@tanstack/react-query'],
-    alias: {
-      react:        reactPath,
-      'react-dom':  reactDomPath,
-      '@':          path.resolve(__dirname, 'src'),
-    },
+    dedupe: [
+      'react',
+      'react-dom',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+      'react-dom/client',
+      '@tanstack/react-query',
+    ],
+    // Array form guarantees ordering — sub-paths before base packages
+    // so the 'react' entry never prefix-matches 'react/jsx-dev-runtime'.
+    alias: [
+      { find: 'react/jsx-dev-runtime', replacement: reactJsxDevPath },
+      { find: 'react/jsx-runtime',     replacement: reactJsxPath    },
+      { find: 'react-dom/client',      replacement: reactDomClient  },
+      { find: 'react-dom',             replacement: reactDomPath    },
+      { find: 'react',                 replacement: reactPath       },
+      { find: '@',                     replacement: path.resolve(__dirname, 'src') },
+    ],
   },
   optimizeDeps: {
-    // force:true clears stale .vite/deps cache that can serve mismatched
-    // React chunks — the most common cause of the useState null crash.
     force: true,
-    include: ['react', 'react-dom', 'react/jsx-runtime', 'react-dom/client'],
+    include: [
+      'react',
+      'react-dom',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+      'react-dom/client',
+    ],
   },
 })

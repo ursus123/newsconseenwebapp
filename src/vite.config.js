@@ -8,6 +8,8 @@ import fs from 'fs'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
 
+// Dynamic resolution — works regardless of project layout or container path.
+// require.resolve finds the actually-installed copy of React.
 const reactDir    = path.dirname(require.resolve('react/package.json'))
 const reactDomDir = path.dirname(require.resolve('react-dom/package.json'))
 
@@ -18,6 +20,10 @@ const SUBPATH_MAP = {
   'react-dom/server':      path.join(reactDomDir, 'server.js'),
 }
 
+// Handles two cases:
+//   1. Clean sub-path imports: 'react/jsx-dev-runtime'
+//   2. Mangled paths produced when the 'react' alias prefix-matches first:
+//      '/path/to/react/index.js/jsx-dev-runtime' → corrected
 function fixBrokenId(id) {
   if (SUBPATH_MAP[id]) return SUBPATH_MAP[id]
 
@@ -35,7 +41,7 @@ function fixBrokenId(id) {
   return null
 }
 
-// Rollup-compatible plugin (no enforce/transform — pure Rollup hooks)
+// Rollup-compatible plugin (runs during production build)
 const rollupFixPlugin = {
   name: 'fix-react-paths-rollup',
   resolveId(id) {
@@ -48,7 +54,7 @@ const rollupFixPlugin = {
   },
 }
 
-// Vite plugin with enforce:'pre' + transform to rewrite imports before base44
+// Vite plugin (enforce:'pre') — catches imports before base44 plugin runs
 const viteFixPlugin = {
   name: 'fix-react-paths-vite',
   enforce: 'pre',
@@ -60,6 +66,7 @@ const viteFixPlugin = {
     if (fixed && fs.existsSync(fixed)) return fs.readFileSync(fixed, 'utf-8')
     return null
   },
+  // Rewrite any string literals that slipped through (pre-bundled chunks etc.)
   transform(code) {
     let result = code
     for (const [subpath, target] of Object.entries(SUBPATH_MAP)) {
@@ -72,12 +79,23 @@ const viteFixPlugin = {
   },
 }
 
+// Cache bust: 2026-04-06T02
 export default defineConfig({
   plugins: [
     viteFixPlugin,
     base44(),
   ],
   resolve: {
+    dedupe: [
+      'react',
+      'react-dom',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+      'react-dom/client',
+      '@tanstack/react-query',
+    ],
+    // Sub-paths only — no base 'react' or 'react-dom' alias here, which
+    // prevents prefix-matching from mangling 'react/jsx-dev-runtime'.
     alias: {
       'react/jsx-dev-runtime': SUBPATH_MAP['react/jsx-dev-runtime'],
       'react/jsx-runtime':     SUBPATH_MAP['react/jsx-runtime'],
@@ -86,9 +104,19 @@ export default defineConfig({
       '@':                     path.resolve(__dirname, 'src'),
     },
   },
+  optimizeDeps: {
+    force: true,
+    include: [
+      'react',
+      'react-dom',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+      'react-dom/client',
+    ],
+    exclude: ['@base44/sdk'],
+  },
   build: {
     rollupOptions: {
-      // Inject the fix at the Rollup level too, before any other plugins
       plugins: [rollupFixPlugin],
     },
   },
