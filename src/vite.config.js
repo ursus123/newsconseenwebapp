@@ -1,38 +1,29 @@
 import base44 from "@base44/vite-plugin"
-import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import { createRequire } from 'module'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const require = createRequire(import.meta.url)
 
-const fixBrokenSubpaths = {
-  name: 'fix-broken-subpaths',
-  enforce: 'pre',
-  resolveId(id) {
-    // base44 plugin aliases react → /app_temp/.../react/index.js
-    // so react/jsx-runtime becomes /app_temp/.../react/index.js/jsx-runtime (ENOTDIR)
-    // We intercept and return the correct path
-    const reactMatch = id.match(/^(.*\/react)\/index\.js\/(.+)$/)
-    if (reactMatch) {
-      return path.join(reactMatch[1], reactMatch[2] + '.js')
-    }
-    const reactDomMatch = id.match(/^(.*\/react-dom)\/index\.js\/(.+)$/)
-    if (reactDomMatch) {
-      return path.join(reactDomMatch[1], reactDomMatch[2] + '.js')
-    }
-  }
-}
+// Resolve the actual react and react-dom directories
+const reactDir = path.dirname(require.resolve('react/package.json'))
+const reactDomDir = path.dirname(require.resolve('react-dom/package.json'))
 
 export default defineConfig({
   plugins: [
     base44(),
-    fixBrokenSubpaths,
-    react(),
   ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      'react/jsx-runtime': path.join(reactDir, 'jsx-runtime.js'),
+      'react/jsx-dev-runtime': path.join(reactDir, 'jsx-dev-runtime.js'),
+      'react-dom/client': path.join(reactDomDir, 'client.js'),
+      'react-dom/server': path.join(reactDomDir, 'server.js'),
+      'react': path.join(reactDir, 'index.js'),
+      'react-dom': path.join(reactDomDir, 'index.js'),
     },
   },
 })
