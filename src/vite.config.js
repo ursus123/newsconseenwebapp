@@ -8,23 +8,19 @@ import fs from 'fs'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
 
-const reactDir = path.dirname(require.resolve('react/package.json'))
+const reactDir    = path.dirname(require.resolve('react/package.json'))
 const reactDomDir = path.dirname(require.resolve('react-dom/package.json'))
 
-const jsxRuntime     = path.join(reactDir, 'jsx-runtime.js')
-const jsxDevRuntime  = path.join(reactDir, 'jsx-dev-runtime.js')
-const reactDomClient = path.join(reactDomDir, 'client.js')
-const reactDomServer = path.join(reactDomDir, 'server.js')
+const SUBPATH_MAP = {
+  'react/jsx-dev-runtime': path.join(reactDir, 'jsx-dev-runtime.js'),
+  'react/jsx-runtime':     path.join(reactDir, 'jsx-runtime.js'),
+  'react-dom/client':      path.join(reactDomDir, 'client.js'),
+  'react-dom/server':      path.join(reactDomDir, 'server.js'),
+}
 
-function resolveReactSubpath(id) {
-  // Direct sub-path imports
-  if (id === 'react/jsx-dev-runtime') return jsxDevRuntime
-  if (id === 'react/jsx-runtime')     return jsxRuntime
-  if (id === 'react-dom/client')      return reactDomClient
-  if (id === 'react-dom/server')      return reactDomServer
+function fixBrokenId(id) {
+  if (SUBPATH_MAP[id]) return SUBPATH_MAP[id]
 
-  // Broken absolute paths: /path/to/react/index.js/jsx-runtime (no extension)
-  // or /path/to/react/index.js/jsx-runtime.js (with extension)
   const mReact = id.match(/\/react\/index\.js\/(.+?)(?:\.js)?$/)
   if (mReact) {
     const candidate = path.join(reactDir, mReact[1] + '.js')
@@ -39,33 +35,61 @@ function resolveReactSubpath(id) {
   return null
 }
 
-const fixReactPaths = {
-  name: 'fix-react-paths',
-  enforce: 'pre',
+// Rollup-compatible plugin (no enforce/transform — pure Rollup hooks)
+const rollupFixPlugin = {
+  name: 'fix-react-paths-rollup',
   resolveId(id) {
-    return resolveReactSubpath(id)
+    return fixBrokenId(id)
   },
   load(id) {
-    // Last resort: if the broken path slipped through resolveId, serve the file content
-    const fixed = resolveReactSubpath(id)
+    const fixed = fixBrokenId(id)
     if (fixed && fs.existsSync(fixed)) return fs.readFileSync(fixed, 'utf-8')
     return null
-  }
+  },
+}
+
+// Vite plugin with enforce:'pre' + transform to rewrite imports before base44
+const viteFixPlugin = {
+  name: 'fix-react-paths-vite',
+  enforce: 'pre',
+  resolveId(id) {
+    return fixBrokenId(id)
+  },
+  load(id) {
+    const fixed = fixBrokenId(id)
+    if (fixed && fs.existsSync(fixed)) return fs.readFileSync(fixed, 'utf-8')
+    return null
+  },
+  transform(code) {
+    let result = code
+    for (const [subpath, target] of Object.entries(SUBPATH_MAP)) {
+      const escaped = subpath.replace(/\//g, '\\/')
+      result = result
+        .replace(new RegExp(`"${escaped}"`, 'g'), `"${target}"`)
+        .replace(new RegExp(`'${escaped}'`, 'g'), `'${target}'`)
+    }
+    return result !== code ? { code: result, map: null } : null
+  },
 }
 
 export default defineConfig({
   plugins: [
-    fixReactPaths,
+    viteFixPlugin,
     base44(),
   ],
   resolve: {
     alias: {
-      // Only alias sub-paths — NOT bare 'react'/'react-dom' to avoid base44 conflict
-      'react/jsx-dev-runtime': jsxDevRuntime,
-      'react/jsx-runtime':     jsxRuntime,
-      'react-dom/client':      reactDomClient,
-      'react-dom/server':      reactDomServer,
+      'react/jsx-dev-runtime': SUBPATH_MAP['react/jsx-dev-runtime'],
+      'react/jsx-runtime':     SUBPATH_MAP['react/jsx-runtime'],
+      'react-dom/client':      SUBPATH_MAP['react-dom/client'],
+      'react-dom/server':      SUBPATH_MAP['react-dom/server'],
       '@':                     path.resolve(__dirname, 'src'),
+    },
+  },
+  build: {
+    rollupOptions: {
+      // Inject the fix at the Rollup level too, before any other plugins
+      plugins: [rollupFixPlugin],
     },
   },
 })
