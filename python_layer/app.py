@@ -53,6 +53,9 @@ from alerts.routes import router as alerts_router
 # Phase 3C — Network Intelligence
 from network.routes import router as network_router
 
+# Webhook — event-driven ETL triggers (taxonomy changes, etc.)
+from webhook.routes import router as webhook_router
+
 # Market Intelligence Layer
 try:
     from market.routes import router as market_router
@@ -123,8 +126,9 @@ app.add_middleware(
 _PUBLIC_PATHS = {
     "/", "/health", "/docs", "/openapi.json", "/redoc",
     "/copilot/status", "/alerts/status", "/network/status",
+    "/webhook/etl-status",
 }
-_CRON_PREFIXES = ("/load/", "/cron/")
+_CRON_PREFIXES = ("/load/", "/cron/", "/webhook/")
 
 
 @app.middleware("http")
@@ -167,6 +171,9 @@ app.include_router(alerts_router)
 
 # Phase 3C — Network Intelligence
 app.include_router(network_router)
+
+# Webhook — event-driven ETL triggers
+app.include_router(webhook_router)
 
 # Market Intelligence
 if _market_ok and market_router is not None:

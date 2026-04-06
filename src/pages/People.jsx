@@ -16,6 +16,8 @@ import BulkImportDialog from "../components/shared/BulkImportDialog";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Upload, Users, CheckCircle, Clock, Heart } from "lucide-react";
+import { useTaxonomySync } from "@/hooks/useTaxonomySync";
+import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
@@ -155,6 +157,7 @@ export default function People() {
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [heatmapOn, setHeatmapOn] = useState(false);
   const qc = useQueryClient();
+  const { syncState, notifyTaxonomyChange } = useTaxonomySync();
   const { toast } = useToast();
 
   useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
@@ -187,12 +190,20 @@ export default function People() {
       qc.invalidateQueries({ queryKey: ["addresses"] });
       qc.invalidateQueries({ queryKey: ["relationships"] });
       triggerETL("people");
+      notifyTaxonomyChange("person", currentUser?.company_id);
       setFormOpen(false);
     },
   });
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Person.update(id, withScope(data)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); qc.refetchQueries({ queryKey: ["people"] }); triggerETL("people"); setFormOpen(false); setEditing(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["people"] });
+      qc.refetchQueries({ queryKey: ["people"] });
+      triggerETL("people");
+      notifyTaxonomyChange("person", currentUser?.company_id);
+      setFormOpen(false);
+      setEditing(null);
+    },
   });
   const deleteMut = useMutation({
     mutationFn: (id) => base44.entities.Person.delete(id),
@@ -270,6 +281,7 @@ export default function People() {
             🗑️ Delete All
           </Button>
         )}
+        <ETLSyncBanner syncState={syncState} entityType="person" />
       </PageHeader>
 
       {/* Stats row */}
