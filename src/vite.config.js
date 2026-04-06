@@ -6,34 +6,28 @@ import path from 'path'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// Resolve react paths from THIS project's node_modules
-const reactDir = path.resolve(__dirname, 'node_modules/react')
-const reactDomDir = path.resolve(__dirname, 'node_modules/react-dom')
+const fixBrokenSubpaths = {
+  name: 'fix-broken-subpaths',
+  enforce: 'pre',
+  resolveId(id) {
+    // base44 plugin aliases react → /app_temp/.../react/index.js
+    // so react/jsx-runtime becomes /app_temp/.../react/index.js/jsx-runtime (ENOTDIR)
+    // We intercept and return the correct path
+    const reactMatch = id.match(/^(.*\/react)\/index\.js\/(.+)$/)
+    if (reactMatch) {
+      return path.join(reactMatch[1], reactMatch[2] + '.js')
+    }
+    const reactDomMatch = id.match(/^(.*\/react-dom)\/index\.js\/(.+)$/)
+    if (reactDomMatch) {
+      return path.join(reactDomMatch[1], reactDomMatch[2] + '.js')
+    }
+  }
+}
 
 export default defineConfig({
   plugins: [
-    base44({ legacySDKImports: false }),
-    {
-      name: 'fix-react-subpath',
-      enforce: 'pre',
-      resolveId(id) {
-        // Fix broken absolute paths injected by base44 plugin alias
-        // e.g. /app_temp/node_modules/react/index.js/jsx-runtime
-        if (/\/react\/index\.js\/(.+)$/.test(id)) {
-          const sub = id.match(/\/react\/index\.js\/(.+)$/)[1]
-          return path.join(reactDir, sub + '.js')
-        }
-        if (/\/react-dom\/index\.js\/(.+)$/.test(id)) {
-          const sub = id.match(/\/react-dom\/index\.js\/(.+)$/)[1]
-          return path.join(reactDomDir, sub + '.js')
-        }
-        // Fix bare subpath imports redirected wrongly
-        if (id === 'react/jsx-runtime') return path.join(reactDir, 'jsx-runtime.js')
-        if (id === 'react/jsx-dev-runtime') return path.join(reactDir, 'jsx-dev-runtime.js')
-        if (id === 'react-dom/client') return path.join(reactDomDir, 'client.js')
-        if (id === 'react-dom/server') return path.join(reactDomDir, 'server.js')
-      }
-    },
+    base44(),
+    fixBrokenSubpaths,
     react(),
   ],
   resolve: {
