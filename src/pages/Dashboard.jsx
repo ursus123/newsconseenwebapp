@@ -805,18 +805,18 @@ function AdminDashboard({ user }) {
           )}
         </div>
 
-        <div className="space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <ClientRetentionRisk people={people} tasks={tasks} currentUser={user} />
-            <StaffingIntelligence people={people} enterprises={enterprises} tasks={tasks} currentUser={user} />
-            <RecentActivityFeed
-              tasks={tasks.slice(0, 10)}
-              transactions={transactions.slice(0, 10)}
-              enterprises={enterprises.slice(0, 5)}
-              people={people.slice(0, 5)}
-            />
-          </div>
-        </div>
+      </div>
+
+      {/* ── Full-width bottom row ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <ClientRetentionRisk people={people} tasks={tasks} currentUser={user} />
+        <StaffingIntelligence people={people} enterprises={enterprises} tasks={tasks} currentUser={user} />
+        <RecentActivityFeed
+          tasks={tasks.slice(0, 10)}
+          transactions={transactions.slice(0, 10)}
+          enterprises={enterprises.slice(0, 5)}
+          people={people.slice(0, 5)}
+        />
       </div>
     </div>
   );
