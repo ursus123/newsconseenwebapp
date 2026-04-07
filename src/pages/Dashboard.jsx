@@ -1,14 +1,19 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Users, Package, ArrowLeftRight, ClipboardList, Building2, Clock, CheckCircle, AlertCircle, Calendar, Link2, Wrench, TrendingUp } from "lucide-react";
-import { format, isToday, isPast, parseISO, isThisWeek } from "date-fns";
+import {
+  Users, Package, ArrowLeftRight, ClipboardList, Building2,
+  Clock, CheckCircle, AlertCircle, Calendar, Link2, Wrench,
+  TrendingUp, Settings2, Eye, EyeOff,
+} from "lucide-react";
+import { format, isToday, isPast, parseISO, subDays, startOfDay } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import StatCard from "../components/dashboard/StatCard";
+import DashboardSyncBanner from "../components/dashboard/DashboardSyncBanner";
 import OnboardingChecklist from "../components/dashboard/OnboardingChecklist";
 import OverdueTasksAlert from "../components/dashboard/OverdueTasksAlert";
 import PendingTransactionsAlert from "../components/dashboard/PendingTransactionsAlert";
@@ -31,13 +36,17 @@ import { REVENUE_TYPES } from "@/config/transactionTypes";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 
-const fetchSummary = async (endpoint, companyId) => {
+// ── Data fetching with source tracking ───────────────────────────────────────
+async function fetchSummary(endpoint, companyId) {
   try {
     const res = await fetch(`${RAILWAY_URL}${endpoint}?company_id=${companyId}`);
-    if (!res.ok) return [];
-    return await res.json();
-  } catch { return []; }
-};
+    if (!res.ok) return { data: [], source: "error" };
+    const data = await res.json();
+    return { data: Array.isArray(data) ? data : [], source: "analytics" };
+  } catch {
+    return { data: [], source: "error" };
+  }
+}
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -53,194 +62,127 @@ function getMotivation(count) {
   return "Heavy workload today — prioritize! ⚡";
 }
 
-// ── Worker Dashboard ──────────────────────────────────────────────────────────
-function WorkerDashboard({ user }) {
-  const companyId = user?.company_id;
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [outcomeTask, setOutcomeTask] = useState(null);
+// ── Trend helpers ─────────────────────────────────────────────────────────────
+/**
+ * Returns integer percent change between current and previous periods.
+ * Returns null if previous is 0 (avoids ÷0).
+ */
+function pctChange(current, previous) {
+  if (!previous) return null;
+  return Math.round(((current - previous) / previous) * 100);
+}
 
-  // Operational query — needed for task list rendering, WorkerMyStats, complete action
-  const { data: tasks = [] } = useQuery({
-    queryKey: ["tasks", companyId, user?.email],
-    queryFn: () => companyId
-      ? base44.entities.Task.filter({ company_id: companyId, assigned_to_email: user.email }, "-created_date")
-      : base44.entities.Task.filter({ assigned_to_email: user?.email }, "-created_date"),
-    enabled: !!user,
-  });
+/**
+ * Counts transactions matching filter in [startDays, endDays) window.
+ * endDays = 0 = today.
+ */
+function txCountInWindow(transactions, filterFn, startDaysAgo, endDaysAgo = 0) {
+  const start = startOfDay(subDays(new Date(), startDaysAgo));
+  const end   = startOfDay(subDays(new Date(), endDaysAgo));
+  return transactions.filter(t => {
+    if (!t.date) return false;
+    const d = startOfDay(new Date(t.date));
+    return d >= start && d < end && filterFn(t);
+  }).length;
+}
 
-  // Analytics query — stat card counts come from python_layer (Layer 3 compliance)
-  const { data: taskSummary = [] } = useQuery({
-    queryKey: ["analytics-tasks-worker", companyId],
-    queryFn: () => fetchSummary("/task-summary", companyId),
-    enabled: !!companyId,
-  });
+function taskCountInWindow(tasks, filterFn, startDaysAgo, endDaysAgo = 0) {
+  const start = startOfDay(subDays(new Date(), startDaysAgo));
+  const end   = startOfDay(subDays(new Date(), endDaysAgo));
+  return tasks.filter(t => {
+    const d = t.updated_date ? startOfDay(new Date(t.updated_date)) : null;
+    return d && d >= start && d < end && filterFn(t);
+  }).length;
+}
 
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
-  });
+// ── Contextual insights ────────────────────────────────────────────────────────
+function peopleInsight(totalPeople, activeStaff, activeClients) {
+  if (totalPeople === 0) return "Add your first person to get started.";
+  const ratio = activeClients > 0 && activeStaff > 0
+    ? (activeClients / activeStaff).toFixed(1)
+    : null;
+  if (ratio && parseFloat(ratio) > 10)
+    return `High client-to-staff ratio (${ratio}:1). Consider capacity.`;
+  if (ratio && parseFloat(ratio) < 2)
+    return `Staff-heavy (${ratio} clients/staff). Room to grow clientele.`;
+  return `${activeStaff} staff serving ${activeClients} active clients.`;
+}
 
-  // Stat counts from python_layer summary
-  const pendingTasks   = taskSummary.reduce((sum, row) => sum + (row.open_count  || 0), 0);
-  const overdueTasks   = taskSummary.reduce((sum, row) => sum + (row.overdue_count  || 0), 0);
-  const completedToday = taskSummary.reduce((sum, row) => sum + (row.completed_count || 0), 0);
+function taskInsight(openTasks, overdueCount, totalTasks) {
+  if (totalTasks === 0) return "No tasks recorded yet.";
+  if (overdueCount > 3) return `${overdueCount} overdue tasks need immediate attention.`;
+  if (overdueCount > 0) return `${overdueCount} task${overdueCount > 1 ? "s" : ""} past due — review soon.`;
+  if (openTasks === 0) return "No open tasks — great execution!";
+  return `${openTasks} task${openTasks > 1 ? "s" : ""} in progress.`;
+}
 
-  // Operational lists for task card rendering
-  const open = tasks.filter((t) => t.status === "open" || t.status === "in_progress");
-  const recentDone = tasks.filter((t) => t.status === "completed").slice(0, 5);
+function productInsight(totalProducts, lowStockCount) {
+  if (totalProducts === 0) return "No inventory recorded yet.";
+  if (lowStockCount > 0) return `${lowStockCount} item${lowStockCount > 1 ? "s" : ""} below reorder level — restock soon.`;
+  return "Stock levels all healthy.";
+}
 
-  const todayOpen = open.filter((t) => t.due_date && isToday(parseISO(t.due_date)));
-  const morningTasks = todayOpen.filter((t) => !t.due_time || t.due_time < "12:00");
-  const afternoonTasks = todayOpen.filter((t) => t.due_time && t.due_time >= "12:00" && t.due_time < "17:00");
-  const eveningTasks = todayOpen.filter((t) => t.due_time && t.due_time >= "17:00");
-  const noTimeTasks = open.filter((t) => !t.due_date);
+function transactionInsight(totalTx, draftTxCount, overdueInvoices) {
+  if (totalTx === 0) return "No transactions recorded yet.";
+  if (overdueInvoices > 0) return `${overdueInvoices} overdue invoice${overdueInvoices > 1 ? "s" : ""} — follow up now.`;
+  if (draftTxCount > 0) return `${draftTxCount} draft${draftTxCount > 1 ? "s" : ""} waiting to be posted.`;
+  return "All invoices are up to date.";
+}
 
-  const handleMarkComplete = (task) => setOutcomeTask(task);
+// ── Personalization ───────────────────────────────────────────────────────────
+const ALL_CARDS = ["people", "enterprises", "products", "services", "tasks", "transactions"];
+const CARD_LABELS = {
+  people:       "People",
+  enterprises:  "Enterprises",
+  products:     "Inventory",
+  services:     "Services",
+  tasks:        "Tasks",
+  transactions: "Transactions",
+};
 
-  const handleOutcomeConfirm = ({ outcome, outcome_notes, completed_time }) => {
-    updateMut.mutate({ id: outcomeTask.id, data: { ...outcomeTask, status: "completed", outcome, outcome_notes } });
-    toast({ title: "Task marked as completed" });
-    setOutcomeTask(null);
-  };
+function loadVisibleCards() {
+  try {
+    const raw = localStorage.getItem("dashboard_visible_cards");
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set(ALL_CARDS);
+}
 
-  const firstName = user?.full_name?.split(" ")[0] || "";
-  const dayOfWeek = format(new Date(), "EEEE, MMMM d");
+function saveVisibleCards(set) {
+  try {
+    localStorage.setItem("dashboard_visible_cards", JSON.stringify([...set]));
+  } catch {}
+}
 
+// ── Card personalizer panel ───────────────────────────────────────────────────
+function CardPersonalizer({ visible, onChange }) {
   return (
-    <div className="space-y-8">
-      {/* Greeting */}
-      <div>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-              Good day{firstName ? `, ${firstName}` : ""}
-            </h1>
-            <p className="text-sm text-slate-400 mt-0.5">{dayOfWeek}</p>
-            <p className="text-sm text-emerald-600 font-medium mt-1">{getMotivation(pendingTasks)}</p>
-          </div>
-          <NotificationsBell tasks={tasks} transactions={[]} products={[]} />
-        </div>
+    <div className="absolute right-0 top-9 z-20 bg-white border border-slate-200 rounded-2xl shadow-lg p-4 w-52">
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+        Show / hide cards
+      </p>
+      <div className="space-y-2">
+        {ALL_CARDS.map(key => (
+          <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={visible.has(key)}
+              onChange={() => {
+                const next = new Set(visible);
+                next.has(key) ? next.delete(key) : next.add(key);
+                onChange(next);
+              }}
+              className="rounded border-slate-300 text-emerald-500"
+            />
+            <span className="text-sm text-slate-700">{CARD_LABELS[key]}</span>
+          </label>
+        ))}
       </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-5 flex items-center gap-4 border-l-4 border-l-blue-400">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><ClipboardList className="w-5 h-5 text-blue-600" /></div>
-          <div><p className="text-2xl font-bold text-slate-800">{pendingTasks}</p><p className="text-xs text-slate-400">Open tasks</p></div>
-        </Card>
-        <Card className="p-5 flex items-center gap-4 border-l-4 border-l-rose-400">
-          <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center"><AlertCircle className="w-5 h-5 text-rose-600" /></div>
-          <div><p className="text-2xl font-bold text-slate-800">{overdueTasks}</p><p className="text-xs text-slate-400">Overdue</p></div>
-        </Card>
-        <Card className="p-5 flex items-center gap-4 border-l-4 border-l-emerald-400">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center"><CheckCircle className="w-5 h-5 text-emerald-600" /></div>
-          <div><p className="text-2xl font-bold text-slate-800">{completedToday}</p><p className="text-xs text-slate-400">Completed today</p></div>
-        </Card>
-      </div>
-
-      <WorkerMyStats tasks={tasks} />
-
-      {/* Today's Timeline */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-slate-700">My Open Tasks</h2>
-          <Link to={createPageUrl("Tasks")} className="text-xs text-emerald-600 hover:underline font-medium">View all →</Link>
-        </div>
-        {open.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-14 border-2 border-dashed border-slate-100 rounded-2xl">
-            <CheckCircle className="w-8 h-8 text-emerald-200 mb-2" />
-            <p className="text-sm text-slate-400 font-medium">All clear! No open tasks.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {open.map((task) => {
-              const isOverdue = task.due_date && isPast(parseISO(task.due_date));
-              return (
-                <Card key={task.id} className={`p-4 border-l-4 ${isOverdue ? "border-l-rose-400" : "border-l-blue-300"}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{taskTypeLabel(task.task_type)}</p>
-                      <p className="text-sm font-medium text-slate-800 mt-0.5">{task.title}</p>
-                      {task.enterprise && <p className="text-xs text-slate-400 mt-0.5">{task.enterprise}</p>}
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      <Badge className={PRIORITY_COLOR[task.priority] || PRIORITY_COLOR.normal}>{task.priority}</Badge>
-                      {task.due_date && (
-                        <span className={`text-[11px] flex items-center gap-1 ${isOverdue ? "text-rose-600" : "text-slate-400"}`}>
-                          <Calendar className="w-3 h-3" />
-                          {isToday(parseISO(task.due_date)) ? "Today" : format(parseISO(task.due_date), "MMM d")}
-                          {task.due_time && ` ${task.due_time}`}
-                        </span>
-                      )}
-                      <Button size="sm" className="h-6 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white px-2 rounded-lg" onClick={() => handleMarkComplete(task)}>
-                        Complete
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Recent completions */}
-      {recentDone.length > 0 && (
-        <div>
-          <h2 className="text-base font-semibold text-slate-700 mb-3">Recently Completed</h2>
-          <div className="space-y-2">
-            {recentDone.map((t) => (
-              <div key={t.id} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-2.5">
-                <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-slate-600 line-through truncate">{t.title}</p>
-                </div>
-                {t.outcome && <Badge className="bg-emerald-50 text-emerald-600 text-xs">{t.outcome.replace(/_/g, " ")}</Badge>}
-                {t.updated_date && <span className="text-[11px] text-slate-400 shrink-0">{format(new Date(t.updated_date), "h:mm a")}</span>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <OutcomeDialog open={!!outcomeTask} onClose={() => setOutcomeTask(null)} taskTitle={outcomeTask?.title} onConfirm={handleOutcomeConfirm} />
     </div>
   );
 }
 
-// ── Enterprise Health Score ───────────────────────────────────────────────────
-function calcHealthScore(enterprise, tasks, transactions, relationships) {
-  let score = 0;
-  const PROFILE_FIELDS = ["enterprise_name", "short_name", "description", "enterprise_type", "phone", "email", "website", "city", "country", "legal_structure", "operating_status", "owners"];
-  const filled = PROFILE_FIELDS.filter((f) => { const v = enterprise[f]; if (Array.isArray(v)) return v.length > 0; return v !== undefined && v !== null && v !== ""; }).length;
-  score += Math.round((filled / PROFILE_FIELDS.length) * 30);
-
-  const relCount = relationships.filter((r) => r.enterprise_name?.toLowerCase() === (enterprise.enterprise_name || "").toLowerCase() && r.status !== "archived").length;
-  if (relCount >= 3) score += 20;
-  else if (relCount > 0) score += 10;
-
-  const entTasks = tasks.filter((t) => t.enterprise === enterprise.enterprise_name);
-  const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const recentDone = entTasks.filter((t) => t.status === "completed" && t.updated_date && new Date(t.updated_date) >= sevenDaysAgo);
-  if (recentDone.length > 0) score += 20;
-
-  const overdueTasks = entTasks.filter((t) => t.due_date && t.status !== "completed" && t.status !== "cancelled" && isPast(parseISO(t.due_date)));
-  if (overdueTasks.length === 0) score += 15;
-
-  const draftTx = transactions.filter((tx) => tx.enterprise === enterprise.enterprise_name && (tx.status === "draft" || !tx.status));
-  if (draftTx.length === 0) score += 15;
-
-  return Math.min(score, 100);
-}
-
-function HealthBadge({ score }) {
-  if (score >= 80) return <span className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 text-xs font-black flex items-center justify-center border-2 border-emerald-300 shrink-0" title="Healthy">{score}</span>;
-  if (score >= 50) return <span className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 text-xs font-black flex items-center justify-center border-2 border-amber-300 shrink-0" title="Needs Attention">{score}</span>;
-  return <span className="w-9 h-9 rounded-full bg-rose-100 text-rose-700 text-xs font-black flex items-center justify-center border-2 border-rose-300 shrink-0" title="At Risk">{score}</span>;
-}
-
-// ── Financial Alerts ─────────────────────────────────────────────────────────
+// ── Financial Alerts ──────────────────────────────────────────────────────────
 function FinancialAlerts({ transactions }) {
   const overdueTransactions = transactions.filter(t =>
     t.payment_status === "unpaid" &&
@@ -297,18 +239,253 @@ function FinancialAlerts({ transactions }) {
   );
 }
 
+// ── Enterprise health ─────────────────────────────────────────────────────────
+function calcHealthScore(enterprise, tasks, transactions, relationships) {
+  let score = 0;
+  const PROFILE_FIELDS = [
+    "enterprise_name", "short_name", "description", "enterprise_type",
+    "phone", "email", "website", "city", "country", "legal_structure",
+    "operating_status", "owners",
+  ];
+  const filled = PROFILE_FIELDS.filter(f => {
+    const v = enterprise[f];
+    if (Array.isArray(v)) return v.length > 0;
+    return v !== undefined && v !== null && v !== "";
+  }).length;
+  score += Math.round((filled / PROFILE_FIELDS.length) * 30);
+
+  const relCount = relationships.filter(r =>
+    r.enterprise_name?.toLowerCase() === (enterprise.enterprise_name || "").toLowerCase() &&
+    r.status !== "archived"
+  ).length;
+  if (relCount >= 3) score += 20; else if (relCount > 0) score += 10;
+
+  const entTasks = tasks.filter(t => t.enterprise === enterprise.enterprise_name);
+  const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const recentDone = entTasks.filter(t =>
+    t.status === "completed" && t.updated_date && new Date(t.updated_date) >= sevenDaysAgo
+  );
+  if (recentDone.length > 0) score += 20;
+
+  const overdueTasks = entTasks.filter(t =>
+    t.due_date && t.status !== "completed" && t.status !== "cancelled" &&
+    isPast(parseISO(t.due_date))
+  );
+  if (overdueTasks.length === 0) score += 15;
+
+  const draftTx = transactions.filter(tx =>
+    tx.enterprise === enterprise.enterprise_name && (tx.status === "draft" || !tx.status)
+  );
+  if (draftTx.length === 0) score += 15;
+
+  return Math.min(score, 100);
+}
+
+function HealthBadge({ score }) {
+  if (score >= 80)
+    return <span className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 text-xs font-black flex items-center justify-center border-2 border-emerald-300 shrink-0">{score}</span>;
+  if (score >= 50)
+    return <span className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 text-xs font-black flex items-center justify-center border-2 border-amber-300 shrink-0">{score}</span>;
+  return <span className="w-9 h-9 rounded-full bg-rose-100 text-rose-700 text-xs font-black flex items-center justify-center border-2 border-rose-300 shrink-0">{score}</span>;
+}
+
+// ── Worker Dashboard ──────────────────────────────────────────────────────────
+function WorkerDashboard({ user }) {
+  const companyId = user?.company_id;
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [outcomeTask, setOutcomeTask] = useState(null);
+
+  const { data: tasks = [] } = useQuery({
+    queryKey: ["tasks", companyId, user?.email],
+    queryFn: () => companyId
+      ? base44.entities.Task.filter({ company_id: companyId, assigned_to_email: user.email }, "-created_date")
+      : base44.entities.Task.filter({ assigned_to_email: user?.email }, "-created_date"),
+    enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
+  const { data: taskAnalytics = { data: [], source: "none" } } = useQuery({
+    queryKey: ["analytics-tasks-worker", companyId],
+    queryFn: () => fetchSummary("/task-summary", companyId),
+    enabled: !!companyId,
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+  });
+
+  const taskSummary = taskAnalytics.data;
+  const pendingTasks   = taskSummary.length > 0
+    ? taskSummary.reduce((s, r) => s + (r.open_count    || 0), 0)
+    : tasks.filter(t => t.status === "open" || t.status === "in_progress").length;
+  const overdueTasks   = taskSummary.length > 0
+    ? taskSummary.reduce((s, r) => s + (r.overdue_count || 0), 0)
+    : tasks.filter(t => t.due_date && isPast(parseISO(t.due_date)) && t.status !== "completed").length;
+  const completedToday = taskSummary.length > 0
+    ? taskSummary.reduce((s, r) => s + (r.completed_count || 0), 0)
+    : tasks.filter(t => t.status === "completed" && t.updated_date && isToday(new Date(t.updated_date))).length;
+
+  const open = tasks.filter(t => t.status === "open" || t.status === "in_progress");
+  const recentDone = tasks.filter(t => t.status === "completed").slice(0, 5);
+
+  const handleMarkComplete = (task) => setOutcomeTask(task);
+  const handleOutcomeConfirm = ({ outcome, outcome_notes }) => {
+    updateMut.mutate({ id: outcomeTask.id, data: { ...outcomeTask, status: "completed", outcome, outcome_notes } });
+    toast({ title: "Task marked as completed" });
+    setOutcomeTask(null);
+  };
+
+  const firstName = user?.full_name?.split(" ")[0] || "";
+  const dayOfWeek = format(new Date(), "EEEE, MMMM d");
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+            Good day{firstName ? `, ${firstName}` : ""}
+          </h1>
+          <p className="text-sm text-slate-400 mt-0.5">{dayOfWeek}</p>
+          <p className="text-sm text-emerald-600 font-medium mt-1">{getMotivation(pendingTasks)}</p>
+        </div>
+        <NotificationsBell tasks={tasks} transactions={[]} products={[]} />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Link to={createPageUrl("Tasks")}>
+          <Card className="p-5 flex items-center gap-4 border-l-4 border-l-blue-400 hover:shadow-md transition-shadow cursor-pointer">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+              <ClipboardList className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-800">{pendingTasks}</p>
+              <p className="text-xs text-slate-400">Open tasks</p>
+            </div>
+          </Card>
+        </Link>
+        <Link to={createPageUrl("Tasks")}>
+          <Card className={`p-5 flex items-center gap-4 border-l-4 border-l-rose-400 hover:shadow-md transition-shadow cursor-pointer ${overdueTasks > 0 ? "bg-rose-50/30" : ""}`}>
+            <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
+              <AlertCircle className="w-5 h-5 text-rose-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-800">{overdueTasks}</p>
+              <p className="text-xs text-slate-400">Overdue</p>
+            </div>
+          </Card>
+        </Link>
+        <Card className="p-5 flex items-center gap-4 border-l-4 border-l-emerald-400">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+            <CheckCircle className="w-5 h-5 text-emerald-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-slate-800">{completedToday}</p>
+            <p className="text-xs text-slate-400">Completed today</p>
+          </div>
+        </Card>
+      </div>
+
+      <WorkerMyStats tasks={tasks} />
+
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-slate-700">My Open Tasks</h2>
+          <Link to={createPageUrl("Tasks")} className="text-xs text-emerald-600 hover:underline font-medium">View all →</Link>
+        </div>
+        {open.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-14 border-2 border-dashed border-slate-100 rounded-2xl">
+            <CheckCircle className="w-8 h-8 text-emerald-200 mb-2" />
+            <p className="text-sm text-slate-400 font-medium">All clear! No open tasks.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {open.map(task => {
+              const isOverdue = task.due_date && isPast(parseISO(task.due_date));
+              return (
+                <Card key={task.id} className={`p-4 border-l-4 ${isOverdue ? "border-l-rose-400" : "border-l-blue-300"}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{taskTypeLabel(task.task_type)}</p>
+                      <p className="text-sm font-medium text-slate-800 mt-0.5">{task.title}</p>
+                      {task.enterprise && <p className="text-xs text-slate-400 mt-0.5">{task.enterprise}</p>}
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <Badge className={PRIORITY_COLOR[task.priority] || PRIORITY_COLOR.normal}>{task.priority}</Badge>
+                      {task.due_date && (
+                        <span className={`text-[11px] flex items-center gap-1 ${isOverdue ? "text-rose-600" : "text-slate-400"}`}>
+                          <Calendar className="w-3 h-3" />
+                          {isToday(parseISO(task.due_date)) ? "Today" : format(parseISO(task.due_date), "MMM d")}
+                          {task.due_time && ` ${task.due_time}`}
+                        </span>
+                      )}
+                      <Button
+                        size="sm"
+                        className="h-6 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white px-2 rounded-lg"
+                        onClick={() => handleMarkComplete(task)}
+                      >
+                        Complete
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {recentDone.length > 0 && (
+        <div>
+          <h2 className="text-base font-semibold text-slate-700 mb-3">Recently Completed</h2>
+          <div className="space-y-2">
+            {recentDone.map(t => (
+              <div key={t.id} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-2.5">
+                <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-slate-600 line-through truncate">{t.title}</p>
+                </div>
+                {t.outcome && <Badge className="bg-emerald-50 text-emerald-600 text-xs">{t.outcome.replace(/_/g, " ")}</Badge>}
+                {t.updated_date && <span className="text-[11px] text-slate-400 shrink-0">{format(new Date(t.updated_date), "h:mm a")}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <OutcomeDialog
+        open={!!outcomeTask}
+        onClose={() => setOutcomeTask(null)}
+        taskTitle={outcomeTask?.title}
+        onConfirm={handleOutcomeConfirm}
+      />
+    </div>
+  );
+}
+
 // ── Admin Dashboard ───────────────────────────────────────────────────────────
 function AdminDashboard({ user }) {
-  const listFn = useEntityListFn(user);
+  const listFn   = useEntityListFn(user);
   const companyId = user?.company_id;
-  const { t } = useTerminology(user);
-  const qc = useQueryClient();
+  const { t }    = useTerminology(user);
+  const qc       = useQueryClient();
 
+  const [showPersonalizer, setShowPersonalizer] = useState(false);
+  const [visibleCards, setVisibleCards]         = useState(loadVisibleCards);
+
+  const handleVisibleChange = useCallback((next) => {
+    setVisibleCards(next);
+    saveVisibleCards(next);
+  }, []);
+
+  // ── Visibility handler ──────────────────────────────────────────────────────
   useEffect(() => {
     const fn = () => {
       if (document.visibilityState === "visible") {
         ["enterprises", "services", "tasks-dash", "transactions-dash", "relationships-dash", "people", "products"].forEach(
-          (key) => qc.refetchQueries({ queryKey: [key, companyId] })
+          key => qc.refetchQueries({ queryKey: [key, companyId] })
         );
       }
     };
@@ -316,141 +493,251 @@ function AdminDashboard({ user }) {
     return () => document.removeEventListener("visibilitychange", fn);
   }, [qc, companyId]);
 
-  // Operational queries — needed for UI rendering (enterprise health cards, alerts, charts, activity feed)
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId], queryFn: () => listFn(base44.entities.Enterprise), staleTime: 0, refetchOnMount: "always" });
-  const { data: services = [] } = useQuery({ queryKey: ["services", companyId], queryFn: () => listFn(base44.entities.Service), staleTime: 0, refetchOnMount: "always" });
-  const { data: tasks = [] } = useQuery({ queryKey: ["tasks-dash", companyId], queryFn: () => listFn(base44.entities.Task), staleTime: 0, refetchOnMount: "always" });
-  const { data: transactions = [] } = useQuery({ queryKey: ["transactions-dash", companyId], queryFn: () => listFn(base44.entities.Transaction), staleTime: 0, refetchOnMount: "always" });
+  // ── Operational queries ─────────────────────────────────────────────────────
+  const { data: enterprises   = [] } = useQuery({ queryKey: ["enterprises",       companyId], queryFn: () => listFn(base44.entities.Enterprise),  staleTime: 0, refetchOnMount: "always" });
+  const { data: services      = [] } = useQuery({ queryKey: ["services",           companyId], queryFn: () => listFn(base44.entities.Service),      staleTime: 0, refetchOnMount: "always" });
+  const { data: tasks         = [] } = useQuery({ queryKey: ["tasks-dash",         companyId], queryFn: () => listFn(base44.entities.Task),         staleTime: 0, refetchOnMount: "always" });
+  const { data: transactions  = [] } = useQuery({ queryKey: ["transactions-dash",  companyId], queryFn: () => listFn(base44.entities.Transaction),  staleTime: 0, refetchOnMount: "always" });
   const { data: relationships = [] } = useQuery({ queryKey: ["relationships-dash", companyId], queryFn: () => listFn(base44.entities.Relationship), staleTime: 0, refetchOnMount: "always" });
-  const { data: people = [] } = useQuery({ queryKey: ["people", companyId], queryFn: () => listFn(base44.entities.Person), staleTime: 0, refetchOnMount: "always" });
-  // Products kept for operational UI: LowStockAlert (item-level display), StockHealthChart, NotificationsBell
-  const { data: products = [] } = useQuery({ queryKey: ["products", companyId], queryFn: () => listFn(base44.entities.Product), staleTime: 0, refetchOnMount: "always" });
+  const { data: people        = [] } = useQuery({ queryKey: ["people",             companyId], queryFn: () => listFn(base44.entities.Person),       staleTime: 0, refetchOnMount: "always" });
+  const { data: products      = [] } = useQuery({ queryKey: ["products",           companyId], queryFn: () => listFn(base44.entities.Product),      staleTime: 0, refetchOnMount: "always" });
 
-  // Analytics queries — read from python_layer summaries (Layer 3 compliance)
-  const { data: peopleSummary = [] } = useQuery({
-    queryKey: ["analytics-people", companyId],
-    queryFn: () => fetchSummary("/people-summary", companyId),
-    enabled: !!companyId,
-  });
-  const { data: taskSummary = [] } = useQuery({
-    queryKey: ["analytics-tasks", companyId],
-    queryFn: () => fetchSummary("/task-summary", companyId),
-    enabled: !!companyId,
-  });
-  const { data: productSummary = [] } = useQuery({
-    queryKey: ["analytics-products", companyId],
-    queryFn: () => fetchSummary("/product-summary", companyId),
-    enabled: !!companyId,
-  });
-  const { data: transactionSummary = [] } = useQuery({
-    queryKey: ["analytics-transactions", companyId],
-    queryFn: () => fetchSummary("/transaction-summary", companyId),
-    enabled: !!companyId,
-  });
+  // ── Analytics queries ───────────────────────────────────────────────────────
+  const analyticsRefetchKeys = ["analytics-people", "analytics-tasks", "analytics-products", "analytics-transactions"];
 
-  // Aggregations — python_layer summaries first, Base44 entities as fallback.
-  // When Railway is unreachable or cold-starting, summaries return [].
-  // Base44 entities (people, tasks, products, transactions) are already loaded above.
-  const _useSummary = {
+  const { data: peopleAnalytics      = { data: [], source: "none" }, isLoading: loadingPeople }   = useQuery({ queryKey: ["analytics-people",       companyId], queryFn: () => fetchSummary("/people-summary",      companyId), enabled: !!companyId });
+  const { data: taskAnalytics        = { data: [], source: "none" }, isLoading: loadingTasks }    = useQuery({ queryKey: ["analytics-tasks",         companyId], queryFn: () => fetchSummary("/task-summary",        companyId), enabled: !!companyId });
+  const { data: productAnalytics     = { data: [], source: "none" }, isLoading: loadingProducts } = useQuery({ queryKey: ["analytics-products",      companyId], queryFn: () => fetchSummary("/product-summary",     companyId), enabled: !!companyId });
+  const { data: transactionAnalytics = { data: [], source: "none" }, isLoading: loadingTx }      = useQuery({ queryKey: ["analytics-transactions",  companyId], queryFn: () => fetchSummary("/transaction-summary", companyId), enabled: !!companyId });
+
+  const handleRefreshAnalytics = useCallback(() => {
+    analyticsRefetchKeys.forEach(key => qc.invalidateQueries({ queryKey: [key, companyId] }));
+  }, [qc, companyId]);
+
+  // ── Aggregations (analytics → Base44 fallback) ─────────────────────────────
+  const peopleSummary      = peopleAnalytics.data;
+  const taskSummary        = taskAnalytics.data;
+  const productSummary     = productAnalytics.data;
+  const transactionSummary = transactionAnalytics.data;
+
+  const usingAnalytics = {
     people:       peopleSummary.length > 0,
     tasks:        taskSummary.length > 0,
     products:     productSummary.length > 0,
     transactions: transactionSummary.length > 0,
   };
 
-  const totalPeople      = _useSummary.people
-    ? peopleSummary.reduce((s, r) => s + (r.total_count || 0), 0)
-    : people.length;
-  const activeStaff      = _useSummary.people
+  const totalPeople  = usingAnalytics.people ? peopleSummary.reduce((s, r) => s + (r.total_count  || 0), 0) : people.length;
+  const activeStaff  = usingAnalytics.people
     ? peopleSummary.filter(r => r.person_type === "staff").reduce((s, r) => s + (r.active_count || 0), 0)
     : people.filter(p => p.person_type === "staff" && p.status === "active").length;
-  const activeClients    = _useSummary.people
+  const activeClients = usingAnalytics.people
     ? peopleSummary.filter(r => r.person_type === "client").reduce((s, r) => s + (r.active_count || 0), 0)
     : people.filter(p => p.person_type === "client" && p.status === "active").length;
 
-  const totalProducts    = _useSummary.products
-    ? productSummary.reduce((s, r) => s + (r.total_count || 0), 0)
-    : products.length;
-  const activeProducts   = _useSummary.products
-    ? productSummary.reduce((s, r) => s + (r.active_count || 0), 0)
-    : products.filter(p => p.status === "active").length;
-  const lowStockCount    = _useSummary.products
-    ? productSummary.reduce((s, r) => s + (r.items_below_reorder || 0), 0)
-    : products.filter(p => p.min_stock_level > 0 && (p.stock_quantity || 0) <= p.min_stock_level).length;
+  const totalProducts  = usingAnalytics.products ? productSummary.reduce((s, r) => s + (r.total_count   || 0), 0) : products.length;
+  const activeProducts = usingAnalytics.products ? productSummary.reduce((s, r) => s + (r.active_count  || 0), 0) : products.filter(p => p.status === "active").length;
+  const lowStockCount  = usingAnalytics.products ? productSummary.reduce((s, r) => s + (r.items_below_reorder || 0), 0) : products.filter(p => p.min_stock_level > 0 && (p.stock_quantity || 0) <= p.min_stock_level).length;
 
-  const totalTasks       = _useSummary.tasks
-    ? taskSummary.reduce((s, r) => s + (r.total_count || 0), 0)
-    : tasks.length;
-  const openTasks        = _useSummary.tasks
-    ? taskSummary.reduce((s, r) => s + (r.open_count || 0), 0)
-    : tasks.filter(t => t.status !== "completed" && t.status !== "cancelled").length;
-  const overdueCount     = _useSummary.tasks
+  const totalTasks = usingAnalytics.tasks ? taskSummary.reduce((s, r) => s + (r.total_count || 0), 0) : tasks.length;
+  const openTasks  = usingAnalytics.tasks ? taskSummary.reduce((s, r) => s + (r.open_count  || 0), 0) : tasks.filter(t => t.status !== "completed" && t.status !== "cancelled").length;
+  const overdueCount = usingAnalytics.tasks
     ? taskSummary.reduce((s, r) => s + (r.overdue_count || 0), 0)
     : tasks.filter(t => t.due_date && t.status !== "completed" && t.status !== "cancelled" && isPast(parseISO(t.due_date))).length;
 
-  const totalTransactions = _useSummary.transactions
-    ? transactionSummary.reduce((s, r) => s + (r.total_count || 0), 0)
-    : transactions.length;
-  const postedTransactions = _useSummary.transactions
-    ? transactionSummary.reduce((s, r) => s + (r.posted_count || 0), 0)
-    : transactions.filter(t => t.status === "posted").length;
-  const draftTxCount     = _useSummary.transactions
-    ? transactionSummary.reduce((s, r) => s + (r.draft_count || 0), 0)
-    : transactions.filter(t => !t.status || t.status === "draft").length;
+  const totalTransactions  = usingAnalytics.transactions ? transactionSummary.reduce((s, r) => s + (r.total_count   || 0), 0) : transactions.length;
+  const postedTransactions = usingAnalytics.transactions ? transactionSummary.reduce((s, r) => s + (r.posted_count  || 0), 0) : transactions.filter(t => t.status === "posted").length;
+  const draftTxCount       = usingAnalytics.transactions ? transactionSummary.reduce((s, r) => s + (r.draft_count   || 0), 0) : transactions.filter(t => !t.status || t.status === "draft").length;
+  const overdueInvoices    = transactionSummary.reduce((s, r) => s + (r.overdue_invoices || 0), 0);
 
+  // ── Trend calculations (30-day vs previous 30-day from Base44 entities) ─────
+  const trends = useMemo(() => {
+    const isRevenue = t => REVENUE_TYPES.includes(t.transaction_type);
+    const isCompleted = t => t.status === "completed";
+
+    const txCurr = txCountInWindow(transactions, isRevenue, 30, 0);
+    const txPrev = txCountInWindow(transactions, isRevenue, 60, 30);
+
+    const taskCurr = taskCountInWindow(tasks, isCompleted, 30, 0);
+    const taskPrev = taskCountInWindow(tasks, isCompleted, 60, 30);
+
+    return {
+      transactions: pctChange(txCurr, txPrev),
+      tasks:        pctChange(taskCurr, taskPrev),
+      // People and products don't have a natural daily window — skip
+      people:       null,
+      products:     null,
+    };
+  }, [transactions, tasks]);
+
+  // ── Onboarding state ────────────────────────────────────────────────────────
   const onboardingDone = {
-    enterprise: enterprises.length > 0,
-    person: people.length > 0,
-    product: totalProducts > 0,
-    service: services.length > 0,
-    task: totalTasks > 0,
+    enterprise:  enterprises.length > 0,
+    person:      people.length > 0,
+    product:     totalProducts > 0,
+    service:     services.length > 0,
+    task:        totalTasks > 0,
     transaction: totalTransactions > 0,
-    report: false, // user must manually confirm
+    report:      false,
   };
 
-  const statusColor = { active: "bg-emerald-50 text-emerald-700", inactive: "bg-slate-100 text-slate-500", prospect: "bg-amber-50 text-amber-700", archived: "bg-slate-100 text-slate-400" };
-  const opColor = { open: "bg-emerald-400", closed: "bg-rose-400", temporarily_closed: "bg-amber-400", seasonal: "bg-blue-400" };
+  const statusColor = {
+    active: "bg-emerald-50 text-emerald-700",
+    inactive: "bg-slate-100 text-slate-500",
+    prospect: "bg-amber-50 text-amber-700",
+    archived: "bg-slate-100 text-slate-400",
+  };
+  const opColor = {
+    open: "bg-emerald-400",
+    closed: "bg-rose-400",
+    temporarily_closed: "bg-amber-400",
+    seasonal: "bg-blue-400",
+  };
+
+  // ── Sync banner sources ─────────────────────────────────────────────────────
+  const syncSources = {
+    people:       { label: "People",       usingAnalytics: usingAnalytics.people,       loading: loadingPeople,   error: peopleAnalytics.source === "error" },
+    tasks:        { label: "Tasks",        usingAnalytics: usingAnalytics.tasks,        loading: loadingTasks,    error: taskAnalytics.source === "error" },
+    products:     { label: "Inventory",    usingAnalytics: usingAnalytics.products,     loading: loadingProducts, error: productAnalytics.source === "error" },
+    transactions: { label: "Transactions", usingAnalytics: usingAnalytics.transactions, loading: loadingTx,       error: transactionAnalytics.source === "error" },
+  };
+
+  const loading = loadingPeople || loadingTasks || loadingProducts || loadingTx;
 
   return (
     <div className="space-y-8">
-      <div className="flex items-start justify-between">
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Dashboard</h1>
-          <p className="text-sm text-slate-400 mt-1">Business overview — reads master data, relationships, and transactions</p>
+          <p className="text-sm text-slate-400 mt-1">
+            Business overview · {format(new Date(), "EEEE, MMMM d, yyyy")}
+          </p>
         </div>
-        <NotificationsBell tasks={tasks} transactions={transactions} products={products} />
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="relative">
+            <button
+              onClick={() => setShowPersonalizer(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+              title="Customize dashboard"
+            >
+              <Settings2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Customize</span>
+            </button>
+            {showPersonalizer && (
+              <CardPersonalizer
+                visible={visibleCards}
+                onChange={(next) => { handleVisibleChange(next); setShowPersonalizer(false); }}
+              />
+            )}
+          </div>
+          <NotificationsBell tasks={tasks} transactions={transactions} products={products} />
+        </div>
       </div>
+
+      {/* ── Sync banner ── */}
+      <DashboardSyncBanner
+        sources={syncSources}
+        onRefresh={handleRefreshAnalytics}
+        isRefreshing={loading}
+      />
 
       <OnboardingChecklist done={onboardingDone} />
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        <StatCard title={t("person_plural")} value={totalPeople} icon={Users} color="blue" subtitle={`${activeStaff} staff · ${activeClients} clients`} />
-        <StatCard title="Enterprises" value={enterprises.length} icon={Building2} color="purple" subtitle={`${enterprises.filter((e) => e.status === "active").length} active`} />
-        <StatCard title={t("product_plural")} value={totalProducts} icon={Package} color="amber"
-          subtitle={lowStockCount > 0 ? `${lowStockCount} low stock` : `${activeProducts} active`}
-          subtitleColor={lowStockCount > 0 ? "text-amber-600" : undefined}
-        />
-        <StatCard title={t("service_plural")} value={services.length} icon={Wrench} color="teal" subtitle={`${services.filter((s) => s.status === "active").length} active`} />
-        <StatCard title={t("task_plural")} value={totalTasks} icon={ClipboardList} color="emerald"
-          subtitle={overdueCount > 0 ? `${overdueCount} overdue` : `${openTasks} open`}
-          subtitleColor={overdueCount > 0 ? "text-rose-600" : undefined}
-        />
-        <StatCard title={t("transaction_plural")} value={totalTransactions} icon={ArrowLeftRight} color="rose"
-          subtitle={draftTxCount > 0 ? `${draftTxCount} pending draft${draftTxCount !== 1 ? "s" : ""}` : `${postedTransactions} posted`}
-          subtitleColor={draftTxCount > 0 ? "text-amber-600" : undefined}
-        />
+      {/* ── Stat Cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+        {visibleCards.has("people") && (
+          <StatCard
+            title={t("person_plural")}
+            value={totalPeople}
+            icon={Users}
+            color="blue"
+            subtitle={`${activeStaff} staff · ${activeClients} clients`}
+            loading={loadingPeople && totalPeople === 0}
+            trend={trends.people}
+            insight={peopleInsight(totalPeople, activeStaff, activeClients)}
+            to={createPageUrl("People")}
+          />
+        )}
+        {visibleCards.has("enterprises") && (
+          <StatCard
+            title="Enterprises"
+            value={enterprises.length}
+            icon={Building2}
+            color="purple"
+            subtitle={`${enterprises.filter(e => e.status === "active").length} active`}
+            to={createPageUrl("Enterprises")}
+          />
+        )}
+        {visibleCards.has("products") && (
+          <StatCard
+            title={t("product_plural")}
+            value={totalProducts}
+            icon={Package}
+            color="amber"
+            subtitle={lowStockCount > 0 ? `${lowStockCount} low stock` : `${activeProducts} active`}
+            subtitleColor={lowStockCount > 0 ? "text-amber-600" : undefined}
+            loading={loadingProducts && totalProducts === 0}
+            trend={trends.products}
+            insight={productInsight(totalProducts, lowStockCount)}
+            to={createPageUrl("Products")}
+          />
+        )}
+        {visibleCards.has("services") && (
+          <StatCard
+            title={t("service_plural")}
+            value={services.length}
+            icon={Wrench}
+            color="teal"
+            subtitle={`${services.filter(s => s.status === "active").length} active`}
+            to={createPageUrl("Services")}
+          />
+        )}
+        {visibleCards.has("tasks") && (
+          <StatCard
+            title={t("task_plural")}
+            value={totalTasks}
+            icon={ClipboardList}
+            color="emerald"
+            subtitle={overdueCount > 0 ? `${overdueCount} overdue` : `${openTasks} open`}
+            subtitleColor={overdueCount > 0 ? "text-rose-600" : undefined}
+            loading={loadingTasks && totalTasks === 0}
+            trend={trends.tasks}
+            trendLabel="completions vs prev 30d"
+            insight={taskInsight(openTasks, overdueCount, totalTasks)}
+            to={createPageUrl("Tasks")}
+          />
+        )}
+        {visibleCards.has("transactions") && (
+          <StatCard
+            title={t("transaction_plural")}
+            value={totalTransactions}
+            icon={ArrowLeftRight}
+            color="rose"
+            subtitle={draftTxCount > 0 ? `${draftTxCount} pending draft${draftTxCount !== 1 ? "s" : ""}` : `${postedTransactions} posted`}
+            subtitleColor={draftTxCount > 0 ? "text-amber-600" : undefined}
+            loading={loadingTx && totalTransactions === 0}
+            trend={trends.transactions}
+            trendLabel="revenue txns vs prev 30d"
+            insight={transactionInsight(totalTransactions, draftTxCount, overdueInvoices)}
+            to={createPageUrl("Transactions")}
+          />
+        )}
       </div>
 
-      {/* Alerts */}
+      {/* ── Alerts ── */}
       <div className="space-y-4">
         <OverdueTasksAlert tasks={tasks} overdueCount={overdueCount} />
-        <PendingTransactionsAlert transactions={transactions} draftCount={draftTxCount} overdueTransactionCount={transactionSummary.reduce((sum, row) => sum + (row.overdue_invoices || 0), 0)} />
+        <PendingTransactionsAlert
+          transactions={transactions}
+          draftCount={draftTxCount}
+          overdueTransactionCount={overdueInvoices}
+        />
         <LowStockAlert products={products} lowStockCount={lowStockCount} />
         <FinancialAlerts transactions={transactions} />
       </div>
 
-      {/* Performance Trend Charts */}
+      {/* ── Trend Charts ── */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <TaskCompletionChart tasks={tasks} />
         <TransactionsTrendChart transactions={transactions} />
@@ -458,9 +745,8 @@ function AdminDashboard({ user }) {
 
       <StockHealthChart products={products} />
 
-      {/* Main 2-col layout */}
+      {/* ── Main 2-col layout ── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Left: Enterprise profiles + Today's schedule */}
         <div className="xl:col-span-2 space-y-6">
           <TodaySchedule tasks={tasks} />
 
@@ -468,49 +754,61 @@ function AdminDashboard({ user }) {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-semibold text-slate-700">Enterprise Health</h2>
-                <Link to={createPageUrl("Enterprises")} className="text-xs text-emerald-600 hover:underline font-medium">Manage →</Link>
+                <Link to={createPageUrl("Enterprises")} className="text-xs text-emerald-600 hover:underline font-medium">
+                  Manage →
+                </Link>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {enterprises.map((e) => {
-                  const relCount = relationships.filter((r) => r.enterprise_name?.toLowerCase() === (e.enterprise_name || "").toLowerCase() && r.status !== "archived").length;
+                {enterprises.map(e => {
+                  const relCount = relationships.filter(r =>
+                    r.enterprise_name?.toLowerCase() === (e.enterprise_name || "").toLowerCase() &&
+                    r.status !== "archived"
+                  ).length;
                   const health = calcHealthScore(e, tasks, transactions, relationships);
-
                   return (
-                    <Card key={e.id} className="p-5 hover:shadow-md transition-shadow">
-                      <div className="flex items-start justify-between gap-2 mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
-                            <Building2 className="w-5 h-5 text-purple-500" />
+                    <Link key={e.id} to={createPageUrl("Enterprises")}>
+                      <Card className="p-5 hover:shadow-md transition-all hover:-translate-y-0.5 cursor-pointer">
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
+                              <Building2 className="w-5 h-5 text-purple-500" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-slate-800 text-sm leading-tight">{e.enterprise_name}</p>
+                              {e.short_name && <p className="text-xs text-slate-400">{e.short_name}</p>}
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-semibold text-slate-800 text-sm leading-tight">{e.enterprise_name}</p>
-                            {e.short_name && <p className="text-xs text-slate-400">{e.short_name}</p>}
+                          <HealthBadge score={health} />
+                        </div>
+                        {e.enterprise_type && (
+                          <p className="text-xs text-slate-500 mb-2 capitalize">{e.enterprise_type.replace(/_/g, " ")}</p>
+                        )}
+                        {e.city && (
+                          <p className="text-xs text-slate-400">📍 {e.city}{e.country ? `, ${e.country}` : ""}</p>
+                        )}
+                        {e.operating_status && (
+                          <div className="mt-2 flex items-center gap-1.5">
+                            <span className={`w-2 h-2 rounded-full ${opColor[e.operating_status] || "bg-slate-300"}`} />
+                            <span className="text-[11px] text-slate-500 capitalize">{e.operating_status.replace(/_/g, " ")}</span>
                           </div>
+                        )}
+                        <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                            <Link2 className="w-3.5 h-3.5" />{relCount} relationship{relCount !== 1 ? "s" : ""}
+                          </div>
+                          <Badge className={statusColor[e.status] || "bg-slate-100 text-slate-500"}>
+                            {e.status || "active"}
+                          </Badge>
                         </div>
-                        <HealthBadge score={health} />
-                      </div>
-                      {e.enterprise_type && <p className="text-xs text-slate-500 mb-2 capitalize">{e.enterprise_type.replace(/_/g, " ")}</p>}
-                      <div className="space-y-1">
-                        {e.city && <p className="text-xs text-slate-400">📍 {e.city}{e.country ? `, ${e.country}` : ""}</p>}
-                      </div>
-                      {e.operating_status && (
-                        <div className="mt-2 flex items-center gap-1.5">
-                          <span className={`w-2 h-2 rounded-full ${opColor[e.operating_status] || "bg-slate-300"}`} />
-                          <span className="text-[11px] text-slate-500 capitalize">{e.operating_status.replace(/_/g, " ")}</span>
+                        <div className="mt-1 text-[10px] font-semibold text-center">
+                          {health >= 80
+                            ? <span className="text-emerald-600">● Healthy</span>
+                            : health >= 50
+                            ? <span className="text-amber-600">● Needs Attention</span>
+                            : <span className="text-rose-600">● At Risk</span>}
                         </div>
-                      )}
-                      <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
-                        <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                          <Link2 className="w-3.5 h-3.5" />{relCount} relationship{relCount !== 1 ? "s" : ""}
-                        </div>
-                        <Badge className={statusColor[e.status] || "bg-slate-100 text-slate-500"}>{e.status || "active"}</Badge>
-                      </div>
-                      <div className="mt-1 text-[10px] font-semibold text-center">
-                        {health >= 80 ? <span className="text-emerald-600">● Healthy</span>
-                          : health >= 50 ? <span className="text-amber-600">● Needs Attention</span>
-                          : <span className="text-rose-600">● At Risk</span>}
-                      </div>
-                    </Card>
+                      </Card>
+                    </Link>
                   );
                 })}
               </div>
@@ -518,11 +816,15 @@ function AdminDashboard({ user }) {
           )}
         </div>
 
-        {/* Right: Retention risk + Staffing + Activity feed */}
         <div className="space-y-5">
           <ClientRetentionRisk people={people} tasks={tasks} currentUser={user} />
           <StaffingIntelligence people={people} enterprises={enterprises} tasks={tasks} currentUser={user} />
-          <RecentActivityFeed tasks={tasks.slice(0, 10)} transactions={transactions.slice(0, 10)} enterprises={enterprises.slice(0, 5)} people={people.slice(0, 5)} />
+          <RecentActivityFeed
+            tasks={tasks.slice(0, 10)}
+            transactions={transactions.slice(0, 10)}
+            enterprises={enterprises.slice(0, 5)}
+            people={people.slice(0, 5)}
+          />
         </div>
       </div>
     </div>
@@ -531,21 +833,24 @@ function AdminDashboard({ user }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const [user, setUser] = useState(null);
+  const [user, setUser]     = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    base44.auth.me().then((u) => { setUser(u); setLoading(false); }).catch(() => setLoading(false));
+    base44.auth.me()
+      .then(u => { setUser(u); setLoading(false); })
+      .catch(() => setLoading(false));
   }, []);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48 text-slate-400">
-        <Clock className="w-5 h-5 animate-spin mr-2" /> Loading...
+        <Clock className="w-5 h-5 animate-spin mr-2" /> Loading…
       </div>
     );
   }
 
-  if (user?.role === "admin" || user?.role === "super_admin") return <AdminDashboard user={user} />;
+  if (user?.role === "admin" || user?.role === "super_admin")
+    return <AdminDashboard user={user} />;
   return <WorkerDashboard user={user} />;
 }
