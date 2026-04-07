@@ -24,9 +24,6 @@ import NotificationsBell from "../components/dashboard/NotificationsBell";
 import WorkerMyStats from "../components/dashboard/WorkerMyStats";
 import ClientRetentionRisk from "../components/dashboard/ClientRetentionRisk";
 import StaffingIntelligence from "../components/dashboard/StaffingIntelligence";
-import TransactionsTrendChart from "../components/dashboard/TransactionsTrendChart";
-import TaskCompletionChart from "../components/dashboard/TaskCompletionChart";
-import StockHealthChart from "../components/dashboard/StockHealthChart";
 import OutcomeDialog from "../components/tasks/OutcomeDialog";
 import { taskTypeLabel } from "../components/tasks/TaskForm";
 import { useToast } from "@/components/ui/use-toast";
@@ -737,14 +734,6 @@ function AdminDashboard({ user }) {
         <FinancialAlerts transactions={transactions} />
       </div>
 
-      {/* ── Trend Charts ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <TaskCompletionChart tasks={tasks} />
-        <TransactionsTrendChart transactions={transactions} />
-      </div>
-
-      <StockHealthChart products={products} />
-
       {/* ── Main 2-col layout ── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 space-y-6">
@@ -755,11 +744,11 @@ function AdminDashboard({ user }) {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-semibold text-slate-700">Enterprise Health</h2>
                 <Link to={createPageUrl("Enterprises")} className="text-xs text-emerald-600 hover:underline font-medium">
-                  Manage →
+                  {enterprises.length > 5 ? "See more →" : "Manage →"}
                 </Link>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {enterprises.map(e => {
+                {enterprises.slice(0, 5).map(e => {
                   const relCount = relationships.filter(r =>
                     r.enterprise_name?.toLowerCase() === (e.enterprise_name || "").toLowerCase() &&
                     r.status !== "archived"
@@ -817,14 +806,16 @@ function AdminDashboard({ user }) {
         </div>
 
         <div className="space-y-5">
-          <ClientRetentionRisk people={people} tasks={tasks} currentUser={user} />
-          <StaffingIntelligence people={people} enterprises={enterprises} tasks={tasks} currentUser={user} />
-          <RecentActivityFeed
-            tasks={tasks.slice(0, 10)}
-            transactions={transactions.slice(0, 10)}
-            enterprises={enterprises.slice(0, 5)}
-            people={people.slice(0, 5)}
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <ClientRetentionRisk people={people} tasks={tasks} currentUser={user} />
+            <StaffingIntelligence people={people} enterprises={enterprises} tasks={tasks} currentUser={user} />
+            <RecentActivityFeed
+              tasks={tasks.slice(0, 10)}
+              transactions={transactions.slice(0, 10)}
+              enterprises={enterprises.slice(0, 5)}
+              people={people.slice(0, 5)}
+            />
+          </div>
         </div>
       </div>
     </div>
