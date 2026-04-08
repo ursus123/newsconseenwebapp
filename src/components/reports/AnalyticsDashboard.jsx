@@ -1,29 +1,48 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Building2, Users, ClipboardList, ArrowLeftRight, ExternalLink, RefreshCw } from "lucide-react";
+import { Loader2, Building2, Users, ClipboardList, ArrowLeftRight, ExternalLink, RefreshCw, Zap, Database, Server } from "lucide-react";
+import { fetchWithFallback } from "@/utils/fetchWithFallback";
+import { base44 } from "@/api/base44Client";
 
-const API_BASE = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const API_HEADERS = { "x-api-key": RAILWAY_API_KEY };
 const SUPERSET_URL = "http://localhost:8089";
 
-const sumField = (arr, field) => (arr || []).reduce((acc, row) => acc + (Number(row[field]) || 0), 0);
+// ── Tier badge ────────────────────────────────────────────────────────────────
+const TIER_LABELS = { 1: "Analytics", 2: "Raw DB", 3: "Live" };
+const TIER_ICONS  = { 1: Zap, 2: Database, 3: Server };
+const TIER_COLORS = {
+  1: "text-emerald-600 bg-emerald-50 border-emerald-200",
+  2: "text-blue-600 bg-blue-50 border-blue-200",
+  3: "text-amber-600 bg-amber-50 border-amber-200",
+};
 
-function KpiCard({ icon: Icon, label, value, loading, color }) {
+function TierPill({ tier }) {
+  if (!tier) return null;
+  const Icon = TIER_ICONS[tier] ?? Database;
+  const cls  = TIER_COLORS[tier] ?? "text-slate-500 bg-slate-50 border-slate-200";
+  return (
+    <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${cls}`}>
+      <Icon className="w-2.5 h-2.5" /> T{tier} {TIER_LABELS[tier]}
+    </span>
+  );
+}
+
+// ── KPI card ──────────────────────────────────────────────────────────────────
+function KpiCard({ icon: Icon, label, value, loading, color, tier }) {
   return (
     <Card className="border border-slate-100 rounded-2xl">
       <CardContent className="pt-5 pb-4 px-5">
         <div className="flex items-start justify-between">
-          <div>
+          <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">{label}</p>
             {loading ? (
               <Loader2 className="w-5 h-5 animate-spin text-slate-300 mt-1" />
             ) : (
               <p className={`text-3xl font-black ${color}`}>{value?.toLocaleString() ?? "—"}</p>
             )}
+            {!loading && <div className="mt-2"><TierPill tier={tier} /></div>}
           </div>
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color.replace("text-", "bg-").replace("700", "100")}`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${color.replace("text-", "bg-").replace("700", "100")}`}>
             <Icon className={`w-5 h-5 ${color}`} />
           </div>
         </div>
@@ -32,46 +51,94 @@ function KpiCard({ icon: Icon, label, value, loading, color }) {
   );
 }
 
-export default function AnalyticsDashboard() {
-  const [data, setData] = useState({ enterprises: null, people: null, tasks: null, transactions: null });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+// ── Aggregation helpers (analytics → raw/base44 field-name differences) ───────
+const sumF = (arr, field) => (arr || []).reduce((acc, r) => acc + (Number(r[field]) || 0), 0);
+
+function aggregateEnterprise(result) {
+  if (result.source === "analytics") return sumF(result.data, "enterprise_count");
+  return result.data.length;
+}
+
+function aggregatePeople(result) {
+  if (result.source === "analytics") return sumF(result.data, "total_count");
+  return result.data.length;
+}
+
+function aggregateTasks(result) {
+  if (result.source === "analytics") return sumF(result.data, "total_count");
+  return result.data.length;
+}
+
+function aggregateTransactions(result) {
+  if (result.source === "analytics") return sumF(result.data, "total_count");
+  return result.data.length;
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+export default function AnalyticsDashboard({ companyId }) {
+  const [results, setResults]   = useState({ enterprises: null, people: null, tasks: null, transactions: null });
+  const [tiers,   setTiers]     = useState({ enterprises: 0,    people: 0,    tasks: 0,    transactions: 0 });
+  const [loading, setLoading]   = useState(true);
+  const [error,   setError]     = useState(null);
 
   const fetchAll = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [entRes, peopleRes, taskRes, txRes] = await Promise.all([
-        fetch(`${API_BASE}/enterprise-summary`, { headers: API_HEADERS }),
-        fetch(`${API_BASE}/people-summary`,     { headers: API_HEADERS }),
-        fetch(`${API_BASE}/task-summary`,        { headers: API_HEADERS }),
-        fetch(`${API_BASE}/transaction-summary`, { headers: API_HEADERS }),
+      const [entR, peopleR, taskR, txR] = await Promise.all([
+        fetchWithFallback({
+          analyticsEndpoint: "/enterprise-summary",
+          rawEntity:         "enterprises",
+          base44Fn:          () => base44.entities.Enterprise.filter(companyId ? { company_id: companyId } : {}),
+          companyId,
+        }),
+        fetchWithFallback({
+          analyticsEndpoint: "/people-summary",
+          rawEntity:         "people",
+          base44Fn:          () => base44.entities.Person.filter(companyId ? { company_id: companyId } : {}),
+          companyId,
+        }),
+        fetchWithFallback({
+          analyticsEndpoint: "/task-summary",
+          rawEntity:         "tasks",
+          base44Fn:          () => base44.entities.Task.filter(companyId ? { company_id: companyId } : {}),
+          companyId,
+        }),
+        fetchWithFallback({
+          analyticsEndpoint: "/transaction-summary",
+          rawEntity:         "transactions",
+          base44Fn:          () => base44.entities.Transaction.filter(companyId ? { company_id: companyId } : {}),
+          companyId,
+        }),
       ]);
-      const [ent, people, tasks, tx] = await Promise.all([
-        entRes.json(), peopleRes.json(), taskRes.json(), txRes.json(),
-      ]);
-      const toArr = (d) => Array.isArray(d) ? d : (d?.data || d?.results || []);
-      setData({
-        enterprises: sumField(toArr(ent), "enterprise_count"),
-        people: sumField(toArr(people), "people_count"),
-        tasks: sumField(toArr(tasks), "total_tasks"),
-        transactions: sumField(toArr(tx), "total_transactions"),
+
+      setResults({
+        enterprises:  aggregateEnterprise(entR),
+        people:       aggregatePeople(peopleR),
+        tasks:        aggregateTasks(taskR),
+        transactions: aggregateTransactions(txR),
+      });
+      setTiers({
+        enterprises:  entR.tier,
+        people:       peopleR.tier,
+        tasks:        taskR.tier,
+        transactions: txR.tier,
       });
     } catch (e) {
-      setError("Failed to load analytics. Check your API connection.");
+      setError("Failed to load analytics data.");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(); }, [companyId]);
 
   return (
     <div className="mb-8">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold text-slate-800">Analytics Dashboard</h2>
-          <p className="text-sm text-slate-400 mt-0.5">Live KPIs from your business data</p>
+          <p className="text-sm text-slate-400 mt-0.5">Live KPIs — analytics → raw DB → Base44 fallback</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={fetchAll} disabled={loading}>
@@ -95,10 +162,10 @@ export default function AnalyticsDashboard() {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard icon={Building2} label="Total Enterprises" value={data.enterprises} loading={loading} color="text-emerald-700" />
-        <KpiCard icon={Users} label="Total People" value={data.people} loading={loading} color="text-blue-700" />
-        <KpiCard icon={ClipboardList} label="Total Tasks" value={data.tasks} loading={loading} color="text-amber-700" />
-        <KpiCard icon={ArrowLeftRight} label="Total Transactions" value={data.transactions} loading={loading} color="text-purple-700" />
+        <KpiCard icon={Building2}    label="Total Enterprises"  value={results.enterprises}  loading={loading} color="text-emerald-700" tier={tiers.enterprises} />
+        <KpiCard icon={Users}        label="Total People"       value={results.people}       loading={loading} color="text-blue-700"    tier={tiers.people} />
+        <KpiCard icon={ClipboardList} label="Total Tasks"       value={results.tasks}        loading={loading} color="text-amber-700"   tier={tiers.tasks} />
+        <KpiCard icon={ArrowLeftRight} label="Total Transactions" value={results.transactions} loading={loading} color="text-purple-700" tier={tiers.transactions} />
       </div>
     </div>
   );

@@ -30,20 +30,12 @@ import { useToast } from "@/components/ui/use-toast";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 import { useTerminology } from "@/hooks/useTerminology";
 import { REVENUE_TYPES } from "@/config/transactionTypes";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-
-// ── Data fetching with source tracking ───────────────────────────────────────
-async function fetchSummary(endpoint, companyId) {
-  try {
-    const res = await fetch(`${RAILWAY_URL}${endpoint}?company_id=${companyId}`);
-    if (!res.ok) return { data: [], source: "error" };
-    const data = await res.json();
-    return { data: Array.isArray(data) ? data : [], source: "analytics" };
-  } catch {
-    return { data: [], source: "error" };
-  }
-}
+import {
+  fetchPeopleFallback,
+  fetchTasksFallback,
+  fetchProductsFallback,
+  fetchTransactionsFallback,
+} from "@/utils/fetchWithFallback";
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -303,9 +295,17 @@ function WorkerDashboard({ user }) {
     refetchOnMount: "always",
   });
 
-  const { data: taskAnalytics = { data: [], source: "none" } } = useQuery({
+  const { data: taskResult = { data: [], tier: 0, source: "none" } } = useQuery({
     queryKey: ["analytics-tasks-worker", companyId],
-    queryFn: () => fetchSummary("/task-summary", companyId),
+    queryFn:  () => fetchTasksFallback(
+      companyId,
+      () => base44.entities.Task.filter(
+        companyId
+          ? { company_id: companyId, assigned_to_email: user?.email }
+          : { assigned_to_email: user?.email },
+        "-created_date"
+      )
+    ),
     enabled: !!companyId,
   });
 
@@ -314,16 +314,20 @@ function WorkerDashboard({ user }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
   });
 
-  const taskSummary = taskAnalytics.data;
-  const pendingTasks   = taskSummary.length > 0
-    ? taskSummary.reduce((s, r) => s + (r.open_count    || 0), 0)
-    : tasks.filter(t => t.status === "open" || t.status === "in_progress").length;
-  const overdueTasks   = taskSummary.length > 0
-    ? taskSummary.reduce((s, r) => s + (r.overdue_count || 0), 0)
-    : tasks.filter(t => t.due_date && isPast(parseISO(t.due_date)) && t.status !== "completed").length;
-  const completedToday = taskSummary.length > 0
+  // Aggregate — analytics summaries vs raw/base44 full records
+  const isAnalytics    = taskResult.source === "analytics";
+  const taskSummary    = isAnalytics ? taskResult.data : [];
+  const rawTaskRecords = !isAnalytics ? taskResult.data : tasks;
+
+  const pendingTasks   = isAnalytics
+    ? taskSummary.reduce((s, r) => s + (r.open_count     || 0), 0)
+    : rawTaskRecords.filter(t => t.status === "open" || t.status === "in_progress").length;
+  const overdueTasks   = isAnalytics
+    ? taskSummary.reduce((s, r) => s + (r.overdue_count  || 0), 0)
+    : rawTaskRecords.filter(t => t.due_date && isPast(parseISO(t.due_date)) && t.status !== "completed").length;
+  const completedToday = isAnalytics
     ? taskSummary.reduce((s, r) => s + (r.completed_count || 0), 0)
-    : tasks.filter(t => t.status === "completed" && t.updated_date && isToday(new Date(t.updated_date))).length;
+    : rawTaskRecords.filter(t => t.status === "completed" && t.updated_date && isToday(new Date(t.updated_date))).length;
 
   const open = tasks.filter(t => t.status === "open" || t.status === "in_progress");
   const recentDone = tasks.filter(t => t.status === "completed").slice(0, 5);
@@ -499,53 +503,112 @@ function AdminDashboard({ user }) {
   const { data: people        = [] } = useQuery({ queryKey: ["people",             companyId], queryFn: () => listFn(base44.entities.Person),       staleTime: 0, refetchOnMount: "always" });
   const { data: products      = [] } = useQuery({ queryKey: ["products",           companyId], queryFn: () => listFn(base44.entities.Product),      staleTime: 0, refetchOnMount: "always" });
 
-  // ── Analytics queries ───────────────────────────────────────────────────────
+  // ── Analytics queries — 3-tier fallback ────────────────────────────────────
   const analyticsRefetchKeys = ["analytics-people", "analytics-tasks", "analytics-products", "analytics-transactions"];
 
-  const { data: peopleAnalytics      = { data: [], source: "none" }, isLoading: loadingPeople }   = useQuery({ queryKey: ["analytics-people",       companyId], queryFn: () => fetchSummary("/people-summary",      companyId), enabled: !!companyId });
-  const { data: taskAnalytics        = { data: [], source: "none" }, isLoading: loadingTasks }    = useQuery({ queryKey: ["analytics-tasks",         companyId], queryFn: () => fetchSummary("/task-summary",        companyId), enabled: !!companyId });
-  const { data: productAnalytics     = { data: [], source: "none" }, isLoading: loadingProducts } = useQuery({ queryKey: ["analytics-products",      companyId], queryFn: () => fetchSummary("/product-summary",     companyId), enabled: !!companyId });
-  const { data: transactionAnalytics = { data: [], source: "none" }, isLoading: loadingTx }      = useQuery({ queryKey: ["analytics-transactions",  companyId], queryFn: () => fetchSummary("/transaction-summary", companyId), enabled: !!companyId });
+  const _empty = { data: [], tier: 0, source: "none" };
+
+  const { data: peopleAnalytics      = _empty, isLoading: loadingPeople }   = useQuery({
+    queryKey: ["analytics-people",       companyId],
+    queryFn:  () => fetchPeopleFallback(companyId,
+      () => listFn(base44.entities.Person)),
+    enabled: !!companyId,
+  });
+  const { data: taskAnalytics        = _empty, isLoading: loadingTasks }    = useQuery({
+    queryKey: ["analytics-tasks",        companyId],
+    queryFn:  () => fetchTasksFallback(companyId,
+      () => listFn(base44.entities.Task)),
+    enabled: !!companyId,
+  });
+  const { data: productAnalytics     = _empty, isLoading: loadingProducts } = useQuery({
+    queryKey: ["analytics-products",     companyId],
+    queryFn:  () => fetchProductsFallback(companyId,
+      () => listFn(base44.entities.Product)),
+    enabled: !!companyId,
+  });
+  const { data: transactionAnalytics = _empty, isLoading: loadingTx }       = useQuery({
+    queryKey: ["analytics-transactions", companyId],
+    queryFn:  () => fetchTransactionsFallback(companyId,
+      () => listFn(base44.entities.Transaction)),
+    enabled: !!companyId,
+  });
 
   const handleRefreshAnalytics = useCallback(() => {
     analyticsRefetchKeys.forEach(key => qc.invalidateQueries({ queryKey: [key, companyId] }));
   }, [qc, companyId]);
 
-  // ── Aggregations (analytics → Base44 fallback) ─────────────────────────────
-  const peopleSummary      = peopleAnalytics.data;
-  const taskSummary        = taskAnalytics.data;
-  const productSummary     = productAnalytics.data;
-  const transactionSummary = transactionAnalytics.data;
+  // ── Aggregations — 3-tier aware ─────────────────────────────────────────────
+  // Tier 1 (analytics): pre-aggregated summary rows  → use summary-specific fields
+  // Tier 2 (raw) / Tier 3 (base44): full entity records → aggregate client-side
+  //
+  // NOTE: raw.people and Base44 Person share the same field names, so Tier 2 and
+  // Tier 3 use identical aggregation logic — only the source differs.
 
-  const usingAnalytics = {
-    people:       peopleSummary.length > 0,
-    tasks:        taskSummary.length > 0,
-    products:     productSummary.length > 0,
-    transactions: transactionSummary.length > 0,
-  };
+  const isPeopleAnalytics = peopleAnalytics.source === "analytics";
+  const isTaskAnalytics   = taskAnalytics.source   === "analytics";
+  const isProdAnalytics   = productAnalytics.source === "analytics";
+  const isTxAnalytics     = transactionAnalytics.source === "analytics";
 
-  const totalPeople  = usingAnalytics.people ? peopleSummary.reduce((s, r) => s + (r.total_count  || 0), 0) : people.length;
-  const activeStaff  = usingAnalytics.people
+  const peopleSummary      = isPeopleAnalytics ? peopleAnalytics.data      : [];
+  const taskSummary        = isTaskAnalytics   ? taskAnalytics.data        : [];
+  const productSummary     = isProdAnalytics   ? productAnalytics.data     : [];
+  const transactionSummary = isTxAnalytics     ? transactionAnalytics.data : [];
+
+  // Raw / Base44 full records (used when analytics tier unavailable)
+  const peopleRecords      = !isPeopleAnalytics ? peopleAnalytics.data      : people;
+  const taskRecords        = !isTaskAnalytics   ? taskAnalytics.data        : tasks;
+  const productRecords     = !isProdAnalytics   ? productAnalytics.data     : products;
+  const txRecords          = !isTxAnalytics     ? transactionAnalytics.data : transactions;
+
+  // People
+  const totalPeople   = isPeopleAnalytics
+    ? peopleSummary.reduce((s, r) => s + (r.total_count  || 0), 0)
+    : peopleRecords.length;
+  const activeStaff   = isPeopleAnalytics
     ? peopleSummary.filter(r => r.person_type === "staff").reduce((s, r) => s + (r.active_count || 0), 0)
-    : people.filter(p => p.person_type === "staff" && p.status === "active").length;
-  const activeClients = usingAnalytics.people
+    : peopleRecords.filter(p => p.person_type === "staff"   && p.status === "active").length;
+  const activeClients = isPeopleAnalytics
     ? peopleSummary.filter(r => r.person_type === "client").reduce((s, r) => s + (r.active_count || 0), 0)
-    : people.filter(p => p.person_type === "client" && p.status === "active").length;
+    : peopleRecords.filter(p => p.person_type === "client"  && p.status === "active").length;
 
-  const totalProducts  = usingAnalytics.products ? productSummary.reduce((s, r) => s + (r.total_count   || 0), 0) : products.length;
-  const activeProducts = usingAnalytics.products ? productSummary.reduce((s, r) => s + (r.active_count  || 0), 0) : products.filter(p => p.status === "active").length;
-  const lowStockCount  = usingAnalytics.products ? productSummary.reduce((s, r) => s + (r.items_below_reorder || 0), 0) : products.filter(p => p.min_stock_level > 0 && (p.stock_quantity || 0) <= p.min_stock_level).length;
+  // Products
+  const totalProducts  = isProdAnalytics
+    ? productSummary.reduce((s, r) => s + (r.total_count          || 0), 0)
+    : productRecords.length;
+  const activeProducts = isProdAnalytics
+    ? productSummary.reduce((s, r) => s + (r.active_count         || 0), 0)
+    : productRecords.filter(p => p.status === "active").length;
+  const lowStockCount  = isProdAnalytics
+    ? productSummary.reduce((s, r) => s + (r.items_below_reorder  || 0), 0)
+    : productRecords.filter(p => p.min_stock_level > 0 && (p.stock_quantity || 0) <= p.min_stock_level).length;
 
-  const totalTasks = usingAnalytics.tasks ? taskSummary.reduce((s, r) => s + (r.total_count || 0), 0) : tasks.length;
-  const openTasks  = usingAnalytics.tasks ? taskSummary.reduce((s, r) => s + (r.open_count  || 0), 0) : tasks.filter(t => t.status !== "completed" && t.status !== "cancelled").length;
-  const overdueCount = usingAnalytics.tasks
-    ? taskSummary.reduce((s, r) => s + (r.overdue_count || 0), 0)
-    : tasks.filter(t => t.due_date && t.status !== "completed" && t.status !== "cancelled" && isPast(parseISO(t.due_date))).length;
+  // Tasks
+  const totalTasks   = isTaskAnalytics
+    ? taskSummary.reduce((s, r) => s + (r.total_count    || 0), 0)
+    : taskRecords.length;
+  const openTasks    = isTaskAnalytics
+    ? taskSummary.reduce((s, r) => s + (r.open_count     || 0), 0)
+    : taskRecords.filter(t => t.status !== "completed" && t.status !== "cancelled").length;
+  const overdueCount = isTaskAnalytics
+    ? taskSummary.reduce((s, r) => s + (r.overdue_count  || 0), 0)
+    : taskRecords.filter(t => t.due_date && t.status !== "completed" && t.status !== "cancelled" && isPast(parseISO(t.due_date))).length;
 
-  const totalTransactions  = usingAnalytics.transactions ? transactionSummary.reduce((s, r) => s + (r.total_count   || 0), 0) : transactions.length;
-  const postedTransactions = usingAnalytics.transactions ? transactionSummary.reduce((s, r) => s + (r.posted_count  || 0), 0) : transactions.filter(t => t.status === "posted").length;
-  const draftTxCount       = usingAnalytics.transactions ? transactionSummary.reduce((s, r) => s + (r.draft_count   || 0), 0) : transactions.filter(t => !t.status || t.status === "draft").length;
-  const overdueInvoices    = transactionSummary.reduce((s, r) => s + (r.overdue_invoices || 0), 0);
+  // Transactions
+  const totalTransactions  = isTxAnalytics
+    ? transactionSummary.reduce((s, r) => s + (r.total_count  || 0), 0)
+    : txRecords.length;
+  const postedTransactions = isTxAnalytics
+    ? transactionSummary.reduce((s, r) => s + (r.posted_count || 0), 0)
+    : txRecords.filter(t => t.status === "posted").length;
+  const draftTxCount       = isTxAnalytics
+    ? transactionSummary.reduce((s, r) => s + (r.draft_count  || 0), 0)
+    : txRecords.filter(t => !t.status || t.status === "draft").length;
+  const overdueInvoices    = isTxAnalytics
+    ? transactionSummary.reduce((s, r) => s + (r.overdue_invoices || 0), 0)
+    : txRecords.filter(t =>
+        t.payment_status === "unpaid" && t.status === "posted" &&
+        t.due_date && new Date(t.due_date) < new Date()
+      ).length;
 
   // ── Trend calculations (30-day vs previous 30-day from Base44 entities) ─────
   const trends = useMemo(() => {
@@ -593,10 +656,10 @@ function AdminDashboard({ user }) {
 
   // ── Sync banner sources ─────────────────────────────────────────────────────
   const syncSources = {
-    people:       { label: "People",       usingAnalytics: usingAnalytics.people,       loading: loadingPeople,   error: peopleAnalytics.source === "error" },
-    tasks:        { label: "Tasks",        usingAnalytics: usingAnalytics.tasks,        loading: loadingTasks,    error: taskAnalytics.source === "error" },
-    products:     { label: "Inventory",    usingAnalytics: usingAnalytics.products,     loading: loadingProducts, error: productAnalytics.source === "error" },
-    transactions: { label: "Transactions", usingAnalytics: usingAnalytics.transactions, loading: loadingTx,       error: transactionAnalytics.source === "error" },
+    people:       { label: "People",       tier: peopleAnalytics.tier,      source: peopleAnalytics.source,      loading: loadingPeople },
+    tasks:        { label: "Tasks",        tier: taskAnalytics.tier,        source: taskAnalytics.source,        loading: loadingTasks },
+    products:     { label: "Inventory",    tier: productAnalytics.tier,     source: productAnalytics.source,     loading: loadingProducts },
+    transactions: { label: "Transactions", tier: transactionAnalytics.tier, source: transactionAnalytics.source, loading: loadingTx },
   };
 
   const loading = loadingPeople || loadingTasks || loadingProducts || loadingTx;
