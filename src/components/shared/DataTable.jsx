@@ -100,8 +100,38 @@ export default function DataTable({
     );
   }
 
+  const allSelected = safeData.length > 0 && safeData.every((r) => selectedIds.includes(r.id));
+  const someNotOnPage = showCheckboxes && allOnPageSelected && !allSelected && safeData.length > PAGE_SIZE;
+
+  const selectAllGlobal = () => {
+    if (!onSelectionChange) return;
+    onSelectionChange(safeData.map((r) => r.id));
+  };
+
   return (
     <div>
+      {someNotOnPage && (
+        <div className="flex items-center justify-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 mb-2 text-sm text-emerald-700">
+          <span>All {paginated.length} rows on this page are selected.</span>
+          <button
+            onClick={selectAllGlobal}
+            className="font-semibold underline hover:text-emerald-900 transition-colors"
+          >
+            Select all {safeData.length} records
+          </button>
+        </div>
+      )}
+      {allSelected && safeData.length > PAGE_SIZE && (
+        <div className="flex items-center justify-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 mb-2 text-sm text-emerald-700">
+          <span>All {safeData.length} records are selected.</span>
+          <button
+            onClick={() => onSelectionChange && onSelectionChange([])}
+            className="font-semibold underline hover:text-emerald-900 transition-colors"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
