@@ -39,6 +39,7 @@ import {
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
 import UndoImportButton from "@/components/layout/UndoImportButton";
+import SmartImportButton from "@/components/layout/SmartImportButton";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import TenantGuard from "@/components/shared/TenantGuard";
@@ -492,8 +493,11 @@ export default function Layout({ children, currentPageName }) {
               )}
             </div>
 
-            {/* Undo last import */}
-            <UndoImportButton />
+            {/* Smart Import + Undo */}
+            <div className="flex items-center gap-1.5">
+              <SmartImportButton currentUser={currentUser} />
+              <UndoImportButton />
+            </div>
 
             {/* User menu */}
             {currentUser && (

@@ -10,6 +10,8 @@ import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Button } from "@/components/ui/button";
 import { Upload, Users, Building2, Package, Wrench, MapPin, Link2, CheckSquare } from "lucide-react";
+import ExportCSVButton from "@/components/shared/ExportCSVButton";
+import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import BulkAssignDialog from "../components/relationships/BulkAssignDialog";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useToast } from "@/components/ui/use-toast";
@@ -109,6 +111,7 @@ export default function Relationships() {
   const [filters, setFilters] = useState({ status: "" });
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -183,6 +186,14 @@ export default function Relationships() {
     toast({ title: `${pairs.length} relationship${pairs.length !== 1 ? "s" : ""} created` });
   };
 
+  const handleDeleteAll = async () => {
+    for (const r of relationships) { try { await base44.entities.Relationship.delete(r.id); } catch {} }
+    qc.invalidateQueries({ queryKey: ["relationships"] });
+    qc.refetchQueries({ queryKey: ["relationships"] });
+    triggerETL("relationship");
+    toast({ title: `All ${relationships.length} relationships deleted` });
+  };
+
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Relationship.delete(id);
     qc.invalidateQueries({ queryKey: ["relationships"] });
@@ -207,6 +218,16 @@ export default function Relationships() {
         {perms.l2_assign && (
           <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
             <Upload className="w-4 h-4 mr-2" /> Import
+          </Button>
+        )}
+        <ExportCSVButton
+          data={processedRelationships}
+          fields={["relationship_type","person_name","enterprise_name","item_name","service_name","role","start_date","end_date","status"]}
+          filename="relationships_export"
+        />
+        {perms.l2_unassign && relationships.length > 0 && (
+          <Button variant="outline" size="sm" className="rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => setDeleteAllOpen(true)}>
+            🗑️ Delete All
           </Button>
         )}
       </PageHeader>
@@ -286,6 +307,7 @@ export default function Relationships() {
       <RelationshipDetailPanel rel={detailRel} open={!!detailRel} onClose={() => setDetailRel(null)} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName="this assignment" />
 
+      <DeleteAllDialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} onConfirm={handleDeleteAll} entityLabel="Relationships" count={relationships.length} />
       <BulkAssignDialog
         open={bulkAssignOpen}
         onClose={() => setBulkAssignOpen(false)}

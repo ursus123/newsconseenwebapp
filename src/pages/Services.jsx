@@ -14,6 +14,8 @@ import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Upload, Settings, CheckCircle, Clock, DollarSign } from "lucide-react";
+import ExportCSVButton from "@/components/shared/ExportCSVButton";
+import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import {
   SERVICE_FIELDS, SERVICE_MAPPING_RULES, SERVICE_TEMPLATE_EXAMPLE,
   SERVICE_TEMPLATE_INSTRUCTIONS, validateService, transformService,
@@ -72,6 +74,7 @@ export default function Services() {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ status: "", service_type: "", pricing_model: "" });
   const [selectedIds, setSelectedIds] = useState([]);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -105,6 +108,13 @@ export default function Services() {
 
   const handleArchive = (item) => { updateMut.mutate({ id: item.id, data: { ...item, status: "archived" } }); setFormOpen(false); setEditing(null); };
 
+  const handleDeleteAll = async () => {
+    for (const s of services) { try { await base44.entities.Service.delete(s.id); } catch {} }
+    qc.invalidateQueries({ queryKey: ["services"] });
+    qc.refetchQueries({ queryKey: ["services"] });
+    toast({ title: `All ${services.length} services deleted` });
+  };
+
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Service.delete(id);
     qc.invalidateQueries({ queryKey: ["services"] });
@@ -134,6 +144,16 @@ export default function Services() {
         <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
           <Upload className="w-4 h-4 mr-2" /> Import
         </Button>
+        <ExportCSVButton
+          data={processedServices}
+          fields={["name","short_code","category","service_type","pricing_model","price","billing_unit","status"]}
+          filename="services_export"
+        />
+        {services.length > 0 && (
+          <Button variant="outline" size="sm" className="rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => setDeleteAllOpen(true)}>
+            🗑️ Delete All
+          </Button>
+        )}
       </PageHeader>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -188,6 +208,7 @@ export default function Services() {
         />
       )}
 
+      <DeleteAllDialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} onConfirm={handleDeleteAll} entityLabel="Services" count={services.length} />
       <ServiceForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }} onSubmit={handleSubmit} onArchive={handleArchive} initialData={editing} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name} />
       <BulkImportDialog

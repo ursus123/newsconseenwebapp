@@ -10,6 +10,7 @@ import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Button } from "@/components/ui/button";
 import { Lock, Upload, ChevronDown, ChevronUp, Plus, Search, X } from "lucide-react";
+import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import { tagColor } from "@/components/shared/TagInput";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkActionBar from "../components/shared/BulkActionBar";
@@ -457,6 +458,11 @@ export default function Transactions() {
             <Upload className="w-4 h-4 mr-2" /> Import
           </Button>
         )}
+        <ExportCSVButton
+          data={tabTransactions}
+          fields={["date","transaction_type","description","enterprise","primary_person","amount","net_amount","currency","payment_status","status","invoice_number"]}
+          filename="transactions_export"
+        />
         {perms.l4_void && transactions.length > 0 && (
           <Button variant="outline" size="sm" className="rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => setDeleteAllOpen(true)}>
             🗑️ Delete All

@@ -18,6 +18,8 @@ import {
   Upload, MapPin, CheckCircle, Navigation, AlertCircle,
   Map, Loader2,
 } from "lucide-react";
+import ExportCSVButton from "@/components/shared/ExportCSVButton";
+import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import {
   ADDRESS_FIELDS, ADDRESS_MAPPING_RULES, ADDRESS_TEMPLATE_EXAMPLE,
   ADDRESS_TEMPLATE_INSTRUCTIONS, validateAddress, transformAddress,
@@ -79,6 +81,7 @@ export default function Addresses() {
   const [filters, setFilters] = useState({ status: "", gps: "" });
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -170,6 +173,13 @@ export default function Addresses() {
     setGeocodingRowId(null);
   };
 
+  const handleDeleteAll = async () => {
+    for (const a of addresses) { try { await base44.entities.Address.delete(a.id); } catch {} }
+    qc.invalidateQueries({ queryKey: ["addresses"] });
+    triggerETL("address");
+    toast({ title: `All ${addresses.length} addresses deleted` });
+  };
+
   const handleBulkDelete = async () => {
     setBulkDeleting(true);
     for (const id of selectedIds) await base44.entities.Address.delete(id);
@@ -242,6 +252,16 @@ export default function Addresses() {
         <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
           <Upload className="w-4 h-4 mr-2" /> Import
         </Button>
+        <ExportCSVButton
+          data={processedAddresses}
+          fields={["label","address_line1","address_line2","city","state_region","postal_code","country","status","latitude","longitude"]}
+          filename="addresses_export"
+        />
+        {addresses.length > 0 && (
+          <Button variant="outline" size="sm" className="rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => setDeleteAllOpen(true)}>
+            🗑️ Delete All
+          </Button>
+        )}
       </PageHeader>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
@@ -292,6 +312,7 @@ export default function Addresses() {
         <AddressDetailPanel address={detailAddress} currentUser={currentUser} onClose={() => setDetailAddress(null)}
           onGeocoded={(updated) => { setDetailAddress(updated); qc.invalidateQueries({ queryKey: ["addresses"] }); }} />
       )}
+      <DeleteAllDialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} onConfirm={handleDeleteAll} entityLabel="Addresses" count={addresses.length} />
       <AddressForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }} onSubmit={handleSubmit} onArchive={handleArchive} initialData={editing} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.label || "this address"} />
       <BulkImportDialog
