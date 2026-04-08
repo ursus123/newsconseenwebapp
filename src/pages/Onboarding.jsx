@@ -228,12 +228,19 @@ export default function Onboarding() {
   const handleComplete = async () => {
     setCompleting(true);
     try {
-      await base44.auth.updateMe({ onboarding_complete: true });
-      await refreshUser();
-      navigate("/Dashboard");
+      // If user is already logged in, mark onboarding complete and go to dashboard
+      const me = await base44.auth.me().catch(() => null);
+      if (me) {
+        await base44.auth.updateMe({ onboarding_complete: true });
+        await refreshUser();
+        navigate("/Dashboard");
+      } else {
+        // Not logged in — redirect to sign-up/login
+        base44.auth.redirectToLogin("/Dashboard");
+      }
     } catch (e) {
       console.error(e);
-      navigate("/Dashboard");
+      base44.auth.redirectToLogin("/Dashboard");
     } finally {
       setCompleting(false);
     }

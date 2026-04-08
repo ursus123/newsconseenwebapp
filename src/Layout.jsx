@@ -458,7 +458,7 @@ export default function Layout({ children, currentPageName }) {
                 <span>Settings</span>
               </Link>
               <button
-                onClick={() => base44.auth.logout()}
+                onClick={() => base44.auth.logout("/")}
                 className="flex items-center gap-2.5 px-3 py-2 w-full rounded-xl text-sm text-slate-400 hover:text-red-400 hover:bg-red-500/5 transition-all"
               >
                 <LogOut className="w-4 h-4" />
@@ -543,7 +543,7 @@ export default function Layout({ children, currentPageName }) {
                       </div>
                       <div className="border-t border-slate-100 py-1.5">
                         <button
-                          onClick={() => base44.auth.logout()}
+                          onClick={() => base44.auth.logout("/")}
                           className="flex items-center gap-2.5 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors w-full text-left"
                         >
                           <LogOut className="w-4 h-4" /> Sign Out

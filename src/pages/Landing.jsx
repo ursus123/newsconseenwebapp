@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { base44 } from "@/api/base44Client";
 import { Check, ChevronRight, Monitor, Layers, Zap, Grid3x3, Bell, Settings, Users, BarChart2, CheckSquare, Receipt, GitBranch, Code2, ArrowRight, Star, Globe, Shield, Cpu, Wifi, Package } from "lucide-react";
 
 // ── Data ──────────────────────────────────────────────────────────────────────
@@ -258,9 +259,9 @@ export default function Landing() {
             <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/Dashboard")} className="text-sm text-slate-400 hover:text-white transition-colors">Sign in</button>
-            <button onClick={() => navigate("/pricing")} className="bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors shadow-md shadow-emerald-500/20">
-              Get Started
+            <button onClick={() => base44.auth.redirectToLogin()} className="text-sm text-slate-400 hover:text-white transition-colors">Sign in</button>
+            <button onClick={() => navigate("/onboarding")} className="bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors shadow-md shadow-emerald-500/20">
+              Sign Up
             </button>
           </div>
         </div>
@@ -287,16 +288,16 @@ export default function Landing() {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
-                onClick={() => navigate("/Dashboard")}
+                onClick={() => navigate("/onboarding")}
                 className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white font-bold px-8 py-4 rounded-2xl text-base transition-all shadow-xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-105"
               >
-                <Monitor className="w-5 h-5" /> Launch the Demo OS
+                <Monitor className="w-5 h-5" /> Get Started Free
               </button>
               <button
-                onClick={() => navigate("/pricing")}
+                onClick={() => base44.auth.redirectToLogin()}
                 className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold px-6 py-4 rounded-2xl text-base transition-all"
               >
-                View Pricing <ArrowRight className="w-4 h-4" />
+                Sign In <ArrowRight className="w-4 h-4" />
               </button>
             </div>
             <p className="text-slate-600 text-xs mt-4">14-day free trial · No credit card required</p>

@@ -85,8 +85,7 @@ const AuthenticatedApp = () => {
   // Render the main app
   return (
     <Routes>
-      {/* Onboarding — no layout wrapper */}
-      <Route path="/onboarding" element={<Onboarding />} />
+      {/* Onboarding is now a public route */}
 
       <Route path="/app" element={
         <LayoutWrapper currentPageName={mainPageKey}>
@@ -148,6 +147,7 @@ function App() {
               <Route path="/" element={<Landing />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/landing" element={<Landing />} />
+              <Route path="/onboarding" element={<Onboarding />} />
               {/* All other routes go through auth */}
               <Route path="/*" element={<AuthenticatedApp />} />
             </Routes>
