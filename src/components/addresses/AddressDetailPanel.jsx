@@ -29,21 +29,60 @@ export default function AddressDetailPanel({ address, currentUser, onClose, onGe
   useEffect(() => {
     if (!address || !currentUser) return;
     const scope = currentUser.role === "super_admin" ? {} : { company_id: currentUser.company_id };
+    const addressLabel = address.label || address.address_line1 || "";
 
-    base44.entities.Enterprise.filter(scope).then((all) => {
-      setEnterprises(all.filter((e) =>
-        (e.primary_address && address.address_line1 && e.primary_address.includes(address.address_line1)) ||
-        (e.linked_addresses || []).includes(address.id)
-      ));
-    }).catch(() => {});
+    // Query Relationship entity for enterprise_address and person_address links
+    base44.entities.Relationship.filter({ relationship_type: "enterprise_address" })
+      .then((rels) => {
+        const linked = rels.filter((r) => r.location === addressLabel || r.location === address.id);
+        const enterpriseNames = linked.map((r) => r.enterprise_name).filter(Boolean);
+        if (enterpriseNames.length > 0) {
+          base44.entities.Enterprise.filter(scope).then((all) => {
+            const fromRels = all.filter((e) => enterpriseNames.includes(e.enterprise_name));
+            const fromLegacy = all.filter((e) =>
+              (e.primary_address && address.address_line1 && e.primary_address.includes(address.address_line1)) ||
+              (e.linked_addresses || []).includes(address.id)
+            );
+            const merged = [...new Map([...fromRels, ...fromLegacy].map(e => [e.id, e])).values()];
+            setEnterprises(merged);
+          }).catch(() => {});
+        } else {
+          base44.entities.Enterprise.filter(scope).then((all) => {
+            setEnterprises(all.filter((e) =>
+              (e.primary_address && address.address_line1 && e.primary_address.includes(address.address_line1)) ||
+              (e.linked_addresses || []).includes(address.id)
+            ));
+          }).catch(() => {});
+        }
+      }).catch(() => {});
 
-    base44.entities.Person.filter(scope).then((all) => {
-      setPeople(all.filter((p) =>
-        (p.address && address.address_line1 && p.address.includes(address.address_line1)) ||
-        (p.linked_addresses || []).includes(address.id)
-      ));
-    }).catch(() => {});
-  }, [address, currentUser]);
+    base44.entities.Relationship.filter({ relationship_type: "person_address" })
+      .then((rels) => {
+        const linked = rels.filter((r) => r.location === addressLabel || r.location === address.id);
+        const personNames = linked.map((r) => r.person_name).filter(Boolean);
+        if (personNames.length > 0) {
+          base44.entities.Person.filter(scope).then((all) => {
+            const fromRels = all.filter((p) => {
+              const name = p.preferred_name || `${p.first_name} ${p.last_name}`.trim();
+              return personNames.includes(name);
+            });
+            const fromLegacy = all.filter((p) =>
+              (p.address && address.address_line1 && p.address.includes(address.address_line1)) ||
+              (p.linked_addresses || []).includes(address.id)
+            );
+            const merged = [...new Map([...fromRels, ...fromLegacy].map(p => [p.id, p])).values()];
+            setPeople(merged);
+          }).catch(() => {});
+        } else {
+          base44.entities.Person.filter(scope).then((all) => {
+            setPeople(all.filter((p) =>
+              (p.address && address.address_line1 && p.address.includes(address.address_line1)) ||
+              (p.linked_addresses || []).includes(address.id)
+            ));
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+  }, [address?.id, currentUser]);
 
   const handleGeocode = async () => {
     setGeocoding(true);

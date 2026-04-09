@@ -40,6 +40,18 @@ export const ROLE_PERMISSIONS = {
       "alerts",
       "Connectors",
       "network",
+      "ObjectExplorer",
+      "KineticLayer",
+      "ObjectViews",
+      "Applications",
+      "MLModels",
+      "DataModels",
+      "EntityGraph",
+      "Pipelines",
+      "TaxonomyAdmin",
+      "MarketIntelligence",
+      "StockCounter",
+      "Settings",
     ],
     crudOps: {
       entities: [

@@ -83,6 +83,7 @@ const QUICK_ADDS = [
   { type: "item_enterprise",      icon: Building2, label: "Item → Enterprise",      cls: "bg-purple-600 hover:bg-purple-700" },
   { type: "item_person",          icon: Package,   label: "Item → Person",          cls: "bg-amber-500 hover:bg-amber-600" },
   { type: "enterprise_service",   icon: Link2,     label: "Enterprise → Service",   cls: "bg-indigo-600 hover:bg-indigo-700" },
+  { type: "enterprise_address",    icon: MapPin,    label: "Enterprise → Address",   cls: "bg-emerald-600 hover:bg-emerald-700" },
 ];
 
 const REL_PREVIEW_COLS = [
