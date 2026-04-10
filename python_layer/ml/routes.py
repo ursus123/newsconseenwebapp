@@ -13,6 +13,27 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ml", tags=["ML"])
 
+# ----------------------------------------------------------
+# GET /ml/pmml-status
+# Shows which KNIME PMML models are deployed vs sklearn fallback
+# ----------------------------------------------------------
+@router.get("/pmml-status")
+def pmml_status_endpoint():
+    """
+    Returns installation status for all PMML models.
+
+    green  source=knime_pmml   → KNIME-exported model is active
+    grey   source=sklearn_fallback → using built-in sklearn/Prophet/XGBoost
+
+    To upgrade a model:
+      1. Train in KNIME Desktop
+      2. Export as PMML 4.x (PMML Writer node)
+      3. Place file in python_layer/ml/pmml/<model_name>.pmml
+      4. Re-request this endpoint — source will flip to knime_pmml
+    """
+    from ml.pmml_loader import pmml_status
+    return pmml_status()
+
 
 # ------------------------------------------------------------------
 # Helpers — persist and retrieve ML predictions in raw.ml_predictions
@@ -210,7 +231,26 @@ def retention_risk(
             if company_id and "company_id" in task_df.columns:
                 task_df = task_df[task_df["company_id"] == company_id]
 
+        # Try KNIME PMML first — if installed, use it directly
+        from ml.pmml_loader import pmml_available, predict_from_pmml
+        if pmml_available("retention-risk") and not people_df.empty:
+            logger.info("/ml/retention-risk: KNIME PMML model available — using pmml_loader")
+            pmml_out = predict_from_pmml("retention-risk", people_df)
+            if pmml_out is not None:
+                result = {
+                    "status":        "success",
+                    "source":        "knime_pmml",
+                    "company_id":    company_id,
+                    "horizon_days":  horizon_days,
+                    "row_count":     len(pmml_out),
+                    "scored":        pmml_out.where(pmml_out.notna(), None).to_dict(orient="records"),
+                }
+                _store_predictions(company_id, "retention-risk", result)
+                return result
+            logger.warning("/ml/retention-risk: PMML prediction failed — falling back to sklearn Cox PH")
+
         result = run_retention_model(people_df, task_df, horizon_days=horizon_days, research_mode=research_mode)
+        result["source"] = "sklearn_cox_ph"
         _store_predictions(company_id, "retention-risk", result)
         return result
 
@@ -288,12 +328,28 @@ def staffing_forecast(
                 "forecast_days": forecast_days,
             }
 
+        # Try KNIME PMML first
+        from ml.pmml_loader import pmml_available, predict_from_pmml
+        if pmml_available("staffing-forecast") and not task_df.empty:
+            logger.info("/ml/staffing-forecast: KNIME PMML available — using pmml_loader")
+            pmml_out = predict_from_pmml("staffing-forecast", task_df)
+            if pmml_out is not None:
+                return {
+                    "status":        "success",
+                    "source":        "knime_pmml",
+                    "enterprise_id": enterprise_id,
+                    "forecast_days": forecast_days,
+                    "forecast":      pmml_out.where(pmml_out.notna(), None).to_dict(orient="records"),
+                }
+            logger.warning("/ml/staffing-forecast: PMML failed — falling back to Prophet")
+
         result = run_staffing_forecast(
             task_df,
             enterprise_id=enterprise_id,
             forecast_days=forecast_days,
             metric=metric,
         )
+        result.setdefault("source", "prophet")
         return result
 
     except HTTPException:
@@ -332,9 +388,27 @@ def ltv_segmentation(
         transaction_df = _load_raw_from_railway("transactions", company_id)
         task_df        = _load_raw_from_railway("tasks",        company_id)
 
+        # Try KNIME PMML first
+        from ml.pmml_loader import pmml_available, predict_from_pmml
+        if pmml_available("ltv-segmentation") and not people_df.empty:
+            logger.info("/ml/ltv-segmentation: KNIME PMML model available — using pmml_loader")
+            pmml_out = predict_from_pmml("ltv-segmentation", people_df)
+            if pmml_out is not None:
+                result = {
+                    "status":     "success",
+                    "source":     "knime_pmml",
+                    "company_id": company_id,
+                    "row_count":  len(pmml_out),
+                    "segments":   pmml_out.where(pmml_out.notna(), None).to_dict(orient="records"),
+                }
+                _store_predictions(company_id, "ltv-segmentation", result)
+                return result
+            logger.warning("/ml/ltv-segmentation: PMML prediction failed — falling back to sklearn KMeans")
+
         result = run_ltv_segmentation(
             people_df, transaction_df, task_df, n_clusters=n_clusters, research_mode=research_mode
         )
+        result["source"] = "sklearn_kmeans"
         _store_predictions(company_id, "ltv-segmentation", result)
         return result
 
@@ -385,12 +459,28 @@ def shift_demand(
                 "forecast": [],
             }
 
+        # Try KNIME PMML first
+        from ml.pmml_loader import pmml_available, predict_from_pmml
+        if pmml_available("shift-demand") and not task_df.empty:
+            logger.info("/ml/shift-demand: KNIME PMML available — using pmml_loader")
+            pmml_out = predict_from_pmml("shift-demand", task_df)
+            if pmml_out is not None:
+                return {
+                    "status":        "success",
+                    "source":        "knime_pmml",
+                    "enterprise_id": enterprise_id,
+                    "forecast_days": forecast_days,
+                    "forecast":      pmml_out.where(pmml_out.notna(), None).to_dict(orient="records"),
+                }
+            logger.warning("/ml/shift-demand: PMML failed — falling back to XGBoost")
+
         result = run_demand_model(
             task_df,
             people_df,
             enterprise_id=enterprise_id,
             forecast_days=forecast_days,
         )
+        result.setdefault("source", "xgboost")
         return result
 
     except HTTPException:

@@ -37,6 +37,7 @@ import {
   fetchTransactionsFallback,
 } from "@/utils/fetchWithFallback";
 import PlottableTransactionTimeline from "../components/dashboard/PlottableTransactionTimeline";
+import MLDashboard from "../components/ml/MLDashboard";
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -870,6 +871,9 @@ function AdminDashboard({ user }) {
         </div>
 
       </div>
+
+      {/* ── ML Models — KNIME PMML bridge + sklearn fallbacks ── */}
+      <MLDashboard currentUser={user} />
 
       {/* ── Plottable transaction timeline — brush to zoom into a month ── */}
       <PlottableTransactionTimeline
