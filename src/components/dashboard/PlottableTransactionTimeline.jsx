@@ -129,6 +129,8 @@ export default function PlottableTransactionTimeline({ transactions, isAnalytics
 
     return () => {
       ro.disconnect();
+      try { pointer.detachFrom(group); } catch (_) {}
+      try { panZoom.detachFrom(group); } catch (_) {}
       if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
       if (tooltipDiv.parentNode) tooltipDiv.parentNode.removeChild(tooltipDiv);
     };

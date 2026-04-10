@@ -88,6 +88,8 @@ export default function PlottableCompetitorScatter({ competitors, radiusKm }) {
 
     return () => {
       ro.disconnect();
+      try { pointer.detachFrom(scatter); } catch (_) {}
+      try { panZoom.detachFrom(scatter); } catch (_) {}
       if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
       if (tooltipDiv.parentNode) tooltipDiv.parentNode.removeChild(tooltipDiv);
     };
