@@ -9,7 +9,8 @@ import BulkImportDialog from "../components/shared/BulkImportDialog";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Button } from "@/components/ui/button";
-import { Upload, Users, Building2, Package, Wrench, MapPin, Link2, CheckSquare } from "lucide-react";
+import { Upload, Users, Building2, Package, Wrench, MapPin, Link2, CheckSquare, Network, List } from "lucide-react";
+import CytoscapeRelationshipGraph from "../components/network/CytoscapeRelationshipGraph";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import BulkAssignDialog from "../components/relationships/BulkAssignDialog";
@@ -113,6 +114,7 @@ export default function Relationships() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [viewMode, setViewMode] = useState("table");
   const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -254,7 +256,24 @@ export default function Relationships() {
         </div>
       )}
 
-      {/* Type filter tabs */}
+      {/* View toggle + Type filter tabs */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+          <button
+            onClick={() => setViewMode("table")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === "table" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            <List className="w-3.5 h-3.5" /> Table
+          </button>
+          <button
+            onClick={() => setViewMode("graph")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === "graph" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            <Network className="w-3.5 h-3.5" /> Graph
+          </button>
+        </div>
+      </div>
+
       <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1 mb-4">
         {TYPE_TABS.map((t) => {
           const count = t.id === "all" ? relationships.length : relationships.filter((r) => r.relationship_type === t.id).length;
@@ -284,14 +303,21 @@ export default function Relationships() {
         canDelete={perms.l2_unassign}
       />
 
-      <DataTable
-        columns={columns}
-        data={processedRelationships}
-        onRowClick={(row) => setDetailRel(row)}
-        onEdit={perms.l2_assign ? (row) => { setEditing(row); setFormType(row.relationship_type); setFormOpen(true); } : undefined}
-        onDelete={perms.l2_unassign ? (row) => setDeleting(row) : undefined}
-        bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
-      />
+      {viewMode === "graph" ? (
+        <CytoscapeRelationshipGraph
+          relationships={relationships}
+          filterType={activeTab}
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={processedRelationships}
+          onRowClick={(row) => setDetailRel(row)}
+          onEdit={perms.l2_assign ? (row) => { setEditing(row); setFormType(row.relationship_type); setFormOpen(true); } : undefined}
+          onDelete={perms.l2_unassign ? (row) => setDeleting(row) : undefined}
+          bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
+        />
+      )}
 
       <RelationshipAnalytics relationships={relationships} />
 

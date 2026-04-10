@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import CytoscapeNetworkGraph from "./CytoscapeNetworkGraph";
 import { Globe, TrendingUp, TrendingDown, Users, Package,
          CheckCircle, AlertTriangle, BarChart2, MapPin,
          RefreshCw, ArrowUp, ArrowDown, Minus } from "lucide-react";
@@ -149,7 +150,7 @@ function MemberRow({ member, rank, showMetric }) {
 // Main NetworkDashboard
 // ----------------------------------------------------------
 export default function NetworkDashboard({ networkId, currentUser }) {
-  const [activeTab, setActiveTab] = useState("overview"); // overview | members | alerts
+  const [activeTab, setActiveTab] = useState("overview"); // overview | members | alerts | graph
 
   const nid = networkId || currentUser?.network_company_id;
 
@@ -165,7 +166,7 @@ export default function NetworkDashboard({ networkId, currentUser }) {
     staleTime:  5 * 60 * 1000,
   });
 
-  // Members with health scores
+  // Members with health scores (loaded for both members and graph tabs)
   const { data: membersData, isLoading: memLoading } = useQuery({
     queryKey: ["network-members", nid],
     queryFn:  async () => {
@@ -173,7 +174,7 @@ export default function NetworkDashboard({ networkId, currentUser }) {
       if (!r.ok) throw new Error(await r.text());
       return r.json();
     },
-    enabled:   !!nid && activeTab === "members",
+    enabled:   !!nid && (activeTab === "members" || activeTab === "graph"),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -277,6 +278,7 @@ export default function NetworkDashboard({ networkId, currentUser }) {
           { id: "overview", label: "Overview" },
           { id: "members",  label: `Members (${overview?.member_count ?? "—"})` },
           { id: "alerts",   label: `Alerts ${overview?.critical_count > 0 ? `(${overview.critical_count})` : ""}` },
+          { id: "graph",    label: "Graph" },
         ].map(tab => (
           <button
             key={tab.id}
@@ -385,6 +387,16 @@ export default function NetworkDashboard({ networkId, currentUser }) {
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === "graph" && (
+        memLoading ? (
+          <div className="flex items-center justify-center py-12 text-slate-400 text-sm gap-2">
+            <RefreshCw className="w-4 h-4 animate-spin" /> Loading member data...
+          </div>
+        ) : (
+          <CytoscapeNetworkGraph members={membersData?.members || []} networkId={nid} />
+        )
       )}
 
       {activeTab === "alerts" && (
