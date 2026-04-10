@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
+import { Column, Table2, Cell, ColumnHeaderCell, SelectionModes, RenderMode } from "@blueprintjs/table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +8,7 @@ import { ChevronLeft, ChevronRight, AlertTriangle, RefreshCw } from "lucide-reac
 import { motion, AnimatePresence } from "framer-motion";
 
 const PAGE_SIZE = 15;
+const VIRTUALIZE_THRESHOLD = 200;
 
 export default function DataTable({
   columns,
@@ -57,6 +59,53 @@ export default function DataTable({
     if (!onSelectionChange) return;
     onSelectionChange(safeData.map((r) => r.id));
   };
+
+  const cellRenderer = useCallback((col) => (rowIndex) => {
+    const row = safeData[rowIndex];
+    if (!row) return <Cell />;
+    const val = row[col.key];
+    if (col.render) return <Cell>{col.render(val, row)}</Cell>;
+    if (col.badge) {
+      return (
+        <Cell>
+          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${col.badgeColor?.(val) || "bg-slate-100 text-slate-600"}`}>
+            {(val || "—").toString().replace(/_/g, " ")}
+          </span>
+        </Cell>
+      );
+    }
+    return <Cell>{val != null && val !== "" ? String(val) : "—"}</Cell>;
+  }, [safeData]);
+
+  if (safeData.length >= VIRTUALIZE_THRESHOLD && !bulkMode) {
+    return (
+      <div>
+        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div className="px-4 py-2 border-b border-slate-100 text-xs text-slate-400">
+            {safeData.length} records — virtualized view
+          </div>
+          <Table2
+            numRows={safeData.length}
+            selectionModes={SelectionModes.ROWS_AND_CELLS}
+            renderMode={RenderMode.BATCH_ON_UPDATE}
+            defaultRowHeight={36}
+            className="w-full"
+          >
+            {columns.map((col) => (
+              <Column
+                key={col.key}
+                name={col.label}
+                nameRenderer={() => (
+                  <ColumnHeaderCell name={col.label} style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }} />
+                )}
+                cellRenderer={cellRenderer(col)}
+              />
+            ))}
+          </Table2>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
