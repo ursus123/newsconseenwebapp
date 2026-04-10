@@ -28,7 +28,7 @@ import {
 } from "@/config/transactionTypes";
 import { createTransaction, TRANSACTION_SOURCES } from "@/utils/createTransaction";
 import { generateInvoiceNumber } from "@/utils/autoInvoice";
-
+import { DateRangeInput3 } from "@blueprintjs/datetime2";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const triggerETL = (entity) =>
@@ -526,20 +526,20 @@ export default function Transactions() {
           ))}
         </div>
 
-        {/* Custom date range inputs */}
-        <div className="flex items-center gap-1">
-          <input
-            type="date"
-            value={dateRange[0] ? new Date(dateRange[0]).toISOString().slice(0,10) : ""}
-            onChange={e => { const d = e.target.value ? new Date(e.target.value) : null; setDateRange([d, dateRange[1]]); if (d) setPeriod(""); }}
-            className="text-xs border border-slate-200 rounded-xl px-3 py-1.5 bg-white text-slate-600 focus:outline-none h-8"
-          />
-          <span className="text-slate-400 text-xs">→</span>
-          <input
-            type="date"
-            value={dateRange[1] ? new Date(dateRange[1]).toISOString().slice(0,10) : ""}
-            onChange={e => { const d = e.target.value ? new Date(e.target.value) : null; setDateRange([dateRange[0], d]); if (d) setPeriod(""); }}
-            className="text-xs border border-slate-200 rounded-xl px-3 py-1.5 bg-white text-slate-600 focus:outline-none h-8"
+        {/* Blueprint DateRangePicker — custom range overrides the presets */}
+        <div style={{ isolation: "isolate" }}>
+          <DateRangeInput3
+            value={dateRange}
+            onChange={(range) => { setDateRange(range); if (range[0] || range[1]) setPeriod(""); }}
+            formatDate={d => d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
+            parseDate={str => { const d = new Date(str); return isNaN(d.getTime()) ? null : d; }}
+            placeholder="Custom range…"
+            shortcuts={false}
+            allowSingleDayRange
+            maxDate={new Date()}
+            popoverProps={{ placement: "bottom-start" }}
+            startInputProps={{ style: { fontSize: 12, height: 34, borderRadius: 10, borderColor: dateRange[0] ? "#10b981" : undefined } }}
+            endInputProps={{ style: { fontSize: 12, height: 34, borderRadius: 10, borderColor: dateRange[1] ? "#10b981" : undefined } }}
           />
         </div>
         {dateRange[0] && (
