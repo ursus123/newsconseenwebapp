@@ -71,23 +71,29 @@ export default function DataTable({
 
   const showCheckboxes = bulkMode && !!onSelectionChange;
 
+  // ── Blueprint virtualized table (large datasets) ───────────────────────────
+  const cellRenderer = useCallback((col) => (rowIndex) => {
+    const row = safeData[rowIndex];
+    if (!row) return <Cell />;
+    const val = row[col.key];
+    if (col.render) {
+      return <Cell>{col.render(val, row)}</Cell>;
+    }
+    if (col.badge) {
+      return (
+        <Cell>
+          <Badge variant="secondary" className={col.badgeColor?.(val) || "bg-slate-100 text-slate-600"}>
+            {(val || "—").toString().replace(/_/g, " ")}
+          </Badge>
+        </Cell>
+      );
+    }
+    return <Cell>{val ?? "—"}</Cell>;
+  }, [safeData]);
+
   if (isLoading) {
     return (
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-        <div className="divide-y divide-slate-50">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-4 px-4 py-3 animate-pulse">
-              <div className="h-3 bg-slate-100 rounded w-1/4" />
-              <div className="h-3 bg-slate-100 rounded w-1/3" />
-              <div className="h-3 bg-slate-100 rounded w-1/5" />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
     return (
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
         <div className="flex flex-col items-center justify-center py-14 gap-3">
@@ -113,29 +119,6 @@ export default function DataTable({
     if (!onSelectionChange) return;
     onSelectionChange(safeData.map((r) => r.id));
   };
-
-  // ── Blueprint virtualized table (large datasets) ───────────────────────────
-  // Kicks in above VIRTUALIZE_THRESHOLD rows. Renders each column as a Blueprint
-  // Column using the same `col.render` / `col.badge` / `col.key` config as the
-  // existing paginated table — no logic changes.
-  const cellRenderer = useCallback((col) => (rowIndex) => {
-    const row = safeData[rowIndex];
-    if (!row) return <Cell />;
-    const val = row[col.key];
-    if (col.render) {
-      return <Cell>{col.render(val, row)}</Cell>;
-    }
-    if (col.badge) {
-      return (
-        <Cell>
-          <Badge variant="secondary" className={col.badgeColor?.(val) || "bg-slate-100 text-slate-600"}>
-            {(val || "—").toString().replace(/_/g, " ")}
-          </Badge>
-        </Cell>
-      );
-    }
-    return <Cell>{val ?? "—"}</Cell>;
-  }, [safeData]);
 
   if (safeData.length >= VIRTUALIZE_THRESHOLD) {
     return (
