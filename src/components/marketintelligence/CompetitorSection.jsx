@@ -7,6 +7,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from "recharts";
 import ClusterAnalysisView from "./ClusterAnalysisView";
+import PlottableCompetitorScatter from "./PlottableCompetitorScatter";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -102,6 +103,7 @@ export default function CompetitorSection({ data, businessType, location, radius
         <div className="flex gap-1">
           {[
             { key: "chart",   label: "📊 Distance" },
+            { key: "scatter", label: "✦ Scatter" },
             { key: "cluster", label: "🔵 Clusters" },
             { key: "map",     label: "🗺️ Map" },
             { key: "table",   label: "📋 Table" },
@@ -128,6 +130,11 @@ export default function CompetitorSection({ data, businessType, location, radius
         <div className="py-6 text-center text-slate-400 text-sm">🟢 No competitors found — potential first-mover advantage!</div>
       ) : (
         <>
+          {/* Plottable Scatter — distance vs rating, zoom + pan */}
+          {view === "scatter" && (
+            <PlottableCompetitorScatter competitors={competitors} radiusKm={radiusKm} />
+          )}
+
           {/* Cluster Analysis View */}
           {view === "cluster" && (
             <ClusterAnalysisView competitors={competitors} radiusKm={radiusKm} />

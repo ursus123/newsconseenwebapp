@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
@@ -28,6 +28,7 @@ import {
 } from "@/config/transactionTypes";
 import { createTransaction, TRANSACTION_SOURCES } from "@/utils/createTransaction";
 import { generateInvoiceNumber } from "@/utils/autoInvoice";
+import { DateRangeInput3 } from "@blueprintjs/datetime2";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const triggerETL = (entity) =>
@@ -237,6 +238,7 @@ export default function Transactions() {
   const [currentUser, setCurrentUser]     = useState(null);
   const [activeTab, setActiveTab]         = useState("outstanding");
   const [period, setPeriod]               = useState("30d");
+  const [dateRange, setDateRange]         = useState([null, null]); // [Date|null, Date|null]
   const [filterEnterprise, setFilterEnterprise] = useState("all");
   const [filterSource, setFilterSource]         = useState("all");
   const [filterTag, setFilterTag]               = useState("all");
@@ -309,14 +311,24 @@ export default function Transactions() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); triggerETL("transaction"); },
   });
 
-  // Period filtering
+  // Period filtering — preset buttons OR custom Blueprint date range
   const filteredByPeriod = useMemo(() => {
+    // Custom date range takes priority when both ends are set
+    const [rangeStart, rangeEnd] = dateRange;
+    if (rangeStart && rangeEnd) {
+      const from = new Date(rangeStart); from.setHours(0, 0, 0, 0);
+      const to   = new Date(rangeEnd);   to.setHours(23, 59, 59, 999);
+      return transactions.filter(t => {
+        const d = new Date(t.date || t.created_date);
+        return d >= from && d <= to;
+      });
+    }
     if (period === "all") return transactions;
     const days = { "7d": 7, "30d": 30, "90d": 90, "year": 365 }[period] || 30;
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
     return transactions.filter(t => new Date(t.date || t.created_date) >= cutoff);
-  }, [transactions, period]);
+  }, [transactions, period, dateRange]);
 
   const filtered = useMemo(() => {
     let list = filteredByPeriod;
@@ -503,14 +515,45 @@ export default function Transactions() {
 
       {/* Period + Enterprise selectors */}
       <div className="flex items-center gap-3 flex-wrap">
+        {/* Preset quick-select buttons */}
         <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
           {[{ value: "7d", label: "7d" }, { value: "30d", label: "30d" }, { value: "90d", label: "90d" }, { value: "year", label: "Year" }, { value: "all", label: "All" }].map(p => (
-            <button key={p.value} onClick={() => setPeriod(p.value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${period === p.value ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>
+            <button key={p.value}
+              onClick={() => { setPeriod(p.value); setDateRange([null, null]); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${period === p.value && !dateRange[0] ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>
               {p.label}
             </button>
           ))}
         </div>
+
+        {/* Blueprint DateRangePicker — custom range overrides the presets above */}
+        <div className="bp5-dark-override" style={{ isolation: "isolate" }}>
+          <DateRangeInput3
+            value={dateRange}
+            onChange={(range) => {
+              setDateRange(range);
+              if (range[0] || range[1]) setPeriod("");
+            }}
+            formatDate={d => d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
+            parseDate={str => { const d = new Date(str); return isNaN(d) ? null : d; }}
+            placeholder="Custom range…"
+            shortcuts={false}
+            allowSingleDayRange
+            maxDate={new Date()}
+            popoverProps={{ placement: "bottom-start" }}
+            startInputProps={{ style: { fontSize: 12, height: 34, borderRadius: 10, borderColor: dateRange[0] ? "#10b981" : undefined } }}
+            endInputProps={{ style: { fontSize: 12, height: 34, borderRadius: 10, borderColor: dateRange[1] ? "#10b981" : undefined } }}
+          />
+        </div>
+        {dateRange[0] && (
+          <button
+            onClick={() => { setDateRange([null, null]); setPeriod("30d"); }}
+            className="text-xs text-slate-400 hover:text-rose-500 transition-colors"
+            title="Clear custom range"
+          >
+            ✕ Clear range
+          </button>
+        )}
         <select value={filterEnterprise} onChange={e => setFilterEnterprise(e.target.value)}
           className="text-xs border border-slate-200 rounded-xl px-3 py-1.5 bg-white text-slate-600 focus:outline-none">
           <option value="all">All Enterprises</option>

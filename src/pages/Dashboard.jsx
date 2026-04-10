@@ -36,6 +36,7 @@ import {
   fetchProductsFallback,
   fetchTransactionsFallback,
 } from "@/utils/fetchWithFallback";
+import PlottableTransactionTimeline from "../components/dashboard/PlottableTransactionTimeline";
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -869,6 +870,13 @@ function AdminDashboard({ user }) {
         </div>
 
       </div>
+
+      {/* ── Plottable transaction timeline — brush to zoom into a month ── */}
+      <PlottableTransactionTimeline
+        transactions={txRecords}
+        isAnalytics={isTxAnalytics}
+        revenueTypes={REVENUE_TYPES}
+      />
 
       {/* ── Full-width bottom row ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
