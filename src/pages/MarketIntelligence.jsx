@@ -17,6 +17,7 @@ import EnvironmentSection from "@/components/marketintelligence/EnvironmentSecti
 import LaborMarketSection from "@/components/marketintelligence/LaborMarketSection";
 import ForecastingModule from "@/components/marketintelligence/ForecastingModule";
 import { executeSQL } from "@/components/querybuilder/sqlEngine";
+import { fetchPeopleFallback, fetchTasksFallback, fetchTransactionsFallback } from "@/utils/fetchWithFallback";
 import { Button } from "@/components/ui/button";
 import {
   BookmarkPlus, Loader2, Download, Building2, ExternalLink,
@@ -165,22 +166,82 @@ function buildReportSections(results) {
   const env   = results.environment?.[0]|| {};
   const wages = results.wages?.[0]      || {};
   const competitors = (results.competitors || []).filter(c => c.distance_km > 0);
+  const infra = results.infrastructure  || [];
 
-  sections.push({ type: "heading", content: `Market Analysis: ${results.businessType} in ${results.location}` });
-  sections.push({ type: "text", content: `Location: ${ov.city || results.location}, ${ov.country || ""}\nCoordinates: ${ov.lat}, ${ov.lon}\nCurrency: ${ov.currency || "USD"}\nLanguage: ${ov.language || ""}` });
+  // ── Cover ──
+  sections.push({ type: "heading", content: `Market Analysis: ${results.businessType?.replace(/_/g, " ")} in ${results.location}`, level: "H1" });
+  sections.push({ type: "text", content: `Generated: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}` });
+  sections.push({ type: "divider" });
+
+  // ── Location ──
+  sections.push({ type: "heading", content: "Location Overview", level: "H2" });
+  sections.push({ type: "text", content: `${ov.city || results.location}${ov.country ? ", " + ov.country : ""}\nCoordinates: ${ov.lat || "—"}, ${ov.lon || "—"} · Currency: ${ov.currency || "USD"} · Language: ${ov.language || "—"}` });
+
+  // ── Opportunity Score metric card ──
+  sections.push({ type: "heading", content: "Market Opportunity", level: "H2" });
+  if (mkt.opportunity_score != null) {
+    sections.push({ type: "metric", icon: "🎯", value: `${mkt.opportunity_score}/100`, label: "Opportunity Score" });
+  }
+  if (mkt.annual_market_usd > 0) {
+    sections.push({ type: "metric", icon: "📈", value: `$${(mkt.annual_market_usd / 1000000).toFixed(1)}M/yr`, label: "Est. Annual Market" });
+  }
+  if (mkt.supply_gap > 0) {
+    sections.push({ type: "metric", icon: "📉", value: String(mkt.supply_gap), label: "Supply Gap (providers needed)" });
+  }
+  sections.push({ type: "spacer" });
+  sections.push({ type: "text", content: `Market Status: ${mkt.market_status || "N/A"} · Competitors: ${mkt.existing_competitors ?? "N/A"}\nRecommendation: ${mkt.recommendation || "—"}` });
+
+  // ── Economic Profile ──
   if (Object.keys(eco).length > 0) {
-    sections.push({ type: "text", content: `Economic Profile:\nPopulation: ${(eco.total_population || eco.population)?.toLocaleString() || "N/A"}\nMedian Income: $${eco.median_household_income?.toLocaleString() || "N/A"}\nMedian Age: ${eco.median_age || "N/A"} years\nPoverty Rate: ${eco.poverty_rate_pct || "N/A"}%\nUnemployment: ${eco.unemployment_rate_pct || "N/A"}%` });
+    sections.push({ type: "heading", content: "Economic Profile", level: "H2" });
+    const ecoData = [
+      { metric: "Population",     value: (eco.total_population || eco.population || 0) / 1000 },
+      { metric: "Median Income",  value: (eco.median_household_income || eco.gdp_per_capita_usd || 0) / 1000 },
+      { metric: "Over-65 %",      value: eco.population_over65_pct || 0 },
+      { metric: "Under-18 %",     value: eco.population_under18_pct || 0 },
+      { metric: "Poverty %",      value: eco.poverty_rate_pct || 0 },
+      { metric: "Unemployment %", value: eco.unemployment_rate_pct || 0 },
+    ].filter(d => d.value > 0);
+    if (ecoData.length >= 3) {
+      sections.push({ type: "mi_chart", chartType: "bar", data: ecoData, title: "Economic Indicators", nameKey: "metric", dataKey: "value", caption: "Population in thousands; Income in thousands USD" });
+    }
+    sections.push({ type: "text", content: `Population: ${(eco.total_population || eco.population)?.toLocaleString() || "N/A"} · Median Income: $${eco.median_household_income?.toLocaleString() || "N/A"} · Median Age: ${eco.median_age || "N/A"} yrs\nPoverty Rate: ${eco.poverty_rate_pct || "N/A"}% · Unemployment: ${eco.unemployment_rate_pct || "N/A"}%` });
   }
-  sections.push({ type: "text", content: `Market Opportunity:\nOpportunity Score: ${mkt.opportunity_score || "N/A"}/100\nMarket Status: ${mkt.market_status || "N/A"}\nEstimated Annual Market: $${mkt.annual_market_usd?.toLocaleString() || "N/A"}\nExisting Competitors: ${mkt.existing_competitors || "N/A"}\nSupply Gap: ${mkt.supply_gap || "N/A"} providers needed\nRecommendation: ${mkt.recommendation || "N/A"}` });
-  if (competitors.length > 0) {
-    sections.push({ type: "text", content: `Competitors Found: ${competitors.length}\n${competitors.slice(0, 5).map(c => `- ${c.name} (${c.distance_km}km away)`).join("\n")}` });
-  }
-  if (env.overall_risk_level) {
-    sections.push({ type: "text", content: `Environmental Factors:\nClimate Risk: ${env.overall_risk_level}\nSuitable for Elderly: ${env.suitable_for_elderly}\nBusiness Climate: ${env.business_climate_rating}` });
-  }
+
+  // ── Labor Market ──
   if (wages.occupation) {
-    sections.push({ type: "text", content: `Labor Market (${wages.state || "National"}):\nRole: ${wages.occupation}\nMedian Salary: $${(wages.state_estimated_median || wages.national_median_salary)?.toLocaleString()}/year\nDemand: ${wages.demand_signal}\nHiring: ${wages.hiring_difficulty}` });
+    sections.push({ type: "heading", content: "Labor Market", level: "H2" });
+    sections.push({ type: "text", content: `Role: ${wages.occupation} · State: ${wages.state || "National"}\nMedian Salary: $${(wages.state_estimated_median || wages.national_median_salary)?.toLocaleString()}/year\nDemand: ${wages.demand_signal || "—"} · Hiring Difficulty: ${wages.hiring_difficulty || "—"}` });
   }
+
+  // ── Infrastructure ──
+  if (infra.length > 0) {
+    sections.push({ type: "heading", content: "Infrastructure", level: "H2" });
+    const infraRows = infra.filter(r => r.availability != null && r.infrastructure_type !== "OVERALL SCORE").slice(0, 8);
+    if (infraRows.length >= 3) {
+      sections.push({ type: "mi_chart", chartType: "bar", data: infraRows.map(r => ({ metric: r.infrastructure_type, value: parseInt(r.availability) || 0 })), title: "Infrastructure Availability (%)", nameKey: "metric", dataKey: "value" });
+    }
+  }
+
+  // ── Competitors ──
+  if (competitors.length > 0) {
+    sections.push({ type: "heading", content: "Competitor Landscape", level: "H2" });
+    sections.push({ type: "text", content: `${competitors.length} competitors found within ${results.radiusKm || 30}km radius.` });
+    sections.push({ type: "mi_table", title: "Nearest Competitors", data: competitors.slice(0, 10).map(c => ({ Name: c.name || "—", "Distance (km)": c.distance_km, Type: c.type || "—", Rating: c.rating || "—" })), columns: ["Name", "Distance (km)", "Type", "Rating"] });
+  }
+
+  // ── Climate & Environment ──
+  if (env.overall_risk_level) {
+    sections.push({ type: "heading", content: "Climate & Environment", level: "H2" });
+    sections.push({ type: "text", content: `Climate Risk: ${env.overall_risk_level} · Suitable for Elderly: ${env.suitable_for_elderly || "—"}\nBusiness Climate: ${env.business_climate_rating || "—"}` });
+  }
+
+  // ── Forecasting radar (if available via forecastBlock) ──
+  if (results._forecastRadar?.length) {
+    sections.push({ type: "heading", content: "Market Fit Analysis", level: "H2" });
+    sections.push({ type: "mi_chart", chartType: "radar", data: results._forecastRadar, title: "Market Fit Radar", nameKey: "metric", dataKey: "value" });
+  }
+
   return sections;
 }
 
@@ -478,11 +539,15 @@ export default function MarketIntelligence() {
       } else {
         folderId = folders[0].id;
       }
+      // Attach forecasting radar data so buildReportSections can serialize it
+      const resultsWithRadar = forecastBlock
+        ? { ...results, _forecastRadar: forecastBlock.radarData }
+        : results;
       await base44.entities.Report.create({
-        title: `Market Analysis: ${results.businessType} in ${results.location}`,
+        title: `Market Analysis: ${results.businessType?.replace(/_/g, " ")} in ${results.location}`,
         description: `Market intelligence report. Opportunity score: ${results.market?.[0]?.opportunity_score ?? "N/A"}/100`,
         status: "published", folder_id: folderId, company_id: currentUser.company_id,
-        sections: buildReportSections(results), is_public: false,
+        sections: buildReportSections(resultsWithRadar), is_public: false,
       });
       toast({ title: "Report saved", description: "View it in the Reports page under Market Research folder." });
     } catch (e) {
@@ -516,57 +581,117 @@ export default function MarketIntelligence() {
   };
 
   // ── Nearby enterprises ─────────────────────────────────────────────────────
-  const nearbyEnterprises = results?.location
-    ? myEnterprises.filter(e =>
-        results.location.toLowerCase().includes(e.city?.toLowerCase() || "XXXXXXX") ||
-        results.location.toLowerCase().includes(e.region?.toLowerCase() || "XXXXXXX")
-      )
-    : [];
+  // Use geocoordinate distance when overview lat/lon available; fall back to
+  // city/region/country string match so we never show nothing unnecessarily.
+  const nearbyEnterprises = (() => {
+    if (!results?.location || myEnterprises.length === 0) return [];
+    const ovLat = results.overview?.[0]?.lat;
+    const ovLon = results.overview?.[0]?.lon;
+    const radiusKm = results.radiusKm || 50;
 
-  // Fetch operational analytics from python_layer (Layer 2) — never query Base44 directly for stats
+    // Haversine distance in km
+    const distKm = (lat1, lon1, lat2, lon2) => {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
+    if (ovLat != null && ovLon != null) {
+      return myEnterprises.filter(e => {
+        if (e.latitude != null && e.longitude != null) {
+          return distKm(ovLat, ovLon, e.latitude, e.longitude) <= radiusKm;
+        }
+        // Fallback: string match on city/region/country if no coords
+        const loc = results.location.toLowerCase();
+        return (e.city && loc.includes(e.city.toLowerCase())) ||
+               (e.region && loc.includes(e.region.toLowerCase())) ||
+               (e.country && loc.includes(e.country.toLowerCase()));
+      });
+    }
+
+    // No geocoordinates from overview — use relaxed string matching
+    const loc = results.location.toLowerCase();
+    const locParts = loc.split(/[,\s]+/).filter(p => p.length > 2);
+    return myEnterprises.filter(e => {
+      const city    = e.city?.toLowerCase() || "";
+      const region  = e.region?.toLowerCase() || "";
+      const country = e.country?.toLowerCase() || "";
+      return locParts.some(p => city.includes(p) || region.includes(p) || country.includes(p)) ||
+             (city && loc.includes(city)) ||
+             (region && loc.includes(region));
+    });
+  })();
+
+  // Fetch operational context — three-tier fallback per ARCHITECTURE.md
   useEffect(() => {
     if (!currentUser?.company_id) return;
     setOperationalContext(null);
-    const cid = encodeURIComponent(currentUser.company_id);
+    const cid = currentUser.company_id;
     (async () => {
       try {
-        const [peopleRes, taskRes, txnRes, mlRes] = await Promise.allSettled([
-          fetch(`${RAILWAY_URL}/people-summary?company_id=${cid}`,      { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
-          fetch(`${RAILWAY_URL}/task-summary?company_id=${cid}`,        { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
-          fetch(`${RAILWAY_URL}/transaction-summary?company_id=${cid}`, { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
-          fetch(`${RAILWAY_URL}/ml/predictions?company_id=${cid}&limit=4`, { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
+        const [peopleResult, taskResult, txnResult] = await Promise.all([
+          fetchPeopleFallback(cid, () => base44.entities.Person.filter({ company_id: cid })),
+          fetchTasksFallback(cid, () => base44.entities.Task.filter({ company_id: cid })),
+          fetchTransactionsFallback(cid, () => base44.entities.Transaction.filter({ company_id: cid })),
         ]);
 
-        const people = peopleRes.status === "fulfilled" ? peopleRes.value : null;
-        const tasks  = taskRes.status  === "fulfilled" ? taskRes.value  : null;
-        const txns   = txnRes.status   === "fulfilled" ? txnRes.value   : null;
-        const ml     = mlRes.status    === "fulfilled" ? mlRes.value    : null;
+        // Tier-aware aggregation
+        const peopleRows = peopleResult.data;
+        const taskRows   = taskResult.data;
+        const txnRows    = txnResult.data;
 
-        // people_summary rows: {person_type, status, people_count, active_count}
-        const peopleRows = Array.isArray(people) ? people : (people?.data || []);
-        const taskRows   = Array.isArray(tasks)  ? tasks  : (tasks?.data  || []);
-        const txnRows    = Array.isArray(txns)   ? txns   : (txns?.data   || []);
+        let total_staff, total_clients, total_revenue, total_tasks, done_tasks, overdue_tasks;
 
-        const total_staff    = peopleRows.filter(r => r.is_staff).reduce((s, r) => s + (r.active_count || r.people_count || 0), 0);
-        const total_clients  = peopleRows.filter(r => r.is_participant || r.person_type === "client").reduce((s, r) => s + (r.people_count || 0), 0);
-        const total_revenue  = txnRows.filter(r => r.is_revenue).reduce((s, r) => s + (r.total_amount || r.revenue_last_30d || 0), 0);
-        const total_tasks    = taskRows.reduce((s, r) => s + (r.total_tasks || 0), 0);
-        const done_tasks     = taskRows.reduce((s, r) => s + (r.completed_tasks || 0), 0);
+        if (peopleResult.source === "analytics") {
+          total_staff   = peopleRows.filter(r => r.is_staff || r.person_type === "staff").reduce((s, r) => s + (r.active_count || r.people_count || 0), 0);
+          total_clients = peopleRows.filter(r => r.is_participant || r.person_type === "client").reduce((s, r) => s + (r.people_count || 0), 0);
+        } else {
+          total_staff   = peopleRows.filter(r => r.person_type === "staff").length;
+          total_clients = peopleRows.filter(r => r.person_type === "client").length;
+        }
+
+        if (taskResult.source === "analytics") {
+          total_tasks   = taskRows.reduce((s, r) => s + (r.total_tasks || r.total_count || 0), 0);
+          done_tasks    = taskRows.reduce((s, r) => s + (r.completed_tasks || 0), 0);
+          overdue_tasks = taskRows.reduce((s, r) => s + (r.overdue_tasks || r.overdue_count || 0), 0);
+        } else {
+          total_tasks   = taskRows.length;
+          done_tasks    = taskRows.filter(r => r.status === "completed" || r.status === "done").length;
+          overdue_tasks = taskRows.filter(r => {
+            if (!r.due_date) return false;
+            return new Date(r.due_date) < new Date() && r.status !== "completed" && r.status !== "done";
+          }).length;
+        }
+
+        if (txnResult.source === "analytics") {
+          total_revenue = txnRows.filter(r => r.is_revenue).reduce((s, r) => s + (r.total_amount || r.revenue_last_30d || 0), 0);
+        } else {
+          total_revenue = txnRows
+            .filter(r => r.transaction_type === "revenue" || r.transaction_type === "invoice")
+            .reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        }
+
         const task_completion = total_tasks > 0 ? Math.round(done_tasks / total_tasks * 100) : null;
-        const overdue_tasks  = taskRows.reduce((s, r) => s + (r.overdue_tasks || 0), 0);
+
+        // ML predictions — best-effort, no fallback needed
+        const ml = await fetch(`${RAILWAY_URL}/ml/predictions?company_id=${encodeURIComponent(cid)}&limit=4`, { headers: RAIL_HEADERS })
+          .then(r => r.ok ? r.json() : null).catch(() => null);
 
         setOperationalContext({
-          enterprises:      nearbyEnterprises.length || 1,
+          enterprises:    nearbyEnterprises.length || 1,
           total_staff,
           total_clients,
           total_revenue,
           task_completion,
           total_tasks,
           overdue_tasks,
-          ml_predictions:   ml?.predictions || [],
-          data_source:      "analytics",
+          ml_predictions: ml?.predictions || [],
+          data_source:    peopleResult.source,
+          data_tier:      peopleResult.tier,
         });
-      } catch { /* python_layer unreachable — show nothing */ }
+      } catch { /* unreachable — show nothing */ }
     })();
   }, [currentUser?.company_id]);
 

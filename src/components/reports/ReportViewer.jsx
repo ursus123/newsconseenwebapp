@@ -5,6 +5,11 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer, MessageSquare, Send } from "lucide-react";
 import { format } from "date-fns";
 import ChartSection from "./ChartSection";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  RadarChart, PolarGrid, PolarAngleAxis, Radar,
+  LineChart, Line, CartesianGrid, Legend,
+} from "recharts";
 
 function SectionViewer({ section, charts }) {
   if (section.type === "heading") {
@@ -52,6 +57,71 @@ function SectionViewer({ section, charts }) {
         <ChartSection chart={chart} height={280} />
         </div>
         {section.caption && <p className="text-xs text-slate-400 mt-1.5 text-center italic">{section.caption}</p>}
+      </div>
+    );
+  }
+
+  // Market intelligence inline charts — serialized with the report at save time
+  if (section.type === "mi_chart") {
+    const { chartType, data, title, caption, dataKey, nameKey = "metric" } = section;
+    if (!data?.length) return null;
+    const dk = dataKey || Object.keys(data[0]).find(k => k !== nameKey) || "value";
+    return (
+      <div className="mb-6 bg-white border border-slate-100 rounded-2xl p-5">
+        {title && <p className="text-sm font-semibold text-slate-800 mb-3">{title}</p>}
+        <ResponsiveContainer width="100%" height={260}>
+          {chartType === "radar" ? (
+            <RadarChart data={data}>
+              <PolarGrid />
+              <PolarAngleAxis dataKey={nameKey} tick={{ fontSize: 11 }} />
+              <Radar dataKey={dk} fill="#10b981" fillOpacity={0.25} stroke="#10b981" />
+              <Tooltip formatter={(v) => v?.toFixed ? v.toFixed(1) : v} />
+            </RadarChart>
+          ) : chartType === "line" ? (
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey={nameKey} tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey={dk} stroke="#10b981" dot={false} strokeWidth={2} />
+            </LineChart>
+          ) : (
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey={nameKey} tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Bar dataKey={dk} fill="#10b981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          )}
+        </ResponsiveContainer>
+        {caption && <p className="text-xs text-slate-400 mt-1.5 text-center italic">{caption}</p>}
+      </div>
+    );
+  }
+
+  if (section.type === "mi_table") {
+    const { data, title, columns } = section;
+    if (!data?.length) return null;
+    const cols = columns || Object.keys(data[0]);
+    return (
+      <div className="mb-6 overflow-x-auto">
+        {title && <p className="text-sm font-semibold text-slate-700 mb-2">{title}</p>}
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-slate-50 border border-slate-200">
+              {cols.map(c => <th key={c} className="px-3 py-2 text-left font-semibold text-slate-500 border border-slate-200 capitalize">{c.replace(/_/g, " ")}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row, i) => (
+              <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50"}>
+                {cols.map(c => <td key={c} className="px-3 py-2 text-slate-700 border border-slate-200">{row[c] ?? "—"}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   }

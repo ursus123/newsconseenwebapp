@@ -27,8 +27,13 @@ import {
   TrendingUp, Search, RefreshCw, Globe, Zap, BarChart2,
   AlertTriangle, ChevronRight, Info, Layers, ExternalLink,
   Star, ShieldAlert, Target, Activity, Filter, Play,
-  CheckCircle2, XCircle, Loader2, DollarSign, Newspaper,
+  CheckCircle2, XCircle, Loader2, DollarSign, Newspaper, PieChart as PieIcon,
 } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, RadarChart, Radar, PolarGrid, PolarAngleAxis,
+} from "recharts";
+import { fetchPeopleFallback, fetchEnterprisesFallback } from "@/utils/fetchWithFallback";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
@@ -181,14 +186,17 @@ function SegBadge({ label }) {
 
 // ── Tab component ─────────────────────────────────────────────────────────────
 const TABS = [
-  { id: "map",       label: "Competitor Map",    icon: MapPin     },
-  { id: "ml",        label: "Market ML",         icon: Zap        },
-  { id: "staffing",  label: "Staffing Intel",    icon: Users      },
-  { id: "products",  label: "Product Intel",     icon: Package    },
-  { id: "economic",  label: "Economic Context",  icon: Globe      },
-  { id: "news",      label: "Industry News",     icon: Newspaper  },
-  { id: "apis",      label: "API Catalog",       icon: Layers     },
+  { id: "map",          label: "Competitor Map",    icon: MapPin     },
+  { id: "ml",           label: "Market ML",         icon: Zap        },
+  { id: "demographics", label: "Demographics",      icon: PieIcon    },
+  { id: "staffing",     label: "Staffing Intel",    icon: Users      },
+  { id: "products",     label: "Product Intel",     icon: Package    },
+  { id: "economic",     label: "Economic Context",  icon: Globe      },
+  { id: "news",         label: "Industry News",     icon: Newspaper  },
+  { id: "apis",         label: "API Catalog",       icon: Layers     },
 ];
+
+const PIE_COLORS = ["#10b981","#3b82f6","#f59e0b","#f43f5e","#8b5cf6","#06b6d4","#ec4899"];
 
 // ────────────────────────────────────────────────────────────────────────────
 // MAIN COMPONENT
@@ -210,6 +218,8 @@ export default function IntelligenceHub({ currentUser }) {
   const [apisCatalog, setApisCatalog]       = useState(null);
   const [apiCatFilter, setApiCatFilter]     = useState("all");
   const [scoredCompetitors, setScoredCompetitors] = useState([]);
+  const [demoData, setDemoData]                   = useState(null);
+  const [demoLoading, setDemoLoading]             = useState(false);
 
   const companyId = currentUser?.company_id;
   const [manualLat, setManualLat] = useState("");
@@ -363,6 +373,83 @@ export default function IntelligenceHub({ currentUser }) {
   }, [selectedEnterprise, loadCompetitors]);
 
   // Economic context
+  // ── Load demographics (three-tier fallback) ──────────────────────────────
+  useEffect(() => {
+    if (activeTab !== "demographics" || !companyId || demoData) return;
+    setDemoLoading(true);
+    (async () => {
+      try {
+        const [peopleResult, entResult] = await Promise.all([
+          fetchPeopleFallback(companyId, () => base44.entities.Person.filter({ company_id: companyId })),
+          fetchEnterprisesFallback(companyId, () => base44.entities.Enterprise.filter({ company_id: companyId })),
+        ]);
+
+        const people = peopleResult.data;
+        const enterprises = entResult.data;
+
+        // Person type breakdown (staff / client / contact / volunteer)
+        const byType = {};
+        people.forEach(p => {
+          const t = p.person_type || "unknown";
+          byType[t] = (byType[t] || 0) + (peopleResult.source === "analytics" ? (p.people_count || p.total_count || 1) : 1);
+        });
+
+        // Status breakdown (active / inactive / on_leave)
+        const byStatus = {};
+        if (peopleResult.source === "analytics") {
+          people.forEach(p => {
+            const s = p.status || "unknown";
+            byStatus[s] = (byStatus[s] || 0) + (p.active_count || p.people_count || 1);
+          });
+        } else {
+          people.forEach(p => {
+            const s = p.status || "unknown";
+            byStatus[s] = (byStatus[s] || 0) + 1;
+          });
+        }
+
+        // Enterprise type breakdown
+        const entByType = {};
+        enterprises.forEach(e => {
+          const t = e.enterprise_type || "unknown";
+          entByType[t] = (entByType[t] || 0) + (entResult.source === "analytics" ? (e.enterprise_count || 1) : 1);
+        });
+
+        // Enterprise status breakdown
+        const entByStatus = {};
+        enterprises.forEach(e => {
+          const s = e.operating_status || e.status || "unknown";
+          entByStatus[s] = (entByStatus[s] || 0) + 1;
+        });
+
+        // Engagement model breakdown (employed / contracted / freelance / volunteer / enrolled / subscribed)
+        const byEngagement = {};
+        if (peopleResult.source !== "analytics") {
+          people.forEach(p => {
+            if (p.engagement_model) {
+              byEngagement[p.engagement_model] = (byEngagement[p.engagement_model] || 0) + 1;
+            }
+          });
+        }
+
+        setDemoData({
+          people,
+          enterprises,
+          byType,
+          byStatus,
+          byEngagement,
+          entByType,
+          entByStatus,
+          totalPeople: Object.values(byType).reduce((a, b) => a + b, 0),
+          totalEnterprises: Object.values(entByType).reduce((a, b) => a + b, 0),
+          dataTier: peopleResult.tier,
+          dataSource: peopleResult.source,
+        });
+      } catch (_) {}
+      setDemoLoading(false);
+    })();
+  }, [activeTab, companyId, demoData]);
+
   useEffect(() => {
     if (activeTab !== "economic") return;
     const country = currentUser?.country_code || "ZA";
@@ -1125,15 +1212,196 @@ export default function IntelligenceHub({ currentUser }) {
     );
   };
 
+  // ── Tab: Demographics ─────────────────────────────────────────────────────
+  const DemographicsTab = () => {
+    if (demoLoading) return (
+      <div className="flex items-center gap-2 text-xs text-slate-400 py-8">
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading demographics…
+      </div>
+    );
+    if (!demoData) return (
+      <div className="text-xs text-slate-400 py-8 text-center">No data available.</div>
+    );
+
+    const toChartData = (obj) =>
+      Object.entries(obj)
+        .filter(([, v]) => v > 0)
+        .sort(([, a], [, b]) => b - a)
+        .map(([name, value]) => ({ name: name.replace(/_/g, " "), value }));
+
+    const personTypeData   = toChartData(demoData.byType);
+    const personStatusData = toChartData(demoData.byStatus);
+    const engagementData   = toChartData(demoData.byEngagement);
+    const entTypeData      = toChartData(demoData.entByType);
+    const entStatusData    = toChartData(demoData.entByStatus);
+
+    const tierLabel = { 1: "Analytics (T1)", 2: "Raw DB (T2)", 3: "Base44 Live (T3)" }[demoData.dataTier] || "—";
+
+    return (
+      <div className="space-y-6">
+        <SectionHeader
+          icon={PieIcon}
+          title="Organisation Demographics"
+          sub="People and Enterprise breakdown from your own data — Person + Enterprise ontology"
+          badge={tierLabel}
+        />
+
+        {/* Summary metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Total People",      value: demoData.totalPeople,      icon: Users,     color: "text-blue-600",    bg: "bg-blue-50" },
+            { label: "Total Enterprises", value: demoData.totalEnterprises,  icon: Building2, color: "text-emerald-600", bg: "bg-emerald-50" },
+            { label: "Person Types",      value: personTypeData.length,      icon: PieIcon,   color: "text-violet-600",  bg: "bg-violet-50" },
+            { label: "Enterprise Types",  value: entTypeData.length,         icon: Layers,    color: "text-amber-600",   bg: "bg-amber-50" },
+          ].map(({ label, value, icon: Icon, color, bg }) => (
+            <div key={label} className={`${bg} rounded-2xl p-4 flex items-center gap-3`}>
+              <Icon className={`w-5 h-5 ${color} shrink-0`} />
+              <div>
+                <p className={`text-2xl font-black ${color}`}>{value ?? "—"}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">{label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* People charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Person type — pie */}
+          {personTypeData.length > 0 && (
+            <div className="bg-white border border-slate-100 rounded-2xl p-5">
+              <p className="text-sm font-semibold text-slate-800 mb-1">People by Type</p>
+              <p className="text-[10px] text-slate-400 mb-4">Ontology: staff · client · contact · volunteer</p>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={personTypeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                    {personTypeData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Person status — bar */}
+          {personStatusData.length > 0 && (
+            <div className="bg-white border border-slate-100 rounded-2xl p-5">
+              <p className="text-sm font-semibold text-slate-800 mb-1">People by Status</p>
+              <p className="text-[10px] text-slate-400 mb-4">Ontology: active · inactive · on_leave</p>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={personStatusData} layout="vertical">
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]}>
+                    {personStatusData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        {/* Engagement model */}
+        {engagementData.length > 0 && (
+          <div className="bg-white border border-slate-100 rounded-2xl p-5">
+            <p className="text-sm font-semibold text-slate-800 mb-1">Engagement Model</p>
+            <p className="text-[10px] text-slate-400 mb-4">Ontology: employed · contracted · freelance · volunteer · enrolled · subscribed</p>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={engagementData}>
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="value" fill="#8b5cf6" radius={[4, 4, 0, 0]}>
+                  {engagementData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Enterprise charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {entTypeData.length > 0 && (
+            <div className="bg-white border border-slate-100 rounded-2xl p-5">
+              <p className="text-sm font-semibold text-slate-800 mb-1">Enterprises by Type</p>
+              <p className="text-[10px] text-slate-400 mb-4">Ontology: commercial · nonprofit · government · household · cooperative · trust</p>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={entTypeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                    {entTypeData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {entStatusData.length > 0 && (
+            <div className="bg-white border border-slate-100 rounded-2xl p-5">
+              <p className="text-sm font-semibold text-slate-800 mb-1">Enterprises by Status</p>
+              <p className="text-[10px] text-slate-400 mb-4">Ontology: open · closed · temporarily_closed · seasonal</p>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={entStatusData} layout="vertical">
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={100} />
+                  <Tooltip />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                    {entStatusData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        {/* Person type detail table */}
+        {personTypeData.length > 0 && (
+          <div className="bg-white border border-slate-100 rounded-2xl p-5">
+            <p className="text-sm font-semibold text-slate-800 mb-3">People — Full Breakdown</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="text-left pb-2 font-semibold text-slate-500">Person Type</th>
+                    <th className="text-right pb-2 font-semibold text-slate-500">Count</th>
+                    <th className="text-right pb-2 font-semibold text-slate-500">Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {personTypeData.map(({ name, value }, i) => (
+                    <tr key={i} className="border-b border-slate-50">
+                      <td className="py-2 text-slate-700 capitalize flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
+                        {name}
+                      </td>
+                      <td className="py-2 text-right font-semibold text-slate-800">{value.toLocaleString()}</td>
+                      <td className="py-2 text-right text-slate-500">{demoData.totalPeople > 0 ? `${((value / demoData.totalPeople) * 100).toFixed(1)}%` : "—"}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-slate-200 font-bold">
+                    <td className="py-2 text-slate-700">Total</td>
+                    <td className="py-2 text-right text-slate-800">{demoData.totalPeople.toLocaleString()}</td>
+                    <td className="py-2 text-right text-slate-500">100%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   const TAB_CONTENT = {
-    map:      <MapTab />,
-    ml:       <MLTab />,
-    staffing: <StaffingTab />,
-    products: <ProductsTab />,
-    economic: <EconomicTab />,
-    news:     <NewsTab />,
-    apis:     <APIsTab />,
+    map:          <MapTab />,
+    ml:           <MLTab />,
+    demographics: <DemographicsTab />,
+    staffing:     <StaffingTab />,
+    products:     <ProductsTab />,
+    economic:     <EconomicTab />,
+    news:         <NewsTab />,
+    apis:         <APIsTab />,
   };
 
   return (
