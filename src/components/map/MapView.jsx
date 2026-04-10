@@ -139,7 +139,7 @@ export default function MapView() {
         )}
 
         {mapData.length > 0 && (
-          <MapContainer center={center} zoom={4} className="h-full w-full">
+          <MapContainer key="main-map" center={center} zoom={4} className="h-full w-full" zoomAnimation={false}>
             <TileLayer
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution='&copy; OpenStreetMap contributors'

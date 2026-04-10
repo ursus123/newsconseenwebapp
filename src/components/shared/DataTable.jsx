@@ -1,27 +1,13 @@
-import React, { useState, useCallback } from "react";
+import React, { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronLeft, ChevronRight, AlertTriangle, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Column, Table2, Cell, ColumnHeaderCell, SelectionModes, RenderMode } from "@blueprintjs/table";
 
-// Blueprint virtualized table above this threshold — handles 500+ rows without layout jank
-const VIRTUALIZE_THRESHOLD = 200;
 const PAGE_SIZE = 15;
 
-/**
- * DataTable — supports external data (fuzzy search done upstream), pagination,
- * bulk selection via checkboxes, and custom row rendering.
- *
- * Props:
- *   columns, data, onEdit, onDelete, onRowClick
- *   isLoading, error, onRetry
- *   selectedIds: string[] (optional) — controlled selection
- *   onSelectionChange: (ids: string[]) => void (optional)
- *   bulkMode: boolean — show checkboxes
- */
 export default function DataTable({
   columns,
   data,
@@ -31,7 +17,6 @@ export default function DataTable({
   isLoading,
   error,
   onRetry,
-  // Bulk selection (controlled)
   selectedIds = [],
   onSelectionChange,
   bulkMode = false,
@@ -42,9 +27,11 @@ export default function DataTable({
   const totalPages = Math.ceil(safeData.length / PAGE_SIZE);
   const paginated = safeData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  // Bulk helpers
+  const showCheckboxes = bulkMode && !!onSelectionChange;
   const allOnPageSelected = paginated.length > 0 && paginated.every((r) => selectedIds.includes(r.id));
   const someSelected = paginated.some((r) => selectedIds.includes(r.id));
+  const allSelected = safeData.length > 0 && safeData.every((r) => selectedIds.includes(r.id));
+  const someNotOnPage = showCheckboxes && allOnPageSelected && !allSelected && safeData.length > PAGE_SIZE;
 
   const toggleRow = (id) => {
     if (!onSelectionChange) return;
@@ -66,9 +53,11 @@ export default function DataTable({
     }
   };
 
-  const showCheckboxes = bulkMode && !!onSelectionChange;
+  const selectAllGlobal = () => {
+    if (!onSelectionChange) return;
+    onSelectionChange(safeData.map((r) => r.id));
+  };
 
-  // ── Blueprint virtualized table (large datasets) ───────────────────────────
   if (isLoading) {
     return (
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
@@ -104,78 +93,12 @@ export default function DataTable({
     );
   }
 
-  const allSelected = safeData.length > 0 && safeData.every((r) => selectedIds.includes(r.id));
-  const someNotOnPage = showCheckboxes && allOnPageSelected && !allSelected && safeData.length > PAGE_SIZE;
-
-  const selectAllGlobal = () => {
-    if (!onSelectionChange) return;
-    onSelectionChange(safeData.map((r) => r.id));
-  };
-
-  // ── Blueprint virtualized table (large datasets ≥ 200 rows) ─────────────
-  const cellRenderer = useCallback((col) => (rowIndex) => {
-    const row = safeData[rowIndex];
-    if (!row) return <Cell />;
-    const val = row[col.key];
-    if (col.render) return <Cell>{col.render(val, row)}</Cell>;
-    if (col.badge) {
-      return (
-        <Cell>
-          <Badge variant="secondary" className={col.badgeColor?.(val) || "bg-slate-100 text-slate-600"}>
-            {(val || "—").toString().replace(/_/g, " ")}
-          </Badge>
-        </Cell>
-      );
-    }
-    return <Cell>{val ?? "—"}</Cell>;
-  }, [safeData]);
-
-  if (safeData.length >= VIRTUALIZE_THRESHOLD) {
-    return (
-      <div className="rounded-2xl border border-slate-100 overflow-hidden bg-white">
-        <div className="px-4 py-2 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
-          <span className="text-xs text-slate-500">{safeData.length.toLocaleString()} records — virtualized view</span>
-          {(onEdit || onDelete) && <span className="text-[10px] text-slate-400">Click a row to edit</span>}
-        </div>
-        <Table2
-          numRows={safeData.length}
-          selectionModes={onRowClick ? SelectionModes.ROWS_AND_CELLS : SelectionModes.NONE}
-          renderMode={RenderMode.BATCH}
-          defaultRowHeight={38}
-          onSelection={onRowClick ? (regions) => {
-            const rowIdx = regions?.[0]?.rows?.[0];
-            if (rowIdx != null && safeData[rowIdx]) onRowClick(safeData[rowIdx]);
-          } : undefined}
-          enableRowHeader={false}
-          style={{ width: "100%", height: Math.min(safeData.length * 38 + 40, 600) }}
-        >
-          {columns.map(col => (
-            <Column
-              key={col.key}
-              name={col.label}
-              columnHeaderCellRenderer={() => (
-                <ColumnHeaderCell name={col.label} style={{ fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748b" }} />
-              )}
-              cellRenderer={cellRenderer(col)}
-            />
-          ))}
-        </Table2>
-        <div className="px-4 py-2 border-t border-slate-100 text-xs text-slate-400 text-right">
-          Scroll to explore all {safeData.length.toLocaleString()} rows
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div>
       {someNotOnPage && (
         <div className="flex items-center justify-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 mb-2 text-sm text-emerald-700">
           <span>All {paginated.length} rows on this page are selected.</span>
-          <button
-            onClick={selectAllGlobal}
-            className="font-semibold underline hover:text-emerald-900 transition-colors"
-          >
+          <button onClick={selectAllGlobal} className="font-semibold underline hover:text-emerald-900 transition-colors">
             Select all {safeData.length} records
           </button>
         </div>
@@ -183,10 +106,7 @@ export default function DataTable({
       {allSelected && safeData.length > PAGE_SIZE && (
         <div className="flex items-center justify-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 mb-2 text-sm text-emerald-700">
           <span>All {safeData.length} records are selected.</span>
-          <button
-            onClick={() => onSelectionChange && onSelectionChange([])}
-            className="font-semibold underline hover:text-emerald-900 transition-colors"
-          >
+          <button onClick={() => onSelectionChange && onSelectionChange([])} className="font-semibold underline hover:text-emerald-900 transition-colors">
             Clear selection
           </button>
         </div>
