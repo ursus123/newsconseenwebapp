@@ -12,7 +12,7 @@
  * Layout switcher: Force / Tree / Circle / Grid.
  */
 import { useEffect, useRef, useState, useMemo } from "react";
-import { loadCytoscape } from "@/utils/loadCytoscape";
+import cytoscape from "cytoscape";
 import { Network, GitBranch, Circle, Grid3x3, X } from "lucide-react";
 
 const NODE_COLORS = {
@@ -78,12 +78,9 @@ function isValidId(id) {
 export default function CytoscapeRelationshipGraph({ relationships = [], filterType = "all" }) {
   const containerRef    = useRef(null);
   const cyRef           = useRef(null);
-  const [cyLib, setCyLib]               = useState(null);
   const [layoutId, setLayoutId]         = useState("cose");
   const [selectedNode, setSelectedNode] = useState(null);
   const [stats, setStats]               = useState({ nodes: 0, edges: 0, topNode: null, topDegree: 0 });
-
-  useEffect(() => { loadCytoscape().then(setCyLib).catch(() => {}); }, []);
 
   const elements = useMemo(() => {
     const nodeMap = new Map();
@@ -133,14 +130,14 @@ export default function CytoscapeRelationshipGraph({ relationships = [], filterT
   }, [relationships, filterType]);
 
   useEffect(() => {
-    if (!cyLib || !containerRef.current) return;
+    if (!containerRef.current) return;
 
     if (cyRef.current) { cyRef.current.destroy(); cyRef.current = null; }
 
     const nodeCount = elements.filter(e => !e.data.source).length;
     if (nodeCount === 0) return;
 
-    const cy = cyLib({
+    const cy = cytoscape({
       container: containerRef.current,
       elements,
       style: [
@@ -250,7 +247,7 @@ export default function CytoscapeRelationshipGraph({ relationships = [], filterT
       ro.disconnect();
       if (cyRef.current) { cyRef.current.destroy(); cyRef.current = null; }
     };
-  }, [cyLib, elements, layoutId]);
+  }, [elements, layoutId]);
 
   const nodeCount = elements.filter(e => !e.data.source).length;
 

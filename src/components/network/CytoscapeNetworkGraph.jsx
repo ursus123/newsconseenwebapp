@@ -8,7 +8,7 @@
  * Click member → detail panel.
  */
 import { useEffect, useRef, useState } from "react";
-import { loadCytoscape } from "@/utils/loadCytoscape";
+import cytoscape from "cytoscape";
 import { X } from "lucide-react";
 
 const GRADE_COLORS = {
@@ -26,13 +26,10 @@ function gradeColor(grade) {
 export default function CytoscapeNetworkGraph({ members = [] }) {
   const containerRef = useRef(null);
   const cyRef        = useRef(null);
-  const [cyLib, setCyLib]       = useState(null);
   const [selected, setSelected] = useState(null);
 
-  useEffect(() => { loadCytoscape().then(setCyLib).catch(() => {}); }, []);
-
   useEffect(() => {
-    if (!cyLib || !containerRef.current || members.length === 0) return;
+    if (!containerRef.current || members.length === 0) return;
 
     if (cyRef.current) { cyRef.current.destroy(); cyRef.current = null; }
 
@@ -69,7 +66,7 @@ export default function CytoscapeNetworkGraph({ members = [] }) {
       })),
     ];
 
-    const cy = cyLib({
+    const cy = cytoscape({
       container: containerRef.current,
       elements,
       style: [
@@ -159,7 +156,7 @@ export default function CytoscapeNetworkGraph({ members = [] }) {
       ro.disconnect();
       if (cyRef.current) { cyRef.current.destroy(); cyRef.current = null; }
     };
-  }, [cyLib, members]);
+  }, [members]);
 
   if (!members.length) return null;
 
