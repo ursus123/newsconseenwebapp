@@ -38,6 +38,7 @@ import {
 } from "@/utils/fetchWithFallback";
 import PlottableTransactionTimeline from "../components/dashboard/PlottableTransactionTimeline";
 import MLDashboard from "../components/ml/MLDashboard";
+import GettingStartedChecklist from "../components/dashboard/GettingStartedChecklist";
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -705,6 +706,7 @@ function AdminDashboard({ user }) {
       />
 
       <OnboardingChecklist done={onboardingDone} />
+      <GettingStartedChecklist />
 
       {/* ── Stat Cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -916,7 +918,9 @@ export default function Dashboard() {
     );
   }
 
-  if (user?.role === "admin" || user?.role === "super_admin")
-    return <AdminDashboard user={user} />;
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const greeting = user?.week_goal ? `This week: ${user.week_goal}` : null;
+
+  if (isAdmin) return <AdminDashboard user={user} />;
   return <WorkerDashboard user={user} />;
 }

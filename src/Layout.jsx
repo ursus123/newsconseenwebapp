@@ -37,6 +37,7 @@ import {
   Tags,
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
+import SetupWizard from "@/components/shared/SetupWizard";
 import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
 import UndoImportButton from "@/components/layout/UndoImportButton";
 import SmartImportButton from "@/components/layout/SmartImportButton";
@@ -246,16 +247,66 @@ function NavItem({ name, label, icon: Icon, isActive, onClick, showRedDot }) {
 }
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
+// ─── Industry mode → nav label overrides ─────────────────────────────────────
+const MODE_LABELS = {
+  crm: {
+    People: "Contacts",
+    Enterprises: "Accounts",
+    Tasks: "Activities",
+    Transactions: "Deals",
+  },
+  healthcare: {
+    People: "Patients",
+    Enterprises: "Clinics",
+    Tasks: "Appointments",
+    Transactions: "Invoices",
+    Products: "Medications",
+    Services: "Treatments",
+  },
+  education: {
+    People: "Students",
+    Enterprises: "Schools",
+    Tasks: "Sessions",
+    Transactions: "Fees",
+    Services: "Courses",
+  },
+  logistics: {
+    People: "Drivers",
+    Enterprises: "Depots",
+    Tasks: "Deliveries",
+    Products: "Cargo",
+  },
+  ngo: {
+    People: "Beneficiaries",
+    Enterprises: "Partners",
+    Tasks: "Programs",
+    Transactions: "Donations",
+  },
+};
+
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [showWizard, setShowWizard] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [criticalAlerts, setCriticalAlerts] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
+    base44.auth.me().then(u => {
+      setCurrentUser(u);
+      if (u && !u.setup_complete && (u.role === 'admin' || u.role === 'super_admin')) {
+        setShowWizard(true);
+      }
+    }).catch(() => {});
   }, []);
+
+  const handleWizardComplete = (prefs) => {
+    setShowWizard(false);
+    if (prefs.industry_mode) {
+      setCurrentUser(u => u ? { ...u, ...prefs, setup_complete: true } : u);
+    }
+  };
 
   useEffect(() => {
     fetch("https://newsconseenwebapp-production.up.railway.app/alerts/status")
@@ -326,6 +377,8 @@ export default function Layout({ children, currentPageName }) {
   // Build role-aware nav sections with permissions
   const { canAccessPage } = usePermissions();
   const role = currentUser?.role || "user";
+  const industryMode = currentUser?.industry_mode || "";
+  const modeOverrides = MODE_LABELS[industryMode] || {};
   let navSections = NAV_CONFIG[role] || NAV_CONFIG.user;
   
   // Filter nav items based on permissions
@@ -345,18 +398,19 @@ export default function Layout({ children, currentPageName }) {
     setSidebarOpen(false);
   };
 
-  // Build adaptive labels - use default names (terminology hooks are in children)
+  // Build adaptive labels — merge mode overrides on top of defaults
   const ADAPTIVE_LABELS = {
-    People:       "People",
-    Products:     "Products",
-    Addresses:    "Addresses",
-    Services:     "Services",
-    Tasks:        "Tasks",
-    Transactions: "Transactions",
+    People:       modeOverrides.People       || "People",
+    Products:     modeOverrides.Products     || "Products",
+    Addresses:    modeOverrides.Addresses    || "Addresses",
+    Services:     modeOverrides.Services     || "Services",
+    Tasks:        modeOverrides.Tasks        || "Tasks",
+    Transactions: modeOverrides.Transactions || "Transactions",
   };
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
+      {showWizard && <SetupWizard onComplete={handleWizardComplete} />}
       <NetworkBanner />
       <TrialBannerWrapper currentUser={currentUser} />
       <div className="flex flex-1 overflow-hidden">
@@ -457,6 +511,12 @@ export default function Layout({ children, currentPageName }) {
                 <Settings className="w-4 h-4" />
                 <span>Settings</span>
               </Link>
+              <button
+                onClick={() => setShowWizard(true)}
+                className="flex items-center gap-2.5 px-3 py-2 w-full rounded-xl text-xs text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all text-left"
+              >
+                <span className="text-slate-500 text-xs">✏️ Rename labels</span>
+              </button>
               <button
                 onClick={() => base44.auth.logout("/")}
                 className="flex items-center gap-2.5 px-3 py-2 w-full rounded-xl text-sm text-slate-400 hover:text-red-400 hover:bg-red-500/5 transition-all"
