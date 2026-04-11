@@ -34,6 +34,7 @@ import {
   PieChart, Pie, Cell, Legend, RadarChart, Radar, PolarGrid, PolarAngleAxis,
 } from "recharts";
 import { fetchPeopleFallback, fetchEnterprisesFallback } from "@/utils/fetchWithFallback";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
@@ -222,6 +223,7 @@ export default function IntelligenceHub({ currentUser }) {
   const [demoLoading, setDemoLoading]             = useState(false);
 
   const companyId = currentUser?.company_id;
+  const listFn = useEntityListFn(currentUser);
   const [manualLat, setManualLat] = useState("");
   const [manualLng, setManualLng] = useState("");
   const [geocoding, setGeocoding] = useState(false);
@@ -270,7 +272,7 @@ export default function IntelligenceHub({ currentUser }) {
           // so merge with Base44 to catch the ones it dropped
           let all = [...ents];
           try {
-            const b44 = await base44.entities.Enterprise.filter({ company_id: companyId });
+            const b44 = await listFn(base44.entities.Enterprise);
             b44.forEach(e => {
               if (!all.find(a => a.id === e.id)) all.push(normalizeEnterprise(e));
             });
@@ -281,7 +283,7 @@ export default function IntelligenceHub({ currentUser }) {
       } catch (_) {}
       // Full Base44 fallback
       try {
-        const b44 = await base44.entities.Enterprise.filter({ company_id: companyId });
+        const b44 = await listFn(base44.entities.Enterprise);
         setMyEnterprises(b44.map(normalizeEnterprise));
       } catch (_) {}
     })();
