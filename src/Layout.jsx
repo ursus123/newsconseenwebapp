@@ -356,13 +356,15 @@ export default function Layout({ children, currentPageName }) {
       .catch(() => {});
   }, [currentUser?.company_id]);
 
+  // Read brand settings from localStorage (saved by BrandingSection)
+  const savedBrand = (() => { try { return JSON.parse(localStorage.getItem("brand_settings") || "{}"); } catch { return {}; } })();
   const branding = { 
-    logoUrl: null,
-    appName: "Newsconseen",
-    primaryColor: "#10b981",
-    secondaryColor: "#1e293b",
-    accentColor: "#6366f1",
-    hideNewsconseen: false
+    logoUrl: savedBrand.logoUrl || null,
+    appName: savedBrand.appName || "Newsconseen",
+    primaryColor: savedBrand.primaryColor || "#10b981",
+    secondaryColor: savedBrand.secondaryColor || "#1e293b",
+    accentColor: savedBrand.accentColor || "#6366f1",
+    hideNewsconseen: savedBrand.hideNewsconseen || false
   };
 
   useEffect(() => {

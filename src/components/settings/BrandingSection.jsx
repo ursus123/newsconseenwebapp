@@ -165,6 +165,14 @@ export default function BrandingSection({ user, enterprise }) {
   const [banner, setBanner] = useState(null);
   const [copied, setCopied] = useState(false);
 
+  // Apply CSS variables live as colors change
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--brand-primary", primaryColor);
+    root.style.setProperty("--brand-secondary", secondaryColor);
+    root.style.setProperty("--brand-accent", accentColor);
+  }, [primaryColor, secondaryColor, accentColor]);
+
   // Sync when enterprise loads
   useEffect(() => {
     if (!enterprise) return;
@@ -202,9 +210,20 @@ export default function BrandingSection({ user, enterprise }) {
   };
 
   const handleSave = async () => {
-    if (!enterprise?.id) return;
     setSaving(true);
+    // Always persist to localStorage so Layout picks it up immediately
+    const brandData = {
+      primaryColor, secondaryColor, accentColor,
+      appName, logoUrl, faviconUrl, tagline, hideNewsconseen,
+    };
+    localStorage.setItem("brand_settings", JSON.stringify(brandData));
     try {
+      if (!enterprise?.id) {
+        // No enterprise yet — just save to localStorage (already done above)
+        setBanner({ type: "success", msg: "Branding applied! Colors are now active." });
+        setSaving(false);
+        return;
+      }
       await base44.entities.Enterprise.update(enterprise.id, {
         brand_name: appName,
         brand_tagline: tagline,
@@ -218,8 +237,7 @@ export default function BrandingSection({ user, enterprise }) {
         brand_favicon_url: faviconUrl,
       });
       queryClient.invalidateQueries({ queryKey: ["branding"] });
-      setBanner({ type: "success", msg: "Branding updated successfully! Reloading to apply changes…" });
-      setTimeout(() => window.location.reload(), 1800);
+      setBanner({ type: "success", msg: "Branding saved! Colors are already live." });
     } catch {
       setBanner({ type: "error", msg: "Failed to save branding. Please try again." });
     }
@@ -503,7 +521,7 @@ export default function BrandingSection({ user, enterprise }) {
       </Card>
 
       {/* Save Button */}
-      <Button onClick={handleSave} disabled={saving || !enterprise?.id} className="w-full bg-emerald-600 hover:bg-emerald-700 rounded-xl py-3 text-base font-semibold">
+      <Button onClick={handleSave} disabled={saving} className="w-full bg-emerald-600 hover:bg-emerald-700 rounded-xl py-3 text-base font-semibold">
         {saving ? (
           <span className="flex items-center gap-2"><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</span>
         ) : (
