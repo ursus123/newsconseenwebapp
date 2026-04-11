@@ -18,6 +18,7 @@ import LaborMarketSection from "@/components/marketintelligence/LaborMarketSecti
 import ForecastingModule from "@/components/marketintelligence/ForecastingModule";
 import { executeSQL } from "@/components/querybuilder/sqlEngine";
 import { fetchPeopleFallback, fetchTasksFallback, fetchTransactionsFallback } from "@/utils/fetchWithFallback";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
 import { Button } from "@/components/ui/button";
 import {
   BookmarkPlus, Loader2, Download, Building2, ExternalLink,
@@ -374,6 +375,7 @@ function AnalysisProgressBar({ sections, results }) {
 // ─── Main component ──────────────────────────────────────────────────────────
 export default function MarketIntelligence() {
   const [currentUser, setCurrentUser]         = useState(null);
+  const listFn = useEntityListFn(currentUser);
   const [pageMode, setPageMode]               = useState("intelligence"); // "intelligence" | "research"
   const [params, setParams]                   = useState({ location: "", businessType: "home_healthcare", radiusKm: 30 });
   const [running, setRunning]                 = useState(false);
@@ -399,8 +401,10 @@ export default function MarketIntelligence() {
 
   const { data: myEnterprises = [] } = useQuery({
     queryKey: ["mi_enterprises", currentUser?.company_id],
-    queryFn: () => base44.entities.Enterprise.filter({ company_id: currentUser.company_id }),
+    queryFn: () => listFn(base44.entities.Enterprise),
     enabled: !!currentUser?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const saveToHistory = useCallback((location, businessType, score) => {
