@@ -289,7 +289,55 @@ export default function IntelligenceHub({ currentUser }) {
     })();
   }, [companyId]);
 
-  // Auto-geocode enterprises that are missing coordinates using city/country
+  // Enrich enterprises missing coordinates from linked Address relationships
+  useEffect(() => {
+    if (!myEnterprises.length || !companyId) return;
+    const stillMissing = myEnterprises.filter(e => !e.latitude || !e.longitude);
+    if (!stillMissing.length) return;
+    (async () => {
+      try {
+        // Fetch enterprise_address relationships + addresses in parallel
+        const [rels, addrs] = await Promise.all([
+          listFn(base44.entities.Relationship),
+          listFn(base44.entities.Address),
+        ]);
+
+        // Build address lookup: id → address record
+        const addrById = new Map();
+        addrs.forEach(a => addrById.set(a.id, a));
+
+        // Build enterprise → address coords map via enterprise_address relationships
+        // prefer active relationships; use enterprise_id if present, else enterprise_name
+        const enterpriseCoords = new Map();
+        rels
+          .filter(r => r.relationship_type === "enterprise_address" && r.status !== "ended")
+          .forEach(r => {
+            const addrId = r.address_id;
+            const entKey = r.enterprise_id || r.enterprise_name;
+            if (!entKey || !addrId) return;
+            const addr = addrById.get(addrId);
+            if (!addr?.latitude || !addr?.longitude) return;
+            if (!enterpriseCoords.has(entKey)) {
+              enterpriseCoords.set(entKey, { latitude: parseFloat(addr.latitude), longitude: parseFloat(addr.longitude) });
+            }
+          });
+
+        if (!enterpriseCoords.size) return;
+
+        const updated = myEnterprises.map(ent => {
+          if (ent.latitude && ent.longitude) return ent;
+          // Try by ID first, then by name
+          const coords = enterpriseCoords.get(ent.id) || enterpriseCoords.get(ent.enterprise_name);
+          if (!coords) return ent;
+          return { ...ent, latitude: coords.latitude, longitude: coords.longitude, _needsGeocode: false, _coordSource: "address_relationship" };
+        });
+
+        setMyEnterprises(updated);
+      } catch (_) {}
+    })();
+  }, [myEnterprises.length, companyId]);
+
+  // Auto-geocode enterprises still missing coordinates using city/country (Nominatim fallback)
   useEffect(() => {
     if (!myEnterprises.length) return;
     const missing = myEnterprises.filter(e => e._needsGeocode && (e.city || e.country));

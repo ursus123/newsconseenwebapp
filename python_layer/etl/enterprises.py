@@ -24,6 +24,96 @@ def extract_enterprises() -> pd.DataFrame:
     return fetch_json_to_df(settings.base44_enterprises_url)
 
 
+def enrich_enterprise_coords(
+    enterprise_df: pd.DataFrame,
+    relationship_df: pd.DataFrame,
+    address_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Enrich enterprise_summary with latitude/longitude pulled from linked
+    Address records via enterprise_address Relationships.
+
+    Priority order per enterprise:
+        1. Coordinates already on the Enterprise record (latitude/longitude columns)
+        2. Coordinates from the linked Address (via enterprise_address relationship)
+        3. Leave null — downstream Nominatim geocoding in address ETL will handle it
+
+    Uses enterprise_id if present on the relationship (stored since the ID-capture
+    fix), falls back to matching on enterprise_name string for older records.
+
+    Modifies enterprise_df in-place and returns it.
+    """
+    if enterprise_df.empty or relationship_df.empty or address_df.empty:
+        return enterprise_df
+
+    # ── Ensure coordinate columns exist ──────────────────────────────────────
+    for col in ("latitude", "longitude"):
+        if col not in enterprise_df.columns:
+            enterprise_df[col] = None
+
+    enterprise_df["latitude"]  = pd.to_numeric(enterprise_df["latitude"],  errors="coerce")
+    enterprise_df["longitude"] = pd.to_numeric(enterprise_df["longitude"], errors="coerce")
+
+    # ── Build address coord lookup: address_id → (lat, lon) ──────────────────
+    addr_lat = pd.to_numeric(address_df.get("latitude",  pd.Series()), errors="coerce")
+    addr_lon = pd.to_numeric(address_df.get("longitude", pd.Series()), errors="coerce")
+    addr_has_coords = addr_lat.notna() & addr_lon.notna()
+
+    addr_coords = {}   # address_id → (lat, lon)
+    for _, row in address_df[addr_has_coords].iterrows():
+        addr_coords[row["id"]] = (float(addr_lat[row.name]), float(addr_lon[row.name]))
+
+    if not addr_coords:
+        logger.info("enrich_enterprise_coords: no addresses have coordinates — skipping enrichment")
+        return enterprise_df
+
+    # ── Filter to active enterprise_address relationships ────────────────────
+    ea_rels = relationship_df[
+        relationship_df.get("relationship_type", pd.Series()).eq("enterprise_address") &
+        relationship_df.get("status", pd.Series("active")).ne("ended")
+    ].copy() if "relationship_type" in relationship_df.columns else pd.DataFrame()
+
+    if ea_rels.empty:
+        logger.info("enrich_enterprise_coords: no enterprise_address relationships found — skipping enrichment")
+        return enterprise_df
+
+    # ── Build enterprise → coords map ────────────────────────────────────────
+    # enterprise_id preferred, enterprise_name fallback (one entry per enterprise, first wins)
+    ent_coords_by_id   = {}   # enterprise_id → (lat, lon)
+    ent_coords_by_name = {}   # enterprise_name → (lat, lon)
+
+    for _, rel in ea_rels.iterrows():
+        addr_id  = rel.get("address_id")
+        ent_id   = rel.get("enterprise_id")
+        ent_name = rel.get("enterprise_name")
+        if not addr_id or addr_id not in addr_coords:
+            continue
+        coords = addr_coords[addr_id]
+        if ent_id and ent_id not in ent_coords_by_id:
+            ent_coords_by_id[str(ent_id)] = coords
+        if ent_name and ent_name not in ent_coords_by_name:
+            ent_coords_by_name[str(ent_name)] = coords
+
+    enriched = 0
+    missing_mask = enterprise_df["latitude"].isna() | enterprise_df["longitude"].isna()
+
+    for idx in enterprise_df[missing_mask].index:
+        eid   = str(enterprise_df.at[idx, "id"] or "")
+        ename = str(enterprise_df.at[idx, "name"] or enterprise_df.at[idx].get("enterprise_name", "") or "")
+        coords = ent_coords_by_id.get(eid) or ent_coords_by_name.get(ename)
+        if coords:
+            enterprise_df.at[idx, "latitude"]         = coords[0]
+            enterprise_df.at[idx, "longitude"]        = coords[1]
+            enterprise_df.at[idx, "coord_source"]     = "address_relationship"
+            enriched += 1
+
+    logger.info(
+        "enrich_enterprise_coords: enriched %d of %d enterprises with address coordinates",
+        enriched, int(missing_mask.sum()),
+    )
+    return enterprise_df
+
+
 def transform_enterprises(df: pd.DataFrame) -> pd.DataFrame:
     """
     Transform raw enterprise records into a summary suitable for
@@ -133,6 +223,11 @@ def transform_enterprises(df: pd.DataFrame) -> pd.DataFrame:
         "naics_title":      df.get("naics_title"),
         "sic_code":         df.get("sic_code"),
         "sic_description":  df.get("sic_description"),
+        # Coordinates — populated directly on Enterprise record;
+        # enrich_enterprise_coords() fills gaps from linked addresses after transform
+        "latitude":         pd.to_numeric(df.get("latitude"),  errors="coerce") if df.get("latitude") is not None else None,
+        "longitude":        pd.to_numeric(df.get("longitude"), errors="coerce") if df.get("longitude") is not None else None,
+        "coord_source":     pd.Series("enterprise", index=df.index),
     }
 
     summary = pd.DataFrame({
@@ -172,4 +267,7 @@ def _empty_summary() -> pd.DataFrame:
         "naics_title",
         "sic_code",
         "sic_description",
+        "latitude",
+        "longitude",
+        "coord_source",
     ])

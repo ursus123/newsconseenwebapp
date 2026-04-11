@@ -43,6 +43,114 @@ def extract_people() -> pd.DataFrame:
     return fetch_json_to_df(settings.base44_people_url)
 
 
+def enrich_people_enterprise(
+    people_df: pd.DataFrame,
+    relationship_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Enrich people_summary rows with enterprise_name and role pulled from
+    active person_enterprise Relationships.
+
+    The people_summary table groups by (enterprise_id, company_id, person_type, status).
+    For rows where enterprise_id is null or the enterprise_name is missing, this
+    function looks up the first active person_enterprise relationship for any person
+    in that group and fills in:
+        - primary_enterprise_name  — display name of the linked enterprise
+        - primary_role             — role within that relationship
+
+    Uses person_id on the relationship if present (stored since the ID-capture fix),
+    falls back to person_name string matching for older records.
+
+    Also adds a flat per-person enrichment for non-aggregated use:
+    when people_df contains individual person rows (id column present and unique),
+    attaches enterprise_name and role directly to each person row.
+
+    Modifies people_df in-place and returns it.
+    """
+    if people_df.empty or relationship_df.empty:
+        return people_df
+
+    if "relationship_type" not in relationship_df.columns:
+        return people_df
+
+    # ── Filter to active person_enterprise relationships ─────────────────────
+    pe_rels = relationship_df[
+        relationship_df["relationship_type"].isin({
+            "person_enterprise", "employment", "membership", "enrollment",
+            "care_assignment", "staff_assignment", "client_enrollment",
+        }) &
+        relationship_df.get("status", pd.Series("active")).ne("ended")
+    ].copy()
+
+    if pe_rels.empty:
+        logger.info("enrich_people_enterprise: no active person_enterprise relationships found")
+        return people_df
+
+    # Normalise key columns
+    pe_rels["_person_id"]   = pe_rels.get("person_id",   pd.Series(None)).astype(str).str.strip()
+    pe_rels["_person_name"] = pe_rels.get("person_name", pd.Series(None)).astype(str).str.strip()
+    pe_rels["_ent_name"]    = pe_rels.get("enterprise_name", pd.Series(None)).astype(str).str.strip()
+    pe_rels["_role"]        = pe_rels.get("role", pd.Series(None)).astype(str).str.strip()
+
+    # Build lookup: person_id → (enterprise_name, role), person_name → (enterprise_name, role)
+    person_id_lookup   = {}
+    person_name_lookup = {}
+    for _, r in pe_rels.iterrows():
+        pid   = r["_person_id"]
+        pname = r["_person_name"]
+        ent   = r["_ent_name"]   if r["_ent_name"]   not in ("", "nan", "None") else None
+        role  = r["_role"]       if r["_role"]        not in ("", "nan", "None") else None
+        if pid and pid not in ("", "nan", "None") and pid not in person_id_lookup:
+            person_id_lookup[pid] = (ent, role)
+        if pname and pname not in ("", "nan", "None") and pname not in person_name_lookup:
+            person_name_lookup[pname] = (ent, role)
+
+    # ── Enrich individual person rows (when id column is present) ────────────
+    if "id" in people_df.columns:
+        enriched = 0
+        for col in ("primary_enterprise_name", "primary_role"):
+            if col not in people_df.columns:
+                people_df[col] = None
+
+        for idx, row in people_df.iterrows():
+            # Skip if already populated
+            if pd.notna(row.get("primary_enterprise_name")):
+                continue
+            pid   = str(row.get("id", ""))
+            pname = str(row.get("preferred_name") or
+                        f"{row.get('first_name', '')} {row.get('last_name', '')}".strip())
+            match = person_id_lookup.get(pid) or person_name_lookup.get(pname)
+            if match:
+                people_df.at[idx, "primary_enterprise_name"] = match[0]
+                people_df.at[idx, "primary_role"]            = match[1]
+                enriched += 1
+
+        logger.info(
+            "enrich_people_enterprise: enriched %d individual person rows with enterprise/role",
+            enriched,
+        )
+
+    # ── Enrich aggregated summary rows (grouped by enterprise_id) ────────────
+    # For summary rows, attach the enterprise_name to enterprise_id so
+    # dashboards can display the name without a separate join.
+    if "enterprise_id" in people_df.columns and "enterprise_id" in pe_rels.columns:
+        eid_to_name = (
+            pe_rels[pe_rels.get("enterprise_id", pd.Series()).notna()]
+            .drop_duplicates("enterprise_id")
+            .set_index("enterprise_id")["_ent_name"]
+            .to_dict()
+        )
+        if "enterprise_name" not in people_df.columns:
+            people_df["enterprise_name"] = None
+        people_df["enterprise_name"] = people_df.apply(
+            lambda r: r["enterprise_name"] if pd.notna(r.get("enterprise_name"))
+                      else eid_to_name.get(str(r.get("enterprise_id", "")), None),
+            axis=1,
+        )
+
+    return people_df
+
+
 def transform_people(df: pd.DataFrame) -> pd.DataFrame:
     """
     Transform raw people records into a summary suitable for

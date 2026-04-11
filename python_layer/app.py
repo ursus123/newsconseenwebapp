@@ -571,10 +571,11 @@ def debug_relationships(company_id: Optional[str] = Query(None)):
 
 @app.get("/people-summary", response_model=List[PeopleSummary], tags=["ETL"])
 def get_people_summary(company_id: Optional[str] = Query(None)):
-    df = filter_by_company(people.extract_people(), company_id)
-    return people.transform_people(df).where(
-        people.transform_people(df).notna(), None
-    ).to_dict(orient="records")
+    df      = filter_by_company(people.extract_people(), company_id)
+    summary = people.transform_people(df)
+    rel_df  = relationships.extract_relationships()
+    summary = people.enrich_people_enterprise(summary, rel_df)
+    return summary.where(summary.notna(), None).to_dict(orient="records")
 
 
 @app.post("/load/people-summary", tags=["ETL"])
@@ -583,8 +584,11 @@ def load_people_summary(
     x_cron_secret: str = Header(None),
 ):
     _check_cron_secret(x_cron_secret)
-    df = filter_by_company(people.extract_people(), company_id)
-    return load_dataframe(people.transform_people(df), "people_summary", company_id=company_id)
+    df      = filter_by_company(people.extract_people(), company_id)
+    summary = people.transform_people(df)
+    rel_df  = relationships.extract_relationships()
+    summary = people.enrich_people_enterprise(summary, rel_df)
+    return load_dataframe(summary, "people_summary", company_id=company_id)
 
 
 # ── Enterprises ───────────────────────────────────────────
@@ -593,6 +597,10 @@ def load_people_summary(
 def get_enterprise_summary(company_id: Optional[str] = Query(None)):
     df      = filter_by_company(enterprises.extract_enterprises(), company_id)
     summary = enterprises.transform_enterprises(df)
+    # Enrich with coordinates from linked addresses via enterprise_address relationships
+    rel_df  = relationships.extract_relationships()
+    addr_df = addresses.extract_addresses()
+    summary = enterprises.enrich_enterprise_coords(summary, rel_df, addr_df)
     return summary.where(summary.notna(), None).to_dict(orient="records")
 
 
@@ -602,8 +610,12 @@ def load_enterprise_summary(
     x_cron_secret: str = Header(None),
 ):
     _check_cron_secret(x_cron_secret)
-    df = filter_by_company(enterprises.extract_enterprises(), company_id)
-    return load_dataframe(enterprises.transform_enterprises(df), "enterprise_summary", company_id=company_id)
+    df      = filter_by_company(enterprises.extract_enterprises(), company_id)
+    summary = enterprises.transform_enterprises(df)
+    rel_df  = relationships.extract_relationships()
+    addr_df = addresses.extract_addresses()
+    summary = enterprises.enrich_enterprise_coords(summary, rel_df, addr_df)
+    return load_dataframe(summary, "enterprise_summary", company_id=company_id)
 
 
 # ── Transactions ──────────────────────────────────────────
