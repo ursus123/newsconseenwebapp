@@ -6,6 +6,7 @@ import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import AddressForm from "../components/addresses/AddressForm";
 import AddressDetailPanel from "../components/addresses/AddressDetailPanel";
+import AddressLeafletMap from "../components/addresses/AddressLeafletMap";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import {
   Upload, MapPin, CheckCircle, Navigation, AlertCircle,
-  Map, Loader2,
+  Map, Loader2, List,
 } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
@@ -77,6 +78,7 @@ export default function Addresses() {
   const [geocodingAll, setGeocodingAll] = useState(false);
   const [geocodeProgress, setGeocodeProgress] = useState(null);
   const [geocodingRowId, setGeocodingRowId] = useState(null);
+  const [viewMode, setViewMode] = useState("table");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ status: "", gps: "" });
   const [selectedIds, setSelectedIds] = useState([]);
@@ -281,32 +283,54 @@ export default function Addresses() {
         </div>
       )}
 
-      <SearchFilterBar
-        search={search} setSearch={setSearch}
-        filters={filters} setFilters={setFilters}
-        filterDefs={FILTER_DEFS}
-        placeholder="Search addresses, cities, countries..."
-        resultCount={processedAddresses.length}
-        totalCount={addresses.length}
-      />
+      {/* View toggle */}
+      <div className="flex items-center gap-1 mb-3 p-1 bg-slate-100 rounded-xl w-fit">
+        <button
+          onClick={() => setViewMode("table")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === "table" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+        >
+          <List className="w-3.5 h-3.5" /> Table
+        </button>
+        <button
+          onClick={() => setViewMode("map")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === "map" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+        >
+          <Map className="w-3.5 h-3.5" /> Map
+        </button>
+      </div>
 
-      <BulkActionBar
-        selectedIds={selectedIds}
-        onClear={() => setSelectedIds([])}
-        onDeleteSelected={handleBulkDelete}
-        canDelete
-      />
+      {viewMode === "map" ? (
+        <AddressLeafletMap addresses={processedAddresses} onAddressClick={(row) => setDetailAddress(row)} />
+      ) : (
+        <>
+          <SearchFilterBar
+            search={search} setSearch={setSearch}
+            filters={filters} setFilters={setFilters}
+            filterDefs={FILTER_DEFS}
+            placeholder="Search addresses, cities, countries..."
+            resultCount={processedAddresses.length}
+            totalCount={addresses.length}
+          />
 
-      <DataTable
-        columns={columns}
-        data={processedAddresses}
-        onRowClick={(row) => setDetailAddress(row)}
-        onEdit={(row) => { setEditing(row); setFormOpen(true); }}
-        onDelete={(row) => setDeleting(row)}
-        bulkMode
-        selectedIds={selectedIds}
-        onSelectionChange={setSelectedIds}
-      />
+          <BulkActionBar
+            selectedIds={selectedIds}
+            onClear={() => setSelectedIds([])}
+            onDeleteSelected={handleBulkDelete}
+            canDelete
+          />
+
+          <DataTable
+            columns={columns}
+            data={processedAddresses}
+            onRowClick={(row) => setDetailAddress(row)}
+            onEdit={(row) => { setEditing(row); setFormOpen(true); }}
+            onDelete={(row) => setDeleting(row)}
+            bulkMode
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+          />
+        </>
+      )}
 
       {detailAddress && (
         <AddressDetailPanel address={detailAddress} currentUser={currentUser} onClose={() => setDetailAddress(null)}
