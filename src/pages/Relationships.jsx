@@ -137,6 +137,8 @@ export default function Relationships() {
   const { data: products = [] } = useQuery({ queryKey: ["products", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Product), enabled: currentUser !== null });
   const { data: services = [] } = useQuery({ queryKey: ["services", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Service), enabled: currentUser !== null });
   const { data: addresses = [] } = useQuery({ queryKey: ["addresses", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Address), enabled: currentUser !== null });
+  const { data: tasks = [] } = useQuery({ queryKey: ["tasks", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Task), enabled: currentUser !== null });
+  const { data: transactions = [] } = useQuery({ queryKey: ["transactions", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Transaction), enabled: currentUser !== null });
 
 
   const updateMut = useMutation({
@@ -307,6 +309,10 @@ export default function Relationships() {
         <CytoscapeRelationshipGraph
           relationships={relationships}
           filterType={activeTab}
+          tasks={tasks}
+          transactions={transactions}
+          people={people}
+          enterprises={enterprises}
         />
       ) : (
         <DataTable

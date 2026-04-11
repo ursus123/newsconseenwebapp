@@ -981,6 +981,181 @@ def get_ml_predictions(company_id: str, model: Optional[str] = None) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# GAP TOOLS — Relationship, Address, Service (previously missing from copilot)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_relationship_summary(
+    company_id:        str,
+    relationship_type: Optional[str] = None,
+) -> dict:
+    """
+    Returns counts and breakdown of all Relationship records for this tenant.
+    Used for: "who is connected to Enterprise X", "how many assignments",
+              "active relationships", "relationship overview", "connections".
+
+    Reads analytics.relationship_summary; falls back to Base44 live.
+    """
+    sql = """
+        SELECT
+            relationship_type,
+            status,
+            COUNT(*)              AS count,
+            COUNT(DISTINCT person_name)     AS unique_people,
+            COUNT(DISTINCT enterprise_name) AS unique_enterprises
+        FROM analytics.relationship_summary
+        WHERE company_id = :company_id
+          AND (:rel_type IS NULL OR relationship_type = :rel_type)
+        GROUP BY relationship_type, status
+        ORDER BY count DESC
+    """
+    rows = _run(sql, {"company_id": company_id, "rel_type": relationship_type})
+
+    if not rows:
+        # Base44 live fallback
+        try:
+            from etl.relationships import extract_relationships
+            import pandas as pd
+            df = extract_relationships()
+            if not df.empty and company_id:
+                df = df[df["company_id"] == company_id].copy()
+            if relationship_type and "relationship_type" in df.columns:
+                df = df[df["relationship_type"] == relationship_type]
+            if not df.empty:
+                grp = df.groupby(["relationship_type", "status"]).size().reset_index(name="count")
+                rows = grp.to_dict(orient="records")
+                logger.info("get_relationship_summary: Base44 fallback — %d relationship records", len(df))
+        except Exception as e:
+            logger.warning("get_relationship_summary fallback failed: %s", e)
+
+    total        = sum(r.get("count", 0) or 0 for r in rows)
+    active_count = sum(r.get("count", 0) or 0 for r in rows if r.get("status") == "active")
+    ended_count  = sum(r.get("count", 0) or 0 for r in rows if r.get("status") == "ended")
+
+    by_type: dict = {}
+    for r in rows:
+        rt = r.get("relationship_type", "unknown")
+        by_type.setdefault(rt, {"active": 0, "ended": 0, "archived": 0})
+        st = r.get("status") or "active"
+        by_type[rt][st] = by_type[rt].get(st, 0) + (r.get("count") or 0)
+
+    return {
+        "total_relationships": total,
+        "active":              active_count,
+        "ended":               ended_count,
+        "by_type":             by_type,
+        "detail_rows":         rows[:30],
+    }
+
+
+def get_address_overview(company_id: str) -> dict:
+    """
+    Returns a count and geographic breakdown of all Address records.
+    Used for: "how many addresses", "where are our locations",
+              "address coverage", "geographic spread", "locations".
+
+    Reads analytics.address_summary; falls back to Base44 live.
+    """
+    sql = """
+        SELECT
+            address_type,
+            city,
+            state_province,
+            country,
+            COUNT(*) AS count
+        FROM analytics.address_summary
+        WHERE company_id = :company_id
+        GROUP BY address_type, city, state_province, country
+        ORDER BY count DESC
+        LIMIT 50
+    """
+    rows = _run(sql, {"company_id": company_id})
+
+    if not rows:
+        try:
+            from etl.addresses import extract_addresses
+            df = extract_addresses()
+            if not df.empty and company_id:
+                df = df[df["company_id"] == company_id].copy()
+            if not df.empty:
+                grp_cols = [c for c in ["address_type", "city", "state_province", "country"] if c in df.columns]
+                if grp_cols:
+                    grp = df.groupby(grp_cols).size().reset_index(name="count")
+                    rows = grp.sort_values("count", ascending=False).head(50).to_dict(orient="records")
+                else:
+                    rows = [{"count": len(df), "note": "address fields not available"}]
+                logger.info("get_address_overview: Base44 fallback — %d addresses", len(df))
+        except Exception as e:
+            logger.warning("get_address_overview fallback failed: %s", e)
+
+    total = sum(r.get("count", 0) or 0 for r in rows)
+    countries  = list({r.get("country", "") for r in rows if r.get("country")})
+    states     = list({r.get("state_province", "") for r in rows if r.get("state_province")})
+    cities     = list({r.get("city", "") for r in rows if r.get("city")})
+
+    return {
+        "total_addresses": total,
+        "countries":       countries[:10],
+        "states":          states[:15],
+        "top_cities":      cities[:10],
+        "breakdown":       rows[:20],
+    }
+
+
+def get_service_overview(company_id: str) -> dict:
+    """
+    Returns a summary of all Service records — types, status, pricing.
+    Used for: "what services do we offer", "service catalogue",
+              "how many services", "service pricing", "active services".
+
+    Reads analytics.service_summary; falls back to Base44 live.
+    """
+    sql = """
+        SELECT
+            service_type,
+            status,
+            COUNT(*)              AS count,
+            ROUND(AVG(price), 2)  AS avg_price,
+            MIN(price)            AS min_price,
+            MAX(price)            AS max_price
+        FROM analytics.service_summary
+        WHERE company_id = :company_id
+        GROUP BY service_type, status
+        ORDER BY count DESC
+    """
+    rows = _run(sql, {"company_id": company_id})
+
+    if not rows:
+        try:
+            from etl.services import extract_services
+            import pandas as pd
+            df = extract_services()
+            if not df.empty and company_id:
+                df = df[df["company_id"] == company_id].copy()
+            if not df.empty:
+                grp_cols = [c for c in ["service_type", "status"] if c in df.columns]
+                agg: dict = {"id": "count"}
+                if "price" in df.columns:
+                    agg["price"] = "mean"
+                grp = df.groupby(grp_cols).agg(agg).reset_index()
+                grp.rename(columns={"id": "count", "price": "avg_price"}, inplace=True)
+                rows = grp.sort_values("count", ascending=False).to_dict(orient="records")
+                logger.info("get_service_overview: Base44 fallback — %d services", len(df))
+        except Exception as e:
+            logger.warning("get_service_overview fallback failed: %s", e)
+
+    total        = sum(r.get("count", 0) or 0 for r in rows)
+    active_count = sum(r.get("count", 0) or 0 for r in rows if r.get("status") == "active")
+    all_prices   = [r.get("avg_price") for r in rows if r.get("avg_price") is not None]
+
+    return {
+        "total_services": total,
+        "active_services": active_count,
+        "avg_price_across_all": round(sum(all_prices) / len(all_prices), 2) if all_prices else None,
+        "by_type": rows,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # WEB-GROUNDED TOOLS — public data sources, no API key required
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1385,6 +1560,32 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "get_relationship_summary",
+        "description": "Get a count and breakdown of all Relationship records — how many assignments exist, by type (person→enterprise, item→person, etc.) and status (active/ended). Use for 'who is connected to X', 'how many relationships', 'active assignments', 'network connections'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "relationship_type": {
+                    "type": "string",
+                    "enum": ["person_enterprise", "person_person", "enterprise_enterprise",
+                             "item_enterprise", "item_person", "person_service",
+                             "enterprise_service", "person_address", "enterprise_address"],
+                    "description": "Filter to a specific relationship type. Leave null for all types.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_address_overview",
+        "description": "Get a geographic breakdown of all Address records — total count, countries, states, top cities. Use for 'how many addresses', 'where are our locations', 'geographic spread', 'address coverage'.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_service_overview",
+        "description": "Get a summary of the service catalogue — types, active count, pricing range. Use for 'what services do we offer', 'service catalogue', 'how many services', 'service pricing'.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "web_search",
         "description": (
             "Search the web for market intelligence, industry news, competitor information, "
@@ -1467,7 +1668,10 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "get_product_summary":     get_product_summary,
         "get_enterprise_overview": get_enterprise_overview,
         "get_network_overview":    get_network_overview,
-        "get_ml_predictions":      get_ml_predictions,
+        "get_ml_predictions":        get_ml_predictions,
+        "get_relationship_summary":  get_relationship_summary,
+        "get_address_overview":      get_address_overview,
+        "get_service_overview":      get_service_overview,
         # Web-grounded tools — company_id injected but not used (public data)
         "web_search":              web_search,
         "search_public_data":      search_public_data,
@@ -1561,3 +1765,12 @@ class QueryEngine:
 
     def query_ml_predictions(self, model: str = None) -> dict:
         return get_ml_predictions(self.company_id, model)
+
+    def query_relationship_summary(self, relationship_type: str = None) -> dict:
+        return get_relationship_summary(self.company_id, relationship_type)
+
+    def query_address_overview(self) -> dict:
+        return get_address_overview(self.company_id)
+
+    def query_service_overview(self) -> dict:
+        return get_service_overview(self.company_id)

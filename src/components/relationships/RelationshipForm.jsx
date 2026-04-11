@@ -78,9 +78,16 @@ function ServiceSelect({ value, onChange, services }) {
   );
 }
 
-function AddressSelect({ value, onChange, addresses }) {
+function AddressSelect({ value, onChangeLabel, onChangeId, addresses }) {
   return (
-    <Select value={value || ""} onValueChange={onChange}>
+    <Select
+      value={value || ""}
+      onValueChange={(label) => {
+        onChangeLabel(label);
+        const addr = (addresses || []).find(a => (a.label || a.address_line1 || a.id) === label);
+        if (addr && onChangeId) onChangeId(addr.id);
+      }}
+    >
       <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select address..." /></SelectTrigger>
       <SelectContent>
         {(addresses || []).map((a) => {
@@ -144,17 +151,22 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
                 <Field label="Item" required><ItemSelect value={form.item_name} onChange={(v) => set("item_name", v)} products={products} /></Field>
                 <Field label="Enterprise" required><EnterpriseSelect value={form.enterprise_name} onChange={(v) => set("enterprise_name", v)} enterprises={enterprises} /></Field>
                 <Field label="Location"><Input value={form.location || ""} onChange={(e) => set("location", e.target.value)} className="rounded-xl" placeholder="e.g. Main Warehouse..." /></Field>
-                <Field label="Responsibility Type">
-                  <Select value={form.responsibility_type || ""} onValueChange={(v) => set("responsibility_type", v)}>
-                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select type..." /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="owned">Owned</SelectItem>
-                      <SelectItem value="rented">Rented</SelectItem>
-                      <SelectItem value="leased">Leased</SelectItem>
-                      <SelectItem value="consigned">Consigned</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Quantity at Location">
+                    <Input type="number" min="0" value={form.quantity || ""} onChange={(e) => set("quantity", e.target.value)} className="rounded-xl" placeholder="0" />
+                  </Field>
+                  <Field label="Responsibility Type">
+                    <Select value={form.responsibility_type || ""} onValueChange={(v) => set("responsibility_type", v)}>
+                      <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select type..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="owned">Owned</SelectItem>
+                        <SelectItem value="rented">Rented</SelectItem>
+                        <SelectItem value="leased">Leased</SelectItem>
+                        <SelectItem value="consigned">Consigned</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
               </>
             )}
 
@@ -163,7 +175,10 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
               <>
                 <Field label="Item" required><ItemSelect value={form.item_name} onChange={(v) => set("item_name", v)} products={products} /></Field>
                 <Field label="Person" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} people={people} /></Field>
-                <Field label="Custody Role"><Input value={form.role || ""} onChange={(e) => set("role", e.target.value)} className="rounded-xl" placeholder="e.g. Driver, Custodian..." /></Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Custody Role"><Input value={form.role || ""} onChange={(e) => set("role", e.target.value)} className="rounded-xl" placeholder="e.g. Driver, Custodian..." /></Field>
+                  <Field label="Quantity"><Input type="number" min="0" value={form.quantity || ""} onChange={(e) => set("quantity", e.target.value)} className="rounded-xl" placeholder="0" /></Field>
+                </div>
               </>
             )}
 
@@ -173,6 +188,10 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
                 <Field label="Person" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} people={people} /></Field>
                 <Field label="Service" required><ServiceSelect value={form.service_name} onChange={(v) => set("service_name", v)} services={services} /></Field>
                 <Field label="Role"><Input value={form.role || ""} onChange={(e) => set("role", e.target.value)} className="rounded-xl" placeholder="e.g. Provider, Trainer..." /></Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Rate ($/hr)"><Input type="number" min="0" step="0.01" value={form.rate || ""} onChange={(e) => set("rate", e.target.value)} className="rounded-xl" placeholder="0.00" /></Field>
+                  <Field label="Contracted Hours / wk"><Input type="number" min="0" step="0.5" value={form.contracted_hours || ""} onChange={(e) => set("contracted_hours", e.target.value)} className="rounded-xl" placeholder="0" /></Field>
+                </div>
               </>
             )}
 
@@ -197,7 +216,7 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
             {relType === "person_address" && (
               <>
                 <Field label="Person" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} people={people} /></Field>
-                <Field label="Address" required><AddressSelect value={form.location} onChange={(v) => set("location", v)} addresses={addresses} /></Field>
+                <Field label="Address" required><AddressSelect value={form.location} onChangeLabel={(v) => set("location", v)} onChangeId={(v) => set("address_id", v)} addresses={addresses} /></Field>
                 <Field label="Address Type">
                   <Select value={form.role || ""} onValueChange={(v) => set("role", v)}>
                     <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select type..." /></SelectTrigger>
@@ -215,7 +234,7 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
             {relType === "enterprise_address" && (
               <>
                 <Field label="Enterprise" required><EnterpriseSelect value={form.enterprise_name} onChange={(v) => set("enterprise_name", v)} enterprises={enterprises} /></Field>
-                <Field label="Address" required><AddressSelect value={form.location} onChange={(v) => set("location", v)} addresses={addresses} /></Field>
+                <Field label="Address" required><AddressSelect value={form.location} onChangeLabel={(v) => set("location", v)} onChangeId={(v) => set("address_id", v)} addresses={addresses} /></Field>
                 <Field label="Location Type">
                   <Select value={form.role || ""} onValueChange={(v) => set("role", v)}>
                     <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select type..." /></SelectTrigger>
