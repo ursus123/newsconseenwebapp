@@ -217,6 +217,7 @@ export default function BrandingSection({ user, enterprise }) {
       appName, logoUrl, faviconUrl, tagline, hideNewsconseen,
     };
     localStorage.setItem("brand_settings", JSON.stringify(brandData));
+    window.dispatchEvent(new Event("brand_updated"));
     try {
       if (!enterprise?.id) {
         // No enterprise yet — just save to localStorage (already done above)

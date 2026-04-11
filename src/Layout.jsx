@@ -356,8 +356,14 @@ export default function Layout({ children, currentPageName }) {
       .catch(() => {});
   }, [currentUser?.company_id]);
 
-  // Read brand settings from localStorage (saved by BrandingSection)
-  const savedBrand = (() => { try { return JSON.parse(localStorage.getItem("brand_settings") || "{}"); } catch { return {}; } })();
+  // Read brand settings from localStorage reactively
+  const readBrand = () => { try { return JSON.parse(localStorage.getItem("brand_settings") || "{}"); } catch { return {}; } };
+  const [savedBrand, setSavedBrand] = useState(readBrand);
+  useEffect(() => {
+    const handler = () => setSavedBrand(readBrand());
+    window.addEventListener("brand_updated", handler);
+    return () => window.removeEventListener("brand_updated", handler);
+  }, []);
   const branding = { 
     logoUrl: savedBrand.logoUrl || null,
     appName: savedBrand.appName || "Newsconseen",
