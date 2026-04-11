@@ -225,18 +225,19 @@ const ROLE_BADGE = {
 };
 
 // ─── NavItem ─────────────────────────────────────────────────────────────────
-function NavItem({ name, label, icon: Icon, isActive, onClick, showRedDot }) {
+function NavItem({ name, label, icon: Icon, isActive, onClick, showRedDot, primaryColor }) {
   return (
     <button
       onClick={onClick}
+      style={isActive && primaryColor ? { backgroundColor: primaryColor + "22" } : {}}
       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all text-left ${
         isActive
-          ? "bg-white/10 text-white"
+          ? "text-white"
           : "text-slate-400 hover:text-white hover:bg-white/5"
       }`}
     >
       <div className="relative shrink-0">
-        <Icon className={`w-4 h-4 ${isActive ? "text-emerald-400" : ""}`} />
+        <Icon className={`w-4 h-4`} style={isActive && primaryColor ? { color: primaryColor } : {}} />
         {showRedDot && (
           <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full" />
         )}
@@ -378,7 +379,7 @@ export default function Layout({ children, currentPageName }) {
     root.style.setProperty("--brand-primary",   branding.primaryColor);
     root.style.setProperty("--brand-secondary", branding.secondaryColor);
     root.style.setProperty("--brand-accent",    branding.accentColor);
-  }, [branding.primaryColor, branding.secondaryColor, branding.accentColor]);
+  }, [branding.primaryColor, branding.secondaryColor, branding.accentColor, savedBrand]);
 
 
 
@@ -433,7 +434,8 @@ export default function Layout({ children, currentPageName }) {
 
         {/* Sidebar */}
         <aside
-          className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-slate-950 transform transition-transform duration-300 ease-out
+          style={{ backgroundColor: branding.secondaryColor }}
+          className={`fixed lg:static inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-out
             ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
         >
           <div className="flex flex-col h-full">
@@ -447,8 +449,8 @@ export default function Layout({ children, currentPageName }) {
                   <>
                     <div
                       className="rounded-lg w-8 h-8 flex items-center justify-center shadow-md shrink-0"
-                      style={{ backgroundColor: branding.primaryColor }}
-                    >
+                      style={{ backgroundColor: branding.primaryColor, flexShrink: 0 }}
+                      >
                       <span className="text-white font-bold text-sm">{branding.appName.charAt(0).toUpperCase()}</span>
                     </div>
                     <div className="min-w-0">
@@ -484,6 +486,7 @@ export default function Layout({ children, currentPageName }) {
                       label={ADAPTIVE_LABELS[item.name] || item.label || item.name}
                       icon={item.icon}
                       isActive={currentPageName === item.name}
+                      primaryColor={branding.primaryColor}
                       onClick={() => handleNavClick(item.name)}
                       showRedDot={item.badge === "alerts" && criticalAlerts > 0}
                     />
