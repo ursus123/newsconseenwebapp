@@ -31,6 +31,9 @@ export const APP_REGISTRY = [
   { id: "shifthandover", name: "Shift Handover", emoji: "🔄", description: "End-of-shift notes and briefing for incoming staff", category: "Field", route: "ShiftHandover", color: "amber", roles: "all", plan: "starter", exists: false },
   { id: "maintenancerequest", name: "Maintenance Request", emoji: "🛠️", description: "Report broken equipment or facilities issues for repair", category: "Field", route: "MaintenanceRequest", color: "orange", roles: "all", plan: "starter", exists: false },
 
+  // TOOLS & UTILITIES
+  { id: "pdftoexcel", name: "PDF to Excel", emoji: "📄", description: "Convert PDF documents into structured Excel spreadsheets using AI", category: "Tools", route: "PdfToExcel", color: "violet", roles: "all", plan: "starter", exists: true, isNew: true },
+
   // FINANCE & ADMIN
   { id: "pettycashlog", name: "Petty Cash Log", emoji: "💰", description: "Track small cash payments and maintain petty cash balance", category: "Finance", route: "PettyCashLog", color: "emerald", roles: "admin_only", plan: "starter", exists: false },
   { id: "receiptscanner", name: "Receipt Scanner", emoji: "🧾", description: "Photograph and log receipts directly to transactions", category: "Finance", route: "ReceiptScanner", color: "green", roles: "all", plan: "starter", exists: false },
@@ -49,7 +52,7 @@ export const APP_REGISTRY = [
   { id: "librarylog", name: "Library Log", emoji: "📚", description: "Book borrowing and return tracker with overdue alerts", category: "Education", route: "LibraryLog", color: "amber", roles: "all", plan: "starter", exists: false, educationOnly: true },
 ];
 
-export const CATEGORIES = ["All", "HR", "Inventory", "Healthcare", "Field", "Finance", "Compliance", "Education"];
+export const CATEGORIES = ["All", "HR", "Inventory", "Healthcare", "Field", "Finance", "Compliance", "Education", "Tools"];
 
 // Apps recommended by enterprise category
 export const APPS_BY_ENTERPRISE_CATEGORY = {
