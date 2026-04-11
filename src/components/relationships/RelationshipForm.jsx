@@ -31,9 +31,15 @@ function Field({ label, required, children }) {
   );
 }
 
-function PersonSelect({ value, onChange, people, placeholder }) {
+function PersonSelect({ value, onChange, onChangeId, people, placeholder }) {
   return (
-    <Select value={value || ""} onValueChange={onChange}>
+    <Select value={value || ""} onValueChange={(name) => {
+      onChange(name);
+      if (onChangeId) {
+        const p = (people || []).find(p => (p.preferred_name || `${p.first_name} ${p.last_name}`.trim()) === name);
+        if (p) onChangeId(p.id);
+      }
+    }}>
       <SelectTrigger className="rounded-xl"><SelectValue placeholder={placeholder || "Select person..."} /></SelectTrigger>
       <SelectContent>
         {(people || []).map((p) => {
@@ -45,9 +51,15 @@ function PersonSelect({ value, onChange, people, placeholder }) {
   );
 }
 
-function EnterpriseSelect({ value, onChange, enterprises }) {
+function EnterpriseSelect({ value, onChange, onChangeId, enterprises }) {
   return (
-    <Select value={value || ""} onValueChange={onChange}>
+    <Select value={value || ""} onValueChange={(name) => {
+      onChange(name);
+      if (onChangeId) {
+        const e = (enterprises || []).find(e => e.enterprise_name === name);
+        if (e) onChangeId(e.id);
+      }
+    }}>
       <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select enterprise..." /></SelectTrigger>
       <SelectContent>
         {(enterprises || []).map((e) => <SelectItem key={e.id} value={e.enterprise_name}>{e.enterprise_name}</SelectItem>)}
@@ -56,9 +68,15 @@ function EnterpriseSelect({ value, onChange, enterprises }) {
   );
 }
 
-function ItemSelect({ value, onChange, products }) {
+function ItemSelect({ value, onChange, onChangeId, products }) {
   return (
-    <Select value={value || ""} onValueChange={onChange}>
+    <Select value={value || ""} onValueChange={(name) => {
+      onChange(name);
+      if (onChangeId) {
+        const p = (products || []).find(p => p.name === name);
+        if (p) onChangeId(p.id);
+      }
+    }}>
       <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select item..." /></SelectTrigger>
       <SelectContent>
         {(products || []).map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
@@ -67,9 +85,15 @@ function ItemSelect({ value, onChange, products }) {
   );
 }
 
-function ServiceSelect({ value, onChange, services }) {
+function ServiceSelect({ value, onChange, onChangeId, services }) {
   return (
-    <Select value={value || ""} onValueChange={onChange}>
+    <Select value={value || ""} onValueChange={(name) => {
+      onChange(name);
+      if (onChangeId) {
+        const s = (services || []).find(s => s.name === name);
+        if (s) onChangeId(s.id);
+      }
+    }}>
       <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select service..." /></SelectTrigger>
       <SelectContent>
         {(services || []).map((s) => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
@@ -139,8 +163,8 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
             {/* Person → Enterprise */}
             {relType === "person_enterprise" && (
               <>
-                <Field label="Person" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} people={people} /></Field>
-                <Field label="Enterprise" required><EnterpriseSelect value={form.enterprise_name} onChange={(v) => set("enterprise_name", v)} enterprises={enterprises} /></Field>
+                <Field label="Person" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} onChangeId={(v) => set("person_id", v)} people={people} /></Field>
+                <Field label="Enterprise" required><EnterpriseSelect value={form.enterprise_name} onChange={(v) => set("enterprise_name", v)} onChangeId={(v) => set("enterprise_id", v)} enterprises={enterprises} /></Field>
                 <Field label="Role in Enterprise"><Input value={form.role || ""} onChange={(e) => set("role", e.target.value)} className="rounded-xl" placeholder="e.g. Technician, Manager..." /></Field>
               </>
             )}
@@ -148,8 +172,8 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
             {/* Item → Enterprise */}
             {relType === "item_enterprise" && (
               <>
-                <Field label="Item" required><ItemSelect value={form.item_name} onChange={(v) => set("item_name", v)} products={products} /></Field>
-                <Field label="Enterprise" required><EnterpriseSelect value={form.enterprise_name} onChange={(v) => set("enterprise_name", v)} enterprises={enterprises} /></Field>
+                <Field label="Item" required><ItemSelect value={form.item_name} onChange={(v) => set("item_name", v)} onChangeId={(v) => set("item_id", v)} products={products} /></Field>
+                <Field label="Enterprise" required><EnterpriseSelect value={form.enterprise_name} onChange={(v) => set("enterprise_name", v)} onChangeId={(v) => set("enterprise_id", v)} enterprises={enterprises} /></Field>
                 <Field label="Location"><Input value={form.location || ""} onChange={(e) => set("location", e.target.value)} className="rounded-xl" placeholder="e.g. Main Warehouse..." /></Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Quantity at Location">
@@ -173,8 +197,8 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
             {/* Item → Person */}
             {relType === "item_person" && (
               <>
-                <Field label="Item" required><ItemSelect value={form.item_name} onChange={(v) => set("item_name", v)} products={products} /></Field>
-                <Field label="Person" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} people={people} /></Field>
+                <Field label="Item" required><ItemSelect value={form.item_name} onChange={(v) => set("item_name", v)} onChangeId={(v) => set("item_id", v)} products={products} /></Field>
+                <Field label="Person" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} onChangeId={(v) => set("person_id", v)} people={people} /></Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Custody Role"><Input value={form.role || ""} onChange={(e) => set("role", e.target.value)} className="rounded-xl" placeholder="e.g. Driver, Custodian..." /></Field>
                   <Field label="Quantity"><Input type="number" min="0" value={form.quantity || ""} onChange={(e) => set("quantity", e.target.value)} className="rounded-xl" placeholder="0" /></Field>
@@ -185,8 +209,8 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
             {/* Person → Service */}
             {relType === "person_service" && (
               <>
-                <Field label="Person" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} people={people} /></Field>
-                <Field label="Service" required><ServiceSelect value={form.service_name} onChange={(v) => set("service_name", v)} services={services} /></Field>
+                <Field label="Person" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} onChangeId={(v) => set("person_id", v)} people={people} /></Field>
+                <Field label="Service" required><ServiceSelect value={form.service_name} onChange={(v) => set("service_name", v)} onChangeId={(v) => set("service_id", v)} services={services} /></Field>
                 <Field label="Role"><Input value={form.role || ""} onChange={(e) => set("role", e.target.value)} className="rounded-xl" placeholder="e.g. Provider, Trainer..." /></Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Rate ($/hr)"><Input type="number" min="0" step="0.01" value={form.rate || ""} onChange={(e) => set("rate", e.target.value)} className="rounded-xl" placeholder="0.00" /></Field>
@@ -198,8 +222,8 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
             {/* Enterprise → Service */}
             {relType === "enterprise_service" && (
               <>
-                <Field label="Enterprise" required><EnterpriseSelect value={form.enterprise_name} onChange={(v) => set("enterprise_name", v)} enterprises={enterprises} /></Field>
-                <Field label="Service" required><ServiceSelect value={form.service_name} onChange={(v) => set("service_name", v)} services={services} /></Field>
+                <Field label="Enterprise" required><EnterpriseSelect value={form.enterprise_name} onChange={(v) => set("enterprise_name", v)} onChangeId={(v) => set("enterprise_id", v)} enterprises={enterprises} /></Field>
+                <Field label="Service" required><ServiceSelect value={form.service_name} onChange={(v) => set("service_name", v)} onChangeId={(v) => set("service_id", v)} services={services} /></Field>
                 <Field label="Role">
                   <Select value={form.role || ""} onValueChange={(v) => set("role", v)}>
                     <SelectTrigger className="rounded-xl"><SelectValue placeholder="Provider or client..." /></SelectTrigger>
@@ -215,7 +239,7 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
             {/* Person → Address */}
             {relType === "person_address" && (
               <>
-                <Field label="Person" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} people={people} /></Field>
+                <Field label="Person" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} onChangeId={(v) => set("person_id", v)} people={people} /></Field>
                 <Field label="Address" required><AddressSelect value={form.location} onChangeLabel={(v) => set("location", v)} onChangeId={(v) => set("address_id", v)} addresses={addresses} /></Field>
                 <Field label="Address Type">
                   <Select value={form.role || ""} onValueChange={(v) => set("role", v)}>
@@ -233,7 +257,7 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
             {/* Enterprise → Address */}
             {relType === "enterprise_address" && (
               <>
-                <Field label="Enterprise" required><EnterpriseSelect value={form.enterprise_name} onChange={(v) => set("enterprise_name", v)} enterprises={enterprises} /></Field>
+                <Field label="Enterprise" required><EnterpriseSelect value={form.enterprise_name} onChange={(v) => set("enterprise_name", v)} onChangeId={(v) => set("enterprise_id", v)} enterprises={enterprises} /></Field>
                 <Field label="Address" required><AddressSelect value={form.location} onChangeLabel={(v) => set("location", v)} onChangeId={(v) => set("address_id", v)} addresses={addresses} /></Field>
                 <Field label="Location Type">
                   <Select value={form.role || ""} onValueChange={(v) => set("role", v)}>
@@ -251,8 +275,8 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
             {/* Person → Person */}
             {relType === "person_person" && (
               <>
-                <Field label="Person (From)" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} people={people} placeholder="Select first person..." /></Field>
-                <Field label="Person (To)" required><PersonSelect value={form.secondary_person} onChange={(v) => set("secondary_person", v)} people={people} placeholder="Select second person..." /></Field>
+                <Field label="Person (From)" required><PersonSelect value={form.person_name} onChange={(v) => set("person_name", v)} onChangeId={(v) => set("person_id", v)} people={people} placeholder="Select first person..." /></Field>
+                <Field label="Person (To)" required><PersonSelect value={form.secondary_person} onChange={(v) => set("secondary_person", v)} onChangeId={(v) => set("secondary_person_id", v)} people={people} placeholder="Select second person..." /></Field>
                 <Field label="Relationship Role"><Input value={form.role || ""} onChange={(e) => set("role", e.target.value)} className="rounded-xl" placeholder="e.g. Teacher of, Mentor of, Guardian of..." /></Field>
               </>
             )}
@@ -260,8 +284,8 @@ export default function RelationshipForm({ open, onClose, onSubmit, onEnd, initi
             {/* Enterprise → Enterprise */}
             {relType === "enterprise_enterprise" && (
               <>
-                <Field label="Parent Enterprise" required><EnterpriseSelect value={form.enterprise_name} onChange={(v) => set("enterprise_name", v)} enterprises={enterprises} /></Field>
-                <Field label="Child / Sub Enterprise" required><EnterpriseSelect value={form.secondary_enterprise} onChange={(v) => set("secondary_enterprise", v)} enterprises={enterprises} /></Field>
+                <Field label="Parent Enterprise" required><EnterpriseSelect value={form.enterprise_name} onChange={(v) => set("enterprise_name", v)} onChangeId={(v) => set("enterprise_id", v)} enterprises={enterprises} /></Field>
+                <Field label="Child / Sub Enterprise" required><EnterpriseSelect value={form.secondary_enterprise} onChange={(v) => set("secondary_enterprise", v)} onChangeId={(v) => set("secondary_enterprise_id", v)} enterprises={enterprises} /></Field>
                 <Field label="Relationship Type"><Input value={form.role || ""} onChange={(e) => set("role", e.target.value)} className="rounded-xl" placeholder="e.g. School → Class, Parent Org → Branch..." /></Field>
               </>
             )}

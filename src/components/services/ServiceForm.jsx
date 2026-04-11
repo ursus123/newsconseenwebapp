@@ -209,6 +209,19 @@ export default function ServiceForm({ open, onClose, onSubmit, onArchive, initia
                 </Select>
               </Field>
             </div>
+            <RadioGroup label="Delivery Mode" value={form.delivery_mode} onChange={(v) => set("delivery_mode", v)} options={[
+              { value: "in_person", label: "In-person — provider and client at same location" },
+              { value: "remote",    label: "Remote — delivered online / by phone" },
+              { value: "hybrid",    label: "Hybrid — mix of in-person and remote" },
+            ]} />
+            <Field label="Requires Certification">
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <div onClick={() => set("requires_certification", !form.requires_certification)} className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${form.requires_certification ? "border-emerald-500 bg-emerald-500" : "border-slate-300"}`}>
+                  {form.requires_certification && <span className="text-white text-[10px] font-bold">✓</span>}
+                </div>
+                <span className="text-sm text-slate-700">Staff must hold a certification to deliver this service</span>
+              </label>
+            </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Response Time SLA (hours)">
                 <Input type="number" value={form.response_sla_hours ?? ""} onChange={(e) => set("response_sla_hours", parseFloat(e.target.value) || 0)} className="rounded-xl" />
