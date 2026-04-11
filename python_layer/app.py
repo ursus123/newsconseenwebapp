@@ -137,6 +137,11 @@ async def api_key_middleware(request: Request, call_next):
     if not expected:
         return await call_next(request)
 
+    # Always pass CORS preflight through — the api_key header is never
+    # sent in OPTIONS requests, so blocking them breaks CORS for all POSTs.
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     path = request.url.path
     if path in _PUBLIC_PATHS or any(path.startswith(p) for p in _CRON_PREFIXES):
         return await call_next(request)
