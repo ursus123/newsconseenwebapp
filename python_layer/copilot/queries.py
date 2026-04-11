@@ -1161,80 +1161,163 @@ def get_service_overview(company_id: str) -> dict:
 
 def web_search(query: str, company_id: str, max_results: int = 5) -> dict:
     """
-    Search the web for market intelligence, industry news, or public data.
-    Uses DuckDuckGo Instant Answer API (no key required).
-    Falls back to Wikipedia summary for factual/encyclopaedic queries.
+    Multi-tier web search for market intelligence, industry news, or public data.
 
-    Used for: industry research, competitor news, market context,
-              regulatory updates, economic conditions, public statistics.
+    Fallback chain (always returns something):
+      Tier 1 — Brave Search API        (if BRAVE_SEARCH_API_KEY is set)
+      Tier 2 — DuckDuckGo HTML scrape  (no key; parses actual result snippets)
+      Tier 3 — DuckDuckGo Instant Answer (no key; encyclopaedic summary)
+      Tier 4 — Wikipedia REST API       (no key; factual/encyclopaedic fallback)
+      Tier 5 — Synthesised answer       (always present; tells Claude what it knows)
     """
     import urllib.request
     import urllib.parse
     import json as _json
+    import os
     import re
 
-    results = []
+    results   = []
+    tiers_tried = []
 
-    # ── DuckDuckGo Instant Answer ─────────────────────────────────────────
-    try:
-        ddg_url = f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json&no_redirect=1&no_html=1&skip_disambig=1"
-        req = urllib.request.Request(ddg_url, headers={"User-Agent": "newsconseen-copilot/1.0"})
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            data = _json.loads(resp.read().decode())
-
-        # Abstract (best single answer)
-        if data.get("Abstract"):
-            results.append({
-                "source":  data.get("AbstractSource", "DuckDuckGo"),
-                "title":   data.get("Heading", query),
-                "snippet": data["Abstract"][:600],
-                "url":     data.get("AbstractURL", ""),
-            })
-
-        # Related topics
-        for topic in data.get("RelatedTopics", [])[:max_results - len(results)]:
-            text = topic.get("Text", "")
-            url  = topic.get("FirstURL", "")
-            if text:
+    # ── Tier 1: Brave Search API ──────────────────────────────────────────
+    brave_key = os.getenv("BRAVE_SEARCH_API_KEY", "")
+    if brave_key and len(results) < max_results:
+        try:
+            brave_url = (
+                f"https://api.search.brave.com/res/v1/web/search"
+                f"?q={urllib.parse.quote(query)}&count={max_results}&text_decorations=0"
+            )
+            req = urllib.request.Request(
+                brave_url,
+                headers={
+                    "Accept":            "application/json",
+                    "Accept-Encoding":   "gzip",
+                    "X-Subscription-Token": brave_key,
+                    "User-Agent":        "newsconseen-copilot/1.0",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                raw = _json.loads(resp.read().decode())
+            for item in (raw.get("web", {}).get("results") or [])[:max_results]:
                 results.append({
-                    "source":  "DuckDuckGo",
-                    "title":   text[:80],
-                    "snippet": text[:400],
-                    "url":     url,
+                    "source":  "Brave Search",
+                    "title":   item.get("title", ""),
+                    "snippet": item.get("description", "")[:600],
+                    "url":     item.get("url", ""),
                 })
+            tiers_tried.append("brave")
+            logger.info("web_search Brave: %d results", len(results))
+        except Exception as e:
+            logger.warning("web_search Brave failed: %s", e)
 
-    except Exception as e:
-        logger.warning("web_search DuckDuckGo failed: %s", e)
-
-    # ── Wikipedia summary fallback ────────────────────────────────────────
+    # ── Tier 2: DuckDuckGo HTML scrape (real results, no API key) ────────
     if len(results) < 2:
         try:
-            wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(query.replace(' ', '_'))}"
-            req = urllib.request.Request(wiki_url, headers={"User-Agent": "newsconseen-copilot/1.0"})
-            with urllib.request.urlopen(req, timeout=6) as resp:
-                wiki = _json.loads(resp.read().decode())
-            if wiki.get("extract"):
-                results.insert(0, {
-                    "source":  "Wikipedia",
-                    "title":   wiki.get("title", query),
-                    "snippet": wiki["extract"][:800],
-                    "url":     wiki.get("content_urls", {}).get("desktop", {}).get("page", ""),
+            ddg_html_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+            req = urllib.request.Request(
+                ddg_html_url,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; newsconseen-copilot/1.0)"},
+            )
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                html = resp.read().decode("utf-8", errors="ignore")
+
+            # Extract result snippets — DDG HTML uses class="result__snippet"
+            snippets = re.findall(
+                r'class="result__a"[^>]*href="([^"]+)"[^>]*>([^<]+)</a>.*?'
+                r'class="result__snippet"[^>]*>([^<]+)</span>',
+                html, re.DOTALL
+            )
+            for url, title, snippet in snippets[:max_results - len(results)]:
+                clean_url = urllib.parse.unquote(url.split("uddg=")[-1]) if "uddg=" in url else url
+                results.append({
+                    "source":  "DuckDuckGo",
+                    "title":   title.strip()[:120],
+                    "snippet": snippet.strip()[:500],
+                    "url":     clean_url,
                 })
+            tiers_tried.append("ddg_html")
+            logger.info("web_search DDG HTML scrape: %d results", len(snippets))
         except Exception as e:
-            logger.warning("web_search Wikipedia fallback failed: %s", e)
+            logger.warning("web_search DDG HTML failed: %s", e)
 
+    # ── Tier 3: DuckDuckGo Instant Answer ────────────────────────────────
+    if len(results) < 2:
+        try:
+            ddg_url = (
+                f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}"
+                f"&format=json&no_redirect=1&no_html=1&skip_disambig=1"
+            )
+            req = urllib.request.Request(ddg_url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                data = _json.loads(resp.read().decode())
+
+            if data.get("Abstract"):
+                results.insert(0, {
+                    "source":  data.get("AbstractSource", "DuckDuckGo"),
+                    "title":   data.get("Heading", query),
+                    "snippet": data["Abstract"][:600],
+                    "url":     data.get("AbstractURL", ""),
+                })
+            for topic in data.get("RelatedTopics", [])[:max_results - len(results)]:
+                text = topic.get("Text", "")
+                if text:
+                    results.append({
+                        "source":  "DuckDuckGo",
+                        "title":   text[:80],
+                        "snippet": text[:400],
+                        "url":     topic.get("FirstURL", ""),
+                    })
+            tiers_tried.append("ddg_instant")
+        except Exception as e:
+            logger.warning("web_search DDG Instant failed: %s", e)
+
+    # ── Tier 4: Wikipedia REST API ────────────────────────────────────────
+    if len(results) < 1:
+        try:
+            # Try exact title first, then search endpoint
+            for attempt_query in [query, query.split()[0]]:
+                wiki_url = (
+                    f"https://en.wikipedia.org/api/rest_v1/page/summary/"
+                    f"{urllib.parse.quote(attempt_query.replace(' ', '_'))}"
+                )
+                req = urllib.request.Request(wiki_url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+                try:
+                    with urllib.request.urlopen(req, timeout=6) as resp:
+                        wiki = _json.loads(resp.read().decode())
+                    if wiki.get("extract"):
+                        results.insert(0, {
+                            "source":  "Wikipedia",
+                            "title":   wiki.get("title", query),
+                            "snippet": wiki["extract"][:800],
+                            "url":     wiki.get("content_urls", {}).get("desktop", {}).get("page", ""),
+                        })
+                        break
+                except Exception:
+                    continue
+            tiers_tried.append("wikipedia")
+        except Exception as e:
+            logger.warning("web_search Wikipedia failed: %s", e)
+
+    # ── Tier 5: Always-present synthesised fallback ───────────────────────
     if not results:
-        return {
-            "query":   query,
-            "results": [],
-            "note":    "No web results found. Try a more specific query.",
-        }
+        results.append({
+            "source":  "fallback",
+            "title":   f"No live web results for: {query}",
+            "snippet": (
+                f"Web search could not retrieve live results for '{query}'. "
+                "This may be a network issue on the server. "
+                "Please answer using your training knowledge, clearly noting "
+                "that this is from your training data and not a live source."
+            ),
+            "url": "",
+        })
 
-    logger.info("web_search: %d results for '%s'", len(results), query[:60])
+    logger.info("web_search: %d results for '%s' (tiers: %s)", len(results), query[:60], tiers_tried)
     return {
-        "query":   query,
-        "results": results[:max_results],
-        "count":   len(results[:max_results]),
+        "query":       query,
+        "results":     results[:max_results],
+        "count":       len(results[:max_results]),
+        "tiers_tried": tiers_tried,
     }
 
 
@@ -1312,37 +1395,110 @@ def search_public_data(dataset: str, query: str, company_id: str, location: str 
             logger.warning("search_public_data open_fda failed: %s", e)
             return {"dataset": "open_fda", "error": str(e), "data": []}
 
-    # ── World Bank indicators ─────────────────────────────────────────────
+    # ── World Bank indicators (expanded — global coverage) ───────────────
     elif dataset == "world_bank":
         try:
-            # Map common query terms to World Bank indicator codes
             INDICATORS = {
-                "gdp": "NY.GDP.MKTP.CD",
-                "health spending": "SH.XPD.CHEX.PC.CD",
-                "hospital beds": "SH.MED.BEDS.ZS",
-                "pharmacists": "SH.MED.PHYS.ZS",
-                "population": "SP.POP.TOTL",
-                "income": "NY.GNP.PCAP.CD",
+                # Economy
+                "gdp":                        "NY.GDP.MKTP.CD",
+                "gdp per capita":             "NY.GDP.PCAP.CD",
+                "gdp growth":                 "NY.GDP.MKTP.KD.ZG",
+                "gni":                        "NY.GNP.MKTP.CD",
+                "income":                     "NY.GNP.PCAP.CD",
+                "inflation":                  "FP.CPI.TOTL.ZG",
+                "poverty":                    "SI.POV.DDAY",
+                "unemployment":               "SL.UEM.TOTL.ZS",
+                "trade":                      "NE.TRD.GNFS.ZS",
+                "foreign investment":         "BX.KLT.DINV.WD.GD.ZS",
+                # Health
+                "health spending":            "SH.XPD.CHEX.PC.CD",
+                "health expenditure":         "SH.XPD.CHEX.GD.ZS",
+                "hospital beds":              "SH.MED.BEDS.ZS",
+                "physicians":                 "SH.MED.PHYS.ZS",
+                "pharmacists":                "SH.MED.PHYS.ZS",
+                "life expectancy":            "SP.DYN.LE00.IN",
+                "infant mortality":           "SP.DYN.IMRT.IN",
+                "maternal mortality":         "SH.STA.MMRT",
+                "hiv":                        "SH.DYN.AIDS.ZS",
+                "malaria":                    "SH.MLR.INCD.P3",
+                # Education
+                "education spending":         "SE.XPD.TOTL.GD.ZS",
+                "literacy":                   "SE.ADT.LITR.ZS",
+                "school enrollment":          "SE.PRM.ENRR",
+                "secondary enrollment":       "SE.SEC.ENRR",
+                "tertiary enrollment":        "SE.TER.ENRR",
+                # Population & demographics
+                "population":                 "SP.POP.TOTL",
+                "population growth":          "SP.POP.GROW",
+                "urban population":           "SP.URB.TOTL.IN.ZS",
+                "rural population":           "SP.RUR.TOTL.ZS",
+                "youth unemployment":         "SL.UEM.1524.ZS",
+                # Agriculture
+                "agriculture":                "NV.AGR.TOTL.ZS",
+                "food security":              "SN.ITK.DEFC.ZS",
+                "arable land":                "AG.LND.ARBL.ZS",
+                # Infrastructure
+                "electricity access":         "EG.ELC.ACCS.ZS",
+                "internet users":             "IT.NET.USER.ZS",
+                "mobile subscriptions":       "IT.CEL.SETS.P2",
+                "roads":                      "IS.ROD.PAVE.ZS",
+                # Environment
+                "co2 emissions":              "EN.ATM.CO2E.PC",
+                "forest area":                "AG.LND.FRST.ZS",
+                "renewable energy":           "EG.FEC.RNEW.ZS",
             }
-            indicator = next((v for k, v in INDICATORS.items() if k in query.lower()), "NY.GDP.MKTP.CD")
-            country   = location[:2].upper() if location and len(location) >= 2 else "US"
-            url = f"https://api.worldbank.org/v2/country/{country}/indicator/{indicator}?format=json&mrv=5"
+            q_lower  = query.lower()
+            indicator = next((v for k, v in INDICATORS.items() if k in q_lower), "NY.GDP.MKTP.CD")
+            indicator_name = next((k for k, v in INDICATORS.items() if v == indicator), indicator)
+
+            # Resolve country code — accept full name ("Rwanda") or ISO2 ("RW")
+            country = "WLD"   # default: world aggregate
+            if location:
+                loc = location.strip()
+                if len(loc) == 2:
+                    country = loc.upper()
+                elif len(loc) == 3:
+                    country = loc.upper()
+                else:
+                    # Try World Bank country search
+                    try:
+                        search_url = f"https://api.worldbank.org/v2/country?format=json&per_page=300"
+                        req = urllib.request.Request(search_url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+                        with urllib.request.urlopen(req, timeout=6) as r:
+                            cdata = _json.loads(r.read().decode())
+                        loc_lower = loc.lower()
+                        match = next(
+                            (c["id"] for c in (cdata[1] or []) if loc_lower in c.get("name", "").lower()),
+                            None
+                        )
+                        if match:
+                            country = match
+                    except Exception:
+                        country = loc[:2].upper()
+
+            url = (
+                f"https://api.worldbank.org/v2/country/{country}"
+                f"/indicator/{indicator}?format=json&mrv=5&per_page=5"
+            )
             req = urllib.request.Request(url, headers={"User-Agent": "newsconseen-copilot/1.0"})
-            with urllib.request.urlopen(req, timeout=8) as resp:
+            with urllib.request.urlopen(req, timeout=10) as resp:
                 raw = _json.loads(resp.read().decode())
-            data = [{"year": r["date"], "value": r["value"], "country": r["country"]["value"]}
-                    for r in (raw[1] or []) if r.get("value") is not None]
+            data = [
+                {"year": r["date"], "value": r["value"], "country": r["country"]["value"]}
+                for r in (raw[1] or []) if r.get("value") is not None
+            ]
             return {
-                "dataset":   "world_bank",
-                "indicator": indicator,
-                "query":     query,
-                "country":   country,
-                "data":      data[:5],
-                "note":      "Source: World Bank Open Data",
+                "dataset":        "world_bank",
+                "indicator":      indicator,
+                "indicator_name": indicator_name,
+                "query":          query,
+                "country":        country,
+                "data":           data[:5],
+                "note":           "Source: World Bank Open Data (api.worldbank.org)",
             }
         except Exception as e:
             logger.warning("search_public_data world_bank failed: %s", e)
-            return {"dataset": "world_bank", "error": str(e), "data": []}
+            return {"dataset": "world_bank", "error": str(e), "data": [], "note": "World Bank API unavailable — try again later"}
 
     # ── OpenStreetMap business count ──────────────────────────────────────
     elif dataset == "osm_count":
@@ -1431,7 +1587,113 @@ def search_public_data(dataset: str, query: str, company_id: str, location: str 
             logger.warning("search_public_data dea_pharmacy failed: %s", e)
             return {"dataset": "dea_pharmacy", "error": str(e), "data": []}
 
-    return {"error": f"Unknown dataset: {dataset}. Use: us_census, world_bank, open_fda, osm_count, cms_pharmacy, state_pharmacy, dea_pharmacy"}
+    # ── FX rates — Open Exchange Rates / fallback to European Central Bank ──
+    elif dataset == "fx_rates":
+        import os as _os
+        try:
+            base_currency = (query or "USD").upper()[:3]
+            oxr_key = _os.getenv("OPEN_EXCHANGE_RATES_KEY", "")
+            if oxr_key:
+                url = f"https://openexchangerates.org/api/latest.json?app_id={oxr_key}&base={base_currency}"
+                req = urllib.request.Request(url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    raw = _json.loads(resp.read().decode())
+                rates = raw.get("rates", {})
+                # Filter to commonly-used currencies for SMEs
+                target = ["USD","EUR","GBP","KES","NGN","GHS","RWF","UGX",
+                          "TZS","ZAR","INR","CAD","AUD","JPY","CNY","MXN",
+                          "BRL","PKR","BDT","PHP","MMK","ETB","XOF","XAF"]
+                filtered = {k: rates[k] for k in target if k in rates}
+                return {
+                    "dataset":         "fx_rates",
+                    "base":            base_currency,
+                    "rates":           filtered,
+                    "timestamp":       raw.get("timestamp"),
+                    "note":            "Source: Open Exchange Rates (live)",
+                }
+            else:
+                # ECB free fallback — always EUR base
+                ecb_url = "https://data-api.ecb.europa.eu/service/data/EXR/D..EUR.SP00.A?format=jsondata&lastNObservations=1"
+                req = urllib.request.Request(ecb_url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    raw = _json.loads(resp.read().decode())
+                series = raw.get("dataSets", [{}])[0].get("series", {})
+                structure = raw.get("structure", {}).get("dimensions", {}).get("series", [])
+                currency_dim = next((d for d in structure if d.get("id") == "CURRENCY"), None)
+                currencies = [v.get("id") for v in (currency_dim or {}).get("values", [])]
+                rates = {}
+                for i, (key, val) in enumerate(series.items()):
+                    obs = val.get("observations", {})
+                    if obs:
+                        rate_val = list(obs.values())[0][0]
+                        if i < len(currencies) and rate_val:
+                            rates[currencies[i]] = round(rate_val, 6)
+                return {
+                    "dataset": "fx_rates",
+                    "base":    "EUR",
+                    "rates":   rates,
+                    "note":    "Source: European Central Bank (ECB) — base currency EUR. Set OPEN_EXCHANGE_RATES_KEY for any base currency.",
+                }
+        except Exception as e:
+            logger.warning("search_public_data fx_rates failed: %s", e)
+            return {
+                "dataset": "fx_rates",
+                "error":   str(e),
+                "note":    "FX rate API unavailable. Set OPEN_EXCHANGE_RATES_KEY in Railway env vars for reliable rates.",
+                "data":    [],
+            }
+
+    # ── UN Data — development indicators (global, no key required) ────────
+    elif dataset == "un_data":
+        try:
+            # UN Data REST API — returns CSV-like JSON
+            # Indicator IDs: 49 = GDP, 530 = Life Expectancy, 568 = Literacy rate
+            UN_INDICATORS = {
+                "gdp":              "49",
+                "life expectancy":  "530",
+                "literacy":         "568",
+                "hdi":              "137506",
+                "population":       "45",
+                "fertility":        "54",
+                "infant mortality": "22",
+                "education":        "568",
+            }
+            q_lower   = query.lower()
+            indicator_id = next((v for k, v in UN_INDICATORS.items() if k in q_lower), "49")
+            country_filter = (location or "").strip()
+            url = (
+                f"https://data.un.org/ws/rest/data/DF_UNData_WDI,{indicator_id}/"
+                f"?format=jsondata&startPeriod=2019&endPeriod=2023"
+            )
+            req = urllib.request.Request(url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                raw = _json.loads(resp.read().decode())
+
+            datasets = raw.get("dataSets", [{}])[0].get("series", {})
+            structure = raw.get("structure", {})
+            obs_list = []
+            for key, val in list(datasets.items())[:20]:
+                for period, obs in val.get("observations", {}).items():
+                    obs_list.append({"series_key": key, "period": period, "value": obs[0] if obs else None})
+
+            return {
+                "dataset":      "un_data",
+                "indicator_id": indicator_id,
+                "query":        query,
+                "location":     country_filter or "global",
+                "data":         obs_list[:10],
+                "note":         "Source: UN Data REST API (data.un.org)",
+            }
+        except Exception as e:
+            logger.warning("search_public_data un_data failed: %s", e)
+            # Graceful fallback — return world_bank instead
+            logger.info("search_public_data un_data: falling back to world_bank")
+            return search_public_data(
+                dataset="world_bank", query=query,
+                company_id=company_id, location=location
+            )
+
+    return {"error": f"Unknown dataset: {dataset}. Use: us_census, world_bank, open_fda, osm_count, fx_rates, un_data, cms_pharmacy, state_pharmacy, dea_pharmacy"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1588,11 +1850,12 @@ TOOL_DEFINITIONS = [
     {
         "name": "web_search",
         "description": (
-            "Search the web for market intelligence, industry news, competitor information, "
+            "Multi-tier web search for market intelligence, industry news, competitor information, "
             "regulations, or any public knowledge. Use this when the user asks about: "
             "industry trends, market conditions, specific companies, public statistics, "
             "regulations, best practices, or any topic beyond the organisation's own data. "
-            "Returns snippets from DuckDuckGo and Wikipedia."
+            "Uses Brave Search (if configured) → DuckDuckGo HTML → DuckDuckGo Instant → Wikipedia. "
+            "Always returns something — never empty."
         ),
         "input_schema": {
             "type": "object",
@@ -1600,7 +1863,7 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "The search query. Be specific — e.g. 'pharmacy market size Maine 2024' not just 'pharmacy'.",
+                    "description": "Be specific — e.g. 'home healthcare market size Kenya 2024' not just 'healthcare'.",
                 },
                 "max_results": {
                     "type": "integer",
@@ -1612,15 +1875,17 @@ TOOL_DEFINITIONS = [
     {
         "name": "search_public_data",
         "description": (
-            "Query structured public datasets for market research. "
-            "Use this for: US demographics and income data (us_census), "
-            "FDA drug and pharmacy data (open_fda), "
-            "World Bank economic indicators like health spending and GDP (world_bank), "
-            "OpenStreetMap business counts in a location (osm_count), "
-            "CMS-certified pharmacy locations by state (cms_pharmacy), "
-            "state pharmacy board license data (state_pharmacy), "
-            "DEA/NPPES pharmacy count by city (dea_pharmacy). "
-            "For pharmacy market research always use cms_pharmacy, state_pharmacy, and dea_pharmacy together."
+            "Query structured public datasets for market research. Datasets available:\n"
+            "- world_bank: Global economic/health/education indicators (GDP, poverty, literacy, life expectancy, etc.) "
+            "  for any country. Use location='Rwanda' or location='RW'. Works for ALL countries.\n"
+            "- us_census: US state-level demographics and income data.\n"
+            "- open_fda: FDA drug/pharmacy data (US healthcare).\n"
+            "- osm_count: Count business types in any city/location via OpenStreetMap.\n"
+            "- fx_rates: Live currency exchange rates. Use query='USD' for USD base rates. "
+            "  Returns KES, NGN, GHS, RWF, ZAR, EUR, GBP, INR and more.\n"
+            "- un_data: UN development indicators (HDI, fertility, infant mortality, education).\n"
+            "- cms_pharmacy / state_pharmacy / dea_pharmacy: US pharmacy licensing data.\n"
+            "For global SME market research always try world_bank first."
         ),
         "input_schema": {
             "type": "object",
@@ -1628,16 +1893,16 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "dataset": {
                     "type": "string",
-                    "enum": ["us_census", "open_fda", "world_bank", "osm_count", "cms_pharmacy", "state_pharmacy", "dea_pharmacy"],
-                    "description": "Which dataset to query. cms_pharmacy=CMS-certified pharmacy locations, state_pharmacy=state board licenses, dea_pharmacy=NPPES pharmacy count by city.",
+                    "enum": ["us_census", "open_fda", "world_bank", "osm_count", "fx_rates", "un_data", "cms_pharmacy", "state_pharmacy", "dea_pharmacy"],
+                    "description": "Which dataset to query.",
                 },
                 "query": {
                     "type": "string",
-                    "description": "What to search for within the dataset (e.g. 'pharmacy', 'health spending', 'gdp').",
+                    "description": "What to search for — e.g. 'health spending', 'gdp', 'USD', 'literacy rate'.",
                 },
                 "location": {
                     "type": "string",
-                    "description": "Location filter — city, state, or country (e.g. 'Maine', 'US', 'Portland Maine').",
+                    "description": "Country, state, or city filter. For world_bank/un_data use full country name or ISO code — e.g. 'Rwanda', 'Kenya', 'RW', 'NG', 'US'.",
                 },
             },
         },

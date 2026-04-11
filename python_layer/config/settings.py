@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------
     ml_enabled: str = "true"
 
+    # ----------------------------------------------------------
+    # Web search API keys (all optional — graceful fallback chain)
+    # ----------------------------------------------------------
+    brave_search_api_key:    Optional[str] = None   # https://brave.com/search/api/
+    open_exchange_rates_key: Optional[str] = None   # https://openexchangerates.org/
+
     class Config:
         env_file       = ".env"
         case_sensitive = False

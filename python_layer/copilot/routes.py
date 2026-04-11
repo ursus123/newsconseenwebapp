@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from copilot.engine import CopilotEngine
+from copilot.engine import CopilotEngine, ask_stream_events
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,7 @@ class AskRequest(BaseModel):
     enterprise_name:Optional[str] = ""
     history:        Optional[list[dict]] = []
     context:        Optional[dict] = {}
+    session_id:     Optional[str] = ""   # if set, history persisted in session store
 
 
 class FeedbackRequest(BaseModel):
@@ -137,6 +138,7 @@ def ask(request: AskRequest):
         question=request.question,
         history=request.history or [],
         context=request.context or {},
+        session_id=request.session_id or "",
     )
 
     # Never raise 500 for engine errors — return 200 with the error as the
@@ -166,44 +168,41 @@ def ask(request: AskRequest):
 @router.post("/ask/stream")
 async def ask_stream(request: AskRequest):
     """
-    Streaming version of /copilot/ask.
-    Returns server-sent events as the answer is generated.
-    Use this for the chat UI to show typing indicators.
+    Real SSE streaming version of /copilot/ask.
+
+    Yields events as the tool loop progresses — client sees tool calls
+    in real time, then the final answer streams when complete.
+
+    Event format (each line):  data: <JSON>\n\n
+
+    Event types:
+      {"event": "thinking",  "content": "..."}         — start
+      {"event": "tool_call", "tool": "...", "input": {}}— tool executing
+      {"event": "answer",    "content": "..."}          — final answer
+      {"event": "done"}                                 — stream complete
     """
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
     async def generate():
-        engine = CopilotEngine(
-            company_id=request.company_id,
-            enterprise_name=request.enterprise_name or "",
-            backend=COPILOT_BACKEND,
-            railway_url=RAILWAY_URL,
-        )
-
-        # First yield: intent classification
-        yield f"data: {{'event': 'thinking', 'content': 'Analyzing your question...'}}\n\n"
-
-        result = engine.ask(
-            question=request.question,
-            history=request.history or [],
-            context=request.context or {},
-        )
-
-        # Yield tool calls as they happen
-        for tool_call in result.get("tools_called", []):
-            yield f"data: {{'event': 'querying', 'tool': '{tool_call['tool']}', 'count': {tool_call.get('count', 0)}}}\n\n"
-
-        # Yield the final answer
-        import json
-        yield f"data: {json.dumps({'event': 'answer', 'content': result['answer'], 'data': result.get('data', {}), 'intent': result.get('intent', '')})}\n\n"
-        yield "data: [DONE]\n\n"
+        try:
+            async for event_json in ask_stream_events(
+                question=request.question,
+                company_id=request.company_id,
+                history=request.history or [],
+            ):
+                yield f"data: {event_json}\n\n"
+        except Exception as e:
+            import json as _json
+            logger.error("SSE streaming error: %s", e)
+            yield f"data: {_json.dumps({'event': 'answer', 'content': f'An error occurred: {e}. Please try again.'})}\n\n"
+            yield "data: {\"event\": \"done\"}\n\n"
 
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control":    "no-cache",
             "X-Accel-Buffering": "no",
         },
     )
