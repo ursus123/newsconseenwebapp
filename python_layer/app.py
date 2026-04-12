@@ -6,6 +6,7 @@ import pandas as pd
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 # Config — from config package (backward compatible with old config.py)
 from config import settings
@@ -263,6 +264,79 @@ def _check_cron_secret(secret: Optional[str]) -> None:
     """
     if settings.cron_secret and secret and secret != settings.cron_secret:
         raise HTTPException(status_code=403, detail="Invalid cron secret")
+
+
+# ----------------------------------------------------------
+# Superset Guest Token — scoped to company_id via RLS
+# ----------------------------------------------------------
+class SupersetTokenRequest(BaseModel):
+    dashboard_id: str
+    company_id:   str
+
+@app.post("/superset/guest-token", tags=["Superset"])
+def superset_guest_token(req: SupersetTokenRequest):
+    """
+    Generate a short-lived Superset guest token scoped to the caller's company_id.
+
+    The token is passed to @superset-ui/embedded-sdk on the frontend.
+    Superset enforces the RLS filter — the embedded dashboard can only
+    query data WHERE company_id = <req.company_id>.
+
+    Requirements:
+      SUPERSET_URL      — your Superset instance URL (e.g. https://superset.railway.app)
+      SUPERSET_USERNAME — admin username for token generation
+      SUPERSET_PASSWORD — admin password for token generation
+
+    Superset config (superset_config.py):
+      FEATURE_FLAGS = {"EMBEDDED_SUPERSET": True}
+      CORS settings must include your frontend domain.
+    """
+    import os, requests as http_requests
+
+    superset_url = os.getenv("SUPERSET_URL", "").rstrip("/")
+    username     = os.getenv("SUPERSET_USERNAME", "admin")
+    password     = os.getenv("SUPERSET_PASSWORD", "")
+
+    if not superset_url:
+        raise HTTPException(
+            status_code=503,
+            detail="SUPERSET_URL not configured. Add it to Railway environment variables.",
+        )
+
+    try:
+        # Step 1: get CSRF token + session cookie
+        login_res = http_requests.post(
+            f"{superset_url}/api/v1/security/login",
+            json={"username": username, "password": password,
+                  "provider": "db", "refresh": True},
+            timeout=10,
+        )
+        login_res.raise_for_status()
+        access_token = login_res.json()["access_token"]
+
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type":  "application/json",
+        }
+
+        # Step 2: get guest token with RLS filter for company_id
+        guest_res = http_requests.post(
+            f"{superset_url}/api/v1/security/guest_token/",
+            json={
+                "user":      {"username": f"guest_{req.company_id}", "first_name": "Guest", "last_name": "User"},
+                "resources": [{"type": "dashboard", "id": req.dashboard_id}],
+                "rls":       [{"clause": f"company_id = '{req.company_id}'"}],
+            },
+            headers=headers,
+            timeout=10,
+        )
+        guest_res.raise_for_status()
+        return {"token": guest_res.json()["token"]}
+
+    except http_requests.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Superset API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Guest token failed: {e}")
 
 
 # ----------------------------------------------------------

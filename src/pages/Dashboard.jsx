@@ -39,6 +39,9 @@ import {
 import PlottableTransactionTimeline from "../components/dashboard/PlottableTransactionTimeline";
 import MLDashboard from "../components/ml/MLDashboard";
 import GettingStartedChecklist from "../components/dashboard/GettingStartedChecklist";
+import TrendCharts from "../components/dashboard/TrendCharts";
+import GeoMap from "../components/dashboard/GeoMap";
+import SupersetEmbed from "../components/dashboard/SupersetEmbed";
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -800,6 +803,15 @@ function AdminDashboard({ user }) {
         <LowStockAlert products={products} lowStockCount={lowStockCount} />
         <FinancialAlerts transactions={transactions} />
       </div>
+
+      {/* ── 30-Day Trend Charts ── */}
+      <TrendCharts companyId={companyId} />
+
+      {/* ── Location Intelligence Map ── */}
+      <GeoMap companyId={companyId} />
+
+      {/* ── Advanced Analytics (Superset Embedded) ── */}
+      <SupersetEmbed companyId={companyId} />
 
       {/* ── Main 2-col layout ── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
