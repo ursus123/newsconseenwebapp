@@ -17,12 +17,12 @@
 
 ## 1. What Newsconseen Is
 
-Newsconseen is the SME version of Palantir Foundry.
+Newsconseen is the Autonomous SME Operating System.
 
-Palantir Foundry gives governments and Fortune 500 companies a universal operating
-system — one ontology, one analytical layer, applications built on top of structured
-reality. It costs millions of dollars and takes months to deploy. It requires teams
-of ontology engineers, data pipeline specialists, and implementation consultants.
+Large enterprises have universal operating systems — one ontology, one analytical
+layer, applications built on top of structured reality. They cost millions of dollars
+and take months to deploy. They require teams of ontology engineers, data pipeline
+specialists, and implementation consultants.
 
 The school in Nairobi, the clinic in Lagos, the cooperative in Kampala, the farm in
 Accra, the NGO in Port-au-Prince — these operators have the same operational
@@ -42,7 +42,7 @@ Newsconseen is.
 
 ## 2. The Mantra
 
-> **Newsconseen is the SME version of Palantir Foundry.**
+> **Newsconseen is the Autonomous SME Operating System.**
 
 This mantra is a constraint, not just a description. Every product decision must
 be tested against it.
@@ -52,18 +52,18 @@ be tested against it.
 - If a dashboard reads directly from Base44 instead of the analytical layer — it violates the mantra.
 - If a new vertical requires rebuilding the data model — it violates the mantra.
 
-The mantra also sets the ambition ceiling. Palantir Foundry does the following for
-large enterprises. Newsconseen must do the equivalent for SMEs:
+The mantra also sets the ambition ceiling. Newsconseen gives SMEs the same
+operational intelligence capability that enterprise systems give large organisations:
 
-| Palantir Foundry | Newsconseen equivalent |
+| Enterprise capability | Newsconseen equivalent |
 |---|---|
 | Ontology — semantic object model | Three master entities + universal taxonomy |
 | Pipelines — ingest from any source | python_layer ETL + external connectors (roadmap) |
-| Foundry datasets — analytical layer | PostgreSQL analytics.* via nightly ETL |
+| Analytical datasets layer | PostgreSQL analytics.* via nightly ETL |
 | Applications built on the ontology | Base44 apps filtered through taxonomy |
 | Actions — write back to source | Form → master data → ETL trigger |
-| Ontology SDK — typed queries | useTaxonomy + TaxonomySelect + TYPE_ALIASES |
-| AIP — AI reasoning over ontology | Operational copilot (roadmap) |
+| Typed ontology SDK | useTaxonomy + TaxonomySelect + TYPE_ALIASES |
+| AI reasoning over ontology | Operational copilot + autonomous agents |
 | Multi-tenant | company_id scoping across all entities |
 | Operator extensibility | MasterDataOption custom taxonomy values |
 
@@ -103,9 +103,9 @@ Newsconseen has three distinct product layers. Every component belongs to one of
 │  Analytical engine                                               │
 │  python_layer · ETL pipeline · PostgreSQL · FastAPI              │
 ├─────────────────────────────────────────────────────────────────┤
-│  LAYER 3 — FOUNDRY INTELLIGENCE                                  │
+│  LAYER 3 — AUTONOMOUS INTELLIGENCE                               │
 │  Operational intelligence on the ontology                        │
-│  QueryBuilder · Dashboards · Operational copilot (roadmap)       │
+│  QueryBuilder · Dashboards · Copilot · Autonomous Agents         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -128,16 +128,16 @@ in from Base44, the ETL normalizes them to taxonomy values before storing.
 
 This layer answers: *What has been happening over time, and how does it compare?*
 
-### Layer 3 — Foundry Intelligence
+### Layer 3 — Autonomous Intelligence
 
-The intelligence surface. QueryBuilder and dashboards today. The operational
-copilot tomorrow. This layer reads exclusively from the Datamart — never from
-Base44 directly. It speaks in ontology terms — person_type, enterprise_subtype,
-item_class — not in raw SQL columns.
+The intelligence surface. QueryBuilder, dashboards, operational copilot, and
+autonomous agents that act on behalf of the operator. This layer reads exclusively
+from the Datamart — never from Base44 directly. It speaks in ontology terms —
+person_type, enterprise_subtype, item_class — not in raw SQL columns.
 
-The roadmap for this layer is an operational copilot that allows an operator to
-ask questions in plain language and receive answers drawn directly from their
-ontology. This is the capability that makes Newsconseen feel like Foundry.
+The copilot allows an operator to ask questions in plain language and receive
+answers drawn directly from their ontology. Autonomous agents go further — they
+monitor, reason, draft, and act without waiting to be asked.
 
 This layer answers: *What does this data mean, and what should I do about it?*
 
@@ -1209,5 +1209,5 @@ The taxonomy is what makes this work across every vertical.
 
 ---
 
-**Newsconseen is the SME version of Palantir Foundry.**
+**Newsconseen is the Autonomous SME Operating System.**
 **One system. Any industry. Deploy in hours.**

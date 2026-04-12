@@ -1913,7 +1913,7 @@ TOOL_DEFINITIONS = [
             "within a given radius of a point, or find the N nearest to a location. "
             "Use this for questions like: "
             "'Which branches are closest to Nairobi CBD?', "
-            "'Find all clinics within 5km of this patient's address', "
+            "'Find all branches within 5km of this client's address',"
             "'What is the nearest pharmacy to coordinates -1.286, 36.817?', "
             "'Which of our branches cover the Northern region?'. "
             "Requires PostGIS to be set up (POST /postgis/setup) and "

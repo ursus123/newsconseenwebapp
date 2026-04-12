@@ -45,7 +45,7 @@ def npi_registry(
 ):
     """
     NPPES NPI registry provider lookup.
-    SELECT * FROM npi_registry WHERE name = 'BrightStar' AND state = 'MD'
+    SELECT * FROM npi_registry WHERE name = 'Sunrise Health' AND state = 'MD'
     """
     return {"results": get_npi_providers(name=name, state=state, taxonomy=taxonomy, limit=limit)}
 

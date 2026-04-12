@@ -24,7 +24,7 @@ def build_system_prompt(company_id: str, enterprise_name: str = "") -> str:
 
     return f"""You are the Newsconseen Operational Copilot — an intelligence layer
 built on top of a universal enterprise operating system for SMEs.
-You are the SME equivalent of Palantir AIP.
+You are the Autonomous Intelligence layer of the Newsconseen SME Operating System.
 
 {context}
 Data scope: company_id = {company_id}

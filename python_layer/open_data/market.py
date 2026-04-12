@@ -134,7 +134,7 @@ def search_news(
     """
     Search news articles via GDELT.
 
-    query:    search terms (e.g. 'home care industry', 'BrightStar Care')
+    query:    search terms (e.g. 'home care industry', 'community health services')
     mode:     'artlist' (articles) or 'timelinevol' (volume over time)
     timespan: '1day', '1week', '1month', '3months'
 

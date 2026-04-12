@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 
 const DEFAULTS = {
   brand_name:             "Newsconseen",
-  brand_tagline:          "The SME version of Palantir Foundry",
+  brand_tagline:          "The Autonomous SME Operating System",
   brand_logo_url:         null,
   brand_favicon_url:      null,
   brand_primary_color:    "#10b981",

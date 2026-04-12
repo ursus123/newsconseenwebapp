@@ -144,7 +144,7 @@ async def lifespan(app: FastAPI):
 
 
 # ----------------------------------------------------------
-# FastAPI App — v4.0.0
+# FastAPI App — v4.1.0
 # ----------------------------------------------------------
 app = FastAPI(
     title="Newsconseen — Autonomous SME Operating System",
