@@ -1,0 +1,24 @@
+# ==============================================================
+# Railway deployment config — n8n service
+# ==============================================================
+# Deploy steps:
+#   1. Railway → New Service → Deploy from GitHub Repo
+#   2. Set root directory to deploy/n8n
+#   3. Railway auto-detects this railway.toml
+#   4. Set environment variables listed in railway.env.example
+#   5. Copy the generated Railway URL → set N8N_WEBHOOK_URL in
+#      your python_layer service variables
+# ==============================================================
+
+[build]
+# n8n publishes a Docker image — Railway pulls it directly.
+# No Dockerfile needed.
+builder = "NIXPACKS"
+nixpacksConfigPath = "nixpacks.toml"
+
+[deploy]
+startCommand = "n8n start"
+healthcheckPath = "/healthz"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

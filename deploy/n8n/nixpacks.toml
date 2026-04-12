@@ -1,0 +1,11 @@
+# ==============================================================
+# Nixpacks config — tells Railway to install n8n via npm
+# ==============================================================
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["npm install -g n8n@latest"]
+
+[start]
+cmd = "n8n start"
