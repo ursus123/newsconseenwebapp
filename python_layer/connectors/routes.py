@@ -13,6 +13,7 @@
 #   GET  /connectors/runs             — connector run history
 # ==============================================================
 
+import json
 import logging
 from typing import Optional
 
@@ -144,11 +145,12 @@ async def suggest_columns(
 
 @router.post("/run")
 async def run_connector(
-    company_id:    str = Form(...),
-    connector_id:  str = Form(...),
-    entity_type:   Optional[str] = Form(None),
-    file:          Optional[UploadFile] = File(None),
-    dry_run:       bool = Form(False),
+    company_id:       str = Form(...),
+    connector_id:     str = Form(...),
+    entity_type:      Optional[str] = Form(None),
+    credentials_json: Optional[str] = Form(None),
+    file:             Optional[UploadFile] = File(None),
+    dry_run:          bool = Form(False),
 ):
     """
     Execute a connector run.
@@ -172,6 +174,15 @@ async def run_connector(
         )
 
     credentials = {"entity_type": entity_type}
+
+    # API connector credentials (JSON-encoded from the Connect modal)
+    if credentials_json:
+        try:
+            extra = json.loads(credentials_json)
+            if isinstance(extra, dict):
+                credentials.update(extra)
+        except Exception as e:
+            logger.warning("run_connector: could not parse credentials_json — %s", e)
 
     # File-based connectors
     if file:

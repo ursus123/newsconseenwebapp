@@ -49,35 +49,237 @@ const DB_CONNECTOR_IDS = new Set([
 ]);
 
 // Static fallback catalog — renders even when Railway is unreachable.
-// Database connectors are always "available"; coming-soon entries are
-// included so the full grid always appears.
+// All 25 connectors are implemented across Sprints 1-8.
 const STATIC_CATALOG = [
-  { id: "postgresql_db", name: "PostgreSQL",          category: "database",     description: "Connect any PostgreSQL database — on-prem, cloud, or local", sprint: 1, status: "available",   icon: "database" },
-  { id: "mysql_db",      name: "MySQL / MariaDB",      category: "database",     description: "Connect MySQL or MariaDB — any version, any host",             sprint: 1, status: "available",   icon: "database" },
-  { id: "aws_rds",       name: "AWS RDS / Aurora",     category: "database",     description: "Connect Amazon RDS or Aurora (PostgreSQL or MySQL engine)",      sprint: 1, status: "available",   icon: "cloud" },
-  { id: "mssql_db",      name: "SQL Server / Azure",   category: "database",     description: "Connect Microsoft SQL Server or Azure SQL Database",             sprint: 1, status: "available",   icon: "database" },
-  { id: "sqlite_db",     name: "SQLite",               category: "database",     description: "Connect a local SQLite database file",                           sprint: 1, status: "available",   icon: "hard-drive" },
-  { id: "excel",         name: "Excel / CSV Import",   category: "file",         description: "Import people, enterprises, or items from Excel or CSV",          sprint: 1, status: "available",   icon: "table" },
-  { id: "csv",           name: "CSV Import",           category: "file",         description: "Import from CSV — same as Excel connector",                       sprint: 1, status: "available",   icon: "file-text" },
-  { id: "google_sheets", name: "Google Sheets",        category: "file",         description: "Sync from a Google Sheet — live or snapshot",                    sprint: 1, status: "available",   icon: "grid" },
-  { id: "json_xml",      name: "JSON / XML Import",    category: "file",         description: "Import from any JSON or XML data export",                         sprint: 1, status: "available",   icon: "code" },
-  { id: "mpesa",         name: "M-Pesa",               category: "mobile_money", description: "Ingest M-Pesa transaction statements via Daraja API",            sprint: 2, status: "coming_soon", icon: "smartphone" },
-  { id: "mtn_momo",      name: "MTN Mobile Money",     category: "mobile_money", description: "Ingest MTN MoMo transaction data",                               sprint: 2, status: "coming_soon", icon: "smartphone" },
-  { id: "stripe",        name: "Stripe",               category: "mobile_money", description: "Sync Stripe payment transactions and customers",                  sprint: 2, status: "coming_soon", icon: "credit-card" },
-  { id: "quickbooks",    name: "QuickBooks Online",    category: "accounting",   description: "Sync invoices, payments, vendors, and customers from QuickBooks", sprint: 4, status: "coming_soon", icon: "dollar-sign" },
-  { id: "xero",          name: "Xero",                 category: "accounting",   description: "Sync financial records from Xero",                               sprint: 4, status: "coming_soon", icon: "dollar-sign" },
-  { id: "sage",          name: "Sage",                 category: "accounting",   description: "Sync financial records from Sage",                               sprint: 4, status: "coming_soon", icon: "dollar-sign" },
-  { id: "adp",           name: "ADP",                  category: "hr_payroll",   description: "Sync employees, payroll runs, and departments from ADP",         sprint: 3, status: "coming_soon", icon: "users" },
-  { id: "bamboohr",      name: "BambooHR",             category: "hr_payroll",   description: "Sync employee records and org chart from BambooHR",              sprint: 3, status: "coming_soon", icon: "users" },
-  { id: "openmrs",       name: "OpenMRS",              category: "health",       description: "Sync patients, visits, and drug orders from OpenMRS",            sprint: 5, status: "coming_soon", icon: "heart" },
-  { id: "epic_fhir",     name: "Epic (FHIR)",          category: "health",       description: "Sync patients, encounters, and medications via FHIR",             sprint: 5, status: "coming_soon", icon: "heart" },
-  { id: "google_classroom", name: "Google Classroom",  category: "education",    description: "Sync students, teachers, classes, and assignments",              sprint: 6, status: "coming_soon", icon: "book" },
-  { id: "powerschool",   name: "PowerSchool",          category: "education",    description: "Sync students, staff, enrollment, and attendance",               sprint: 6, status: "coming_soon", icon: "book" },
-  { id: "square",        name: "Square",               category: "pos",          description: "Sync sales, inventory, and customers from Square POS",           sprint: 7, status: "coming_soon", icon: "shopping-cart" },
-  { id: "shopify",       name: "Shopify",              category: "pos",          description: "Sync orders, products, and customers from Shopify",              sprint: 7, status: "coming_soon", icon: "shopping-cart" },
-  { id: "kra",           name: "KRA (Kenya)",          category: "government",   description: "Validate business registration and tax compliance via KRA",       sprint: 8, status: "coming_soon", icon: "shield" },
-  { id: "nigeria_cac",   name: "Nigeria CAC",          category: "government",   description: "Validate business registration via Nigeria CAC",                 sprint: 8, status: "coming_soon", icon: "shield" },
+  // Database
+  { id: "postgresql_db",    name: "PostgreSQL",          category: "database",     description: "Connect any PostgreSQL database — on-prem, cloud, or local",       sprint: 1, status: "available", icon: "database" },
+  { id: "mysql_db",         name: "MySQL / MariaDB",     category: "database",     description: "Connect MySQL or MariaDB — any version, any host",                  sprint: 1, status: "available", icon: "database" },
+  { id: "aws_rds",          name: "AWS RDS / Aurora",    category: "database",     description: "Connect Amazon RDS or Aurora (PostgreSQL or MySQL engine)",          sprint: 1, status: "available", icon: "cloud" },
+  { id: "mssql_db",         name: "SQL Server / Azure",  category: "database",     description: "Connect Microsoft SQL Server or Azure SQL Database",                 sprint: 1, status: "available", icon: "database" },
+  { id: "sqlite_db",        name: "SQLite",              category: "database",     description: "Connect a local SQLite database file",                               sprint: 1, status: "available", icon: "hard-drive" },
+  // File
+  { id: "excel",            name: "Excel / CSV Import",  category: "file",         description: "Import people, enterprises, or items from Excel or CSV",             sprint: 1, status: "available", icon: "table" },
+  { id: "csv",              name: "CSV Import",          category: "file",         description: "Import from CSV — same as Excel connector",                          sprint: 1, status: "available", icon: "file-text" },
+  { id: "google_sheets",    name: "Google Sheets",       category: "file",         description: "Sync from a Google Sheet — live or snapshot",                       sprint: 1, status: "available", icon: "grid" },
+  { id: "json_xml",         name: "JSON / XML Import",   category: "file",         description: "Import from any JSON or XML data export",                            sprint: 1, status: "available", icon: "code" },
+  // Mobile Money
+  { id: "mpesa",            name: "M-Pesa",              category: "mobile_money", description: "Ingest M-Pesa transaction statements via Daraja API or CSV",        sprint: 2, status: "available", icon: "smartphone" },
+  { id: "mtn_momo",         name: "MTN Mobile Money",    category: "mobile_money", description: "Ingest MTN MoMo transaction data via CSV or MoMo API",              sprint: 2, status: "available", icon: "smartphone" },
+  { id: "airtel_money",     name: "Airtel Money",        category: "mobile_money", description: "Ingest Airtel Money transactions (Kenya, Uganda, Tanzania)",         sprint: 2, status: "available", icon: "smartphone" },
+  { id: "wave",             name: "Wave",                category: "mobile_money", description: "Ingest Wave mobile money transactions (Senegal, Côte d'Ivoire)",     sprint: 2, status: "available", icon: "smartphone" },
+  { id: "stripe",           name: "Stripe",              category: "mobile_money", description: "Sync Stripe payment transactions and customers via Stripe API",      sprint: 2, status: "available", icon: "credit-card" },
+  { id: "bank_statement",   name: "Bank Statement",      category: "mobile_money", description: "Import any bank statement in CSV, OFX, or QIF format",              sprint: 2, status: "available", icon: "landmark" },
+  // HR & Payroll
+  { id: "adp",              name: "ADP",                 category: "hr_payroll",   description: "Sync employees and departments from ADP Workforce Now",              sprint: 3, status: "available", icon: "users" },
+  { id: "paychex",          name: "Paychex",             category: "hr_payroll",   description: "Sync employees and payroll from Paychex Flex",                       sprint: 3, status: "available", icon: "users" },
+  { id: "bamboohr",         name: "BambooHR",            category: "hr_payroll",   description: "Sync employee records and org chart from BambooHR",                  sprint: 3, status: "available", icon: "users" },
+  { id: "gusto",            name: "Gusto",               category: "hr_payroll",   description: "Sync employees, contractors, and payroll from Gusto",                sprint: 3, status: "available", icon: "users" },
+  // Accounting
+  { id: "quickbooks",       name: "QuickBooks Online",   category: "accounting",   description: "Sync invoices, payments, vendors, and customers from QuickBooks",    sprint: 4, status: "available", icon: "dollar-sign" },
+  { id: "xero",             name: "Xero",                category: "accounting",   description: "Sync contacts, invoices, and inventory from Xero",                   sprint: 4, status: "available", icon: "dollar-sign" },
+  { id: "sage",             name: "Sage",                category: "accounting",   description: "Sync contacts, invoices, and products from Sage Business Cloud",     sprint: 4, status: "available", icon: "dollar-sign" },
+  { id: "wave_accounting",  name: "Wave Accounting",     category: "accounting",   description: "Sync customers and products from Wave (popular in Africa)",           sprint: 4, status: "available", icon: "dollar-sign" },
+  // Health / EHR
+  { id: "openmrs",          name: "OpenMRS",             category: "health",       description: "Sync patients and visits from OpenMRS (open-source EMR)",            sprint: 5, status: "available", icon: "heart" },
+  { id: "therap",           name: "Therap",              category: "health",       description: "Sync service recipients and billing from Therap EHR",                sprint: 5, status: "available", icon: "heart" },
+  { id: "epic_fhir",        name: "Epic (FHIR)",         category: "health",       description: "Sync patients and encounters from Epic via FHIR R4",                 sprint: 5, status: "available", icon: "heart" },
+  { id: "dhis2",            name: "DHIS2",               category: "health",       description: "Sync health facility org units and indicators from DHIS2",            sprint: 5, status: "available", icon: "heart" },
+  // Education
+  { id: "powerschool",      name: "PowerSchool",         category: "education",    description: "Sync students, staff, and enrollment from PowerSchool",              sprint: 6, status: "available", icon: "book" },
+  { id: "canvas",           name: "Canvas LMS",          category: "education",    description: "Sync students and teachers from Canvas",                             sprint: 6, status: "available", icon: "book" },
+  { id: "google_classroom", name: "Google Classroom",    category: "education",    description: "Sync students and teachers from Google Classroom courses",           sprint: 6, status: "available", icon: "book" },
+  // POS
+  { id: "square",           name: "Square",              category: "pos",          description: "Sync customers and catalog items from Square POS",                   sprint: 7, status: "available", icon: "shopping-cart" },
+  { id: "shopify",          name: "Shopify",             category: "pos",          description: "Sync customers and products from Shopify",                           sprint: 7, status: "available", icon: "shopping-cart" },
+  { id: "toast",            name: "Toast POS",           category: "pos",          description: "Sync menu items and staff from Toast restaurant POS",                sprint: 7, status: "available", icon: "shopping-cart" },
+  // Government
+  { id: "kra",              name: "KRA (Kenya)",         category: "government",   description: "Validate business registration and tax compliance via KRA iTax",    sprint: 8, status: "available", icon: "shield" },
+  { id: "ghana_gra",        name: "Ghana GRA",           category: "government",   description: "Validate business registration via Ghana Revenue Authority TIN API", sprint: 8, status: "available", icon: "shield" },
+  { id: "nigeria_cac",      name: "Nigeria CAC",         category: "government",   description: "Validate business registration and directors via Nigeria CAC API",   sprint: 8, status: "available", icon: "shield" },
 ];
+
+// Credential field definitions for API connectors — drives ApiConnectModal
+const CREDENTIAL_SCHEMA = {
+  mpesa:           [{ key: "consumer_key", label: "Consumer Key", type: "password" }, { key: "consumer_secret", label: "Consumer Secret", type: "password" }, { key: "shortcode", label: "Shortcode / Till", type: "text" }],
+  mtn_momo:        [{ key: "subscription_key", label: "Subscription Key", type: "password" }, { key: "api_user", label: "API User UUID", type: "text" }, { key: "api_key", label: "API Key", type: "password" }, { key: "collection_id", label: "Collection Subscription ID", type: "text" }],
+  airtel_money:    [{ key: "client_id", label: "Client ID", type: "text" }, { key: "client_secret", label: "Client Secret", type: "password" }, { key: "country", label: "Country Code (e.g. KE)", type: "text" }],
+  wave:            [{ key: "api_key", label: "API Key", type: "password" }, { key: "country", label: "Country Code (SN or CI)", type: "text" }],
+  stripe:          [{ key: "api_key", label: "Stripe Secret Key (sk_...)", type: "password" }],
+  bank_statement:  [],  // file upload only
+  adp:             [{ key: "client_id", label: "Client ID", type: "text" }, { key: "client_secret", label: "Client Secret", type: "password" }],
+  paychex:         [{ key: "client_id", label: "Client ID", type: "text" }, { key: "client_secret", label: "Client Secret", type: "password" }, { key: "paychex_company_id", label: "Paychex Company ID", type: "text" }],
+  bamboohr:        [{ key: "api_key", label: "API Key", type: "password" }, { key: "subdomain", label: "Company Subdomain (e.g. acme)", type: "text" }],
+  gusto:           [{ key: "access_token", label: "OAuth Access Token", type: "password" }, { key: "gusto_company_id", label: "Gusto Company UUID", type: "text" }],
+  quickbooks:      [{ key: "access_token", label: "OAuth Access Token", type: "password" }, { key: "realm_id", label: "Company Realm ID", type: "text" }],
+  xero:            [{ key: "access_token", label: "OAuth Access Token", type: "password" }, { key: "tenant_id", label: "Tenant / Organisation ID", type: "text" }],
+  sage:            [{ key: "access_token", label: "OAuth Access Token", type: "password" }],
+  wave_accounting: [{ key: "access_token", label: "OAuth Access Token", type: "password" }, { key: "business_id", label: "Business ID", type: "text" }],
+  openmrs:         [{ key: "base_url", label: "OpenMRS URL (e.g. https://demo.openmrs.org/openmrs)", type: "text" }, { key: "username", label: "Username", type: "text" }, { key: "password", label: "Password", type: "password" }],
+  therap:          [{ key: "access_token", label: "OAuth Access Token", type: "password" }, { key: "agency_code", label: "Agency Code", type: "text" }],
+  epic_fhir:       [{ key: "fhir_base_url", label: "FHIR Base URL", type: "text" }, { key: "access_token", label: "SMART Access Token", type: "password" }],
+  dhis2:           [{ key: "base_url", label: "DHIS2 URL (e.g. https://play.dhis2.org/dev)", type: "text" }, { key: "username", label: "Username", type: "text" }, { key: "password", label: "Password", type: "password" }],
+  powerschool:     [{ key: "base_url", label: "PowerSchool Server URL", type: "text" }, { key: "client_id", label: "Plugin Client ID", type: "text" }, { key: "client_secret", label: "Plugin Client Secret", type: "password" }],
+  canvas:          [{ key: "base_url", label: "Canvas URL (e.g. https://canvas.instructure.com)", type: "text" }, { key: "api_token", label: "API Token", type: "password" }, { key: "account_id", label: "Account ID (default: 1)", type: "text" }],
+  google_classroom:[{ key: "access_token", label: "Google OAuth Access Token", type: "password" }],
+  square:          [{ key: "access_token", label: "Square OAuth Access Token", type: "password" }],
+  shopify:         [{ key: "shop_domain", label: "Shop Domain (e.g. mystore.myshopify.com)", type: "text" }, { key: "access_token", label: "Admin API Access Token", type: "password" }],
+  toast:           [{ key: "client_id", label: "Toast Client ID", type: "text" }, { key: "client_secret", label: "Toast Client Secret", type: "password" }, { key: "restaurant_guid", label: "Restaurant GUID", type: "text" }],
+  kra:             [{ key: "username", label: "iTax KRA PIN / Username", type: "text" }, { key: "password", label: "iTax Password", type: "password" }, { key: "target_pin", label: "Target PIN to validate", type: "text" }],
+  ghana_gra:       [{ key: "api_key", label: "GRA API Subscription Key", type: "password" }, { key: "target_tin", label: "TIN(s) to validate (comma-separated)", type: "text" }],
+  nigeria_cac:     [{ key: "api_key", label: "CAC API Key", type: "password" }, { key: "target_rc", label: "RC Number(s) to validate (comma-separated)", type: "text" }],
+};
+
+// ── ApiConnectModal ─────────────────────────────────────────────────────────
+// Used for all API/OAuth connectors (Stripe, ADP, QuickBooks, OpenMRS, etc.)
+function ApiConnectModal({ connector, companyId, onClose }) {
+  const { toast } = useToast();
+  const schema = CREDENTIAL_SCHEMA[connector?.id] || [];
+  const [step, setStep]       = useState("credentials"); // credentials | result
+  const [creds, setCreds]     = useState({});
+  const [running, setRunning] = useState(false);
+  const [result, setResult]   = useState(null);
+
+  function setField(key, val) {
+    setCreds(prev => ({ ...prev, [key]: val }));
+  }
+
+  async function runSync(dryRun = false) {
+    setRunning(true);
+    try {
+      const form = new FormData();
+      form.append("company_id",       companyId);
+      form.append("connector_id",     connector.id);
+      form.append("credentials_json", JSON.stringify(creds));
+      form.append("dry_run",          dryRun ? "true" : "false");
+      const res = await fetch(`${RAILWAY_URL}/connectors/run`, {
+        method: "POST",
+        headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setResult({ ...data, _dryRun: dryRun });
+      setStep("result");
+      if (!dryRun && data.status !== "error") {
+        toast({ title: `${connector.name} sync complete — ${data.created || 0} created, ${data.updated || 0} updated` });
+      }
+    } catch (e) {
+      toast({ title: "Sync failed", description: e.message, variant: "destructive" });
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center">
+              <Plug className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-800">{connector?.name}</p>
+              <p className="text-xs text-slate-400 capitalize">{connector?.category?.replace("_", " ")} connector</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          {step === "credentials" && (
+            <>
+              {schema.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  This connector uses file upload. Use the Import File button instead.
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-500">
+                    Enter your {connector?.name} credentials. These are sent directly to the connector and are not stored.
+                  </p>
+                  {schema.map(field => (
+                    <div key={field.key}>
+                      <label className="text-xs font-semibold text-slate-600 mb-1.5 block">{field.label}</label>
+                      <input
+                        type={field.type === "password" ? "password" : "text"}
+                        value={creds[field.key] || ""}
+                        onChange={e => setField(field.key, e.target.value)}
+                        className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-indigo-400"
+                        placeholder={field.type === "password" ? "••••••••••••" : field.label}
+                        autoComplete="off"
+                      />
+                    </div>
+                  ))}
+                </>
+              )}
+            </>
+          )}
+
+          {step === "result" && result && (
+            <div className={`rounded-xl border p-4 text-sm ${
+              result._dryRun          ? "bg-amber-50 border-amber-200"
+              : result.status === "error" ? "bg-rose-50 border-rose-200"
+              : result.status === "skipped" ? "bg-slate-50 border-slate-200"
+              : "bg-emerald-50 border-emerald-200"
+            }`}>
+              <p className="font-bold text-slate-800 mb-2">
+                {result._dryRun           ? "Dry run — no data written"
+                  : result.status === "error"   ? "Sync failed"
+                  : result.status === "skipped" ? "Nothing to sync"
+                  : "Sync complete"}
+              </p>
+              {result.reason && <p className="text-xs text-slate-600 mb-2">{result.reason}</p>}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {result.extracted     != null && <div><span className="text-slate-500">Extracted:</span> <strong>{result.extracted}</strong></div>}
+                {result.would_create  != null && <div><span className="text-slate-500">Would create:</span> <strong>{result.would_create}</strong></div>}
+                {result.created       != null && <div><span className="text-slate-500">Created:</span> <strong>{result.created}</strong></div>}
+                {result.updated       != null && <div><span className="text-slate-500">Updated:</span> <strong>{result.updated}</strong></div>}
+                {result.failed        != null && <div><span className="text-slate-500">Failed:</span> <strong>{result.failed}</strong></div>}
+              </div>
+              {result.unmapped?.length > 0 && (
+                <p className="mt-2 text-xs text-amber-700">
+                  {result.unmapped.length} unmapped values — review in the Unmapped Values section.
+                </p>
+              )}
+              {result.detail && <p className="mt-2 text-xs text-rose-700">{result.detail}</p>}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+          <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">
+            {step === "result" ? "Close" : "Cancel"}
+          </button>
+          {step === "credentials" && schema.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => runSync(true)} disabled={running}
+                className="rounded-xl text-xs border-amber-300 text-amber-700 hover:bg-amber-50">
+                {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Dry Run"}
+              </Button>
+              <Button onClick={() => runSync(false)} disabled={running}
+                className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs">
+                {running
+                  ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Syncing…</>
+                  : <><Play className="w-3.5 h-3.5 mr-1.5" /> Connect & Sync</>}
+              </Button>
+            </div>
+          )}
+          {step === "result" && (
+            <Button onClick={() => { setStep("credentials"); setResult(null); }}
+              variant="outline" className="rounded-xl text-xs">
+              Sync Again
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 // ── DatabaseConnectModal ─────────────────────────────────────────────────────
 function DatabaseConnectModal({ connector, companyId, onClose }) {
@@ -1210,10 +1412,11 @@ function GoogleSheetsModal({ connector, companyId, onClose }) {
 
 // ── Main Connectors page ─────────────────────────────────────────────────────
 export default function Connectors() {
-  const [currentUser, setCurrentUser]             = useState(null);
-  const [dbModalConnector, setDbModalConnector]   = useState(null);
-  const [fileModalConnector, setFileModalConnector] = useState(null);
+  const [currentUser, setCurrentUser]                   = useState(null);
+  const [dbModalConnector, setDbModalConnector]         = useState(null);
+  const [fileModalConnector, setFileModalConnector]     = useState(null);
   const [sheetsModalConnector, setSheetsModalConnector] = useState(null);
+  const [apiModalConnector, setApiModalConnector]       = useState(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -1313,6 +1516,8 @@ export default function Connectors() {
       setSheetsModalConnector(conn);
     } else if (conn.category === "file" && conn.status === "available") {
       setFileModalConnector(conn);
+    } else if (conn.status === "available") {
+      setApiModalConnector(conn);
     } else {
       toast({ title: conn.name, description: "This connector is coming soon." });
     }
@@ -1356,11 +1561,20 @@ export default function Connectors() {
         />
       )}
 
+      {/* API connector modal (Stripe, ADP, QuickBooks, OpenMRS, etc.) */}
+      {apiModalConnector && (
+        <ApiConnectModal
+          connector={apiModalConnector}
+          companyId={currentUser.company_id}
+          onClose={() => setApiModalConnector(null)}
+        />
+      )}
+
       {/* Section 1: Available Connectors */}
       <div>
         <h2 className="text-2xl font-bold text-slate-800 mb-2">Available Connectors</h2>
         <p className="text-sm text-slate-500 mb-6">
-          Connect any external data source. Database connectors are live — others are coming soon.
+          Connect any external data source. All 35 connectors across 9 categories are live.
         </p>
 
         {catalogLoading ? (
@@ -1430,7 +1644,9 @@ export default function Connectors() {
                             <><Cloud className="w-3.5 h-3.5 mr-1.5" /> Connect Sheet</>
                           ) : conn.category === "file" && available ? (
                             <><HardDrive className="w-3.5 h-3.5 mr-1.5" /> Import File</>
-                          ) : "Connect"}
+                          ) : available ? (
+                            <><Plug className="w-3.5 h-3.5 mr-1.5" /> Connect</>
+                          ) : "Coming Soon"}
                         </Button>
                       </div>
                     );
