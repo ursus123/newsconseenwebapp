@@ -347,11 +347,11 @@ export default function Landing() {
               <span className="text-emerald-400 text-xs font-semibold tracking-wide">The Autonomous SME Operating System</span>
             </div>
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white mb-6 leading-[1.05]">
-              Palantir Foundry.<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Built for Every SME.</span>
+              Your operations.<br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Running themselves.</span>
             </h1>
             <p className="text-xl text-slate-400 max-w-2xl mx-auto mb-4 leading-relaxed">
-              The same operational intelligence that governments and Fortune 500s use —<br className="hidden sm:block" /> at a fraction of the cost, with AI agents that run your operations autonomously.
+              Newsconseen is the Autonomous SME Operating System — one universal ontology, 30+ specialist apps, and AI agents that run your operations 24/7.
             </p>
             <p className="text-slate-500 text-sm max-w-lg mx-auto mb-10">
               Schools, clinics, farms, cooperatives, NGOs, franchises. One universal ontology. Every industry.
@@ -456,7 +456,7 @@ export default function Landing() {
               },
               {
                 num: "03",
-                label: "Foundry Intelligence",
+                label: "Autonomous Intelligence",
                 sublabel: "Agents + copilot — intelligence explains reality",
                 desc: "The Copilot is grounded in your live data. Agents monitor, alert, and act on your behalf — 24/7. The longer you use Newsconseen, the smarter your agents become about your specific business. No competitor can replicate this without your history.",
                 color: "border-violet-500/30 bg-violet-500/5",
