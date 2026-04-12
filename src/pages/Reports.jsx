@@ -9,6 +9,7 @@ import ReportViewer from "@/components/reports/ReportViewer";
 import WelcomeSetup from "@/components/reports/WelcomeSetup";
 import ChartViewer from "@/components/reports/ChartViewer.jsx";
 import { Loader2, RefreshCw, Sparkles, TrendingUp, Users, AlertCircle, ChevronRight, Database, FileText, Download, CheckCircle2, Circle, Play, Globe, Building2, BarChart2, Brain } from "lucide-react";
+import SupersetEmbed from "@/components/reports/SupersetEmbed";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = typeof import.meta !== "undefined" ? (import.meta.env?.VITE_RAILWAY_API_KEY || "") : "";
@@ -563,7 +564,7 @@ function canUserSee(item, currentUser) {
 export default function Reports() {
   const [currentUser, setCurrentUser] = useState(null);
   const [selected, setSelected] = useState({ type: "all-charts", id: "all-charts" });
-  const [view, setView] = useState("folders"); // folders | chart-builder | report-builder | report-viewer | chart-viewer | ml-insights | market-template
+  const [view, setView] = useState("folders"); // folders | chart-builder | report-builder | report-viewer | chart-viewer | ml-insights | market-template | superset
   const [editingChart, setEditingChart] = useState(null);
   const [editingReport, setEditingReport] = useState(null);
   const [viewingReport, setViewingReport] = useState(null);
@@ -787,11 +788,19 @@ export default function Reports() {
             >
               <FileText className="w-3.5 h-3.5" /> Market Analysis
             </button>
+            <button
+              onClick={() => setView("superset")}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-t-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+            >
+              <BarChart2 className="w-3.5 h-3.5" /> Superset Dashboards
+            </button>
           </div>
         )}
         <div className="flex-1 overflow-hidden flex">
         {showSetup ? (
           <WelcomeSetup currentUser={currentUser} onComplete={() => setSetupDone(true)} />
+        ) : view === "superset" ? (
+          <SupersetEmbed companyId={currentUser?.company_id} />
         ) : view === "ml-insights" ? (
           <MLInsightsPanel currentUser={currentUser} onBack={() => setView("folders")} />
         ) : view === "market-template" ? (
