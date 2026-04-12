@@ -43,6 +43,13 @@
       "description": "Open Dashboard",
       "url": "/Dashboard",
       "icons": [{ "src": "https://placehold.co/96x96/0a0f1e/10b981?text=D", "sizes": "96x96" }]
+    },
+    {
+      "name": "Field Agent",
+      "short_name": "Field",
+      "description": "Mobile field agent — offline task capture",
+      "url": "/Mobile",
+      "icons": [{ "src": "https://placehold.co/96x96/0a0f1e/10b981?text=F", "sizes": "96x96" }]
     }
   ]
 }

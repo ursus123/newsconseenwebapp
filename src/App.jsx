@@ -35,6 +35,7 @@ import KineticLayer from './pages/KineticLayer';
 import ObjectViews from './pages/ObjectViews';
 import Landing from './pages/Landing';
 import Agents from './pages/Agents';
+import Mobile from './pages/Mobile';
 import Layout from './Layout.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
@@ -130,6 +131,8 @@ const AuthenticatedApp = () => {
       {/* Desktop Shell — NO layout wrapper, full screen */}
       <Route path="/Desktop" element={<Desktop />} />
       <Route path="/DesktopSettings" element={<DesktopSettings />} />
+      {/* Mobile PWA Shell — NO layout wrapper, standalone field agent app */}
+      <Route path="/Mobile" element={<Mobile />} />
       <Route path="/files" element={<LayoutWrapper currentPageName="File Manager"><FileManager /></LayoutWrapper>} />
 
       <Route path="*" element={<PageNotFound />} />
