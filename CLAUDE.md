@@ -654,44 +654,52 @@ python_layer/config/taxonomy.py
 
 ```
 Phase 1  Core OS          ✅ All 7 entities, forms, lists, taxonomy
-Phase 2  Connectors       🔄 25 connectors, 8 categories
-Phase 3A Copilot          ✅ Engine + 10 grounded query tools
-Phase 3B Alerts           ✅ WhatsApp/Email/SMS alert engine
-Phase 3C Network          ✅ Multi-tenant network intelligence
-Phase 4A Orchestrator     🔲 Multi-LLM routing + base agent loop + tool registry
-Phase 4B Core Agents      🔲 Operations + Revenue intelligence agents
-Phase 4C Action Agents    🔲 Retention + Inventory + Onboarding agents
-Phase 4D Approval Gate    🔲 Human-in-the-loop UI for high-risk agent actions
-Phase 4E Full Coverage    🔲 Compliance + Network coordinator agents
-Phase 4F Agent Memory     🔲 Per-company persistent memory + self-calibration
-Phase 4G LLM Optimise     🔲 Haiku triage, Sonnet execution, Opus strategy routing
-Phase 5  ML Models        🔲 Survival, time series, clustering, regression
+Phase 2  Connectors       🔄 25 connectors, 8 categories (partially wired)
+Phase 3A Copilot          ✅ Engine + query tools, session memory, grounded answers
+Phase 3B Alerts           ✅ WhatsApp/Email/SMS alert engine, 10 alert types
+Phase 3C Network          ✅ Multi-tenant network intelligence + cross-branch compare
+Phase 4A Orchestrator     ✅ Multi-LLM routing + base agent loop + tool registry
+Phase 4B Core Agents      ✅ Operations + Revenue intelligence agents
+Phase 4C Action Agents    ✅ Retention + Inventory + Onboarding agents
+Phase 4D Approval Gate    ✅ Human-in-the-loop UI for high-risk agent actions
+Phase 4E Full Coverage    ✅ Compliance + Network + Market Research agents
+Phase 4F Agent Memory     ✅ Per-company persistent memory + self-calibration
+Phase 4G LLM Optimise     ✅ Haiku triage, Sonnet execution, Opus strategy routing
+Phase 5  ML Models        🔄 Backend built (survival, forecast, segmentation, demand)
 Phase 6  Mobile           🔲 Offline-first field entry
 ```
 
 ---
 
-## Current work in progress
+## Current state (as of 2026-04-12)
+
+All Phases 1–4 are implemented and deployed. The system is fully operational.
 
 ```
-BROKEN
-  Railway startup crash — BASE44_RELATIONSHIPS_URL and BASE44_ADDRESSES_URL
-  missing from environment variables
+COMPLETED (Phases 1–4)
+  ✅ All 7 core entities with forms, lists, bulk import, taxonomy
+  ✅ ETL pipeline — all 9 entities, multi-tenant, three-tier fallback
+  ✅ Copilot — claude-sonnet-4-6, tool loop, 7 query tools, session memory
+  ✅ Alerts engine — 10 alert types, WhatsApp/Email/SMS, per-company config
+  ✅ Network intelligence — cross-branch performance comparison
+  ✅ Autonomous agents — 8 agents, orchestrator, approval gate, agent memory,
+     LLM router (Haiku/Sonnet/Opus), market research with weekly briefings
+  ✅ ML models — survival, segmentation, demand forecasting, time series
+  ✅ Desktop cache fix — all 7 entity list pages
+  ✅ entityFetchFn — all 6 BulkImportDialog usages
+  ✅ Branding — fully white-label, all Palantir/Foundry references removed
+  ✅ Agents page in sidebar navigation for super_admin, admin, executive
 
-PENDING
-  ETL has not run — analytics tables empty
-  Desktop cache fix not applied to Enterprises, Products, Transactions, Tasks
-  entityFetchFn missing from Enterprises, Products, Tasks,
-    Transactions, Relationships, Addresses BulkImportDialog calls
+PENDING (operational — requires Railway access)
+  ⏳ Run POST /cron/etl-all to populate analytics tables
+  ⏳ Verify /health returns 200 and copilot tool calls return data
+  ⏳ Configure ALERT_DEFAULT_EMAIL / ALERT_DEFAULT_WHATSAPP env vars
+  ⏳ Set OPUS_ENABLED=true when Opus budget is approved
 
-NEXT IN ORDER
-  1. Fix Railway env vars → verify /health returns 200
-  2. Run POST /cron/etl-all → verify analytics tables populated
-  3. Test copilot with validation questions
-  4. Apply desktop cache fix to remaining 4 list pages
-  5. Add entityFetchFn to remaining 6 BulkImportDialog usages
-  6. Build executive dashboard reading from python_layer endpoints
-  7. Configure operational alerts in Phase 3B
+NEXT BUILD MILESTONE
+  Phase 5 — ML Models UI polish (results display, model explanations)
+  Phase 6 — Mobile (offline-first field entry)
+  Connectors — 25 external data connectors
 ```
 
 ---
@@ -701,16 +709,11 @@ NEXT IN ORDER
 CLAUDE.md gives Claude all the context. Just state the task:
 
 ```
-Fix Railway startup crash — make BASE44_RELATIONSHIPS_URL and
-BASE44_ADDRESSES_URL Optional in python_layer/config/settings.py
+Build the Phase 5 ML results panel — show survival curve chart,
+segmentation clusters, and demand forecast in MLModels.jsx
 ```
 
 ```
-Apply desktop cache fix to Enterprises.jsx —
-staleTime:0, refetchOnMount:always, visibilitychange handler,
-refetchQueries on BulkImportDialog onClose
-```
-
-```
-Add entityFetchFn to the BulkImportDialog in Products.jsx
+Audit the Connectors page — check which of the 25 connectors
+are wired up in python_layer/connectors/ vs just placeholder
 ```

@@ -80,6 +80,7 @@ const NAV_CONFIG = {
         { name: "MarketIntelligence",  label: "Market Intelligence",  icon: TrendingUp },
         { name: "copilot",             label: "Copilot",              icon: Sparkles },
         { name: "alerts",              label: "Alerts",               icon: Bell, badge: "alerts" },
+        { name: "agents",              label: "Agents",               icon: Brain },
         { name: "Connectors",          icon: Plug },
       ],
     },
@@ -95,7 +96,7 @@ const NAV_CONFIG = {
       section: "Applications",
       items: [
         { name: "Applications", icon: Grid3x3 },
-        { name: "MLModels", label: "ML Models", icon: Brain },
+        { name: "MLModels", label: "ML Models", icon: TrendingUp },
       ],
     },
     {
@@ -143,6 +144,7 @@ const NAV_CONFIG = {
         { name: "MarketIntelligence", label: "Market Intelligence", icon: TrendingUp },
         { name: "copilot",            label: "Copilot",             icon: Sparkles },
         { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
+        { name: "agents",             label: "Agents",              icon: Brain },
         { name: "Connectors",         icon: Plug },
       ],
     },
@@ -158,7 +160,7 @@ const NAV_CONFIG = {
       section: "Applications",
       items: [
         { name: "Applications", icon: Grid3x3 },
-        { name: "MLModels", label: "ML Models", icon: Brain },
+        { name: "MLModels", label: "ML Models", icon: TrendingUp },
       ],
     },
     {
@@ -186,6 +188,8 @@ const NAV_CONFIG = {
       items: [
         { name: "Reports",      icon: BarChart2 },
         { name: "QueryBuilder", label: "Query Builder", icon: Code2 },
+        { name: "copilot",      label: "Copilot",       icon: Sparkles },
+        { name: "agents",       label: "Agents",        icon: Brain },
       ],
     },
     {
