@@ -7,10 +7,31 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Plus, Clock, User, Filter, Download, Check, X, AlertCircle } from "lucide-react";
+import { Calendar, Plus, Clock, User, Filter, Check, X, AlertCircle, BookOpen } from "lucide-react";
 import { format } from "date-fns";
+import AttendanceDashboard from "@/components/attendance/AttendanceDashboard";
+import ClassAttendancePage from "@/components/attendance/ClassAttendancePage";
+import StudentProfilePage from "@/components/attendance/StudentProfilePage";
+import TeacherProfilePage from "@/components/attendance/TeacherProfilePage";
 
 export default function Attendance() {
+  const [tab, setTab] = useState("mark"); // "mark" | "register"
+  const [currentUser, setCurrentUser] = useState(null);
+  // Register sub-views
+  const [regView, setRegView] = useState("dashboard");
+  const [selectedClass, setSelectedClass] = useState(null);
+  const [selectedPerson, setSelectedPerson] = useState(null);
+
+  useEffect(() => {
+    base44.auth.me().then(setCurrentUser).catch(() => {});
+  }, []);
+
+  const navigateReg = (v, data = {}) => {
+    setRegView(v);
+    if (data.classObj) setSelectedClass(data.classObj);
+    if (data.person) setSelectedPerson(data.person);
+  };
+
   const [open, setOpen] = useState(false);
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split("T")[0]);
   const [filterPerson, setFilterPerson] = useState("");
@@ -87,12 +108,66 @@ export default function Attendance() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Attendance</h1>
-          <p className="text-slate-500 mt-1">Log and track daily attendance for students and staff</p>
+          <p className="text-slate-500 mt-1">Log daily attendance or open the class register</p>
         </div>
-        <Button onClick={() => setOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
-          <Plus className="w-4 h-4" /> Log Attendance
-        </Button>
+        {tab === "mark" && (
+          <Button onClick={() => setOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl gap-2">
+            <Plus className="w-4 h-4" /> Log Attendance
+          </Button>
+        )}
       </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+        {[
+          { key: "mark",     label: "Quick Mark",     icon: Check },
+          { key: "register", label: "Class Register", icon: BookOpen },
+        ].map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => { setTab(key); setRegView("dashboard"); }}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+              tab === key ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <Icon className="w-4 h-4" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Class Register tab */}
+      {tab === "register" && (
+        <div>
+          {regView === "dashboard" && (
+            <AttendanceDashboard
+              currentUser={currentUser}
+              onOpenClass={(classObj) => navigateReg("class", { classObj })}
+              onOpenPerson={(person, role) => navigateReg(role === "teacher" ? "teacher" : "student", { person })}
+            />
+          )}
+          {regView === "class" && selectedClass && (
+            <ClassAttendancePage
+              classObj={selectedClass}
+              currentUser={currentUser}
+              onBack={() => navigateReg("dashboard")}
+              onOpenStudent={(person) => navigateReg("student", { person })}
+            />
+          )}
+          {regView === "student" && selectedPerson && (
+            <StudentProfilePage person={selectedPerson} onBack={() => navigateReg("dashboard")} />
+          )}
+          {regView === "teacher" && selectedPerson && (
+            <TeacherProfilePage
+              person={selectedPerson}
+              onBack={() => navigateReg("dashboard")}
+              onOpenClass={(classObj) => navigateReg("class", { classObj })}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Quick Mark tab */}
+      {tab === "mark" && (<>
 
       {/* Filters */}
       <div className="bg-white rounded-2xl border border-slate-100 p-4">
@@ -306,6 +381,7 @@ export default function Attendance() {
           </form>
         </DialogContent>
       </Dialog>
+      </>)}
     </div>
   );
 }

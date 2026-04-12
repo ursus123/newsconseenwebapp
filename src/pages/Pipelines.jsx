@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   RefreshCw, ExternalLink, Database, CheckCircle2, AlertTriangle,
-  Clock, Activity, Zap, Building2, Users, Package, Wrench,
+  Clock, Activity, Building2, Users, Package, Wrench,
   CheckSquare, Receipt, MapPin, Loader2, Info, Link2, Globe,
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
@@ -35,6 +36,18 @@ export default function Pipelines() {
     base44.auth.me().then(setCurrentUser).catch(() => {});
   }, []);
 
+  // Live health check — shows actual last-run timestamps from the API
+  const { data: healthData, refetch: refetchHealth } = useQuery({
+    queryKey: ["pipeline-health"],
+    queryFn: async () => {
+      const r = await fetch(`${RAILWAY_URL}/health`);
+      if (!r.ok) return null;
+      return r.json();
+    },
+    staleTime: 30000,
+    retry: false,
+  });
+
   const triggerEtl = async () => {
     setEtlLoading(true);
     setEtlResult(null);
@@ -47,6 +60,7 @@ export default function Pipelines() {
       if (!res.ok) throw new Error(data.detail || `Status ${res.status}`);
       setEtlResult(data);
       setLastTriggered(new Date().toLocaleTimeString());
+      refetchHealth();
       toast({
         title: data.all_success
           ? `ETL complete — ${data.success}/${data.total} entities synced`
@@ -122,8 +136,24 @@ export default function Pipelines() {
         <div className="flex items-center gap-6 flex-wrap ml-auto text-xs text-slate-500">
           <span className="flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5" />
-            Last run: <strong className="text-slate-700 ml-1">{lastTriggered ? `Manually at ${lastTriggered}` : "Not yet triggered"}</strong>
+            Last run:{" "}
+            <strong className="text-slate-700 ml-1">
+              {lastTriggered
+                ? `Manually at ${lastTriggered}`
+                : healthData?.last_etl_run
+                ? new Date(healthData.last_etl_run).toLocaleString()
+                : "Not yet triggered"}
+            </strong>
           </span>
+          {healthData && (
+            <span className="flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5" />
+              DB:{" "}
+              <strong className={`ml-1 ${healthData.database === "connected" ? "text-emerald-600" : "text-rose-600"}`}>
+                {healthData.database ?? "unknown"}
+              </strong>
+            </span>
+          )}
         </div>
       </div>
 
@@ -214,18 +244,7 @@ export default function Pipelines() {
           <Activity className="w-4 h-4 text-slate-400" />
           <h2 className="text-sm font-bold text-slate-700">Pipeline Logs</h2>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-3 p-4 rounded-xl border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50 transition-all group">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
-              <Activity className="w-5 h-5 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-slate-700 group-hover:text-emerald-700">Airflow UI</p>
-              <p className="text-xs text-slate-400">localhost:8080 — local dev</p>
-            </div>
-            <ExternalLink className="w-3.5 h-3.5 text-slate-300 ml-auto group-hover:text-emerald-500" />
-          </a>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <a href={`${RAILWAY_URL}/docs`} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-3 p-4 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50 transition-all group">
             <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
