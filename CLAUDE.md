@@ -1,20 +1,36 @@
 # Newsconseen OS — Project Context
 
+## Mantra
+
+> **Newsconseen is the Autonomous SME Operating System.**
+
+Every feature, architecture decision, and design choice must be evaluated against:
+*"Does this make the system more autonomous for the operator, or does it require them to do more work?"*
+
+---
+
 ## What Newsconseen is
 
-Newsconseen is the SME version of Palantir Foundry.
+Newsconseen is the Autonomous SME Operating System — the SME equivalent of
+Palantir Foundry, extended with agentic AI that runs operations autonomously.
 
 It gives any small or medium organisation — a school, clinic, cooperative,
 farm, NGO, franchise, government agency, or retail chain — the same
-operational intelligence capability that Palantir gives governments and
-Fortune 500 companies, at a fraction of the cost and complexity.
+operational intelligence and autonomous execution capability that Palantir
+gives governments and Fortune 500 companies, at a fraction of the cost and
+complexity.
 
 The core insight: every SME has the same underlying data problems regardless
 of industry. They have people, organisations, things they sell or manage,
 tasks they perform, transactions they record, and addresses they operate from.
 The industry changes the labels. The structure does not.
 
-Newsconseen solves this with three layers and one universal ontology.
+Newsconseen solves this with three layers, one universal ontology, and
+autonomous agents that act on behalf of the operator.
+
+The moat: agent memory + operator data grows over time. The longer an operator
+uses Newsconseen, the smarter their agents become about their specific business.
+No competitor can replicate this without the history.
 
 ---
 
@@ -642,8 +658,15 @@ Phase 2  Connectors       🔄 25 connectors, 8 categories
 Phase 3A Copilot          ✅ Engine + 10 grounded query tools
 Phase 3B Alerts           ✅ WhatsApp/Email/SMS alert engine
 Phase 3C Network          ✅ Multi-tenant network intelligence
-Phase 4  ML Models        🔲 Survival, time series, clustering, regression
-Phase 5  Mobile           🔲 Offline-first field entry
+Phase 4A Orchestrator     🔲 Multi-LLM routing + base agent loop + tool registry
+Phase 4B Core Agents      🔲 Operations + Revenue intelligence agents
+Phase 4C Action Agents    🔲 Retention + Inventory + Onboarding agents
+Phase 4D Approval Gate    🔲 Human-in-the-loop UI for high-risk agent actions
+Phase 4E Full Coverage    🔲 Compliance + Network coordinator agents
+Phase 4F Agent Memory     🔲 Per-company persistent memory + self-calibration
+Phase 4G LLM Optimise     🔲 Haiku triage, Sonnet execution, Opus strategy routing
+Phase 5  ML Models        🔲 Survival, time series, clustering, regression
+Phase 6  Mobile           🔲 Offline-first field entry
 ```
 
 ---
