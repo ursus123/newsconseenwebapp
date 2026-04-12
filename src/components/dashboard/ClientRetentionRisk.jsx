@@ -1,6 +1,14 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, Calendar, Users } from "lucide-react";
@@ -83,6 +91,7 @@ export default function ClientRetentionRisk({ people, tasks, currentUser }) {
       assigned_to_name: currentUser?.full_name || currentUser?.email,
     }),
     onSuccess: (_, client) => {
+      triggerETL("task");
       qc.invalidateQueries({ queryKey: ["tasks-dash"] });
       toast({ title: `Check-in task created for ${client.first_name} ${client.last_name}` });
       setSchedulingId(null);

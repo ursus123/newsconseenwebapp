@@ -1,6 +1,14 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation } from "@tanstack/react-query";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
 import { format } from "date-fns";
 import { X, CheckCircle2, Search, Pill, ChevronDown } from "lucide-react";
 import MedMedicationPicker from "@/components/medadmin/MedMedicationPicker";
@@ -152,6 +160,9 @@ export default function PRNFlow({ user, selectedClient, people, products, enterp
         });
       }
 
+      triggerETL("task");
+      triggerETL("transaction");
+      triggerETL("product");
       return mainTask;
     },
     onSuccess,

@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
 import { format } from "date-fns";
 import { X, Save, Plus, Trash2, Loader2, Search, Zap } from "lucide-react";
 
@@ -198,6 +206,7 @@ export default function MedProfileForm({ client, existing, onClose, onSuccess })
           ...(form.notes && { side_effects: form.notes }),
           ...(form.rx_number && { batch_number: form.rx_number }),
         });
+        triggerETL("product");
       }
 
       // 3. Create Relationship: item_person (medication ↔ client/patient)
@@ -210,6 +219,7 @@ export default function MedProfileForm({ client, existing, onClose, onSuccess })
         start_date: form.start_date || new Date().toISOString().split("T")[0],
         notes: `Medication assigned via MedAdmin. Rx: ${form.rx_number || "N/A"}`,
       });
+      triggerETL("relationship");
     }
 
     setLoading(false);

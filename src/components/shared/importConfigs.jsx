@@ -150,7 +150,7 @@ export const PEOPLE_MAPPING_RULES = [
 
 export const PEOPLE_TEMPLATE_EXAMPLE = {
   first_name: "Jane", last_name: "Smith", preferred_name: "Jane",
-  person_type: "employee", status: "active", primary_role: "Nurse",
+  person_type: "staff", status: "active", primary_role: "Field Coordinator",
   role_category: "professional_licensed", phone: "+1-555-0100",
   email: "jane@example.com", gender: "female", date_of_birth: "1990-05-15",
   national_id: "ID-12345", address: "123 Main St", city: "New York",
@@ -164,7 +164,7 @@ export const PEOPLE_TEMPLATE_EXAMPLE = {
 export const PEOPLE_TEMPLATE_INSTRUCTIONS = [
   ["first_name","Yes","First name of the person","Jane"],
   ["last_name","Yes","Last name of the person","Smith"],
-  ["person_type","No","Type","employee, contractor, freelancer, vendor, client, patient, external_partner"],
+  ["person_type","No","Type","staff, client, contact, volunteer"],
   ["status","No","Status","active, inactive, on_leave"],
   ["email","No","Email address (must be valid format)","jane@example.com"],
   ["phone","No","Phone number","555-0100"],

@@ -4,6 +4,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
+
 const statusColor = (s) => ({
   active: "bg-emerald-50 text-emerald-700",
   archived: "bg-slate-100 text-slate-400",
@@ -89,6 +97,7 @@ export default function AddressDetailPanel({ address, currentUser, onClose, onGe
     const coords = await geocodeAddress(address);
     if (coords) {
       await base44.entities.Address.update(address.id, { ...address, ...coords });
+      triggerETL("address");
       onGeocoded?.({ ...address, ...coords });
     }
     setGeocoding(false);

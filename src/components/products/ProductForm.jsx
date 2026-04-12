@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -135,6 +143,7 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
     const productName = form.name;
 
     // Create relationship records for assigned enterprises
+    let relCreated = false;
     for (const assignment of (form.assigned_enterprises || [])) {
       if (assignment.enterprise_name) {
         try {
@@ -147,6 +156,7 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
             company_id: currentUser?.company_id,
             start_date: new Date().toISOString().split("T")[0],
           });
+          relCreated = true;
         } catch (e) { console.error("Relationship create failed", e); }
       }
     }
@@ -164,9 +174,12 @@ export default function ProductForm({ open, onClose, onSubmit, onArchive, initia
             company_id: currentUser?.company_id,
             start_date: new Date().toISOString().split("T")[0],
           });
+          relCreated = true;
         } catch (e) { console.error("Relationship create failed", e); }
       }
     }
+
+    if (relCreated) triggerETL("relationship");
   };
 
   const renderTab = () => {

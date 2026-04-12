@@ -2,6 +2,14 @@ import React, { useState } from "react";
 import { TYPE_ALIASES } from "@/utils/typeAliases";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, ShieldAlert, BarChart2, Bell } from "lucide-react";
@@ -92,6 +100,7 @@ function CertificationAlerts({ people, currentUser }) {
       assigned_to_name: currentUser?.full_name || currentUser?.email,
     }),
     onSuccess: (_, person) => {
+      triggerETL("task");
       qc.invalidateQueries({ queryKey: ["tasks-dash"] });
       toast({ title: `Reminder task created for ${person.first_name} ${person.last_name}` });
       setSending(null);

@@ -1,6 +1,14 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSameMonth, isToday, parseISO, addMonths, subMonths } from "date-fns";
 import { ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -67,6 +75,7 @@ export default function TaskCalendarView({ tasks }) {
     if (!task || task.due_date?.slice(0, 10) === dateStr) return;
     try {
       await base44.entities.Task.update(taskId, { ...task, due_date: dateStr });
+      triggerETL("task");
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.refetchQueries({ queryKey: ["tasks"] });
     } catch (err) {

@@ -2,20 +2,18 @@ import React, { useState } from "react";
 import { Plus, X } from "lucide-react";
 
 const PERSON_TYPES = [
-  { value: "employee", label: "Employee" },
-  { value: "contractor", label: "Contractor" },
-  { value: "freelancer", label: "Freelancer" },
+  { value: "staff",     label: "Staff / Employee" },
+  { value: "contact",   label: "Contractor / Freelancer" },
   { value: "volunteer", label: "Volunteer" },
 ];
 
 const TYPE_COLOR = {
-  employee: "bg-emerald-100 text-emerald-700",
-  contractor: "bg-blue-100 text-blue-700",
-  freelancer: "bg-purple-100 text-purple-700",
+  staff:     "bg-emerald-100 text-emerald-700",
+  contact:   "bg-blue-100 text-blue-700",
   volunteer: "bg-amber-100 text-amber-700",
 };
 
-const EMPTY = { first_name: "", last_name: "", role: "", person_type: "employee" };
+const EMPTY = { first_name: "", last_name: "", role: "", person_type: "staff" };
 
 export default function StepTeam({ people, onChange }) {
   const [form, setForm] = useState(EMPTY);

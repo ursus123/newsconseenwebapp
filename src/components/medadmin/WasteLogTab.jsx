@@ -1,6 +1,14 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
 import { format } from "date-fns";
 import { Trash2, Plus, Download, X } from "lucide-react";
 import { jsPDF } from "jspdf";
@@ -65,7 +73,13 @@ function WasteForm({ products, user, selectedClient, onSuccess, onClose, darkMod
         await base44.entities.Product.update(p.id, { stock_quantity: Math.max(0, (p.stock_quantity || 0) - qty) });
       }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["waste-tasks"] }); onSuccess(); },
+    onSuccess: () => {
+      triggerETL("task");
+      triggerETL("transaction");
+      triggerETL("product");
+      qc.invalidateQueries({ queryKey: ["waste-tasks"] });
+      onSuccess();
+    },
   });
 
   const canSave = medName && prepared && administered && reason && witness;

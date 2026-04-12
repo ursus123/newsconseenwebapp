@@ -47,7 +47,7 @@ const DEFAULT_CHARTS = (folderMap, companyId) => [
   {
     title: "Staff to Client Ratio",
     chart_type: "bar",
-    sql_query: `SELECT enterprise_name, COUNT(DISTINCT CASE WHEN person_type='employee' THEN id END) as staff, COUNT(DISTINCT CASE WHEN person_type='client' THEN id END) as clients FROM people GROUP BY enterprise_name`,
+    sql_query: `SELECT enterprise_name, COUNT(DISTINCT CASE WHEN person_type IN ('staff','employee','contractor','freelancer') THEN id END) as staff, COUNT(DISTINCT CASE WHEN person_type='client' THEN id END) as clients FROM people GROUP BY enterprise_name`,
     x_axis_key: "enterprise_name",
     y_axis_key: "clients",
     color_scheme: "blue",
