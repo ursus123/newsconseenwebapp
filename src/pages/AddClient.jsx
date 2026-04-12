@@ -1,6 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -249,6 +257,9 @@ async function extractDataFromFile(file) {
 export default function AddClient() {
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   // Step 0
   const [clientType, setClientType] = useState(null); // "individual" | "business" | "both"
@@ -276,9 +287,9 @@ export default function AddClient() {
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
 
-  const { data: people = [] } = useQuery({ queryKey: ["people"], queryFn: () => base44.entities.Person.list() });
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises"], queryFn: () => base44.entities.Enterprise.list() });
-  const { data: addresses = [] } = useQuery({ queryKey: ["addresses"], queryFn: () => base44.entities.Address.list() });
+  const { data: people = [] } = useQuery({ queryKey: ["people", currentUser?.company_id], queryFn: () => base44.entities.Person.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", currentUser?.company_id], queryFn: () => base44.entities.Enterprise.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser });
+  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", currentUser?.company_id], queryFn: () => base44.entities.Address.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser });
 
   const needsPerson = clientType === "individual" || clientType === "both";
   const needsEnterprise = clientType === "business" || clientType === "both";
@@ -390,14 +401,18 @@ export default function AddClient() {
     let finalEnterprise = selectedEnterprise;
     let finalAddress = selectedAddress;
 
+    const companyId = currentUser?.company_id;
     if (needsPerson && !selectedPerson && personData.first_name) {
-      finalPerson = await base44.entities.Person.create({ ...personData, status: "active" });
+      finalPerson = await base44.entities.Person.create({ ...personData, status: "active", company_id: companyId });
+      triggerETL("people");
     }
     if (needsEnterprise && !selectedEnterprise && enterpriseData.enterprise_name) {
-      finalEnterprise = await base44.entities.Enterprise.create({ ...enterpriseData, status: "active" });
+      finalEnterprise = await base44.entities.Enterprise.create({ ...enterpriseData, status: "active", company_id: companyId });
+      triggerETL("enterprise");
     }
     if (!skipAddress && !selectedAddress && addressData.address_line1) {
-      finalAddress = await base44.entities.Address.create({ ...addressData, status: "active" });
+      finalAddress = await base44.entities.Address.create({ ...addressData, status: "active", company_id: companyId });
+      triggerETL("address");
     }
 
     const personName = finalPerson ? `${finalPerson.first_name} ${finalPerson.last_name}` : null;
@@ -415,6 +430,7 @@ export default function AddClient() {
       relPromises.push(base44.entities.Relationship.create({ relationship_type: "item_enterprise", enterprise_name: entName, item_name: addrLine1, role: enterpriseData.relationshipRole || "Client", start_date: today, status: "active" }));
     }
     await Promise.all(relPromises);
+    if (relPromises.length > 0) triggerETL("relationship");
 
     qc.invalidateQueries();
     setSaving(false);
