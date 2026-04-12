@@ -68,6 +68,12 @@ class Settings(BaseSettings):
     n8n_secret:      Optional[str] = None   # shared secret for /n8n/ingest/* endpoints
 
     # ----------------------------------------------------------
+    # pgvector semantic search
+    # ----------------------------------------------------------
+    openai_api_key:  Optional[str] = None   # text-embedding-3-small (~$0.02/1M tokens)
+    voyage_api_key:  Optional[str] = None   # voyage-large-2 (alternative embedder)
+
+    # ----------------------------------------------------------
     # Airbyte data integration
     # ----------------------------------------------------------
     airbyte_api_url:        Optional[str] = None   # e.g. http://localhost:8001 or https://api.airbyte.com

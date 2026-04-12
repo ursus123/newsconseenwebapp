@@ -1873,6 +1873,40 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "search_records_semantically",
+        "description": (
+            "Semantic similarity search across all indexed entity records. "
+            "Use this for: finding people/enterprises/products similar to a description, "
+            "detecting potential duplicates, or answering questions like "
+            "'find all clients similar to John Smith' or 'show me records about expired medications'. "
+            "Returns records ranked by semantic similarity — understands synonyms and context, "
+            "not just keyword matches. Only works if pgvector is set up and records are indexed."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Natural language description of what to find. E.g. 'nurse at Kigali branch', 'overdue school fee payment', 'expired antibiotic'.",
+                },
+                "entity_type": {
+                    "type": "string",
+                    "enum": ["people", "enterprises", "products", "transactions", "tasks"],
+                    "description": "Which entity type to search within.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results to return (default 10).",
+                },
+                "min_similarity": {
+                    "type": "number",
+                    "description": "Minimum similarity threshold 0–1 (default 0.65). Higher = stricter.",
+                },
+            },
+            "required": ["query", "entity_type"],
+        },
+    },
+    {
         "name": "search_public_data",
         "description": (
             "Query structured public datasets for market research. Datasets available:\n"
@@ -1910,6 +1944,53 @@ TOOL_DEFINITIONS = [
 ]
 
 
+# ── pgvector semantic search tool ────────────────────────────────────────────
+
+def _search_records_semantically(
+    query: str,
+    entity_type: str,
+    company_id: str,
+    limit: int = 10,
+    min_similarity: float = 0.65,
+) -> dict:
+    """
+    Copilot-callable wrapper for pgvector semantic search.
+    Returns results in the same structure as other copilot tools.
+    """
+    try:
+        from pgvector_ext.searcher import search_similar
+        results = search_similar(
+            query=query,
+            company_id=company_id,
+            entity_type=entity_type,
+            limit=limit,
+            min_similarity=min_similarity,
+        )
+        if not results:
+            return {
+                "query":       query,
+                "entity_type": entity_type,
+                "data":        [],
+                "note":        (
+                    "No semantically similar records found. "
+                    "This may mean pgvector is not set up yet "
+                    "(run POST /pgvector/setup then POST /pgvector/index/all), "
+                    "or no records match the query at this similarity threshold."
+                ),
+            }
+        return {
+            "query":       query,
+            "entity_type": entity_type,
+            "count":       len(results),
+            "data":        results,
+        }
+    except Exception as e:
+        return {
+            "error": f"Semantic search unavailable: {e}",
+            "note":  "pgvector may not be set up. Run POST /pgvector/setup.",
+        }
+
+
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
 
 def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
@@ -1937,6 +2018,8 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "get_relationship_summary":  get_relationship_summary,
         "get_address_overview":      get_address_overview,
         "get_service_overview":      get_service_overview,
+        # Semantic search — pgvector powered
+        "search_records_semantically": _search_records_semantically,
         # Web-grounded tools — company_id injected but not used (public data)
         "web_search":              web_search,
         "search_public_data":      search_public_data,

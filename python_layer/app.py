@@ -63,6 +63,9 @@ from n8n.emitter import emit_etl_complete
 # Airbyte data integration
 from airbyte.routes import router as airbyte_router
 
+# pgvector semantic search
+from pgvector_ext.routes import router as pgvector_router
+
 # Market Intelligence Layer
 try:
     from market.routes import router as market_router
@@ -96,6 +99,14 @@ async def lifespan(app: FastAPI):
             logger.info("Startup: Railway PostgreSQL connected → analytics schema ready")
         except Exception as e:
             logger.warning("Startup: Failed to create analytics schema: %s", e)
+
+        # Enable pgvector extension + embeddings table (silent if already exists)
+        try:
+            from pgvector_ext.setup import ensure_pgvector
+            ensure_pgvector(engine)
+            logger.info("Startup: pgvector extension ready")
+        except Exception as e:
+            logger.warning("Startup: pgvector setup skipped — %s", e)
     else:
         logger.warning("Startup: DATABASE_URL not set — analytics store unavailable")
     yield
@@ -192,6 +203,9 @@ app.include_router(n8n_router)
 
 # Airbyte data integration
 app.include_router(airbyte_router)
+
+# pgvector semantic search
+app.include_router(pgvector_router)
 
 # Market Intelligence
 if _market_ok and market_router is not None:
