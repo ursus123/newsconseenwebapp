@@ -56,6 +56,10 @@ from network.routes import router as network_router
 # Webhook — event-driven ETL triggers (taxonomy changes, etc.)
 from webhook.routes import router as webhook_router
 
+# n8n Workflow Automation integration
+from n8n.routes import router as n8n_router
+from n8n.emitter import emit_etl_complete
+
 # Market Intelligence Layer
 try:
     from market.routes import router as market_router
@@ -179,6 +183,9 @@ app.include_router(network_router)
 
 # Webhook — event-driven ETL triggers
 app.include_router(webhook_router)
+
+# n8n Workflow Automation
+app.include_router(n8n_router)
 
 # Market Intelligence
 if _market_ok and market_router is not None:
@@ -413,6 +420,10 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
             logger.error("Cron: geospatial transform/load failed — %s", e)
 
     success_count = sum(1 for r in results.values() if r.get("status") == "success")
+
+    # Notify n8n of ETL completion (fire-and-forget, never blocks response)
+    emit_etl_complete(results, company_ids)
+
     return {
         "cron_run":    True,
         "version":     "4.0.3",

@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     brave_search_api_key:    Optional[str] = None   # https://brave.com/search/api/
     open_exchange_rates_key: Optional[str] = None   # https://openexchangerates.org/
 
+    # ----------------------------------------------------------
+    # n8n Workflow Automation integration
+    # ----------------------------------------------------------
+    n8n_webhook_url: Optional[str] = None   # n8n webhook URL — Newsconseen fires events here
+    n8n_secret:      Optional[str] = None   # shared secret for /n8n/ingest/* endpoints
+
     class Config:
         env_file       = ".env"
         case_sensitive = False
