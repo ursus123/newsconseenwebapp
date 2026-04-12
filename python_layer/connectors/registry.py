@@ -79,9 +79,9 @@ CONNECTOR_CATALOG = {
         "id":          "mpesa",
         "name":        "M-Pesa",
         "category":    "mobile_money",
-        "description": "Ingest M-Pesa transaction statements via Safaricom Daraja API",
+        "description": "Ingest M-Pesa transaction statements via CSV or Safaricom Daraja API",
         "sprint":      2,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "api_key",
         "entities":    ["transactions", "people"],
         "icon":        "smartphone",
@@ -90,9 +90,9 @@ CONNECTOR_CATALOG = {
         "id":          "mtn_momo",
         "name":        "MTN Mobile Money",
         "category":    "mobile_money",
-        "description": "Ingest MTN MoMo transaction data",
+        "description": "Ingest MTN MoMo transaction data via CSV or MoMo API",
         "sprint":      2,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "api_key",
         "entities":    ["transactions", "people"],
         "icon":        "smartphone",
@@ -101,9 +101,9 @@ CONNECTOR_CATALOG = {
         "id":          "airtel_money",
         "name":        "Airtel Money",
         "category":    "mobile_money",
-        "description": "Ingest Airtel Money transaction data",
+        "description": "Ingest Airtel Money transaction data via CSV (Kenya, Uganda, Tanzania)",
         "sprint":      2,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "api_key",
         "entities":    ["transactions", "people"],
         "icon":        "smartphone",
@@ -112,9 +112,9 @@ CONNECTOR_CATALOG = {
         "id":          "wave",
         "name":        "Wave",
         "category":    "mobile_money",
-        "description": "Ingest Wave mobile money transactions (Senegal, Côte d'Ivoire)",
+        "description": "Ingest Wave mobile money transactions (Senegal, Côte d'Ivoire) via CSV or API",
         "sprint":      2,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "api_key",
         "entities":    ["transactions", "people"],
         "icon":        "smartphone",
@@ -123,12 +123,23 @@ CONNECTOR_CATALOG = {
         "id":          "stripe",
         "name":        "Stripe",
         "category":    "mobile_money",
-        "description": "Sync Stripe payment transactions and customers",
+        "description": "Sync Stripe payment transactions and customers via Stripe API",
         "sprint":      2,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "api_key",
         "entities":    ["transactions", "people"],
         "icon":        "credit-card",
+    },
+    "bank_statement": {
+        "id":          "bank_statement",
+        "name":        "Bank Statement (Universal)",
+        "category":    "mobile_money",
+        "description": "Import any bank statement in CSV, OFX, or QIF format — auto-detects layout",
+        "sprint":      2,
+        "status":      "available",
+        "auth_type":   "file_upload",
+        "entities":    ["transactions"],
+        "icon":        "landmark",
     },
 
     # ── Sprint 3 — HR/Payroll ─────────────────────────────
@@ -495,3 +506,33 @@ def _ensure_connectors_loaded():
             _REGISTRY[_db_id] = SqlDatabaseConnector
     except ImportError as e:
         logger.warning("connector registry: could not load database connectors — %s", e)
+    try:
+        from connectors.mobile_money.mpesa import MpesaConnector
+        _REGISTRY["mpesa"] = MpesaConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load mpesa — %s", e)
+    try:
+        from connectors.mobile_money.mtn import MtnConnector
+        _REGISTRY["mtn_momo"] = MtnConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load mtn_momo — %s", e)
+    try:
+        from connectors.mobile_money.airtel import AirtelConnector
+        _REGISTRY["airtel_money"] = AirtelConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load airtel_money — %s", e)
+    try:
+        from connectors.mobile_money.stripe import StripeConnector
+        _REGISTRY["stripe"] = StripeConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load stripe — %s", e)
+    try:
+        from connectors.mobile_money.wavepay import WavePayConnector
+        _REGISTRY["wave"] = WavePayConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load wave — %s", e)
+    try:
+        from connectors.mobile_money.bank_statement import BankStatementConnector
+        _REGISTRY["bank_statement"] = BankStatementConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load bank_statement — %s", e)
