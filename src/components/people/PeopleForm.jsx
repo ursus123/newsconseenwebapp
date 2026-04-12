@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -219,6 +227,7 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
           longitude: form.longitude,
           linked_people: [{ person_name: personName, address_type: "Home", active: true }],
         }));
+        triggerETL("address");
       }
 
       // 3. If enterprise selected, create Relationship
@@ -231,14 +240,11 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
           role: form.primary_role || "",
           start_date: form.start_date || new Date().toISOString().split("T")[0],
         }));
+        triggerETL("relationship");
       }
 
-      // 4. Trigger ETL refresh (fire and forget)
-      const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-      fetch(`${RAILWAY_URL}/load/people-summary`, {
-        method: "POST",
-        headers: { "x-api-key": import.meta.env.VITE_RAILWAY_API_KEY || "" },
-      }).catch(() => {});
+      // 4. Trigger ETL refresh for people
+      triggerETL("people");
     } finally {
       setSaving(false);
     }

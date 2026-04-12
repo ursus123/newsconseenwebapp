@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { ENTERPRISE_TYPE_GROUPS, OBJECTIVE_OPTIONS, ENTERPRISE_SUB_TYPES } from "./typeConfig";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -177,7 +185,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
     let personName = selection.name;
 
     if (selection.isNew && selection.name) {
-      // Create a new Person record with type employee, role owners
+      // Create a new Person record with type staff, role owner
       const nameParts = selection.name.trim().split(" ");
       const newPerson = await base44.entities.Person.create({
         first_name: nameParts[0] || selection.name,
@@ -185,6 +193,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
         person_type: "staff",
         primary_role: "Owner",
       });
+      triggerETL("people");
       personName = `${newPerson.first_name} ${newPerson.last_name}`;
     }
 
@@ -201,6 +210,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
         status: "active",
         start_date: new Date().toISOString().split("T")[0],
       });
+      triggerETL("relationship");
     }
   };
 
@@ -217,6 +227,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
         person_type: "staff",
         primary_role: roleTitle || "Manager",
       });
+      triggerETL("people");
       personName = `${newPerson.first_name} ${newPerson.last_name}`;
     }
 
@@ -231,6 +242,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
         status: "active",
         start_date: new Date().toISOString().split("T")[0],
       });
+      triggerETL("relationship");
     }
   };
 
@@ -244,6 +256,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
 
     // Save the enterprise
     await onSubmit(submitData);
+    triggerETL("enterprise");
 
     // Create Address record if address data was entered
     if (form.primary_address || form.city || form.country) {
@@ -265,6 +278,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
             active: true
           }],
         });
+        triggerETL("address");
       } catch (e) {
         console.error("Address record creation failed", e);
       }
