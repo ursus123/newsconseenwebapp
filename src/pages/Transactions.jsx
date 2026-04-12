@@ -513,6 +513,48 @@ export default function Transactions() {
         </div>
       </div>
 
+      {/* P&L visual bar — shows revenue vs expense proportion */}
+      {(totalRevenue > 0 || totalExpenses > 0) && (() => {
+        const total = totalRevenue + totalExpenses;
+        const revPct = total > 0 ? Math.round((totalRevenue / total) * 100) : 0;
+        const expPct = 100 - revPct;
+        const margin = totalRevenue > 0 ? Math.round((netIncome / totalRevenue) * 100) : 0;
+        return (
+          <div className="bg-white border border-slate-100 rounded-2xl px-4 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-slate-600">P&L Overview</p>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${margin >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                {margin >= 0 ? "+" : ""}{margin}% margin
+              </span>
+            </div>
+            <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">
+              {revPct > 0 && (
+                <div
+                  className="bg-emerald-400 rounded-l-full transition-all"
+                  style={{ width: `${revPct}%` }}
+                  title={`Revenue ${revPct}%`}
+                />
+              )}
+              {expPct > 0 && (
+                <div
+                  className="bg-rose-400 rounded-r-full transition-all"
+                  style={{ width: `${expPct}%` }}
+                  title={`Expenses ${expPct}%`}
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-4 mt-1.5">
+              <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Revenue {revPct}%
+              </span>
+              <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" /> Expenses {expPct}%
+              </span>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Period + Enterprise selectors */}
       <div className="flex items-center gap-3 flex-wrap">
         {/* Preset quick-select buttons */}
