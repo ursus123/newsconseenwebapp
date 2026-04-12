@@ -1,5 +1,5 @@
 # ==============================================================
-# Newsconseen Universal Taxonomy  v2.0
+# Newsconseen Universal Taxonomy  v2.1
 # ==============================================================
 # Single source of truth for all type classification across
 # python_layer. Every ETL module and every API response imports
@@ -21,6 +21,15 @@
 #   - Expanded relationship types with semantic context
 #   - Derived attributes: risk flags, license requirements
 #   - All v1 names preserved — zero breaking changes
+#
+# v2.1 improvements:
+#   - Bug fix: _fuzzy_match_key now returns matched key (not always default)
+#   - Bug fix: lru_cache receives tuple (hashable) not list (would TypeError)
+#   - fuzzy_normalize_* are now correct aliases for normalize_* (DRY)
+#   - SUBTYPE_METADATA: short AI-friendly descriptions for key subtypes
+#   - PERSON_ROLE_HIERARCHY: lightweight org-chart relationships
+#   - NOTE for v3.0: move taxonomy data to JSON/YAML loaded at startup
+#     (enables hot-reload, operator customisation, and i18n without redeploy)
 # ==============================================================
 
 from __future__ import annotations
@@ -706,12 +715,165 @@ PAYMENT_STATUSES = {
 
 
 # ==============================================================
+# SUBTYPE METADATA  (v2.1 — AI-friendly descriptions)
+# ==============================================================
+# Short descriptions make RAG / copilot prompts more precise.
+# Copilot uses these when building context for tool responses.
+# Not exhaustive — covers high-frequency and compliance-sensitive subtypes.
+#
+# NOTE v3.0: this will live in a YAML file (config/taxonomy/subtypes.yaml)
+# so operators can annotate their own subtypes without touching Python.
+
+SUBTYPE_METADATA: dict[str, dict] = {
+    # ── Person subtypes ──────────────────────────────────────────
+    "Nurse": {
+        "description": "Registered or enrolled nurse providing clinical care",
+        "entity": "person", "main_type": "staff",
+        "licensed": True, "ai_example": "Find all nurses on leave this week",
+    },
+    "Doctor": {
+        "description": "Licensed medical doctor or physician",
+        "entity": "person", "main_type": "staff",
+        "licensed": True, "ai_example": "How many doctors are currently available?",
+    },
+    "Teacher": {
+        "description": "Classroom instructor, any level",
+        "entity": "person", "main_type": "staff",
+        "licensed": False, "ai_example": "Which teachers have classes scheduled today?",
+    },
+    "Student": {
+        "description": "Person enrolled in an educational programme",
+        "entity": "person", "main_type": "client",
+        "licensed": False, "ai_example": "Show students with outstanding fee balances",
+    },
+    "Patient": {
+        "description": "Person receiving medical or therapeutic care",
+        "entity": "person", "main_type": "client",
+        "licensed": False, "ai_example": "List patients admitted this month",
+    },
+    "Driver": {
+        "description": "Employed driver for goods or people transport",
+        "entity": "person", "main_type": "staff",
+        "licensed": True, "ai_example": "Which drivers are available for delivery today?",
+    },
+    "Accountant": {
+        "description": "Finance professional managing books and reports",
+        "entity": "person", "main_type": "staff",
+        "licensed": True, "ai_example": "Who is the accountant for the Nairobi branch?",
+    },
+    "Farmer": {
+        "description": "Agricultural worker managing crops or livestock",
+        "entity": "person", "main_type": "staff",
+        "licensed": False, "ai_example": "How many farmers are registered in the cooperative?",
+    },
+    # ── Enterprise subtypes ───────────────────────────────────────
+    "General Hospital": {
+        "description": "Full-service inpatient and outpatient hospital",
+        "entity": "enterprise", "naics": 62,
+        "ai_example": "Which hospitals are near the Kampala branch?",
+    },
+    "Elementary School": {
+        "description": "Primary school serving children aged 6-12",
+        "entity": "enterprise", "naics": 61,
+        "ai_example": "How many elementary schools are active clients?",
+    },
+    "Secondary School": {
+        "description": "High school or secondary education institution",
+        "entity": "enterprise", "naics": 61,
+        "ai_example": "List secondary schools with overdue fee invoices",
+    },
+    "Commercial Bank": {
+        "description": "Licensed deposit-taking and lending institution",
+        "entity": "enterprise", "naics": 52,
+        "ai_example": "Which banks are linked as financial partners?",
+    },
+    "Crop Farm": {
+        "description": "Agricultural enterprise growing food or cash crops",
+        "entity": "enterprise", "naics": 11,
+        "ai_example": "Show crop farms with harvest tasks due this month",
+    },
+    "Pharmacy Drug Store": {
+        "description": "Licensed retail pharmacy dispensing medications",
+        "entity": "enterprise", "naics": 44,
+        "ai_example": "Which pharmacy branches are low on controlled substances?",
+    },
+    # ── Item subtypes ─────────────────────────────────────────────
+    "Medication": {
+        "description": "Pharmaceutical product requiring dispensing record",
+        "entity": "item", "main_type": "physical",
+        "perishable": True, "controlled": True,
+        "ai_example": "Show medications expiring in the next 30 days",
+    },
+    "Vaccine": {
+        "description": "Biological immunisation product with cold chain requirement",
+        "entity": "item", "main_type": "physical",
+        "perishable": True, "controlled": True,
+        "ai_example": "How many vaccine doses are in stock at each branch?",
+    },
+    "Livestock": {
+        "description": "Animals kept for agricultural or commercial production",
+        "entity": "item", "main_type": "living",
+        "perishable": False, "controlled": False,
+        "ai_example": "What is the total cattle count across all farms?",
+    },
+    "Insurance Policy": {
+        "description": "Financial product providing risk coverage",
+        "entity": "item", "main_type": "financial_instrument",
+        "perishable": False, "controlled": True,
+        "ai_example": "Which clients have insurance policies expiring this quarter?",
+    },
+    "Software": {
+        "description": "Licensed software product or subscription",
+        "entity": "item", "main_type": "digital",
+        "perishable": False, "controlled": False,
+        "ai_example": "How many software licenses are assigned to clients?",
+    },
+}
+
+
+# ==============================================================
+# PERSON ROLE HIERARCHY  (v2.1 — lightweight org-chart)
+# ==============================================================
+# Maps senior roles to the roles they typically oversee.
+# Used by: copilot ("who does the nurse report to?"),
+#          alerts ("notify supervisor when task overdue"),
+#          network intelligence (span-of-control analysis).
+#
+# Keys are canonical person_subtype values (case-sensitive, matches PERSON_SUBTYPES).
+# Values are lists of subordinate subtypes.
+# NOTE v3.0: full hierarchy will be stored per-company in the Enterprise record.
+
+PERSON_ROLE_HIERARCHY: dict[str, list[str]] = {
+    "Executive Leadership":     ["Senior Management", "Director"],
+    "Senior Management":        ["Middle Management", "Director"],
+    "Middle Management":        ["Team Lead Supervisor", "Administrative Staff"],
+    "Team Lead Supervisor":     [
+        "Teacher", "Nurse", "Driver", "Sales Representative",
+        "Customer Service Representative", "Operations Staff",
+    ],
+    "Director":                 ["Manager", "Middle Management"],
+    "Doctor":                   ["Nurse", "Pharmacist", "Therapist", "Physiotherapist"],
+    "Accountant":               ["Finance Accounting Staff", "Auditor"],
+    "Engineer":                 ["Operations Staff", "Manufacturing Production Worker"],
+    "Agronomist":               ["Farmer"],
+    "Veterinarian":             ["Farmer"],
+    "Lawyer":                   ["Paralegal"],
+}
+
+# Reverse index: role → who supervises it
+PERSON_ROLE_SUPERVISORS: dict[str, list[str]] = {}
+for _supervisor, _reports in PERSON_ROLE_HIERARCHY.items():
+    for _report in _reports:
+        PERSON_ROLE_SUPERVISORS.setdefault(_report, []).append(_supervisor)
+
+
+# ==============================================================
 # HELPER FUNCTIONS  (v1 API preserved + v2 additions)
 # ==============================================================
 
 def normalize_person_type(raw_type: str) -> str:
     """Translate any legacy or canonical person_type to taxonomy value.
-    Falls back to fuzzy matching if no exact match found.
+    Falls back to fuzzy matching if no exact match found (typo-tolerant).
     """
     if not raw_type:
         return "staff"
@@ -719,13 +881,13 @@ def normalize_person_type(raw_type: str) -> str:
     exact = PERSON_TYPE_MAP.get(key)
     if exact:
         return exact
-    # Fuzzy fallback — catches typos like "staf", "cllient"
-    return _fuzzy_match_type(key, list(PERSON_TYPE_MAP.keys()), default="staff")
+    matched = _fuzzy_match_key(key, tuple(PERSON_TYPE_MAP.keys()))
+    return PERSON_TYPE_MAP[matched] if matched else "staff"
 
 
 def normalize_enterprise_type(raw_type: str) -> str:
     """Translate any legacy or canonical enterprise_type to taxonomy value.
-    Falls back to fuzzy matching if no exact match found.
+    Falls back to fuzzy matching if no exact match found (typo-tolerant).
     """
     if not raw_type:
         return "commercial"
@@ -733,12 +895,13 @@ def normalize_enterprise_type(raw_type: str) -> str:
     exact = ENTERPRISE_TYPE_MAP.get(key)
     if exact:
         return exact
-    return _fuzzy_match_type(key, list(ENTERPRISE_TYPE_MAP.keys()), default="commercial")
+    matched = _fuzzy_match_key(key, tuple(ENTERPRISE_TYPE_MAP.keys()))
+    return ENTERPRISE_TYPE_MAP[matched] if matched else "commercial"
 
 
 def normalize_item_type(raw_type: str) -> str:
     """Translate any legacy or canonical item_type to taxonomy value.
-    Falls back to fuzzy matching if no exact match found.
+    Falls back to fuzzy matching if no exact match found (typo-tolerant).
     """
     if not raw_type:
         return "physical"
@@ -746,7 +909,8 @@ def normalize_item_type(raw_type: str) -> str:
     exact = ITEM_TYPE_MAP.get(key)
     if exact:
         return exact
-    return _fuzzy_match_type(key, list(ITEM_TYPE_MAP.keys()), default="physical")
+    matched = _fuzzy_match_key(key, tuple(ITEM_TYPE_MAP.keys()))
+    return ITEM_TYPE_MAP[matched] if matched else "physical"
 
 
 def get_sector_for_subtype(subtype: str) -> tuple:
@@ -942,20 +1106,25 @@ def get_concept_meta(code: str) -> ConceptMeta:
     return CONCEPT_METADATA.get(code, ConceptMeta(description=f"User-defined term: {code}"))
 
 
-# ── v2: Fuzzy matching internals ──────────────────────────────────────────────
+# ── v2.1: Fuzzy matching internals ───────────────────────────────────────────
+# Bug fixes vs v2.0:
+#   1. _fuzzy_match_key returns the matched key (not always default)
+#   2. Receives tuple (hashable) so lru_cache works without TypeError
+#   3. fuzzy_normalize_* are now correct aliases — no duplicated logic
 
 @lru_cache(maxsize=512)
-def _fuzzy_match_type(raw: str, candidates_tuple: tuple, default: str) -> str:
+def _fuzzy_match_key(raw: str, candidates: tuple) -> Optional[str]:
     """
-    Internal fuzzy lookup using stdlib difflib.
-    Cached — repeated lookups for the same value are instant.
-    cutoff=0.7 means 70% similarity required to suggest a match.
+    Return the closest matching key from candidates, or None.
+    Cached — repeated lookups for the same value are O(1) after first call.
+    cutoff=0.7 = 70% similarity required (catches typos, not unrelated words).
+
+    Args:
+        raw:        lowercased, stripped input string
+        candidates: tuple of known keys (must be tuple for lru_cache hashability)
     """
-    matches = get_close_matches(raw, list(candidates_tuple), n=1, cutoff=0.7)
-    if matches:
-        # matches[0] is the closest key — look up canonical value
-        return default  # return default; caller maps via their dict
-    return default
+    matches = get_close_matches(raw, candidates, n=1, cutoff=0.7)
+    return matches[0] if matches else None
 
 
 def _fuzzy_suggest(raw: str, candidates: list[str], n: int = 3) -> list[str]:
@@ -963,48 +1132,10 @@ def _fuzzy_suggest(raw: str, candidates: list[str], n: int = 3) -> list[str]:
     return get_close_matches(raw, candidates, n=n, cutoff=0.6)
 
 
-def fuzzy_normalize_person_type(raw_type: str) -> str:
-    """
-    Normalize person_type with fuzzy fallback.
-    Handles typos: "staf" → "staff", "cllient" → "client".
-    """
-    if not raw_type:
-        return "staff"
-    key = raw_type.lower().strip()
-    # Exact match first
-    if key in PERSON_TYPE_MAP:
-        return PERSON_TYPE_MAP[key]
-    # Fuzzy match against all known keys
-    matches = get_close_matches(key, list(PERSON_TYPE_MAP.keys()), n=1, cutoff=0.65)
-    if matches:
-        return PERSON_TYPE_MAP[matches[0]]
-    return "staff"
-
-
-def fuzzy_normalize_enterprise_type(raw_type: str) -> str:
-    """Normalize enterprise_type with fuzzy fallback."""
-    if not raw_type:
-        return "commercial"
-    key = raw_type.lower().strip()
-    if key in ENTERPRISE_TYPE_MAP:
-        return ENTERPRISE_TYPE_MAP[key]
-    matches = get_close_matches(key, list(ENTERPRISE_TYPE_MAP.keys()), n=1, cutoff=0.65)
-    if matches:
-        return ENTERPRISE_TYPE_MAP[matches[0]]
-    return "commercial"
-
-
-def fuzzy_normalize_item_type(raw_type: str) -> str:
-    """Normalize item_type with fuzzy fallback."""
-    if not raw_type:
-        return "physical"
-    key = raw_type.lower().strip()
-    if key in ITEM_TYPE_MAP:
-        return ITEM_TYPE_MAP[key]
-    matches = get_close_matches(key, list(ITEM_TYPE_MAP.keys()), n=1, cutoff=0.65)
-    if matches:
-        return ITEM_TYPE_MAP[matches[0]]
-    return "physical"
+# Aliases — fuzzy_normalize_* kept for backward compat; normalize_* already fuzzy
+fuzzy_normalize_person_type     = normalize_person_type
+fuzzy_normalize_enterprise_type = normalize_enterprise_type
+fuzzy_normalize_item_type       = normalize_item_type
 
 
 # ── v2: Taxonomy introspection ────────────────────────────────────────────────
@@ -1031,7 +1162,7 @@ def list_all_subtypes(entity: str, main_type: str) -> list[str]:
 def taxonomy_summary() -> dict:
     """Return a summary of the full taxonomy — useful for status/health checks."""
     return {
-        "version": "2.0",
+        "version": "2.1",
         "person_types":          len(PERSON_TYPES),
         "person_subtypes_total": sum(len(v) for v in PERSON_SUBTYPES.values()),
         "enterprise_types":      len(ENTERPRISE_TYPES),
@@ -1044,4 +1175,9 @@ def taxonomy_summary() -> dict:
         "person_type_map_size":  len(PERSON_TYPE_MAP),
         "enterprise_type_map_size": len(ENTERPRISE_TYPE_MAP),
         "item_type_map_size":    len(ITEM_TYPE_MAP),
+        # v2.1
+        "subtype_metadata_entries": len(SUBTYPE_METADATA),
+        "role_hierarchy_entries":   len(PERSON_ROLE_HIERARCHY),
+        "concept_metadata_entries": len(CONCEPT_METADATA),
+        "licensed_person_subtypes": len(LICENSED_PERSON_SUBTYPES),
     }
