@@ -22,6 +22,58 @@ const PAINS = [
   "Your systems don't talk to each other.",
 ];
 
+const APP_CATEGORIES = [
+  {
+    label: "People & Operations",
+    color: "text-blue-400",
+    apps: [
+      { icon: Users, name: "People & Clients", desc: "Staff, clients, contacts — unified." },
+      { icon: CheckSquare, name: "Staff Scheduler", desc: "Shifts, rosters, and publish in one tap." },
+      { icon: CheckSquare, name: "Clock In / Out", desc: "GPS-stamped time tracking for any team." },
+      { icon: CheckSquare, name: "Attendance", desc: "Class registers and attendance history." },
+      { icon: Users, name: "Add Client", desc: "5-step guided client onboarding wizard." },
+      { icon: CheckSquare, name: "Med Administration", desc: "MAR, PRN flows, and controlled drug logs." },
+    ],
+  },
+  {
+    label: "Inventory & Finance",
+    color: "text-emerald-400",
+    apps: [
+      { icon: Package, name: "Products & Stock", desc: "Inventory, assets, and expiry tracking." },
+      { icon: Receipt, name: "Transactions", desc: "Revenue, expenses, invoices, payroll." },
+      { icon: CheckSquare, name: "Barcode Scanner", desc: "Scan and reconcile stock in real time." },
+      { icon: CheckSquare, name: "Stock Counter", desc: "Physical count with variance reports." },
+      { icon: CheckSquare, name: "Purchase Orders", desc: "Raise, track, and receive POs end-to-end." },
+      { icon: CheckSquare, name: "Services Catalog", desc: "Define reusable offerings with pricing." },
+    ],
+  },
+  {
+    label: "Intelligence & Analytics",
+    color: "text-violet-400",
+    apps: [
+      { icon: BarChart2, name: "Dashboards", desc: "Live stat cards, charts, and pinnable widgets." },
+      { icon: Code2, name: "Query Builder", desc: "SQL against your live ontology data." },
+      { icon: GitBranch, name: "Entity Graph", desc: "11 views — org structure to anomaly detection." },
+      { icon: BarChart2, name: "Reports", desc: "Scheduled, exportable, shareable reports." },
+      { icon: Globe, name: "Market Intelligence", desc: "Open data APIs fused with your operations." },
+      { icon: Cpu, name: "ML Models", desc: "Churn, survival, clustering — no-code." },
+    ],
+  },
+  {
+    label: "AI Agents & Copilot",
+    color: "text-amber-400",
+    apps: [
+      { icon: Zap, name: "Operational Copilot", desc: "Ask anything. Grounded in your live data." },
+      { icon: Bell, name: "Alert Engine", desc: "WhatsApp, email, SMS — operational triggers." },
+      { icon: Cpu, name: "Agents (Phase 4)", desc: "Autonomous agents that run ops 24/7." },
+      { icon: GitBranch, name: "Network Intelligence", desc: "Cross-branch comparison and insights." },
+      { icon: Zap, name: "Kinetic Layer", desc: "Action governance — who can do what." },
+      { icon: BarChart2, name: "Pipelines", desc: "ETL control — trigger, monitor, repair." },
+    ],
+  },
+];
+
+// Legacy flat list for sections that need it
 const APPS = [
   { icon: CheckSquare, name: "Tasks", desc: "Track every workflow across your org.", color: "bg-emerald-500" },
   { icon: Receipt, name: "Ledger", desc: "Revenue, expenses, and full audit trails.", color: "bg-blue-500" },
@@ -52,36 +104,52 @@ const ARCH_FEATURES = [
 
 const PERSONAS = [
   {
-    emoji: "💼",
-    title: "Consultant",
-    tagline: "Build workflows for clients",
-    points: ["Standardize processes across clients", "Deliver dashboards instantly", "White-label with your own domain"],
-    color: "border-emerald-500/30 bg-emerald-500/5",
-    badge: "bg-emerald-500/20 text-emerald-300",
+    emoji: "🏥",
+    title: "Healthcare & Care",
+    tagline: "End-to-end care operations",
+    points: ["Medication admin (MAR + PRN + controlled)", "Staff rostering and clock-in/out", "Client relationships and care task tracking"],
+    color: "border-rose-500/30 bg-rose-500/5",
+    badge: "bg-rose-500/20 text-rose-300",
   },
   {
-    emoji: "📊",
-    title: "BI Team",
-    tagline: "Intelligence at org scale",
-    points: ["Model data with visual query builder", "Build reusable analytics", "Connect open data APIs"],
+    emoji: "🏫",
+    title: "Education",
+    tagline: "Schools, colleges, training orgs",
+    points: ["Student enrollment and fee collection", "Attendance registers and class schedules", "Staff management and leave requests"],
     color: "border-blue-500/30 bg-blue-500/5",
     badge: "bg-blue-500/20 text-blue-300",
   },
   {
+    emoji: "🌾",
+    title: "Agriculture & Cooperatives",
+    tagline: "Farms, co-ops, and supply chains",
+    points: ["Livestock, flock, and crop product tracking", "Seasonal task planning and field visit logs", "Cooperative member and transaction management"],
+    color: "border-amber-500/30 bg-amber-500/5",
+    badge: "bg-amber-500/20 text-amber-300",
+  },
+  {
     emoji: "🏢",
-    title: "Small Enterprise",
+    title: "SME Operations",
     tagline: "Run the entire business",
-    points: ["Manage operations from one OS", "Track people & relationships", "Unify finance, HR, and inventory"],
+    points: ["People, inventory, finance — unified", "Barcode scanning and stock counters", "Dashboards, reports, and query builder"],
     color: "border-violet-500/30 bg-violet-500/5",
     badge: "bg-violet-500/20 text-violet-300",
   },
   {
-    emoji: "🏥",
-    title: "Care Organization",
-    tagline: "Purpose-built for care delivery",
-    points: ["Medication administration & MAR", "Care plan tasks & incident logs", "Client & carer relationship tracking"],
-    color: "border-rose-500/30 bg-rose-500/5",
-    badge: "bg-rose-500/20 text-rose-300",
+    emoji: "🤝",
+    title: "NGO & Nonprofits",
+    tagline: "Impact tracking and donor management",
+    points: ["Beneficiary enrollment and program tracking", "Volunteer management and field visit reports", "Donation tracking and grant reporting"],
+    color: "border-cyan-500/30 bg-cyan-500/5",
+    badge: "bg-cyan-500/20 text-cyan-300",
+  },
+  {
+    emoji: "💼",
+    title: "Consultants",
+    tagline: "Deploy for clients, not just yourself",
+    points: ["White-label with your own domain and logo", "Deliver dashboards and reports instantly", "Multi-enterprise management from one account"],
+    color: "border-emerald-500/30 bg-emerald-500/5",
+    badge: "bg-emerald-500/20 text-emerald-300",
   },
 ];
 
@@ -423,31 +491,38 @@ export default function Landing() {
       <section id="apps" className="py-24 bg-slate-900/50">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-14">
-            <p className="text-violet-400 text-xs font-bold tracking-widest uppercase mb-3">Core Apps</p>
-            <h2 className="text-4xl font-black text-white mb-4">Every workflow. One launcher.</h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto">Modular apps that install into your OS environment. Use what you need, hide what you don't.</p>
+            <p className="text-violet-400 text-xs font-bold tracking-widest uppercase mb-3">App Catalog</p>
+            <h2 className="text-4xl font-black text-white mb-4">30+ apps. One launcher.</h2>
+            <p className="text-slate-400 text-lg max-w-xl mx-auto">Modular specialist apps organized across four operational domains. Use what you need, hide what you don't.</p>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {APPS.map((app) => (
-              <div key={app.name} className="bg-slate-900 border border-white/5 rounded-2xl p-5 hover:border-white/15 transition-all hover:-translate-y-1 cursor-pointer group">
-                <div className={`w-12 h-12 rounded-xl ${app.color} shadow-lg flex items-center justify-center mb-3`}>
-                  <app.icon className="w-6 h-6 text-white" />
+          <div className="space-y-8">
+            {APP_CATEGORIES.map((cat) => (
+              <div key={cat.label}>
+                <p className={`text-xs font-bold tracking-widest uppercase mb-4 ${cat.color}`}>{cat.label}</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {cat.apps.map((app) => (
+                    <div key={app.name} className="bg-slate-900 border border-white/5 rounded-xl p-4 hover:border-white/15 transition-all hover:-translate-y-0.5 cursor-pointer">
+                      <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center mb-3">
+                        <app.icon className={`w-4 h-4 ${cat.color}`} />
+                      </div>
+                      <h3 className="font-bold text-white text-xs mb-1 leading-tight">{app.name}</h3>
+                      <p className="text-slate-500 text-[10px] leading-relaxed">{app.desc}</p>
+                    </div>
+                  ))}
                 </div>
-                <h3 className="font-bold text-white text-sm mb-1">{app.name}</h3>
-                <p className="text-slate-500 text-xs leading-relaxed">{app.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── HOW IT WORKS ─────────────────────────────────────────────────── */}
+      {/* ── THE ONTOLOGY LOOP ────────────────────────────────────────────── */}
       <section className="py-24">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
-            <p className="text-amber-400 text-xs font-bold tracking-widest uppercase mb-3">How It Works</p>
+            <p className="text-amber-400 text-xs font-bold tracking-widest uppercase mb-3">The Ontology Loop</p>
             <h2 className="text-4xl font-black text-white mb-4">Structure → Action → Intelligence</h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto">Every organization follows the same logic. Newsconseen maps it perfectly.</p>
+            <p className="text-slate-400 text-lg max-w-xl mx-auto">Every organization follows the same operational logic. Newsconseen maps it to a universal data model.</p>
           </div>
           <div className="flex flex-wrap items-start justify-center gap-2">
             {WORKFLOW_STEPS.map((step, i) => (
@@ -496,15 +571,48 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── AUTONOMOUS AGENTS ────────────────────────────────────────────── */}
+      <section className="py-24 bg-slate-900/50">
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="text-center mb-14">
+            <p className="text-violet-400 text-xs font-bold tracking-widest uppercase mb-3">Autonomous AI</p>
+            <h2 className="text-4xl font-black text-white mb-4">Agents that run your operations. 24/7.</h2>
+            <p className="text-slate-400 text-lg max-w-xl mx-auto">
+              Not a chatbot. Not a dashboard. Agents grounded in your data that monitor, alert, and act on your behalf.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+            {[
+              { emoji: "🤖", title: "Operational Copilot", desc: "Ask any question about your org — staff availability, revenue trends, task backlogs — and get answers grounded in your live data.", badge: "Live", badgeColor: "bg-emerald-500/20 text-emerald-300" },
+              { emoji: "🔔", title: "Alert Engine", desc: "Define rules — low stock, overdue invoices, missed visits, churn risk — and receive instant alerts via WhatsApp, email, or SMS.", badge: "Active", badgeColor: "bg-blue-500/20 text-blue-300" },
+              { emoji: "⚡", title: "Action Agents (Phase 4)", desc: "Autonomous agents that detect patterns, suggest actions, and execute workflows — with a human-in-the-loop approval gate for high-risk operations.", badge: "Coming", badgeColor: "bg-amber-500/20 text-amber-300" },
+            ].map((a) => (
+              <div key={a.title} className="bg-slate-900 border border-violet-500/20 rounded-2xl p-6 hover:border-violet-500/40 transition-all">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-3xl">{a.emoji}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${a.badgeColor}`}>{a.badge}</span>
+                </div>
+                <h3 className="font-bold text-white text-sm mb-2">{a.title}</h3>
+                <p className="text-slate-500 text-xs leading-relaxed">{a.desc}</p>
+              </div>
+            ))}
+          </div>
+          <div className="bg-gradient-to-r from-violet-500/10 to-indigo-500/10 border border-violet-500/20 rounded-2xl p-6 text-center">
+            <p className="text-sm font-bold text-slate-200 mb-1">🧠 The Compounding Moat</p>
+            <p className="text-slate-400 text-sm max-w-2xl mx-auto">Agent memory + operator history grows over time. The longer you use Newsconseen, the smarter your agents become about your specific business. No competitor can replicate this without your data.</p>
+          </div>
+        </div>
+      </section>
+
       {/* ── PERSONAS ─────────────────────────────────────────────────────── */}
       <section id="personas" className="py-24">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
             <p className="text-emerald-400 text-xs font-bold tracking-widest uppercase mb-3">Use Cases</p>
             <h2 className="text-4xl font-black text-white mb-4">Who uses Newsconseen?</h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto">Every type of organized enterprise — one OS.</p>
+            <p className="text-slate-400 text-lg max-w-xl mx-auto">Every type of organized enterprise — one OS, one ontology.</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {PERSONAS.map((p) => (
               <div key={p.title} className={`border rounded-2xl p-6 ${p.color} transition-all hover:-translate-y-1`}>
                 <div className="text-4xl mb-4">{p.emoji}</div>
@@ -620,10 +728,10 @@ export default function Landing() {
             Stop managing tools. Start running your organization from one unified OS.
           </p>
           <button
-            onClick={() => navigate("/Dashboard")}
+            onClick={() => navigate("/onboarding")}
             className="inline-flex items-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-white font-black px-10 py-5 rounded-2xl text-lg transition-all shadow-2xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-105"
           >
-            <Monitor className="w-6 h-6" /> Launch the Demo OS
+            <Monitor className="w-6 h-6" /> Start Free — No Credit Card
           </button>
           <p className="text-slate-600 text-xs mt-4">Free for 14 days · No credit card required</p>
         </div>
@@ -640,10 +748,9 @@ export default function Landing() {
             <span className="text-slate-600 text-xs">The universal enterprise operating system</span>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm text-slate-500">
-            <span>140 River Rd, Apt 3, Orrington, ME 04474</span>
-            <a href="tel:6823731189" className="hover:text-slate-400 transition-colors">(682) 373-1189</a>
             <a href="mailto:anewsconseen@gmail.com" className="hover:text-slate-400 transition-colors">anewsconseen@gmail.com</a>
             <button onClick={() => navigate("/pricing")} className="hover:text-slate-400 transition-colors">Pricing</button>
+            <button onClick={() => navigate("/onboarding")} className="hover:text-slate-400 transition-colors">Get Started</button>
             <span>© {new Date().getFullYear()} Newsconseen</span>
           </div>
         </div>
