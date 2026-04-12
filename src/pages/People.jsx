@@ -89,7 +89,7 @@ const columns = [
               {row.preferred_name || `${row.first_name || ""} ${row.last_name || ""}`.trim()}
             </span>
             <Badge className={personTypeColor(row.person_type)}>
-              {row.person_type || "employee"}
+              {row.person_type || "staff"}
             </Badge>
           </div>
           {row.email && (

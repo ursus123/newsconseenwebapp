@@ -1,5 +1,13 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,12 +56,13 @@ export default function InviteUser() {
         last_name: form.last_name,
         email: form.email,
         phone: form.phone || undefined,
-        person_type: "employee",
+        person_type: "staff",
         status: "active",
         company_id: form.company_id || currentUser?.company_id || undefined,
         internal_notes: form.enterprise_name ? `Enterprise: ${form.enterprise_name}` : undefined,
       });
 
+      triggerETL("people");
       setStatus("success");
       setForm({ first_name: "", last_name: "", email: "", phone: "", enterprise_name: "", company_id: "", role: "user" });
     } catch (err) {

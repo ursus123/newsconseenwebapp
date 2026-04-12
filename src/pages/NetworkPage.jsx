@@ -29,13 +29,11 @@ export default function NetworkPage() {
           a network join code, or generate one from the Settings page if you are a network admin.
         </p>
         <a
-          href="/ARCHITECTURE.md"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/Settings"
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition-colors"
         >
           <Globe className="w-4 h-4" />
-          Learn more
+          Go to Settings
         </a>
       </div>
     );
