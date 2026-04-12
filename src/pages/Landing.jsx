@@ -276,17 +276,17 @@ export default function Landing() {
           <div className="text-center mb-14">
             <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-4 py-1.5 mb-6">
               <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-emerald-400 text-xs font-semibold tracking-wide">The Browser-Native Enterprise OS</span>
+              <span className="text-emerald-400 text-xs font-semibold tracking-wide">The Autonomous SME Operating System</span>
             </div>
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white mb-6 leading-[1.05]">
-              Your Organization.<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">One Operating System.</span>
+              Palantir Foundry.<br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Built for Every SME.</span>
             </h1>
             <p className="text-xl text-slate-400 max-w-2xl mx-auto mb-4 leading-relaxed">
-              Tasks, data, workflows, and people — unified in a modular,<br className="hidden sm:block" /> browser-native OS built for real organizations.
+              The same operational intelligence that governments and Fortune 500s use —<br className="hidden sm:block" /> at a fraction of the cost, with AI agents that run your operations autonomously.
             </p>
             <p className="text-slate-500 text-sm max-w-lg mx-auto mb-10">
-              From care homes to consultancies, farms to franchises. One platform. Infinite configurations.
+              Schools, clinics, farms, cooperatives, NGOs, franchises. One universal ontology. Every industry.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
@@ -352,6 +352,69 @@ export default function Landing() {
             <div className="text-4xl mb-4">⚡</div>
             <h3 className="text-2xl font-black text-white mb-3">Newsconseen replaces the chaos.</h3>
             <p className="text-slate-300 text-lg max-w-xl mx-auto">One unified operating system. Every workflow. Every person. Every insight — in one place.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── THREE-LAYER ARCHITECTURE ─────────────────────────────────────── */}
+      <section className="py-24 bg-slate-900/50">
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="text-center mb-14">
+            <p className="text-indigo-400 text-xs font-bold tracking-widest uppercase mb-3">How It Works</p>
+            <h2 className="text-4xl font-black text-white mb-4">Three layers. One coherent system.</h2>
+            <p className="text-slate-400 text-lg max-w-xl mx-auto">
+              Most tools give you one layer. Newsconseen gives you all three — and the ontology that ties them together.
+            </p>
+          </div>
+          <div className="flex flex-col gap-4">
+            {[
+              {
+                num: "01",
+                label: "Enterprise OS",
+                sublabel: "System of record — forms create reality",
+                desc: "Every entity your organisation works with lives here: Person, Enterprise, Product, Task, Transaction, Address, Relationship. Forms create the data. The ontology gives it structure. Every mutation triggers the analytics engine.",
+                color: "border-emerald-500/30 bg-emerald-500/5",
+                badge: "bg-emerald-500/20 text-emerald-300",
+                icon: "🏢",
+              },
+              {
+                num: "02",
+                label: "Deployable Datamart",
+                sublabel: "Analytics engine — databases store reality",
+                desc: "A PostgreSQL analytics layer on Railway. ETL pipelines extract, transform, and load every mutation into analytics tables. Every dashboard stat card, chart, and ML model reads from here — never from Layer 1 directly.",
+                color: "border-blue-500/30 bg-blue-500/5",
+                badge: "bg-blue-500/20 text-blue-300",
+                icon: "📊",
+              },
+              {
+                num: "03",
+                label: "Foundry Intelligence",
+                sublabel: "Agents + copilot — intelligence explains reality",
+                desc: "The Copilot is grounded in your live data. Agents monitor, alert, and act on your behalf — 24/7. The longer you use Newsconseen, the smarter your agents become about your specific business. No competitor can replicate this without your history.",
+                color: "border-violet-500/30 bg-violet-500/5",
+                badge: "bg-violet-500/20 text-violet-300",
+                icon: "🤖",
+              },
+            ].map((layer) => (
+              <div key={layer.num} className={`flex items-start gap-5 rounded-2xl border p-6 ${layer.color}`}>
+                <div className="text-3xl shrink-0">{layer.icon}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${layer.badge}`}>LAYER {layer.num}</span>
+                    <h3 className="text-base font-black text-white">{layer.label}</h3>
+                    <span className="text-xs text-slate-500">— {layer.sublabel}</span>
+                  </div>
+                  <p className="text-sm text-slate-400 leading-relaxed">{layer.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-8 bg-gradient-to-r from-indigo-500/10 to-violet-500/10 border border-indigo-500/20 rounded-2xl p-6 text-center">
+            <p className="text-sm font-semibold text-slate-300 mb-1">The Moat</p>
+            <p className="text-slate-400 text-sm max-w-2xl mx-auto">
+              Agent memory + operator data grows over time. The longer an operator uses Newsconseen, the smarter their agents become about their specific business.
+              No competitor can replicate this without the history.
+            </p>
           </div>
         </div>
       </section>

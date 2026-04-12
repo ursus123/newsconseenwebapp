@@ -2,6 +2,14 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
 import { useAuth } from "@/lib/AuthContext";
 import StepEnterpriseType from "@/components/onboarding/StepEnterpriseType";
 import StepWorkspace from "@/components/onboarding/StepWorkspace";
@@ -97,6 +105,7 @@ export default function Onboarding() {
       });
 
       setCreatedEnterprise({ ...enterprise, company_id: enterprise.id });
+      triggerETL("enterprise");
       return true;
     } catch (e) {
       console.error(e);
@@ -120,6 +129,7 @@ export default function Onboarding() {
           company_id: createdEnterprise?.id,
         })
       ));
+      triggerETL("people");
       return true;
     } catch (e) {
       console.error(e);
@@ -156,6 +166,7 @@ export default function Onboarding() {
           })
         ),
       ]);
+      if (products.length > 0) triggerETL("product");
       return true;
     } catch (e) {
       console.error(e);
@@ -180,6 +191,7 @@ export default function Onboarding() {
         enterprise: createdEnterprise?.enterprise_name || "",
         company_id: createdEnterprise?.id,
       });
+      triggerETL("task");
       return true;
     } catch (e) {
       console.error(e);

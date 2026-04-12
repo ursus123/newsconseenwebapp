@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   User, Lock, Bell, Monitor, AlertTriangle,
   Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X, Settings as SettingsIcon, Palette, Bug,
-  Globe, Copy, Trash2, Loader2,
+  Globe, Copy, Trash2, Loader2, Brain, Zap, CheckCircle2, Clock,
 } from "lucide-react";
 import BrandingSection from "@/components/settings/BrandingSection";
 import ErrorLogSection from "@/components/settings/ErrorLogSection";
@@ -88,6 +88,120 @@ function PasswordField({ label, value, onChange, placeholder }) {
   );
 }
 
+// ── Agents Section ────────────────────────────────────────────────────────────
+function AgentsSection({ user }) {
+  const cid = user?.company_id || "default";
+  const storageKey = `agent_config_${cid}`;
+  const [config, setConfig] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { return {}; }
+  });
+  const [saved, setSaved] = useState(false);
+
+  const get = (key, def) => config[key] ?? def;
+  const set = (key, val) => setConfig(prev => ({ ...prev, [key]: val }));
+
+  const save = () => {
+    localStorage.setItem(storageKey, JSON.stringify(config));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const PHASE4_AGENTS = [
+    { id: "operations",    label: "Operations Agent",          desc: "Monitors task backlogs, staffing gaps, and SLA breaches. Triggers alerts and creates follow-up tasks autonomously.",   phase: "4B", ready: false },
+    { id: "revenue",       label: "Revenue Intelligence",      desc: "Tracks invoice ageing, payment patterns, and revenue forecasts. Flags overdue accounts and unusual transaction patterns.", phase: "4B", ready: false },
+    { id: "retention",     label: "Retention Agent",           desc: "Identifies clients and staff at churn risk using ML survival models. Recommends interventions before disengagement.",       phase: "4C", ready: false },
+    { id: "inventory",     label: "Inventory Agent",           desc: "Monitors stock levels, expiry dates, and reorder points. Raises purchase orders and stock alerts automatically.",          phase: "4C", ready: false },
+    { id: "onboarding",    label: "Onboarding Agent",          desc: "Guides new clients and staff through onboarding checklists. Tracks completion and escalates blockers.",                    phase: "4C", ready: false },
+    { id: "network",       label: "Network Coordinator",       desc: "Compares performance across branches and franchises. Surfaces outliers and escalates network-level patterns.",             phase: "4E", ready: false },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-bold text-slate-800">Agent Configuration</h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Configure autonomous agents that run your operations 24/7.
+            Agents are scoped to your organisation — no other tenant is affected.
+          </p>
+        </div>
+        <button
+          onClick={save}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            saved ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          }`}
+        >
+          {saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+          {saved ? "Saved" : "Save"}
+        </button>
+      </div>
+
+      {/* Global toggles */}
+      <div className="bg-white border border-slate-100 rounded-2xl p-5 space-y-1">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Global</p>
+        <ToggleRow label="Enable agent system" checked={get("agents_enabled", false)} onChange={v => set("agents_enabled", v)} />
+        <ToggleRow label="Human-in-the-loop approval for high-risk actions" checked={get("approval_gate", true)} onChange={v => set("approval_gate", v)} />
+        <ToggleRow label="Send agent activity digest (daily email)" checked={get("digest_email", false)} onChange={v => set("digest_email", v)} />
+      </div>
+
+      {/* Approval gate threshold */}
+      <div className="bg-white border border-slate-100 rounded-2xl p-5">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Approval gate threshold</p>
+        <p className="text-xs text-slate-400 mb-3">Actions above this financial threshold require manual approval before execution.</p>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-slate-600">$</span>
+          <input
+            type="number"
+            value={get("approval_threshold", 500)}
+            onChange={e => set("approval_threshold", Number(e.target.value))}
+            className="w-32 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          />
+          <span className="text-xs text-slate-400">per action</span>
+        </div>
+      </div>
+
+      {/* Agent roster */}
+      <div className="bg-white border border-slate-100 rounded-2xl p-5">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">Agent roster — Phase 4</p>
+        <div className="space-y-3">
+          {PHASE4_AGENTS.map(agent => (
+            <div key={agent.id} className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+                <Brain className="w-4 h-4 text-indigo-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                  <p className="text-sm font-semibold text-slate-700">{agent.label}</p>
+                  <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">Phase {agent.phase}</span>
+                  <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                    <Clock className="w-2.5 h-2.5" /> Coming soon
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-snug">{agent.desc}</p>
+              </div>
+              <div className="shrink-0 opacity-40">
+                <button disabled className="w-10 h-6 rounded-full bg-slate-200 relative cursor-not-allowed">
+                  <span className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-3 flex items-start gap-3">
+        <Zap className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-xs font-semibold text-indigo-700">Agent memory grows with your data</p>
+          <p className="text-[10px] text-indigo-500 mt-0.5">
+            Every entity mutation, task outcome, and transaction is fed into agent memory. The longer you use Newsconseen, the smarter your agents become — this moat cannot be replicated by competitors without your history.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const ALL_TABS = [
   { id: "profile",       label: "Profile",       icon: User,          adminOnly: false },
   { id: "password",      label: "Password",      icon: Lock,          adminOnly: false },
@@ -95,8 +209,9 @@ const ALL_TABS = [
   { id: "sessions",      label: "Sessions",      icon: Monitor,       adminOnly: false },
   { id: "network",       label: "Network",       icon: Globe,         adminOnly: false },
   { id: "branding",      label: "Brand Settings", icon: Palette,       superAdminOnly: true },
-  { id: "error_log",     label: "Error Log",     icon: Bug,           adminOnly: true  },
-  { id: "danger",        label: "Danger Zone",   icon: AlertTriangle, adminOnly: false },
+  { id: "agents",        label: "Agents",         icon: Brain,         adminOnly: true  },
+  { id: "error_log",     label: "Error Log",      icon: Bug,           adminOnly: true  },
+  { id: "danger",        label: "Danger Zone",    icon: AlertTriangle, adminOnly: false },
 ];
 
 const DEFAULT_NOTIF = {
@@ -175,6 +290,7 @@ export default function Settings() {
           {activeTab === "sessions"      && <SessionsSection />}
           {activeTab === "network"       && <NetworkSection user={user} enterprises={enterprises} />}
           {activeTab === "branding"      && <BrandingSection user={user} enterprise={myEnterprise} />}
+          {activeTab === "agents"        && <AgentsSection user={user} />}
           {activeTab === "error_log"     && <ErrorLogSection user={user} />}
           {activeTab === "danger"        && <DangerSection user={user} />}
         </div>

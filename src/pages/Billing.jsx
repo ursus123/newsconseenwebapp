@@ -97,6 +97,30 @@ export default function Billing() {
     enabled: !!companyId,
   });
 
+  const { data: people = [] } = useQuery({
+    queryKey: ["people_billing", companyId],
+    queryFn: () => base44.entities.Person.filter({ company_id: companyId }),
+    enabled: !!companyId,
+  });
+
+  const { data: products = [] } = useQuery({
+    queryKey: ["products_billing", companyId],
+    queryFn: () => base44.entities.Product.filter({ company_id: companyId }),
+    enabled: !!companyId,
+  });
+
+  const { data: transactions = [] } = useQuery({
+    queryKey: ["transactions_billing", companyId],
+    queryFn: () => base44.entities.Transaction.filter({ company_id: companyId }),
+    enabled: !!companyId,
+  });
+
+  const { data: tasks = [] } = useQuery({
+    queryKey: ["tasks_billing", companyId],
+    queryFn: () => base44.entities.Task.filter({ company_id: companyId }),
+    enabled: !!companyId,
+  });
+
   const enterprise = enterprises.find((e) => e.enterprise_name === companyId) || enterprises[0];
   const tier = enterprise?.subscription_tier || "professional";
   const status = enterprise?.subscription_status || "trial";
@@ -195,6 +219,15 @@ export default function Billing() {
         <div className="space-y-5">
           <UsageBar label="Enterprises" used={enterprises.length} max={limits.enterprises} />
           <UsageBar label="Users" used={users.length} max={limits.users} />
+          <div className="border-t border-slate-100 pt-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">Data volume</p>
+            <div className="grid grid-cols-2 gap-4">
+              <UsageBar label="People" used={people.length} max={limits.people ?? Infinity} />
+              <UsageBar label="Products" used={products.length} max={limits.products ?? Infinity} />
+              <UsageBar label="Transactions" used={transactions.length} max={limits.transactions ?? Infinity} />
+              <UsageBar label="Tasks" used={tasks.length} max={limits.tasks ?? Infinity} />
+            </div>
+          </div>
         </div>
         {(enterprises.length >= limits.enterprises || users.length >= limits.users) && (
           <button
