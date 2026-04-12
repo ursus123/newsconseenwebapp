@@ -42,6 +42,7 @@ import GettingStartedChecklist from "../components/dashboard/GettingStartedCheck
 import TrendCharts from "../components/dashboard/TrendCharts";
 import GeoMap from "../components/dashboard/GeoMap";
 import SupersetEmbed from "../components/dashboard/SupersetEmbed";
+import N8nEmbed from "../components/dashboard/N8nEmbed";
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -812,6 +813,9 @@ function AdminDashboard({ user }) {
 
       {/* ── Advanced Analytics (Superset Embedded) ── */}
       <SupersetEmbed companyId={companyId} />
+
+      {/* ── Workflow Automation (n8n Embedded) ── */}
+      <N8nEmbed />
 
       {/* ── Main 2-col layout ── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

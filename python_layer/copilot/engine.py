@@ -17,6 +17,7 @@ import logging
 import os
 import time
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from .queries import TOOL_DEFINITIONS, execute_tool, get_operator_context, QueryEngine
 
 logger = logging.getLogger(__name__)
@@ -172,36 +173,60 @@ def _run_tool_loop(
 
         if response.stop_reason == "tool_use":
             messages.append({"role": "assistant", "content": response.content})
-            tool_results = []
 
-            for block in response.content:
-                if block.type != "tool_use":
-                    continue
+            tool_blocks = [b for b in response.content if b.type == "tool_use"]
 
-                logger.info("Copilot tool: %s  input: %s", block.name, block.input)
-
-                # Notify streaming caller before executing
-                if on_tool_call:
+            # Notify streaming caller before executing (sequential — ordering matters for UX)
+            if on_tool_call:
+                for block in tool_blocks:
                     try:
                         on_tool_call(block.name, block.input)
                     except Exception:
                         pass
 
+            # Execute all tool calls in PARALLEL — each is an independent DB read.
+            # When Claude requests get_people_summary + get_transaction_summary together,
+            # both database queries run simultaneously instead of sequentially.
+            # Results are keyed by tool_use_id to preserve ordering for the API response.
+            def _run_tool(block):
+                logger.info("Copilot tool [parallel]: %s  input: %s", block.name, block.input)
                 try:
-                    result = execute_tool(
+                    return block.id, execute_tool(
                         tool_name=block.name,
                         tool_input=block.input,
                         company_id=company_id,
                     )
                 except Exception as e:
                     logger.warning("Tool %s raised: %s", block.name, e)
-                    result = {"error": str(e), "note": "Tool failed — answer from available context."}
+                    return block.id, {
+                        "error": str(e),
+                        "note": "Tool failed — answer from available context.",
+                    }
 
-                tool_results.append({
+            result_map = {}
+            if len(tool_blocks) == 1:
+                # Single tool — skip thread overhead
+                bid, res = _run_tool(tool_blocks[0])
+                result_map[bid] = res
+            else:
+                with ThreadPoolExecutor(
+                    max_workers=len(tool_blocks),
+                    thread_name_prefix="copilot-tool",
+                ) as pool:
+                    futures = {pool.submit(_run_tool, b): b for b in tool_blocks}
+                    for future in as_completed(futures):
+                        bid, res = future.result()
+                        result_map[bid] = res
+
+            # Preserve original tool ordering in the API message
+            tool_results = [
+                {
                     "type":        "tool_result",
                     "tool_use_id": block.id,
-                    "content":     json.dumps(result, default=str),
-                })
+                    "content":     json.dumps(result_map[block.id], default=str),
+                }
+                for block in tool_blocks
+            ]
 
             messages.append({"role": "user", "content": tool_results})
             continue

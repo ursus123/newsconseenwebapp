@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -436,30 +437,40 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         "relationships": (relationships.extract_relationships,  relationships.transform_relationships),
     }
 
-    # ── Step 1: Extract all entities once (all tenants, no filtering) ─────────
-    # One API call per entity regardless of tenant count.
-    # Extract and raw-write are separate try blocks so a DB write failure
-    # never loses the in-memory DataFrame needed for the transform step.
+    # ── Step 1: Extract all entities in PARALLEL ──────────────────────────────
+    # All Base44 fetches are independent HTTP calls — fire them simultaneously.
+    # ThreadPoolExecutor: threads bypass Python's GIL for I/O-bound work.
+    # max_workers=8 matches number of entities — each gets its own thread.
+    # Wall-clock time drops from (sum of all fetches) → (slowest single fetch).
     raw_data: dict[str, pd.DataFrame] = {}
-    for name, (extract_fn, _) in entity_map.items():
-        # 1a. Extract from Base44
+
+    def _extract_one(name, extract_fn):
+        """Extract one entity and write to raw table. Returns (name, df)."""
         try:
             df = extract_fn()
-            raw_data[name] = df
         except Exception as e:
             logger.error("Cron: %s extract failed — %s", name, e)
-            raw_data[name] = pd.DataFrame()
-            continue
-
-        # 1b. Persist raw records — failure here does NOT lose raw_data
+            return name, pd.DataFrame()
         try:
             load_raw(df, name)
             logger.info("Cron: raw.%s — %d records written", name, len(df))
         except Exception as e:
             logger.warning(
-                "Cron: raw.%s write failed (data still available for transform) — %s",
+                "Cron: raw.%s write failed (data still in memory for transform) — %s",
                 name, e,
             )
+        return name, df
+
+    with ThreadPoolExecutor(max_workers=8, thread_name_prefix="etl-extract") as pool:
+        futures = {
+            pool.submit(_extract_one, name, extract_fn): name
+            for name, (extract_fn, _) in entity_map.items()
+        }
+        for future in as_completed(futures):
+            name, df = future.result()
+            raw_data[name] = df
+
+    logger.info("Cron: parallel extract complete — %d entities loaded", len(raw_data))
 
     # ── Step 2: Discover all company_ids from ALL entity extracts ────────────
     # Robust multi-tenant discovery: scan every raw DataFrame for a company_id
@@ -487,24 +498,43 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
 
     logger.info("Cron: %d company_id(s) discovered: %s", len(company_ids), company_ids)
 
-    # ── Step 3: Transform + load analytics summaries per company ──────────────
+    # ── Step 3: Transform + load analytics summaries — parallel per entity ────
+    # Entities are independent — people_summary doesn't depend on task_summary.
+    # Run one thread per entity, each iterating its own company list.
+    # DB writes use separate connections per thread (SQLAlchemy pool handles this).
     results: dict = {}
-    for company_id in company_ids:
-        for name, (_, transform_fn) in entity_map.items():
+    results_lock = __import__("threading").Lock()
+
+    def _transform_entity(name, transform_fn):
+        """Transform + load one entity across all companies. Returns (name, result)."""
+        entity_result = {}
+        for company_id in company_ids:
             try:
                 filtered = filter_by_company(raw_data.get(name, pd.DataFrame()), company_id)
                 summary  = transform_fn(filtered)
-                result   = load_dataframe(summary, f"{name}_summary", company_id=company_id)
-                # Accumulate row counts across companies; surface any error
-                if name not in results or result.get("status") == "error":
-                    results[name] = result
-                elif result.get("status") == "success":
-                    results[name]["rows_loaded"] = (
-                        results[name].get("rows_loaded", 0) + result.get("rows_loaded", 0)
+                r        = load_dataframe(summary, f"{name}_summary", company_id=company_id)
+                if not entity_result or r.get("status") == "error":
+                    entity_result = r
+                elif r.get("status") == "success":
+                    entity_result["rows_loaded"] = (
+                        entity_result.get("rows_loaded", 0) + r.get("rows_loaded", 0)
                     )
             except Exception as e:
-                results[name] = {"status": "error", "detail": str(e)}
+                entity_result = {"status": "error", "detail": str(e)}
                 logger.error("Cron: %s summary failed (company_id=%s) — %s", name, company_id, e)
+        return name, entity_result
+
+    with ThreadPoolExecutor(max_workers=8, thread_name_prefix="etl-transform") as pool:
+        futures = {
+            pool.submit(_transform_entity, name, transform_fn): name
+            for name, (_, transform_fn) in entity_map.items()
+        }
+        for future in as_completed(futures):
+            name, entity_result = future.result()
+            with results_lock:
+                results[name] = entity_result
+
+    logger.info("Cron: parallel transform complete — %d entities", len(results))
 
     # ── Step 4: Geospatial (company-agnostic spatial clustering) ─────────────
     try:

@@ -17,6 +17,7 @@
 
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -252,27 +253,43 @@ def index_entity_records(
         return {"indexed": 0, "skipped": len(records), "errors": 0,
                 "note": "No embedding provider. Set OPENAI_API_KEY or VOYAGE_API_KEY."}
 
+    # ── Phase 1: Parallel embedding generation ────────────────────────────────
+    # Embedding API calls (OpenAI / Voyage) are I/O-bound HTTP requests.
+    # Fire batch_size calls simultaneously — limited by API rate limits.
+    # max_workers=batch_size (default 50) matches the batch window.
+    # Each worker: text → embedding vector (HTTP call). No shared state.
     indexed = skipped = errors = 0
+
+    def _embed_record(record):
+        """Generate embedding for one record. Returns (record_id, text, vector) or None."""
+        record_id = str(record.get("id") or record.get("external_id") or "")
+        if not record_id:
+            return None, None, None
+        text_content = entity_to_text(entity_type, record)
+        if not text_content:
+            return None, None, None
+        embedding = get_embedding(text_content)
+        return record_id, text_content, embedding
 
     for i in range(0, len(records), batch_size):
         batch = records[i: i + batch_size]
 
-        for record in batch:
-            record_id = str(record.get("id") or record.get("external_id") or "")
-            if not record_id:
-                skipped += 1
-                continue
+        # Fire all embedding calls in this batch simultaneously
+        embed_results = []
+        with ThreadPoolExecutor(
+            max_workers=min(batch_size, len(batch)),
+            thread_name_prefix="pgvector-embed",
+        ) as pool:
+            futures = {pool.submit(_embed_record, r): r for r in batch}
+            for future in as_completed(futures):
+                record_id, text_content, embedding = future.result()
+                if record_id is None or embedding is None:
+                    skipped += 1
+                    continue
+                embed_results.append((record_id, text_content, embedding))
 
-            text_content = entity_to_text(entity_type, record)
-            if not text_content:
-                skipped += 1
-                continue
-
-            embedding = get_embedding(text_content)
-            if embedding is None:
-                skipped += 1
-                continue
-
+        # ── Phase 2: Sequential DB upserts (connection pool is finite) ────────
+        for record_id, text_content, embedding in embed_results:
             try:
                 with engine.connect() as conn:
                     conn.execute(sqlt("""
