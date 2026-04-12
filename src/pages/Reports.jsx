@@ -33,16 +33,32 @@ function MarketAnalysisTemplate({ currentUser, onBack, onSaveReport }) {
     { id: "demand_risk",         title: "6. Demand Risk & Switching",        icon: AlertCircle, source: "ml",         description: "Retention risk scores by segment" },
     { id: "capacity_forecast",   title: "7. Capacity & Demand Forecast",     icon: TrendingUp,  source: "ml",         description: "Staffing forecast from ML model" },
     { id: "economic_context",    title: "8. Economic & Labor Context",       icon: BarChart2,   source: "economic",   description: "Census, BLS, World Bank indicators" },
-    { id: "public_data",         title: "9. Public Data Intelligence",       icon: Globe,       source: "public",     description: "CMS pharmacy data, NPPES, state licenses" },
+    { id: "public_data",         title: "9. Public Data Intelligence",       icon: Globe,       source: "public",     description: "Public registries, state licenses, regulatory data (US)" },
     { id: "recommendations",     title: "10. Recommendations & Opportunities", icon: Brain,    source: "copilot",    description: "AI-generated strategic recommendations" },
   ];
 
   const [sectionData, setSectionData]   = useState({});
   const [loading, setLoading]           = useState({});
-  const [config, setConfig]             = useState({ location: "Maine", industry: "pharmacy", state: "ME" });
+  const [config, setConfig]             = useState({ location: "", industry: "", state: "" });
   const [generating, setGenerating]     = useState(false);
   const [reportText, setReportText]     = useState({});
   const [savedReport, setSavedReport]   = useState(null);
+
+  // Auto-populate location from operator's Enterprise record
+  useEffect(() => {
+    if (!companyId) return;
+    base44.entities.Enterprise.filter({ company_id: companyId }).then(ents => {
+      const ent = ents[0];
+      if (!ent) return;
+      const location = [ent.city, ent.country].filter(Boolean).join(", ");
+      const industry = ent.enterprise_type?.replace(/_/g, " ") || "";
+      setConfig(c => ({
+        location: c.location || location,
+        industry: c.industry || industry,
+        state: c.state,
+      }));
+    }).catch(() => {});
+  }, [companyId]);
 
   // ── Fetch a section ────────────────────────────────────────────────────────
   async function fetchSection(sectionId) {
@@ -51,13 +67,13 @@ function MarketAnalysisTemplate({ currentUser, onBack, onSaveReport }) {
       let data = null;
 
       if (sectionId === "competitor_density" || sectionId === "market_overview") {
-        // Market Intelligence — OSM pharmacy counts per city
-        const cities = ["Portland Maine", "Bangor Maine", "Lewiston Maine", "Augusta Maine"];
-        const results = await Promise.allSettled(cities.map(city =>
-          fetch(`${RAILWAY_URL}/market/nearby?lat=44.0&lng=-70.5&radius_km=20&enterprise_type=commercial&limit=30&company_id=${companyId}`)
-            .then(r => r.ok ? r.json() : null).catch(() => null)
-        ));
-        data = { cities, results: results.map(r => r.value), source: "OpenStreetMap via Market Intelligence" };
+        // Market Intelligence — competitor density around operator's location
+        const searchLocation = config.location || "unknown";
+        const r = await fetch(
+          `${RAILWAY_URL}/market/search?query=${encodeURIComponent(searchLocation)}&enterprise_type=commercial&limit=50&company_id=${companyId}`,
+          { headers: RAIL_HEADERS }
+        ).then(res => res.ok ? res.json() : null).catch(() => null);
+        data = { location: searchLocation, results: r, source: "OpenStreetMap via Market Intelligence" };
       }
 
       else if (sectionId === "competitor_database") {
@@ -83,9 +99,12 @@ function MarketAnalysisTemplate({ currentUser, onBack, onSaveReport }) {
       }
 
       else if (sectionId === "economic_context") {
+        // Derive country code from location: last part after comma, or use config.state as US hint
+        const locationParts = config.location.split(",").map(s => s.trim());
+        const countryHint = config.state ? "US" : (locationParts[locationParts.length - 1] || "");
         const [census, worldBank] = await Promise.allSettled([
-          fetch(`${RAILWAY_URL}/market/economic-context?country_code=US&company_id=${companyId}`, { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
-          fetch(`${RAILWAY_URL}/market/labor-context?country_code=US&company_id=${companyId}`, { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
+          fetch(`${RAILWAY_URL}/market/economic-context?country_code=${encodeURIComponent(countryHint)}&location=${encodeURIComponent(config.location)}&company_id=${companyId}`, { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
+          fetch(`${RAILWAY_URL}/market/labor-context?country_code=${encodeURIComponent(countryHint)}&location=${encodeURIComponent(config.location)}&company_id=${companyId}`, { headers: RAIL_HEADERS }).then(r => r.ok ? r.json() : null),
         ]);
         data = { economic: census.value, labor: worldBank.value };
       }
@@ -220,8 +239,8 @@ function MarketAnalysisTemplate({ currentUser, onBack, onSaveReport }) {
           <input
             value={config.location}
             onChange={e => setConfig(c => ({ ...c, location: e.target.value }))}
-            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white w-40"
-            placeholder="e.g. Maine"
+            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white w-48"
+            placeholder="City, Country — auto-filled from your enterprise"
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -230,16 +249,16 @@ function MarketAnalysisTemplate({ currentUser, onBack, onSaveReport }) {
             value={config.industry}
             onChange={e => setConfig(c => ({ ...c, industry: e.target.value }))}
             className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white w-36"
-            placeholder="e.g. pharmacy"
+            placeholder="e.g. healthcare, retail"
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">State Code</label>
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">US State Code <span className="normal-case font-normal text-slate-400">(optional)</span></label>
           <input
             value={config.state}
             onChange={e => setConfig(c => ({ ...c, state: e.target.value.toUpperCase().slice(0, 2) }))}
             className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white w-20"
-            placeholder="ME"
+            placeholder="e.g. TX"
             maxLength={2}
           />
         </div>

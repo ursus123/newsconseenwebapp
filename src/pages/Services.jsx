@@ -21,6 +21,14 @@ import {
   SERVICE_TEMPLATE_INSTRUCTIONS, validateService, transformService,
 } from "@/components/shared/importConfigs";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
+
 const statusColor = (s) => ({ active: "bg-emerald-50 text-emerald-700", inactive: "bg-amber-50 text-amber-700", archived: "bg-slate-100 text-slate-400" }[s] || "bg-slate-100 text-slate-600");
 const catColor = (c) => ({ non_medical: "bg-cyan-50 text-cyan-700", personal_care: "bg-blue-50 text-blue-700", skilled_nursing: "bg-purple-50 text-purple-700", medication: "bg-rose-50 text-rose-600", transitional: "bg-orange-50 text-orange-700", specialty: "bg-violet-50 text-violet-700", respite: "bg-green-50 text-green-700", therapy: "bg-indigo-50 text-indigo-700", residential: "bg-amber-50 text-amber-700" }[c] || "bg-slate-100 text-slate-600");
 const typeColor = (t) => ({ recurring: "bg-emerald-50 text-emerald-700", on_demand: "bg-blue-50 text-blue-700", one_time: "bg-slate-100 text-slate-600" }[t] || "bg-slate-100 text-slate-600");
@@ -97,9 +105,9 @@ export default function Services() {
     refetchOnMount: "always",
   });
 
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Service.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); setFormOpen(false); } });
-  const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Service.update(id, withScope(data)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); setFormOpen(false); setEditing(null); } });
-  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Service.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); setDeleting(null); } });
+  const createMut = useMutation({ mutationFn: (d) => base44.entities.Service.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); triggerETL("service"); setFormOpen(false); } });
+  const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Service.update(id, withScope(data)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); triggerETL("service"); setFormOpen(false); setEditing(null); } });
+  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Service.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); triggerETL("service"); setDeleting(null); } });
 
   const handleSubmit = (data, saveAndNew = false) => {
     if (editing) { updateMut.mutate({ id: editing.id, data }); }
@@ -217,7 +225,8 @@ export default function Services() {
         templateFileName="newsconseen_services_import_template.xlsx"
         templateExample={SERVICE_TEMPLATE_EXAMPLE} templateInstructions={SERVICE_TEMPLATE_INSTRUCTIONS}
         validateRow={validateService} transformRow={transformService}
-        onImport={(row) => base44.entities.Service.create(withScope(row))}
+        entityFetchFn={() => listFn(base44.entities.Service)}
+        onImport={async (row) => { const s = await base44.entities.Service.create(withScope(row)); triggerETL("service"); return s; }}
         currentUser={currentUser} previewColumns={SVC_PREVIEW_COLS} requiredField="name"
       />
     </div>

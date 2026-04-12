@@ -19,6 +19,14 @@ import ClockOutModal from "@/components/clockinout/ClockOutModal";
 import WeeklyView from "@/components/clockinout/WeeklyView";
 import { TeamTodayView, TeamWeekView } from "@/components/clockinout/TeamView";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
+
 function LiveClock() {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -317,7 +325,7 @@ export default function ClockInOut() {
       }
       return task;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["clock-tasks"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["clock-tasks"] }); triggerETL("task"); },
   });
 
   const handleClockIn = () => {

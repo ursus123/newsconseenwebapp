@@ -24,6 +24,14 @@ import CriticalMissedBanner from "@/components/medadmin/CriticalMissedBanner";
 import { useMedNotifications } from "@/components/medadmin/useMedNotifications";
 import { queryPatients, queryProducts, queryEnterprises, queryAddresses } from "@/components/shared/masterDataQuery";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
+
 const DARK_KEY = (email) => `medadmin_dark_mode_${email}`;
 
 export default function MedAdmin() {
@@ -261,7 +269,7 @@ export default function MedAdmin() {
           products={products}
           user={user}
           onClose={() => setScheduleOpen(false)}
-          onSuccess={() => { setScheduleOpen(false); refetch(); }}
+          onSuccess={() => { setScheduleOpen(false); refetch(); triggerETL("task"); }}
         />
       )}
 
@@ -274,7 +282,7 @@ export default function MedAdmin() {
           enterprises={enterprises}
           addresses={addresses}
           onClose={() => setPrnOpen(false)}
-          onSuccess={() => { setPrnOpen(false); refetch(); }}
+          onSuccess={() => { setPrnOpen(false); refetch(); triggerETL("task"); }}
         />
       )}
 
@@ -298,7 +306,7 @@ export default function MedAdmin() {
             products={products}
             darkMode={darkMode}
             onClose={() => setAdministerTarget(null)}
-            onSuccess={() => { setAdministerTarget(null); refetch(); }}
+            onSuccess={() => { setAdministerTarget(null); refetch(); triggerETL("task"); }}
           />
         </div>
       )}

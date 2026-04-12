@@ -10,6 +10,14 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
 import { getWeekDays, formatWeekLabel, parseShiftMeta, todayStr } from "@/components/staffschedule/shiftUtils";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+  }).catch(() => {});
 import WeekView from "@/components/staffschedule/WeekView";
 import DayView from "@/components/staffschedule/DayView";
 import MonthView from "@/components/staffschedule/MonthView";
@@ -116,6 +124,7 @@ export default function StaffSchedule() {
     },
     onSuccess: (count) => {
       qc.invalidateQueries({ queryKey: ["shift-tasks"] });
+      triggerETL("task");
       setCopyConfirm(false);
       setCopyResult(`✅ ${count} shifts copied from last week`);
       setTimeout(() => setCopyResult(null), 4000);
@@ -134,6 +143,7 @@ export default function StaffSchedule() {
     },
     onSuccess: (count) => {
       qc.invalidateQueries({ queryKey: ["shift-tasks"] });
+      triggerETL("task");
       setPublishResult(`✅ ${count} shifts published`);
       setTimeout(() => setPublishResult(null), 4000);
     },
@@ -350,7 +360,7 @@ export default function StaffSchedule() {
           weekShifts={weekShifts}
           user={user}
           onClose={() => setShiftModal(null)}
-          onSuccess={() => { setShiftModal(null); qc.invalidateQueries({ queryKey: ["shift-tasks"] }); }}
+          onSuccess={() => { setShiftModal(null); qc.invalidateQueries({ queryKey: ["shift-tasks"] }); triggerETL("task"); }}
           onAddAnother={() => setShiftModal({ task: null, staff: null, date: shiftModal.date })}
         />
       )}
