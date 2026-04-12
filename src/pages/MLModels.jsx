@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import {
   Brain, Play, Save, Plus, Trash2, ChevronDown, ChevronUp,
   Loader2, CheckCircle2, AlertTriangle, Code2, BarChart2,
@@ -285,6 +288,61 @@ def run_shift_demand(company_id: str, df_tasks: pd.DataFrame) -> list[dict]:
   },
 ];
 
+// ── ColdStartBanner ────────────────────────────────────────────────────────────
+// Shows a one-time warning when the ETL pipeline hasn't run yet (raw tables empty).
+// Models silently return "insufficient data" warnings without this — this makes
+// the root cause obvious and links directly to the Pipelines page to fix it.
+function ColdStartBanner({ companyId }) {
+  const [dismissed, setDismissed] = useState(
+    () => !!localStorage.getItem("ml_coldstart_dismissed")
+  );
+
+  const { data: health } = useQuery({
+    queryKey: ["ml-health-check"],
+    queryFn: async () => {
+      const r = await fetch(`${RAILWAY_URL}/health`);
+      if (!r.ok) return null;
+      return r.json();
+    },
+    enabled: !dismissed,
+    staleTime: 60000,
+    retry: false,
+  });
+
+  // Consider cold if health returned but no raw table counts, or python_layer unreachable
+  const isCold = health === null || (health && (health.raw_people_count ?? 0) === 0 && (health.people_count ?? 0) === 0);
+
+  if (dismissed || !isCold) return null;
+
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-3">
+      <Database className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-amber-800">ETL pipeline hasn't run yet</p>
+        <p className="text-xs text-amber-700 mt-0.5">
+          ML models read from <span className="font-mono">raw.*</span> tables. If you see "insufficient data" warnings,
+          run the ETL pipeline first to populate the analytics database.
+        </p>
+        <Link
+          to={createPageUrl("Pipelines")}
+          className="inline-flex items-center gap-1 mt-2 text-xs font-semibold text-amber-700 hover:text-amber-900 underline"
+        >
+          Go to Pipelines → run ETL
+        </Link>
+      </div>
+      <button
+        onClick={() => {
+          localStorage.setItem("ml_coldstart_dismissed", "1");
+          setDismissed(true);
+        }}
+        className="text-amber-400 hover:text-amber-600 shrink-0"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
 // ── ResultsView ────────────────────────────────────────────────────────────────
 function ResultsView({ data, modelId }) {
   // data may be: array, or { predictions, summary, ... }
@@ -529,6 +587,12 @@ export default function MLModels() {
           </div>
         ))}
       </div>
+
+      {/* ── Cold-start notice ── */}
+      {!currentUser && null}
+      {currentUser && (
+        <ColdStartBanner companyId={currentUser.company_id} />
+      )}
 
       {/* ── Add Custom Model Form ── */}
       {addingCustom && (

@@ -40,23 +40,9 @@ const RAIL_HEADERS    = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
 // ─── Constants ───────────────────────────────────────────────────────────────
 const HISTORY_KEY_PREFIX = "mi_history_";
 
-const US_STATES = [
-  "alabama","alaska","arizona","arkansas","california","colorado","connecticut",
-  "delaware","florida","georgia","hawaii","idaho","illinois","indiana","iowa",
-  "kansas","kentucky","louisiana","maine","maryland","massachusetts","michigan",
-  "minnesota","mississippi","missouri","montana","nebraska","nevada",
-  "new hampshire","new jersey","new mexico","new york","north carolina",
-  "north dakota","ohio","oklahoma","oregon","pennsylvania","rhode island",
-  "south carolina","south dakota","tennessee","texas","utah","vermont",
-  "virginia","washington","west virginia","wisconsin","wyoming",
-];
-
-const US_ABBREVS = [
-  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
-  "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
-  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT",
-  "VA","WA","WV","WI","WY","USA","US",
-];
+// US detection — used only to route to the correct analytics endpoint
+// (US Census API vs World Bank / REST Countries API). No content gating.
+const US_STATE_ABBREVS_RE = /\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/;
 
 const BIZ_TO_OCCUPATION = {
   home_healthcare: "registered_nurse", clinic: "registered_nurse",
@@ -124,19 +110,16 @@ const SECTION_STATUS = [
 
 // ─── Helper functions ────────────────────────────────────────────────────────
 function isUSLocation(loc) {
-  const lower = loc.toLowerCase();
-  const upper = loc.toUpperCase();
   if (/^\d{5}$/.test(loc.trim())) return true;
-  if (US_STATES.some(s => lower.includes(s))) return true;
-  if (US_ABBREVS.some(a => upper.includes(a))) return true;
-  if (lower.includes("united states") || lower.includes("usa")) return true;
+  if (/\b(united states|usa|u\.s\.a?\.)\b/i.test(loc)) return true;
+  if (US_STATE_ABBREVS_RE.test(loc)) return true;
   return false;
 }
 
 function extractState(loc) {
-  const lower = loc.toLowerCase();
-  const found = US_STATES.find(s => lower.includes(s));
-  return found ? found.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") : null;
+  // Extract trailing "City, StateName" or "City, ST" pattern
+  const m = loc.match(/,\s*([A-Za-z][A-Za-z\s]{2,})(?:\s+\d{5})?(?:,\s*US[A]?)?$/);
+  return m ? m[1].trim() : null;
 }
 
 function extractCountry(loc) {

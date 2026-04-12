@@ -357,11 +357,46 @@ export default function AlertsPage({ currentUser }) {
         </div>
       )}
 
+      {/* Active monitoring rules */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4">
+        <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-1.5">
+          <Bell className="w-4 h-4 text-emerald-600" /> Active monitoring rules
+        </h3>
+        <div className="space-y-2">
+          {[
+            { label: "Churn risk",       desc: "Persons inactive for 30+ days with incomplete tasks",        sev: "critical", entity: "People" },
+            { label: "Overdue invoices", desc: "Transactions past due date with unpaid status",               sev: "critical", entity: "Transactions" },
+            { label: "Low stock",        desc: "Products below minimum stock level or expiring within 7 days", sev: "warning",  entity: "Products" },
+            { label: "Task backlog",     desc: "Open tasks older than 14 days with no status update",          sev: "warning",  entity: "Tasks" },
+            { label: "Staff gap",        desc: "Active staff count falls below scheduled task demand",          sev: "warning",  entity: "People" },
+            { label: "No recent visits", desc: "Client with no task activity in past 21 days",                 sev: "info",     entity: "People" },
+          ].map(rule => {
+            const sevColors = {
+              critical: "bg-rose-100 text-rose-700",
+              warning:  "bg-amber-100 text-amber-700",
+              info:     "bg-blue-100 text-blue-700",
+            };
+            return (
+              <div key={rule.label} className="flex items-start gap-3 px-3 py-2.5 bg-slate-50 rounded-xl">
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 mt-0.5 ${sevColors[rule.sev]}`}>
+                  {rule.sev.toUpperCase()}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-slate-700">{rule.label}</p>
+                  <p className="text-[11px] text-slate-400">{rule.desc}</p>
+                </div>
+                <span className="text-[10px] text-slate-400 shrink-0">{rule.entity}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* How it works */}
       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
         <h3 className="text-sm font-semibold text-slate-600 mb-2">How it works</h3>
         <div className="space-y-1.5 text-xs text-slate-500">
-          <p>🕐 Every 4 hours, Airflow evaluates all alert rules against your analytics data</p>
+          <p>🕐 Every 4 hours, the alert engine evaluates all rules against your analytics data</p>
           <p>🔴 Critical alerts → all configured channels immediately</p>
           <p>🟡 Warnings → preferred channel (email or WhatsApp)</p>
           <p>🔇 Frequency caps prevent duplicate alerts within the cap window</p>
