@@ -1276,21 +1276,20 @@ export const PRODUCT_MAPPING_RULES = [
 ];
 
 export const PRODUCT_TEMPLATE_EXAMPLE = {
-  product_id:        "SVC-001",
-  product_name:      "Companion Care - Standard",
+  product_id:        "PRD-001",
+  product_name:      "Standard Service Package",
   item_type:         "service_package",
   item_subtype:      "Consultation",
   item_class:        "unrestricted",
-  service_line:      "Companion Care",
-  billing_code:      "S5125",
+  service_line:      "Core Services",
+  billing_code:      "SVC-001",
   unit_of_measure:   "hour",
-  unit_price:        28,
-  min_hours:         2,
+  unit_price:        50,
+  min_hours:         1,
   max_hours_per_day: 8,
   requires_license:  "No",
-  payer_eligible:    "Private Pay; Long-Term Care Insurance",
+  payer_eligible:    "Private Pay",
   status:            "active",
-  company_id:        "BRIGHTSTAR",
 };
 
 export const PRODUCT_TEMPLATE_INSTRUCTIONS = `
