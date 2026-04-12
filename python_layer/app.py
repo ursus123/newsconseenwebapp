@@ -89,6 +89,16 @@ except Exception as _kinetic_err:
     _kinetic_ok = False
     logger.warning("kinetic layer import failed — disabled: %s", _kinetic_err)
 
+# Phase 4 — Agentic AI Framework
+try:
+    from agents.routes import router as agents_router, setup_agent_tables
+    _agents_ok = True
+except Exception as _agents_err:
+    agents_router = None
+    setup_agent_tables = None
+    _agents_ok = False
+    logger.warning("agents layer import failed — disabled: %s", _agents_err)
+
 logger = logging.getLogger(__name__)
 
 
@@ -120,6 +130,14 @@ async def lifespan(app: FastAPI):
             logger.info("Startup: PostGIS extension ready")
         except Exception as e:
             logger.warning("Startup: PostGIS setup skipped — %s", e)
+
+        # Phase 4 — Agent tables (approval gate, memory, market intelligence)
+        if setup_agent_tables:
+            try:
+                setup_agent_tables(engine)
+                logger.info("Startup: Agent tables ready")
+            except Exception as e:
+                logger.warning("Startup: Agent table setup skipped — %s", e)
     else:
         logger.warning("Startup: DATABASE_URL not set — analytics store unavailable")
     yield
@@ -129,15 +147,17 @@ async def lifespan(app: FastAPI):
 # FastAPI App — v4.0.0
 # ----------------------------------------------------------
 app = FastAPI(
-    title="Newsconseen OS — Analytics & Intelligence Layer",
+    title="Newsconseen — Autonomous SME Operating System",
     description=(
-        "The SME version of Palantir Foundry.\n\n"
+        "**The Autonomous SME Operating System.**\n\n"
         "Layer 1 — Enterprise OS: Base44 master data (Person, Enterprise, Product)\n"
         "Layer 2 — Deployable Datamart: ETL pipeline, PostgreSQL, FastAPI\n"
-        "Layer 3 — Foundry Intelligence: Copilot + Alerts + Network Intelligence\n\n"
-        "One system. Any industry. Deploy in hours."
+        "Layer 3 — Foundry Intelligence: Copilot + Alerts + Network Intelligence\n"
+        "Layer 4 — Agentic AI: 8 autonomous agents, multi-LLM orchestration, "
+        "approval gate, agent memory, deep market research\n\n"
+        "One system. Any industry. Runs itself."
     ),
-    version="4.0.0",
+    version="4.1.0",
     lifespan=lifespan,
 )
 
@@ -238,6 +258,10 @@ except Exception as _pd_err:
 # Phase 4 — Kinetic Layer
 if _kinetic_ok and kinetic_router is not None:
     app.include_router(kinetic_router)
+
+# Phase 4 — Agentic AI Framework
+if _agents_ok and agents_router is not None:
+    app.include_router(agents_router)
 
 
 # ----------------------------------------------------------
