@@ -9,8 +9,13 @@ import {
   Brain, Play, Save, Plus, Trash2, ChevronDown, ChevronUp,
   Loader2, CheckCircle2, AlertTriangle, Code2, BarChart2,
   TrendingDown, Users, Clock, X, Cpu, Activity, Layers, Zap,
-  RefreshCw, Database,
+  RefreshCw, Database, Upload,
 } from "lucide-react";
+import {
+  BarChart, Bar, LineChart, Line, AreaChart, Area,
+  PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from "recharts";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
@@ -343,13 +348,243 @@ function ColdStartBanner({ companyId }) {
   );
 }
 
-// ── ResultsView ────────────────────────────────────────────────────────────────
-function ResultsView({ data, modelId }) {
-  // data may be: array, or { predictions, summary, ... }
-  const rows = Array.isArray(data) ? data : (data.predictions || data.results || data.data || []);
-  const summary = !Array.isArray(data) ? data : null;
+// ── Shared helpers ─────────────────────────────────────────────────────────────
+const SEG_COLORS = {
+  Champions:  "#10b981",
+  Loyal:      "#6366f1",
+  "At Risk":  "#f59e0b",
+  Lost:       "#f43f5e",
+  high:       "#f43f5e",
+  medium:     "#f59e0b",
+  low:        "#10b981",
+};
+const TIER_BADGE = {
+  high:   "bg-rose-100 text-rose-800",
+  medium: "bg-amber-100 text-amber-800",
+  low:    "bg-emerald-100 text-emerald-800",
+  Champions: "bg-emerald-100 text-emerald-800",
+  Loyal:     "bg-blue-100 text-blue-800",
+  "At Risk": "bg-amber-100 text-amber-800",
+  Lost:      "bg-rose-100 text-rose-800",
+};
 
-  if (!rows.length && !summary) {
+function SummaryCards({ entries }) {
+  if (!entries.length) return null;
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {entries.slice(0, 8).map(([k, v]) => (
+        <div key={k} className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+          <p className="text-[10px] text-slate-400 uppercase tracking-wide">{k.replace(/_/g, " ")}</p>
+          <p className="text-base font-black text-slate-800 mt-0.5">{String(v)}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DataTable({ rows, maxRows = 20 }) {
+  if (!rows.length) return null;
+  const columns = Object.keys(rows[0]).slice(0, 8);
+  return (
+    <div className="rounded-xl border border-slate-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-200">
+              {columns.map(col => (
+                <th key={col} className="px-3 py-2 text-left font-bold text-slate-600 uppercase tracking-wide text-[10px] whitespace-nowrap">
+                  {col.replace(/_/g, " ")}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, maxRows).map((row, i) => (
+              <tr key={i} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                {columns.map(col => {
+                  const val = row[col];
+                  const isBadge = col === "segment" || col === "risk_tier";
+                  return (
+                    <td key={col} className="px-3 py-2 text-slate-700 whitespace-nowrap">
+                      {isBadge && val ? (
+                        <span className={`px-2 py-0.5 rounded-full font-semibold text-[10px] ${TIER_BADGE[val] || "bg-slate-100 text-slate-700"}`}>
+                          {val}
+                        </span>
+                      ) : typeof val === "number" ? (
+                        Number.isInteger(val) ? val : val.toFixed(3)
+                      ) : (
+                        String(val ?? "—")
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > maxRows && (
+        <div className="px-3 py-2 bg-slate-50 border-t border-slate-200 text-xs text-slate-400">
+          Showing {maxRows} of {rows.length} rows
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Model-specific chart components ───────────────────────────────────────────
+
+function RetentionRiskChart({ data }) {
+  // Expects scored array with risk_tier counts, or summary.high/medium/low_risk
+  const scored = data.scored || data.predictions || [];
+  const tiers = ["high", "medium", "low"];
+  const chartData = tiers.map(t => ({
+    tier: t.charAt(0).toUpperCase() + t.slice(1),
+    count: scored.filter(r => r.risk_tier === t).length ||
+           data.summary?.[`${t}_risk`] || 0,
+    fill: SEG_COLORS[t],
+  }));
+  if (chartData.every(d => d.count === 0)) return null;
+  return (
+    <div className="bg-slate-50 rounded-xl p-4">
+      <p className="text-xs font-bold text-slate-600 mb-3">Risk Tier Distribution</p>
+      <ResponsiveContainer width="100%" height={160}>
+        <BarChart data={chartData} barSize={40}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+          <XAxis dataKey="tier" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+          <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #e2e8f0", fontSize: 12 }} />
+          <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+            {chartData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function LTVSegmentationChart({ data }) {
+  const segments = data.segments || data.scored || [];
+  const summary = data.segment_summary || {};
+  // Build pie data from summary or by counting
+  let pieData = Object.entries(summary).map(([name, v]) => ({
+    name,
+    value: v?.count ?? 0,
+    fill: SEG_COLORS[name] || "#94a3b8",
+  })).filter(d => d.value > 0);
+  if (!pieData.length && segments.length) {
+    const counts = {};
+    segments.forEach(r => { counts[r.segment] = (counts[r.segment] || 0) + 1; });
+    pieData = Object.entries(counts).map(([name, value]) => ({
+      name, value, fill: SEG_COLORS[name] || "#94a3b8",
+    }));
+  }
+  if (!pieData.length) return null;
+  return (
+    <div className="bg-slate-50 rounded-xl p-4">
+      <p className="text-xs font-bold text-slate-600 mb-3">Segment Breakdown</p>
+      <div className="flex items-center gap-4">
+        <ResponsiveContainer width={160} height={160}>
+          <PieChart>
+            <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3}>
+              {pieData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+            </Pie>
+            <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #e2e8f0", fontSize: 12 }} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="space-y-2">
+          {pieData.map(d => (
+            <div key={d.name} className="flex items-center gap-2 text-xs">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.fill }} />
+              <span className="text-slate-700 font-medium">{d.name}</span>
+              <span className="text-slate-400">{d.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ForecastChart({ data, label = "Predicted", color = "#10b981" }) {
+  const fc = data.forecast || data.predictions || [];
+  if (!fc.length) return null;
+  const chartData = fc.slice(0, 30).map(r => ({
+    date: (r.ds || r.date || "").slice(5), // MM-DD
+    value: Math.round(r.yhat ?? r.predicted_shifts ?? r.predicted ?? 0),
+    lower: Math.round(r.yhat_lower ?? r.predicted_shifts ?? 0),
+    upper: Math.round(r.yhat_upper ?? r.predicted_shifts ?? 0),
+  }));
+  return (
+    <div className="bg-slate-50 rounded-xl p-4">
+      <p className="text-xs font-bold text-slate-600 mb-3">30-Day Forecast</p>
+      <ResponsiveContainer width="100%" height={180}>
+        <AreaChart data={chartData}>
+          <defs>
+            <linearGradient id="fcGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={color} stopOpacity={0.15} />
+              <stop offset="95%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+          <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} interval={4} />
+          <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+          <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #e2e8f0", fontSize: 12 }}
+            formatter={(v) => [v, label]} />
+          <Area type="monotone" dataKey="value" stroke={color} strokeWidth={2}
+            fill="url(#fcGrad)" dot={false} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function ShiftDemandChart({ data }) {
+  const fc = data.forecast || data.predictions || [];
+  if (!fc.length) return null;
+  const chartData = fc.slice(0, 14).map(r => ({
+    date: (r.date || r.ds || "").slice(5),
+    shifts: Math.round(r.predicted_shifts ?? r.yhat ?? 0),
+  }));
+  return (
+    <div className="bg-slate-50 rounded-xl p-4">
+      <p className="text-xs font-bold text-slate-600 mb-3">Predicted Shifts — Next 14 Days</p>
+      <ResponsiveContainer width="100%" height={160}>
+        <BarChart data={chartData} barSize={28}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+          <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
+          <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #e2e8f0", fontSize: 12 }} />
+          <Bar dataKey="shifts" fill="#f59e0b" radius={[5, 5, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ── ResultsView — model-aware ──────────────────────────────────────────────────
+function ResultsView({ data, modelId, onPushToBase44, pushing }) {
+  if (!data) return null;
+
+  // Warning / error from backend
+  const warningMsg = !Array.isArray(data) && (
+    data.warning || (Array.isArray(data.predictions) && data.predictions[0]?.warning)
+  );
+  if (warningMsg) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-2">
+        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+        <p className="text-sm text-amber-700">{warningMsg}</p>
+      </div>
+    );
+  }
+
+  const rows  = Array.isArray(data) ? data : (data.scored || data.segments || data.predictions || data.results || data.data || []);
+  const summaryEntries = !Array.isArray(data)
+    ? Object.entries(data).filter(([, v]) => typeof v !== "object" && !Array.isArray(v))
+    : [];
+
+  if (!rows.length && !summaryEntries.length) {
     return (
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-500">
         No results returned.
@@ -357,87 +592,35 @@ function ResultsView({ data, modelId }) {
     );
   }
 
-  // Check for warning
-  if (rows.length === 1 && rows[0]?.warning) {
-    return (
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-2">
-        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-        <p className="text-sm text-amber-700">{rows[0].warning}</p>
-      </div>
-    );
-  }
-
-  const columns = rows.length > 0 ? Object.keys(rows[0]).slice(0, 8) : [];
-
-  // Summary cards from non-array top-level keys
-  const summaryEntries = summary
-    ? Object.entries(summary).filter(([, v]) => typeof v !== "object" && !Array.isArray(v))
-    : [];
-
   return (
-    <div className="space-y-3">
-      {summaryEntries.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {summaryEntries.slice(0, 8).map(([k, v]) => (
-            <div key={k} className="bg-slate-50 border border-slate-100 rounded-xl p-3">
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide">{k.replace(/_/g, " ")}</p>
-              <p className="text-base font-black text-slate-800 mt-0.5">{String(v)}</p>
-            </div>
-          ))}
-        </div>
-      )}
-      {rows.length > 0 && columns.length > 0 && (
-        <div className="rounded-xl border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  {columns.map(col => (
-                    <th key={col} className="px-3 py-2 text-left font-bold text-slate-600 uppercase tracking-wide text-[10px] whitespace-nowrap">
-                      {col.replace(/_/g, " ")}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.slice(0, 20).map((row, i) => (
-                  <tr key={i} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                    {columns.map(col => {
-                      const val = row[col];
-                      const isSegment = col === "segment" || col === "risk_tier";
-                      const segColors = {
-                        Champions: "bg-emerald-100 text-emerald-800",
-                        Loyal: "bg-blue-100 text-blue-800",
-                        "At Risk": "bg-amber-100 text-amber-800",
-                        Lost: "bg-rose-100 text-rose-800",
-                        high: "bg-rose-100 text-rose-800",
-                        medium: "bg-amber-100 text-amber-800",
-                        low: "bg-emerald-100 text-emerald-800",
-                      };
-                      return (
-                        <td key={col} className="px-3 py-2 text-slate-700 whitespace-nowrap">
-                          {isSegment && val ? (
-                            <span className={`px-2 py-0.5 rounded-full font-semibold text-[10px] ${segColors[val] || "bg-slate-100 text-slate-700"}`}>
-                              {val}
-                            </span>
-                          ) : typeof val === "number" ? (
-                            Number.isInteger(val) ? val : val.toFixed(3)
-                          ) : (
-                            String(val ?? "—")
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {rows.length > 20 && (
-            <div className="px-3 py-2 bg-slate-50 border-t border-slate-200 text-xs text-slate-400">
-              Showing 20 of {rows.length} rows
-            </div>
-          )}
+    <div className="space-y-4">
+      {/* Summary stat cards */}
+      <SummaryCards entries={summaryEntries} />
+
+      {/* Model-specific charts */}
+      {modelId === "retention-risk"    && <RetentionRiskChart data={data} />}
+      {modelId === "ltv-segmentation"  && <LTVSegmentationChart data={data} />}
+      {modelId === "staffing-forecast" && <ForecastChart data={data} label="Predicted Tasks" color="#10b981" />}
+      {modelId === "shift-demand"      && <ShiftDemandChart data={data} />}
+
+      {/* Data table */}
+      <DataTable rows={rows} />
+
+      {/* Push to Base44 */}
+      {onPushToBase44 && rows.length > 0 && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs rounded-lg gap-1.5 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+            onClick={onPushToBase44}
+            disabled={pushing}
+          >
+            {pushing
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Upload className="w-3.5 h-3.5" />}
+            {pushing ? "Pushing…" : "Push to Base44"}
+          </Button>
         </div>
       )}
     </div>
@@ -454,6 +637,7 @@ export default function MLModels() {
   const [customModels, setCustomModels] = useState([]);
   const [addingCustom, setAddingCustom] = useState(false);
   const [newForm, setNewForm] = useState({ name: "", description: "", endpoint: "", code: "" });
+  const [pushing, setPushing] = useState({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -533,6 +717,24 @@ export default function MLModels() {
     setNewForm({ name: "", description: "", endpoint: "", code: "" });
     setAddingCustom(false);
     toast({ title: "Custom model added" });
+  };
+
+  const pushToBase44 = async (modelId) => {
+    const cid = currentUser?.company_id || "";
+    setPushing(prev => ({ ...prev, [modelId]: true }));
+    try {
+      const res = await fetch(`${RAILWAY_URL}/ml/push-to-base44?company_id=${cid}&model=${modelId}`, {
+        method: "POST",
+        headers: API_HEADERS,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      toast({ title: "Pushed to Base44", description: `${data.pushed ?? 0} predictions written.` });
+    } catch (e) {
+      toast({ title: "Push failed", description: e.message, variant: "destructive" });
+    } finally {
+      setPushing(prev => ({ ...prev, [modelId]: false }));
+    }
   };
 
   const deleteCustomModel = (modelId) => {
@@ -790,7 +992,12 @@ export default function MLModels() {
                           </div>
                         </div>
                       ) : (
-                        <ResultsView data={result} modelId={model.id} />
+                        <ResultsView
+                          data={result}
+                          modelId={model.id}
+                          onPushToBase44={!model.isCustom ? () => pushToBase44(model.id) : null}
+                          pushing={pushing[model.id]}
+                        />
                       )}
                     </div>
                   )}
