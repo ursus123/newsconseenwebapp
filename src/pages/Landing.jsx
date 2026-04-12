@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Check, ChevronRight, Monitor, Layers, Zap, Grid3x3, Bell, Settings, Users, BarChart2, CheckSquare, Receipt, GitBranch, Code2, ArrowRight, Star, Globe, Shield, Cpu, Wifi, Package } from "lucide-react";
+import { Check, ChevronRight, Monitor, Layers, Zap, Grid3x3, Bell, Settings, Users, BarChart2, CheckSquare, Receipt, GitBranch, Code2, ArrowRight, Star, Globe, Shield, Cpu, Wifi, Package, Lock, Eye, EyeOff } from "lucide-react";
+import TrendChartsSection from "@/components/landing/TrendChartsSection";
+import RoleDashboardPreview from "@/components/landing/RoleDashboardPreview";
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -532,6 +534,12 @@ export default function Landing() {
           <p className="text-center text-slate-600 text-xs mt-6">All plans include 14-day free trial · No credit card required · Cancel anytime</p>
         </div>
       </section>
+
+      {/* ── TREND CHARTS ─────────────────────────────────────────────────── */}
+      <TrendChartsSection />
+
+      {/* ── ROLE DASHBOARD PREVIEW ───────────────────────────────────────── */}
+      <RoleDashboardPreview />
 
       {/* ── CLOSING CTA ──────────────────────────────────────────────────── */}
       <section className="py-28 relative overflow-hidden">
