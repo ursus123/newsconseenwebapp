@@ -66,6 +66,9 @@ from airbyte.routes import router as airbyte_router
 # pgvector semantic search
 from pgvector_ext.routes import router as pgvector_router
 
+# PostGIS spatial intelligence
+from postgis.routes import router as postgis_router
+
 # Market Intelligence Layer
 try:
     from market.routes import router as market_router
@@ -107,6 +110,14 @@ async def lifespan(app: FastAPI):
             logger.info("Startup: pgvector extension ready")
         except Exception as e:
             logger.warning("Startup: pgvector setup skipped — %s", e)
+
+        # Enable PostGIS extension + spatial columns (silent if already exists)
+        try:
+            from postgis.setup import ensure_postgis
+            ensure_postgis(engine)
+            logger.info("Startup: PostGIS extension ready")
+        except Exception as e:
+            logger.warning("Startup: PostGIS setup skipped — %s", e)
     else:
         logger.warning("Startup: DATABASE_URL not set — analytics store unavailable")
     yield
@@ -206,6 +217,9 @@ app.include_router(airbyte_router)
 
 # pgvector semantic search
 app.include_router(pgvector_router)
+
+# PostGIS spatial intelligence
+app.include_router(postgis_router)
 
 # Market Intelligence
 if _market_ok and market_router is not None:
@@ -435,6 +449,26 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         try:
             geo_summary = geospatial.transform_geospatial(geo_raw)
             results["geospatial"] = load_dataframe_replace(geo_summary, "geospatial_summary")
+            # Backfill PostGIS geom column after every geospatial ETL write
+            _geo_engine = get_engine_safe()
+            if _geo_engine:
+                try:
+                    from sqlalchemy import text as _sqlt
+                    with _geo_engine.connect() as _conn:
+                        _upd = _conn.execute(_sqlt("""
+                            UPDATE analytics.geospatial_summary
+                            SET geom = ST_SetSRID(
+                                ST_MakePoint(longitude::float, latitude::float),
+                                4326
+                            )::geography
+                            WHERE latitude IS NOT NULL
+                              AND longitude IS NOT NULL
+                              AND geom IS NULL;
+                        """))
+                        _conn.commit()
+                    results["geospatial"]["postgis_geom_updated"] = _upd.rowcount
+                except Exception as _ge:
+                    results["geospatial"]["postgis_geom_updated"] = f"skipped ({_ge})"
         except Exception as e:
             results["geospatial"] = {"status": "error", "detail": str(e)}
             logger.error("Cron: geospatial transform/load failed — %s", e)
@@ -784,4 +818,27 @@ def load_geospatial_summary(
 ):
     _check_cron_secret(x_cron_secret)
     df = filter_by_company(geospatial.extract_geospatial(), company_id)
-    return load_dataframe_replace(geospatial.transform_geospatial(df), "geospatial_summary")
+    result = load_dataframe_replace(geospatial.transform_geospatial(df), "geospatial_summary")
+
+    # Backfill PostGIS geometry column from lat/lng after every write
+    engine = get_engine_safe()
+    if engine:
+        try:
+            from sqlalchemy import text as sqlt
+            with engine.connect() as conn:
+                updated = conn.execute(sqlt("""
+                    UPDATE analytics.geospatial_summary
+                    SET geom = ST_SetSRID(
+                        ST_MakePoint(longitude::float, latitude::float),
+                        4326
+                    )::geography
+                    WHERE latitude IS NOT NULL
+                      AND longitude IS NOT NULL
+                      AND geom IS NULL;
+                """))
+                conn.commit()
+            result["postgis_geom_updated"] = updated.rowcount
+        except Exception as _e:
+            result["postgis_geom_updated"] = f"skipped ({_e})"
+
+    return result

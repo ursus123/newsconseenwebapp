@@ -1907,6 +1907,50 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "find_nearby_locations",
+        "description": (
+            "Spatial proximity search — find branches, clients, staff, or any entity "
+            "within a given radius of a point, or find the N nearest to a location. "
+            "Use this for questions like: "
+            "'Which branches are closest to Nairobi CBD?', "
+            "'Find all clinics within 5km of this patient's address', "
+            "'What is the nearest pharmacy to coordinates -1.286, 36.817?', "
+            "'Which of our branches cover the Northern region?'. "
+            "Requires PostGIS to be set up (POST /postgis/setup) and "
+            "geospatial ETL to have run (POST /load/geospatial-summary)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["lat", "lng"],
+            "properties": {
+                "lat": {
+                    "type": "number",
+                    "description": "Latitude of the reference point (e.g. -1.286 for Nairobi).",
+                },
+                "lng": {
+                    "type": "number",
+                    "description": "Longitude of the reference point (e.g. 36.817 for Nairobi).",
+                },
+                "radius_meters": {
+                    "type": "number",
+                    "description": "Search radius in metres (default 5000 = 5km). Use 1000 for city block, 50000 for district.",
+                },
+                "entity_type": {
+                    "type": "string",
+                    "description": "Filter by enterprise_type — e.g. 'General Hospital', 'Elementary School', 'Pharmacy Drug Store'. Leave blank for all types.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum results to return (default 10).",
+                },
+                "nearest_only": {
+                    "type": "boolean",
+                    "description": "If true, return only the N nearest records regardless of radius (uses KNN). Default false.",
+                },
+            },
+        },
+    },
+    {
         "name": "search_public_data",
         "description": (
             "Query structured public datasets for market research. Datasets available:\n"
@@ -1942,6 +1986,78 @@ TOOL_DEFINITIONS = [
         },
     },
 ]
+
+
+# ── PostGIS spatial search tool ──────────────────────────────────────────────
+
+def _find_nearby_locations(
+    lat: float,
+    lng: float,
+    company_id: str,
+    radius_meters: float = 5000,
+    entity_type: Optional[str] = None,
+    limit: int = 10,
+    nearest_only: bool = False,
+) -> dict:
+    """
+    Copilot-callable wrapper for PostGIS proximity queries.
+    Returns results in the same structure as other copilot tools.
+    """
+    try:
+        from database import get_engine_safe
+        engine = get_engine_safe()
+        if not engine:
+            return {"error": "No database connection — PostGIS unavailable"}
+
+        if nearest_only:
+            from postgis.queries import find_nearest
+            results = find_nearest(
+                engine=engine,
+                lat=lat,
+                lng=lng,
+                company_id=company_id,
+                entity_type=entity_type,
+                limit=limit,
+            )
+            note = f"Nearest {limit} records to ({lat}, {lng})."
+        else:
+            from postgis.queries import find_nearby
+            results = find_nearby(
+                engine=engine,
+                lat=lat,
+                lng=lng,
+                radius_meters=radius_meters,
+                company_id=company_id,
+                entity_type=entity_type,
+                limit=limit,
+            )
+            note = f"{len(results)} records within {radius_meters}m of ({lat}, {lng})."
+
+        if not results:
+            return {
+                "lat": lat, "lng": lng,
+                "radius_meters": radius_meters,
+                "data": [],
+                "note": (
+                    "No records found in this area. "
+                    "PostGIS may not be set up yet (run POST /postgis/setup), "
+                    "or the geospatial ETL has not run (POST /load/geospatial-summary)."
+                ),
+            }
+
+        return {
+            "lat": lat, "lng": lng,
+            "radius_meters": radius_meters,
+            "entity_type": entity_type or "all",
+            "count": len(results),
+            "data":  results,
+            "note":  note,
+        }
+    except Exception as e:
+        return {
+            "error": f"Spatial search unavailable: {e}",
+            "note":  "PostGIS may not be set up. Run POST /postgis/setup.",
+        }
 
 
 # ── pgvector semantic search tool ────────────────────────────────────────────
@@ -2020,6 +2136,8 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "get_service_overview":      get_service_overview,
         # Semantic search — pgvector powered
         "search_records_semantically": _search_records_semantically,
+        # Spatial search — PostGIS powered
+        "find_nearby_locations":       _find_nearby_locations,
         # Web-grounded tools — company_id injected but not used (public data)
         "web_search":              web_search,
         "search_public_data":      search_public_data,
