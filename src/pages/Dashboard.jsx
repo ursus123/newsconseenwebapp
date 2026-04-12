@@ -6,7 +6,8 @@ import { createPageUrl } from "@/utils";
 import {
   Users, Package, ArrowLeftRight, ClipboardList, Building2,
   Clock, CheckCircle, AlertCircle, Calendar, Link2, Wrench,
-  TrendingUp, Settings2, Eye, EyeOff,
+  TrendingUp, Settings2, Eye, EyeOff, Brain, Shield, Activity,
+  ChevronRight,
 } from "lucide-react";
 import { format, isToday, isPast, parseISO, subDays, startOfDay } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,92 @@ import TrendCharts from "../components/dashboard/TrendCharts";
 import GeoMap from "../components/dashboard/GeoMap";
 import SupersetEmbed from "../components/dashboard/SupersetEmbed";
 import N8nEmbed from "../components/dashboard/N8nEmbed";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+
+// ── Agent Insight Strip ───────────────────────────────────────────────────────
+// Shows latest agent run summaries + pending approval count above stat cards.
+// Reads from /agents/status and /agents/runs — falls back gracefully if 404.
+function AgentInsightStrip({ companyId }) {
+  const { data: statusData } = useQuery({
+    queryKey: ["dash-agent-status", companyId],
+    queryFn: async () => {
+      const r = await fetch(`${RAILWAY_URL}/agents/status?company_id=${companyId}`);
+      if (!r.ok) return null;
+      return r.json();
+    },
+    enabled: !!companyId,
+    staleTime: 60000,
+    retry: false,
+  });
+
+  const { data: runsData } = useQuery({
+    queryKey: ["dash-agent-runs", companyId],
+    queryFn: async () => {
+      const r = await fetch(`${RAILWAY_URL}/agents/runs?company_id=${companyId}&limit=5`);
+      if (!r.ok) return { runs: [] };
+      return r.json();
+    },
+    enabled: !!companyId,
+    staleTime: 60000,
+    retry: false,
+  });
+
+  // Don't show if agents not configured or no runs yet
+  if (!statusData?.agents_enabled) return null;
+  const runs = runsData?.runs || [];
+  if (runs.length === 0) return null;
+
+  const pendingCount = statusData?.pending_approvals || 0;
+
+  return (
+    <div className="bg-gradient-to-r from-indigo-50 to-slate-50 border border-indigo-100 rounded-2xl px-4 py-3">
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center gap-2">
+          <Brain className="w-4 h-4 text-indigo-500" />
+          <span className="text-xs font-bold text-indigo-700">Autonomous Agents</span>
+          {pendingCount > 0 && (
+            <Link to="/agents">
+              <span className="flex items-center gap-1 text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full hover:bg-amber-200 transition-colors">
+                <Shield className="w-2.5 h-2.5" />
+                {pendingCount} awaiting approval
+              </span>
+            </Link>
+          )}
+        </div>
+        <Link to="/agents" className="flex items-center gap-0.5 text-[10px] text-indigo-500 hover:text-indigo-700 font-semibold">
+          View all <ChevronRight className="w-3 h-3" />
+        </Link>
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        {runs.map((run, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-2 shrink-0 bg-white/70 border border-indigo-100 rounded-xl px-3 py-2 min-w-0 max-w-[220px]"
+          >
+            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+              run.status === "completed" ? "bg-emerald-500" :
+              run.status === "error"     ? "bg-rose-500" : "bg-amber-500"
+            }`} />
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold text-slate-700 capitalize truncate">
+                {run.agent_name?.replace(/_/g, " ")}
+              </p>
+              {run.summary && (
+                <p className="text-[9px] text-slate-500 truncate">{run.summary}</p>
+              )}
+            </div>
+            {run.actions_pending > 0 && (
+              <span className="shrink-0 text-[8px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
+                {run.actions_pending}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -711,6 +798,9 @@ function AdminDashboard({ user }) {
 
       <OnboardingChecklist done={onboardingDone} />
       <GettingStartedChecklist />
+
+      {/* ── Agent Insight Strip ── */}
+      <AgentInsightStrip companyId={companyId} />
 
       {/* ── Stat Cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">

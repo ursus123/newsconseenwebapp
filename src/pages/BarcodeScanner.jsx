@@ -14,6 +14,14 @@ import LowStockPanel from "@/components/barcodescanner/LowStockPanel";
 import BulkQueue from "@/components/barcodescanner/BulkQueue";
 import { createStockTransaction } from "@/utils/createTransaction";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+    method: "POST",
+    headers: { "x-api-key": RAILWAY_API_KEY },
+  }).catch(() => {});
+
 export function playBeep(error = false) {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -225,6 +233,10 @@ export default function BarcodeScanner() {
 
     // Update local products cache
     setProducts((ps) => ps.map((p) => p.id === prod.id ? { ...p, stock_quantity: newQty } : p));
+
+    // Sync analytics — fire and forget
+    triggerETL("product");
+    triggerETL("transaction");
 
     playBeep(false);
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);

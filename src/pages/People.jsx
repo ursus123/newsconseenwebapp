@@ -57,23 +57,45 @@ const personTypeColor = (t) => ({
   volunteer: "bg-green-50 text-green-700",
 }[t] || "bg-slate-100 text-slate-500");
 
+// ── Profile completeness score (0–100) ────────────────────────────
+const COMPLETENESS_FIELDS = [
+  "first_name", "last_name", "person_type", "primary_role",
+  "email", "phone", "engagement_model", "person_subtype",
+];
+function profileScore(row) {
+  const filled = COMPLETENESS_FIELDS.filter(f => row[f] && String(row[f]).trim() !== "").length;
+  return Math.round((filled / COMPLETENESS_FIELDS.length) * 100);
+}
+function ScoreRing({ score }) {
+  const color = score >= 80 ? "text-emerald-500" : score >= 50 ? "text-amber-500" : "text-rose-500";
+  const bg    = score >= 80 ? "bg-emerald-50"   : score >= 50 ? "bg-amber-50"   : "bg-rose-50";
+  return (
+    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${bg}`} title={`Profile ${score}% complete`}>
+      <span className={`text-[10px] font-black ${color}`}>{score}</span>
+    </div>
+  );
+}
+
 // ── Table columns ──────────────────────────────────────────────────
 const columns = [
   {
     key: "first_name", label: "Name",
     render: (val, row) => (
-      <div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-slate-800">
-            {row.preferred_name || `${row.first_name || ""} ${row.last_name || ""}`.trim()}
-          </span>
-          <Badge className={personTypeColor(row.person_type)}>
-            {row.person_type || "employee"}
-          </Badge>
+      <div className="flex items-start gap-2">
+        <ScoreRing score={profileScore(row)} />
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-slate-800">
+              {row.preferred_name || `${row.first_name || ""} ${row.last_name || ""}`.trim()}
+            </span>
+            <Badge className={personTypeColor(row.person_type)}>
+              {row.person_type || "employee"}
+            </Badge>
+          </div>
+          {row.email && (
+            <p className="text-xs text-slate-400 mt-0.5">{row.email}</p>
+          )}
         </div>
-        {row.email && (
-          <p className="text-xs text-slate-400 mt-0.5">{row.email}</p>
-        )}
       </div>
     ),
   },

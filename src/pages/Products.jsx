@@ -22,7 +22,8 @@ import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { Upload, Package, AlertTriangle, Pill, DollarSign } from "lucide-react";
+import { Upload, Package, AlertTriangle, DollarSign, Clock } from "lucide-react";
+import { differenceInDays, parseISO, isValid } from "date-fns";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
@@ -36,6 +37,36 @@ const triggerETL = (entity) =>
   }).catch(() => {});
 
 const statusColor = (s) => ({ active: "bg-emerald-50 text-emerald-700", discontinued: "bg-slate-100 text-slate-600", out_of_stock: "bg-rose-50 text-rose-700", archived: "bg-slate-100 text-slate-400" }[s] || "bg-slate-100 text-slate-600");
+
+// ── Expiry countdown badge ─────────────────────────────────────────
+function ExpiryBadge({ expiryDate }) {
+  if (!expiryDate) return null;
+  let date;
+  try { date = parseISO(expiryDate); } catch { return null; }
+  if (!isValid(date)) return null;
+  const days = differenceInDays(date, new Date());
+  if (days < 0) return (
+    <span className="flex items-center gap-1 text-[10px] font-bold bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full">
+      <Clock className="w-2.5 h-2.5" /> Expired
+    </span>
+  );
+  if (days <= 7) return (
+    <span className="flex items-center gap-1 text-[10px] font-bold bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded-full animate-pulse">
+      <Clock className="w-2.5 h-2.5" /> {days}d left
+    </span>
+  );
+  if (days <= 30) return (
+    <span className="flex items-center gap-1 text-[10px] font-semibold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full">
+      <Clock className="w-2.5 h-2.5" /> {days}d left
+    </span>
+  );
+  if (days <= 90) return (
+    <span className="flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full">
+      <Clock className="w-2.5 h-2.5" /> {days}d left
+    </span>
+  );
+  return null;
+}
 const itemTypeColor = (t) => ({
   physical:             "bg-blue-50 text-blue-700",
   living:               "bg-green-50 text-green-700",
@@ -55,6 +86,7 @@ const buildColumns = (recalls) => [
           {row.regulatory_status === "controlled" && <span className="text-[10px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full font-medium">Controlled</span>}
           {row.regulatory_status === "prescription" && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">Rx</span>}
           {recalls[row.id] && <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full font-bold animate-pulse">⚠️ RECALL</span>}
+          <ExpiryBadge expiryDate={row.expiry_date} />
         </div>
       </div>
     ),
@@ -189,6 +221,11 @@ export default function Products() {
 
   const lowStockItems = products.filter((p) => p.stock_quantity != null && p.min_stock_level != null && p.stock_quantity <= p.min_stock_level && p.status === "active");
   const totalStockValue = "$" + products.reduce((sum, p) => sum + ((parseFloat(p.stock_quantity) || 0) * (parseFloat(p.cost_price) || 0)), 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const expiringSoonCount = products.filter(p => {
+    if (!p.expiry_date) return false;
+    try { const d = differenceInDays(parseISO(p.expiry_date), new Date()); return d >= 0 && d <= 30; }
+    catch { return false; }
+  }).length;
 
   const tabFiltered = activeTab === "low_stock"
     ? products.filter((p) => p.stock_quantity != null && p.min_stock_level != null && p.stock_quantity <= p.min_stock_level)
@@ -241,7 +278,7 @@ export default function Products() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={Package} iconClass="bg-slate-100 text-slate-500" label="Total Items" value={products.length} />
         <StatCard icon={AlertTriangle} iconClass={lowStockItems.length > 0 ? "bg-amber-50 text-amber-500" : "bg-slate-100 text-slate-400"} label="Low Stock" value={lowStockItems.length} />
-        <StatCard icon={Pill} iconClass="bg-blue-50 text-blue-600" label="Physical Items" value={products.filter((p) => (ITEM_TYPE_ALIASES.physical || []).includes(p.item_type)).length} />
+        <StatCard icon={Clock} iconClass={expiringSoonCount > 0 ? "bg-rose-50 text-rose-600" : "bg-slate-100 text-slate-400"} label="Expiring ≤30d" value={expiringSoonCount} />
         <StatCard icon={DollarSign} iconClass="bg-emerald-50 text-emerald-600" label="Total Stock Value" value={totalStockValue} />
       </div>
 
@@ -252,6 +289,15 @@ export default function Products() {
             <p className="text-sm text-amber-700"><span className="font-semibold">{lowStockItems.length} item(s)</span> are at or below minimum stock level</p>
           </div>
           <button onClick={() => setActiveTab("low_stock")} className="text-xs font-semibold text-amber-700 hover:underline shrink-0">View all →</button>
+        </div>
+      )}
+
+      {expiringSoonCount > 0 && (
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl px-5 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-rose-500" />
+            <p className="text-sm text-rose-700"><span className="font-semibold">{expiringSoonCount} item(s)</span> expire within 30 days — review stock levels</p>
+          </div>
         </div>
       )}
 

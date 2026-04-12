@@ -233,7 +233,8 @@ export default function StockCounter() {
     localStorage.removeItem(draftKey);
 
     // Refresh analytics after stock count so dashboards reflect new levels immediately
-    triggerETL("product"); // fire and forget — don't block the success screen
+    triggerETL("product");      // fire and forget — don't block the success screen
+    triggerETL("transaction");  // stock adjustment transactions also update analytics
 
     setShowSubmit(false);
     setSubmitResult({ ...results, session });
