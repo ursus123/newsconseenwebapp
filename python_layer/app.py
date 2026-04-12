@@ -2,6 +2,8 @@ import logging
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
+logger = logging.getLogger(__name__)
+
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import FastAPI, Header, HTTPException, Query, Request
@@ -99,8 +101,6 @@ except Exception as _agents_err:
     _agents_ok = False
     logger.warning("agents layer import failed — disabled: %s", _agents_err)
 
-logger = logging.getLogger(__name__)
-
 
 # ----------------------------------------------------------
 # Lifespan — runs on startup
@@ -152,7 +152,7 @@ app = FastAPI(
         "**The Autonomous SME Operating System.**\n\n"
         "Layer 1 — Enterprise OS: Base44 master data (Person, Enterprise, Product)\n"
         "Layer 2 — Deployable Datamart: ETL pipeline, PostgreSQL, FastAPI\n"
-        "Layer 3 — Foundry Intelligence: Copilot + Alerts + Network Intelligence\n"
+        "Layer 3 — Autonomous Intelligence: Copilot + Alerts + Network Intelligence\n"
         "Layer 4 — Agentic AI: 8 autonomous agents, multi-LLM orchestration, "
         "approval gate, agent memory, deep market research\n\n"
         "One system. Any industry. Runs itself."
@@ -372,12 +372,12 @@ def root():
     return {
         "status":  "ok",
         "service": "newsconseen-python-layer",
-        "version": "4.0.3",
-        "mantra":  "The SME version of Palantir Foundry",
+        "version": "4.1.0",
+        "mantra":  "The Autonomous SME Operating System",
         "layers": {
             "layer_1": "Enterprise OS — Base44 master data",
             "layer_2": "Deployable Datamart — ETL + PostgreSQL + FastAPI",
-            "layer_3": "Foundry Intelligence — Copilot + Alerts + Network",
+            "layer_3": "Autonomous Intelligence — Copilot + Alerts + Network",
         },
     }
 
@@ -410,7 +410,7 @@ def health():
 
     return {
         "status":   "ok" if db_status == "connected" else "degraded",
-        "version":  "4.0.2",
+        "version":  "4.1.0",
         "api":      "ok",
         "database": db_status,
 
@@ -608,7 +608,7 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
 
     return {
         "cron_run":    True,
-        "version":     "4.0.3",
+        "version":     "4.1.0",
         "companies":   len(company_ids),
         "raw_stored":  list(raw_data.keys()),
         "success":     success_count,
