@@ -6,14 +6,14 @@
 # instantiate connectors by name.
 #
 # Sprint delivery status:
-#   ✅ Sprint 1 — File connectors (Excel, CSV, Google Sheets, PDF, JSON)
-#   🔲 Sprint 2 — Mobile money (M-Pesa, MTN, Airtel, Wave, Stripe)
-#   🔲 Sprint 3 — HR/Payroll (ADP, Paychex, BambooHR, Gusto)
-#   🔲 Sprint 4 — Accounting (QuickBooks, Wave, Xero, Sage)
-#   🔲 Sprint 5 — Health/EHR (OpenMRS, Therap, Epic FHIR)
-#   🔲 Sprint 6 — Education (PowerSchool, Canvas, Google Classroom)
-#   🔲 Sprint 7 — POS (Square, Shopify, Toast)
-#   🔲 Sprint 8 — Government (KRA, Ghana GRA, Nigeria CAC)
+#   ✅ Sprint 1 — File connectors (Excel, CSV, Google Sheets, JSON)
+#   ✅ Sprint 2 — Mobile money (M-Pesa, MTN, Airtel, Wave, Stripe, Bank)
+#   ✅ Sprint 3 — HR/Payroll (ADP, Paychex, BambooHR, Gusto)
+#   ✅ Sprint 4 — Accounting (QuickBooks, Xero, Sage, Wave Accounting)
+#   ✅ Sprint 5 — Health/EHR (OpenMRS, Therap, Epic FHIR, DHIS2)
+#   ✅ Sprint 6 — Education (PowerSchool, Canvas, Google Classroom)
+#   ✅ Sprint 7 — POS (Square, Shopify, Toast)
+#   ✅ Sprint 8 — Government (KRA, Ghana GRA, Nigeria CAC)
 # ==============================================================
 
 import logging
@@ -149,9 +149,9 @@ CONNECTOR_CATALOG = {
         "category":    "hr_payroll",
         "description": "Sync employees, payroll runs, and departments from ADP",
         "sprint":      3,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
-        "entities":    ["people", "transactions"],
+        "entities":    ["people", "enterprises"],
         "icon":        "users",
     },
     "paychex": {
@@ -160,9 +160,9 @@ CONNECTOR_CATALOG = {
         "category":    "hr_payroll",
         "description": "Sync employees, payroll, and time-attendance from Paychex",
         "sprint":      3,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
-        "entities":    ["people", "transactions"],
+        "entities":    ["people"],
         "icon":        "users",
     },
     "bamboohr": {
@@ -171,9 +171,9 @@ CONNECTOR_CATALOG = {
         "category":    "hr_payroll",
         "description": "Sync employee records and org chart from BambooHR",
         "sprint":      3,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "api_key",
-        "entities":    ["people"],
+        "entities":    ["people", "enterprises"],
         "icon":        "users",
     },
     "gusto": {
@@ -182,9 +182,9 @@ CONNECTOR_CATALOG = {
         "category":    "hr_payroll",
         "description": "Sync employees, contractors, and payroll from Gusto",
         "sprint":      3,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
-        "entities":    ["people", "transactions"],
+        "entities":    ["people"],
         "icon":        "users",
     },
 
@@ -195,7 +195,7 @@ CONNECTOR_CATALOG = {
         "category":    "accounting",
         "description": "Sync invoices, payments, vendors, and customers from QuickBooks",
         "sprint":      4,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
         "entities":    ["transactions", "people", "products"],
         "icon":        "dollar-sign",
@@ -206,18 +206,18 @@ CONNECTOR_CATALOG = {
         "category":    "accounting",
         "description": "Sync financial records from Wave (popular in Africa)",
         "sprint":      4,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
-        "entities":    ["transactions", "people", "products"],
+        "entities":    ["people", "products"],
         "icon":        "dollar-sign",
     },
     "xero": {
         "id":          "xero",
         "name":        "Xero",
         "category":    "accounting",
-        "description": "Sync financial records from Xero",
+        "description": "Sync contacts, invoices, and inventory from Xero",
         "sprint":      4,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
         "entities":    ["transactions", "people", "products"],
         "icon":        "dollar-sign",
@@ -226,9 +226,9 @@ CONNECTOR_CATALOG = {
         "id":          "sage",
         "name":        "Sage",
         "category":    "accounting",
-        "description": "Sync financial records from Sage",
+        "description": "Sync contacts, invoices, and products from Sage Business Cloud",
         "sprint":      4,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
         "entities":    ["transactions", "people", "products"],
         "icon":        "dollar-sign",
@@ -239,11 +239,11 @@ CONNECTOR_CATALOG = {
         "id":          "openmrs",
         "name":        "OpenMRS",
         "category":    "health",
-        "description": "Sync patients, visits, and drug orders from OpenMRS",
+        "description": "Sync patients and visits from OpenMRS (open-source EMR)",
         "sprint":      5,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "api_key",
-        "entities":    ["people", "products", "transactions"],
+        "entities":    ["people"],
         "icon":        "heart",
     },
     "therap": {
@@ -252,29 +252,29 @@ CONNECTOR_CATALOG = {
         "category":    "health",
         "description": "Sync service recipients, ISPs, goals, and billing from Therap",
         "sprint":      5,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
-        "entities":    ["people", "transactions"],
+        "entities":    ["people"],
         "icon":        "heart",
     },
     "epic_fhir": {
         "id":          "epic_fhir",
         "name":        "Epic (FHIR)",
         "category":    "health",
-        "description": "Sync patients, encounters, and medications from Epic via FHIR",
+        "description": "Sync patients and encounters from Epic via FHIR R4",
         "sprint":      5,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
-        "entities":    ["people", "products", "transactions"],
+        "entities":    ["people"],
         "icon":        "heart",
     },
     "dhis2": {
         "id":          "dhis2",
         "name":        "DHIS2",
         "category":    "health",
-        "description": "Sync health facility data and aggregate indicators from DHIS2",
+        "description": "Sync health facility org units and aggregate indicators from DHIS2",
         "sprint":      5,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "api_key",
         "entities":    ["enterprises"],
         "icon":        "heart",
@@ -285,11 +285,11 @@ CONNECTOR_CATALOG = {
         "id":          "google_classroom",
         "name":        "Google Classroom",
         "category":    "education",
-        "description": "Sync students, teachers, classes, and assignments",
+        "description": "Sync students and teachers from Google Classroom courses",
         "sprint":      6,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
-        "entities":    ["people", "enterprises"],
+        "entities":    ["people"],
         "icon":        "book",
     },
     "powerschool": {
@@ -298,20 +298,20 @@ CONNECTOR_CATALOG = {
         "category":    "education",
         "description": "Sync students, staff, enrollment, and attendance from PowerSchool",
         "sprint":      6,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
-        "entities":    ["people", "enterprises"],
+        "entities":    ["people"],
         "icon":        "book",
     },
     "canvas": {
         "id":          "canvas",
         "name":        "Canvas LMS",
         "category":    "education",
-        "description": "Sync students, courses, and assignments from Canvas",
+        "description": "Sync students, teachers, and courses from Canvas",
         "sprint":      6,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "api_key",
-        "entities":    ["people", "enterprises"],
+        "entities":    ["people"],
         "icon":        "book",
     },
 
@@ -320,33 +320,33 @@ CONNECTOR_CATALOG = {
         "id":          "square",
         "name":        "Square",
         "category":    "pos",
-        "description": "Sync sales, inventory, and customers from Square POS",
+        "description": "Sync customers and catalog items from Square POS",
         "sprint":      7,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
-        "entities":    ["transactions", "products", "people"],
+        "entities":    ["products", "people"],
         "icon":        "shopping-cart",
     },
     "shopify": {
         "id":          "shopify",
         "name":        "Shopify",
         "category":    "pos",
-        "description": "Sync orders, products, and customers from Shopify",
+        "description": "Sync customers and products from Shopify",
         "sprint":      7,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
-        "entities":    ["transactions", "products", "people"],
+        "entities":    ["products", "people"],
         "icon":        "shopping-cart",
     },
     "toast": {
         "id":          "toast",
         "name":        "Toast POS",
         "category":    "pos",
-        "description": "Sync restaurant orders, menu items, and staff from Toast",
+        "description": "Sync restaurant menu items and staff from Toast",
         "sprint":      7,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "oauth",
-        "entities":    ["transactions", "products", "people"],
+        "entities":    ["products", "people"],
         "icon":        "shopping-cart",
     },
 
@@ -414,7 +414,7 @@ CONNECTOR_CATALOG = {
         "category":    "government",
         "description": "Validate business registration and tax compliance via KRA iTax",
         "sprint":      8,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "api_key",
         "entities":    ["enterprises"],
         "icon":        "shield",
@@ -423,9 +423,9 @@ CONNECTOR_CATALOG = {
         "id":          "ghana_gra",
         "name":        "Ghana GRA",
         "category":    "government",
-        "description": "Validate business registration via Ghana Revenue Authority",
+        "description": "Validate business registration via Ghana Revenue Authority TIN API",
         "sprint":      8,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "api_key",
         "entities":    ["enterprises"],
         "icon":        "shield",
@@ -434,11 +434,11 @@ CONNECTOR_CATALOG = {
         "id":          "nigeria_cac",
         "name":        "Nigeria CAC",
         "category":    "government",
-        "description": "Validate business registration via Nigeria Corporate Affairs Commission",
+        "description": "Validate business registration and directors via Nigeria CAC API",
         "sprint":      8,
-        "status":      "coming_soon",
+        "status":      "available",
         "auth_type":   "api_key",
-        "entities":    ["enterprises"],
+        "entities":    ["enterprises", "people"],
         "icon":        "shield",
     },
 }
@@ -536,3 +536,120 @@ def _ensure_connectors_loaded():
         _REGISTRY["bank_statement"] = BankStatementConnector
     except ImportError as e:
         logger.warning("connector registry: could not load bank_statement — %s", e)
+
+    # ── Sprint 3 — HR/Payroll ────────────────────────────
+    try:
+        from connectors.hr_payroll.adp import AdpConnector
+        _REGISTRY["adp"] = AdpConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load adp — %s", e)
+    try:
+        from connectors.hr_payroll.paychex import PaychexConnector
+        _REGISTRY["paychex"] = PaychexConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load paychex — %s", e)
+    try:
+        from connectors.hr_payroll.bamboohr import BambooHRConnector
+        _REGISTRY["bamboohr"] = BambooHRConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load bamboohr — %s", e)
+    try:
+        from connectors.hr_payroll.gusto import GustoConnector
+        _REGISTRY["gusto"] = GustoConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load gusto — %s", e)
+
+    # ── Sprint 4 — Accounting ────────────────────────────
+    try:
+        from connectors.accounting.quickbooks import QuickBooksConnector
+        _REGISTRY["quickbooks"] = QuickBooksConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load quickbooks — %s", e)
+    try:
+        from connectors.accounting.xero import XeroConnector
+        _REGISTRY["xero"] = XeroConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load xero — %s", e)
+    try:
+        from connectors.accounting.sage import SageConnector
+        _REGISTRY["sage"] = SageConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load sage — %s", e)
+    try:
+        from connectors.accounting.wave_accounting import WaveAccountingConnector
+        _REGISTRY["wave_accounting"] = WaveAccountingConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load wave_accounting — %s", e)
+
+    # ── Sprint 5 — Health/EHR ────────────────────────────
+    try:
+        from connectors.health.open_mrs import OpenMrsConnector
+        _REGISTRY["openmrs"] = OpenMrsConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load openmrs — %s", e)
+    try:
+        from connectors.health.therap import TherapConnector
+        _REGISTRY["therap"] = TherapConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load therap — %s", e)
+    try:
+        from connectors.health.epic_fhir import EpicFhirConnector
+        _REGISTRY["epic_fhir"] = EpicFhirConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load epic_fhir — %s", e)
+    try:
+        from connectors.health.dhis2 import Dhis2Connector
+        _REGISTRY["dhis2"] = Dhis2Connector
+    except ImportError as e:
+        logger.warning("connector registry: could not load dhis2 — %s", e)
+
+    # ── Sprint 6 — Education ─────────────────────────────
+    try:
+        from connectors.education.power_school import PowerSchoolConnector
+        _REGISTRY["powerschool"] = PowerSchoolConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load powerschool — %s", e)
+    try:
+        from connectors.education.canvas import CanvasConnector
+        _REGISTRY["canvas"] = CanvasConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load canvas — %s", e)
+    try:
+        from connectors.education.google_classroom import GoogleClassroomConnector
+        _REGISTRY["google_classroom"] = GoogleClassroomConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load google_classroom — %s", e)
+
+    # ── Sprint 7 — POS ───────────────────────────────────
+    try:
+        from connectors.pos.square import SquareConnector
+        _REGISTRY["square"] = SquareConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load square — %s", e)
+    try:
+        from connectors.pos.shopify import ShopifyConnector
+        _REGISTRY["shopify"] = ShopifyConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load shopify — %s", e)
+    try:
+        from connectors.pos.toast import ToastConnector
+        _REGISTRY["toast"] = ToastConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load toast — %s", e)
+
+    # ── Sprint 8 — Government ────────────────────────────
+    try:
+        from connectors.government.kra import KraConnector
+        _REGISTRY["kra"] = KraConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load kra — %s", e)
+    try:
+        from connectors.government.ghana_gra import GhanaGraConnector
+        _REGISTRY["ghana_gra"] = GhanaGraConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load ghana_gra — %s", e)
+    try:
+        from connectors.government.nigeria_cac import NigeriaCacConnector
+        _REGISTRY["nigeria_cac"] = NigeriaCacConnector
+    except ImportError as e:
+        logger.warning("connector registry: could not load nigeria_cac — %s", e)
