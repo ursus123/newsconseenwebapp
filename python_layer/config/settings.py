@@ -67,6 +67,14 @@ class Settings(BaseSettings):
     n8n_webhook_url: Optional[str] = None   # n8n webhook URL — Newsconseen fires events here
     n8n_secret:      Optional[str] = None   # shared secret for /n8n/ingest/* endpoints
 
+    # ----------------------------------------------------------
+    # Airbyte data integration
+    # ----------------------------------------------------------
+    airbyte_api_url:        Optional[str] = None   # e.g. http://localhost:8001 or https://api.airbyte.com
+    airbyte_api_key:        Optional[str] = None   # Airbyte Cloud API key
+    airbyte_workspace_id:   Optional[str] = None   # Airbyte workspace ID
+    airbyte_webhook_secret: Optional[str] = None   # secures /airbyte/webhook endpoint
+
     class Config:
         env_file       = ".env"
         case_sensitive = False

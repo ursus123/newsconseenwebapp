@@ -60,6 +60,9 @@ from webhook.routes import router as webhook_router
 from n8n.routes import router as n8n_router
 from n8n.emitter import emit_etl_complete
 
+# Airbyte data integration
+from airbyte.routes import router as airbyte_router
+
 # Market Intelligence Layer
 try:
     from market.routes import router as market_router
@@ -186,6 +189,9 @@ app.include_router(webhook_router)
 
 # n8n Workflow Automation
 app.include_router(n8n_router)
+
+# Airbyte data integration
+app.include_router(airbyte_router)
 
 # Market Intelligence
 if _market_ok and market_router is not None:
