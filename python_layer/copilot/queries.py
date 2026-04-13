@@ -1143,8 +1143,7 @@ def get_monthly_kpis(company_id: str, months: int = 12) -> dict:
             tsk = _filter_by_company(tsk, company_id)
 
             kpi_df = transform_monthly_kpis(ppl, txs, tsk, lookback_months=months)
-            if not kpi_df.empty and "company_id" in kpi_df.columns:
-                kpi_df = kpi_df[kpi_df["company_id"] == company_id]
+            kpi_df = _filter_by_company(kpi_df, company_id)
             rows = kpi_df.to_dict(orient="records") if not kpi_df.empty else []
             logger.info("get_monthly_kpis: using live fallback (%d months)", len(rows))
         except Exception as e:
@@ -1217,9 +1216,7 @@ def get_entity_list(
             from etl.entity_index import transform_entity_index
             from etl.people import extract_people
 
-            ppl = extract_people()
-            if not ppl.empty and company_id and "company_id" in ppl.columns:
-                ppl = ppl[ppl["company_id"] == company_id]
+            ppl = _filter_by_company(extract_people(), company_id)
 
             idx_df = transform_entity_index(ppl)
             if entity_type and "entity_type" in idx_df.columns:
@@ -1294,8 +1291,7 @@ def get_company_scorecard(company_id: str) -> dict:
                 _fetch_filtered(extract_tasks),
                 _fetch_filtered(extract_products),
             )
-            if not sc_df.empty and "company_id" in sc_df.columns:
-                sc_df = sc_df[sc_df["company_id"] == company_id]
+            sc_df = _filter_by_company(sc_df, company_id)
             rows = sc_df.to_dict(orient="records") if not sc_df.empty else []
             logger.info("get_company_scorecard: using live fallback")
         except Exception as e:
