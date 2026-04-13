@@ -9,7 +9,7 @@ import {
   User, Lock, Bell, Monitor, AlertTriangle,
   Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X, Settings as SettingsIcon, Palette, Bug,
   Globe, Copy, Trash2, Loader2, Brain, Zap, CheckCircle2, Clock,
-  ScrollText, Download, Filter, RefreshCw,
+  ScrollText, Download, Filter, RefreshCw, Send, Plus,
 } from "lucide-react";
 import BrandingSection from "@/components/settings/BrandingSection";
 import ErrorLogSection from "@/components/settings/ErrorLogSection";
@@ -211,6 +211,7 @@ const ALL_TABS = [
   { id: "network",       label: "Network",       icon: Globe,         adminOnly: false },
   { id: "branding",      label: "Brand Settings", icon: Palette,       superAdminOnly: true },
   { id: "agents",        label: "Agents",         icon: Brain,         adminOnly: true  },
+  { id: "reports",       label: "Report Delivery", icon: Send,         adminOnly: true  },
   { id: "audit",         label: "Audit Trail",    icon: ScrollText,    adminOnly: true  },
   { id: "error_log",     label: "Error Log",      icon: Bug,           adminOnly: true  },
   { id: "danger",        label: "Danger Zone",    icon: AlertTriangle, adminOnly: false },
@@ -293,6 +294,7 @@ export default function Settings() {
           {activeTab === "network"       && <NetworkSection user={user} enterprises={enterprises} />}
           {activeTab === "branding"      && <BrandingSection user={user} enterprise={myEnterprise} />}
           {activeTab === "agents"        && <AgentsSection user={user} />}
+          {activeTab === "reports"       && <ReportsSection user={user} enterprise={myEnterprise} />}
           {activeTab === "audit"         && <AuditTrailSection user={user} />}
           {activeTab === "error_log"     && <ErrorLogSection user={user} />}
           {activeTab === "danger"        && <DangerSection user={user} />}
@@ -1158,5 +1160,241 @@ function NetworkSection({ user, enterprises }) {
         </div>
       )}
     </Card>
+  );
+}
+
+// ── Reports Section ──────────────────────────────────────────────────────────
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
+const API_HEADERS = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
+
+function ReportsSection({ user, enterprise }) {
+  const companyId   = user?.company_id;
+  const companyName = enterprise?.brand_name || enterprise?.enterprise_name || "Your Organisation";
+
+  const [config, setConfig]     = useState({
+    enabled:    false,
+    frequency:  "weekly",
+    recipients: [],
+  });
+  const [newEmail, setNewEmail] = useState("");
+  const [newName,  setNewName]  = useState("");
+  const [loading,  setLoading]  = useState(true);
+  const [saving,   setSaving]   = useState(false);
+  const [sending,  setSending]  = useState(false);
+  const [banner,   setBanner]   = useState(null);
+
+  useEffect(() => {
+    if (!companyId) return;
+    fetch(`${RAILWAY_URL}/reports/schedule?company_id=${companyId}`, { headers: API_HEADERS })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && data.configured) {
+          setConfig({
+            enabled:    data.enabled,
+            frequency:  data.frequency || "weekly",
+            recipients: data.recipients || [],
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [companyId]);
+
+  const showBanner = (type, msg) => {
+    setBanner({ type, msg });
+    setTimeout(() => setBanner(null), 4000);
+  };
+
+  const save = async () => {
+    if (!companyId) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${RAILWAY_URL}/reports/schedule`, {
+        method:  "POST",
+        headers: { ...API_HEADERS, "Content-Type": "application/json" },
+        body:    JSON.stringify({ company_id: companyId, company_name: companyName, ...config }),
+      });
+      if (res.ok) showBanner("success", "Report schedule saved.");
+      else        showBanner("error",   "Failed to save — check Railway logs.");
+    } catch {
+      showBanner("error", "Could not reach Railway service.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendNow = async () => {
+    if (!companyId) return;
+    setSending(true);
+    try {
+      const res = await fetch(
+        `${RAILWAY_URL}/reports/send-digest?company_id=${companyId}`,
+        { method: "POST", headers: API_HEADERS }
+      );
+      const data = await res.json();
+      if (data.status === "accepted") showBanner("success", "Digest queued — recipients will receive it shortly.");
+      else if (data.reason)           showBanner("error",   data.reason);
+      else                            showBanner("error",   "Delivery failed.");
+    } catch {
+      showBanner("error", "Could not reach Railway service.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const addRecipient = () => {
+    if (!newEmail || !newEmail.includes("@")) return;
+    setConfig(c => ({
+      ...c,
+      recipients: [...c.recipients, { email: newEmail.trim(), name: newName.trim() }],
+    }));
+    setNewEmail(""); setNewName("");
+  };
+
+  const removeRecipient = (idx) => {
+    setConfig(c => ({ ...c, recipients: c.recipients.filter((_, i) => i !== idx) }));
+  };
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-32">
+      <div className="w-5 h-5 border-2 border-slate-200 border-t-indigo-500 rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-bold text-slate-800">Report Delivery</h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Automatically email operational summaries to your team on a schedule —
+            no need to open the dashboard.
+          </p>
+        </div>
+        <button
+          onClick={save}
+          disabled={saving}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all shrink-0"
+        >
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+          Save
+        </button>
+      </div>
+
+      {banner && <Banner type={banner.type} message={banner.msg} onDismiss={() => setBanner(null)} />}
+
+      <div className="bg-white border border-slate-100 rounded-2xl p-5">
+        <ToggleRow
+          label="Enable scheduled digest emails"
+          checked={config.enabled}
+          onChange={v => setConfig(c => ({ ...c, enabled: v }))}
+        />
+      </div>
+
+      <div className="bg-white border border-slate-100 rounded-2xl p-5 space-y-4">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Delivery Schedule</p>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-slate-700">Frequency</label>
+          <div className="flex gap-2 flex-wrap">
+            {["daily", "weekly", "monthly"].map(freq => (
+              <button
+                key={freq}
+                onClick={() => setConfig(c => ({ ...c, frequency: freq }))}
+                className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all capitalize ${
+                  config.frequency === freq
+                    ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+                    : "border-slate-200 text-slate-500 hover:border-slate-300"
+                }`}
+              >
+                {freq}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {config.frequency === "daily"   && "Sent every morning after overnight ETL sync."}
+            {config.frequency === "weekly"  && "Sent every Monday after weekly ETL sync."}
+            {config.frequency === "monthly" && "Sent on the first of each month."}
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-100 rounded-2xl p-5 space-y-4">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Recipients</p>
+        {config.recipients.length === 0 && (
+          <p className="text-xs text-slate-400 italic">No recipients yet. Add at least one email address below.</p>
+        )}
+        {config.recipients.map((r, idx) => (
+          <div key={idx} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+              <Mail className="w-3.5 h-3.5 text-indigo-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-700 truncate">{r.email}</p>
+              {r.name && <p className="text-[11px] text-slate-400 truncate">{r.name}</p>}
+            </div>
+            <button
+              onClick={() => removeRecipient(idx)}
+              className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+        <div className="border-t border-slate-100 pt-4 space-y-2">
+          <p className="text-xs font-medium text-slate-600">Add recipient</p>
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={newEmail}
+              onChange={e => setNewEmail(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && addRecipient()}
+              placeholder="email@example.com"
+              className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            />
+            <input
+              type="text"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              placeholder="Name (optional)"
+              className="w-36 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            />
+            <button
+              onClick={addRecipient}
+              disabled={!newEmail || !newEmail.includes("@")}
+              className="px-3 py-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors disabled:opacity-40"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-indigo-800">What operators receive</p>
+          <p className="text-xs text-indigo-600 mt-1">
+            Each digest includes: total people, active staff, churn risk, revenue, overdue invoices,
+            task completion rate, and data health score with top issues — all in a clean, branded email.
+          </p>
+        </div>
+        <button
+          onClick={sendNow}
+          disabled={sending || config.recipients.length === 0}
+          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 shrink-0"
+        >
+          {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+          Send now
+        </button>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3 flex items-start gap-3">
+        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-700">
+          Digest delivery requires <strong>SENDGRID_API_KEY</strong> (or SMTP_HOST + SMTP_USER + SMTP_PASSWORD)
+          set in Railway environment variables. The same credentials used by the Alerts engine are shared here.
+        </p>
+      </div>
+    </div>
   );
 }

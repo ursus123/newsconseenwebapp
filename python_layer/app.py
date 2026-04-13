@@ -302,6 +302,14 @@ try:
 except Exception as _dq_err:
     logger.warning("Data quality monitoring router failed to load — %s", _dq_err)
 
+# Scheduled Report Delivery
+try:
+    from reports.routes import router as reports_router
+    app.include_router(reports_router)
+    logger.info("Report delivery router loaded")
+except Exception as _rep_err:
+    logger.warning("Report delivery router failed to load — %s", _rep_err)
+
 
 # ----------------------------------------------------------
 # Helper Functions
@@ -675,9 +683,18 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     except Exception as _dq_err:
         logger.warning("cron: data quality runner failed — %s", _dq_err)
 
+    # Scheduled report delivery — sends due digests after fresh data is available
+    digest_result = {}
+    try:
+        from reports.routes import run_scheduled_digests
+        digest_result = run_scheduled_digests(list(company_ids))
+        logger.info("cron: report digests sent=%s", digest_result.get("sent", 0))
+    except Exception as _rep_err:
+        logger.warning("cron: report digest runner failed — %s", _rep_err)
+
     return {
         "cron_run":               True,
-        "version":                "4.4.0",
+        "version":                "4.5.0",
         "companies":              len(company_ids),
         "raw_stored":             list(raw_data.keys()),
         "success":                success_count,
@@ -686,6 +703,7 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         "results":                results,
         "scheduled_connectors":   connector_sync_result,
         "data_quality":           dq_result,
+        "report_digests":         digest_result,
     }
 
 
