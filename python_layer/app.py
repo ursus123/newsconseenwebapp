@@ -286,6 +286,14 @@ try:
 except Exception as _wf_err:
     logger.warning("Workflow engine router failed to load — %s", _wf_err)
 
+# Tenant Onboarding Automation
+try:
+    from onboarding.routes import router as onboarding_router
+    app.include_router(onboarding_router)
+    logger.info("Onboarding automation router loaded")
+except Exception as _ob_err:
+    logger.warning("Onboarding automation router failed to load — %s", _ob_err)
+
 
 # ----------------------------------------------------------
 # Helper Functions

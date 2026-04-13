@@ -5,11 +5,47 @@ import { base44 } from "@/api/base44Client";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const API_HEADERS = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
+
 const triggerETL = (entity) =>
   fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
     method: "POST",
-    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+    headers: API_HEADERS,
   }).catch(() => {});
+
+// Fire-and-forget: provision taxonomy + workflows for a new tenant
+async function provisionTenant(companyId, enterpriseType, enterpriseName) {
+  try {
+    const res = await fetch(`${RAILWAY_URL}/onboarding/provision`, {
+      method: "POST",
+      headers: { ...API_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, enterprise_type: enterpriseType, enterprise_name: enterpriseName }),
+    });
+    if (!res.ok) return;
+    const { taxonomy = [] } = await res.json();
+
+    // Create MasterDataOption records from the returned taxonomy template
+    // Chunked with small delay to avoid overwhelming Base44
+    for (let i = 0; i < taxonomy.length; i++) {
+      const item = taxonomy[i];
+      await base44.entities.MasterDataOption.create({
+        entity_type:       item.entity_type,
+        field_name:        item.field_name,
+        value:             item.value,
+        label:             item.label,
+        parent_value:      item.parent_value || null,
+        company_id:        companyId,
+        is_system_default: false,
+        is_active:         true,
+        usage_count:       0,
+      }).catch(() => {});
+      // Small pause every 5 items to avoid rate-limiting
+      if (i > 0 && i % 5 === 0) await new Promise(r => setTimeout(r, 200));
+    }
+  } catch (_) {
+    // Provision is best-effort — never block the onboarding flow
+  }
+}
 import { useAuth } from "@/lib/AuthContext";
 import StepEnterpriseType from "@/components/onboarding/StepEnterpriseType";
 import StepWorkspace from "@/components/onboarding/StepWorkspace";
@@ -106,6 +142,10 @@ export default function Onboarding() {
 
       setCreatedEnterprise({ ...enterprise, company_id: enterprise.id });
       triggerETL("enterprise");
+
+      // Fire-and-forget: provision default taxonomy + workflows for this enterprise type
+      provisionTenant(enterprise.id, selectedType, workspaceData.org_name);
+
       return true;
     } catch (e) {
       console.error(e);
