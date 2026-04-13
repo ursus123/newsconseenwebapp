@@ -421,6 +421,57 @@ def _ml_chart(model: str, result: dict):
     return None
 
 
+def _count_rows(result: dict) -> int | None:
+    """Estimate the number of data rows returned by a tool."""
+    for key in (
+        "records", "people", "enterprises", "transactions", "tasks",
+        "products", "results", "breakdown", "months", "predictions",
+        "items", "addresses", "relationships", "services",
+    ):
+        val = result.get(key)
+        if isinstance(val, list):
+            return len(val)
+    # summary dict — sum totals
+    summary = result.get("summary")
+    if isinstance(summary, dict):
+        total = sum(
+            v.get("total", 0) if isinstance(v, dict) else 0
+            for v in summary.values()
+        )
+        if total > 0:
+            return total
+    # scorecard / overview — single record
+    if result.get("scorecard") or result.get("enterprises"):
+        ents = result.get("enterprises")
+        if isinstance(ents, list):
+            return len(ents)
+        return 1
+    return None
+
+
+def _build_tools_detail(collected: list) -> list:
+    """
+    Build a rich metadata list per tool call for the transparency panel.
+    Excludes web_search and search_public_data (those are handled by citations).
+    Strips company_id from visible params — it's never useful to show the operator.
+    """
+    detail = []
+    for c in collected:
+        tool = c["tool"]
+        if tool in ("web_search", "search_public_data"):
+            continue
+        params = {k: v for k, v in c.get("input", {}).items() if k != "company_id"}
+        result = c.get("result", {})
+        detail.append({
+            "tool":        tool,
+            "params":      params,
+            "data_as_of":  result.get("data_as_of"),
+            "data_source": result.get("data_source"),
+            "row_count":   _count_rows(result),
+        })
+    return detail
+
+
 def _extract_data_freshness(collected_tools: list) -> dict:
     """
     Walk all tool results and return the oldest data_as_of string found,
@@ -756,6 +807,7 @@ class CopilotEngine:
                 "charts":          charts,
                 "citations":       citations,
                 "data_freshness":  _extract_data_freshness(collected),
+                "tools_detail":    _build_tools_detail(collected),
                 "intent":          "",
                 "company_id":      self.company_id,
                 "backend":         self.backend,

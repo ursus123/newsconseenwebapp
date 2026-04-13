@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import {
   Send, Loader2, Sparkles, ThumbsUp, ThumbsDown, AlertTriangle,
@@ -6,6 +7,7 @@ import {
   ExternalLink, Save, CheckCircle, RefreshCw, TrendingUp,
   PieChart as PieIcon, Activity, Copy, Check, Clock,
   MessageSquare, X, History, Download, ChevronRight,
+  Search, ArrowUpRight, Database,
 } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
@@ -428,6 +430,132 @@ function CitationsPanel({ citations }) {
   );
 }
 
+// ── Sources verification panel ───────────────────────────────────────────────
+// Shows each internal tool that fired: label, data source, age, record count.
+// Lets the operator see exactly what data the copilot queried before answering.
+const SOURCE_ICONS = {
+  get_people_summary:      "👥",
+  get_person_churn_risk:   "⚠️",
+  get_staff_availability:  "🟢",
+  get_transaction_summary: "💳",
+  get_overdue_invoices:    "🔴",
+  get_task_summary:        "✅",
+  get_task_outcomes:       "📊",
+  get_product_summary:     "📦",
+  get_enterprise_overview: "🏢",
+  get_network_overview:    "🌐",
+  get_ml_predictions:      "🤖",
+  get_monthly_kpis:        "📈",
+  get_entity_list:         "🗃️",
+  get_company_scorecard:   "🏆",
+  get_operator_context:    "ℹ️",
+  get_relationship_summary:"🔗",
+  get_address_overview:    "📍",
+  get_service_overview:    "🛠️",
+};
+
+function SourcesPanel({ toolsDetail, onOpenQueryBuilder }) {
+  const [open, setOpen] = useState(false);
+  if (!toolsDetail || toolsDetail.length === 0) return null;
+
+  return (
+    <div className="mt-1.5 border border-slate-100 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 text-xs font-medium text-slate-500 hover:bg-slate-100 transition-colors"
+      >
+        <span className="flex items-center gap-1.5">
+          <Search className="w-3 h-3" />
+          {toolsDetail.length} data source{toolsDetail.length !== 1 ? "s" : ""} queried
+        </span>
+        <span className="flex items-center gap-2">
+          {open && onOpenQueryBuilder && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={e => { e.stopPropagation(); onOpenQueryBuilder(); }}
+              onKeyDown={e => e.key === "Enter" && (e.stopPropagation(), onOpenQueryBuilder())}
+              className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-700 font-semibold"
+            >
+              Verify in Query Builder <ArrowUpRight className="w-2.5 h-2.5" />
+            </span>
+          )}
+          {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        </span>
+      </button>
+
+      {open && (
+        <div className="bg-white divide-y divide-slate-50">
+          {toolsDetail.map((t, i) => (
+            <div key={i} className="px-3 py-2 flex items-center gap-3">
+              {/* Source indicator dot */}
+              <span className={`w-2 h-2 rounded-full shrink-0 ${
+                t.data_source === "base44_live" ? "bg-blue-400" : "bg-emerald-400"
+              }`} />
+
+              {/* Emoji icon */}
+              <span className="text-sm shrink-0" aria-hidden="true">
+                {SOURCE_ICONS[t.tool] || "📋"}
+              </span>
+
+              {/* Label + params */}
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-semibold text-slate-700 truncate">
+                  {TOOL_LABELS[t.tool] || t.tool?.replace(/_/g, " ")}
+                </p>
+                {t.params && Object.keys(t.params).length > 0 && (
+                  <p className="text-[9px] text-slate-400 truncate">
+                    {Object.entries(t.params).map(([k, v]) => `${k}: ${v}`).join(" · ")}
+                  </p>
+                )}
+              </div>
+
+              {/* Row count */}
+              {t.row_count != null && (
+                <span className="text-[9px] text-slate-400 shrink-0 flex items-center gap-0.5">
+                  <Database className="w-2.5 h-2.5" />
+                  {t.row_count.toLocaleString()}
+                </span>
+              )}
+
+              {/* Source badge */}
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
+                t.data_source === "base44_live"
+                  ? "bg-blue-50 text-blue-600"
+                  : "bg-emerald-50 text-emerald-700"
+              }`}>
+                {t.data_source === "base44_live" ? "live" : "analytics"}
+              </span>
+
+              {/* Data age */}
+              {t.data_as_of && t.data_source !== "base44_live" && (
+                <span className="text-[9px] text-slate-400 shrink-0 whitespace-nowrap">
+                  {t.data_as_of}
+                </span>
+              )}
+            </div>
+          ))}
+
+          {/* Footer shortcut */}
+          {onOpenQueryBuilder && (
+            <div className="px-3 py-2 bg-slate-50 flex items-center justify-between">
+              <span className="text-[10px] text-slate-400">
+                Want to run your own query against this data?
+              </span>
+              <button
+                onClick={onOpenQueryBuilder}
+                className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors"
+              >
+                Open Query Builder <ArrowUpRight className="w-2.5 h-2.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── ML result mini-cards ─────────────────────────────────────────────────────
 function MLPanel({ data }) {
   const mlResults = Object.entries(data || {})
@@ -595,7 +723,7 @@ function SaveButton({ message, companyId }) {
 }
 
 // ── Message bubble ───────────────────────────────────────────────────────────
-function MessageBubble({ message, onFeedback, companyId, mode }) {
+function MessageBubble({ message, onFeedback, companyId, mode, onOpenQueryBuilder }) {
   const isUser     = message.role === "user";
   const isThinking = message.type === "thinking";
   const [copied, doCopy] = useCopy(message.content || "");
@@ -674,6 +802,16 @@ function MessageBubble({ message, onFeedback, companyId, mode }) {
         {!isUser && message.citations?.length > 0 && (
           <div className="w-full">
             <CitationsPanel citations={message.citations} />
+          </div>
+        )}
+
+        {/* Sources verification panel */}
+        {!isUser && message.tools_detail?.length > 0 && (
+          <div className="w-full">
+            <SourcesPanel
+              toolsDetail={message.tools_detail}
+              onOpenQueryBuilder={onOpenQueryBuilder}
+            />
           </div>
         )}
 
@@ -855,6 +993,7 @@ function HistoryPanel({ companyId, onRestore, onClose }) {
 
 // ── Main CopilotChat component ───────────────────────────────────────────────
 export default function CopilotChat({ currentUser, className = "" }) {
+  const navigate = useNavigate();
   const [mode, setMode]           = useState("operations");
   const [messages, setMessages]   = useState([]);
   const [input, setInput]         = useState("");
@@ -864,6 +1003,8 @@ export default function CopilotChat({ currentUser, className = "" }) {
   const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef             = useRef(null);
   const inputRef                   = useRef(null);
+
+  const openQueryBuilder = useCallback(() => navigate("/QueryBuilder"), [navigate]);
 
   const companyId  = currentUser?.company_id;
   const modeConfig = MODES[mode];
@@ -970,6 +1111,7 @@ export default function CopilotChat({ currentUser, className = "" }) {
         charts:         result.charts         || [],
         citations:      result.citations      || [],
         tools_called:   result.tools_called   || [],
+        tools_detail:   result.tools_detail   || [],
         data_freshness: result.data_freshness || null,
         intent:         result.intent,
         feedback:       null,
@@ -1155,6 +1297,7 @@ export default function CopilotChat({ currentUser, className = "" }) {
             onFeedback={handleFeedback}
             companyId={companyId}
             mode={mode}
+            onOpenQueryBuilder={openQueryBuilder}
           />
         ))}
 
