@@ -15,6 +15,15 @@ from database import get_engine_safe
 
 logger = logging.getLogger(__name__)
 
+# ── Staleness threshold ───────────────────────────────────────────────────────
+# If the most recent analytics snapshot is older than this, the copilot falls
+# through to Base44 live data instead of serving stale cached rows.
+# Mutation triggers keep tables fresh within ~30s of any save; this threshold
+# is a safety net for the case where a trigger failed or ETL was delayed.
+STALE_THRESHOLD_HOURS: float = float(
+    __import__("os").getenv("COPILOT_STALE_HOURS", "2")
+)
+
 # ── DB helper ────────────────────────────────────────────────────────────────
 
 def _run(sql: str, params: dict) -> list[dict]:
@@ -30,6 +39,94 @@ def _run(sql: str, params: dict) -> list[dict]:
     except Exception as e:
         logger.warning("Copilot query failed: %s", e)
         return []
+
+
+# ── Staleness helpers ─────────────────────────────────────────────────────────
+
+def _analytics_freshness(table: str, company_id: str) -> tuple[bool, str]:
+    """
+    Return (is_stale, data_as_of_str) for an analytics table + company.
+
+    Strategy:
+      1. Try MAX(loaded_at) — full timestamp, set by load_dataframe().
+      2. Fall back to MAX(snapshot_date) — date only, set by all ETL paths.
+      3. No rows → stale.
+
+    data_as_of_str examples: "just now", "4 min ago", "1h 22m ago",
+                              "today (cached)", "Base44 live"
+    """
+    from datetime import datetime, date as _date, timezone
+
+    def _age_str(secs: float) -> str:
+        mins = int(secs / 60)
+        if mins < 2:
+            return "just now"
+        if mins < 60:
+            return f"{mins} min ago"
+        return f"{mins // 60}h {mins % 60}m ago"
+
+    # ── Tier 1: loaded_at (timestamp) ─────────────────────────────────────────
+    try:
+        rows = _run(
+            f"SELECT MAX(loaded_at) AS ts FROM analytics.{table} WHERE company_id = :cid",
+            {"cid": company_id},
+        )
+        if rows and rows[0].get("ts") is not None:
+            ts = rows[0]["ts"]
+            now = datetime.now(timezone.utc)
+            if hasattr(ts, "tzinfo") and ts.tzinfo:
+                age_secs = (now - ts).total_seconds()
+            else:
+                age_secs = (now.replace(tzinfo=None) - ts).total_seconds()
+            is_stale = age_secs / 3600 > STALE_THRESHOLD_HOURS
+            return is_stale, ("Base44 live" if is_stale else _age_str(age_secs))
+    except Exception:
+        pass  # column may not exist on load_dataframe_replace tables
+
+    # ── Tier 2: snapshot_date (date) ──────────────────────────────────────────
+    try:
+        rows = _run(
+            f"SELECT MAX(snapshot_date) AS sd FROM analytics.{table} WHERE company_id = :cid",
+            {"cid": company_id},
+        )
+        if rows and rows[0].get("sd") is not None:
+            sd = rows[0]["sd"]
+            if hasattr(sd, "date"):
+                sd = sd.date()
+            today = _date.today()
+            is_stale = sd < today
+            return is_stale, ("Base44 live" if is_stale else "today (cached)")
+    except Exception:
+        pass
+
+    # No data at all
+    return True, "Base44 live"
+
+
+def _query_analytics(
+    table: str,
+    sql: str,
+    params: dict,
+    company_id: str,
+) -> tuple[list[dict], str, str]:
+    """
+    Run an analytics query only if the snapshot is fresh enough.
+    Returns (rows, data_as_of, source).
+
+    When stale or unavailable, returns ([], "Base44 live", "base44_live")
+    so the caller falls through to its existing Base44 fallback unchanged.
+    """
+    is_stale, data_as_of = _analytics_freshness(table, company_id)
+    if is_stale:
+        logger.info(
+            "Copilot: analytics.%s stale → Base44 live (company_id=%s)",
+            table, company_id,
+        )
+        return [], "Base44 live", "base44_live"
+    rows = _run(sql, params)
+    if rows:
+        return rows, data_as_of, "analytics"
+    return [], "Base44 live", "base44_live"
 
 
 # ── Base44 live-data helpers (fallback when analytics tables are empty) ───────
@@ -198,7 +295,9 @@ def get_people_summary(company_id: str, person_type: Optional[str] = None) -> di
         GROUP BY person_type, status
         ORDER BY person_type, status
     """
-    rows = _run(sql, {"company_id": company_id, "person_type": person_type})
+    rows, _dao, _src = _query_analytics(
+        "people_summary", sql, {"company_id": company_id, "person_type": person_type}, company_id
+    )
 
     if not rows:
         # Base44 live fallback
@@ -229,6 +328,8 @@ def get_people_summary(company_id: str, person_type: Optional[str] = None) -> di
         "summary":      totals,
         "rows":         rows,
         "total_people": sum(v["total"] for v in totals.values()),
+        "data_as_of":   _dao,
+        "data_source":  _src,
     }
 
 
@@ -255,7 +356,9 @@ def get_person_churn_risk(company_id: str, top_n: int = 10) -> dict:
         ORDER BY count DESC
         LIMIT :top_n
     """
-    rows = _run(sql, {"company_id": company_id, "top_n": top_n})
+    rows, _dao, _src = _query_analytics(
+        "people_summary", sql, {"company_id": company_id, "top_n": top_n}, company_id
+    )
 
     if not rows:
         df = _b44_people(company_id)
@@ -272,6 +375,8 @@ def get_person_churn_risk(company_id: str, top_n: int = 10) -> dict:
     return {
         "at_risk_people": rows,
         "count":          total,
+        "data_as_of":     _dao,
+        "data_source":    _src,
     }
 
 
@@ -301,7 +406,9 @@ def get_staff_availability(
           )
         GROUP BY person_type, status
     """
-    rows = _run(sql, {"company_id": company_id})
+    rows, _dao, _src = _query_analytics(
+        "people_summary", sql, {"company_id": company_id}, company_id
+    )
 
     if not rows:
         df = _b44_people(company_id)
@@ -322,6 +429,8 @@ def get_staff_availability(
         "by_availability": {"active": rows},
         "available_count": total_active,
         "total_active":    total_active,
+        "data_as_of":      _dao,
+        "data_source":     _src,
     }
 
 
@@ -362,11 +471,12 @@ def get_transaction_summary(
         GROUP BY transaction_type, status
         ORDER BY total_amount DESC
     """
-    rows = _run(sql, {
-        "company_id":       company_id,
-        "months_back":      months_back,
-        "transaction_type": transaction_type,
-    })
+    rows, _dao, _src = _query_analytics(
+        "transaction_summary",
+        sql,
+        {"company_id": company_id, "months_back": months_back, "transaction_type": transaction_type},
+        company_id,
+    )
 
     if not rows:
         df = _b44_transactions(company_id)
@@ -403,6 +513,8 @@ def get_transaction_summary(
         "total_unpaid":      round(total_unpaid,  2),
         "pending_drafts":    0,
         "months_analysed":   months_back,
+        "data_as_of":        _dao,
+        "data_source":       _src,
     }
 
 
@@ -431,7 +543,9 @@ def get_overdue_invoices(company_id: str, top_n: int = 20) -> dict:
         ORDER BY total_outstanding DESC
         LIMIT :top_n
     """
-    rows = _run(sql, {"company_id": company_id, "top_n": top_n})
+    rows, _dao, _src = _query_analytics(
+        "transaction_summary", sql, {"company_id": company_id, "top_n": top_n}, company_id
+    )
 
     if not rows:
         df = _b44_transactions(company_id)
@@ -455,6 +569,8 @@ def get_overdue_invoices(company_id: str, top_n: int = 20) -> dict:
         "overdue_invoices":  rows,
         "count":             sum(r.get("count") or 0 for r in rows),
         "total_outstanding": round(total_outstanding, 2),
+        "data_as_of":        _dao,
+        "data_source":       _src,
     }
 
 
@@ -491,11 +607,12 @@ def get_task_summary(
         GROUP BY task_type, status
         ORDER BY total_tasks DESC
     """
-    rows = _run(sql, {
-        "company_id": company_id,
-        "task_type":  task_type,
-        "days_back":  days_back,
-    })
+    rows, _dao, _src = _query_analytics(
+        "task_summary",
+        sql,
+        {"company_id": company_id, "task_type": task_type, "days_back": days_back},
+        company_id,
+    )
 
     if not rows:
         df = _b44_tasks(company_id)
@@ -542,6 +659,8 @@ def get_task_summary(
         "overdue":         overdue,
         "completion_rate": rate,
         "days_analysed":   days_back,
+        "data_as_of":      _dao,
+        "data_source":     _src,
     }
 
 
@@ -578,11 +697,12 @@ def get_task_outcomes(
         GROUP BY status, task_type
         ORDER BY count DESC
     """
-    rows = _run(sql, {
-        "company_id": company_id,
-        "task_type":  task_type,
-        "days_back":  days_back,
-    })
+    rows, _dao, _src = _query_analytics(
+        "task_summary",
+        sql,
+        {"company_id": company_id, "task_type": task_type, "days_back": days_back},
+        company_id,
+    )
 
     if not rows:
         df = _b44_tasks(company_id)
@@ -611,6 +731,8 @@ def get_task_outcomes(
         "completed_tasks": completed,
         "overdue_tasks":   overdue,
         "days_analysed":   days_back,
+        "data_as_of":      _dao,
+        "data_source":     _src,
     }
 
 
@@ -653,7 +775,9 @@ def get_product_summary(
         GROUP BY item_type, status
         ORDER BY total_products DESC
     """
-    rows = _run(sql, {"company_id": company_id, "item_type": item_type})
+    rows, _dao, _src = _query_analytics(
+        "product_summary", sql, {"company_id": company_id, "item_type": item_type}, company_id
+    )
 
     if not rows:
         df = _b44_products(company_id)
@@ -710,6 +834,8 @@ def get_product_summary(
             "expiring_7d_count":  total_expiring_7d,
             "expiring_30d_count": total_expiring_30d,
         },
+        "data_as_of":  _dao,
+        "data_source": _src,
     }
 
 
@@ -747,7 +873,9 @@ def get_enterprise_overview(company_id: str) -> dict:
           )
         ORDER BY is_root DESC, name
     """
-    rows = _run(sql, {"company_id": company_id})
+    rows, _dao, _src = _query_analytics(
+        "enterprise_summary", sql, {"company_id": company_id}, company_id
+    )
 
     if not rows:
         df = _b44_enterprises(company_id)
@@ -789,6 +917,8 @@ def get_enterprise_overview(company_id: str) -> dict:
             for etype in set(r.get("enterprise_type") for r in rows if r.get("enterprise_type"))
         },
         "by_naics":        by_naics,
+        "data_as_of":      _dao,
+        "data_source":     _src,
     }
 
 
@@ -798,6 +928,10 @@ def get_network_overview(company_id: str) -> dict:
     Pulls from each pre-aggregated summary table using the latest snapshot.
     Used for: "how is the network doing", "network overview", "compare branches"
     """
+    # Single freshness check covers all four analytics tables in this query
+    _net_stale, _dao = _analytics_freshness("enterprise_summary", company_id)
+    _src = "base44_live" if _net_stale else "analytics"
+
     # Enterprise list
     ent_sql = """
         SELECT name, enterprise_type, operating_status, is_active, is_root
@@ -810,7 +944,7 @@ def get_network_overview(company_id: str) -> dict:
           )
         ORDER BY is_root DESC, name
     """
-    enterprises = _run(ent_sql, {"company_id": company_id})
+    enterprises = [] if _net_stale else _run(ent_sql, {"company_id": company_id})
     if not enterprises:
         df_ent = _b44_enterprises(company_id)
         if not df_ent.empty:
@@ -840,7 +974,7 @@ def get_network_overview(company_id: str) -> dict:
           )
         GROUP BY person_type
     """
-    people = _run(people_sql, {"company_id": company_id})
+    people = [] if _net_stale else _run(people_sql, {"company_id": company_id})
     if not people:
         df_p = _b44_people(company_id)
         if not df_p.empty and "person_type" in df_p.columns:
@@ -866,7 +1000,7 @@ def get_network_overview(company_id: str) -> dict:
               WHERE company_id = :company_id
           )
     """
-    tasks = _run(task_sql, {"company_id": company_id})
+    tasks = [] if _net_stale else _run(task_sql, {"company_id": company_id})
     if not tasks:
         df_t = _b44_tasks(company_id)
         if not df_t.empty:
@@ -892,7 +1026,7 @@ def get_network_overview(company_id: str) -> dict:
               WHERE company_id = :company_id
           )
     """
-    transactions = _run(tx_sql, {"company_id": company_id})
+    transactions = [] if _net_stale else _run(tx_sql, {"company_id": company_id})
     if not transactions:
         df_tx = _b44_transactions(company_id)
         if not df_tx.empty:
@@ -925,6 +1059,8 @@ def get_network_overview(company_id: str) -> dict:
             "total_revenue":      tx_totals.get("total_revenue",      0),
             "outstanding":        tx_totals.get("outstanding_amount", 0),
         },
+        "data_as_of":  _dao,
+        "data_source": _src,
     }
 
 
@@ -954,7 +1090,9 @@ def get_monthly_kpis(company_id: str, months: int = 12) -> dict:
               )
         ORDER BY year_month ASC
     """
-    rows = _run(sql, {"company_id": company_id, "months": months})
+    rows, _dao, _src = _query_analytics(
+        "monthly_kpis", sql, {"company_id": company_id, "months": months}, company_id
+    )
 
     if not rows:
         # Base44 live fallback — compute from raw transactions + people + tasks
@@ -982,7 +1120,7 @@ def get_monthly_kpis(company_id: str, months: int = 12) -> dict:
             logger.warning("get_monthly_kpis live fallback failed: %s", e)
 
     if not rows:
-        return {"months": [], "count": 0,
+        return {"months": [], "count": 0, "data_as_of": _dao, "data_source": _src,
                 "note": "No monthly KPI data yet — run ETL to populate."}
 
     # Compute totals for the period
@@ -991,13 +1129,15 @@ def get_monthly_kpis(company_id: str, months: int = 12) -> dict:
     total_new_ppl = sum(r.get("new_people", 0) or 0 for r in rows)
 
     return {
-        "months":          rows,
-        "count":           len(rows),
-        "period_revenue":  round(total_revenue, 2),
-        "period_expense":  round(total_expense, 2),
-        "period_net":      round(total_revenue - total_expense, 2),
+        "months":            rows,
+        "count":             len(rows),
+        "period_revenue":    round(total_revenue, 2),
+        "period_expense":    round(total_expense, 2),
+        "period_net":        round(total_revenue - total_expense, 2),
         "period_new_people": total_new_ppl,
-        "note":            None,
+        "note":              None,
+        "data_as_of":        _dao,
+        "data_source":       _src,
     }
 
 
@@ -1037,7 +1177,7 @@ def get_entity_list(
         ORDER BY tenure_days DESC
         LIMIT :top_n
     """
-    rows = _run(sql, params)
+    rows, _dao, _src = _query_analytics("entity_index", sql, params, company_id)
 
     if not rows:
         # Base44 live fallback
@@ -1070,11 +1210,13 @@ def get_entity_list(
                 r[bc] = bool(r[bc])
 
     return {
-        "entities":   rows,
-        "count":      len(rows),
+        "entities":    rows,
+        "count":       len(rows),
         "entity_type": entity_type,
-        "status":     status,
-        "note":       None if rows else "No matching entities found.",
+        "status":      status,
+        "note":        None if rows else "No matching entities found.",
+        "data_as_of":  _dao,
+        "data_source": _src,
     }
 
 
@@ -1096,7 +1238,9 @@ def get_company_scorecard(company_id: str) -> dict:
         ORDER BY snapshot_date DESC
         LIMIT 1
     """
-    rows = _run(sql, {"company_id": company_id})
+    rows, _dao, _src = _query_analytics(
+        "company_scorecard", sql, {"company_id": company_id}, company_id
+    )
 
     if not rows:
         # Base44 live fallback — compute scorecard on the fly
@@ -1130,14 +1274,15 @@ def get_company_scorecard(company_id: str) -> dict:
             logger.warning("get_company_scorecard live fallback failed: %s", e)
 
     if not rows:
-        return {"scorecard": None, "note": "No scorecard data yet — run ETL to populate."}
+        return {"scorecard": None, "data_as_of": _dao, "data_source": _src,
+                "note": "No scorecard data yet — run ETL to populate."}
 
     sc = rows[0]
     # Coerce snapshot_date to string for JSON serialisation
     if "snapshot_date" in sc and sc["snapshot_date"] is not None:
         sc["snapshot_date"] = str(sc["snapshot_date"])
 
-    return {"scorecard": sc, "note": None}
+    return {"scorecard": sc, "note": None, "data_as_of": _dao, "data_source": _src}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

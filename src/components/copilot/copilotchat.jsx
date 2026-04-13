@@ -677,6 +677,22 @@ function MessageBubble({ message, onFeedback, companyId, mode }) {
           </div>
         )}
 
+        {/* Data freshness badge */}
+        {!isUser && message.data_freshness?.label && (
+          <div className="w-full flex items-center gap-1.5 pt-0.5">
+            <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium ${
+              message.data_freshness.source === "base44_live"
+                ? "bg-blue-50 text-blue-600 border border-blue-100"
+                : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                message.data_freshness.source === "base44_live" ? "bg-blue-400" : "bg-emerald-400"
+              }`} />
+              {message.data_freshness.source === "base44_live" ? "Live data" : `Data from ${message.data_freshness.label}`}
+            </span>
+          </div>
+        )}
+
         {/* Footer: timestamp + actions */}
         <div className={`flex items-center gap-1 mt-0.5 ${isUser ? "justify-end" : "justify-start"}`}>
           {message.timestamp && (
@@ -947,16 +963,17 @@ export default function CopilotChat({ currentUser, className = "" }) {
       const result = await resp.json();
 
       const assistantMsg = {
-        id:           Date.now() + 2,
-        role:         "assistant",
-        content:      result.answer,
-        data:         result.data        || {},
-        charts:       result.charts      || [],
-        citations:    result.citations   || [],
-        tools_called: result.tools_called || [],
-        intent:       result.intent,
-        feedback:     null,
-        timestamp:    new Date().toISOString(),
+        id:             Date.now() + 2,
+        role:           "assistant",
+        content:        result.answer,
+        data:           result.data           || {},
+        charts:         result.charts         || [],
+        citations:      result.citations      || [],
+        tools_called:   result.tools_called   || [],
+        data_freshness: result.data_freshness || null,
+        intent:         result.intent,
+        feedback:       null,
+        timestamp:      new Date().toISOString(),
       };
 
       setMessages(prev => [

@@ -421,6 +421,50 @@ def _ml_chart(model: str, result: dict):
     return None
 
 
+def _extract_data_freshness(collected_tools: list) -> dict:
+    """
+    Walk all tool results and return the oldest data_as_of string found,
+    plus a combined source label.
+
+    Returns e.g.:
+      {"label": "4 min ago", "source": "analytics"}
+      {"label": "Base44 live", "source": "base44_live"}
+      {"label": "just now", "source": "analytics"}
+    """
+    sources    = set()
+    timestamps = []  # collect parseable age strings for picking the oldest
+
+    for item in collected_tools:
+        result = item.get("result", {})
+        dao    = result.get("data_as_of")
+        src    = result.get("data_source")
+        if dao:
+            timestamps.append(dao)
+        if src:
+            sources.add(src)
+
+    if not timestamps:
+        return {}
+
+    # If any tool fell back to live data, the whole answer is live
+    has_live = "base44_live" in sources
+    # Pick the least fresh label to surface to the user
+    # Priority: "Base44 live" > "today (cached)" > "Xh Ym ago" > "X min ago" > "just now"
+    def _rank(label: str) -> int:
+        if label == "Base44 live":          return 0
+        if label == "today (cached)":       return 1
+        if "h" in label and "m" in label:   return 2
+        if "min ago" in label:              return 3
+        return 4  # "just now"
+
+    label = min(timestamps, key=_rank)
+
+    return {
+        "label":  label,
+        "source": "base44_live" if has_live else "analytics",
+    }
+
+
 def _extract_chart_configs(collected_tools: list) -> list:
     """Extract chart configs from all collected tool results."""
     charts = []
@@ -706,14 +750,15 @@ class CopilotEngine:
             citations = _extract_citations(collected)
 
             return {
-                "answer":       answer_text,
-                "tools_called": [c["tool"] for c in collected],
-                "data":         {c["tool"]: c["result"] for c in collected},
-                "charts":       charts,
-                "citations":    citations,
-                "intent":       "",
-                "company_id":   self.company_id,
-                "backend":      self.backend,
+                "answer":          answer_text,
+                "tools_called":    [c["tool"] for c in collected],
+                "data":            {c["tool"]: c["result"] for c in collected},
+                "charts":          charts,
+                "citations":       citations,
+                "data_freshness":  _extract_data_freshness(collected),
+                "intent":          "",
+                "company_id":      self.company_id,
+                "backend":         self.backend,
             }
 
         except Exception as exc:

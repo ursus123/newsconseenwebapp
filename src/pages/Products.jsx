@@ -214,7 +214,7 @@ export default function Products() {
 
   const createMut = useMutation({ mutationFn: (d) => base44.entities.Product.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(currentUser?.company_id, "created", editing, currentUser?.email); triggerWorkflows(currentUser?.company_id, "entity_created", editing); setFormOpen(false); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Product.update(id, withScope(data)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(currentUser?.company_id, "updated", editing, currentUser?.email); triggerWorkflows(currentUser?.company_id, "entity_updated", editing); setFormOpen(false); setEditing(null); } });
-  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Product.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); } });
+  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Product.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); } });
 
   const handleArchive = (item) => { updateMut.mutate({ id: item.id, data: { ...item, status: "archived" } }); setFormOpen(false); setEditing(null); };
 
@@ -222,6 +222,7 @@ export default function Products() {
     for (const id of selectedIds) await base44.entities.Product.delete(id);
     qc.invalidateQueries({ queryKey: ["products"] });
     qc.refetchQueries({ queryKey: ["products"] });
+    triggerETL("product");
     toast({ title: `${selectedIds.length} items deleted` });
     setSelectedIds([]);
   };

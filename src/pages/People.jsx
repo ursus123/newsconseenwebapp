@@ -262,6 +262,7 @@ export default function People() {
       logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email);
       qc.invalidateQueries({ queryKey: ["people"] });
       qc.refetchQueries({ queryKey: ["people"] });
+      triggerETL("people");
       setDeleting(null);
     },
   });
@@ -270,6 +271,7 @@ export default function People() {
     for (const id of selectedIds) await base44.entities.Person.delete(id);
     qc.invalidateQueries({ queryKey: ["people"] });
     qc.refetchQueries({ queryKey: ["people"] });
+    triggerETL("people");
     toast({ title: `${selectedIds.length} people deleted` });
     setSelectedIds([]);
   };

@@ -197,7 +197,7 @@ export default function Enterprises() {
 
   const deleteMut = useMutation({
     mutationFn: (id) => base44.entities.Enterprise.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); qc.refetchQueries({ queryKey: ["enterprises"] }); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); qc.refetchQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); },
   });
 
   const processedEnterprises = useMemo(() => {
@@ -222,6 +222,7 @@ export default function Enterprises() {
     for (const id of selectedIds) await base44.entities.Enterprise.delete(id);
     qc.invalidateQueries({ queryKey: ["enterprises"] });
     qc.refetchQueries({ queryKey: ["enterprises"] });
+    triggerETL("enterprise");
     toast({ title: `${selectedIds.length} enterprises deleted` });
     setSelectedIds([]);
   };

@@ -448,6 +448,7 @@ export default function Transactions() {
     for (const id of selectedIds) await base44.entities.Transaction.delete(id);
     qc.invalidateQueries({ queryKey: ["transactions"] });
     qc.refetchQueries({ queryKey: ["transactions"] });
+    triggerETL("transaction");
     toast({ title: `${selectedIds.length} transactions deleted` });
     setSelectedIds([]);
   };
