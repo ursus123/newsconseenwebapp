@@ -10,7 +10,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Bot, Play, Loader2, CheckCircle2, AlertCircle, Clock,
   RefreshCw, Activity, Brain, TrendingUp, Users, Package,
-  UserPlus, Shield, Globe, Network, ChevronRight,
+  UserPlus, Shield, Globe, Network, ChevronRight, Zap,
 } from "lucide-react";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
@@ -85,6 +85,18 @@ export default function AgentDashboard({ companyId, onSelectAgent }) {
     staleTime: 30000,
   });
 
+  const { data: actionStats = { total: 0, by_agent: {} } } = useQuery({
+    queryKey: ["agents-action-stats", companyId],
+    queryFn:  async () => {
+      const r = await fetch(`${RAILWAY_URL}/agents/actions/stats?company_id=${companyId}`);
+      if (!r.ok) return { total: 0, by_agent: {} };
+      return r.json();
+    },
+    enabled:   !!companyId,
+    staleTime: 60000,
+    refetchInterval: 120000,
+  });
+
   const runMut = useMutation({
     mutationFn: ({ agentName }) => runAgent(agentName, companyId),
     onMutate:   ({ agentName }) => setRunningAgent(agentName),
@@ -104,8 +116,10 @@ export default function AgentDashboard({ companyId, onSelectAgent }) {
     if (!runMap[run.agent_name]) runMap[run.agent_name] = run;
   }
 
-  const agentsEnabled = status.agents_enabled;
-  const pendingCount  = status.pending_approvals || 0;
+  const agentsEnabled  = status.agents_enabled;
+  const pendingCount   = status.pending_approvals || 0;
+  const totalActionsWk = actionStats.total || 0;
+  const byAgent        = actionStats.by_agent || {};
 
   return (
     <div className="space-y-6">
@@ -121,17 +135,26 @@ export default function AgentDashboard({ companyId, onSelectAgent }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {totalActionsWk > 0 && (
+            <div className="flex items-center gap-1.5 text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg">
+              <Zap className="w-3.5 h-3.5" />
+              {totalActionsWk} action{totalActionsWk !== 1 ? "s" : ""} this week
+            </div>
+          )}
           {pendingCount > 0 && (
             <button
               onClick={() => onSelectAgent && onSelectAgent("approvals")}
               className="flex items-center gap-1.5 text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-700 px-3 py-1.5 rounded-lg hover:bg-amber-100"
             >
               <AlertCircle className="w-3.5 h-3.5" />
-              {pendingCount} pending approval{pendingCount !== 1 ? "s" : ""}
+              {pendingCount} pending
             </button>
           )}
           <button
-            onClick={() => qc.invalidateQueries({ queryKey: ["agents-status", companyId] })}
+            onClick={() => {
+              qc.invalidateQueries({ queryKey: ["agents-status",       companyId] });
+              qc.invalidateQueries({ queryKey: ["agents-action-stats", companyId] });
+            }}
             className="text-xs text-slate-500 hover:text-indigo-600 border border-slate-200 px-2.5 py-1.5 rounded-lg"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -164,11 +187,12 @@ export default function AgentDashboard({ companyId, onSelectAgent }) {
       {/* Agent cards grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {Object.entries(AGENT_META).map(([name, meta]) => {
-          const Icon       = meta.icon;
-          const colorClass = COLOR_MAP[meta.color];
-          const iconClass  = ICON_COLOR[meta.color];
-          const lastRun    = runMap[name];
-          const isRunning  = runningAgent === name;
+          const Icon         = meta.icon;
+          const colorClass   = COLOR_MAP[meta.color];
+          const iconClass    = ICON_COLOR[meta.color];
+          const lastRun      = runMap[name];
+          const isRunning    = runningAgent === name;
+          const actionsCount = byAgent[name] || 0;
 
           return (
             <div key={name}
@@ -193,6 +217,12 @@ export default function AgentDashboard({ companyId, onSelectAgent }) {
                     {lastRun && (
                       <p className="text-[10px] mt-1 opacity-60 truncate">
                         Last: {lastRun.summary?.slice(0, 60) || lastRun.status}
+                      </p>
+                    )}
+                    {actionsCount > 0 && (
+                      <p className="text-[10px] mt-0.5 flex items-center gap-1 text-current font-semibold opacity-80">
+                        <Zap className="w-2.5 h-2.5" />
+                        {actionsCount} action{actionsCount !== 1 ? "s" : ""} this week
                       </p>
                     )}
                   </div>

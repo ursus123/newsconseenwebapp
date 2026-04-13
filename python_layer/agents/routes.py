@@ -9,7 +9,10 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel
 
 from .orchestrator import list_agents, run_agent, run_all, run_scheduled
-from .approval_gate import get_pending, resolve, get_recent_runs, ensure_tables
+from .approval_gate import (
+    get_pending, resolve, get_recent_runs, ensure_tables,
+    execute_approved, get_executed_history, get_actions_this_week,
+)
 from .agent_memory import summarise_memory, ensure_tables as ensure_memory_tables
 from .agents.market_research import MarketResearchAgent, ensure_market_tables
 from database import get_engine_safe
@@ -114,11 +117,66 @@ def get_pending_approvals(company_id: str = Query(...)):
 
 @router.post("/approvals/{approval_id}/resolve")
 def resolve_approval(approval_id: str, req: ResolveRequest):
-    """Approve or reject a pending agent action."""
+    """
+    Approve or reject a pending agent action.
+    Phase 13: when approved, immediately executes the Base44 mutation.
+    Returns both the resolution result and the execution result.
+    """
     engine = get_engine_safe()
     if not engine:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    return resolve(engine, approval_id, req.decision, req.resolved_by, req.note)
+
+    # First resolve (flip status in DB)
+    resolution = resolve(engine, approval_id, req.decision, req.resolved_by, req.note)
+
+    # Phase 13: if approved, execute immediately
+    execution = None
+    if req.decision == "approved":
+        # Fetch company_id from the approval record
+        try:
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT company_id FROM analytics.agent_approvals WHERE id = :id"),
+                    {"id": approval_id}
+                ).fetchone()
+            company_id = row[0] if row else None
+        except Exception:
+            company_id = None
+
+        if company_id:
+            execution = execute_approved(engine, approval_id, company_id)
+        else:
+            execution = {"executed": False, "error": "Could not determine company_id"}
+
+    return {**resolution, "execution": execution}
+
+
+# ── Executed actions (Phase 13) ───────────────────────────────────────────────
+
+@router.get("/actions/executed")
+def get_executed_actions(company_id: str = Query(...), limit: int = Query(30, le=100)):
+    """
+    Phase 13: List recently executed agent actions for a company.
+    Each entry includes entity_type, entity_id, audit_id and executed_at.
+    Used by the Approval Gate 'Executed Actions' section.
+    """
+    engine = get_engine_safe()
+    if not engine:
+        return {"executed": []}
+    return {"executed": get_executed_history(engine, company_id, limit)}
+
+
+@router.get("/actions/stats")
+def get_action_stats(company_id: str = Query(...)):
+    """
+    Phase 13: Return count of executed actions in the last 7 days, broken down by agent.
+    Used by AgentDashboard to show 'Actions taken this week' per card.
+    """
+    engine = get_engine_safe()
+    if not engine:
+        return {"total": 0, "by_agent": {}}
+    return get_actions_this_week(engine, company_id)
 
 
 # ── Agent run history ─────────────────────────────────────────────────────────
@@ -164,9 +222,11 @@ def agents_status(company_id: str = Query(...)):
 
     recent_runs = []
     pending_count = 0
+    actions_week = {"total": 0, "by_agent": {}}
     if db_ok:
         recent_runs   = get_recent_runs(engine, company_id, limit=10)
         pending_count = len(get_pending(engine, company_id))
+        actions_week  = get_actions_this_week(engine, company_id)
 
     return {
         "agents_enabled": bool(os.getenv("ANTHROPIC_API_KEY")),
@@ -175,6 +235,7 @@ def agents_status(company_id: str = Query(...)):
         "registered_agents": [a["name"] for a in list_agents()],
         "pending_approvals": pending_count,
         "recent_runs":    recent_runs[:5],
+        "actions_this_week": actions_week,
     }
 
 

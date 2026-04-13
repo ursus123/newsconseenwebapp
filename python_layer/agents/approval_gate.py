@@ -23,22 +23,37 @@ logger = logging.getLogger(__name__)
 
 DDL = """
 CREATE TABLE IF NOT EXISTS analytics.agent_approvals (
-    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    company_id      TEXT NOT NULL,
-    agent_name      TEXT NOT NULL,
-    action_type     TEXT NOT NULL,
-    action_label    TEXT NOT NULL,
-    action_payload  JSONB NOT NULL,
-    risk_level      TEXT NOT NULL,
-    reasoning       TEXT,
-    status          TEXT NOT NULL DEFAULT 'pending',
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    resolved_at     TIMESTAMPTZ,
-    resolved_by     TEXT,
-    resolution_note TEXT
+    id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    company_id       TEXT NOT NULL,
+    agent_name       TEXT NOT NULL,
+    action_type      TEXT NOT NULL,
+    action_label     TEXT NOT NULL,
+    action_payload   JSONB NOT NULL,
+    risk_level       TEXT NOT NULL,
+    reasoning        TEXT,
+    status           TEXT NOT NULL DEFAULT 'pending',
+    created_at       TIMESTAMPTZ DEFAULT NOW(),
+    resolved_at      TIMESTAMPTZ,
+    resolved_by      TEXT,
+    resolution_note  TEXT,
+    executed_at      TIMESTAMPTZ,
+    execution_result JSONB
 );
 CREATE INDEX IF NOT EXISTS idx_agent_approvals_company_status
     ON analytics.agent_approvals (company_id, status);
+CREATE INDEX IF NOT EXISTS idx_agent_approvals_executed
+    ON analytics.agent_approvals (company_id, executed_at DESC)
+    WHERE executed_at IS NOT NULL;
+"""
+
+# Migration: add new columns to existing tables (idempotent)
+DDL_MIGRATE = """
+ALTER TABLE analytics.agent_approvals
+    ADD COLUMN IF NOT EXISTS executed_at      TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS execution_result JSONB;
+CREATE INDEX IF NOT EXISTS idx_agent_approvals_executed
+    ON analytics.agent_approvals (company_id, executed_at DESC)
+    WHERE executed_at IS NOT NULL;
 """
 
 CREATE_AGENT_RUNS_DDL = """
@@ -70,21 +85,21 @@ class RiskLevel(str, Enum):
 
 # Action type → risk level mapping
 ACTION_RISK_MAP = {
-    # Auto
+    # Auto — execute immediately, no record needed
     "read_data":            RiskLevel.AUTO,
     "generate_report":      RiskLevel.AUTO,
     "create_task":          RiskLevel.AUTO,
+    "create_follow_up":     RiskLevel.AUTO,
     "update_task_status":   RiskLevel.AUTO,
     "trigger_etl":          RiskLevel.AUTO,
-    "flag_record":          RiskLevel.AUTO,
+    "flag_record":          RiskLevel.AUTO,  # Phase 13: flags are low-risk, auto
 
-    # Notify
+    # Notify — execute + notify operator after
     "internal_alert":       RiskLevel.NOTIFY,
     "update_record":        RiskLevel.NOTIFY,
     "reassign_task":        RiskLevel.NOTIFY,
-    "create_follow_up":     RiskLevel.NOTIFY,
 
-    # Approve
+    # Approve — pause until operator approves
     "send_client_message":  RiskLevel.APPROVE,
     "send_whatsapp":        RiskLevel.APPROVE,
     "send_email":           RiskLevel.APPROVE,
@@ -92,7 +107,7 @@ ACTION_RISK_MAP = {
     "create_purchase_order":RiskLevel.APPROVE,
     "bulk_update":          RiskLevel.APPROVE,
 
-    # Critical
+    # Critical — always requires explicit approval, never auto
     "delete_record":        RiskLevel.CRITICAL,
     "bulk_delete":          RiskLevel.CRITICAL,
     "financial_transfer":   RiskLevel.CRITICAL,
@@ -106,6 +121,14 @@ def ensure_tables(engine) -> None:
         conn.execute(text(DDL))
         conn.execute(text(CREATE_AGENT_RUNS_DDL))
         conn.commit()
+    # Best-effort migration for existing deployments
+    try:
+        from sqlalchemy import text as _t
+        with engine.connect() as conn:
+            conn.execute(_t(DDL_MIGRATE))
+            conn.commit()
+    except Exception:
+        pass
 
 
 def get_risk_level(action_type: str) -> RiskLevel:
@@ -247,6 +270,123 @@ def get_recent_runs(engine, company_id: str, limit: int = 20) -> list[dict]:
     except Exception as e:
         logger.warning("ApprovalGate: get_recent_runs failed: %s", e)
         return []
+
+
+def execute_approved(engine, approval_id: str, company_id: str) -> dict:
+    """
+    Phase 13: Execute the Base44 mutation for an already-approved action.
+
+    Called immediately after resolve() when decision == 'approved'.
+    Returns the execution result and stamps executed_at + execution_result
+    on the approval record.
+    """
+    # Fetch the approval record
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            row = conn.execute(text("""
+                SELECT id, agent_name, action_type, action_payload
+                FROM analytics.agent_approvals
+                WHERE id = :id
+            """), {"id": approval_id}).fetchone()
+    except Exception as e:
+        return {"executed": False, "error": f"Could not fetch approval: {e}"}
+
+    if not row:
+        return {"executed": False, "error": "Approval record not found"}
+
+    rec_id, agent_name, action_type, action_payload = row
+    if isinstance(action_payload, str):
+        try:
+            action_payload = json.loads(action_payload)
+        except Exception:
+            action_payload = {}
+
+    # Execute
+    from .action_executor import execute_action
+    result = execute_action(
+        action_type=action_type,
+        action_payload=action_payload,
+        company_id=company_id,
+        agent_name=agent_name,
+        engine=engine,
+    )
+
+    # Stamp the approval record
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("""
+                UPDATE analytics.agent_approvals
+                SET executed_at      = NOW(),
+                    execution_result = :result::jsonb
+                WHERE id = :id
+            """), {
+                "id":     approval_id,
+                "result": json.dumps(result),
+            })
+            conn.commit()
+    except Exception as e:
+        logger.warning("ApprovalGate: could not stamp execution result: %s", e)
+
+    return result
+
+
+def get_executed_history(engine, company_id: str, limit: int = 30) -> list[dict]:
+    """Get recently executed agent actions for a company (Phase 13 Executed Actions list)."""
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT id, agent_name, action_type, action_label,
+                       risk_level, resolved_by, executed_at,
+                       execution_result
+                FROM analytics.agent_approvals
+                WHERE company_id = :company_id
+                  AND executed_at IS NOT NULL
+                ORDER BY executed_at DESC
+                LIMIT :limit
+            """), {"company_id": company_id, "limit": limit}).fetchall()
+            cols = ["id", "agent_name", "action_type", "action_label",
+                    "risk_level", "resolved_by", "executed_at", "execution_result"]
+            result = []
+            for r in rows:
+                row = dict(zip(cols, r))
+                if isinstance(row.get("execution_result"), str):
+                    try:
+                        row["execution_result"] = json.loads(row["execution_result"])
+                    except Exception:
+                        pass
+                if row.get("executed_at"):
+                    row["executed_at"] = str(row["executed_at"])
+                result.append(row)
+            return result
+    except Exception as e:
+        logger.warning("ApprovalGate: get_executed_history failed: %s", e)
+        return []
+
+
+def get_actions_this_week(engine, company_id: str) -> dict:
+    """
+    Return count of executed actions in the last 7 days, broken down by agent.
+    Used by AgentDashboard to show 'Actions taken this week: N' per card.
+    """
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT agent_name, COUNT(*) as cnt
+                FROM analytics.agent_approvals
+                WHERE company_id = :company_id
+                  AND executed_at >= NOW() - INTERVAL '7 days'
+                GROUP BY agent_name
+            """), {"company_id": company_id}).fetchall()
+            total = sum(r[1] for r in rows)
+            by_agent = {r[0]: r[1] for r in rows}
+            return {"total": total, "by_agent": by_agent}
+    except Exception as e:
+        logger.warning("ApprovalGate: get_actions_this_week failed: %s", e)
+        return {"total": 0, "by_agent": {}}
 
 
 def log_run(engine, company_id: str, agent_name: str,

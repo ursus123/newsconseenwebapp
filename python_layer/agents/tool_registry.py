@@ -115,6 +115,65 @@ def _get_competitor_density(lat: float, lng: float,
     })
 
 
+# ── Phase 13: Write-back tool executors ──────────────────────────────────────
+# These tools allow agents to propose Base44 mutations.
+# They route through the approval gate (base_agent._execute_tools_parallel).
+# Actual Base44 writes happen only after approval via action_executor.
+
+def _create_task(company_id: str, title: str, task_type: str = "follow_up",
+                 description: str = "", priority: str = "medium",
+                 assigned_to_name: str = "", due_date: str = "",
+                 notes: str = "", **kw) -> dict:
+    """Propose creating a task — routes through approval gate."""
+    return {
+        "proposed": True,
+        "action_type": "create_task",
+        "inputs": {
+            "company_id": company_id, "title": title, "task_type": task_type,
+            "description": description, "priority": priority,
+            "assigned_to_name": assigned_to_name, "due_date": due_date,
+            "notes": notes,
+        },
+    }
+
+
+def _flag_record(company_id: str, entity_type: str, record_id: str,
+                 reason: str = "Flagged by agent", **kw) -> dict:
+    """Propose flagging a record — routes through approval gate."""
+    return {
+        "proposed": True,
+        "action_type": "flag_record",
+        "inputs": {
+            "company_id": company_id, "entity_type": entity_type,
+            "record_id": record_id, "reason": reason,
+        },
+    }
+
+
+def _update_record(company_id: str, entity_type: str, record_id: str,
+                   updates: dict = None, **kw) -> dict:
+    """Propose updating a record's fields — routes through approval gate."""
+    return {
+        "proposed": True,
+        "action_type": "update_record",
+        "inputs": {
+            "company_id": company_id, "entity_type": entity_type,
+            "record_id": record_id, "updates": updates or {},
+        },
+    }
+
+
+def _create_follow_up(company_id: str, title: str, description: str = "",
+                      assigned_to_name: str = "", due_date: str = "",
+                      priority: str = "medium", **kw) -> dict:
+    """Propose creating a follow-up task — routes through approval gate."""
+    return _create_task(
+        company_id=company_id, title=title, task_type="follow_up",
+        description=description, assigned_to_name=assigned_to_name,
+        due_date=due_date, priority=priority,
+    )
+
+
 # ── Tool definitions (Anthropic schema) ──────────────────────────────────────
 
 TOOL_DEFINITIONS = [
@@ -331,6 +390,90 @@ TOOL_DEFINITIONS = [
             "required": ["lat", "lng"],
         },
     },
+    # ── Phase 13: Write-back action tools ─────────────────────────────────────
+    {
+        "name": "create_task",
+        "description": (
+            "Create a task or follow-up action for a person or team. "
+            "Use this when you detect a condition that requires human follow-through "
+            "(e.g. at-risk client needs a check-in call, overdue invoice needs chasing). "
+            "Routes through approval gate — auto-approved for low-risk task types."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "company_id":       {"type": "string"},
+                "title":            {"type": "string", "description": "Task title"},
+                "task_type":        {"type": "string", "description": "follow_up | call | visit | purchase_order | reminder | compliance_check"},
+                "description":      {"type": "string"},
+                "priority":         {"type": "string", "description": "low | medium | high | urgent"},
+                "assigned_to_name": {"type": "string", "description": "Name of the person to assign to"},
+                "due_date":         {"type": "string", "description": "ISO date YYYY-MM-DD"},
+                "notes":            {"type": "string"},
+            },
+            "required": ["company_id", "title"],
+        },
+    },
+    {
+        "name": "create_follow_up",
+        "description": (
+            "Create a follow-up task for a specific person or client. "
+            "Shorter form of create_task — always sets task_type=follow_up."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "company_id":       {"type": "string"},
+                "title":            {"type": "string"},
+                "description":      {"type": "string"},
+                "assigned_to_name": {"type": "string"},
+                "due_date":         {"type": "string"},
+                "priority":         {"type": "string"},
+            },
+            "required": ["company_id", "title"],
+        },
+    },
+    {
+        "name": "flag_record",
+        "description": (
+            "Flag a person, enterprise, product, or task record for operator attention. "
+            "Use when a record requires review but no immediate action "
+            "(e.g. duplicate suspected, compliance concern, stock anomaly). "
+            "Auto-approved — executes immediately."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "company_id":  {"type": "string"},
+                "entity_type": {"type": "string", "description": "person | enterprise | product | task"},
+                "record_id":   {"type": "string", "description": "Base44 entity ID"},
+                "reason":      {"type": "string", "description": "Why this record is being flagged"},
+            },
+            "required": ["company_id", "entity_type", "record_id", "reason"],
+        },
+    },
+    {
+        "name": "update_record",
+        "description": (
+            "Update specific fields on an existing person, enterprise, product, or task record. "
+            "Use for status changes, corrections, or enrichment "
+            "(e.g. mark a person inactive, update product stock level). "
+            "Routes through approval gate — risk level depends on entity type."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "company_id":  {"type": "string"},
+                "entity_type": {"type": "string", "description": "person | enterprise | product | task | transaction"},
+                "record_id":   {"type": "string"},
+                "updates":     {
+                    "type": "object",
+                    "description": "Dict of field_name → new_value to apply",
+                },
+            },
+            "required": ["company_id", "entity_type", "record_id", "updates"],
+        },
+    },
 ]
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
@@ -354,6 +497,11 @@ _EXECUTORS: dict[str, Any] = {
     "get_network_overview":    _get_network_overview,
     "search_market":           _search_market,
     "get_competitor_density":  _get_competitor_density,
+    # Phase 13 — write-back tools
+    "create_task":             _create_task,
+    "create_follow_up":        _create_follow_up,
+    "flag_record":             _flag_record,
+    "update_record":           _update_record,
 }
 
 

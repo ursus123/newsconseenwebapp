@@ -214,6 +214,22 @@ class BaseAgent(ABC):
 
             # Execute tool
             result = execute_tool(tool_name, inputs)
+
+            # Phase 13: if the tool returned a write-back proposal (AUTO/NOTIFY),
+            # execute it immediately via action_executor
+            if isinstance(result, dict) and result.get("proposed"):
+                from .action_executor import execute_action
+                exec_result = execute_action(
+                    action_type=result.get("action_type", action_type),
+                    action_payload=result.get("inputs", inputs),
+                    company_id=company_id,
+                    agent_name=self.name,
+                    engine=self.engine,
+                )
+                actions.append({"tool": tool_name, "status": "executed",
+                                 "risk": risk.value, "execution": exec_result})
+                return block.id, exec_result
+
             actions.append({"tool": tool_name, "status": "executed",
                              "risk": risk.value})
             return block.id, result
@@ -275,8 +291,7 @@ def _try_parse_json(text: str) -> Optional[dict]:
 def _map_tool_to_action(tool_name: str) -> str:
     """Map tool name to action type for approval gate risk assessment."""
     _map = {
-        "send_alert":       "send_client_message",
-        "trigger_etl":      "trigger_etl",
+        # Read-only — auto
         "get_people_summary":        "read_data",
         "get_enterprise_summary":    "read_data",
         "get_transaction_summary":   "read_data",
@@ -293,5 +308,12 @@ def _map_tool_to_action(tool_name: str) -> str:
         "get_network_overview":      "read_data",
         "search_market":             "read_data",
         "get_competitor_density":    "read_data",
+        "trigger_etl":               "trigger_etl",
+        # Phase 13 — write-back tools
+        "create_task":               "create_task",       # AUTO
+        "create_follow_up":          "create_follow_up",  # AUTO
+        "flag_record":               "flag_record",       # AUTO
+        "update_record":             "update_record",     # NOTIFY
+        "send_alert":                "send_client_message",  # APPROVE
     }
-    return _map.get(tool_name, "read_data")
+    return _map.get(tool_name, "update_record")
