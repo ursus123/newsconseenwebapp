@@ -514,9 +514,9 @@ def get_transaction_summary(
         if not df.empty:
             if transaction_type and "transaction_type" in df.columns:
                 df = df[df["transaction_type"] == transaction_type]
-            from config.taxonomy import REVENUE_TYPES, EXPENSE_TYPES
-            revenue_types = REVENUE_TYPES if "REVENUE_TYPES" in dir() else {"invoice", "payment", "sale"}
-            expense_types = EXPENSE_TYPES if "EXPENSE_TYPES" in dir() else {"expense", "bill", "purchase"}
+            from etl.transactions import REVENUE_TYPES, EXPENSE_TYPES
+            revenue_types = REVENUE_TYPES
+            expense_types = EXPENSE_TYPES
             for col in ("transaction_type", "status", "amount"):
                 if col not in df.columns:
                     df[col] = None
