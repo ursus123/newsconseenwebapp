@@ -13,19 +13,29 @@ const triggerETL = (entity) =>
     headers: API_HEADERS,
   }).catch(() => {});
 
-// Fire-and-forget: provision taxonomy + workflows for a new tenant
-async function provisionTenant(companyId, enterpriseType, enterpriseName) {
+// Provision taxonomy + workflows for a new tenant.
+// Returns the full provision response (ai_readiness_score, recommended_connectors, etc.)
+async function provisionTenant(companyId, enterpriseType, enterpriseName, stepsMeta = {}) {
   try {
     const res = await fetch(`${RAILWAY_URL}/onboarding/provision`, {
       method: "POST",
       headers: { ...API_HEADERS, "Content-Type": "application/json" },
-      body: JSON.stringify({ company_id: companyId, enterprise_type: enterpriseType, enterprise_name: enterpriseName }),
+      body: JSON.stringify({
+        company_id:       companyId,
+        enterprise_type:  enterpriseType,
+        enterprise_name:  enterpriseName,
+        steps_completed:  stepsMeta.stepsCompleted || 1,
+        people_added:     stepsMeta.peopleAdded    || 0,
+        products_added:   stepsMeta.productsAdded  || 0,
+        tasks_created:    stepsMeta.tasksCreated   || 0,
+        invites_sent:     stepsMeta.invitesSent    || 0,
+      }),
     });
-    if (!res.ok) return;
-    const { taxonomy = [] } = await res.json();
+    if (!res.ok) return null;
+    const data = await res.json();
 
     // Create MasterDataOption records from the returned taxonomy template
-    // Chunked with small delay to avoid overwhelming Base44
+    const taxonomy = data.taxonomy || [];
     for (let i = 0; i < taxonomy.length; i++) {
       const item = taxonomy[i];
       await base44.entities.MasterDataOption.create({
@@ -39,11 +49,12 @@ async function provisionTenant(companyId, enterpriseType, enterpriseName) {
         is_active:         true,
         usage_count:       0,
       }).catch(() => {});
-      // Small pause every 5 items to avoid rate-limiting
       if (i > 0 && i % 5 === 0) await new Promise(r => setTimeout(r, 200));
     }
+
+    return data;
   } catch (_) {
-    // Provision is best-effort — never block the onboarding flow
+    return null;
   }
 }
 import { useAuth } from "@/lib/AuthContext";
@@ -85,6 +96,8 @@ export default function Onboarding() {
   const [taskErrors, setTaskErrors] = useState({});
   const [invites, setInvites] = useState([]);
   const [createdEnterprise, setCreatedEnterprise] = useState(null);
+  const [provisionResult, setProvisionResult]     = useState(null);
+  const [provisioning, setProvisioning]           = useState(false);
 
   useEffect(() => {
     base44.auth.me().then((u) => {
@@ -143,8 +156,14 @@ export default function Onboarding() {
       setCreatedEnterprise({ ...enterprise, company_id: enterprise.id });
       triggerETL("enterprise");
 
-      // Fire-and-forget: provision default taxonomy + workflows for this enterprise type
-      provisionTenant(enterprise.id, selectedType, workspaceData.org_name);
+      // Provision: taxonomy + workflows + get AI readiness baseline
+      setProvisioning(true);
+      try {
+        const result = await provisionTenant(enterprise.id, selectedType, workspaceData.org_name);
+        if (result) setProvisionResult(result);
+      } finally {
+        setProvisioning(false);
+      }
 
       return true;
     } catch (e) {
@@ -373,6 +392,7 @@ export default function Onboarding() {
                 invites: invites.length,
                 industry: selectedType,
               }}
+              provisionResult={provisionResult}
               onComplete={handleComplete}
               completing={completing}
             />
@@ -392,10 +412,15 @@ export default function Onboarding() {
 
                 <button
                   onClick={handleNext}
-                  disabled={saving || (step === 0 && !selectedType)}
+                  disabled={saving || provisioning || (step === 0 && !selectedType)}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm transition-colors disabled:opacity-60"
                 >
-                  {saving ? (
+                  {provisioning ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Setting up your AI OS…
+                    </>
+                  ) : saving ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { CheckCircle2, ArrowRight } from "lucide-react";
+import { CheckCircle2, ArrowRight, Zap, Plug, Bot } from "lucide-react";
 import { getTermsFromEnterpriseType } from "@/config/enterpriseTerminology";
 
 const NEXT_STEPS_BY_CATEGORY = {
@@ -93,12 +93,42 @@ function Confetti() {
   );
 }
 
-export default function StepDone({ summary, onComplete, completing }) {
+function ReadinessGauge({ score }) {
+  const color = score >= 70 ? "bg-emerald-500" : score >= 40 ? "bg-amber-500" : "bg-rose-500";
+  const label = score >= 70 ? "Good" : score >= 40 ? "Getting started" : "Needs data";
+  return (
+    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Zap className="w-4 h-4 text-emerald-600" />
+          <span className="text-sm font-bold text-slate-700">AI Readiness Score</span>
+        </div>
+        <span className="text-2xl font-black text-slate-800">{score}%</span>
+      </div>
+      <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-700 ${color}`}
+          style={{ width: `${score}%` }}
+        />
+      </div>
+      <p className="text-xs text-slate-500 mt-2">
+        <span className="font-semibold">{label}</span> — add more data to unlock deeper AI insights.
+        Your score improves as you import records, complete tasks, and connect systems.
+      </p>
+    </div>
+  );
+}
+
+export default function StepDone({ summary, provisionResult, onComplete, completing }) {
   const { enterprise, people, items, tasks, invites, industry } = summary;
   const category = CATEGORY_MAP[industry] || "other";
   const nextSteps = NEXT_STEPS_BY_CATEGORY[category] || NEXT_STEPS_BY_CATEGORY.other;
   const doneMsg = DONE_MESSAGES[category] || DONE_MESSAGES.other;
   const enterpriseName = enterprise?.name || "Your enterprise";
+
+  const aiScore             = provisionResult?.ai_readiness_score ?? null;
+  const recommendedConnectors = provisionResult?.recommended_connectors ?? [];
+  const recommendedAgents   = provisionResult?.recommended_agents ?? [];
 
   return (
     <div className="space-y-5 relative">
@@ -111,11 +141,28 @@ export default function StepDone({ summary, onComplete, completing }) {
         </p>
       </div>
 
+      {/* What was created */}
       <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 space-y-2">
         {enterprise && (
           <div className="flex items-center gap-2 text-sm">
             <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
             <span className="text-slate-700"><span className="font-semibold">Enterprise:</span> {enterprise.name}</span>
+          </div>
+        )}
+        {provisionResult && (
+          <div className="flex items-center gap-2 text-sm">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span className="text-slate-700">
+              <span className="font-semibold">{provisionResult.taxonomy_count}</span> taxonomy options configured
+            </span>
+          </div>
+        )}
+        {provisionResult?.workflows_created > 0 && (
+          <div className="flex items-center gap-2 text-sm">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span className="text-slate-700">
+              <span className="font-semibold">{provisionResult.workflows_created}</span> automation workflows activated
+            </span>
           </div>
         )}
         <div className="flex items-center gap-2 text-sm">
@@ -138,17 +185,67 @@ export default function StepDone({ summary, onComplete, completing }) {
         )}
       </div>
 
-      <div>
-        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Recommended Next Steps</p>
-        <div className="space-y-2">
-          {nextSteps.map((step, i) => (
-            <div key={i} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
-              <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</div>
-              <span className="text-sm text-slate-700">{step}</span>
-            </div>
-          ))}
+      {/* AI Readiness Score */}
+      {aiScore !== null && <ReadinessGauge score={aiScore} />}
+
+      {/* Recommended connectors */}
+      {recommendedConnectors.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Plug className="w-4 h-4 text-slate-500" />
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Connect Your Tools</p>
+          </div>
+          <div className="space-y-2">
+            {recommendedConnectors.map((c) => (
+              <div key={c.id} className="flex items-start gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-semibold text-slate-700">{c.name}</span>
+                  <p className="text-xs text-slate-500 mt-0.5">{c.reason}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400 mt-2 text-center">Set these up in Settings → Connectors after you sign in.</p>
         </div>
-      </div>
+      )}
+
+      {/* Recommended agents */}
+      {recommendedAgents.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Bot className="w-4 h-4 text-slate-500" />
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Activate Your AI Agents</p>
+          </div>
+          <div className="space-y-2">
+            {recommendedAgents.map((a) => (
+              <div key={a.name} className="flex items-start gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
+                <div className="w-2 h-2 rounded-full bg-violet-400 mt-1.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-semibold text-slate-700">{a.name}</span>
+                  <p className="text-xs text-slate-500 mt-0.5">{a.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400 mt-2 text-center">Agents auto-run after your first data import.</p>
+        </div>
+      )}
+
+      {/* Next steps */}
+      {recommendedConnectors.length === 0 && (
+        <div>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Recommended Next Steps</p>
+          <div className="space-y-2">
+            {nextSteps.map((step, i) => (
+              <div key={i} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
+                <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</div>
+                <span className="text-sm text-slate-700">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <button
         onClick={onComplete}

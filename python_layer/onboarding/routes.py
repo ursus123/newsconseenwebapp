@@ -375,14 +375,172 @@ _TEMPLATES: dict[str, dict] = {
 _TEMPLATES["default"] = _TEMPLATES["commercial"]
 
 
+# ── Industry metadata ──────────────────────────────────────────────────────────
+
+_INDUSTRY_META: list[dict] = [
+    {
+        "id": "healthcare",
+        "label": "Healthcare & Care",
+        "icon": "🏥",
+        "description": "Clinics, nursing homes, pharmacies, home healthcare",
+        "example_subtypes": ["clinic", "pharmacy", "hospital", "nursing_home"],
+        "recommended_connectors": [
+            {"id": "google_sheets",    "name": "Google Sheets",    "reason": "Export patient records and care logs"},
+            {"id": "quickbooks_online","name": "QuickBooks Online","reason": "Sync billing and invoices"},
+            {"id": "slack",            "name": "Slack",            "reason": "Staff alerts and care updates"},
+        ],
+        "recommended_agents": [
+            {"name": "RetentionAgent",   "description": "Detects patients at risk of disengaging from care"},
+            {"name": "OnboardingAgent",  "description": "Automates new patient intake tasks"},
+            {"name": "ComplianceAgent",  "description": "Monitors care documentation compliance"},
+        ],
+    },
+    {
+        "id": "education",
+        "label": "Education & Training",
+        "icon": "🎓",
+        "description": "Schools, universities, training centres, childcare",
+        "example_subtypes": ["school", "university", "training_center", "childcare"],
+        "recommended_connectors": [
+            {"id": "google_sheets", "name": "Google Sheets", "reason": "Student records and attendance export"},
+            {"id": "slack",         "name": "Slack",         "reason": "Staff and parent notifications"},
+        ],
+        "recommended_agents": [
+            {"name": "RetentionAgent",  "description": "Flags students with declining engagement"},
+            {"name": "OnboardingAgent", "description": "Creates enrolment tasks for new students"},
+        ],
+    },
+    {
+        "id": "nonprofit",
+        "label": "Non-Profit & NGO",
+        "icon": "🤝",
+        "description": "NGOs, charities, faith organisations, cooperatives",
+        "example_subtypes": ["ngo", "charity", "church", "cooperative"],
+        "recommended_connectors": [
+            {"id": "google_sheets",    "name": "Google Sheets",    "reason": "Donor and beneficiary data exports"},
+            {"id": "quickbooks_online","name": "QuickBooks Online","reason": "Grant and donation accounting"},
+            {"id": "slack",            "name": "Slack",            "reason": "Field team coordination"},
+        ],
+        "recommended_agents": [
+            {"name": "RetentionAgent",   "description": "Flags lapsing donors and beneficiaries"},
+            {"name": "OnboardingAgent",  "description": "Creates intake tasks for new beneficiaries"},
+            {"name": "ComplianceAgent",  "description": "Tracks reporting deadlines and compliance"},
+        ],
+    },
+    {
+        "id": "agriculture",
+        "label": "Agriculture & Farming",
+        "icon": "🌾",
+        "description": "Crop farms, livestock, aquaculture, cooperatives",
+        "example_subtypes": ["farm", "livestock_farm", "crop_farm", "cooperative"],
+        "recommended_connectors": [
+            {"id": "google_sheets",   "name": "Google Sheets",   "reason": "Farm data and harvest logs"},
+            {"id": "outbound_webhook","name": "Custom Webhook",  "reason": "Connect to field sensors or ERP"},
+        ],
+        "recommended_agents": [
+            {"name": "InventoryAgent", "description": "Monitors stock levels and triggers reorder tasks"},
+            {"name": "RevenueAgent",   "description": "Tracks sales and flags payment gaps"},
+        ],
+    },
+    {
+        "id": "retail",
+        "label": "Retail & Hospitality",
+        "icon": "🛒",
+        "description": "Retail stores, restaurants, hotels, food & beverage",
+        "example_subtypes": ["retail", "restaurant", "hotel", "food_beverage"],
+        "recommended_connectors": [
+            {"id": "quickbooks_online","name": "QuickBooks Online","reason": "Sync sales invoices automatically"},
+            {"id": "xero",            "name": "Xero",             "reason": "Accounting and VAT returns"},
+            {"id": "google_sheets",   "name": "Google Sheets",    "reason": "Product and sales reporting"},
+            {"id": "slack",           "name": "Slack",            "reason": "Low-stock and order alerts"},
+        ],
+        "recommended_agents": [
+            {"name": "InventoryAgent", "description": "Detects low stock and creates replenishment tasks"},
+            {"name": "RevenueAgent",   "description": "Monitors daily sales and flags anomalies"},
+            {"name": "RetentionAgent", "description": "Identifies at-risk customers before they churn"},
+        ],
+    },
+    {
+        "id": "government",
+        "label": "Government & Public Sector",
+        "icon": "🏛️",
+        "description": "Municipalities, departments, agencies, public services",
+        "example_subtypes": ["government", "municipal", "agency", "department"],
+        "recommended_connectors": [
+            {"id": "google_sheets",   "name": "Google Sheets",  "reason": "Case and permit data exports"},
+            {"id": "outbound_webhook","name": "Custom Webhook", "reason": "Integrate with government portals"},
+        ],
+        "recommended_agents": [
+            {"name": "ComplianceAgent",  "description": "Tracks regulatory deadlines and submissions"},
+            {"name": "OperationsAgent",  "description": "Monitors case backlogs and service delivery"},
+        ],
+    },
+    {
+        "id": "commercial",
+        "label": "Business & Professional Services",
+        "icon": "💼",
+        "description": "Consulting, finance, technology, logistics, manufacturing",
+        "example_subtypes": ["consulting", "technology", "finance", "manufacturing"],
+        "recommended_connectors": [
+            {"id": "quickbooks_online","name": "QuickBooks Online","reason": "Invoice and revenue sync"},
+            {"id": "xero",            "name": "Xero",             "reason": "Accounting integration"},
+            {"id": "google_sheets",   "name": "Google Sheets",    "reason": "Client and pipeline exports"},
+            {"id": "slack",           "name": "Slack",            "reason": "Deal and task notifications"},
+        ],
+        "recommended_agents": [
+            {"name": "RetentionAgent",  "description": "Flags at-risk clients before they churn"},
+            {"name": "RevenueAgent",    "description": "Monitors pipeline and flags payment gaps"},
+            {"name": "OperationsAgent", "description": "Tracks task completion and delivery SLAs"},
+        ],
+    },
+]
+
+_INDUSTRY_META_MAP: dict[str, dict] = {m["id"]: m for m in _INDUSTRY_META}
+
 # ── Request model ──────────────────────────────────────────────────────────────
 class ProvisionRequest(BaseModel):
-    company_id:      str
-    enterprise_type: str
-    enterprise_name: Optional[str] = ""
+    company_id:           str
+    enterprise_type:      str
+    enterprise_name:      Optional[str] = ""
+    steps_completed:      int = 1       # 1-6; used to compute AI readiness score
+    people_added:         int = 0
+    products_added:       int = 0
+    tasks_created:        int = 0
+    invites_sent:         int = 0
 
 
-# ── Endpoint ───────────────────────────────────────────────────────────────────
+def _compute_ai_readiness(
+    taxonomy_count: int,
+    workflows_created: int,
+    steps_completed: int,
+    people_added: int,
+    products_added: int,
+    tasks_created: int,
+    invites_sent: int,
+) -> int:
+    """Return an AI Readiness Score in the range 0–100."""
+    score = 15  # base: workspace created
+    if taxonomy_count >= 5:  score += 15
+    if taxonomy_count >= 10: score += 5
+    if workflows_created >= 1: score += 10
+    if workflows_created >= 2: score += 5
+    if people_added > 0:    score += 10
+    if products_added > 0:  score += 10
+    if tasks_created > 0:   score += 5
+    if invites_sent > 0:    score += 5
+    # Step completion bonus (each optional step completed = more data richness)
+    score += min(steps_completed * 3, 15)
+    return min(score, 100)
+
+
+# ── Endpoints ──────────────────────────────────────────────────────────────────
+
+@router.get("/industries")
+def list_industries():
+    """Return all industry clusters with labels, icons, descriptions, and recommendations."""
+    return {"industries": _INDUSTRY_META}
+
+
 @router.post("/provision", status_code=201)
 def provision_tenant(req: ProvisionRequest):
     """
@@ -438,13 +596,29 @@ def provision_tenant(req: ProvisionRequest):
         logger.warning("onboarding: workflow creation failed — %s", e)
         workflows_created = []
 
+    taxonomy_count = len(template.get("taxonomy", []))
+    ai_readiness   = _compute_ai_readiness(
+        taxonomy_count=taxonomy_count,
+        workflows_created=len(workflows_created),
+        steps_completed=req.steps_completed,
+        people_added=req.people_added,
+        products_added=req.products_added,
+        tasks_created=req.tasks_created,
+        invites_sent=req.invites_sent,
+    )
+
+    industry_meta = _INDUSTRY_META_MAP.get(cluster, _INDUSTRY_META_MAP.get("commercial", {}))
+
     return {
-        "status":            "provisioned",
-        "company_id":        req.company_id,
-        "enterprise_type":   req.enterprise_type,
-        "cluster":           cluster,
-        "workflows_created": len(workflows_created),
-        "workflow_names":    workflows_created,
-        "taxonomy":          template.get("taxonomy", []),
-        "taxonomy_count":    len(template.get("taxonomy", [])),
+        "status":                  "provisioned",
+        "company_id":              req.company_id,
+        "enterprise_type":         req.enterprise_type,
+        "cluster":                 cluster,
+        "workflows_created":       len(workflows_created),
+        "workflow_names":          workflows_created,
+        "taxonomy":                template.get("taxonomy", []),
+        "taxonomy_count":          taxonomy_count,
+        "ai_readiness_score":      ai_readiness,
+        "recommended_connectors":  industry_meta.get("recommended_connectors", []),
+        "recommended_agents":      industry_meta.get("recommended_agents", []),
     }
