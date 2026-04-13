@@ -328,6 +328,49 @@ def _make_chart_config(tool_name: str, result: dict):
                 if cfg:
                     return cfg
 
+        if tool_name == "get_monthly_kpis":
+            months = result.get("months", [])
+            if not months:
+                return None
+            data = [
+                {
+                    "name":    m.get("year_month", ""),
+                    "Revenue": float(m.get("revenue", 0) or 0),
+                    "Expense": float(m.get("expense", 0) or 0),
+                    "Net":     float(m.get("net", 0) or 0),
+                }
+                for m in months[-12:]
+            ]
+            if not data or all(d["Revenue"] == 0 and d["Expense"] == 0 for d in data):
+                return None
+            return {
+                "type": "area", "title": "Monthly Revenue vs Expense",
+                "data": data,
+                "keys": [
+                    {"key": "Revenue", "color": "#10b981"},
+                    {"key": "Expense", "color": "#ef4444"},
+                    {"key": "Net",     "color": "#3b82f6"},
+                ],
+                "unit": "$",
+            }
+
+        if tool_name == "get_company_scorecard":
+            sc = result.get("scorecard")
+            if not sc:
+                return None
+            data = [
+                {"name": "Active People",   "value": int(sc.get("active_people", 0) or 0)},
+                {"name": "Active Clients",  "value": int(sc.get("active_clients", 0) or 0)},
+                {"name": "Active Staff",    "value": int(sc.get("active_staff", 0) or 0)},
+                {"name": "Overdue Tasks",   "value": int(sc.get("overdue_tasks", 0) or 0)},
+                {"name": "Low Stock",       "value": int(sc.get("low_stock_count", 0) or 0)},
+            ]
+            data = [d for d in data if d["value"] > 0]
+            if not data:
+                return None
+            return {"type": "bar", "title": "Operational Snapshot",
+                    "data": data, "keys": [{"key": "value", "color": "#8b5cf6"}]}
+
     except Exception as e:
         logger.debug("_make_chart_config(%s) error: %s", tool_name, e)
     return None

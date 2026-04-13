@@ -929,6 +929,218 @@ def get_network_overview(company_id: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# ENHANCED ANALYTICS — monthly_kpis · entity_index · company_scorecard
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_monthly_kpis(company_id: str, months: int = 12) -> dict:
+    """
+    Returns month-by-month revenue, expense, net income, new people, and task
+    metrics for the last N months. Use for trend questions, time-series charts,
+    period comparisons, and forecasting context.
+
+    Used for: "how has revenue trended", "show me growth over the year",
+              "revenue by month", "headcount growth", "monthly performance".
+    """
+    months = max(1, min(months, 24))
+    sql = """
+        SELECT year_month, revenue, expense, net,
+               transaction_count,
+               new_people, new_clients, new_staff,
+               tasks_created, tasks_completed, task_completion_rate_pct
+        FROM analytics.monthly_kpis
+        WHERE company_id = :company_id
+          AND year_month >= to_char(
+                NOW() - INTERVAL '1 month' * :months, 'YYYY-MM'
+              )
+        ORDER BY year_month ASC
+    """
+    rows = _run(sql, {"company_id": company_id, "months": months})
+
+    if not rows:
+        # Base44 live fallback — compute from raw transactions + people + tasks
+        try:
+            import pandas as _pd
+            from etl.monthly_kpis import transform_monthly_kpis
+            from etl.people import extract_people
+            from etl.transactions import extract_transactions
+            from etl.tasks import extract_tasks
+
+            ppl = extract_people()
+            txs = extract_transactions()
+            tsk = extract_tasks()
+
+            for df in [ppl, txs, tsk]:
+                if not df.empty and company_id and "company_id" in df.columns:
+                    df = df[df["company_id"] == company_id]
+
+            kpi_df = transform_monthly_kpis(ppl, txs, tsk, lookback_months=months)
+            if not kpi_df.empty and "company_id" in kpi_df.columns:
+                kpi_df = kpi_df[kpi_df["company_id"] == company_id]
+            rows = kpi_df.to_dict(orient="records") if not kpi_df.empty else []
+            logger.info("get_monthly_kpis: using live fallback (%d months)", len(rows))
+        except Exception as e:
+            logger.warning("get_monthly_kpis live fallback failed: %s", e)
+
+    if not rows:
+        return {"months": [], "count": 0,
+                "note": "No monthly KPI data yet — run ETL to populate."}
+
+    # Compute totals for the period
+    total_revenue = sum(r.get("revenue", 0) or 0 for r in rows)
+    total_expense = sum(r.get("expense", 0) or 0 for r in rows)
+    total_new_ppl = sum(r.get("new_people", 0) or 0 for r in rows)
+
+    return {
+        "months":          rows,
+        "count":           len(rows),
+        "period_revenue":  round(total_revenue, 2),
+        "period_expense":  round(total_expense, 2),
+        "period_net":      round(total_revenue - total_expense, 2),
+        "period_new_people": total_new_ppl,
+        "note":            None,
+    }
+
+
+def get_entity_list(
+    company_id: str,
+    entity_type: Optional[str] = None,
+    status:      Optional[str] = None,
+    top_n:       int           = 20,
+) -> dict:
+    """
+    Returns a named list of individual people — not grouped counts.
+    Use when the user asks 'who', 'which person', 'list the clients',
+    'show me inactive staff', 'who has been here the longest', etc.
+
+    Used for: "who are our active clients", "list all inactive staff",
+              "which new people joined this month", "longest-tenured staff",
+              "who became inactive recently", "name the high-risk clients".
+    """
+    top_n = max(1, min(top_n, 100))
+
+    filters = ["company_id = :company_id"]
+    params: dict = {"company_id": company_id, "top_n": top_n}
+
+    if entity_type:
+        filters.append("entity_type = :entity_type")
+        params["entity_type"] = entity_type.lower()
+    if status:
+        filters.append("status = :status")
+        params["status"] = status.lower()
+
+    sql = f"""
+        SELECT entity_id, entity_name, entity_type, entity_subtype,
+               status, tenure_days, is_staff, is_participant, is_contact,
+               new_last_30d, became_inactive_30d, enterprise_id
+        FROM analytics.entity_index
+        WHERE {' AND '.join(filters)}
+        ORDER BY tenure_days DESC
+        LIMIT :top_n
+    """
+    rows = _run(sql, params)
+
+    if not rows:
+        # Base44 live fallback
+        try:
+            import pandas as _pd
+            from etl.entity_index import transform_entity_index
+            from etl.people import extract_people
+
+            ppl = extract_people()
+            if not ppl.empty and company_id and "company_id" in ppl.columns:
+                ppl = ppl[ppl["company_id"] == company_id]
+
+            idx_df = transform_entity_index(ppl)
+            if entity_type and "entity_type" in idx_df.columns:
+                idx_df = idx_df[idx_df["entity_type"] == entity_type.lower()]
+            if status and "status" in idx_df.columns:
+                idx_df = idx_df[idx_df["status"] == status.lower()]
+            idx_df = idx_df.sort_values("tenure_days", ascending=False).head(top_n)
+            rows = idx_df.to_dict(orient="records") if not idx_df.empty else []
+            logger.info("get_entity_list: using live fallback (%d entities)", len(rows))
+        except Exception as e:
+            logger.warning("get_entity_list live fallback failed: %s", e)
+
+    # Coerce bool types (PostgreSQL returns them as True/False, pandas as 1/0)
+    bool_cols = {"is_staff", "is_participant", "is_contact",
+                 "new_last_30d", "became_inactive_30d"}
+    for r in rows:
+        for bc in bool_cols:
+            if bc in r:
+                r[bc] = bool(r[bc])
+
+    return {
+        "entities":   rows,
+        "count":      len(rows),
+        "entity_type": entity_type,
+        "status":     status,
+        "note":       None if rows else "No matching entities found.",
+    }
+
+
+def get_company_scorecard(company_id: str) -> dict:
+    """
+    Returns a single-row operational health summary for this company.
+    Covers people, enterprises, finance, tasks, and inventory in one call.
+    Use as the primary source for 'how are we doing', 'give me an overview',
+    or any question needing a cross-entity health check.
+
+    Used for: "how are we doing today", "give me an overview",
+              "operational health", "key metrics", "business summary",
+              "what needs attention", "everything in one view".
+    """
+    sql = """
+        SELECT *
+        FROM analytics.company_scorecard
+        WHERE company_id = :company_id
+        ORDER BY snapshot_date DESC
+        LIMIT 1
+    """
+    rows = _run(sql, {"company_id": company_id})
+
+    if not rows:
+        # Base44 live fallback — compute scorecard on the fly
+        try:
+            import pandas as _pd
+            from etl.company_scorecard import transform_company_scorecard
+            from etl.people import extract_people
+            from etl.enterprises import extract_enterprises
+            from etl.transactions import extract_transactions
+            from etl.tasks import extract_tasks
+            from etl.products import extract_products
+
+            def _fetch_filtered(extract_fn):
+                df = extract_fn()
+                if not df.empty and company_id and "company_id" in df.columns:
+                    df = df[df["company_id"] == company_id]
+                return df
+
+            sc_df = transform_company_scorecard(
+                _fetch_filtered(extract_people),
+                _fetch_filtered(extract_enterprises),
+                _fetch_filtered(extract_transactions),
+                _fetch_filtered(extract_tasks),
+                _fetch_filtered(extract_products),
+            )
+            if not sc_df.empty and "company_id" in sc_df.columns:
+                sc_df = sc_df[sc_df["company_id"] == company_id]
+            rows = sc_df.to_dict(orient="records") if not sc_df.empty else []
+            logger.info("get_company_scorecard: using live fallback")
+        except Exception as e:
+            logger.warning("get_company_scorecard live fallback failed: %s", e)
+
+    if not rows:
+        return {"scorecard": None, "note": "No scorecard data yet — run ETL to populate."}
+
+    sc = rows[0]
+    # Coerce snapshot_date to string for JSON serialisation
+    if "snapshot_date" in sc and sc["snapshot_date"] is not None:
+        sc["snapshot_date"] = str(sc["snapshot_date"])
+
+    return {"scorecard": sc, "note": None}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # ML PREDICTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1808,6 +2020,46 @@ TOOL_DEFINITIONS = [
         "input_schema": {"type": "object", "properties": {}},
     },
     {
+        "name": "get_monthly_kpis",
+        "description": "Get month-by-month revenue, expense, net income, new people joined, and task metrics for a time period. Use for trend questions, time-series charts, period comparisons. Use for 'revenue trend', 'monthly performance', 'how has income changed', 'headcount growth', 'show me the last 6 months'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "months": {
+                    "type": "integer",
+                    "description": "Number of months to return (1–24). Default 12.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_entity_list",
+        "description": "Get a named list of individual people — not aggregate counts. Use when the question asks 'who', 'which person', or wants to name specific individuals. Use for 'list our active clients', 'who are the longest-tenured staff', 'which people joined this month', 'who became inactive recently', 'name the high-risk clients'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity_type": {
+                    "type": "string",
+                    "enum": ["staff", "client", "contact", "volunteer"],
+                    "description": "Filter by canonical person type. Leave null for all types.",
+                },
+                "status": {
+                    "type": "string",
+                    "description": "Filter by status — e.g. 'active', 'inactive'. Leave null for all.",
+                },
+                "top_n": {
+                    "type": "integer",
+                    "description": "Maximum number of people to return (1–100). Default 20.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_company_scorecard",
+        "description": "Get a single-row operational health summary covering people, enterprises, finance (last 30 days), tasks, and inventory in one call. Use as the first tool for overview questions. Use for 'how are we doing', 'give me an overview', 'operational health', 'key metrics', 'business summary', 'what needs attention'.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "get_ml_predictions",
         "description": "Get the most recent machine learning model predictions for this organisation — retention risk scores, LTV segments, staffing forecasts, shift demand. Use for 'who is at risk of leaving', 'client segments', 'staffing forecast', 'ML insights', 'predictions', 'risk scores'.",
         "input_schema": {
@@ -2329,6 +2581,9 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "get_product_summary":     get_product_summary,
         "get_enterprise_overview": get_enterprise_overview,
         "get_network_overview":    get_network_overview,
+        "get_monthly_kpis":          get_monthly_kpis,
+        "get_entity_list":           get_entity_list,
+        "get_company_scorecard":     get_company_scorecard,
         "get_ml_predictions":        get_ml_predictions,
         "get_relationship_summary":  get_relationship_summary,
         "get_address_overview":      get_address_overview,

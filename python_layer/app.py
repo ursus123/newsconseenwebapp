@@ -768,6 +768,52 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     except Exception as _goals_err:
         logger.warning("cron: goal tracking failed — %s", _goals_err)
 
+    # ── Step 5: Enhanced analytics tables — built from in-memory raw_data ────
+    # These run after the core entity transforms so raw_data is fully populated.
+    # They use load_dataframe_replace (full snapshot each run, not appended).
+    enhanced_result = {}
+    try:
+        from etl.monthly_kpis import transform_monthly_kpis
+        from etl.entity_index import transform_entity_index
+        from etl.company_scorecard import transform_company_scorecard
+
+        _ppl  = raw_data.get("people",       pd.DataFrame())
+        _txs  = raw_data.get("transactions",  pd.DataFrame())
+        _tsks = raw_data.get("tasks",         pd.DataFrame())
+        _ents = raw_data.get("enterprises",   pd.DataFrame())
+        _prds = raw_data.get("products",      pd.DataFrame())
+
+        # monthly_kpis
+        try:
+            _kpi_df = transform_monthly_kpis(_ppl, _txs, _tsks)
+            enhanced_result["monthly_kpis"] = load_dataframe_replace(_kpi_df, "monthly_kpis")
+            logger.info("cron: monthly_kpis — %d rows", len(_kpi_df))
+        except Exception as _e:
+            enhanced_result["monthly_kpis"] = {"status": "error", "detail": str(_e)}
+            logger.warning("cron: monthly_kpis failed — %s", _e)
+
+        # entity_index
+        try:
+            _idx_df = transform_entity_index(_ppl)
+            enhanced_result["entity_index"] = load_dataframe_replace(_idx_df, "entity_index")
+            logger.info("cron: entity_index — %d rows", len(_idx_df))
+        except Exception as _e:
+            enhanced_result["entity_index"] = {"status": "error", "detail": str(_e)}
+            logger.warning("cron: entity_index failed — %s", _e)
+
+        # company_scorecard
+        try:
+            _sc_df = transform_company_scorecard(_ppl, _ents, _txs, _tsks, _prds)
+            enhanced_result["company_scorecard"] = load_dataframe_replace(_sc_df, "company_scorecard")
+            logger.info("cron: company_scorecard — %d rows", len(_sc_df))
+        except Exception as _e:
+            enhanced_result["company_scorecard"] = {"status": "error", "detail": str(_e)}
+            logger.warning("cron: company_scorecard failed — %s", _e)
+
+    except Exception as _enh_err:
+        logger.warning("cron: enhanced analytics step failed — %s", _enh_err)
+        enhanced_result = {"status": "error", "detail": str(_enh_err)}
+
     # ML model predictions — runs last so raw tables are fully populated
     ml_result = {}
     try:
@@ -783,7 +829,7 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
 
     return {
         "cron_run":               True,
-        "version":                "4.9.0",
+        "version":                "5.0.0",
         "companies":              len(company_ids),
         "raw_stored":             list(raw_data.keys()),
         "success":                success_count,
@@ -796,6 +842,7 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         "auto_remediation":       autotask_result,
         "anomaly_detection":      anomaly_result,
         "goal_tracking":          goals_result,
+        "enhanced_analytics":     enhanced_result,
         "ml_predictions":         ml_result,
     }
 
