@@ -310,6 +310,14 @@ try:
 except Exception as _rep_err:
     logger.warning("Report delivery router failed to load — %s", _rep_err)
 
+# Auto-Remediation Engine
+try:
+    from autotask.routes import router as autotask_router
+    app.include_router(autotask_router)
+    logger.info("Auto-remediation router loaded")
+except Exception as _at_err:
+    logger.warning("Auto-remediation router failed to load — %s", _at_err)
+
 
 # ----------------------------------------------------------
 # Helper Functions
@@ -692,9 +700,21 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     except Exception as _rep_err:
         logger.warning("cron: report digest runner failed — %s", _rep_err)
 
+    # Auto-remediation — create tasks for detected issues (runs last, after fresh DQ data)
+    autotask_result = {}
+    try:
+        from autotask.routes import run_autotasks
+        autotask_result = run_autotasks(list(company_ids))
+        logger.info(
+            "cron: auto-remediation tasks_created=%s",
+            autotask_result.get("tasks_created", 0),
+        )
+    except Exception as _at_err:
+        logger.warning("cron: auto-remediation runner failed — %s", _at_err)
+
     return {
         "cron_run":               True,
-        "version":                "4.5.0",
+        "version":                "4.6.0",
         "companies":              len(company_ids),
         "raw_stored":             list(raw_data.keys()),
         "success":                success_count,
@@ -704,6 +724,7 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         "scheduled_connectors":   connector_sync_result,
         "data_quality":           dq_result,
         "report_digests":         digest_result,
+        "auto_remediation":       autotask_result,
     }
 
 

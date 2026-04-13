@@ -211,8 +211,9 @@ const ALL_TABS = [
   { id: "network",       label: "Network",       icon: Globe,         adminOnly: false },
   { id: "branding",      label: "Brand Settings", icon: Palette,       superAdminOnly: true },
   { id: "agents",        label: "Agents",         icon: Brain,         adminOnly: true  },
-  { id: "reports",       label: "Report Delivery", icon: Send,         adminOnly: true  },
-  { id: "audit",         label: "Audit Trail",    icon: ScrollText,    adminOnly: true  },
+  { id: "reports",       label: "Report Delivery",  icon: Send,         adminOnly: true  },
+  { id: "autotask",      label: "Auto-Remediation", icon: Zap,          adminOnly: true  },
+  { id: "audit",         label: "Audit Trail",      icon: ScrollText,   adminOnly: true  },
   { id: "error_log",     label: "Error Log",      icon: Bug,           adminOnly: true  },
   { id: "danger",        label: "Danger Zone",    icon: AlertTriangle, adminOnly: false },
 ];
@@ -295,6 +296,7 @@ export default function Settings() {
           {activeTab === "branding"      && <BrandingSection user={user} enterprise={myEnterprise} />}
           {activeTab === "agents"        && <AgentsSection user={user} />}
           {activeTab === "reports"       && <ReportsSection user={user} enterprise={myEnterprise} />}
+          {activeTab === "autotask"      && <AutoTaskSection user={user} />}
           {activeTab === "audit"         && <AuditTrailSection user={user} />}
           {activeTab === "error_log"     && <ErrorLogSection user={user} />}
           {activeTab === "danger"        && <DangerSection user={user} />}
@@ -1393,6 +1395,188 @@ function ReportsSection({ user, enterprise }) {
         <p className="text-xs text-amber-700">
           Digest delivery requires <strong>SENDGRID_API_KEY</strong> (or SMTP_HOST + SMTP_USER + SMTP_PASSWORD)
           set in Railway environment variables. The same credentials used by the Alerts engine are shared here.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Auto-Remediation Section ─────────────────────────────────────────────────
+const RULE_META = {
+  data_quality_critical: { label: "Fix data quality issues",     desc: "Creates a task when critical missing-field or duplicate issues are detected." },
+  overdue_invoices:      { label: "Chase overdue invoices",      desc: "Creates a task when unpaid invoices exceed the configured threshold." },
+  churn_risk:            { label: "Retention outreach",          desc: "Creates a task when clients flagged as at-risk of disengagement." },
+  overdue_tasks:         { label: "Clear task backlog",          desc: "Creates a task when overdue tasks exceed the configured count." },
+  low_stock:             { label: "Reorder stock",               desc: "Creates a task when products fall below minimum reorder level." },
+};
+
+function AutoTaskSection({ user }) {
+  const companyId = user?.company_id;
+
+  const [config,    setConfig]    = useState({ enabled: false, enabled_rules: Object.keys(RULE_META), rule_config: {} });
+  const [history,   setHistory]   = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [saving,    setSaving]    = useState(false);
+  const [running,   setRunning]   = useState(false);
+  const [banner,    setBanner]    = useState(null);
+
+  useEffect(() => {
+    if (!companyId) return;
+    Promise.all([
+      fetch(`${RAILWAY_URL}/autotask/config?company_id=${companyId}`, { headers: API_HEADERS }).then(r => r.ok ? r.json() : null),
+      fetch(`${RAILWAY_URL}/autotask/history?company_id=${companyId}&limit=10`, { headers: API_HEADERS }).then(r => r.ok ? r.json() : null),
+    ]).then(([cfg, hist]) => {
+      if (cfg && cfg.configured) {
+        setConfig({
+          enabled:       cfg.enabled,
+          enabled_rules: cfg.enabled_rules || Object.keys(RULE_META),
+          rule_config:   cfg.rule_config || {},
+        });
+      }
+      if (hist) setHistory(hist.tasks || []);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, [companyId]);
+
+  const showBanner = (type, msg) => { setBanner({ type, msg }); setTimeout(() => setBanner(null), 4000); };
+
+  const toggleRule = (rule) => {
+    setConfig(c => ({
+      ...c,
+      enabled_rules: c.enabled_rules.includes(rule)
+        ? c.enabled_rules.filter(r => r !== rule)
+        : [...c.enabled_rules, rule],
+    }));
+  };
+
+  const save = async () => {
+    if (!companyId) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${RAILWAY_URL}/autotask/config`, {
+        method:  "POST",
+        headers: { ...API_HEADERS, "Content-Type": "application/json" },
+        body:    JSON.stringify({ company_id: companyId, ...config }),
+      });
+      if (res.ok) showBanner("success", "Auto-remediation config saved.");
+      else        showBanner("error",   "Failed to save — check Railway logs.");
+    } catch { showBanner("error", "Could not reach Railway service."); }
+    finally { setSaving(false); }
+  };
+
+  const runNow = async () => {
+    if (!companyId) return;
+    setRunning(true);
+    try {
+      const res = await fetch(`${RAILWAY_URL}/autotask/run?company_id=${companyId}`, {
+        method: "POST", headers: API_HEADERS,
+      });
+      const data = await res.json();
+      if (data.status === "accepted") {
+        showBanner("success", "Evaluation queued — check Tasks shortly.");
+        setTimeout(() => {
+          fetch(`${RAILWAY_URL}/autotask/history?company_id=${companyId}&limit=10`, { headers: API_HEADERS })
+            .then(r => r.ok ? r.json() : null).then(h => { if (h) setHistory(h.tasks || []); }).catch(() => {});
+        }, 3000);
+      } else { showBanner("error", "Run failed."); }
+    } catch { showBanner("error", "Could not reach Railway service."); }
+    finally { setRunning(false); }
+  };
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-32">
+      <div className="w-5 h-5 border-2 border-slate-200 border-t-indigo-500 rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-bold text-slate-800">Auto-Remediation</h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            When issues are detected, the system automatically creates tasks in your Tasks list
+            and assigns them — closing the loop without operator intervention.
+          </p>
+        </div>
+        <button onClick={save} disabled={saving}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all shrink-0">
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+          Save
+        </button>
+      </div>
+
+      {banner && <Banner type={banner.type} message={banner.msg} onDismiss={() => setBanner(null)} />}
+
+      <div className="bg-white border border-slate-100 rounded-2xl p-5">
+        <ToggleRow
+          label="Enable auto-remediation"
+          checked={config.enabled}
+          onChange={v => setConfig(c => ({ ...c, enabled: v }))}
+        />
+      </div>
+
+      <div className="bg-white border border-slate-100 rounded-2xl p-5 space-y-3">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Rules</p>
+        <p className="text-[11px] text-slate-400">
+          Each rule runs after every ETL cycle. Tasks are not re-created within 24 hours of the last creation for the same issue.
+        </p>
+        {Object.entries(RULE_META).map(([rule, meta]) => (
+          <div key={rule} className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
+            <button
+              onClick={() => toggleRule(rule)}
+              className={`w-9 h-5 rounded-full transition-colors relative shrink-0 mt-0.5 ${
+                config.enabled_rules.includes(rule) ? "bg-indigo-500" : "bg-slate-200"
+              }`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${
+                config.enabled_rules.includes(rule) ? "left-4" : "left-0.5"
+              }`} />
+            </button>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-700">{meta.label}</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">{meta.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Run now + history */}
+      <div className="bg-white border border-slate-100 rounded-2xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Recent Auto-Tasks</p>
+          <button onClick={runNow} disabled={running || !config.enabled}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors disabled:opacity-50">
+            {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+            Run now
+          </button>
+        </div>
+        {history.length === 0 ? (
+          <p className="text-xs text-slate-400 italic">No tasks auto-created yet. Enable rules and run the ETL cycle.</p>
+        ) : (
+          <div className="space-y-2">
+            {history.map((t, i) => (
+              <div key={i} className="flex items-start gap-3 py-2 border-b border-slate-50 last:border-0">
+                <div className="w-6 h-6 rounded-lg bg-violet-50 flex items-center justify-center shrink-0 mt-0.5">
+                  <Zap className="w-3 h-3 text-violet-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-slate-700 truncate">{t.title}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5 capitalize">
+                    {t.rule?.replace(/_/g, " ")}
+                    {t.created_at && ` · ${new Date(t.created_at).toLocaleDateString()}`}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-violet-50 border border-violet-100 rounded-2xl px-4 py-3 flex items-start gap-3">
+        <Zap className="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-violet-700">
+          Auto-remediation runs after every ETL cycle. Tasks are created in Base44 and appear
+          on your Tasks page immediately — assigned to the configured person, or unassigned if none is set.
         </p>
       </div>
     </div>

@@ -75,10 +75,23 @@ function AutomationFeed({ companyId }) {
     retry:     false,
   });
 
-  const wfRuns   = wfRunsData?.runs   || [];
-  const audits   = auditData?.entries || [];
+  const { data: autotaskData } = useQuery({
+    queryKey: ["dash-autotask-feed", companyId],
+    queryFn: async () => {
+      const r = await fetch(`${RAILWAY_URL}/autotask/history?company_id=${companyId}&limit=8`);
+      if (!r.ok) return { tasks: [] };
+      return r.json();
+    },
+    enabled:   !!companyId,
+    staleTime: 30000,
+    retry:     false,
+  });
 
-  if (wfRuns.length === 0 && audits.length === 0) return null;
+  const wfRuns    = wfRunsData?.runs   || [];
+  const audits    = auditData?.entries || [];
+  const autotasks = /** @type {Array<{title:string,created_at:string,rule:string,task_id?:string}>} */ (autotaskData?.tasks || []);
+
+  if (wfRuns.length === 0 && audits.length === 0 && autotasks.length === 0) return null;
 
   // Merge and sort by time
   const feedItems = [
@@ -98,6 +111,14 @@ function AutomationFeed({ companyId }) {
       status: a.action,
       entity: a.entity_type,
     })),
+    ...autotasks.map(t => ({
+      type:   "autotask",
+      time:   t.created_at,
+      title:  t.title,
+      sub:    `Auto-created · ${t.rule?.replace(/_/g, " ")}`,
+      status: "created",
+      entity: "task",
+    })),
   ]
     .filter(i => i.time)
     .sort((a, b) => (b.time > a.time ? 1 : -1))
@@ -114,6 +135,7 @@ function AutomationFeed({ companyId }) {
   }
 
   function dot(item) {
+    if (item.type === "autotask") return "bg-violet-500";
     if (item.type === "workflow") {
       if (item.status === "completed") return "bg-emerald-500";
       if (item.status === "completed_with_errors") return "bg-amber-500";
