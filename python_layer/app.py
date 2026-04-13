@@ -138,6 +138,13 @@ async def lifespan(app: FastAPI):
                 logger.info("Startup: Agent tables ready")
             except Exception as e:
                 logger.warning("Startup: Agent table setup skipped — %s", e)
+
+        # Phase 8 — Audit Trail table (immutable change log)
+        try:
+            from audit.routes import ensure_audit_table
+            ensure_audit_table(engine)
+        except Exception as e:
+            logger.warning("Startup: Audit table setup skipped — %s", e)
     else:
         logger.warning("Startup: DATABASE_URL not set — analytics store unavailable")
     yield
@@ -157,7 +164,7 @@ app = FastAPI(
         "approval gate, agent memory, deep market research\n\n"
         "One system. Any industry. Runs itself."
     ),
-    version="4.1.0",
+    version="4.3.0",
     lifespan=lifespan,
 )
 
@@ -645,7 +652,7 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
 
     return {
         "cron_run":               True,
-        "version":                "4.2.0",
+        "version":                "4.3.0",
         "companies":              len(company_ids),
         "raw_stored":             list(raw_data.keys()),
         "success":                success_count,

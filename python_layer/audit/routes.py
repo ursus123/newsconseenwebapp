@@ -20,6 +20,7 @@ from typing import Optional
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -41,33 +42,44 @@ ACTIONS = {"created", "updated", "deleted"}
 
 # ── PostgreSQL persistence ────────────────────────────────────────────────────
 
-def _ensure_audit_table(engine) -> bool:
-    """Create audit.change_log table if it doesn't exist. Returns True on success."""
+def ensure_audit_table(engine) -> bool:
+    """
+    Create audit schema and change_log table if they don't exist.
+    Called at startup from app.py lifespan so the table is always ready.
+    Returns True on success.
+    """
+    _STATEMENTS = [
+        "CREATE SCHEMA IF NOT EXISTS audit",
+        """
+        CREATE TABLE IF NOT EXISTS audit.change_log (
+            id             SERIAL PRIMARY KEY,
+            company_id     TEXT        NOT NULL,
+            entity_type    TEXT        NOT NULL,
+            entity_id      TEXT,
+            entity_name    TEXT,
+            action         TEXT        NOT NULL,
+            changed_by     TEXT,
+            changed_fields JSONB,
+            timestamp      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_audit_company ON audit.change_log (company_id, timestamp DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_audit_entity  ON audit.change_log (company_id, entity_type, timestamp DESC)",
+    ]
     try:
         with engine.connect() as conn:
-            conn.execute("""
-                CREATE SCHEMA IF NOT EXISTS audit;
-                CREATE TABLE IF NOT EXISTS audit.change_log (
-                    id            SERIAL PRIMARY KEY,
-                    company_id    TEXT        NOT NULL,
-                    entity_type   TEXT        NOT NULL,
-                    entity_id     TEXT,
-                    entity_name   TEXT,
-                    action        TEXT        NOT NULL,
-                    changed_by    TEXT,
-                    changed_fields JSONB,
-                    timestamp     TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                );
-                CREATE INDEX IF NOT EXISTS idx_audit_company
-                    ON audit.change_log (company_id, timestamp DESC);
-                CREATE INDEX IF NOT EXISTS idx_audit_entity
-                    ON audit.change_log (company_id, entity_type, timestamp DESC);
-            """)
+            for stmt in _STATEMENTS:
+                conn.execute(text(stmt))
             conn.commit()
+        logger.info("audit: audit.change_log table ready")
         return True
     except Exception as e:
-        logger.debug("audit table setup skipped — %s", e)
+        logger.warning("audit: table setup skipped — %s", e)
         return False
+
+
+# Keep backward-compatible alias
+_ensure_audit_table = ensure_audit_table
 
 
 def _pg_insert(entry: dict) -> None:
@@ -79,14 +91,14 @@ def _pg_insert(entry: dict) -> None:
             return
         with engine.connect() as conn:
             conn.execute(
-                """
+                text("""
                 INSERT INTO audit.change_log
                     (company_id, entity_type, entity_id, entity_name,
                      action, changed_by, changed_fields, timestamp)
                 VALUES
                     (:company_id, :entity_type, :entity_id, :entity_name,
                      :action, :changed_by, :changed_fields::jsonb, :timestamp)
-                """,
+                """),
                 {
                     "company_id":     entry["company_id"],
                     "entity_type":    entry["entity_type"],
@@ -295,19 +307,53 @@ def export_audit_log(
 @router.get("/summary")
 def audit_summary(company_id: str = Query(...)):
     """
-    Return counts by entity_type and action for the last 30 days.
-    Used by the Audit Trail dashboard header.
+    Return counts by entity_type and action.
+    Tries PostgreSQL first (full history); falls back to in-memory store.
     """
+    # Try PostgreSQL — has full durable history
+    try:
+        from database import get_engine_safe
+        import pandas as pd
+        engine = get_engine_safe()
+        if engine:
+            df = pd.read_sql(
+                text("""
+                    SELECT entity_type, action, changed_by
+                    FROM audit.change_log
+                    WHERE company_id = :company_id
+                """),
+                engine,
+                params={"company_id": company_id},
+            )
+            if not df.empty:
+                by_entity = df["entity_type"].value_counts().to_dict()
+                by_action = df["action"].value_counts().to_dict()
+                top_users = (
+                    df["changed_by"].dropna()
+                    .value_counts()
+                    .head(5)
+                    .to_dict()
+                )
+                return {
+                    "total":     len(df),
+                    "by_entity": by_entity,
+                    "by_action": by_action,
+                    "top_users": top_users,
+                    "source":    "postgresql",
+                }
+    except Exception as e:
+        logger.debug("audit summary pg failed — %s", e)
+
+    # Fallback: in-memory store
     from collections import Counter
     entries = [e for e in _AUDIT_LOG if e.get("company_id") == company_id]
-
     by_entity = Counter(e.get("entity_type", "unknown") for e in entries)
     by_action = Counter(e.get("action", "unknown")      for e in entries)
     by_user   = Counter(e.get("changed_by", "unknown")  for e in entries)
-
     return {
         "total":     len(entries),
         "by_entity": dict(by_entity.most_common()),
         "by_action": dict(by_action.most_common()),
         "top_users": dict(by_user.most_common(5)),
+        "source":    "memory",
     }
