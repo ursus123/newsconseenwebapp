@@ -9,7 +9,7 @@ import {
   User, Lock, Bell, Monitor, AlertTriangle,
   Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X, Settings as SettingsIcon, Palette, Bug,
   Globe, Copy, Trash2, Loader2, Brain, Zap, CheckCircle2, Clock,
-  ScrollText, Download, Filter, RefreshCw, Send, Plus, CheckCircle2,
+  ScrollText, Download, Filter, RefreshCw, Send, Plus,
 } from "lucide-react";
 import BrandingSection from "@/components/settings/BrandingSection";
 import ErrorLogSection from "@/components/settings/ErrorLogSection";
