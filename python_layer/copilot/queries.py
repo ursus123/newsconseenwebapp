@@ -41,6 +41,47 @@ def _run(sql: str, params: dict) -> list[dict]:
         return []
 
 
+def _read_raw_table(table: str, company_id: str) -> "_pd.DataFrame":
+    """
+    Tier 2 fallback: read from raw.{table} in PostgreSQL.
+
+    raw.* tables are populated by the airbyte integration and contain
+    full normalised records — more recent than analytics.* (no aggregation
+    delay) but not as fast for grouped queries.
+
+    Returns an empty DataFrame if the table doesn't exist, is empty,
+    or PostgreSQL is unavailable.
+    """
+    engine = get_engine_safe()
+    if not engine:
+        return _pd.DataFrame()
+    try:
+        import sqlalchemy as sa
+        with engine.connect() as conn:
+            # Check table exists before querying
+            exists = conn.execute(
+                text(
+                    "SELECT 1 FROM information_schema.tables "
+                    "WHERE table_schema = 'raw' AND table_name = :t LIMIT 1"
+                ),
+                {"t": table},
+            ).fetchone()
+            if not exists:
+                return _pd.DataFrame()
+            result = conn.execute(
+                text(f"SELECT * FROM raw.{table} WHERE company_id = :cid LIMIT 2000"),
+                {"cid": company_id},
+            )
+            rows = result.fetchall()
+            if not rows:
+                return _pd.DataFrame()
+            cols = result.keys()
+            return _pd.DataFrame([dict(zip(cols, r)) for r in rows])
+    except Exception as e:
+        logger.debug("_read_raw_table(%s): %s", table, e)
+        return _pd.DataFrame()
+
+
 # ── Staleness helpers ─────────────────────────────────────────────────────────
 
 def _analytics_freshness(table: str, company_id: str) -> tuple[bool, str]:
@@ -183,6 +224,12 @@ def _filter_by_company(df: "_pd.DataFrame", company_id: str) -> "_pd.DataFrame":
 
 
 def _b44_people(company_id: str):
+    # Tier 2: raw PostgreSQL table
+    raw = _read_raw_table("people", company_id)
+    if not raw.empty:
+        logger.info("_b44_people: using raw.people (%d rows)", len(raw))
+        return raw
+    # Tier 3: Base44 live API
     try:
         from etl.people import extract_people
         df = extract_people()
@@ -193,6 +240,10 @@ def _b44_people(company_id: str):
 
 
 def _b44_enterprises(company_id: str):
+    raw = _read_raw_table("enterprises", company_id)
+    if not raw.empty:
+        logger.info("_b44_enterprises: using raw.enterprises (%d rows)", len(raw))
+        return raw
     try:
         from etl.enterprises import extract_enterprises
         df = extract_enterprises()
@@ -203,6 +254,10 @@ def _b44_enterprises(company_id: str):
 
 
 def _b44_transactions(company_id: str):
+    raw = _read_raw_table("transactions", company_id)
+    if not raw.empty:
+        logger.info("_b44_transactions: using raw.transactions (%d rows)", len(raw))
+        return raw
     try:
         from etl.transactions import extract_transactions
         df = extract_transactions()
@@ -213,6 +268,10 @@ def _b44_transactions(company_id: str):
 
 
 def _b44_tasks(company_id: str):
+    raw = _read_raw_table("tasks", company_id)
+    if not raw.empty:
+        logger.info("_b44_tasks: using raw.tasks (%d rows)", len(raw))
+        return raw
     try:
         from etl.tasks import extract_tasks
         df = extract_tasks()
@@ -223,6 +282,10 @@ def _b44_tasks(company_id: str):
 
 
 def _b44_products(company_id: str):
+    raw = _read_raw_table("products", company_id)
+    if not raw.empty:
+        logger.info("_b44_products: using raw.products (%d rows)", len(raw))
+        return raw
     try:
         from etl.products import extract_products
         df = extract_products()
@@ -1126,7 +1189,7 @@ def get_monthly_kpis(company_id: str, months: int = 12) -> dict:
     )
 
     if not rows:
-        # Base44 live fallback — compute from raw transactions + people + tasks
+        # Tier 2: raw PostgreSQL; Tier 3: Base44 live
         try:
             import pandas as _pd
             from etl.monthly_kpis import transform_monthly_kpis
@@ -1134,13 +1197,13 @@ def get_monthly_kpis(company_id: str, months: int = 12) -> dict:
             from etl.transactions import extract_transactions
             from etl.tasks import extract_tasks
 
-            ppl = extract_people()
-            txs = extract_transactions()
-            tsk = extract_tasks()
+            ppl = _read_raw_table("people", company_id)
+            txs = _read_raw_table("transactions", company_id)
+            tsk = _read_raw_table("tasks", company_id)
 
-            ppl = _filter_by_company(ppl, company_id)
-            txs = _filter_by_company(txs, company_id)
-            tsk = _filter_by_company(tsk, company_id)
+            if ppl.empty: ppl = _filter_by_company(extract_people(), company_id)
+            if txs.empty: txs = _filter_by_company(extract_transactions(), company_id)
+            if tsk.empty: tsk = _filter_by_company(extract_tasks(), company_id)
 
             kpi_df = transform_monthly_kpis(ppl, txs, tsk, lookback_months=months)
             kpi_df = _filter_by_company(kpi_df, company_id)
@@ -1210,13 +1273,15 @@ def get_entity_list(
     rows, _dao, _src = _query_analytics("entity_index", sql, params, company_id)
 
     if not rows:
-        # Base44 live fallback
+        # Tier 2: raw PostgreSQL entity_index, then Tier 3: Base44 live
         try:
             import pandas as _pd
             from etl.entity_index import transform_entity_index
             from etl.people import extract_people
 
-            ppl = _filter_by_company(extract_people(), company_id)
+            ppl = _read_raw_table("people", company_id)
+            if ppl.empty:
+                ppl = _filter_by_company(extract_people(), company_id)
 
             idx_df = transform_entity_index(ppl)
             if entity_type and "entity_type" in idx_df.columns:
@@ -1271,7 +1336,7 @@ def get_company_scorecard(company_id: str) -> dict:
     )
 
     if not rows:
-        # Base44 live fallback — compute scorecard on the fly
+        # Tier 2: raw PostgreSQL; Tier 3: Base44 live
         try:
             import pandas as _pd
             from etl.company_scorecard import transform_company_scorecard
@@ -1281,15 +1346,18 @@ def get_company_scorecard(company_id: str) -> dict:
             from etl.tasks import extract_tasks
             from etl.products import extract_products
 
-            def _fetch_filtered(extract_fn):
-                return _filter_by_company(extract_fn(), company_id)
+            def _fetch_filtered(raw_table: str, extract_fn):
+                df = _read_raw_table(raw_table, company_id)
+                if df.empty:
+                    df = _filter_by_company(extract_fn(), company_id)
+                return df
 
             sc_df = transform_company_scorecard(
-                _fetch_filtered(extract_people),
-                _fetch_filtered(extract_enterprises),
-                _fetch_filtered(extract_transactions),
-                _fetch_filtered(extract_tasks),
-                _fetch_filtered(extract_products),
+                _fetch_filtered("people",       extract_people),
+                _fetch_filtered("enterprises",  extract_enterprises),
+                _fetch_filtered("transactions", extract_transactions),
+                _fetch_filtered("tasks",        extract_tasks),
+                _fetch_filtered("products",     extract_products),
             )
             sc_df = _filter_by_company(sc_df, company_id)
             rows = sc_df.to_dict(orient="records") if not sc_df.empty else []
@@ -1392,17 +1460,18 @@ def get_relationship_summary(
     rows = _run(sql, {"company_id": company_id, "rel_type": relationship_type})
 
     if not rows:
-        # Base44 live fallback
+        # Tier 2: raw PostgreSQL, then Tier 3: Base44 live
         try:
             from etl.relationships import extract_relationships
-            import pandas as pd
-            df = _filter_by_company(extract_relationships(), company_id)
+            df = _read_raw_table("relationships", company_id)
+            if df.empty:
+                df = _filter_by_company(extract_relationships(), company_id)
             if relationship_type and "relationship_type" in df.columns:
                 df = df[df["relationship_type"] == relationship_type]
             if not df.empty:
                 grp = df.groupby(["relationship_type", "status"]).size().reset_index(name="count")
                 rows = grp.to_dict(orient="records")
-                logger.info("get_relationship_summary: Base44 fallback — %d relationship records", len(df))
+                logger.info("get_relationship_summary: live fallback — %d relationship records", len(df))
         except Exception as e:
             logger.warning("get_relationship_summary fallback failed: %s", e)
 
@@ -1452,7 +1521,9 @@ def get_address_overview(company_id: str) -> dict:
     if not rows:
         try:
             from etl.addresses import extract_addresses
-            df = _filter_by_company(extract_addresses(), company_id)
+            df = _read_raw_table("addresses", company_id)
+            if df.empty:
+                df = _filter_by_company(extract_addresses(), company_id)
             if not df.empty:
                 grp_cols = [c for c in ["address_type", "city", "state_province", "country"] if c in df.columns]
                 if grp_cols:
@@ -1504,8 +1575,9 @@ def get_service_overview(company_id: str) -> dict:
     if not rows:
         try:
             from etl.services import extract_services
-            import pandas as pd
-            df = _filter_by_company(extract_services(), company_id)
+            df = _read_raw_table("services", company_id)
+            if df.empty:
+                df = _filter_by_company(extract_services(), company_id)
             if not df.empty:
                 grp_cols = [c for c in ["service_type", "status"] if c in df.columns]
                 agg: dict = {"id": "count"}
