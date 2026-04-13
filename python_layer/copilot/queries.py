@@ -1138,9 +1138,9 @@ def get_monthly_kpis(company_id: str, months: int = 12) -> dict:
             txs = extract_transactions()
             tsk = extract_tasks()
 
-            for df in [ppl, txs, tsk]:
-                if not df.empty and company_id and "company_id" in df.columns:
-                    df = df[df["company_id"] == company_id]
+            ppl = _filter_by_company(ppl, company_id)
+            txs = _filter_by_company(txs, company_id)
+            tsk = _filter_by_company(tsk, company_id)
 
             kpi_df = transform_monthly_kpis(ppl, txs, tsk, lookback_months=months)
             if not kpi_df.empty and "company_id" in kpi_df.columns:
@@ -1285,10 +1285,7 @@ def get_company_scorecard(company_id: str) -> dict:
             from etl.products import extract_products
 
             def _fetch_filtered(extract_fn):
-                df = extract_fn()
-                if not df.empty and company_id and "company_id" in df.columns:
-                    df = df[df["company_id"] == company_id]
-                return df
+                return _filter_by_company(extract_fn(), company_id)
 
             sc_df = transform_company_scorecard(
                 _fetch_filtered(extract_people),
@@ -1403,9 +1400,7 @@ def get_relationship_summary(
         try:
             from etl.relationships import extract_relationships
             import pandas as pd
-            df = extract_relationships()
-            if not df.empty and company_id:
-                df = df[df["company_id"] == company_id].copy()
+            df = _filter_by_company(extract_relationships(), company_id)
             if relationship_type and "relationship_type" in df.columns:
                 df = df[df["relationship_type"] == relationship_type]
             if not df.empty:
@@ -1461,9 +1456,7 @@ def get_address_overview(company_id: str) -> dict:
     if not rows:
         try:
             from etl.addresses import extract_addresses
-            df = extract_addresses()
-            if not df.empty and company_id:
-                df = df[df["company_id"] == company_id].copy()
+            df = _filter_by_company(extract_addresses(), company_id)
             if not df.empty:
                 grp_cols = [c for c in ["address_type", "city", "state_province", "country"] if c in df.columns]
                 if grp_cols:
@@ -1516,9 +1509,7 @@ def get_service_overview(company_id: str) -> dict:
         try:
             from etl.services import extract_services
             import pandas as pd
-            df = extract_services()
-            if not df.empty and company_id:
-                df = df[df["company_id"] == company_id].copy()
+            df = _filter_by_company(extract_services(), company_id)
             if not df.empty:
                 grp_cols = [c for c in ["service_type", "status"] if c in df.columns]
                 agg: dict = {"id": "count"}
