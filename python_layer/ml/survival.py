@@ -53,27 +53,62 @@ INACTIVE_STATUSES = {
 COMPLETION_RATE_DEFAULT = None
 
 
+def _compute_tenure_days(df: pd.DataFrame) -> pd.Series:
+    """
+    Derive tenure in days from raw date columns when avg_tenure_days is absent.
+    Handles ISO strings, Excel serial numbers (e.g. 45288), and Unix timestamps.
+    Falls back to 30 days when no valid date column is found.
+    """
+    today = pd.Timestamp.now()
+
+    for col in ["start_date", "created_date", "start_at", "joined_date", "intake_date"]:
+        if col not in df.columns:
+            continue
+        try:
+            raw = df[col]
+            # Detect Excel serial numbers: numeric values in the range 30000–60000
+            # (approx 1982–2064), stored as int, float, or numeric string
+            numeric = pd.to_numeric(raw, errors="coerce")
+            excel_mask = numeric.notna() & numeric.between(30_000, 60_000)
+            if excel_mask.sum() > len(df) * 0.3:
+                dates = pd.to_datetime(
+                    numeric, unit="D", origin="1899-12-30", errors="coerce"
+                )
+            else:
+                dates = pd.to_datetime(raw, errors="coerce", utc=False)
+
+            tenure = (today - dates.dt.tz_localize(None)
+                      if hasattr(dates.dt, "tz_localize") else today - dates).dt.days
+            valid = tenure.notna() & tenure.between(0, 36_500)
+            if valid.sum() > len(df) * 0.3:
+                logger.info(
+                    "_compute_tenure_days: using col=%s valid=%d/%d",
+                    col, valid.sum(), len(df),
+                )
+                return tenure.where(valid, 30).clip(lower=1).astype(int)
+        except Exception as ex:
+            logger.debug("_compute_tenure_days: col=%s error — %s", col, ex)
+
+    logger.info("_compute_tenure_days: no valid date column — defaulting to 30 days")
+    return pd.Series(30, index=df.index)
+
+
 def build_survival_features(
     people_df: pd.DataFrame,
     task_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Join people and task summary DataFrames to build the
-    feature matrix for the Cox PH model.
+    Build the feature matrix for Cox PH from either:
+      - analytics.people_summary + analytics.task_summary (aggregated)
+      - raw.people + raw.tasks (individual Base44 records)
 
-    Attempts to filter to participant-type rows first.
-    Falls back to all person types if none found, so the
-    model runs for verticals that don't use participant
-    terminology.
-
-    Returns a DataFrame with one row per enterprise/person_type
-    group containing all features needed for Cox PH fitting.
+    Works with both schemas: detects which it has and adapts.
     """
-    if people_df.empty or task_df.empty:
-        logger.warning("build_survival_features: one or both inputs empty")
+    if people_df.empty:
+        logger.warning("build_survival_features: people_df is empty")
         return pd.DataFrame()
 
-    # Try participant filter first
+    # ── Candidate selection ───────────────────────────────────────────
     if "is_participant" in people_df.columns:
         candidates = people_df[people_df["is_participant"] == True].copy()
     else:
@@ -82,49 +117,52 @@ def build_survival_features(
         ).fillna("").str.lower().str.strip()
         candidates = people_df[pt.isin(PARTICIPANT_TYPES)].copy()
 
-    # Fall back to all person types if no participants found
     if candidates.empty:
-        logger.info(
-            "build_survival_features: no participant rows — "
-            "using all person types"
-        )
+        logger.info("build_survival_features: no participant rows — using all person types")
         candidates = people_df.copy()
 
-    # Aggregate task metrics to enterprise level for join
+    # ── Task join (skip entirely if no join keys or task_df empty) ────
+    # FIX: groupby([]) raises "No group keys passed!" — guard against it.
     join_cols = [c for c in ["enterprise_id", "company_id"]
-                 if c in task_df.columns]
+                 if c in task_df.columns] if not task_df.empty else []
 
-    task_agg = (
-        task_df.groupby(join_cols, dropna=False)
-        .agg(
-            completion_rate_pct=("completion_rate_pct", "mean"),
-            overdue_tasks=("overdue_tasks", "sum"),
-            tasks_last_30d=("tasks_last_30d", "sum"),
-        )
-        .reset_index()
-    )
+    if join_cols:
+        try:
+            task_agg = (
+                task_df.groupby(join_cols, dropna=False)
+                .agg(
+                    completion_rate_pct=("completion_rate_pct", "mean"),
+                    overdue_tasks=("overdue_tasks", "sum"),
+                    tasks_last_30d=("tasks_last_30d", "sum"),
+                )
+                .reset_index()
+            )
+            people_join_cols = [c for c in join_cols if c in candidates.columns]
+            if people_join_cols:
+                features = candidates.merge(task_agg, on=people_join_cols, how="left")
+            else:
+                features = candidates.copy()
+        except Exception as e:
+            logger.warning("build_survival_features: task join failed (%s) — skipping", e)
+            features = candidates.copy()
+    else:
+        logger.info("build_survival_features: no task join keys — using people data only")
+        features = candidates.copy()
 
-    # Join on enterprise
-    people_join_cols = [c for c in join_cols if c in candidates.columns]
-    features = candidates.merge(task_agg, on=people_join_cols, how="left")
+    # ── Duration T (tenure in days) ───────────────────────────────────
+    # Analytics tables have avg_tenure_days; raw tables need computation.
+    if "avg_tenure_days" in features.columns and features["avg_tenure_days"].notna().sum() > 0:
+        features["T"] = features["avg_tenure_days"].fillna(1).clip(lower=1)
+    else:
+        features["T"] = _compute_tenure_days(features)
 
-    # Duration variable T — tenure in days (time-at-risk)
-    # Clip at 1 so Cox PH doesn't fail on zero-tenure rows
-    features["T"] = features.get(
-        "avg_tenure_days", pd.Series(1, index=features.index)
-    ).fillna(1).clip(lower=1)
-
-    # Event variable E — 1 if ended/inactive, 0 if still active
-    # Uses the full INACTIVE_STATUSES set, not just "inactive"
+    # ── Event E (1 = ended/inactive, 0 = active) ─────────────────────
     status_col = features.get(
         "status", pd.Series("active", index=features.index)
     ).fillna("active").str.lower().str.strip()
-
     features["E"] = status_col.isin(INACTIVE_STATUSES).astype(int)
 
-    # Fill missing feature values
-    # completion_rate_pct: leave as NaN when missing so Cox PH
-    # can handle it via penaliser rather than assuming perfection
+    # ── Task features (default to 0/NaN when absent) ─────────────────
     features["completion_rate_pct"] = features.get(
         "completion_rate_pct",
         pd.Series(COMPLETION_RATE_DEFAULT, index=features.index)
@@ -137,8 +175,7 @@ def build_survival_features(
     ).fillna(0)
 
     logger.info(
-        "build_survival_features: built %d rows — "
-        "%d active (E=0), %d ended (E=1)",
+        "build_survival_features: %d rows — E=0 (active) %d, E=1 (ended) %d",
         len(features),
         int((features["E"] == 0).sum()),
         int((features["E"] == 1).sum()),
