@@ -22,6 +22,7 @@ import LowStockAlert from "../components/dashboard/LowStockAlert";
 import RecentActivityFeed from "../components/dashboard/RecentActivityFeed";
 import TodaySchedule from "../components/dashboard/TodaySchedule";
 import NotificationsBell from "../components/dashboard/NotificationsBell";
+import DataQualityWidget from "../components/dashboard/DataQualityWidget";
 import WorkerMyStats from "../components/dashboard/WorkerMyStats";
 import ClientRetentionRisk from "../components/dashboard/ClientRetentionRisk";
 import StaffingIntelligence from "../components/dashboard/StaffingIntelligence";
@@ -923,8 +924,11 @@ function AdminDashboard({ user }) {
       <OnboardingChecklist done={onboardingDone} />
       <GettingStartedChecklist />
 
-      {/* ── Automation Feed ── */}
-      <AutomationFeed companyId={companyId} />
+      {/* ── Automation Feed + Data Quality ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <AutomationFeed companyId={companyId} />
+        <DataQualityWidget companyId={companyId} />
+      </div>
 
       {/* ── Agent Insight Strip ── */}
       <AgentInsightStrip companyId={companyId} />

@@ -294,6 +294,14 @@ try:
 except Exception as _ob_err:
     logger.warning("Onboarding automation router failed to load — %s", _ob_err)
 
+# Data Quality Monitoring
+try:
+    from dataquality.routes import router as dataquality_router
+    app.include_router(dataquality_router)
+    logger.info("Data quality monitoring router loaded")
+except Exception as _dq_err:
+    logger.warning("Data quality monitoring router failed to load — %s", _dq_err)
+
 
 # ----------------------------------------------------------
 # Helper Functions
@@ -658,9 +666,18 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     except Exception as _conn_err:
         logger.warning("cron: scheduled connector runner failed — %s", _conn_err)
 
+    # Data quality evaluation — runs after ETL so raw.* tables are fresh
+    dq_result = {}
+    try:
+        from dataquality.routes import run_quality_for_all_companies
+        dq_result = run_quality_for_all_companies(list(company_ids))
+        logger.info("cron: data quality evaluated=%s", dq_result.get("evaluated", 0))
+    except Exception as _dq_err:
+        logger.warning("cron: data quality runner failed — %s", _dq_err)
+
     return {
         "cron_run":               True,
-        "version":                "4.3.0",
+        "version":                "4.4.0",
         "companies":              len(company_ids),
         "raw_stored":             list(raw_data.keys()),
         "success":                success_count,
@@ -668,6 +685,7 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         "all_success":            success_count == len(results),
         "results":                results,
         "scheduled_connectors":   connector_sync_result,
+        "data_quality":           dq_result,
     }
 
 
