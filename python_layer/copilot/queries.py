@@ -135,70 +135,101 @@ def _query_analytics(
 # extract_*() fetches from Base44 live — so this is always current data.
 # Tenant isolation: filter DataFrame by company_id after fetch.
 
+import pandas as _pd
+
+
+def _filter_by_company(df: "_pd.DataFrame", company_id: str) -> "_pd.DataFrame":
+    """
+    Filter a DataFrame to rows matching company_id.
+
+    Handles two common situations in new deployments:
+      1. Records created before onboarding completed → company_id is null/empty.
+         These are included alongside exact matches so the operator can see
+         their data immediately without needing an ETL run.
+      2. company_id is falsy (unauthenticated/test) → return all rows.
+
+    For true multi-tenant isolation, ETL should be run so queries hit
+    analytics tables instead of this fallback.
+    """
+    if not company_id or "company_id" not in df.columns:
+        return df.copy()
+
+    exact = df[df["company_id"] == company_id]
+
+    if not exact.empty:
+        return exact.copy()
+
+    # No exact matches — include records with null/empty company_id.
+    # These are "unclaimed" records created before company_id was assigned
+    # (e.g. records added before onboarding was completed).
+    unassigned = df[df["company_id"].isna() | (df["company_id"] == "")]
+    if not unassigned.empty:
+        logger.warning(
+            "_filter_by_company: 0 rows matched company_id=%s; "
+            "returning %d unassigned records (company_id is null). "
+            "Run POST /cron/etl-all and ensure records are saved with company_id set.",
+            company_id, len(unassigned),
+        )
+        return unassigned.copy()
+
+    # No records at all for this company
+    logger.warning(
+        "_filter_by_company: 0 rows matched company_id=%s and no unassigned rows either. "
+        "Total rows in fetched df: %d. "
+        "Ensure BASE44_API_KEY is valid and records are saved with company_id=%s.",
+        company_id, len(df), company_id,
+    )
+    return _pd.DataFrame(columns=df.columns)
+
+
 def _b44_people(company_id: str):
-    """Return Base44 people as a DataFrame, filtered to company_id."""
     try:
         from etl.people import extract_people
         df = extract_people()
-        if not df.empty and company_id:
-            df = df[df["company_id"] == company_id].copy()
-        return df
+        return _filter_by_company(df, company_id)
     except Exception as e:
         logger.warning("_b44_people fallback failed: %s", e)
-        import pandas as pd
-        return pd.DataFrame()
+        return _pd.DataFrame()
 
 
 def _b44_enterprises(company_id: str):
     try:
         from etl.enterprises import extract_enterprises
         df = extract_enterprises()
-        if not df.empty and company_id:
-            df = df[df["company_id"] == company_id].copy()
-        return df
+        return _filter_by_company(df, company_id)
     except Exception as e:
         logger.warning("_b44_enterprises fallback failed: %s", e)
-        import pandas as pd
-        return pd.DataFrame()
+        return _pd.DataFrame()
 
 
 def _b44_transactions(company_id: str):
     try:
         from etl.transactions import extract_transactions
         df = extract_transactions()
-        if not df.empty and company_id:
-            df = df[df["company_id"] == company_id].copy()
-        return df
+        return _filter_by_company(df, company_id)
     except Exception as e:
         logger.warning("_b44_transactions fallback failed: %s", e)
-        import pandas as pd
-        return pd.DataFrame()
+        return _pd.DataFrame()
 
 
 def _b44_tasks(company_id: str):
     try:
         from etl.tasks import extract_tasks
         df = extract_tasks()
-        if not df.empty and company_id:
-            df = df[df["company_id"] == company_id].copy()
-        return df
+        return _filter_by_company(df, company_id)
     except Exception as e:
         logger.warning("_b44_tasks fallback failed: %s", e)
-        import pandas as pd
-        return pd.DataFrame()
+        return _pd.DataFrame()
 
 
 def _b44_products(company_id: str):
     try:
         from etl.products import extract_products
         df = extract_products()
-        if not df.empty and company_id:
-            df = df[df["company_id"] == company_id].copy()
-        return df
+        return _filter_by_company(df, company_id)
     except Exception as e:
         logger.warning("_b44_products fallback failed: %s", e)
-        import pandas as pd
-        return pd.DataFrame()
+        return _pd.DataFrame()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
