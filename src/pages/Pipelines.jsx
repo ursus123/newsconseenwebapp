@@ -49,6 +49,8 @@ export default function Pipelines() {
     retry: false,
   });
 
+  const isSuperAdmin = currentUser?.role === "super_admin";
+
   const triggerEtl = async () => {
     setEtlLoading(true);
     setEtlResult(null);
@@ -85,6 +87,52 @@ export default function Pipelines() {
     }
   };
 
+  const triggerCompanyEtl = async () => {
+    const companyId = currentUser?.company_id;
+    if (!companyId) {
+      toast({
+        title: "Cannot refresh",
+        description: "Your account is not linked to an organisation. Contact support.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setEtlLoading(true);
+    setEtlResult(null);
+    try {
+      const params = new URLSearchParams({ company_id: companyId });
+      const res = await fetch(`${RAILWAY_URL}/cron/etl-company?${params}`, {
+        method: "POST",
+        headers: {
+          ...(CRON_SECRET     ? { "x-cron-secret": CRON_SECRET }     : {}),
+          ...(RAILWAY_API_KEY ? { "x-api-key":     RAILWAY_API_KEY } : {}),
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `Status ${res.status}`);
+      setEtlResult(data);
+      setLastTriggered(new Date().toLocaleTimeString());
+      refetchHealth();
+      toast({
+        title: data.all_success
+          ? `Data refreshed — ${data.success}/${data.total} entities synced`
+          : `Refresh partial — ${data.success}/${data.total} succeeded`,
+        description: data.all_success
+          ? "Your analytics are now up to date."
+          : "Some entities failed. Check results below.",
+        variant: data.all_success ? "default" : "destructive",
+      });
+    } catch (e) {
+      toast({
+        title: "Refresh failed",
+        description: e.message || "Could not reach the pipeline endpoint.",
+        variant: "destructive",
+      });
+    } finally {
+      setEtlLoading(false);
+    }
+  };
+
   const pipelineStats = etlResult ? {
     total:    etlResult.total,
     healthy:  etlResult.success,
@@ -112,17 +160,29 @@ export default function Pipelines() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            onClick={triggerEtl}
-            disabled={etlLoading}
-            className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-          >
-            {etlLoading
-              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Running ETL…</>
-              : <><RefreshCw className="w-4 h-4 mr-2" /> Run Full ETL Now</>
-            }
-          </Button>
-
+          {isSuperAdmin ? (
+            <Button
+              onClick={triggerEtl}
+              disabled={etlLoading}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+            >
+              {etlLoading
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Running ETL…</>
+                : <><RefreshCw className="w-4 h-4 mr-2" /> Run Full ETL Now</>
+              }
+            </Button>
+          ) : (
+            <Button
+              onClick={triggerCompanyEtl}
+              disabled={etlLoading || !currentUser}
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+            >
+              {etlLoading
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Refreshing…</>
+                : <><RefreshCw className="w-4 h-4 mr-2" /> Refresh My Data</>
+              }
+            </Button>
+          )}
         </div>
       </div>
 
@@ -187,6 +247,11 @@ export default function Pipelines() {
           <div className="flex items-center gap-2 mb-3">
             <Database className="w-4 h-4 text-slate-400" />
             <h2 className="text-sm font-bold text-slate-700">Last ETL Run Results</h2>
+            {etlResult.scoped && (
+              <span className="ml-1 px-2 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-700 rounded-full">
+                Your data only
+              </span>
+            )}
             <span className="ml-auto text-xs text-slate-400">Triggered at {lastTriggered}</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">

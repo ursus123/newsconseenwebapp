@@ -78,6 +78,28 @@ def load_dataframe(
     from database import get_engine
 
     # ----------------------------------------------------------
+    # Guard: never write unscoped rows to analytics tables.
+    # Records with no company_id belong to no tenant — writing them
+    # would leak across all tenant queries (WHERE company_id = X
+    # would silently miss them, but aggregate queries would include
+    # them). Raw tables accept all records; analytics must not.
+    # ----------------------------------------------------------
+    if company_id is None and schema == "analytics":
+        logger.warning(
+            "load_dataframe: skipping %s.%s write — company_id is null "
+            "(record has no tenant tag; written to raw.* only)",
+            schema, table_name,
+        )
+        return {
+            "status": "skipped",
+            "reason": "null company_id — raw write only, not analytics",
+            "rows_loaded": 0,
+            "table": f"{schema}.{table_name}",
+            "snapshot_date": str(date.today()),
+            "company_id": None,
+        }
+
+    # ----------------------------------------------------------
     # Guard: never write an empty snapshot
     # An empty DataFrame means Base44 returned no data, which is
     # either a fetch failure or a genuine zero. Either way, writing

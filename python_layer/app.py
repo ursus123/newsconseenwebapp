@@ -618,6 +618,22 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         """Transform + load one entity across all companies. Returns (name, result)."""
         entity_result = {}
         for company_id in company_ids:
+            # Skip analytics write for null company_id — records already in raw.*
+            # These are records created without a tenant tag (e.g. super_admin setup
+            # records). They must not pollute analytics tables with unscoped rows.
+            if company_id is None:
+                logger.info(
+                    "Cron: skipping analytics.%s_summary for null company_id "
+                    "(records already in raw.%s)",
+                    name, name,
+                )
+                if not entity_result:
+                    entity_result = {
+                        "status": "skipped",
+                        "reason": "null company_id — raw write only",
+                        "rows_loaded": 0,
+                    }
+                continue
             try:
                 filtered = filter_by_company(raw_data.get(name, pd.DataFrame()), company_id)
                 summary  = transform_fn(filtered)
@@ -844,6 +860,171 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         "goal_tracking":          goals_result,
         "enhanced_analytics":     enhanced_result,
         "ml_predictions":         ml_result,
+    }
+
+
+# ----------------------------------------------------------
+# Cron — Scoped ETL refresh for a single company (org admin)
+# ----------------------------------------------------------
+@app.post("/cron/etl-company", tags=["Cron"])
+def cron_etl_company(
+    company_id: str = Query(..., description="Tenant company_id to refresh"),
+    x_cron_secret: str = Header(None),
+):
+    """
+    Scoped ETL refresh for a single company/tenant.
+
+    Called by org admins via the 'Refresh My Data' button in Pipelines.jsx.
+    Extracts all Base44 data (no server-side filter is available — Base44
+    returns all records on every call), then filters in-memory to the caller's
+    company_id before transforming and writing to analytics tables.
+
+    Raw tables (raw.*) always receive the full extract — this is correct
+    behaviour because raw.* is a global mirror of Base44. Analytics tables
+    (analytics.*) only receive rows matching the caller's company_id.
+
+    Returns row counts and status scoped to the caller's company only.
+    """
+    _check_cron_secret(x_cron_secret)
+
+    company_id = (company_id or "").strip()
+    if not company_id:
+        raise HTTPException(status_code=400, detail="company_id is required and must not be empty")
+
+    entity_map = {
+        "tasks":         (tasks.extract_tasks,                tasks.transform_tasks),
+        "transactions":  (transactions.extract_transactions,   transactions.transform_transactions),
+        "services":      (services.extract_services,           services.transform_services),
+        "enterprises":   (enterprises.extract_enterprises,     enterprises.transform_enterprises),
+        "people":        (people.extract_people,               people.transform_people),
+        "products":      (products.extract_products,           products.transform_products),
+        "addresses":     (addresses.extract_addresses,         addresses.transform_addresses),
+        "relationships": (relationships.extract_relationships,  relationships.transform_relationships),
+    }
+
+    # ── Step 1: Extract all entities in parallel ──────────────────────────────
+    raw_data: dict[str, pd.DataFrame] = {}
+
+    def _extract_one(name, extract_fn):
+        try:
+            df = extract_fn()
+        except Exception as e:
+            logger.error("ETL-company: %s extract failed — %s", name, e)
+            return name, pd.DataFrame()
+        try:
+            load_raw(df, name)
+            logger.info("ETL-company: raw.%s — %d records written", name, len(df))
+        except Exception as e:
+            logger.warning("ETL-company: raw.%s write failed — %s", name, e)
+        return name, df
+
+    with ThreadPoolExecutor(max_workers=8, thread_name_prefix="etl-co-extract") as pool:
+        futures = {
+            pool.submit(_extract_one, name, extract_fn): name
+            for name, (extract_fn, _) in entity_map.items()
+        }
+        for future in as_completed(futures):
+            name, df = future.result()
+            raw_data[name] = df
+
+    logger.info("ETL-company: parallel extract complete — company_id=%s", company_id)
+
+    # ── Step 2: Verify this company has records ────────────────────────────────
+    has_data = any(
+        "company_id" in df.columns and (df["company_id"] == company_id).any()
+        for df in raw_data.values()
+        if not df.empty
+    )
+    if not has_data:
+        logger.warning(
+            "ETL-company: no records found for company_id=%s — analytics not updated",
+            company_id,
+        )
+        return {
+            "status":     "no_data",
+            "company_id": company_id,
+            "detail":     (
+                "No records found for this company_id in Base44. "
+                "Check that company_id is set correctly on your records."
+            ),
+            "raw_stored": list(raw_data.keys()),
+        }
+
+    # ── Step 3: Transform + load analytics — this company only ───────────────
+    results: dict = {}
+
+    def _transform_one(name, transform_fn):
+        try:
+            filtered = filter_by_company(raw_data.get(name, pd.DataFrame()), company_id)
+            summary  = transform_fn(filtered)
+            r        = load_dataframe(summary, f"{name}_summary", company_id=company_id)
+            return name, r
+        except Exception as e:
+            logger.error(
+                "ETL-company: %s summary failed (company_id=%s) — %s",
+                name, company_id, e,
+            )
+            return name, {"status": "error", "detail": str(e)}
+
+    with ThreadPoolExecutor(max_workers=8, thread_name_prefix="etl-co-transform") as pool:
+        futures = {
+            pool.submit(_transform_one, name, transform_fn): name
+            for name, (_, transform_fn) in entity_map.items()
+        }
+        for future in as_completed(futures):
+            name, r = future.result()
+            results[name] = r
+
+    # ── Step 4: Enhanced analytics for this company ───────────────────────────
+    enhanced_result = {}
+    try:
+        from etl.monthly_kpis import transform_monthly_kpis
+        from etl.entity_index import transform_entity_index
+        from etl.company_scorecard import transform_company_scorecard
+
+        _ppl  = filter_by_company(raw_data.get("people",       pd.DataFrame()), company_id)
+        _txs  = filter_by_company(raw_data.get("transactions",  pd.DataFrame()), company_id)
+        _tsks = filter_by_company(raw_data.get("tasks",         pd.DataFrame()), company_id)
+        _ents = filter_by_company(raw_data.get("enterprises",   pd.DataFrame()), company_id)
+        _prds = filter_by_company(raw_data.get("products",      pd.DataFrame()), company_id)
+
+        try:
+            _kpi_df = transform_monthly_kpis(_ppl, _txs, _tsks)
+            enhanced_result["monthly_kpis"] = load_dataframe_replace(_kpi_df, "monthly_kpis")
+        except Exception as _e:
+            enhanced_result["monthly_kpis"] = {"status": "error", "detail": str(_e)}
+            logger.warning("ETL-company: monthly_kpis failed — %s", _e)
+
+        try:
+            _idx_df = transform_entity_index(_ppl)
+            enhanced_result["entity_index"] = load_dataframe_replace(_idx_df, "entity_index")
+        except Exception as _e:
+            enhanced_result["entity_index"] = {"status": "error", "detail": str(_e)}
+            logger.warning("ETL-company: entity_index failed — %s", _e)
+
+        try:
+            _sc_df = transform_company_scorecard(_ppl, _ents, _txs, _tsks, _prds)
+            enhanced_result["company_scorecard"] = load_dataframe_replace(_sc_df, "company_scorecard")
+        except Exception as _e:
+            enhanced_result["company_scorecard"] = {"status": "error", "detail": str(_e)}
+            logger.warning("ETL-company: company_scorecard failed — %s", _e)
+
+    except Exception as _enh_err:
+        enhanced_result = {"status": "error", "detail": str(_enh_err)}
+        logger.warning("ETL-company: enhanced analytics failed — %s", _enh_err)
+
+    success_count = sum(1 for r in results.values() if r.get("status") == "success")
+
+    return {
+        "cron_run":           True,
+        "version":            "5.0.0",
+        "company_id":         company_id,
+        "scoped":             True,
+        "success":            success_count,
+        "total":              len(results),
+        "all_success":        success_count == len(results),
+        "results":            results,
+        "enhanced_analytics": enhanced_result,
     }
 
 
