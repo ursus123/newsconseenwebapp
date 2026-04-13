@@ -148,6 +148,24 @@ export default function Pipelines() {
   const statusBg    = hasFailures ? "bg-rose-50 border-rose-200" : "bg-emerald-50 border-emerald-200";
   const StatusIcon  = hasFailures ? AlertTriangle : CheckCircle2;
 
+  // ── Org admin view — Pipeline Builder only ─────────────────────────────────
+  if (currentUser && !isSuperAdmin) {
+    return (
+      <div className="flex flex-col gap-6 min-h-full">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-black text-slate-800">My Pipelines</h1>
+            <p className="text-slate-500 text-sm mt-1 max-w-2xl">
+              Build custom data integration pipelines from your organisation's data.
+              Pipelines are private to your organisation and scoped to your data only.
+            </p>
+          </div>
+        </div>
+        <PipelineBuilder currentUser={currentUser} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6 min-h-full">
 

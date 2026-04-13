@@ -331,13 +331,28 @@ function NodeCard({ node, index, isSelected, isFirst, isLast, onSelect, onDelete
 
 // ── NodeConfigPanel ────────────────────────────────────────────────────────────
 
-function NodeConfigPanel({ node, onChange, onClose }) {
+function NodeConfigPanel({ node, onChange, onClose, companyId }) {
   const def = NODE_TYPES[node.type];
   if (!def) return null;
   const Icon = def.icon;
   const isValid = validateNode(node);
 
-  const set = (key, val) => onChange({ ...node, config: { ...node.config, [key]: val } });
+  const set = (key, val) => {
+    const newConfig = { ...node.config, [key]: val };
+    // Auto-inject company_id WHERE filter when a source table is selected.
+    // This ensures pipelines built by org admins are always scoped to their
+    // own data — prevents cross-tenant data access if/when real execution runs.
+    if (node.type === "source" && key === "table" && val && companyId && companyId !== "default") {
+      const scopeClause = `company_id = '${companyId}'`;
+      const existing = (newConfig.filter || "").trim();
+      if (!existing) {
+        newConfig.filter = scopeClause;
+      } else if (!existing.includes("company_id")) {
+        newConfig.filter = `${scopeClause} AND (${existing})`;
+      }
+    }
+    onChange({ ...node, config: newConfig });
+  };
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl shadow-lg overflow-hidden">
@@ -399,6 +414,16 @@ function NodeConfigPanel({ node, onChange, onClose }) {
             )}
           </div>
         ))}
+
+        {/* Scope badge — source nodes always show which tenant they're filtered to */}
+        {node.type === "source" && node.config.table && companyId && companyId !== "default" && (
+          <div className="flex items-center gap-1.5 mt-1 px-2 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            <p className="text-[10px] text-emerald-700 font-medium leading-tight">
+              Scoped to your organisation — <span className="font-mono">{`company_id = '${companyId}'`}</span> is enforced at execution.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -776,6 +801,7 @@ export default function PipelineBuilder({ currentUser }) {
               node={selectedNode}
               onChange={updateNode}
               onClose={() => setSelectedNodeId(null)}
+              companyId={cid}
             />
           </div>
         )}
