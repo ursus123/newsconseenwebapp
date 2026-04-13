@@ -190,15 +190,24 @@ _PUBLIC_PATHS = {
 _CRON_PREFIXES = ("/load/", "/cron/", "/webhook/")
 
 
+_CORS_HEADERS = {
+    "Access-Control-Allow-Origin":  "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+    "Access-Control-Allow-Headers": "x-api-key, Content-Type, Authorization, Accept, X-Requested-With",
+    "Access-Control-Max-Age":       "86400",
+}
+
+
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
+    # Handle CORS preflight directly — return explicit headers so
+    # Starlette's CORSMiddleware wildcard ambiguity never affects us.
+    if request.method == "OPTIONS":
+        from fastapi.responses import Response as _Resp
+        return _Resp(status_code=200, headers=_CORS_HEADERS)
+
     expected = settings.api_key
     if not expected:
-        return await call_next(request)
-
-    # Always pass CORS preflight through — the api_key header is never
-    # sent in OPTIONS requests, so blocking them breaks CORS for all POSTs.
-    if request.method == "OPTIONS":
         return await call_next(request)
 
     path = request.url.path
