@@ -652,3 +652,99 @@ def connector_categories():
             for cat, count in cats.most_common()
         ]
     }
+
+
+# ── Phase 14: Bidirectional Connectors — Write-back routes ────────────────────
+
+class WritebackConfigBody(BaseModel):
+    company_id:      str
+    connector_id:    str
+    entity_types:    list = ["transactions"]
+    conflict_policy: str  = "newsconseen_wins"  # newsconseen_wins | external_wins | flag_review
+    credentials:     dict = {}
+    enabled:         bool = True
+
+
+class WritebackTestBody(BaseModel):
+    company_id:   str
+    connector_id: str
+    entity_type:  str = "transactions"
+    sample_payload: dict = {}
+
+
+@router.post("/writeback/configure", tags=["Phase 14 — Bidirectional"])
+def configure_writeback(body: WritebackConfigBody):
+    """
+    Save or update a write-back config for a connector.
+    Enables Newsconseen to push mutations to the external system.
+    """
+    from connectors.writeback import save_config, WRITEBACK_CAPABLE
+    if body.connector_id not in WRITEBACK_CAPABLE:
+        raise HTTPException(
+            422,
+            f"'{body.connector_id}' does not support write-back. "
+            f"Supported: {sorted(WRITEBACK_CAPABLE)}"
+        )
+    result = save_config(
+        company_id=body.company_id,
+        connector_id=body.connector_id,
+        entity_types=body.entity_types,
+        conflict_policy=body.conflict_policy,
+        credentials=body.credentials,
+        enabled=body.enabled,
+    )
+    return {"status": "saved", "config": result}
+
+
+@router.get("/writeback/config", tags=["Phase 14 — Bidirectional"])
+def get_writeback_configs(company_id: str = Query(...)):
+    """List all active write-back configs for a company (credentials stripped)."""
+    from connectors.writeback import get_configs, WRITEBACK_CAPABLE, WRITEBACK_ENTITIES
+    configs = get_configs(company_id)
+    return {
+        "configs":          configs,
+        "count":            len(configs),
+        "capable":          sorted(WRITEBACK_CAPABLE),
+        "capable_entities": WRITEBACK_ENTITIES,
+    }
+
+
+@router.delete("/writeback/{connector_id}", tags=["Phase 14 — Bidirectional"])
+def delete_writeback(connector_id: str, company_id: str = Query(...)):
+    """Disable write-back for a connector."""
+    from connectors.writeback import delete_config
+    deleted = delete_config(company_id, connector_id)
+    return {"status": "deleted" if deleted else "not_found",
+            "connector_id": connector_id}
+
+
+@router.post("/writeback/test", tags=["Phase 14 — Bidirectional"])
+def test_writeback(body: WritebackTestBody):
+    """
+    Dry-run a write-back push — validates config and connectivity
+    without actually writing to the external system.
+    """
+    from connectors.writeback import push
+    result = push(
+        company_id=body.company_id,
+        connector_id=body.connector_id,
+        entity_type=body.entity_type,
+        payload=body.sample_payload or {
+            "full_name": "Test Record",
+            "amount": 100,
+            "status": "active",
+        },
+        dry_run=True,
+    )
+    return result
+
+
+@router.get("/writeback/log", tags=["Phase 14 — Bidirectional"])
+def writeback_log(
+    company_id: str = Query(...),
+    limit: int  = Query(50, le=200),
+):
+    """Recent write-back push events for a company."""
+    from connectors.writeback import get_push_log
+    events = get_push_log(company_id, limit)
+    return {"events": events, "count": len(events)}

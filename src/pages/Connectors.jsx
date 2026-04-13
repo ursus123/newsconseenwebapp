@@ -7,6 +7,7 @@ import {
   Eye, Play, RefreshCw, AlertTriangle, Table2, Code2,
   Clock, Calendar, CalendarClock, KeyRound,
   Webhook, Copy, Trash2, Plus, ExternalLink, Zap,
+  ArrowUpRight, ToggleLeft, ToggleRight, Shield, Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -1962,6 +1963,367 @@ function WebhookSection({ currentUser }) {
   );
 }
 
+// ── Phase 14: Bidirectional Connectors — Write-back section ──────────────────
+
+const WRITEBACK_CAPABLE = new Set([
+  "google_sheets", "quickbooks_online", "xero",
+  "outbound_webhook", "slack", "sage_pastel",
+]);
+
+const WRITEBACK_LABELS = {
+  google_sheets:     { name: "Google Sheets",    desc: "Append a row on every record change" },
+  quickbooks_online: { name: "QuickBooks Online", desc: "Create invoices and customers" },
+  xero:              { name: "Xero",              desc: "Create invoices and contacts" },
+  outbound_webhook:  { name: "Outbound Webhook",  desc: "POST JSON to any URL" },
+  slack:             { name: "Slack",             desc: "Post a message to a channel" },
+  sage_pastel:       { name: "Sage Pastel",       desc: "Push transactions and contacts" },
+};
+
+const CONFLICT_LABELS = {
+  newsconseen_wins: "Newsconseen wins — always push our data",
+  external_wins:    "External wins — log conflict, don't overwrite",
+  flag_review:      "Flag for review — push + mark record for operator review",
+};
+
+const ENTITY_OPTIONS = [
+  { id: "people",       label: "People" },
+  { id: "enterprises",  label: "Enterprises" },
+  { id: "products",     label: "Products" },
+  { id: "transactions", label: "Transactions" },
+  { id: "tasks",        label: "Tasks" },
+];
+
+function WritebackSection({ currentUser }) {
+  const companyId = currentUser?.company_id;
+  const { toast }  = useToast();
+
+  const [configModalId, setConfigModalId] = useState(null); // connector_id being configured
+  const [form, setForm] = useState({
+    entity_types:    ["transactions"],
+    conflict_policy: "newsconseen_wins",
+    credentials:     {},
+    enabled:         true,
+  });
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  const { data: wbData, isLoading, refetch } = useQuery({
+    queryKey: ["writeback-configs", companyId],
+    queryFn: async () => {
+      if (!companyId) return { configs: [], capable: [] };
+      const res = await fetch(`${RAILWAY_URL}/connectors/writeback/config?company_id=${companyId}`, { headers: API_HEADERS });
+      if (!res.ok) return { configs: [], capable: [] };
+      return res.json();
+    },
+    enabled: !!companyId,
+    staleTime: 30_000,
+  });
+
+  const { data: logData } = useQuery({
+    queryKey: ["writeback-log", companyId],
+    queryFn: async () => {
+      if (!companyId) return { events: [] };
+      const res = await fetch(`${RAILWAY_URL}/connectors/writeback/log?company_id=${companyId}&limit=20`, { headers: API_HEADERS });
+      if (!res.ok) return { events: [] };
+      return res.json();
+    },
+    enabled: !!companyId,
+    staleTime: 15_000,
+    refetchInterval: 60_000,
+  });
+
+  const configs     = wbData?.configs  || [];
+  const pushLog     = logData?.events  || [];
+  const configMap   = Object.fromEntries(configs.map(c => [c.connector_id, c]));
+  const capable     = [...WRITEBACK_CAPABLE];
+
+  const openConfig = (connectorId) => {
+    const existing = configMap[connectorId];
+    setForm(existing
+      ? { entity_types: existing.entity_types, conflict_policy: existing.conflict_policy,
+          credentials: {}, enabled: existing.enabled }
+      : { entity_types: ["transactions"], conflict_policy: "newsconseen_wins", credentials: {}, enabled: true }
+    );
+    setConfigModalId(connectorId);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`${RAILWAY_URL}/connectors/writeback/configure`, {
+        method: "POST",
+        headers: { ...API_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: companyId, connector_id: configModalId, ...form }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setConfigModalId(null);
+      refetch();
+      toast({ title: "Write-back configured" });
+    } catch (e) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      const res = await fetch(`${RAILWAY_URL}/connectors/writeback/test`, {
+        method: "POST",
+        headers: { ...API_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: companyId, connector_id: configModalId,
+          entity_type: form.entity_types[0] || "transactions" }),
+      });
+      const data = await res.json();
+      toast({ title: data.pushed ? "Test successful" : "Test failed",
+              description: data.error || (data.dry_run ? "Dry run — no data was sent" : ""),
+              variant: data.pushed ? "default" : "destructive" });
+    } catch (e) {
+      toast({ title: "Test error", description: e.message, variant: "destructive" });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleDisable = async (connectorId) => {
+    if (!window.confirm("Disable write-back for this connector?")) return;
+    try {
+      await fetch(`${RAILWAY_URL}/connectors/writeback/${connectorId}?company_id=${companyId}`, {
+        method: "DELETE", headers: API_HEADERS,
+      });
+      refetch();
+      toast({ title: "Write-back disabled" });
+    } catch {
+      toast({ title: "Error", variant: "destructive" });
+    }
+  };
+
+  const toggleEntityType = (id) => {
+    setForm(f => ({
+      ...f,
+      entity_types: f.entity_types.includes(id)
+        ? f.entity_types.filter(e => e !== id)
+        : [...f.entity_types, id],
+    }));
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+            <ArrowUpRight className="w-5 h-5 text-purple-600" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">Bidirectional Connectors</h2>
+            <p className="text-sm text-slate-500">Push Newsconseen changes back to your connected systems</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Capable connectors grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {capable.map(connId => {
+          const meta       = WRITEBACK_LABELS[connId] || { name: connId, desc: "" };
+          const configured = configMap[connId];
+          const isActive   = configured?.enabled;
+
+          return (
+            <div key={connId} className={`bg-white border rounded-xl p-5 space-y-3 transition-all ${
+              isActive ? "border-purple-200 shadow-sm" : "border-slate-200"
+            }`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-slate-800">{meta.name}</p>
+                    {isActive && (
+                      <span className="text-[9px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">ACTIVE</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">{meta.desc}</p>
+                </div>
+                {isActive
+                  ? <button onClick={() => handleDisable(connId)} className="text-slate-400 hover:text-rose-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                  : null
+                }
+              </div>
+
+              {configured && (
+                <div className="text-xs text-slate-500 space-y-1">
+                  <p>Entities: {configured.entity_types?.join(", ") || "—"}</p>
+                  <p>Policy: {configured.conflict_policy?.replace(/_/g, " ")}</p>
+                  {configured.last_pushed_at && (
+                    <p>Last push: {new Date(configured.last_pushed_at).toLocaleString()}</p>
+                  )}
+                  {configured.push_count > 0 && (
+                    <p className="flex items-center gap-1 text-purple-600 font-medium">
+                      <Activity className="w-3 h-3" />{configured.push_count} pushes
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={() => openConfig(connId)}
+                className={`w-full text-xs font-semibold py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
+                  isActive
+                    ? "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200"
+                    : "bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200"
+                }`}
+              >
+                <ArrowUpRight className="w-3.5 h-3.5" />
+                {isActive ? "Edit Sync Back" : "Enable Sync Back ↗"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Push log */}
+      {pushLog.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-purple-500" /> Recent Pushes
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  {["Connector", "Entity", "Status", "Time"].map(h => (
+                    <th key={h} className="px-3 py-2 text-left font-semibold text-slate-600">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pushLog.map((ev, i) => (
+                  <tr key={i} className="border-b border-slate-100">
+                    <td className="px-3 py-2 text-slate-700 font-medium">{WRITEBACK_LABELS[ev.connector_id]?.name || ev.connector_id}</td>
+                    <td className="px-3 py-2 text-slate-600 capitalize">{ev.entity_type}</td>
+                    <td className="px-3 py-2">
+                      {ev.pushed
+                        ? <span className="text-emerald-600 font-medium">Pushed</span>
+                        : ev.conflict
+                          ? <span className="text-amber-600 font-medium">Conflict</span>
+                          : <span className="text-rose-600 font-medium">Failed</span>
+                      }
+                    </td>
+                    <td className="px-3 py-2 text-slate-400">{ev.pushed_at ? new Date(ev.pushed_at).toLocaleTimeString() : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Config modal */}
+      {configModalId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">
+                  {WRITEBACK_LABELS[configModalId]?.name} — Sync Back
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">{WRITEBACK_LABELS[configModalId]?.desc}</p>
+              </div>
+              <button onClick={() => setConfigModalId(null)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+
+            {/* Entity types */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-2">Which entity types to sync back</label>
+              <div className="flex flex-wrap gap-2">
+                {ENTITY_OPTIONS.map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => toggleEntityType(opt.id)}
+                    className={`text-xs px-3 py-1 rounded-full border font-medium transition-colors ${
+                      form.entity_types.includes(opt.id)
+                        ? "bg-purple-100 border-purple-300 text-purple-700"
+                        : "bg-white border-slate-300 text-slate-600 hover:border-purple-300"
+                    }`}
+                  >{opt.label}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Conflict policy */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-2">Conflict resolution</label>
+              <div className="space-y-2">
+                {Object.entries(CONFLICT_LABELS).map(([key, label]) => (
+                  <label key={key} className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="radio" name="conflict_policy" value={key}
+                      checked={form.conflict_policy === key}
+                      onChange={() => setForm(f => ({ ...f, conflict_policy: key }))}
+                      className="mt-0.5"
+                    />
+                    <span className="text-xs text-slate-700">{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Credentials */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-2">
+                Credentials / Connection
+                {configModalId === "outbound_webhook" && " — enter target URL"}
+                {configModalId === "slack" && " — Slack incoming webhook URL"}
+                {configModalId === "google_sheets" && " — Google API access token + spreadsheet ID"}
+              </label>
+              {(configModalId === "outbound_webhook" || configModalId === "slack") && (
+                <input
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  placeholder={configModalId === "slack" ? "https://hooks.slack.com/services/..." : "https://your-system.com/webhook"}
+                  value={configModalId === "slack" ? (form.credentials.webhook_url || "") : (form.credentials.url || "")}
+                  onChange={e => {
+                    const key = configModalId === "slack" ? "webhook_url" : "url";
+                    setForm(f => ({ ...f, credentials: { ...f.credentials, [key]: e.target.value } }));
+                  }}
+                />
+              )}
+              {configModalId === "google_sheets" && (
+                <div className="space-y-2">
+                  <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" placeholder="Spreadsheet ID"
+                    value={form.credentials.spreadsheet_id || ""}
+                    onChange={e => setForm(f => ({ ...f, credentials: { ...f.credentials, spreadsheet_id: e.target.value } }))} />
+                  <input className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" placeholder="Access token"
+                    value={form.credentials.access_token || ""}
+                    onChange={e => setForm(f => ({ ...f, credentials: { ...f.credentials, access_token: e.target.value } }))} />
+                </div>
+              )}
+              {(configModalId === "quickbooks_online" || configModalId === "xero") && (
+                <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
+                  Uses credentials from your connected {WRITEBACK_LABELS[configModalId]?.name} connector.
+                  Make sure the connector is connected before enabling sync back.
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button onClick={handleTest} disabled={testing}
+                className="flex-1 px-3 py-2 border border-slate-300 text-slate-700 rounded-lg text-sm hover:bg-slate-50 flex items-center justify-center gap-1.5 disabled:opacity-50">
+                {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+                Test
+              </button>
+              <button onClick={handleSave} disabled={saving}
+                className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowUpRight className="w-3.5 h-3.5" />}
+                Save & Enable
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Connectors() {
@@ -2521,6 +2883,11 @@ export default function Connectors() {
       {/* Section 5: Live Data Feeds */}
       <div>
         <WebhookSection currentUser={currentUser} />
+      </div>
+
+      {/* Section 6: Bidirectional Connectors — Sync Back */}
+      <div>
+        <WritebackSection currentUser={currentUser} />
       </div>
     </div>
   );

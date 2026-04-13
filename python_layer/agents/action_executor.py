@@ -244,6 +244,24 @@ _HANDLERS = {
 }
 
 
+def _push_to_connected_systems(company_id: str, entity_type: str, payload: dict) -> None:
+    """
+    Phase 14: Fire-and-forget push to all active write-back connectors.
+    Called after every successful Base44 mutation.
+    Failures are logged but never bubble up to the caller.
+    """
+    try:
+        from connectors.writeback import push_all
+        import threading
+        threading.Thread(
+            target=push_all,
+            args=(company_id, entity_type, payload),
+            daemon=True,
+        ).start()
+    except Exception as e:
+        logger.debug("action_executor: write-back push skipped — %s", e)
+
+
 def execute_action(
     action_type: str,
     action_payload: dict,
@@ -297,6 +315,9 @@ def execute_action(
         if executed:
             logger.info("action_executor: ✓ %s/%s entity_id=%s",
                         agent_name, action_type, entity_id)
+            # Phase 14: push to any active bidirectional connectors
+            if entity_type:
+                _push_to_connected_systems(company_id, entity_type, inputs)
         else:
             logger.warning("action_executor: ✗ %s/%s error=%s",
                            agent_name, action_type, error)
