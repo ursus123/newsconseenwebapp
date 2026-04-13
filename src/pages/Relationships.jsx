@@ -30,8 +30,23 @@ import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 const triggerETL = (entity) =>
   fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
+function triggerWorkflows(companyId, triggerType, entityData) {
+  fetch(`${RAILWAY_URL}/workflows/trigger`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "relationship", entity_data: entityData }),
+  }).catch(() => {});
+}
+function logAudit(companyId, action, record, userEmail) {
+  fetch(`${RAILWAY_URL}/audit/log`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+    body: JSON.stringify({ company_id: companyId, entity_type: "relationship", entity_id: record?.id, entity_name: record?.relationship_type || record?.id, action, changed_by: userEmail }),
+  }).catch(() => {});
+}
 
 const TYPE_CONFIG = {
   person_enterprise:    { label: "Person → Enterprise",    color: "bg-blue-50 text-blue-700" },
@@ -147,6 +162,8 @@ export default function Relationships() {
       qc.invalidateQueries({ queryKey: ["relationships"] });
       qc.refetchQueries({ queryKey: ["relationships"] });
       triggerETL("relationship");
+      logAudit(currentUser?.company_id, "updated", editing, currentUser?.email);
+      triggerWorkflows(currentUser?.company_id, "entity_updated", editing);
       setFormOpen(false);
       setEditing(null);
       setEndTarget(null);
@@ -155,17 +172,19 @@ export default function Relationships() {
   });
   const deleteMut = useMutation({
     mutationFn: (id) => base44.entities.Relationship.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); qc.refetchQueries({ queryKey: ["relationships"] }); triggerETL("relationship"); setDeleting(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); qc.refetchQueries({ queryKey: ["relationships"] }); triggerETL("relationship"); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); },
   });
 
   const handleSubmit = (data, saveAndNew = false) => {
     if (editing) {
       updateMut.mutate({ id: editing.id, data });
     } else {
-      base44.entities.Relationship.create(withScope(data)).then(() => {
+      base44.entities.Relationship.create(withScope(data)).then((created) => {
         qc.invalidateQueries({ queryKey: ["relationships"] });
         qc.refetchQueries({ queryKey: ["relationships"] });
         triggerETL("relationship");
+        logAudit(currentUser?.company_id, "created", created, currentUser?.email);
+        triggerWorkflows(currentUser?.company_id, "entity_created", created);
         toast({ title: "Relationship created" });
         if (saveAndNew) {
           setEditing(null);

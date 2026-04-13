@@ -31,8 +31,23 @@ import { generateInvoiceNumber } from "@/utils/autoInvoice";
 import { DateRangeInput3 } from "@blueprintjs/datetime2";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 const triggerETL = (entity) =>
   fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
+function triggerWorkflows(companyId, triggerType, entityData) {
+  fetch(`${RAILWAY_URL}/workflows/trigger`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "transaction", entity_data: entityData }),
+  }).catch(() => {});
+}
+function logAudit(companyId, action, record, userEmail) {
+  fetch(`${RAILWAY_URL}/audit/log`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+    body: JSON.stringify({ company_id: companyId, entity_type: "transaction", entity_id: record?.id, entity_name: record?.reference_number || record?.transaction_type || record?.id, action, changed_by: userEmail }),
+  }).catch(() => {});
+}
 
 const STOCK_IMPACT_TYPES = ["stock_out", "item_assignment"];
 const STOCK_IN_TYPES = ["stock_in", "item_return"];
@@ -302,13 +317,13 @@ export default function Transactions() {
       existingTransactions: transactions,
       enterprise:      enterprises.find(e => e.enterprise_name === data.enterprise),
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); setFormOpen(false); triggerETL("transaction"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); setFormOpen(false); triggerETL("transaction"); logAudit(companyId, "created", editing, currentUser?.email); triggerWorkflows(companyId, "entity_created", editing); },
     onError: (e) => toast({ title: "Failed to create transaction", description: e.message, variant: "destructive" }),
   });
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Transaction.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); triggerETL("transaction"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); triggerETL("transaction"); logAudit(companyId, "updated", editing, currentUser?.email); triggerWorkflows(companyId, "entity_updated", editing); },
   });
 
   // Period filtering — preset buttons OR custom Blueprint date range

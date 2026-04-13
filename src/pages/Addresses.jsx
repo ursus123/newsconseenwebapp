@@ -27,8 +27,23 @@ import {
 } from "@/components/shared/importConfigs";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 const triggerETL = (entity) =>
   fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
+function triggerWorkflows(companyId, triggerType, entityData) {
+  fetch(`${RAILWAY_URL}/workflows/trigger`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "address", entity_data: entityData }),
+  }).catch(() => {});
+}
+function logAudit(companyId, action, record, userEmail) {
+  fetch(`${RAILWAY_URL}/audit/log`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+    body: JSON.stringify({ company_id: companyId, entity_type: "address", entity_id: record?.id, entity_name: [record?.address_line1, record?.city].filter(Boolean).join(", ") || record?.id, action, changed_by: userEmail }),
+  }).catch(() => {});
+}
 
 const statusColor = (s) => ({
   active: "bg-emerald-50 text-emerald-700",
@@ -115,7 +130,7 @@ export default function Addresses() {
       }
       return base44.entities.Address.create(withScope(data));
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); triggerETL("address"); setFormOpen(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); triggerETL("address"); logAudit(currentUser?.company_id, "created", editing, currentUser?.email); triggerWorkflows(currentUser?.company_id, "entity_created", editing); setFormOpen(false); },
   });
 
   const updateMut = useMutation({
@@ -132,6 +147,8 @@ export default function Addresses() {
       qc.invalidateQueries({ queryKey: ["addresses"] });
       qc.refetchQueries({ queryKey: ["addresses"] });
       triggerETL("address");
+      logAudit(currentUser?.company_id, "updated", editing, currentUser?.email);
+      triggerWorkflows(currentUser?.company_id, "entity_updated", editing);
       setFormOpen(false); setEditing(null);
       if (detailAddress) setDetailAddress(null);
     },
@@ -139,7 +156,7 @@ export default function Addresses() {
 
   const deleteMut = useMutation({
     mutationFn: (id) => base44.entities.Address.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); triggerETL("address"); setDeleting(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); triggerETL("address"); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); },
   });
 
   const handleSubmit = (data, saveAndNew = false) => {

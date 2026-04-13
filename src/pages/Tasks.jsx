@@ -36,8 +36,23 @@ import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 const triggerETL = (entity) =>
   fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
+function triggerWorkflows(companyId, triggerType, entityData) {
+  fetch(`${RAILWAY_URL}/workflows/trigger`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "task", entity_data: entityData }),
+  }).catch(() => {});
+}
+function logAudit(companyId, action, record, userEmail) {
+  fetch(`${RAILWAY_URL}/audit/log`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+    body: JSON.stringify({ company_id: companyId, entity_type: "task", entity_id: record?.id, entity_name: record?.title || record?.id, action, changed_by: userEmail }),
+  }).catch(() => {});
+}
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -250,7 +265,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
 
   const createMut = useMutation({
     mutationFn: async (d) => base44.entities.Task.create(withScope({ ...d, app_source: d.app_source || "manual" })),
-    onSuccess: () => { setFormOpen(false); invalidate(); triggerETL("task"); },
+    onSuccess: () => { setFormOpen(false); invalidate(); triggerETL("task"); logAudit(companyId, "created", editing, currentUser?.email); triggerWorkflows(companyId, "entity_created", editing); },
   });
   const updateMut = useMutation({
     mutationFn: async ({ id, data }) => {
@@ -266,9 +281,9 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
       }
       return task;
     },
-    onSuccess: () => { setFormOpen(false); setEditing(null); invalidate(); triggerETL("task"); },
+    onSuccess: () => { setFormOpen(false); setEditing(null); invalidate(); triggerETL("task"); logAudit(companyId, "updated", editing, currentUser?.email); triggerWorkflows(companyId, "entity_updated", editing); },
   });
-  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Task.delete(id), onSuccess: () => { invalidate(); setDeleting(null); triggerETL("task"); } });
+  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Task.delete(id), onSuccess: () => { invalidate(); logAudit(companyId, "deleted", deleting, currentUser?.email); setDeleting(null); triggerETL("task"); } });
 
   const filtered = (() => {
     let list = search ? fuzzyFilter(tasks, search, ["title", "enterprise", "assigned_to_name", "related_person", "outcome_notes"]) : [...tasks];
