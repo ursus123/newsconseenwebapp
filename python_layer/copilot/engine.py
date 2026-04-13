@@ -218,6 +218,35 @@ RULES:
   after the next scheduled run (or the operator can trigger POST /cron/etl-all)."""
 
 
+def _get_readiness_note(company_id: str) -> str:
+    """
+    Return a brief data-quality note to include in the system prompt.
+    Only included when score < 80 or critical issues exist.
+    Reads from the dataquality in-memory cache — zero network cost.
+    """
+    try:
+        from dataquality.routes import _CACHE, _is_stale
+        cached = _CACHE.get(company_id)
+        if not cached or _is_stale(cached):
+            return ""
+        score    = cached.get("overall_score", 100)
+        critical = cached.get("critical_count", 0)
+        if score >= 80 and critical == 0:
+            return ""
+        issues        = cached.get("issues", [])
+        critical_msgs = [i["message"] for i in issues if i["severity"] == "critical"][:3]
+        lines = [f"DATA QUALITY NOTE (AI Readiness Score: {score}/100)"]
+        if critical_msgs:
+            lines.append("Critical data gaps detected: " + "; ".join(critical_msgs))
+        lines.append(
+            "When your answer draws on entities with critical gaps, note that "
+            "figures may be understated and recommend the operator check Settings > AI Readiness."
+        )
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 def build_system_prompt(company_id: str) -> str:
     """
     Build the runtime system prompt.
@@ -225,6 +254,7 @@ def build_system_prompt(company_id: str) -> str:
       1. Newsconseen self-knowledge (what the system is)
       2. Operator identity (who THIS operator is)
       3. Tool instructions (how to use the tools)
+      4. Data quality note (only when score < 80 or critical issues exist)
     """
     ctx    = get_operator_context(company_id)
     name   = ctx.get("name", "this organisation")
@@ -242,7 +272,9 @@ def build_system_prompt(company_id: str) -> str:
         + (f"Website: {ctx['website']}\n" if ctx.get("website") else "")
     )
 
-    return f"{_SELF_KNOWLEDGE}\n\n{operator_identity}\n\n{_BASE_INSTRUCTIONS}"
+    readiness_note = _get_readiness_note(company_id)
+    base = f"{_SELF_KNOWLEDGE}\n\n{operator_identity}\n\n{_BASE_INSTRUCTIONS}"
+    return f"{base}\n\n{readiness_note}" if readiness_note else base
 
 
 # ── Core tool loop ───────────────────────────────────────────────────────────

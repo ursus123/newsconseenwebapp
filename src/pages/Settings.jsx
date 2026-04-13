@@ -10,6 +10,7 @@ import {
   Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X, Settings as SettingsIcon, Palette, Bug,
   Globe, Copy, Trash2, Loader2, Brain, Zap, CheckCircle2, Clock,
   ScrollText, Download, Filter, RefreshCw, Send, Plus,
+  TrendingUp, ChevronRight, ShieldCheck,
 } from "lucide-react";
 import BrandingSection from "@/components/settings/BrandingSection";
 import ErrorLogSection from "@/components/settings/ErrorLogSection";
@@ -215,6 +216,7 @@ const ALL_TABS = [
   { id: "autotask",      label: "Auto-Remediation", icon: Zap,          adminOnly: true  },
   { id: "goals",         label: "KPI Goals",        icon: Calendar,     adminOnly: true  },
   { id: "audit",         label: "Audit Trail",      icon: ScrollText,   adminOnly: true  },
+  { id: "readiness",     label: "AI Readiness",   icon: ShieldCheck,  adminOnly: true  },
   { id: "error_log",     label: "Error Log",      icon: Bug,           adminOnly: true  },
   { id: "danger",        label: "Danger Zone",    icon: AlertTriangle, adminOnly: false },
 ];
@@ -300,6 +302,7 @@ export default function Settings() {
           {activeTab === "autotask"      && <AutoTaskSection user={user} />}
           {activeTab === "goals"         && <GoalsSection user={user} />}
           {activeTab === "audit"         && <AuditTrailSection user={user} />}
+          {activeTab === "readiness"     && <AIReadinessSection user={user} />}
           {activeTab === "error_log"     && <ErrorLogSection user={user} />}
           {activeTab === "danger"        && <DangerSection user={user} />}
         </div>
@@ -856,6 +859,261 @@ function AuditTrailSection({ user }) {
           </div>
         </Card>
       )}
+    </div>
+  );
+}
+
+
+// ── AI Readiness Section ─────────────────────────────────────────────────────
+const RAILWAY_URL_READINESS = "https://newsconseenwebapp-production.up.railway.app";
+
+const ENTITY_LABELS = {
+  people:        { label: "People",        emoji: "👥" },
+  enterprises:   { label: "Enterprises",   emoji: "🏢" },
+  products:      { label: "Products",      emoji: "📦" },
+  tasks:         { label: "Tasks",         emoji: "✅" },
+  transactions:  { label: "Transactions",  emoji: "💳" },
+  relationships: { label: "Relationships", emoji: "🔗" },
+  addresses:     { label: "Addresses",     emoji: "📍" },
+};
+
+function scoreColor(score) {
+  if (score >= 90) return { bar: "bg-emerald-500", text: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" };
+  if (score >= 75) return { bar: "bg-blue-500",    text: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200"    };
+  if (score >= 60) return { bar: "bg-amber-500",   text: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-200"   };
+  return                   { bar: "bg-rose-500",   text: "text-rose-600",    bg: "bg-rose-50",    border: "border-rose-200"    };
+}
+
+function gradeLabel(grade) {
+  return {
+    A: "Excellent — your data is AI-ready",
+    B: "Good — minor gaps won't materially affect AI answers",
+    C: "Fair — some gaps may cause the AI to underestimate figures",
+    D: "Poor — significant gaps will reduce AI accuracy",
+    F: "Critical — AI answers may be unreliable until data is fixed",
+  }[grade] || "";
+}
+
+function AIReadinessSection({ user }) {
+  const [report,     setReport]     = useState(null);
+  const [loading,    setLoading]    = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const companyId = user?.company_id;
+
+  const fetchReport = async (force = false) => {
+    if (!companyId) return;
+    setLoading(!force);
+    setRefreshing(force);
+    try {
+      const res = await fetch(
+        `${RAILWAY_URL_READINESS}/dataquality/report?company_id=${companyId}${force ? "&force=true" : ""}`,
+      );
+      if (res.ok) setReport(await res.json());
+    } catch { /* silent */ } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => { fetchReport(false); }, [companyId]);
+
+  if (loading) return (
+    <Card className="p-8 flex items-center justify-center gap-3">
+      <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
+      <span className="text-sm text-slate-500">Evaluating your data…</span>
+    </Card>
+  );
+
+  if (!report) return (
+    <Card className="p-8 text-center">
+      <Brain className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+      <p className="text-sm text-slate-500">Could not load readiness report.</p>
+      <button onClick={() => fetchReport(false)} className="mt-3 text-xs text-emerald-600 hover:underline">Try again</button>
+    </Card>
+  );
+
+  const score  = report.overall_score ?? 100;
+  const grade  = report.grade ?? "A";
+  const colors = scoreColor(score);
+  const evaluatedAt = report.evaluated_at
+    ? new Date(report.evaluated_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    : null;
+
+  const criticalIssues = (report.issues || []).filter(i => i.severity === "critical");
+  const warningIssues  = (report.issues || []).filter(i => i.severity === "warning");
+  const entities = Object.entries(report.by_entity || {}).sort((a, b) => a[1] - b[1]);
+
+  return (
+    <div className="space-y-4">
+      {/* Overall score card */}
+      <Card className={`p-5 border ${colors.border} ${colors.bg}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {/* Big score */}
+            <div className={`w-20 h-20 rounded-2xl bg-white border ${colors.border} shadow-sm flex flex-col items-center justify-center shrink-0`}>
+              <span className={`text-3xl font-black ${colors.text}`}>{score}</span>
+              <span className="text-[10px] text-slate-400 font-medium">/100</span>
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-2xl font-black ${colors.text}`}>Grade {grade}</span>
+                <Brain className={`w-5 h-5 ${colors.text}`} />
+              </div>
+              <p className="text-sm text-slate-600 max-w-sm">{gradeLabel(grade)}</p>
+              {evaluatedAt && (
+                <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Evaluated {evaluatedAt}
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => fetchReport(true)}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
+
+        {/* Overall progress bar */}
+        <div className="mt-4">
+          <div className="flex justify-between text-[11px] text-slate-500 mb-1">
+            <span>AI readiness</span>
+            <span>{score}%</span>
+          </div>
+          <div className="h-2 bg-white/60 rounded-full overflow-hidden border border-white/40">
+            <div
+              className={`h-full ${colors.bar} rounded-full transition-all duration-700`}
+              style={{ width: `${score}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Quick stats */}
+        <div className="mt-3 flex gap-3">
+          {report.critical_count > 0 && (
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-medium">
+              {report.critical_count} critical issue{report.critical_count !== 1 ? "s" : ""}
+            </span>
+          )}
+          {report.warning_count > 0 && (
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+              {report.warning_count} warning{report.warning_count !== 1 ? "s" : ""}
+            </span>
+          )}
+          {report.critical_count === 0 && report.warning_count === 0 && (
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" /> No issues found
+            </span>
+          )}
+        </div>
+      </Card>
+
+      {/* Per-entity scores */}
+      {entities.length > 0 && (
+        <Card className="p-5">
+          <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-4">
+            <TrendingUp className="w-4 h-4 text-slate-400" />
+            Score by Entity
+          </h3>
+          <div className="space-y-3">
+            {entities.map(([entity, entityScore]) => {
+              const meta     = ENTITY_LABELS[entity] || { label: entity, emoji: "📋" };
+              const records  = report.record_counts?.[entity] ?? 0;
+              const eColors  = scoreColor(entityScore);
+              return (
+                <div key={entity}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                      <span>{meta.emoji}</span>
+                      {meta.label}
+                      {records > 0 && (
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          ({records.toLocaleString()} records)
+                        </span>
+                      )}
+                    </span>
+                    <span className={`text-xs font-bold ${eColors.text}`}>{entityScore}</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${eColors.bar} rounded-full transition-all duration-500`}
+                      style={{ width: `${entityScore}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Issues to fix */}
+      {(criticalIssues.length > 0 || warningIssues.length > 0) && (
+        <Card className="p-5">
+          <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-3">
+            <AlertTriangle className="w-4 h-4 text-slate-400" />
+            Issues to Fix
+          </h3>
+          <div className="space-y-2">
+            {[...criticalIssues, ...warningIssues].slice(0, 12).map((issue, i) => (
+              <div
+                key={i}
+                className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border ${
+                  issue.severity === "critical"
+                    ? "bg-rose-50 border-rose-100"
+                    : "bg-amber-50 border-amber-100"
+                }`}
+              >
+                <span className="text-base shrink-0 mt-0.5" aria-hidden="true">
+                  {issue.severity === "critical" ? "🔴" : "🟡"}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-xs font-semibold ${
+                    issue.severity === "critical" ? "text-rose-700" : "text-amber-700"
+                  }`}>
+                    {issue.message}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{issue.suggested_action}</p>
+                </div>
+                {issue.page && (
+                  <a
+                    href={`/${issue.page}`}
+                    className={`shrink-0 flex items-center gap-0.5 text-[11px] font-semibold whitespace-nowrap ${
+                      issue.severity === "critical" ? "text-rose-600 hover:text-rose-800" : "text-amber-600 hover:text-amber-800"
+                    }`}
+                  >
+                    Fix <ChevronRight className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* What this means */}
+      <Card className="p-4 bg-slate-50 border-slate-200">
+        <div className="flex items-start gap-3">
+          <ShieldCheck className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+          <div className="text-xs text-slate-500 space-y-1">
+            <p className="font-semibold text-slate-600">What does this score mean?</p>
+            <p>
+              The AI Readiness Score measures how reliably the Copilot and Agents can answer questions
+              about your organisation. Missing required fields, duplicate records, and invalid values
+              reduce accuracy — the AI may underestimate headcounts, revenue, or task completion rates
+              when the underlying data has gaps.
+            </p>
+            <p>
+              A score of <strong>90+</strong> means the AI can answer with high confidence.
+              Below <strong>60</strong>, consider fixing critical issues before relying on AI-generated insights
+              for decisions.
+            </p>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
