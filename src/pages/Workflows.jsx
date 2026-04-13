@@ -911,8 +911,8 @@ export default function Workflows() {
                 </div>
               );
             })}
-            </div>   {/* end workflow list */}
-          </div>     {/* end space-y-6 */}
+            </div>
+          </div>
         )
       )}
 
