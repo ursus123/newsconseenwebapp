@@ -5,6 +5,7 @@ import {
   Plug, CheckCircle2, AlertCircle, XCircle, Loader2,
   Database, Cloud, HardDrive, X, ChevronRight, ChevronDown,
   Eye, Play, RefreshCw, AlertTriangle, Table2, Code2,
+  Clock, Calendar, CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -274,6 +275,206 @@ function ApiConnectModal({ connector, companyId, onClose }) {
               Sync Again
             </Button>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ── ScheduleModal ────────────────────────────────────────────────────────────
+// Lets the operator set an automatic sync schedule for any API connector.
+const FREQ_OPTIONS = [
+  { id: "manual",  label: "Manual only",   desc: "Run only when you click Connect & Sync" },
+  { id: "hourly",  label: "Every hour",    desc: "Runs at the top of each hour (UTC)" },
+  { id: "daily",   label: "Daily",         desc: "Runs once per day at the specified hour (UTC)" },
+  { id: "weekly",  label: "Weekly",        desc: "Runs on the chosen weekday at the specified hour" },
+  { id: "monthly", label: "Monthly",       desc: "Runs on the chosen day of the month" },
+];
+const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function ScheduleModal({ connector, companyId, existingSchedule, onClose, onSaved }) {
+  const { toast } = useToast();
+  const [frequency,  setFrequency]  = useState(existingSchedule?.frequency  || "manual");
+  const [runAtHour,  setRunAtHour]  = useState(existingSchedule?.run_at_hour ?? 0);
+  const [runAtDay,   setRunAtDay]   = useState(existingSchedule?.run_at_day  ?? 1);
+  const [entityType, setEntityType] = useState(existingSchedule?.entity_type || "people");
+  const [saving,     setSaving]     = useState(false);
+
+  async function saveSchedule() {
+    setSaving(true);
+    try {
+      const res = await fetch(`${RAILWAY_URL}/connectors/schedule`, {
+        method: "POST",
+        headers: { ...API_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company_id:     companyId,
+          connector_id:   connector.id,
+          connector_name: connector.name,
+          frequency,
+          run_at_hour:    parseInt(runAtHour, 10),
+          run_at_day:     parseInt(runAtDay, 10),
+          entity_type:    entityType,
+          is_active:      true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      toast({ title: `${connector.name} schedule saved`, description: frequency === "manual" ? "Manual sync only" : `Next run: ${data.next_run_at ? new Date(data.next_run_at).toLocaleString() : "—"}` });
+      onSaved && onSaved(data);
+      onClose();
+    } catch (e) {
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeSchedule() {
+    if (!existingSchedule) { onClose(); return; }
+    try {
+      await fetch(`${RAILWAY_URL}/connectors/schedule/${connector.id}?company_id=${companyId}`, {
+        method: "DELETE",
+        headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+      });
+      toast({ title: `${connector.name} schedule removed` });
+      onSaved && onSaved(null);
+      onClose();
+    } catch (e) {
+      toast({ title: "Remove failed", description: e.message, variant: "destructive" });
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center">
+              <CalendarClock className="w-5 h-5 text-violet-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-800">Schedule — {connector?.name}</p>
+              <p className="text-xs text-slate-400">Automatic sync schedule</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+          {/* Frequency picker */}
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-2 block">Sync frequency</label>
+            <div className="space-y-2">
+              {FREQ_OPTIONS.map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => setFrequency(opt.id)}
+                  className={`w-full text-left px-3 py-2.5 rounded-xl border text-xs transition-colors ${
+                    frequency === opt.id
+                      ? "border-violet-400 bg-violet-50"
+                      : "border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <span className={`font-semibold ${frequency === opt.id ? "text-violet-700" : "text-slate-700"}`}>{opt.label}</span>
+                  <span className="text-slate-400 ml-2">{opt.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Hour picker — shown for daily/weekly/monthly */}
+          {(frequency === "daily" || frequency === "weekly" || frequency === "monthly") && (
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Run at hour (UTC)</label>
+              <select
+                value={runAtHour}
+                onChange={e => setRunAtHour(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-violet-400 bg-white"
+              >
+                {Array.from({ length: 24 }, (_, h) => (
+                  <option key={h} value={h}>{String(h).padStart(2, "0")}:00 UTC</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Weekday picker — weekly */}
+          {frequency === "weekly" && (
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Day of week</label>
+              <div className="flex gap-1.5 flex-wrap">
+                {DOW.map((d, i) => (
+                  <button
+                    key={d}
+                    onClick={() => setRunAtDay(i)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      runAtDay === i ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Day of month — monthly */}
+          {frequency === "monthly" && (
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Day of month</label>
+              <select
+                value={runAtDay}
+                onChange={e => setRunAtDay(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-violet-400 bg-white"
+              >
+                {Array.from({ length: 28 }, (_, i) => (
+                  <option key={i + 1} value={i + 1}>{i + 1}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Entity type */}
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Sync as</label>
+            <select
+              value={entityType}
+              onChange={e => setEntityType(e.target.value)}
+              className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-violet-400 bg-white"
+            >
+              {ENTITY_TYPES.map(et => (
+                <option key={et.id} value={et.id}>{et.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <p className="text-[10px] text-slate-400">
+            Schedules trigger via Railway cron (<code>POST /connectors/run-scheduled</code>).
+            Credentials are resolved per-connector at run time.
+          </p>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+          {existingSchedule ? (
+            <button onClick={removeSchedule} className="text-xs text-rose-500 hover:text-rose-700">
+              Remove schedule
+            </button>
+          ) : (
+            <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+          )}
+          <Button
+            onClick={saveSchedule}
+            disabled={saving}
+            className="bg-violet-600 hover:bg-violet-700 rounded-xl text-xs"
+          >
+            {saving
+              ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Saving…</>
+              : <><CalendarClock className="w-3.5 h-3.5 mr-1.5" /> Save Schedule</>}
+          </Button>
         </div>
       </div>
     </div>
@@ -1412,11 +1613,12 @@ function GoogleSheetsModal({ connector, companyId, onClose }) {
 
 // ── Main Connectors page ─────────────────────────────────────────────────────
 export default function Connectors() {
-  const [currentUser, setCurrentUser]                   = useState(null);
-  const [dbModalConnector, setDbModalConnector]         = useState(null);
-  const [fileModalConnector, setFileModalConnector]     = useState(null);
-  const [sheetsModalConnector, setSheetsModalConnector] = useState(null);
-  const [apiModalConnector, setApiModalConnector]       = useState(null);
+  const [currentUser, setCurrentUser]                       = useState(null);
+  const [dbModalConnector, setDbModalConnector]             = useState(null);
+  const [fileModalConnector, setFileModalConnector]         = useState(null);
+  const [sheetsModalConnector, setSheetsModalConnector]     = useState(null);
+  const [apiModalConnector, setApiModalConnector]           = useState(null);
+  const [scheduleModalConnector, setScheduleModalConnector] = useState(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -1477,10 +1679,58 @@ export default function Connectors() {
     queryKey: ["connector-runs", currentUser?.company_id],
     queryFn: async () => {
       if (!currentUser?.company_id) return [];
-      return base44.entities.ConnectorRun.filter({ company_id: currentUser.company_id });
+      try {
+        // Try python_layer run log first (scheduled runs)
+        const res = await fetch(
+          `${RAILWAY_URL}/connectors/runs?company_id=${currentUser.company_id}&limit=100`,
+          { headers: API_HEADERS }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.runs?.length > 0) return data.runs;
+        }
+      } catch {}
+      // Fallback: Base44 ConnectorRun entity
+      try {
+        return await base44.entities.ConnectorRun.filter({ company_id: currentUser.company_id });
+      } catch {
+        return [];
+      }
     },
     enabled: !!currentUser?.company_id,
+    refetchInterval: 30_000,
   });
+
+  const { data: schedulesData = { schedules: [] }, refetch: refetchSchedules } = useQuery({
+    queryKey: ["connector-schedules", currentUser?.company_id],
+    queryFn: async () => {
+      if (!currentUser?.company_id) return { schedules: [] };
+      try {
+        const res = await fetch(
+          `${RAILWAY_URL}/connectors/schedule?company_id=${currentUser.company_id}`,
+          { headers: API_HEADERS }
+        );
+        if (res.ok) return res.json();
+      } catch {}
+      return { schedules: [] };
+    },
+    enabled: !!currentUser?.company_id,
+    staleTime: 60_000,
+  });
+
+  // Index schedules by connector_id for fast lookup
+  const scheduleByConnector = Object.fromEntries(
+    (schedulesData.schedules || []).map(s => [s.connector_id, s])
+  );
+
+  // Index last run time by connector_id
+  const lastRunByConnector = runs.reduce((acc, run) => {
+    const cid = run.connector_id;
+    if (!acc[cid] || run.started_at > acc[cid].started_at) {
+      acc[cid] = run;
+    }
+    return acc;
+  }, {});
 
   const needsReviewRuns = runs.filter(r => r.status === "needs_review");
 
@@ -1570,6 +1820,17 @@ export default function Connectors() {
         />
       )}
 
+      {/* Schedule modal */}
+      {scheduleModalConnector && (
+        <ScheduleModal
+          connector={scheduleModalConnector}
+          companyId={currentUser.company_id}
+          existingSchedule={scheduleByConnector[scheduleModalConnector.id] || null}
+          onClose={() => setScheduleModalConnector(null)}
+          onSaved={() => { refetchSchedules(); setScheduleModalConnector(null); }}
+        />
+      )}
+
       {/* Section 1: Available Connectors */}
       <div>
         <h2 className="text-2xl font-bold text-slate-800 mb-2">Available Connectors</h2>
@@ -1590,8 +1851,27 @@ export default function Connectors() {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {connectorsByCategory[category].map(conn => {
-                    const isDb = DB_CONNECTOR_IDS.has(conn.id) || conn.category === "database";
+                    const isDb      = DB_CONNECTOR_IDS.has(conn.id) || conn.category === "database";
                     const available = conn.status === "available";
+                    const isFileConn = conn.category === "file" && conn.id !== "google_sheets";
+                    const isApiConn = available && !isDb && !isFileConn;
+                    const lastRun   = lastRunByConnector[conn.id];
+                    const schedule  = scheduleByConnector[conn.id];
+                    const hasSchedule = schedule && schedule.frequency !== "manual";
+
+                    // Format last-sync time
+                    let lastSyncLabel = null;
+                    if (lastRun?.started_at) {
+                      const diff = Date.now() - new Date(lastRun.started_at).getTime();
+                      const mins  = Math.floor(diff / 60000);
+                      const hours = Math.floor(mins / 60);
+                      const days  = Math.floor(hours / 24);
+                      lastSyncLabel = days > 0 ? `${days}d ago`
+                        : hours > 0 ? `${hours}h ago`
+                        : mins > 0 ? `${mins}m ago`
+                        : "just now";
+                    }
+
                     return (
                       <div
                         key={conn.id}
@@ -1616,7 +1896,8 @@ export default function Connectors() {
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2 mb-4">
+                        {/* Status row */}
+                        <div className="flex items-center gap-3 mb-3">
                           {available ? (
                             <>
                               <span className="w-2 h-2 bg-emerald-500 rounded-full" />
@@ -1628,26 +1909,65 @@ export default function Connectors() {
                               <span className="text-xs font-medium text-slate-600">Coming Soon</span>
                             </>
                           )}
+                          {lastSyncLabel && (
+                            <span className="text-[10px] text-slate-400 flex items-center gap-1 ml-auto">
+                              <Clock className="w-3 h-3" />
+                              {lastSyncLabel}
+                            </span>
+                          )}
                         </div>
 
-                        <Button
-                          onClick={() => handleConnect(conn)}
-                          disabled={!available}
-                          className={`w-full text-xs rounded-xl ${
-                            available ? "bg-indigo-600 hover:bg-indigo-700" : ""
-                          }`}
-                          variant={available ? "default" : "outline"}
-                        >
-                          {isDb && available ? (
-                            <><Database className="w-3.5 h-3.5 mr-1.5" /> Connect Database</>
-                          ) : conn.id === "google_sheets" && available ? (
-                            <><Cloud className="w-3.5 h-3.5 mr-1.5" /> Connect Sheet</>
-                          ) : conn.category === "file" && available ? (
-                            <><HardDrive className="w-3.5 h-3.5 mr-1.5" /> Import File</>
-                          ) : available ? (
-                            <><Plug className="w-3.5 h-3.5 mr-1.5" /> Connect</>
-                          ) : "Coming Soon"}
-                        </Button>
+                        {/* Schedule badge (only if a non-manual schedule is set) */}
+                        {hasSchedule && (
+                          <div className="flex items-center gap-1.5 mb-3 px-2 py-1.5 bg-violet-50 border border-violet-200 rounded-lg">
+                            <CalendarClock className="w-3 h-3 text-violet-600 shrink-0" />
+                            <span className="text-[10px] font-semibold text-violet-700 capitalize">
+                              {schedule.frequency}
+                            </span>
+                            {schedule.next_run_at && (
+                              <span className="text-[10px] text-violet-500 ml-auto">
+                                next: {new Date(schedule.next_run_at).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2">
+                          <Button
+                            onClick={() => handleConnect(conn)}
+                            disabled={!available}
+                            className={`flex-1 text-xs rounded-xl ${
+                              available ? "bg-indigo-600 hover:bg-indigo-700" : ""
+                            }`}
+                            variant={available ? "default" : "outline"}
+                          >
+                            {isDb && available ? (
+                              <><Database className="w-3.5 h-3.5 mr-1.5" /> Connect</>
+                            ) : conn.id === "google_sheets" && available ? (
+                              <><Cloud className="w-3.5 h-3.5 mr-1.5" /> Connect</>
+                            ) : isFileConn && available ? (
+                              <><HardDrive className="w-3.5 h-3.5 mr-1.5" /> Import</>
+                            ) : available ? (
+                              <><Plug className="w-3.5 h-3.5 mr-1.5" /> Connect</>
+                            ) : "Coming Soon"}
+                          </Button>
+
+                          {/* Schedule button — API connectors only */}
+                          {isApiConn && (
+                            <button
+                              onClick={() => setScheduleModalConnector(conn)}
+                              title={hasSchedule ? `Scheduled: ${schedule.frequency}` : "Set sync schedule"}
+                              className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${
+                                hasSchedule
+                                  ? "border-violet-300 bg-violet-50 text-violet-600 hover:bg-violet-100"
+                                  : "border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
+                              }`}
+                            >
+                              <Calendar className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -1658,7 +1978,71 @@ export default function Connectors() {
         )}
       </div>
 
-      {/* Section 2: Run History */}
+      {/* Section 2: Scheduled Syncs */}
+      {schedulesData.schedules.filter(s => s.frequency !== "manual").length > 0 && (
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Scheduled Syncs</h2>
+          <p className="text-sm text-slate-500 mb-6">
+            Active automatic syncs — run via <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">POST /connectors/run-scheduled</code> cron.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {schedulesData.schedules
+              .filter(s => s.frequency !== "manual")
+              .map(sched => {
+                const lastRun = lastRunByConnector[sched.connector_id];
+                return (
+                  <div key={sched.connector_id}
+                    className="bg-white border border-violet-200 rounded-xl p-4 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">
+                          {sched.connector_name || sched.connector_id}
+                        </p>
+                        <p className="text-xs text-slate-400 capitalize">{sched.entity_type}</p>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-violet-100 text-violet-700 capitalize">
+                        {sched.frequency}
+                      </span>
+                    </div>
+
+                    <div className="text-xs space-y-1">
+                      {sched.next_run_at && (
+                        <div className="flex items-center gap-1.5 text-slate-500">
+                          <CalendarClock className="w-3 h-3" />
+                          Next: {new Date(sched.next_run_at).toLocaleString()}
+                        </div>
+                      )}
+                      {lastRun?.started_at && (
+                        <div className="flex items-center gap-1.5 text-slate-500">
+                          <Clock className="w-3 h-3" />
+                          Last: {new Date(lastRun.started_at).toLocaleString()}
+                          {" "}
+                          <span className={`font-medium ${
+                            lastRun.status === "completed" ? "text-emerald-600"
+                              : lastRun.status === "failed" ? "text-rose-600"
+                              : "text-slate-500"
+                          }`}>({lastRun.status})</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        const conn = catalogData.connectors.find(c => c.id === sched.connector_id);
+                        if (conn) setScheduleModalConnector(conn);
+                      }}
+                      className="text-xs text-violet-600 hover:text-violet-800 self-start font-medium"
+                    >
+                      Edit schedule
+                    </button>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* Section 3: Run History */}
       <div>
         <h2 className="text-2xl font-bold text-slate-800 mb-6">Run History</h2>
         {runsLoading ? (
@@ -1718,7 +2102,7 @@ export default function Connectors() {
         )}
       </div>
 
-      {/* Section 3: Unmapped Values Review */}
+      {/* Section 4: Unmapped Values Review */}
       {needsReviewRuns.length > 0 && (
         <div>
           <h2 className="text-2xl font-bold text-slate-800 mb-6">Unmapped Values Review</h2>

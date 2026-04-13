@@ -4,20 +4,25 @@
 # FastAPI endpoints for the Connectors UI and automation.
 #
 # Endpoints:
-#   GET  /connectors/catalog          — list all connectors with status
-#   GET  /connectors/catalog/{id}     — single connector metadata
-#   POST /connectors/run              — execute a connector
-#   POST /connectors/preview          — preview without loading to Base44
-#   GET  /connectors/suggest-columns  — suggest column mappings for a file
-#   POST /connectors/save-mapping     — save an operator taxonomy mapping
-#   GET  /connectors/runs             — connector run history
+#   GET  /connectors/catalog            — list all connectors with status
+#   GET  /connectors/catalog/{id}       — single connector metadata
+#   POST /connectors/run                — execute a connector
+#   POST /connectors/preview            — preview without loading to Base44
+#   GET  /connectors/suggest-columns    — suggest column mappings for a file
+#   POST /connectors/save-mapping       — save an operator taxonomy mapping
+#   GET  /connectors/runs               — connector run history
+#   GET  /connectors/schedule           — list schedules for a company
+#   POST /connectors/schedule           — save/update a connector schedule
+#   DELETE /connectors/schedule/{id}    — remove a connector schedule
+#   POST /connectors/run-scheduled      — trigger all due scheduled syncs (cron)
 # ==============================================================
 
 import json
 import logging
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Header, Query, UploadFile, File, Form
 from pydantic import BaseModel
 
 from connectors.registry import (
@@ -31,6 +36,208 @@ from connectors.mapping_engine import MappingEngine
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/connectors", tags=["Connectors"])
+
+
+# ── Schedule store ────────────────────────────────────────────────────────────
+# In-memory for now. Production would persist to PostgreSQL connectors.schedules.
+# Key: "{company_id}:{connector_id}"
+_SCHEDULE_STORE: dict[str, dict] = {}
+
+# Simple run log (in addition to Base44 ConnectorRun entity)
+_RUN_LOG: list[dict] = []
+_RUN_LOG_MAX = 500
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _compute_next_run(frequency: str, run_at_hour: int = 0, run_at_day: int = 1) -> str:
+    """Compute the next UTC run time given a frequency string."""
+    now = datetime.now(timezone.utc)
+    if frequency == "hourly":
+        return (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0).isoformat()
+    if frequency == "daily":
+        nxt = now.replace(hour=run_at_hour, minute=0, second=0, microsecond=0)
+        if nxt <= now:
+            nxt += timedelta(days=1)
+        return nxt.isoformat()
+    if frequency == "weekly":
+        # run_at_day: 0=Mon, 6=Sun
+        days_ahead = (run_at_day - now.weekday()) % 7 or 7
+        nxt = (now + timedelta(days=days_ahead)).replace(
+            hour=run_at_hour, minute=0, second=0, microsecond=0
+        )
+        return nxt.isoformat()
+    if frequency == "monthly":
+        # run_at_day: day of month (1-31)
+        nxt = now.replace(day=min(run_at_day, 28), hour=run_at_hour, minute=0, second=0, microsecond=0)
+        if nxt <= now:
+            # roll forward one month
+            if now.month == 12:
+                nxt = nxt.replace(year=now.year + 1, month=1)
+            else:
+                nxt = nxt.replace(month=now.month + 1)
+        return nxt.isoformat()
+    return ""   # "manual" — no automatic next run
+
+
+class ConnectorScheduleConfig(BaseModel):
+    company_id:   str
+    connector_id: str
+    connector_name: Optional[str] = ""
+    frequency:    str = "manual"   # manual | hourly | daily | weekly | monthly
+    run_at_hour:  int = 0          # hour of day (UTC, 0-23)
+    run_at_day:   int = 1          # 0=Mon…6=Sun for weekly; 1-31 for monthly
+    entity_type:  Optional[str] = "people"
+    is_active:    bool = True
+
+
+@router.get("/schedule")
+def get_schedules(company_id: str = Query(...)):
+    """List all active connector schedules for a company."""
+    prefix = f"{company_id}:"
+    return {
+        "schedules": [v for k, v in _SCHEDULE_STORE.items() if k.startswith(prefix)]
+    }
+
+
+@router.post("/schedule")
+def save_schedule(config: ConnectorScheduleConfig):
+    """
+    Save or update the sync schedule for a connector.
+    Schedules are stored in-memory (Railway resets clear them — acceptable for now).
+    """
+    key = f"{config.company_id}:{config.connector_id}"
+    entry = config.dict()
+    entry["created_at"]  = entry.get("created_at", _now_iso())
+    entry["updated_at"]  = _now_iso()
+    entry["next_run_at"] = _compute_next_run(
+        config.frequency, config.run_at_hour, config.run_at_day
+    )
+    entry["last_run_at"] = _SCHEDULE_STORE.get(key, {}).get("last_run_at")
+    _SCHEDULE_STORE[key] = entry
+    logger.info(
+        "schedule saved: company=%s connector=%s freq=%s next=%s",
+        config.company_id, config.connector_id, config.frequency, entry["next_run_at"],
+    )
+    return {"status": "saved", **entry}
+
+
+@router.delete("/schedule/{connector_id}")
+def delete_schedule(connector_id: str, company_id: str = Query(...)):
+    """Remove a connector schedule."""
+    key = f"{company_id}:{connector_id}"
+    removed = _SCHEDULE_STORE.pop(key, None)
+    return {"status": "deleted" if removed else "not_found", "connector_id": connector_id}
+
+
+@router.post("/run-scheduled")
+def run_scheduled_connectors(x_cron_secret: Optional[str] = Header(None)):
+    """
+    Evaluate all active schedules and trigger any that are due.
+    Called by Railway cron every hour: POST /connectors/run-scheduled
+    Header: x-cron-secret
+
+    Note: scheduled runs use the entity_type saved with the schedule.
+    Credentials are not stored — scheduled syncs work only for connectors
+    that don't require runtime credentials (database connectors with saved
+    config, or future credential-vault integration).
+    """
+    triggered = []
+    now = datetime.now(timezone.utc)
+
+    for key, sched in list(_SCHEDULE_STORE.items()):
+        if not sched.get("is_active"):
+            continue
+        if sched.get("frequency") == "manual":
+            continue
+        next_run = sched.get("next_run_at")
+        if next_run:
+            try:
+                next_dt = datetime.fromisoformat(next_run)
+                if next_dt.tzinfo is None:
+                    next_dt = next_dt.replace(tzinfo=timezone.utc)
+                if next_dt > now:
+                    continue
+            except ValueError:
+                continue
+
+        connector_id = sched["connector_id"]
+        company_id   = sched["company_id"]
+        entity_type  = sched.get("entity_type", "people")
+        logger.info(
+            "run-scheduled: triggering %s for company=%s", connector_id, company_id
+        )
+
+        run_entry = {
+            "connector_id": connector_id,
+            "company_id":   company_id,
+            "triggered_by": "scheduler",
+            "started_at":   _now_iso(),
+            "status":       "triggered",
+        }
+
+        try:
+            connector_class = get_connector(connector_id)
+            if connector_class:
+                engine    = MappingEngine(company_id=company_id)
+                connector = connector_class(
+                    company_id=company_id,
+                    credentials={"entity_type": entity_type},
+                    mappings=engine._mappings,
+                )
+                raw = connector.extract()
+                if raw:
+                    transformed = connector.transform(raw)
+                    result = connector.load(transformed)
+                    run_entry.update({
+                        "status":            "completed",
+                        "records_extracted": len(raw),
+                        "records_created":   result.get("created", 0),
+                        "records_updated":   result.get("updated", 0),
+                        "completed_at":      _now_iso(),
+                    })
+                else:
+                    run_entry.update({"status": "skipped", "completed_at": _now_iso()})
+        except Exception as e:
+            logger.error("run-scheduled: %s failed — %s", connector_id, e)
+            run_entry.update({"status": "failed", "error": str(e), "completed_at": _now_iso()})
+
+        # Update last_run and compute next_run
+        _SCHEDULE_STORE[key]["last_run_at"] = _now_iso()
+        _SCHEDULE_STORE[key]["next_run_at"] = _compute_next_run(
+            sched["frequency"], sched.get("run_at_hour", 0), sched.get("run_at_day", 1)
+        )
+
+        _RUN_LOG.append(run_entry)
+        if len(_RUN_LOG) > _RUN_LOG_MAX:
+            del _RUN_LOG[: len(_RUN_LOG) - _RUN_LOG_MAX]
+
+        triggered.append(run_entry)
+
+    return {
+        "evaluated":  len(_SCHEDULE_STORE),
+        "triggered":  len(triggered),
+        "results":    triggered,
+    }
+
+
+@router.get("/runs")
+def connector_runs(
+    company_id: str = Query(...),
+    connector_id: Optional[str] = Query(None),
+    limit: int = Query(50, le=200),
+):
+    """
+    Return recent connector run log entries for a company.
+    Combines in-memory run log from scheduled runs.
+    """
+    entries = [r for r in _RUN_LOG if r.get("company_id") == company_id]
+    if connector_id:
+        entries = [r for r in entries if r.get("connector_id") == connector_id]
+    entries.sort(key=lambda r: r.get("started_at", ""), reverse=True)
+    return {"runs": entries[:limit], "total": len(entries)}
 
 
 @router.get("/catalog")

@@ -654,7 +654,7 @@ python_layer/config/taxonomy.py
 
 ```
 Phase 1  Core OS          ✅ All 7 entities, forms, lists, taxonomy
-Phase 2  Connectors       🔄 25 connectors, 8 categories (partially wired)
+Phase 2  Connectors       ✅ 35 connectors, 9 categories, full connect flow UI
 Phase 3A Copilot          ✅ Engine + query tools, session memory, grounded answers
 Phase 3B Alerts           ✅ WhatsApp/Email/SMS alert engine, 10 alert types
 Phase 3C Network          ✅ Multi-tenant network intelligence + cross-branch compare
@@ -665,18 +665,20 @@ Phase 4D Approval Gate    ✅ Human-in-the-loop UI for high-risk agent actions
 Phase 4E Full Coverage    ✅ Compliance + Network + Market Research agents
 Phase 4F Agent Memory     ✅ Per-company persistent memory + self-calibration
 Phase 4G LLM Optimise     ✅ Haiku triage, Sonnet execution, Opus strategy routing
-Phase 5  ML Models        🔄 Backend built (survival, forecast, segmentation, demand)
-Phase 6  Mobile           🔲 Offline-first field entry
+Phase 5  ML Models        ✅ Frontend + backend — survival, segmentation, demand forecast
+Phase 6  Mobile           ✅ PWA offline-first field entry, IndexedDB sync, bottom nav
+Phase 7  Connector Sync   🔲 Scheduled connector runs + sync history dashboard
+Phase 8  Audit Trail      🔲 Immutable change log across all 7 entities
 ```
 
 ---
 
 ## Current state (as of 2026-04-12)
 
-All Phases 1–4 are implemented and deployed. The system is fully operational.
+All Phases 1–6 are implemented and deployed. The system is fully operational.
 
 ```
-COMPLETED (Phases 1–4)
+COMPLETED (Phases 1–6)
   ✅ All 7 core entities with forms, lists, bulk import, taxonomy
   ✅ ETL pipeline — all 9 entities, multi-tenant, three-tier fallback
   ✅ Copilot — claude-sonnet-4-6, tool loop, 7 query tools, session memory
@@ -684,7 +686,11 @@ COMPLETED (Phases 1–4)
   ✅ Network intelligence — cross-branch performance comparison
   ✅ Autonomous agents — 8 agents, orchestrator, approval gate, agent memory,
      LLM router (Haiku/Sonnet/Opus), market research with weekly briefings
-  ✅ ML models — survival, segmentation, demand forecasting, time series
+  ✅ ML models — survival, segmentation, demand forecasting, time series (frontend + backend)
+  ✅ Mobile — PWA offline-first field entry, IndexedDB sync queue, bottom nav
+  ✅ Connectors — 35 connectors (9 categories): file, database, mobile_money, hr_payroll,
+     accounting, health, education, pos, government — all with real API implementations
+     and ApiConnectModal UI with credentials form + dry run + sync result
   ✅ Desktop cache fix — all 7 entity list pages
   ✅ entityFetchFn — all 6 BulkImportDialog usages
   ✅ Branding — fully white-label, all Palantir/Foundry references removed
@@ -697,9 +703,10 @@ PENDING (operational — requires Railway access)
   ⏳ Set OPUS_ENABLED=true when Opus budget is approved
 
 NEXT BUILD MILESTONE
-  Phase 5 — ML Models UI polish (results display, model explanations)
-  Phase 6 — Mobile (offline-first field entry)
-  Connectors — 25 external data connectors
+  Phase 7 — Connector Sync Scheduler: cron-based automatic connector runs,
+            per-connector schedule config, sync history log in Connectors UI
+  Phase 8 — Audit Trail: immutable change log across all 7 entities,
+            visible in Settings > Audit Trail with filter/export
 ```
 
 ---
@@ -709,11 +716,13 @@ NEXT BUILD MILESTONE
 CLAUDE.md gives Claude all the context. Just state the task:
 
 ```
-Build the Phase 5 ML results panel — show survival curve chart,
-segmentation clusters, and demand forecast in MLModels.jsx
+Build Phase 7 — Connector Sync Scheduler: add schedule config (daily/weekly/monthly)
+per connector in the ApiConnectModal, a /connectors/schedule endpoint on python_layer,
+and a sync history table in the Connectors page showing last run, status, records synced.
 ```
 
 ```
-Audit the Connectors page — check which of the 25 connectors
-are wired up in python_layer/connectors/ vs just placeholder
+Build Phase 8 — Audit Trail: a python_layer /audit endpoint that reads from Base44
+entity change history, stores to PostgreSQL audit.change_log, and a Settings > Audit Trail
+tab in the frontend with date/entity/user filters and CSV export.
 ```
