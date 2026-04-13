@@ -5,7 +5,7 @@ import {
   Plug, CheckCircle2, AlertCircle, XCircle, Loader2,
   Database, Cloud, HardDrive, X, ChevronRight, ChevronDown,
   Eye, Play, RefreshCw, AlertTriangle, Table2, Code2,
-  Clock, Calendar, CalendarClock,
+  Clock, Calendar, CalendarClock, KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -295,28 +295,39 @@ const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function ScheduleModal({ connector, companyId, existingSchedule, onClose, onSaved }) {
   const { toast } = useToast();
+  const schema     = CREDENTIAL_SCHEMA[connector?.id] || [];
   const [frequency,  setFrequency]  = useState(existingSchedule?.frequency  || "manual");
   const [runAtHour,  setRunAtHour]  = useState(existingSchedule?.run_at_hour ?? 0);
   const [runAtDay,   setRunAtDay]   = useState(existingSchedule?.run_at_day  ?? 1);
   const [entityType, setEntityType] = useState(existingSchedule?.entity_type || "people");
+  const [creds,      setCreds]      = useState({});
   const [saving,     setSaving]     = useState(false);
+
+  function setCredField(key, val) {
+    setCreds(prev => ({ ...prev, [key]: val }));
+  }
 
   async function saveSchedule() {
     setSaving(true);
     try {
+      const body = {
+        company_id:     companyId,
+        connector_id:   connector.id,
+        connector_name: connector.name,
+        frequency,
+        run_at_hour:    parseInt(runAtHour, 10),
+        run_at_day:     parseInt(runAtDay, 10),
+        entity_type:    entityType,
+        is_active:      true,
+      };
+      // Only include credentials if operator filled them in
+      if (schema.length > 0 && Object.values(creds).some(v => v)) {
+        body.credentials = creds;
+      }
       const res = await fetch(`${RAILWAY_URL}/connectors/schedule`, {
         method: "POST",
         headers: { ...API_HEADERS, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          company_id:     companyId,
-          connector_id:   connector.id,
-          connector_name: connector.name,
-          frequency,
-          run_at_hour:    parseInt(runAtHour, 10),
-          run_at_day:     parseInt(runAtDay, 10),
-          entity_type:    entityType,
-          is_active:      true,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
@@ -451,9 +462,35 @@ function ScheduleModal({ connector, companyId, existingSchedule, onClose, onSave
             </select>
           </div>
 
+          {/* Credentials — only shown for non-manual schedules with API-key connectors */}
+          {frequency !== "manual" && schema.length > 0 && (
+            <div className="space-y-3 border border-slate-200 rounded-xl p-3 bg-slate-50">
+              <p className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5 text-slate-400" />
+                API credentials for automatic sync
+              </p>
+              <p className="text-[10px] text-slate-400">
+                Stored in-memory on the server. Re-enter after each Railway redeploy.
+              </p>
+              {schema.map(field => (
+                <div key={field.key}>
+                  <label className="text-[10px] font-semibold text-slate-500 mb-1 block">{field.label}</label>
+                  <input
+                    type={field.type === "password" ? "password" : "text"}
+                    value={creds[field.key] || ""}
+                    onChange={e => setCredField(field.key, e.target.value)}
+                    className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-violet-400 bg-white"
+                    placeholder={field.type === "password" ? "••••••••••••" : field.label}
+                    autoComplete="off"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           <p className="text-[10px] text-slate-400">
-            Schedules trigger via Railway cron (<code>POST /connectors/run-scheduled</code>).
-            Credentials are resolved per-connector at run time.
+            Schedules trigger automatically via Railway cron every hour.
+            Credentials are never logged or returned by the API.
           </p>
         </div>
 
@@ -1924,6 +1961,12 @@ export default function Connectors() {
                             <span className="text-[10px] font-semibold text-violet-700 capitalize">
                               {schedule.frequency}
                             </span>
+                            {schedule.has_credentials && (
+                              <KeyRound className="w-3 h-3 text-emerald-500 shrink-0" title="Credentials stored" />
+                            )}
+                            {!schedule.has_credentials && (
+                              <KeyRound className="w-3 h-3 text-amber-400 shrink-0" title="No credentials stored — add via schedule settings" />
+                            )}
                             {schedule.next_run_at && (
                               <span className="text-[10px] text-violet-500 ml-auto">
                                 next: {new Date(schedule.next_run_at).toLocaleDateString()}

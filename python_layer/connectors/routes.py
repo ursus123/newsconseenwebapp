@@ -83,23 +83,28 @@ def _compute_next_run(frequency: str, run_at_hour: int = 0, run_at_day: int = 1)
 
 
 class ConnectorScheduleConfig(BaseModel):
-    company_id:   str
-    connector_id: str
+    company_id:     str
+    connector_id:   str
     connector_name: Optional[str] = ""
-    frequency:    str = "manual"   # manual | hourly | daily | weekly | monthly
-    run_at_hour:  int = 0          # hour of day (UTC, 0-23)
-    run_at_day:   int = 1          # 0=Mon…6=Sun for weekly; 1-31 for monthly
-    entity_type:  Optional[str] = "people"
-    is_active:    bool = True
+    frequency:      str = "manual"   # manual | hourly | daily | weekly | monthly
+    run_at_hour:    int = 0          # hour of day (UTC, 0-23)
+    run_at_day:     int = 1          # 0=Mon…6=Sun for weekly; 1-31 for monthly
+    entity_type:    Optional[str] = "people"
+    is_active:      bool = True
+    credentials:    Optional[dict] = None  # stored in-memory, never logged
 
 
 @router.get("/schedule")
 def get_schedules(company_id: str = Query(...)):
-    """List all active connector schedules for a company."""
+    """List all active connector schedules for a company. Credentials are stripped from responses."""
     prefix = f"{company_id}:"
-    return {
-        "schedules": [v for k, v in _SCHEDULE_STORE.items() if k.startswith(prefix)]
-    }
+    schedules = []
+    for k, v in _SCHEDULE_STORE.items():
+        if k.startswith(prefix):
+            safe = {key: val for key, val in v.items() if key != "credentials"}
+            safe["has_credentials"] = bool(v.get("credentials"))
+            schedules.append(safe)
+    return {"schedules": schedules}
 
 
 @router.post("/schedule")
@@ -116,12 +121,18 @@ def save_schedule(config: ConnectorScheduleConfig):
         config.frequency, config.run_at_hour, config.run_at_day
     )
     entry["last_run_at"] = _SCHEDULE_STORE.get(key, {}).get("last_run_at")
+    # Preserve previously stored credentials if none supplied this call
+    if entry.get("credentials") is None:
+        entry["credentials"] = _SCHEDULE_STORE.get(key, {}).get("credentials")
     _SCHEDULE_STORE[key] = entry
     logger.info(
-        "schedule saved: company=%s connector=%s freq=%s next=%s",
-        config.company_id, config.connector_id, config.frequency, entry["next_run_at"],
+        "schedule saved: company=%s connector=%s freq=%s next=%s has_creds=%s",
+        config.company_id, config.connector_id, config.frequency,
+        entry["next_run_at"], bool(entry.get("credentials")),
     )
-    return {"status": "saved", **entry}
+    # Return entry without credentials — never expose stored creds in API response
+    safe = {k: v for k, v in entry.items() if k != "credentials"}
+    return {"status": "saved", **safe}
 
 
 @router.delete("/schedule/{connector_id}")
@@ -181,10 +192,13 @@ def run_scheduled_connectors(x_cron_secret: Optional[str] = Header(None)):
         try:
             connector_class = get_connector(connector_id)
             if connector_class:
-                engine    = MappingEngine(company_id=company_id)
+                engine = MappingEngine(company_id=company_id)
+                # Merge stored credentials with the entity_type hint
+                stored_creds = sched.get("credentials") or {}
+                runtime_creds = {**stored_creds, "entity_type": entity_type}
                 connector = connector_class(
                     company_id=company_id,
-                    credentials={"entity_type": entity_type},
+                    credentials=runtime_creds,
                     mappings=engine._mappings,
                 )
                 raw = connector.extract()
@@ -200,6 +214,9 @@ def run_scheduled_connectors(x_cron_secret: Optional[str] = Header(None)):
                     })
                 else:
                     run_entry.update({"status": "skipped", "completed_at": _now_iso()})
+            else:
+                run_entry.update({"status": "skipped", "completed_at": _now_iso(),
+                                  "error": f"connector class not found: {connector_id}"})
         except Exception as e:
             logger.error("run-scheduled: %s failed — %s", connector_id, e)
             run_entry.update({"status": "failed", "error": str(e), "completed_at": _now_iso()})

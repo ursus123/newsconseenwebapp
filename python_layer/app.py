@@ -632,15 +632,27 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     except Exception as _sched_err:
         logger.warning("cron: scheduled workflow runner failed — %s", _sched_err)
 
+    # Run scheduled connector syncs — keeps external data fresh automatically
+    connector_sync_result = {}
+    try:
+        from connectors.routes import run_scheduled_connectors
+        connector_sync_result = run_scheduled_connectors()
+        logger.info("cron: scheduled connectors evaluated=%s triggered=%s",
+                    connector_sync_result.get("evaluated", 0),
+                    connector_sync_result.get("triggered", 0))
+    except Exception as _conn_err:
+        logger.warning("cron: scheduled connector runner failed — %s", _conn_err)
+
     return {
-        "cron_run":    True,
-        "version":     "4.1.0",
-        "companies":   len(company_ids),
-        "raw_stored":  list(raw_data.keys()),
-        "success":     success_count,
-        "total":       len(results),
-        "all_success": success_count == len(results),
-        "results":     results,
+        "cron_run":               True,
+        "version":                "4.2.0",
+        "companies":              len(company_ids),
+        "raw_stored":             list(raw_data.keys()),
+        "success":                success_count,
+        "total":                  len(results),
+        "all_success":            success_count == len(results),
+        "results":                results,
+        "scheduled_connectors":   connector_sync_result,
     }
 
 
