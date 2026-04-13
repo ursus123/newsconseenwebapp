@@ -570,7 +570,7 @@ function WorkerDashboard({ user }) {
           <p className="text-sm text-slate-400 mt-0.5">{dayOfWeek}</p>
           <p className="text-sm text-emerald-600 font-medium mt-1">{getMotivation(pendingTasks)}</p>
         </div>
-        <NotificationsBell tasks={tasks} transactions={[]} products={[]} />
+        <NotificationsBell tasks={tasks} transactions={[]} products={[]} currentUser={user} />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -909,7 +909,7 @@ function AdminDashboard({ user }) {
               />
             )}
           </div>
-          <NotificationsBell tasks={tasks} transactions={transactions} products={products} />
+          <NotificationsBell tasks={tasks} transactions={transactions} products={products} currentUser={user} />
         </div>
       </div>
 

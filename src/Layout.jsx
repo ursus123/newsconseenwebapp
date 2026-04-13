@@ -46,6 +46,7 @@ import { base44 } from "@/api/base44Client";
 import TenantGuard from "@/components/shared/TenantGuard";
 import NetworkBanner from "@/components/shared/NetworkBanner";
 import { usePermissions } from "@/hooks/usePermissions";
+import CommandPalette from "@/components/layout/CommandPalette";
 
 // ─── Role-aware nav config ────────────────────────────────────────────────────
 const NAV_CONFIG = {
@@ -426,6 +427,7 @@ export default function Layout({ children, currentPageName }) {
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
       {showWizard && <SetupWizard onComplete={handleWizardComplete} />}
+      <CommandPalette currentUser={currentUser} />
       <NetworkBanner />
       <TrialBannerWrapper currentUser={currentUser} />
       <div className="flex flex-1 overflow-hidden">
