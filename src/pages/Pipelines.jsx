@@ -11,7 +11,8 @@ import { base44 } from "@/api/base44Client";
 import PipelineBuilder from "@/components/pipelines/PipelineBuilder";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const CRON_SECRET = import.meta.env.VITE_CRON_SECRET || "";
+const CRON_SECRET   = import.meta.env.VITE_CRON_SECRET   || "";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 
 const PIPELINE_ENTITIES = [
   { icon: CheckSquare, label: "Tasks",         desc: "Operational task records and completion metrics",         color: "text-blue-500",    bg: "bg-blue-50"    },
@@ -54,7 +55,10 @@ export default function Pipelines() {
     try {
       const res = await fetch(`${RAILWAY_URL}/cron/etl-all`, {
         method: "POST",
-        headers: { "x-cron-secret": CRON_SECRET },
+        headers: {
+          ...(CRON_SECRET    ? { "x-cron-secret": CRON_SECRET }       : {}),
+          ...(RAILWAY_API_KEY ? { "x-api-key":     RAILWAY_API_KEY }   : {}),
+        },
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || `Status ${res.status}`);
