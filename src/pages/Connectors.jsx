@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -6,6 +6,7 @@ import {
   Database, Cloud, HardDrive, X, ChevronRight, ChevronDown,
   Eye, Play, RefreshCw, AlertTriangle, Table2, Code2,
   Clock, Calendar, CalendarClock, KeyRound,
+  Webhook, Copy, Trash2, Plus, ExternalLink, Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -1649,6 +1650,320 @@ function GoogleSheetsModal({ connector, companyId, onClose }) {
 
 
 // ── Main Connectors page ─────────────────────────────────────────────────────
+// ── Phase 12: Live Data Feeds — Inbound Webhooks ─────────────────────────────
+
+const ENTITY_TYPE_LABELS = {
+  people:       "People",
+  enterprises:  "Enterprises",
+  products:     "Products",
+  transactions: "Transactions",
+  tasks:        "Tasks",
+};
+
+const ENTITY_TYPE_COLORS = {
+  people:       "bg-blue-100 text-blue-700",
+  enterprises:  "bg-amber-100 text-amber-700",
+  products:     "bg-rose-100 text-rose-700",
+  transactions: "bg-emerald-100 text-emerald-700",
+  tasks:        "bg-violet-100 text-violet-700",
+};
+
+function WebhookSection({ currentUser }) {
+  const companyId = currentUser?.company_id;
+  const { toast } = useToast();
+
+  const [createOpen, setCreateOpen]         = useState(false);
+  const [sourceName, setSourceName]         = useState("");
+  const [entityType, setEntityType]         = useState("people");
+  const [description, setDescription]       = useState("");
+  const [creating, setCreating]             = useState(false);
+  const [createdSecret, setCreatedSecret]   = useState(null); // {webhook_id, ingest_url, secret}
+  const [expandedEvents, setExpandedEvents] = useState(null); // webhook_id
+
+  const { data: webhooksData, isLoading: whLoading, refetch: refetchWebhooks } = useQuery({
+    queryKey: ["webhooks", companyId],
+    queryFn: async () => {
+      if (!companyId) return { webhooks: [] };
+      const res = await fetch(`${RAILWAY_URL}/ingest/list?company_id=${companyId}`, { headers: API_HEADERS });
+      if (!res.ok) return { webhooks: [] };
+      return res.json();
+    },
+    enabled: !!companyId,
+    staleTime: 30_000,
+  });
+
+  const { data: eventsData } = useQuery({
+    queryKey: ["webhook-events", companyId],
+    queryFn: async () => {
+      if (!companyId) return { events: [] };
+      const res = await fetch(`${RAILWAY_URL}/ingest/events?company_id=${companyId}&limit=50`, { headers: API_HEADERS });
+      if (!res.ok) return { events: [] };
+      return res.json();
+    },
+    enabled: !!companyId,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+
+  const webhooks = webhooksData?.webhooks || [];
+  const events   = eventsData?.events   || [];
+
+  const copyToClipboard = useCallback((text, label = "Copied") => {
+    navigator.clipboard.writeText(text).then(() => toast({ title: label })).catch(() => {});
+  }, [toast]);
+
+  const handleCreate = async () => {
+    if (!sourceName.trim()) { toast({ title: "Source name required", variant: "destructive" }); return; }
+    setCreating(true);
+    try {
+      const res = await fetch(`${RAILWAY_URL}/ingest/register`, {
+        method: "POST",
+        headers: { ...API_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company_id:  companyId,
+          source_name: sourceName.trim(),
+          entity_type: entityType,
+          description: description.trim() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Registration failed");
+      }
+      const result = await res.json();
+      setCreatedSecret(result);
+      setCreateOpen(false);
+      setSourceName(""); setEntityType("people"); setDescription("");
+      refetchWebhooks();
+      toast({ title: "Webhook created" });
+    } catch (e) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDelete = async (webhookId) => {
+    if (!window.confirm("Delete this webhook? External systems using it will stop working.")) return;
+    try {
+      const encoded = encodeURIComponent(webhookId);
+      const res = await fetch(`${RAILWAY_URL}/ingest/config/${encoded}`, {
+        method: "DELETE",
+        headers: API_HEADERS,
+      });
+      if (!res.ok) throw new Error("Delete failed");
+      refetchWebhooks();
+      toast({ title: "Webhook deleted" });
+    } catch (e) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
+            <Zap className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">Live Data Feeds</h2>
+            <p className="text-sm text-slate-500">Receive real-time data from any external system via webhook</p>
+          </div>
+        </div>
+        <button
+          onClick={() => setCreateOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" /> New Feed
+        </button>
+      </div>
+
+      {/* Secret reveal card (shown once after creation) */}
+      {createdSecret && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+          <div className="flex items-start justify-between mb-3">
+            <p className="text-sm font-semibold text-amber-800">Webhook created — save your secret now</p>
+            <button onClick={() => setCreatedSecret(null)} className="text-amber-500 hover:text-amber-700">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="space-y-2 text-xs font-mono">
+            <div className="flex items-center gap-2 bg-white border border-amber-200 rounded-lg px-3 py-2">
+              <span className="text-slate-500 shrink-0">URL</span>
+              <span className="flex-1 truncate text-slate-800">{createdSecret.ingest_url}</span>
+              <button onClick={() => copyToClipboard(createdSecret.ingest_url, "URL copied")} className="text-indigo-500 hover:text-indigo-700 shrink-0"><Copy className="w-3.5 h-3.5" /></button>
+            </div>
+            <div className="flex items-center gap-2 bg-white border border-amber-200 rounded-lg px-3 py-2">
+              <span className="text-slate-500 shrink-0">Secret</span>
+              <span className="flex-1 text-slate-800 select-all">{createdSecret.secret}</span>
+              <button onClick={() => copyToClipboard(createdSecret.secret, "Secret copied")} className="text-indigo-500 hover:text-indigo-700 shrink-0"><Copy className="w-3.5 h-3.5" /></button>
+            </div>
+          </div>
+          <p className="text-xs text-amber-700 mt-2">Pass the secret as <code className="bg-amber-100 px-1 rounded">X-Webhook-Secret</code> header or <code className="bg-amber-100 px-1 rounded">?secret=</code> query param.</p>
+        </div>
+      )}
+
+      {/* Webhook cards */}
+      {whLoading ? (
+        <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-indigo-400 animate-spin" /></div>
+      ) : webhooks.length === 0 ? (
+        <div className="text-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
+          <Webhook className="w-10 h-10 mx-auto mb-3 opacity-40" />
+          <p className="text-sm font-medium">No live feeds yet</p>
+          <p className="text-xs mt-1">Create a feed to receive data from POS, LIMS, mobile apps, ERPs, or any HTTP-capable system.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {webhooks.map(wh => {
+            const entityColor = ENTITY_TYPE_COLORS[wh.entity_type] || "bg-slate-100 text-slate-700";
+            const entityLabel = ENTITY_TYPE_LABELS[wh.entity_type] || wh.entity_type;
+            const wEvents = events.filter(e => e.webhook_id === wh.webhook_id);
+            const isExpanded = expandedEvents === wh.webhook_id;
+
+            return (
+              <div key={wh.webhook_id} className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-slate-800 text-sm">{wh.source_name}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${entityColor}`}>{entityLabel}</span>
+                    </div>
+                    {wh.description && <p className="text-xs text-slate-500 mt-1">{wh.description}</p>}
+                  </div>
+                  <button onClick={() => handleDelete(wh.webhook_id)} className="text-slate-400 hover:text-rose-500 transition-colors shrink-0 p-1">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* URL row */}
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-mono">
+                  <span className="flex-1 truncate text-slate-600">{wh.ingest_url}</span>
+                  <button onClick={() => copyToClipboard(wh.ingest_url, "URL copied")} className="text-indigo-400 hover:text-indigo-600 shrink-0"><Copy className="w-3 h-3" /></button>
+                </div>
+
+                {/* Stats row */}
+                <div className="flex items-center gap-4 text-xs text-slate-500">
+                  <span className="flex items-center gap-1">
+                    <Zap className="w-3 h-3" />{wh.received_count || 0} received
+                  </span>
+                  {wh.last_received_at && (
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />Last: {new Date(wh.last_received_at).toLocaleDateString()}
+                    </span>
+                  )}
+                  <span className="ml-auto text-slate-400">Secret: ••••{wh.secret?.slice(-4)}</span>
+                </div>
+
+                {/* Events toggle */}
+                {wEvents.length > 0 && (
+                  <button
+                    onClick={() => setExpandedEvents(isExpanded ? null : wh.webhook_id)}
+                    className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700"
+                  >
+                    {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    {wEvents.length} recent event{wEvents.length !== 1 ? "s" : ""}
+                  </button>
+                )}
+
+                {isExpanded && (
+                  <div className="border-t border-slate-100 pt-2 space-y-1.5">
+                    {wEvents.slice(0, 8).map((ev, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs text-slate-600 py-0.5">
+                        <span className="text-slate-400">{new Date(ev.received_at).toLocaleTimeString()}</span>
+                        <span>{ev.records_in} in</span>
+                        <span className="text-emerald-600">{ev.created} created</span>
+                        {ev.errors > 0 && <span className="text-rose-500">{ev.errors} err</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* How it works */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-xs text-slate-600 space-y-2">
+        <p className="font-semibold text-slate-700">How live feeds work</p>
+        <ol className="list-decimal list-inside space-y-1">
+          <li>Create a feed — choose source name and which entity type to receive (People, Products, etc.)</li>
+          <li>Copy the ingest URL and secret to your external system (POS, LIMS, ERP, mobile app)</li>
+          <li>Your system POSTs JSON to the URL with <code className="bg-slate-200 px-1 rounded">X-Webhook-Secret</code> header</li>
+          <li>Newsconseen auto-maps fields, writes to Base44, and triggers ETL immediately</li>
+        </ol>
+        <p className="text-slate-500">Body can be a single JSON object or an array of objects. Unknown fields are silently ignored.</p>
+      </div>
+
+      {/* Create modal */}
+      {createOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-800">New Live Feed</h3>
+              <button onClick={() => setCreateOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Source name <span className="text-rose-500">*</span></label>
+                <input
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  placeholder="e.g. Square POS, Lab System, Mobile App"
+                  value={sourceName}
+                  onChange={e => setSourceName(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Entity type</label>
+                <select
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  value={entityType}
+                  onChange={e => setEntityType(e.target.value)}
+                >
+                  {Object.entries(ENTITY_TYPE_LABELS).map(([id, label]) => (
+                    <option key={id} value={id}>{label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Description (optional)</label>
+                <input
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  placeholder="e.g. Daily stock updates from warehouse"
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setCreateOpen(false)}
+                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-sm hover:bg-slate-50"
+              >Cancel</button>
+              <button
+                onClick={handleCreate}
+                disabled={creating}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                Create Feed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function Connectors() {
   const [currentUser, setCurrentUser]                       = useState(null);
   const [dbModalConnector, setDbModalConnector]             = useState(null);
@@ -2202,6 +2517,11 @@ export default function Connectors() {
           </div>
         </div>
       )}
+
+      {/* Section 5: Live Data Feeds */}
+      <div>
+        <WebhookSection currentUser={currentUser} />
+      </div>
     </div>
   );
 }

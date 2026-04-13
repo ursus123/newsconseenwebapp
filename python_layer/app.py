@@ -347,6 +347,14 @@ try:
 except Exception as _goals_err:
     logger.warning("KPI goal tracking router failed to load — %s", _goals_err)
 
+# Phase 12 — Live Data Feeds (inbound webhooks)
+try:
+    from ingest.routes import router as ingest_router
+    app.include_router(ingest_router)
+    logger.info("Ingest (live data feeds) router loaded")
+except Exception as _ingest_err:
+    logger.warning("Ingest router failed to load — %s", _ingest_err)
+
 
 # ----------------------------------------------------------
 # Helper Functions
