@@ -622,6 +622,16 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     # Notify n8n of ETL completion (fire-and-forget, never blocks response)
     emit_etl_complete(results, company_ids)
 
+    # Run scheduled workflows — fire any that are due
+    scheduled_result = {}
+    try:
+        from workflows.routes import run_scheduled_workflows
+        scheduled_result = run_scheduled_workflows()
+        logger.info("cron: scheduled workflows evaluated=%s triggered=%s",
+                    scheduled_result.get("evaluated", 0), scheduled_result.get("triggered", 0))
+    except Exception as _sched_err:
+        logger.warning("cron: scheduled workflow runner failed — %s", _sched_err)
+
     return {
         "cron_run":    True,
         "version":     "4.1.0",

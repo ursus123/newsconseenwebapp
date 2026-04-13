@@ -7,9 +7,9 @@ import {
   Users, Package, ArrowLeftRight, ClipboardList, Building2,
   Clock, CheckCircle, AlertCircle, Calendar, Link2, Wrench,
   TrendingUp, Settings2, Eye, EyeOff, Brain, Shield, Activity,
-  ChevronRight,
+  ChevronRight, Zap, ScrollText,
 } from "lucide-react";
-import { format, isToday, isPast, parseISO, subDays, startOfDay } from "date-fns";
+import { format, isToday, isPast, parseISO, subDays, startOfDay, formatDistanceToNow } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -46,6 +46,130 @@ import SupersetEmbed from "../components/dashboard/SupersetEmbed";
 import N8nEmbed from "../components/dashboard/N8nEmbed";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+
+// ── Automation Feed ───────────────────────────────────────────────────────────
+// Shows recent workflow runs + audit events as a unified activity feed.
+function AutomationFeed({ companyId }) {
+  const { data: wfRunsData } = useQuery({
+    queryKey: ["dash-wf-runs", companyId],
+    queryFn: async () => {
+      const r = await fetch(`${RAILWAY_URL}/workflows/runs?company_id=${companyId}&limit=8`);
+      if (!r.ok) return { runs: [] };
+      return r.json();
+    },
+    enabled:   !!companyId,
+    staleTime: 30000,
+    retry:     false,
+  });
+
+  const { data: auditData } = useQuery({
+    queryKey: ["dash-audit-feed", companyId],
+    queryFn: async () => {
+      const r = await fetch(`${RAILWAY_URL}/audit/log?company_id=${companyId}&limit=8`);
+      if (!r.ok) return { entries: [] };
+      return r.json();
+    },
+    enabled:   !!companyId,
+    staleTime: 30000,
+    retry:     false,
+  });
+
+  const wfRuns   = wfRunsData?.runs   || [];
+  const audits   = auditData?.entries || [];
+
+  if (wfRuns.length === 0 && audits.length === 0) return null;
+
+  // Merge and sort by time
+  const feedItems = [
+    ...wfRuns.map(r => ({
+      type:    "workflow",
+      time:    r.started_at,
+      title:   r.workflow_name,
+      sub:     `${r.steps_run ?? 0} steps · ${r.trigger_type?.replace(/_/g, " ")}`,
+      status:  r.status,
+      entity:  r.entity_type,
+    })),
+    ...audits.map(a => ({
+      type:   "audit",
+      time:   a.timestamp,
+      title:  a.entity_name || a.entity_id || a.entity_type,
+      sub:    `${a.entity_type} ${a.action}${a.changed_by ? ` by ${a.changed_by.split("@")[0]}` : ""}`,
+      status: a.action,
+      entity: a.entity_type,
+    })),
+  ]
+    .filter(i => i.time)
+    .sort((a, b) => (b.time > a.time ? 1 : -1))
+    .slice(0, 10);
+
+  if (feedItems.length === 0) return null;
+
+  function timeAgo(iso) {
+    try {
+      return formatDistanceToNow(new Date(iso), { addSuffix: true });
+    } catch {
+      return "";
+    }
+  }
+
+  function dot(item) {
+    if (item.type === "workflow") {
+      if (item.status === "completed") return "bg-emerald-500";
+      if (item.status === "completed_with_errors") return "bg-amber-500";
+      if (item.status === "error") return "bg-rose-500";
+      return "bg-slate-400";
+    }
+    if (item.status === "created")  return "bg-emerald-400";
+    if (item.status === "updated")  return "bg-blue-400";
+    if (item.status === "deleted")  return "bg-rose-400";
+    return "bg-slate-400";
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Zap className="w-4 h-4 text-violet-500" />
+          <span className="text-sm font-bold text-slate-700">Automation Feed</span>
+          <span className="text-[10px] bg-violet-100 text-violet-600 font-bold px-2 py-0.5 rounded-full">
+            {feedItems.length} events
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link to="/Workflows" className="text-[10px] text-violet-500 hover:text-violet-700 font-semibold flex items-center gap-0.5">
+            Workflows <ChevronRight className="w-3 h-3" />
+          </Link>
+          <Link to="/Settings#audit" className="text-[10px] text-slate-400 hover:text-slate-600 font-semibold flex items-center gap-0.5">
+            <ScrollText className="w-3 h-3 mr-0.5" />Audit log
+          </Link>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {feedItems.map((item, i) => (
+          <div key={i} className="flex items-start gap-2.5">
+            <div className="mt-1.5 shrink-0">
+              <span className={`block w-2 h-2 rounded-full ${dot(item)}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                  item.type === "workflow"
+                    ? "bg-violet-100 text-violet-600"
+                    : "bg-slate-100 text-slate-500"
+                }`}>
+                  {item.type === "workflow" ? "WF" : item.entity?.toUpperCase().slice(0, 3) || "AUD"}
+                </span>
+                <p className="text-xs font-medium text-slate-700 truncate">{item.title}</p>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-0.5">{item.sub}</p>
+            </div>
+            <span className="text-[10px] text-slate-300 shrink-0 mt-0.5 whitespace-nowrap">{timeAgo(item.time)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // ── Agent Insight Strip ───────────────────────────────────────────────────────
 // Shows latest agent run summaries + pending approval count above stat cards.
@@ -798,6 +922,9 @@ function AdminDashboard({ user }) {
 
       <OnboardingChecklist done={onboardingDone} />
       <GettingStartedChecklist />
+
+      {/* ── Automation Feed ── */}
+      <AutomationFeed companyId={companyId} />
 
       {/* ── Agent Insight Strip ── */}
       <AgentInsightStrip companyId={companyId} />

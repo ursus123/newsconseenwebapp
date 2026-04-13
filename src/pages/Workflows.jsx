@@ -33,12 +33,26 @@ const TRIGGER_TYPES = [
     color: "amber",
   },
   {
+    id:    "schedule",
+    label: "Scheduled",
+    desc:  "Runs automatically on a recurring schedule",
+    icon:  Clock,
+    color: "violet",
+  },
+  {
     id:    "manual",
-    label: "Manual trigger",
+    label: "Manual only",
     desc:  "Only runs when operator clicks Run",
     icon:  Play,
     color: "indigo",
   },
+];
+
+const SCHEDULE_INTERVALS = [
+  { id: "hourly",  label: "Every hour" },
+  { id: "daily",   label: "Every day" },
+  { id: "weekly",  label: "Every week" },
+  { id: "monthly", label: "Every month" },
 ];
 
 const ENTITY_TYPES = [
@@ -262,7 +276,33 @@ function WorkflowFormModal({ companyId, existing, onClose, onSaved }) {
               })}
             </div>
 
-            {form.trigger.type !== "manual" && (
+            {form.trigger.type === "schedule" && (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Repeat every</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {SCHEDULE_INTERVALS.map(si => (
+                      <button
+                        key={si.id}
+                        onClick={() => setField("trigger.schedule_interval", si.id)}
+                        className={`text-xs py-2 rounded-xl border transition-colors ${
+                          (form.trigger.schedule_interval || "daily") === si.id
+                            ? "border-violet-400 bg-violet-50 text-violet-700 font-semibold"
+                            : "border-slate-200 text-slate-500 hover:border-slate-300"
+                        }`}
+                      >
+                        {si.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Scheduled workflows fire automatically when the ETL cron runs. The system checks whether each workflow is due based on its last run time.
+                </p>
+              </div>
+            )}
+
+            {(form.trigger.type === "entity_created" || form.trigger.type === "entity_updated") && (
               <div className="space-y-3">
                 <div>
                   <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Entity type</label>

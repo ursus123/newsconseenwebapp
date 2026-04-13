@@ -16,7 +16,7 @@
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Header
@@ -42,9 +42,11 @@ def _now_iso() -> str:
 # ── Pydantic models ────────────────────────────────────────────────────────────
 
 class WorkflowTrigger(BaseModel):
-    type:        str                     # manual | entity_created | entity_updated | schedule
-    entity_type: Optional[str] = None   # person | enterprise | product | task | transaction
-    condition:   Optional[dict] = None  # {field: value} — trigger entity must match
+    type:              str                     # manual | entity_created | entity_updated | schedule
+    entity_type:       Optional[str] = None   # person | enterprise | product | task | transaction
+    condition:         Optional[dict] = None  # {field: value} — trigger entity must match
+    schedule_interval: Optional[str] = None  # hourly | daily | weekly | monthly
+    schedule_hour:     Optional[int] = None  # 0-23 UTC preferred fire hour (informational)
 
 
 class WorkflowStep(BaseModel):
@@ -144,6 +146,82 @@ def toggle_workflow(workflow_id: str):
     wf["is_active"]  = not wf["is_active"]
     wf["updated_at"] = _now_iso()
     return {"id": workflow_id, "is_active": wf["is_active"]}
+
+
+# ── Scheduled execution ────────────────────────────────────────────────────────
+
+_SCHEDULE_INTERVALS = {
+    "hourly":  timedelta(hours=1),
+    "daily":   timedelta(hours=24),
+    "weekly":  timedelta(days=7),
+    "monthly": timedelta(days=30),
+}
+
+
+@router.post("/run-scheduled")
+def run_scheduled_workflows():
+    """
+    Called by the cron runner (POST /cron/etl-all or a dedicated schedule).
+    Evaluates all active schedule-triggered workflows and fires those that are due.
+    """
+    now       = datetime.now(timezone.utc)
+    evaluated = 0
+    triggered = []
+
+    for wf in list(_WORKFLOWS.values()):
+        if not wf.get("is_active"):
+            continue
+        trig = wf.get("trigger", {})
+        if trig.get("type") != "schedule":
+            continue
+
+        evaluated += 1
+        interval_key = trig.get("schedule_interval") or "daily"
+        interval     = _SCHEDULE_INTERVALS.get(interval_key, timedelta(hours=24))
+
+        last_run = wf.get("last_run_at")
+        if last_run:
+            try:
+                last_dt = datetime.fromisoformat(last_run.replace("Z", "+00:00"))
+                if last_dt.tzinfo is None:
+                    last_dt = last_dt.replace(tzinfo=timezone.utc)
+                if now - last_dt < interval:
+                    continue  # not due yet
+            except Exception:
+                pass  # malformed timestamp — fire anyway
+
+        started_at = _now_iso()
+        try:
+            result = execute_workflow(wf, {"_entity_type": "schedule"})
+        except Exception as e:
+            result = {"status": "error", "error": str(e)}
+
+        wf["run_count"]   = wf.get("run_count", 0) + 1
+        wf["last_run_at"] = started_at
+
+        run_entry = {
+            "workflow_id":   wf["id"],
+            "workflow_name": wf["name"],
+            "company_id":    wf["company_id"],
+            "trigger_type":  "schedule",
+            "entity_type":   None,
+            "entity_id":     None,
+            "started_at":    started_at,
+            **result,
+        }
+        _RUN_LOG.append(run_entry)
+        if len(_RUN_LOG) > _RUN_LOG_MAX:
+            del _RUN_LOG[: len(_RUN_LOG) - _RUN_LOG_MAX]
+
+        triggered.append({
+            "workflow_id":   wf["id"],
+            "workflow_name": wf["name"],
+            "status":        result.get("status"),
+            "steps_run":     result.get("steps_run", 0),
+        })
+        logger.info("scheduled workflow fired: %s → %s", wf["name"], result.get("status"))
+
+    return {"evaluated": evaluated, "triggered": len(triggered), "results": triggered}
 
 
 # ── Execution ─────────────────────────────────────────────────────────────────
