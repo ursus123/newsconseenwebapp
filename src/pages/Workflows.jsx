@@ -115,6 +115,101 @@ const STEP_TYPES = [
 
 const STEP_TYPE_MAP = Object.fromEntries(STEP_TYPES.map(s => [s.id, s]));
 
+// ── Workflow Templates ────────────────────────────────────────────────────────
+const WORKFLOW_TEMPLATES = [
+  {
+    id:          "new_client_onboarding",
+    label:       "New Client Onboarding",
+    desc:        "Welcome task + WhatsApp greeting when a new client is added",
+    icon:        "👋",
+    color:       "emerald",
+    definition: {
+      name:        "New Client Onboarding",
+      description: "Fires when a new client record is created — creates a welcome task and sends a WhatsApp greeting",
+      trigger:     { type: "entity_created", entity_type: "person", condition: { person_type: "client" } },
+      steps: [
+        {
+          type:   "create_task",
+          label:  "Create Welcome Task",
+          params: { title: "Welcome call with {{first_name}}", task_type: "call", due_days: 1, priority: "high", notes: "First contact with new client {{first_name}} {{last_name}}" },
+        },
+        {
+          type:   "send_alert",
+          label:  "Send WhatsApp Greeting",
+          params: { channel: "whatsapp", recipient: "{{phone}}", message: "Hi {{first_name}}, welcome! We're excited to have you on board. Your team will be in touch shortly." },
+        },
+        {
+          type:   "log_note",
+          label:  "Log Onboarding Note",
+          params: { note: "Onboarding workflow triggered for {{first_name}} {{last_name}} ({{person_type}})" },
+        },
+      ],
+    },
+  },
+  {
+    id:          "task_overdue_alert",
+    label:       "Overdue Task Alert",
+    desc:        "Email manager when a task is updated to overdue status",
+    icon:        "⏰",
+    color:       "amber",
+    definition: {
+      name:        "Overdue Task Alert",
+      description: "Fires when a task record is updated — sends an email alert for overdue items",
+      trigger:     { type: "entity_updated", entity_type: "task", condition: {} },
+      steps: [
+        {
+          type:   "send_alert",
+          label:  "Email Manager",
+          params: { channel: "email", recipient: "{{assigned_to}}", subject: "Task overdue: {{title}}", message: "Task '{{title}}' is overdue. Please follow up immediately." },
+        },
+        {
+          type:   "log_note",
+          label:  "Log Alert Sent",
+          params: { note: "Overdue alert sent for task: {{title}}" },
+        },
+      ],
+    },
+  },
+  {
+    id:          "weekly_operations_log",
+    label:       "Weekly Operations Log",
+    desc:        "Scheduled note logged every week summarising that the week cron ran",
+    icon:        "📋",
+    color:       "violet",
+    definition: {
+      name:        "Weekly Operations Log",
+      description: "Runs every week via the ETL cron — logs that the weekly automation check completed",
+      trigger:     { type: "schedule", schedule_interval: "weekly" },
+      steps: [
+        {
+          type:   "log_note",
+          label:  "Log Weekly Check",
+          params: { note: "Weekly automated operations check completed by Newsconseen workflow engine." },
+        },
+      ],
+    },
+  },
+  {
+    id:          "new_transaction_notification",
+    label:       "New Transaction Alert",
+    desc:        "Email notification when a new transaction is created",
+    icon:        "💳",
+    color:       "blue",
+    definition: {
+      name:        "New Transaction Alert",
+      description: "Fires when a new transaction record is created",
+      trigger:     { type: "entity_created", entity_type: "transaction", condition: {} },
+      steps: [
+        {
+          type:   "log_note",
+          label:  "Log Transaction",
+          params: { note: "New transaction created: {{reference_number}} ({{transaction_type}})" },
+        },
+      ],
+    },
+  },
+];
+
 
 // ── WorkflowFormModal ─────────────────────────────────────────────────────────
 function WorkflowFormModal({ companyId, existing, onClose, onSaved }) {
@@ -559,6 +654,26 @@ export default function Workflows() {
     setEditing(null);
   }
 
+  async function handleTemplate(tpl) {
+    try {
+      const payload = {
+        ...tpl.definition,
+        company_id: companyId,
+        steps: (tpl.definition.steps || []).map((s, i) => ({
+          ...s,
+          step_id: Math.random().toString(36).slice(2, 10),
+        })),
+      };
+      const res  = await fetch(`${RAILWAY_URL}/workflows`, { method: "POST", headers: API_HEADERS, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      toast({ title: `"${tpl.label}" workflow created from template` });
+      qc.invalidateQueries({ queryKey: ["workflows", companyId] });
+    } catch (e) {
+      toast({ title: "Template failed", description: e.message, variant: "destructive" });
+    }
+  }
+
   const workflows = workflowsData.workflows || [];
   const runs      = runsData.runs || [];
   const active    = workflows.filter(w => w.is_active).length;
@@ -642,19 +757,60 @@ export default function Workflows() {
             <div className="w-8 h-8 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin" />
           </div>
         ) : workflows.length === 0 ? (
-          <div className="text-center py-16 text-slate-400">
-            <GitBranch className="w-14 h-14 mx-auto mb-4 opacity-20" />
-            <p className="text-base font-medium text-slate-600">No workflows yet</p>
-            <p className="text-sm mt-1">Create your first workflow to automate operations.</p>
-            <Button
-              onClick={() => setFormOpen(true)}
-              className="mt-6 bg-indigo-600 hover:bg-indigo-700 rounded-xl"
-            >
-              <Plus className="w-4 h-4 mr-2" /> Create first workflow
-            </Button>
+          <div className="space-y-6">
+            <div className="text-center py-8 text-slate-400">
+              <GitBranch className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <p className="text-base font-medium text-slate-600">No workflows yet</p>
+              <p className="text-sm mt-1 mb-6">Start from a template or build from scratch.</p>
+              <Button onClick={() => setFormOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 rounded-xl">
+                <Plus className="w-4 h-4 mr-2" /> Create from scratch
+              </Button>
+            </div>
+            {/* Templates */}
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Start from a template</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {WORKFLOW_TEMPLATES.map(tpl => (
+                  <button
+                    key={tpl.id}
+                    onClick={() => handleTemplate(tpl)}
+                    className="text-left p-4 border border-dashed border-slate-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors group"
+                  >
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-2xl">{tpl.icon}</span>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-700 group-hover:text-indigo-700">{tpl.label}</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-400">{tpl.desc}</p>
+                    <p className="text-[10px] text-indigo-500 font-semibold mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      Click to create →
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-6">
+            {/* Template quick-add strip */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Add from template</p>
+              <div className="flex flex-wrap gap-2">
+                {WORKFLOW_TEMPLATES.map(tpl => (
+                  <button
+                    key={tpl.id}
+                    onClick={() => handleTemplate(tpl)}
+                    className="flex items-center gap-1.5 text-xs border border-dashed border-slate-300 text-slate-500 px-3 py-1.5 rounded-xl hover:border-indigo-400 hover:text-indigo-600 hover:bg-white transition-colors"
+                  >
+                    <span>{tpl.icon}</span> {tpl.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Workflow list */}
+            <div className="space-y-3">
             {workflows.map(wf => {
               const triggerDef = TRIGGER_TYPES.find(t => t.id === wf.trigger?.type);
               const TrigIcon   = triggerDef?.icon || Zap;
@@ -755,7 +911,8 @@ export default function Workflows() {
                 </div>
               );
             })}
-          </div>
+            </div>   {/* end workflow list */}
+          </div>     {/* end space-y-6 */}
         )
       )}
 

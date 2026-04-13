@@ -1985,6 +1985,55 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "name": "get_workflow_summary",
+        "description": (
+            "Get an overview of this organisation's workflow automation: how many workflows are active, "
+            "how many times they've run recently, success vs error rates, and which workflows run most often. "
+            "Use for questions like 'how many automations do we have?', 'what workflows are running?', "
+            "'is our automation working?', 'what has the system done automatically?'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days_back": {
+                    "type": "integer",
+                    "description": "How many days back to count runs. Default 30.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_audit_summary",
+        "description": (
+            "Get a summary of recent data changes (audit trail): who created, updated, or deleted records "
+            "and when. Use for questions like 'what changed recently?', 'who deleted X?', 'show me activity "
+            "for people records', 'what did the team do this week?'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days_back": {
+                    "type": "integer",
+                    "description": "How many days back to look. Default 7.",
+                },
+                "entity_type": {
+                    "type": "string",
+                    "enum": ["person", "enterprise", "product", "task", "transaction", "relationship", "address"],
+                    "description": "Filter to a specific entity type. Leave blank for all.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_automation_roi",
+        "description": (
+            "Calculate the automation ROI — how many tasks were auto-created by workflows, how many alerts were "
+            "sent automatically, fields updated, and an estimate of time saved. Use for questions like "
+            "'how much time has automation saved us?', 'what has the system done for us?', 'show me automation value'."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
 ]
 
 
@@ -2107,6 +2156,156 @@ def _search_records_semantically(
         }
 
 
+# ── Automation-aware tools ────────────────────────────────────────────────────
+
+def get_workflow_summary(company_id: str, days_back: int = 30) -> dict:
+    """
+    Return active workflows, recent run counts, and top-performing workflows.
+    Falls back to in-memory store if called directly.
+    """
+    try:
+        from workflows.routes import _WORKFLOWS, _RUN_LOG
+        from datetime import datetime, timezone, timedelta
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
+        wfs    = [w for w in _WORKFLOWS.values() if w.get("company_id") == company_id]
+        recent_runs = [
+            r for r in _RUN_LOG
+            if r.get("company_id") == company_id
+            and r.get("started_at", "") >= cutoff.isoformat()
+        ]
+
+        total_active = sum(1 for w in wfs if w.get("is_active"))
+        by_trigger   = {}
+        for w in wfs:
+            t = w.get("trigger", {}).get("type", "unknown")
+            by_trigger[t] = by_trigger.get(t, 0) + 1
+
+        # Per-workflow run counts
+        run_counts: dict = {}
+        for r in recent_runs:
+            wid = r.get("workflow_id", "?")
+            run_counts[wid] = run_counts.get(wid, 0) + 1
+
+        top_workflows = sorted(
+            [{"id": w["id"], "name": w["name"], "runs": run_counts.get(w["id"], 0),
+              "is_active": w.get("is_active"), "trigger": w.get("trigger", {}).get("type")}
+             for w in wfs],
+            key=lambda x: x["runs"], reverse=True
+        )[:5]
+
+        completed = sum(1 for r in recent_runs if r.get("status") in ("completed", "completed_with_errors"))
+        errors    = sum(1 for r in recent_runs if r.get("status") == "error")
+
+        return {
+            "total_workflows":  len(wfs),
+            "active_workflows": total_active,
+            "by_trigger_type":  by_trigger,
+            "total_runs":       len(recent_runs),
+            "completed_runs":   completed,
+            "error_runs":       errors,
+            "top_workflows":    top_workflows,
+            "period_days":      days_back,
+        }
+    except Exception as e:
+        return {"error": str(e), "total_workflows": 0, "total_runs": 0}
+
+
+def get_audit_summary(company_id: str, days_back: int = 7, entity_type: Optional[str] = None) -> dict:
+    """
+    Return recent audit log entries — who changed what and when.
+    Falls back to the in-memory audit log.
+    """
+    try:
+        from audit.routes import _AUDIT_LOG
+        from datetime import datetime, timezone, timedelta
+
+        cutoff  = datetime.now(timezone.utc) - timedelta(days=days_back)
+        entries = [
+            e for e in _AUDIT_LOG
+            if e.get("company_id") == company_id
+            and e.get("timestamp", "") >= cutoff.isoformat()
+            and (not entity_type or e.get("entity_type") == entity_type)
+        ]
+
+        by_action: dict = {}
+        by_entity: dict = {}
+        by_user:   dict = {}
+        for e in entries:
+            by_action[e.get("action", "?")] = by_action.get(e.get("action", "?"), 0) + 1
+            by_entity[e.get("entity_type", "?")] = by_entity.get(e.get("entity_type", "?"), 0) + 1
+            u = (e.get("changed_by") or "unknown").split("@")[0]
+            by_user[u] = by_user.get(u, 0) + 1
+
+        recent = sorted(entries, key=lambda x: x.get("timestamp", ""), reverse=True)[:10]
+
+        return {
+            "total_changes":  len(entries),
+            "period_days":    days_back,
+            "by_action":      by_action,
+            "by_entity_type": by_entity,
+            "by_user":        by_user,
+            "recent_entries": [
+                {
+                    "entity": e.get("entity_name") or e.get("entity_id"),
+                    "type":   e.get("entity_type"),
+                    "action": e.get("action"),
+                    "by":     (e.get("changed_by") or "").split("@")[0],
+                    "when":   e.get("timestamp", "")[:16],
+                }
+                for e in recent
+            ],
+        }
+    except Exception as e:
+        return {"error": str(e), "total_changes": 0}
+
+
+def get_automation_roi(company_id: str) -> dict:
+    """
+    Estimate automation ROI: tasks auto-created, alerts sent, time saved.
+    Combines workflow run data with step-level outcome counts.
+    """
+    try:
+        from workflows.routes import _WORKFLOWS, _RUN_LOG
+
+        wf_runs = [r for r in _RUN_LOG if r.get("company_id") == company_id]
+
+        tasks_created  = 0
+        alerts_sent    = 0
+        fields_updated = 0
+        notes_logged   = 0
+
+        for run in wf_runs:
+            for step in (run.get("step_results") or []):
+                if step.get("status") not in ("ok", "completed"):
+                    continue
+                t = step.get("type", "")
+                if t == "create_task":   tasks_created  += 1
+                if t == "send_alert":    alerts_sent    += 1
+                if t == "update_field":  fields_updated += 1
+                if t == "log_note":      notes_logged   += 1
+
+        # Estimate: task creation = 5 min saved; alert = 2 min; field update = 1 min
+        time_saved_min = tasks_created * 5 + alerts_sent * 2 + fields_updated * 1 + notes_logged * 1
+
+        active_wfs = sum(1 for w in _WORKFLOWS.values()
+                         if w.get("company_id") == company_id and w.get("is_active"))
+
+        return {
+            "active_workflows":   active_wfs,
+            "total_runs":         len(wf_runs),
+            "tasks_auto_created": tasks_created,
+            "alerts_auto_sent":   alerts_sent,
+            "fields_auto_updated":fields_updated,
+            "notes_auto_logged":  notes_logged,
+            "estimated_time_saved_minutes": time_saved_min,
+            "estimated_time_saved_hours":   round(time_saved_min / 60, 1),
+            "note": "Time estimates: task creation=5min, alert=2min, field update=1min, note=1min.",
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
 
 def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
@@ -2141,6 +2340,10 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         # Web-grounded tools — company_id injected but not used (public data)
         "web_search":              web_search,
         "search_public_data":      search_public_data,
+        # Automation-aware tools — reads in-memory workflow/audit stores
+        "get_workflow_summary":    get_workflow_summary,
+        "get_audit_summary":       get_audit_summary,
+        "get_automation_roi":      get_automation_roi,
     }
 
     fn = dispatch.get(tool_name)
