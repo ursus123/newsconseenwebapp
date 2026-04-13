@@ -444,12 +444,13 @@ def root():
     return {
         "status":  "ok",
         "service": "newsconseen-python-layer",
-        "version": "4.1.0",
+        "version": "4.8.0",
         "mantra":  "The Autonomous SME Operating System",
         "layers": {
             "layer_1": "Enterprise OS — Base44 master data",
             "layer_2": "Deployable Datamart — ETL + PostgreSQL + FastAPI",
             "layer_3": "Autonomous Intelligence — Copilot + Alerts + Network",
+            "layer_4": "Agentic AI — 8 agents, orchestrator, approval gate, agent memory",
         },
     }
 
@@ -482,7 +483,7 @@ def health():
 
     return {
         "status":   "ok" if db_status == "connected" else "degraded",
-        "version":  "4.1.0",
+        "version":  "4.8.0",
         "api":      "ok",
         "database": db_status,
 
