@@ -82,6 +82,7 @@ const NAV_CONFIG = {
         { name: "alerts",              label: "Alerts",               icon: Bell, badge: "alerts" },
         { name: "agents",              label: "Agents",               icon: Brain },
         { name: "Connectors",          icon: Plug },
+        { name: "Workflows",           icon: Zap },
       ],
     },
     {
@@ -146,6 +147,7 @@ const NAV_CONFIG = {
         { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
         { name: "agents",             label: "Agents",              icon: Brain },
         { name: "Connectors",         icon: Plug },
+        { name: "Workflows",          icon: Zap },
       ],
     },
     {

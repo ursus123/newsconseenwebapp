@@ -35,6 +35,7 @@ import KineticLayer from './pages/KineticLayer';
 import ObjectViews from './pages/ObjectViews';
 import Landing from './pages/Landing';
 import Agents from './pages/Agents';
+import Workflows from './pages/Workflows';
 import Mobile from './pages/Mobile';
 import Layout from './Layout.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
@@ -127,6 +128,7 @@ const AuthenticatedApp = () => {
       <Route path="/ObjectExplorer" element={<LayoutWrapper currentPageName="Object Explorer"><ObjectExplorer /></LayoutWrapper>} />
       <Route path="/KineticLayer" element={<LayoutWrapper currentPageName="Kinetic Layer"><KineticLayer /></LayoutWrapper>} />
       <Route path="/agents" element={<LayoutWrapper currentPageName="Agents"><Agents /></LayoutWrapper>} />
+      <Route path="/Workflows" element={<LayoutWrapper currentPageName="Workflows"><Workflows /></LayoutWrapper>} />
       <Route path="/ObjectViews" element={<LayoutWrapper currentPageName="Object Views"><ObjectViews /></LayoutWrapper>} />
       {/* Desktop Shell — NO layout wrapper, full screen */}
       <Route path="/Desktop" element={<Desktop />} />

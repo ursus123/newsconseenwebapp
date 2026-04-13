@@ -36,6 +36,15 @@ const triggerETL = (entity) =>
     headers: { "x-api-key": RAILWAY_API_KEY },
   }).catch(() => {});
 
+// Fire-and-forget workflow trigger — never blocks the UI
+function triggerWorkflows(companyId, triggerType, entityData) {
+  fetch(`${RAILWAY_URL}/workflows/trigger`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "person", entity_data: entityData }),
+  }).catch(() => {});
+}
+
 // Fire-and-forget audit log — never blocks the UI
 function logAudit(companyId, action, record, userEmail) {
   fetch(`${RAILWAY_URL}/audit/log`, {
@@ -230,6 +239,7 @@ export default function People() {
       triggerETL("people");
       notifyTaxonomyChange("person", currentUser?.company_id);
       logAudit(currentUser?.company_id, "created", editing, currentUser?.email);
+      triggerWorkflows(currentUser?.company_id, "entity_created", editing);
       setFormOpen(false);
     },
   });
@@ -241,6 +251,7 @@ export default function People() {
       triggerETL("people");
       notifyTaxonomyChange("person", currentUser?.company_id);
       logAudit(currentUser?.company_id, "updated", editing, currentUser?.email);
+      triggerWorkflows(currentUser?.company_id, "entity_updated", editing);
       setFormOpen(false);
       setEditing(null);
     },

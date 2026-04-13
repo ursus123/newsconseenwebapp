@@ -271,6 +271,14 @@ try:
 except Exception as _audit_err:
     logger.warning("Audit trail router failed to load — %s", _audit_err)
 
+# Phase 9 — Workflow Engine
+try:
+    from workflows.routes import router as workflows_router
+    app.include_router(workflows_router)
+    logger.info("Workflow engine router loaded")
+except Exception as _wf_err:
+    logger.warning("Workflow engine router failed to load — %s", _wf_err)
+
 
 # ----------------------------------------------------------
 # Helper Functions
