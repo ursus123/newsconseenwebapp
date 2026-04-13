@@ -147,7 +147,50 @@ async def lifespan(app: FastAPI):
             logger.warning("Startup: Audit table setup skipped — %s", e)
     else:
         logger.warning("Startup: DATABASE_URL not set — analytics store unavailable")
+
+    # ----------------------------------------------------------
+    # ETL scheduler — runs /cron/etl-all every 5 minutes
+    # Keeps analytics tables fresh without relying on frontend
+    # mutation triggers or manual Railway cron jobs.
+    # ----------------------------------------------------------
+    scheduler = None
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        import threading
+
+        def _run_etl_background():
+            """Run the full ETL pipeline in a background thread."""
+            try:
+                import requests as _req
+                _req.post(
+                    "http://localhost:8000/cron/etl-all",
+                    headers={"x-cron-secret": settings.cron_secret or ""},
+                    timeout=300,
+                )
+                logger.info("Scheduler: ETL cycle complete")
+            except Exception as _e:
+                logger.warning("Scheduler: ETL cycle failed — %s", _e)
+
+        scheduler = BackgroundScheduler(daemon=True)
+        scheduler.add_job(
+            _run_etl_background,
+            trigger="interval",
+            minutes=5,
+            id="etl_all",
+            max_instances=1,          # never overlap; skip if previous run is still going
+            misfire_grace_time=60,    # tolerate up to 60s latency before skipping
+        )
+        scheduler.start()
+        logger.info("Startup: ETL scheduler started — running every 5 minutes")
+    except Exception as _sched_err:
+        logger.warning("Startup: ETL scheduler failed to start — %s", _sched_err)
+
     yield
+
+    # Shutdown
+    if scheduler and scheduler.running:
+        scheduler.shutdown(wait=False)
+        logger.info("Shutdown: ETL scheduler stopped")
 
 
 # ----------------------------------------------------------

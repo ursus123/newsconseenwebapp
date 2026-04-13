@@ -31,6 +31,7 @@ openpyxl
 
 # Scheduling / datetime
 python-dateutil
+apscheduler
 
 # Environment
 python-dotenv
