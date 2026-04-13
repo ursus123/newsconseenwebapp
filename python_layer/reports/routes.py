@@ -177,6 +177,20 @@ class DigestConfig(BaseModel):
     recipients:   List[Recipient] = []
 
 
+class SavedChatReport(BaseModel):
+    company_id: str
+    title:      str
+    content:    str
+    charts:     Optional[list] = []
+    citations:  Optional[list] = []
+    saved_at:   Optional[str]  = None
+
+
+# In-memory store for saved chat reports (most recent 200 per company)
+_SAVED_CHATS: dict[str, list] = {}
+_MAX_SAVED   = 200
+
+
 # ── API Endpoints ──────────────────────────────────────────────
 @router.get("/schedule")
 def get_schedule(company_id: str = Query(...)):
@@ -209,6 +223,43 @@ def save_schedule(body: DigestConfig):
         body.company_id, body.frequency, len(body.recipients), body.enabled,
     )
     return {"status": "saved", "company_id": body.company_id}
+
+
+@router.post("/save-chat")
+def save_chat_report(body: SavedChatReport):
+    """
+    Save a copilot answer (with optional charts + citations) as a report.
+    Called from the CopilotChat 'Save' button.
+    Stores in-memory; accessible via GET /reports/saved.
+    """
+    report = {
+        "id":         str(__import__("uuid").uuid4()),
+        "company_id": body.company_id,
+        "title":      body.title[:120],
+        "content":    body.content,
+        "charts":     body.charts or [],
+        "citations":  body.citations or [],
+        "saved_at":   body.saved_at or _now_iso(),
+        "source":     "copilot",
+    }
+    bucket = _SAVED_CHATS.setdefault(body.company_id, [])
+    bucket.insert(0, report)
+    # Trim to last _MAX_SAVED
+    if len(bucket) > _MAX_SAVED:
+        _SAVED_CHATS[body.company_id] = bucket[:_MAX_SAVED]
+    logger.info("reports: saved chat report company=%s title='%s'", body.company_id, body.title)
+    return {"status": "saved", "id": report["id"]}
+
+
+@router.get("/saved")
+def get_saved_reports(company_id: str = Query(...), limit: int = 50):
+    """Return saved copilot reports for a company (most recent first)."""
+    reports = _SAVED_CHATS.get(company_id, [])
+    return {
+        "company_id": company_id,
+        "reports":    reports[:limit],
+        "total":      len(reports),
+    }
 
 
 @router.post("/send-digest", status_code=202)

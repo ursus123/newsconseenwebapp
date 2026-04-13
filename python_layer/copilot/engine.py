@@ -134,10 +134,170 @@ def build_system_prompt(company_id: str) -> str:
 
 # ── Core tool loop ───────────────────────────────────────────────────────────
 
+def _make_chart_config(tool_name: str, result: dict):
+    """Generate a Recharts-compatible chart config from a tool result, or None."""
+    try:
+        if tool_name == "get_transaction_summary":
+            rows = result.get("monthly_breakdown", [])
+            if not rows:
+                return None
+            data = []
+            for r in rows[:10]:
+                tt = (r.get("transaction_type") or "Other").replace("_", " ").title()
+                amt = round(float(r.get("total_amount") or 0), 2)
+                data.append({"name": tt, "Amount": amt})
+            data = sorted(data, key=lambda x: x["Amount"], reverse=True)[:8]
+            if not data or all(d["Amount"] == 0 for d in data):
+                return None
+            return {"type": "bar", "title": "Revenue by Transaction Type",
+                    "data": data, "keys": [{"key": "Amount", "color": "#10b981"}], "unit": "$"}
+
+        if tool_name == "get_people_summary":
+            summary = result.get("summary", {})
+            if not summary:
+                return None
+            data = [
+                {"name": k.replace("_", " ").title(), "value": v.get("total", 0)}
+                for k, v in summary.items() if v.get("total", 0) > 0
+            ]
+            if not data:
+                return None
+            return {"type": "pie", "title": "People by Type", "data": data}
+
+        if tool_name == "get_task_summary":
+            breakdown = result.get("breakdown", [])
+            if not breakdown:
+                return None
+            from collections import defaultdict
+            by_type: dict = defaultdict(lambda: {"Total": 0, "Completed": 0, "Overdue": 0})
+            for r in breakdown:
+                tt = (r.get("task_type") or "Unknown").replace("_", " ").title()
+                by_type[tt]["Total"]     += int(r.get("total_tasks", 0) or 0)
+                by_type[tt]["Completed"] += int(r.get("completed_tasks", 0) or 0)
+                by_type[tt]["Overdue"]   += int(r.get("overdue_tasks", 0) or 0)
+            data = [{"name": k, **v} for k, v in list(by_type.items())[:8]]
+            if not data:
+                return None
+            return {
+                "type": "bar", "title": "Task Completion",
+                "data": data,
+                "keys": [
+                    {"key": "Total",     "color": "#94a3b8"},
+                    {"key": "Completed", "color": "#10b981"},
+                    {"key": "Overdue",   "color": "#ef4444"},
+                ],
+            }
+
+        if tool_name == "get_network_overview":
+            enterprises = result.get("enterprises", [])
+            if enterprises and len(enterprises) > 1:
+                data = [
+                    {"name": e.get("name", "Branch")[:18],
+                     "People": int(e.get("people_count") or 0),
+                     "Tasks":  int(e.get("task_count") or 0)}
+                    for e in enterprises[:8]
+                    if e.get("people_count") or e.get("task_count")
+                ]
+                if data:
+                    return {
+                        "type": "bar", "title": "Network Overview",
+                        "data": data,
+                        "keys": [
+                            {"key": "People", "color": "#3b82f6"},
+                            {"key": "Tasks",  "color": "#f59e0b"},
+                        ],
+                    }
+
+        if tool_name == "get_ml_predictions":
+            predictions = result.get("predictions", [])
+            for pred in predictions[:2]:
+                cfg = _ml_chart(pred.get("model", ""), pred.get("result", {}))
+                if cfg:
+                    return cfg
+
+    except Exception as e:
+        logger.debug("_make_chart_config(%s) error: %s", tool_name, e)
+    return None
+
+
+def _ml_chart(model: str, result: dict):
+    """Chart config for a single ML model result."""
+    try:
+        if any(k in model for k in ("churn", "retention", "survival", "risk")):
+            risk_data = []
+            if "risk_distribution" in result:
+                for level, count in result["risk_distribution"].items():
+                    risk_data.append({"name": level.title(), "Count": int(count)})
+            elif "high_risk" in result or "medium_risk" in result:
+                risk_data = [
+                    {"name": "High Risk",   "Count": int(result.get("high_risk", 0) or 0)},
+                    {"name": "Medium Risk", "Count": int(result.get("medium_risk", 0) or 0)},
+                    {"name": "Low Risk",    "Count": int(result.get("low_risk", 0) or 0)},
+                ]
+            if risk_data:
+                return {"type": "bar", "title": "Retention Risk Distribution",
+                        "data": risk_data, "keys": [{"key": "Count", "color": "#ef4444"}]}
+
+        if any(k in model for k in ("segment", "ltv", "cluster")):
+            segments = result.get("segments", result.get("cluster_summary", []))
+            if segments:
+                data = [
+                    {"name": s.get("label") or s.get("segment") or f"Seg {i+1}",
+                     "value": int(s.get("count", 0) or 0)}
+                    for i, s in enumerate(segments[:6])
+                ]
+                if data:
+                    return {"type": "pie", "title": "Customer Segments", "data": data}
+
+        if any(k in model for k in ("demand", "forecast")):
+            forecast = result.get("forecast", result.get("predictions", []))
+            if forecast:
+                data = [
+                    {"name": f.get("period") or str(f.get("date", ""))[:7],
+                     "Forecast": round(float(f.get("value") or f.get("forecast", 0)), 0)}
+                    for f in forecast[:12]
+                ]
+                if data:
+                    return {"type": "area", "title": "Demand Forecast",
+                            "data": data, "keys": [{"key": "Forecast", "color": "#8b5cf6"}]}
+    except Exception:
+        pass
+    return None
+
+
+def _extract_chart_configs(collected_tools: list) -> list:
+    """Extract chart configs from all collected tool results."""
+    charts = []
+    for item in collected_tools:
+        cfg = _make_chart_config(item["tool"], item["result"])
+        if cfg:
+            charts.append(cfg)
+    return charts
+
+
+def _extract_citations(collected_tools: list) -> list:
+    """Extract web search citations from collected tool results."""
+    citations = []
+    for item in collected_tools:
+        if item["tool"] in ("web_search", "search_public_data"):
+            for r in item.get("result", {}).get("results", []):
+                url   = r.get("url", "")
+                title = r.get("title", "")
+                if url or title:
+                    citations.append({
+                        "title":   title or url,
+                        "url":     url,
+                        "snippet": r.get("snippet", ""),
+                        "source":  item["tool"].replace("_", " ").title(),
+                    })
+    return citations[:8]
+
+
 def _run_tool_loop(
     messages: list,
     company_id: str,
     on_tool_call=None,      # optional callback(tool_name, tool_input) → None
+    _collected=None,        # if list, append {"tool", "input", "result"} per call
 ) -> str:
     """
     Run the Anthropic tool loop and return the final text answer.
@@ -217,6 +377,15 @@ def _run_tool_loop(
                     for future in as_completed(futures):
                         bid, res = future.result()
                         result_map[bid] = res
+
+            # Collect tool results for chart/citation extraction
+            if _collected is not None:
+                for block in tool_blocks:
+                    _collected.append({
+                        "tool":   block.name,
+                        "input":  dict(block.input) if hasattr(block.input, "items") else {},
+                        "result": result_map.get(block.id, {}),
+                    })
 
             # Preserve original tool ordering in the API message
             tool_results = [
@@ -363,8 +532,11 @@ class CopilotEngine:
         messages.append({"role": "user", "content": full_question})
 
         try:
+            collected: list = []
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(_run_tool_loop, messages, self.company_id)
+                future = pool.submit(
+                    _run_tool_loop, messages, self.company_id, None, collected
+                )
                 answer_text = future.result(timeout=120)
 
             # Save updated history to session store
@@ -374,10 +546,15 @@ class CopilotEngine:
                 updated.append({"role": "assistant",  "content": answer_text})
                 save_session_history(self.company_id, session_id, updated)
 
+            charts    = _extract_chart_configs(collected)
+            citations = _extract_citations(collected)
+
             return {
                 "answer":       answer_text,
-                "tools_called": [],
-                "data":         {},
+                "tools_called": [c["tool"] for c in collected],
+                "data":         {c["tool"]: c["result"] for c in collected},
+                "charts":       charts,
+                "citations":    citations,
                 "intent":       "",
                 "company_id":   self.company_id,
                 "backend":      self.backend,
@@ -385,7 +562,6 @@ class CopilotEngine:
 
         except Exception as exc:
             logger.error("CopilotEngine.ask failed: %s", exc)
-            # Always return an answer — never propagate error to UI as empty
             return {
                 "answer": (
                     "I encountered an unexpected error processing your request. "
@@ -395,6 +571,8 @@ class CopilotEngine:
                 "error":        str(exc),
                 "tools_called": [],
                 "data":         {},
+                "charts":       [],
+                "citations":    [],
                 "intent":       "",
                 "company_id":   self.company_id,
             }
