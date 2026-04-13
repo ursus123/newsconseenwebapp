@@ -171,10 +171,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,   # must be False when allow_origins=["*"] — browser rejects wildcard+credentials
+    allow_credentials=False,
     allow_methods=["*"],
-    allow_headers=["*", "x-api-key", "Content-Type", "Authorization", "Accept"],
-    expose_headers=["*"],
+    allow_headers=["*"],
 )
 
 # ----------------------------------------------------------
@@ -199,28 +198,32 @@ _CORS_HEADERS = {
 
 
 @app.middleware("http")
-async def api_key_middleware(request: Request, call_next):
-    # Handle CORS preflight directly — return explicit headers so
-    # Starlette's CORSMiddleware wildcard ambiguity never affects us.
+async def cors_and_auth_middleware(request: Request, call_next):
+    # Always handle OPTIONS preflight immediately with explicit CORS headers.
     if request.method == "OPTIONS":
         from fastapi.responses import Response as _Resp
         return _Resp(status_code=200, headers=_CORS_HEADERS)
 
+    # Check API key (skip if API_KEY not configured)
     expected = settings.api_key
-    if not expected:
-        return await call_next(request)
+    if expected:
+        path = request.url.path
+        if path not in _PUBLIC_PATHS and not any(path.startswith(p) for p in _CRON_PREFIXES):
+            provided = request.headers.get("x-api-key", "")
+            if provided != expected:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Missing or invalid x-api-key header"},
+                    headers={"Access-Control-Allow-Origin": "*"},
+                )
 
-    path = request.url.path
-    if path in _PUBLIC_PATHS or any(path.startswith(p) for p in _CRON_PREFIXES):
-        return await call_next(request)
+    response = await call_next(request)
 
-    provided = request.headers.get("x-api-key", "")
-    if provided != expected:
-        return JSONResponse(
-            status_code=401,
-            content={"detail": "Missing or invalid x-api-key header"},
-        )
-    return await call_next(request)
+    # Stamp every response with CORS headers so the browser never blocks it.
+    response.headers["Access-Control-Allow-Origin"]  = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+    response.headers["Access-Control-Allow-Headers"] = "x-api-key, Content-Type, Authorization, Accept, X-Requested-With"
+    return response
 
 # ----------------------------------------------------------
 # Mount all routers
