@@ -456,7 +456,7 @@ def root():
     return {
         "status":  "ok",
         "service": "newsconseen-python-layer",
-        "version": "4.8.0",
+        "version": "4.9.0",
         "mantra":  "The Autonomous SME Operating System",
         "layers": {
             "layer_1": "Enterprise OS — Base44 master data",
@@ -495,7 +495,7 @@ def health():
 
     return {
         "status":   "ok" if db_status == "connected" else "degraded",
-        "version":  "4.8.0",
+        "version":  "4.9.0",
         "api":      "ok",
         "database": db_status,
 
@@ -768,9 +768,22 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     except Exception as _goals_err:
         logger.warning("cron: goal tracking failed — %s", _goals_err)
 
+    # ML model predictions — runs last so raw tables are fully populated
+    ml_result = {}
+    try:
+        from ml.routes import run_ml_models
+        ml_result = run_ml_models(list(company_ids))
+        logger.info(
+            "cron: ML models status=%s companies_with_predictions=%s",
+            ml_result.get("status"),
+            ml_result.get("companies_with_predictions", 0),
+        )
+    except Exception as _ml_err:
+        logger.warning("cron: ML models failed — %s", _ml_err)
+
     return {
         "cron_run":               True,
-        "version":                "4.8.0",
+        "version":                "4.9.0",
         "companies":              len(company_ids),
         "raw_stored":             list(raw_data.keys()),
         "success":                success_count,
@@ -783,6 +796,7 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         "auto_remediation":       autotask_result,
         "anomaly_detection":      anomaly_result,
         "goal_tracking":          goals_result,
+        "ml_predictions":         ml_result,
     }
 
 

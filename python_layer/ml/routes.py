@@ -688,3 +688,105 @@ def push_ml_to_base44(
     except Exception as e:
         logger.error("/ml/push-to-base44 failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Cron hook ──────────────────────────────────────────────────────────────
+def run_ml_models(company_ids: list) -> dict:
+    """
+    Called from /cron/etl-all after ETL completes (raw tables are fresh).
+    Runs retention-risk, ltv-segmentation, and staffing-forecast for each
+    company and stores results to raw.ml_predictions.
+
+    Skips silently when ML_ENABLED=false — no exceptions raised.
+    Uses research_mode=True so models produce results even on sparse data.
+    """
+    if not ML_ENABLED:
+        return {"status": "skipped", "reason": "ML_ENABLED=false — set ML_ENABLED=true in Railway to enable"}
+
+    from ml.survival     import run_retention_model
+    from ml.segmentation import run_ltv_segmentation
+    from ml.forecast     import run_staffing_forecast
+
+    results: dict = {}
+    companies_with_predictions = 0
+
+    for raw_cid in company_ids:
+        cid = str(raw_cid)
+        company_result: dict = {}
+
+        # ── Retention / churn risk ──────────────────────────────────────
+        try:
+            people_df = _load_raw_from_railway("people", cid)
+            task_df   = _load_raw_from_railway("tasks",  cid)
+            if not people_df.empty:
+                result = run_retention_model(
+                    people_df, task_df,
+                    horizon_days=30,
+                    research_mode=True,
+                )
+                result["source"] = "sklearn_cox_ph"
+                _store_predictions(cid, "retention-risk", result)
+                company_result["retention_risk"] = "ok"
+                logger.info("ml cron: retention-risk ok company=%s", cid)
+            else:
+                company_result["retention_risk"] = "skipped_no_data"
+        except Exception as e:
+            company_result["retention_risk"] = f"error: {str(e)[:80]}"
+            logger.warning("ml cron: retention-risk failed company=%s — %s", cid, e)
+
+        # ── LTV segmentation ────────────────────────────────────────────
+        try:
+            people_df      = _load_raw_from_railway("people",       cid)
+            transaction_df = _load_raw_from_railway("transactions",  cid)
+            task_df        = _load_raw_from_railway("tasks",         cid)
+            if not people_df.empty:
+                result = run_ltv_segmentation(
+                    people_df, transaction_df, task_df,
+                    n_clusters=3,
+                    research_mode=True,
+                )
+                result["source"] = "sklearn_kmeans"
+                _store_predictions(cid, "ltv-segmentation", result)
+                company_result["ltv_segmentation"] = "ok"
+                logger.info("ml cron: ltv-segmentation ok company=%s", cid)
+            else:
+                company_result["ltv_segmentation"] = "skipped_no_data"
+        except Exception as e:
+            company_result["ltv_segmentation"] = f"error: {str(e)[:80]}"
+            logger.warning("ml cron: ltv-segmentation failed company=%s — %s", cid, e)
+
+        # ── Staffing / demand forecast ──────────────────────────────────
+        try:
+            task_df = _load_raw_from_railway("tasks", cid)
+            if not task_df.empty and "enterprise_id" in task_df.columns:
+                eid_series = task_df["enterprise_id"].dropna()
+                enterprise_id = str(eid_series.iloc[0]) if not eid_series.empty else None
+                if enterprise_id:
+                    result = run_staffing_forecast(
+                        task_df,
+                        enterprise_id=enterprise_id,
+                        forecast_days=30,
+                    )
+                    result.setdefault("source", "prophet")
+                    _store_predictions(cid, "staffing-forecast", result)
+                    company_result["staffing_forecast"] = "ok"
+                    logger.info("ml cron: staffing-forecast ok company=%s enterprise=%s", cid, enterprise_id)
+                else:
+                    company_result["staffing_forecast"] = "skipped_no_enterprise"
+            else:
+                company_result["staffing_forecast"] = "skipped_no_data"
+        except Exception as e:
+            company_result["staffing_forecast"] = f"error: {str(e)[:80]}"
+            logger.warning("ml cron: staffing-forecast failed company=%s — %s", cid, e)
+
+        results[cid] = company_result
+        if any(v == "ok" for v in company_result.values()):
+            companies_with_predictions += 1
+
+    return {
+        "status":                     "completed",
+        "companies_run":              len(company_ids),
+        "companies_with_predictions": companies_with_predictions,
+        "results":                    results,
+    }
+
