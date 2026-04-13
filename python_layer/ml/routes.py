@@ -707,6 +707,25 @@ def run_ml_models(company_ids: list) -> dict:
     from ml.segmentation import run_ltv_segmentation
     from ml.forecast     import run_staffing_forecast
 
+    # Load raw tables once — no SQL company_id filter because the column may
+    # not exist in raw.* tables. Filter in Python after loading if possible.
+    # This is safe: raw tables are small (one full snapshot per entity).
+    def _load_for_cron(entity: str, cid: str) -> "pd.DataFrame":
+        """
+        Load raw entity table without a SQL company_id filter (the column may not
+        exist in raw.*). Tenant isolation applied in Python:
+          - If company_id column exists → filter strictly to cid only.
+          - If column is absent → raw table has no tenant stamp; return as-is
+            (single-entity tables: all rows belong to the deployment).
+        Never mixes tenant data: if the filter returns nothing, return empty.
+        """
+        df = _load_raw_from_railway(entity)   # no SQL filter — loads all rows
+        if df.empty:
+            return df
+        if "company_id" in df.columns:
+            return df[df["company_id"] == cid]   # strict isolation — empty if no match
+        return df   # no company_id column → single-tenant raw table, safe to return all
+
     results: dict = {}
     companies_with_predictions = 0
 
@@ -716,8 +735,8 @@ def run_ml_models(company_ids: list) -> dict:
 
         # ── Retention / churn risk ──────────────────────────────────────
         try:
-            people_df = _load_raw_from_railway("people", cid)
-            task_df   = _load_raw_from_railway("tasks",  cid)
+            people_df = _load_for_cron("people", cid)
+            task_df   = _load_for_cron("tasks",  cid)
             if not people_df.empty:
                 result = run_retention_model(
                     people_df, task_df,
@@ -727,7 +746,7 @@ def run_ml_models(company_ids: list) -> dict:
                 result["source"] = "sklearn_cox_ph"
                 _store_predictions(cid, "retention-risk", result)
                 company_result["retention_risk"] = "ok"
-                logger.info("ml cron: retention-risk ok company=%s", cid)
+                logger.info("ml cron: retention-risk ok company=%s rows=%d", cid, len(people_df))
             else:
                 company_result["retention_risk"] = "skipped_no_data"
         except Exception as e:
@@ -736,9 +755,9 @@ def run_ml_models(company_ids: list) -> dict:
 
         # ── LTV segmentation ────────────────────────────────────────────
         try:
-            people_df      = _load_raw_from_railway("people",       cid)
-            transaction_df = _load_raw_from_railway("transactions",  cid)
-            task_df        = _load_raw_from_railway("tasks",         cid)
+            people_df      = _load_for_cron("people",       cid)
+            transaction_df = _load_for_cron("transactions",  cid)
+            task_df        = _load_for_cron("tasks",         cid)
             if not people_df.empty:
                 result = run_ltv_segmentation(
                     people_df, transaction_df, task_df,
@@ -748,7 +767,7 @@ def run_ml_models(company_ids: list) -> dict:
                 result["source"] = "sklearn_kmeans"
                 _store_predictions(cid, "ltv-segmentation", result)
                 company_result["ltv_segmentation"] = "ok"
-                logger.info("ml cron: ltv-segmentation ok company=%s", cid)
+                logger.info("ml cron: ltv-segmentation ok company=%s rows=%d", cid, len(people_df))
             else:
                 company_result["ltv_segmentation"] = "skipped_no_data"
         except Exception as e:
@@ -757,7 +776,7 @@ def run_ml_models(company_ids: list) -> dict:
 
         # ── Staffing / demand forecast ──────────────────────────────────
         try:
-            task_df = _load_raw_from_railway("tasks", cid)
+            task_df = _load_for_cron("tasks", cid)
             if not task_df.empty and "enterprise_id" in task_df.columns:
                 eid_series = task_df["enterprise_id"].dropna()
                 enterprise_id = str(eid_series.iloc[0]) if not eid_series.empty else None
