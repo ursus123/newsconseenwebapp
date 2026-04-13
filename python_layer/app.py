@@ -173,7 +173,8 @@ app.add_middleware(
     allow_origins=["*"],
     allow_credentials=False,   # must be False when allow_origins=["*"] — browser rejects wildcard+credentials
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*", "x-api-key", "Content-Type", "Authorization", "Accept"],
+    expose_headers=["*"],
 )
 
 # ----------------------------------------------------------
