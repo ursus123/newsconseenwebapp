@@ -24,6 +24,7 @@ import TodaySchedule from "../components/dashboard/TodaySchedule";
 import NotificationsBell from "../components/dashboard/NotificationsBell";
 import DataQualityWidget from "../components/dashboard/DataQualityWidget";
 import AnomalyWidget from "../components/dashboard/AnomalyWidget";
+import GoalsWidget from "../components/dashboard/GoalsWidget";
 import WorkerMyStats from "../components/dashboard/WorkerMyStats";
 import ClientRetentionRisk from "../components/dashboard/ClientRetentionRisk";
 import StaffingIntelligence from "../components/dashboard/StaffingIntelligence";
@@ -946,6 +947,9 @@ function AdminDashboard({ user }) {
 
       <OnboardingChecklist done={onboardingDone} />
       <GettingStartedChecklist />
+
+      {/* ── KPI Goals ── */}
+      <GoalsWidget companyId={companyId} />
 
       {/* ── Automation Feed + Data Quality + Anomalies ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">

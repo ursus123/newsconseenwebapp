@@ -326,6 +326,14 @@ try:
 except Exception as _anom_err:
     logger.warning("Anomaly detection router failed to load — %s", _anom_err)
 
+# KPI Goal Tracking
+try:
+    from goals.routes import router as goals_router
+    app.include_router(goals_router)
+    logger.info("KPI goal tracking router loaded")
+except Exception as _goals_err:
+    logger.warning("KPI goal tracking router failed to load — %s", _goals_err)
+
 
 # ----------------------------------------------------------
 # Helper Functions
@@ -733,9 +741,22 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     except Exception as _anom_err:
         logger.warning("cron: anomaly detection failed — %s", _anom_err)
 
+    # KPI goal tracking — re-evaluate progress against all company goals
+    goals_result = {}
+    try:
+        from goals.routes import run_goal_tracking
+        goals_result = run_goal_tracking(list(company_ids))
+        logger.info(
+            "cron: goal tracking tracked=%s total_behind=%s",
+            goals_result.get("tracked", 0),
+            goals_result.get("total_behind", 0),
+        )
+    except Exception as _goals_err:
+        logger.warning("cron: goal tracking failed — %s", _goals_err)
+
     return {
         "cron_run":               True,
-        "version":                "4.7.0",
+        "version":                "4.8.0",
         "companies":              len(company_ids),
         "raw_stored":             list(raw_data.keys()),
         "success":                success_count,
@@ -747,6 +768,7 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         "report_digests":         digest_result,
         "auto_remediation":       autotask_result,
         "anomaly_detection":      anomaly_result,
+        "goal_tracking":          goals_result,
     }
 
 

@@ -9,7 +9,7 @@ import {
   User, Lock, Bell, Monitor, AlertTriangle,
   Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X, Settings as SettingsIcon, Palette, Bug,
   Globe, Copy, Trash2, Loader2, Brain, Zap, CheckCircle2, Clock,
-  ScrollText, Download, Filter, RefreshCw, Send, Plus,
+  ScrollText, Download, Filter, RefreshCw, Send, Plus, CheckCircle2,
 } from "lucide-react";
 import BrandingSection from "@/components/settings/BrandingSection";
 import ErrorLogSection from "@/components/settings/ErrorLogSection";
@@ -213,6 +213,7 @@ const ALL_TABS = [
   { id: "agents",        label: "Agents",         icon: Brain,         adminOnly: true  },
   { id: "reports",       label: "Report Delivery",  icon: Send,         adminOnly: true  },
   { id: "autotask",      label: "Auto-Remediation", icon: Zap,          adminOnly: true  },
+  { id: "goals",         label: "KPI Goals",        icon: Calendar,     adminOnly: true  },
   { id: "audit",         label: "Audit Trail",      icon: ScrollText,   adminOnly: true  },
   { id: "error_log",     label: "Error Log",      icon: Bug,           adminOnly: true  },
   { id: "danger",        label: "Danger Zone",    icon: AlertTriangle, adminOnly: false },
@@ -297,6 +298,7 @@ export default function Settings() {
           {activeTab === "agents"        && <AgentsSection user={user} />}
           {activeTab === "reports"       && <ReportsSection user={user} enterprise={myEnterprise} />}
           {activeTab === "autotask"      && <AutoTaskSection user={user} />}
+          {activeTab === "goals"         && <GoalsSection user={user} />}
           {activeTab === "audit"         && <AuditTrailSection user={user} />}
           {activeTab === "error_log"     && <ErrorLogSection user={user} />}
           {activeTab === "danger"        && <DangerSection user={user} />}
@@ -1577,6 +1579,211 @@ function AutoTaskSection({ user }) {
         <p className="text-xs text-violet-700">
           Auto-remediation runs after every ETL cycle. Tasks are created in Base44 and appear
           on your Tasks page immediately — assigned to the configured person, or unassigned if none is set.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── KPI Goals Section ─────────────────────────────────────────────────────────
+const AVAILABLE_METRICS = [
+  { key: "revenue_monthly",      label: "Monthly Revenue",      unit: "$",  direction: "higher_is_better", period: "monthly"  },
+  { key: "task_completion",      label: "Task Completion %",    unit: "%",  direction: "higher_is_better", period: "monthly"  },
+  { key: "active_clients",       label: "Active Clients",       unit: "",   direction: "higher_is_better", period: "monthly"  },
+  { key: "active_staff",         label: "Active Staff",         unit: "",   direction: "higher_is_better", period: "monthly"  },
+  { key: "transactions_monthly", label: "Monthly Transactions", unit: "",   direction: "higher_is_better", period: "monthly"  },
+];
+
+const STATUS_COLORS = {
+  exceeded: "text-emerald-600 bg-emerald-50",
+  on_track: "text-blue-600 bg-blue-50",
+  at_risk:  "text-amber-600 bg-amber-50",
+  behind:   "text-rose-600 bg-rose-50",
+  unknown:  "text-slate-400 bg-slate-50",
+};
+
+function GoalsSection({ user }) {
+  const companyId = user?.company_id;
+  const [goals,   setGoals]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [banner,  setBanner]  = useState(null);
+  const [addMetric, setAddMetric] = useState(AVAILABLE_METRICS[0].key);
+  const [addTarget, setAddTarget] = useState("");
+
+  useEffect(() => {
+    if (!companyId) return;
+    fetch(`${RAILWAY_URL}/goals?company_id=${companyId}&evaluate=false`, { headers: API_HEADERS })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setGoals(d.goals || []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [companyId]);
+
+  const showBanner = (type, msg) => { setBanner({ type, msg }); setTimeout(() => setBanner(null), 4000); };
+
+  const save = async (newGoals) => {
+    if (!companyId) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${RAILWAY_URL}/goals`, {
+        method:  "POST",
+        headers: { ...API_HEADERS, "Content-Type": "application/json" },
+        body:    JSON.stringify({ company_id: companyId, goals: newGoals }),
+      });
+      if (res.ok) { showBanner("success", "Goals saved."); }
+      else        { showBanner("error", "Failed to save."); }
+    } catch { showBanner("error", "Could not reach Railway service."); }
+    finally { setSaving(false); }
+  };
+
+  const addGoal = () => {
+    const target = parseFloat(addTarget);
+    if (!addMetric || isNaN(target) || target <= 0) return;
+    const meta = AVAILABLE_METRICS.find(m => m.key === addMetric);
+    const newGoals = [
+      ...goals.filter(g => g.metric !== addMetric), // replace if exists
+      { metric: addMetric, target, period: meta?.period || "monthly",
+        direction: meta?.direction || "higher_is_better",
+        label: meta?.label, unit: meta?.unit },
+    ];
+    setGoals(newGoals);
+    save(newGoals);
+    setAddTarget("");
+  };
+
+  const removeGoal = async (goalId, metric) => {
+    const newGoals = goals.filter(g => g.metric !== metric && g.id !== goalId);
+    setGoals(newGoals);
+    save(newGoals);
+  };
+
+  const fmt = (val, unit) => {
+    if (val == null) return "—";
+    if (unit === "$") return `$${Number(val).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+    if (unit === "%") return `${Number(val).toFixed(1)}%`;
+    return Number(val).toLocaleString();
+  };
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-32">
+      <div className="w-5 h-5 border-2 border-slate-200 border-t-emerald-500 rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-base font-bold text-slate-800">KPI Goals</h2>
+        <p className="text-xs text-slate-400 mt-0.5">
+          Set targets once — the system tracks progress automatically after every ETL cycle and
+          surfaces them on your dashboard with pace indicators.
+        </p>
+      </div>
+
+      {banner && <Banner type={banner.type} message={banner.msg} onDismiss={() => setBanner(null)} />}
+
+      {/* Current goals */}
+      {goals.length > 0 ? (
+        <div className="bg-white border border-slate-100 rounded-2xl p-5 space-y-3">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Active Goals</p>
+          {goals.map((goal, i) => {
+            const meta = AVAILABLE_METRICS.find(m => m.key === goal.metric);
+            const statusCls = STATUS_COLORS[goal.status] || STATUS_COLORS.unknown;
+            const pct = Math.min(goal.progress_pct ?? 0, 100);
+            return (
+              <div key={i} className="p-3 rounded-xl border border-slate-100 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="text-sm font-semibold text-slate-700 truncate">
+                      {goal.label || meta?.label || goal.metric}
+                    </p>
+                    {goal.status && (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${statusCls}`}>
+                        {goal.status.replace("_", " ")}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-sm font-bold text-slate-800">
+                      {fmt(goal.actual, goal.unit ?? meta?.unit)} / {fmt(goal.target, goal.unit ?? meta?.unit)}
+                    </span>
+                    <button onClick={() => removeGoal(goal.id, goal.metric)}
+                      className="text-slate-300 hover:text-rose-400 transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-emerald-500 transition-all"
+                    style={{ width: `${pct}%` }} />
+                </div>
+                {goal.pace_needed > 0 && goal.days_remaining > 0 && (
+                  <p className="text-[10px] text-slate-400">
+                    Pace needed: {fmt(goal.pace_needed, goal.unit ?? meta?.unit)}/day · {goal.days_remaining} days remaining
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="bg-slate-50 border border-slate-100 rounded-2xl px-5 py-6 text-center">
+          <Calendar className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+          <p className="text-xs text-slate-400">No goals configured yet. Add your first target below.</p>
+        </div>
+      )}
+
+      {/* Add goal */}
+      <div className="bg-white border border-slate-100 rounded-2xl p-5 space-y-4">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Add Goal</p>
+        <div className="flex gap-3 flex-wrap">
+          <div className="flex-1 min-w-40">
+            <label className="text-xs font-medium text-slate-600 block mb-1">Metric</label>
+            <select
+              value={addMetric}
+              onChange={e => setAddMetric(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            >
+              {AVAILABLE_METRICS.map(m => (
+                <option key={m.key} value={m.key}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="w-36">
+            <label className="text-xs font-medium text-slate-600 block mb-1">
+              Target {AVAILABLE_METRICS.find(m => m.key === addMetric)?.unit || ""}
+            </label>
+            <input
+              type="number"
+              value={addTarget}
+              onChange={e => setAddTarget(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && addGoal()}
+              placeholder="e.g. 10000"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              onClick={addGoal}
+              disabled={saving || !addTarget || isNaN(parseFloat(addTarget))}
+              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              Add
+            </button>
+          </div>
+        </div>
+        <p className="text-[11px] text-slate-400">
+          All goals use a monthly period by default. Progress is recalculated after every ETL cycle.
+        </p>
+      </div>
+
+      <div className="bg-emerald-50 border border-emerald-100 rounded-2xl px-4 py-3 flex items-start gap-3">
+        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-emerald-700">
+          Goals appear on your dashboard with live progress bars and pace indicators.
+          The system calculates how much you need per day to stay on track for the period.
         </p>
       </div>
     </div>
