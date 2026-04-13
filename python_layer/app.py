@@ -263,6 +263,14 @@ if _kinetic_ok and kinetic_router is not None:
 if _agents_ok and agents_router is not None:
     app.include_router(agents_router)
 
+# Phase 8 — Audit Trail
+try:
+    from audit.routes import router as audit_router
+    app.include_router(audit_router)
+    logger.info("Audit trail router loaded")
+except Exception as _audit_err:
+    logger.warning("Audit trail router failed to load — %s", _audit_err)
+
 
 # ----------------------------------------------------------
 # Helper Functions

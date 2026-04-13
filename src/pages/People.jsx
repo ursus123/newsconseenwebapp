@@ -36,6 +36,22 @@ const triggerETL = (entity) =>
     headers: { "x-api-key": RAILWAY_API_KEY },
   }).catch(() => {});
 
+// Fire-and-forget audit log — never blocks the UI
+function logAudit(companyId, action, record, userEmail) {
+  fetch(`${RAILWAY_URL}/audit/log`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+    body: JSON.stringify({
+      company_id:  companyId,
+      entity_type: "person",
+      entity_id:   record?.id,
+      entity_name: [record?.first_name, record?.last_name].filter(Boolean).join(" ") || record?.id,
+      action,
+      changed_by:  userEmail,
+    }),
+  }).catch(() => {});
+}
+
 // ── Color helpers ──────────────────────────────────────────────────
 const statusColor = (s) => ({
   active:   "bg-emerald-50 text-emerald-700",
@@ -213,6 +229,7 @@ export default function People() {
       qc.invalidateQueries({ queryKey: ["relationships"] });
       triggerETL("people");
       notifyTaxonomyChange("person", currentUser?.company_id);
+      logAudit(currentUser?.company_id, "created", editing, currentUser?.email);
       setFormOpen(false);
     },
   });
@@ -223,13 +240,19 @@ export default function People() {
       qc.refetchQueries({ queryKey: ["people"] });
       triggerETL("people");
       notifyTaxonomyChange("person", currentUser?.company_id);
+      logAudit(currentUser?.company_id, "updated", editing, currentUser?.email);
       setFormOpen(false);
       setEditing(null);
     },
   });
   const deleteMut = useMutation({
     mutationFn: (id) => base44.entities.Person.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["people"] }); qc.refetchQueries({ queryKey: ["people"] }); setDeleting(null); },
+    onSuccess: () => {
+      logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email);
+      qc.invalidateQueries({ queryKey: ["people"] });
+      qc.refetchQueries({ queryKey: ["people"] });
+      setDeleting(null);
+    },
   });
 
   const handleBulkDelete = async () => {

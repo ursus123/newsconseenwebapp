@@ -9,6 +9,7 @@ import {
   User, Lock, Bell, Monitor, AlertTriangle,
   Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X, Settings as SettingsIcon, Palette, Bug,
   Globe, Copy, Trash2, Loader2, Brain, Zap, CheckCircle2, Clock,
+  ScrollText, Download, Filter, RefreshCw,
 } from "lucide-react";
 import BrandingSection from "@/components/settings/BrandingSection";
 import ErrorLogSection from "@/components/settings/ErrorLogSection";
@@ -210,6 +211,7 @@ const ALL_TABS = [
   { id: "network",       label: "Network",       icon: Globe,         adminOnly: false },
   { id: "branding",      label: "Brand Settings", icon: Palette,       superAdminOnly: true },
   { id: "agents",        label: "Agents",         icon: Brain,         adminOnly: true  },
+  { id: "audit",         label: "Audit Trail",    icon: ScrollText,    adminOnly: true  },
   { id: "error_log",     label: "Error Log",      icon: Bug,           adminOnly: true  },
   { id: "danger",        label: "Danger Zone",    icon: AlertTriangle, adminOnly: false },
 ];
@@ -291,6 +293,7 @@ export default function Settings() {
           {activeTab === "network"       && <NetworkSection user={user} enterprises={enterprises} />}
           {activeTab === "branding"      && <BrandingSection user={user} enterprise={myEnterprise} />}
           {activeTab === "agents"        && <AgentsSection user={user} />}
+          {activeTab === "audit"         && <AuditTrailSection user={user} />}
           {activeTab === "error_log"     && <ErrorLogSection user={user} />}
           {activeTab === "danger"        && <DangerSection user={user} />}
         </div>
@@ -557,6 +560,300 @@ function SessionsSection() {
     </Card>
   );
 }
+
+// ── Audit Trail Section ───────────────────────────────────────────────────────
+const RAILWAY_AUDIT_URL = "https://newsconseenwebapp-production.up.railway.app";
+
+const ENTITY_OPTS = [
+  { id: "",             label: "All entities" },
+  { id: "person",       label: "Person" },
+  { id: "enterprise",   label: "Enterprise" },
+  { id: "product",      label: "Product" },
+  { id: "task",         label: "Task" },
+  { id: "transaction",  label: "Transaction" },
+  { id: "relationship", label: "Relationship" },
+  { id: "address",      label: "Address" },
+];
+
+const ACTION_OPTS = [
+  { id: "",        label: "All actions" },
+  { id: "created", label: "Created" },
+  { id: "updated", label: "Updated" },
+  { id: "deleted", label: "Deleted" },
+];
+
+const ACTION_COLORS = {
+  created: "bg-emerald-100 text-emerald-700",
+  updated: "bg-amber-100  text-amber-700",
+  deleted: "bg-rose-100   text-rose-700",
+};
+
+function AuditTrailSection({ user }) {
+  const [entityType, setEntityType] = useState("");
+  const [action,     setAction]     = useState("");
+  const [changedBy,  setChangedBy]  = useState("");
+  const [dateFrom,   setDateFrom]   = useState("");
+  const [dateTo,     setDateTo]     = useState("");
+  const [loading,    setLoading]    = useState(false);
+  const [entries,    setEntries]    = useState(null);   // null = not yet loaded
+  const [summary,    setSummary]    = useState(null);
+  const [exporting,  setExporting]  = useState(false);
+
+  const companyId = user?.company_id;
+
+  async function fetchLog() {
+    if (!companyId) return;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ company_id: companyId, limit: 200 });
+      if (entityType) params.set("entity_type", entityType);
+      if (action)     params.set("action",      action);
+      if (changedBy)  params.set("changed_by",  changedBy);
+      if (dateFrom)   params.set("date_from",   dateFrom);
+      if (dateTo)     params.set("date_to",     dateTo);
+
+      const [logRes, sumRes] = await Promise.all([
+        fetch(`${RAILWAY_AUDIT_URL}/audit/log?${params}`),
+        fetch(`${RAILWAY_AUDIT_URL}/audit/summary?company_id=${companyId}`),
+      ]);
+
+      if (logRes.ok) {
+        const data = await logRes.json();
+        setEntries(data.entries || []);
+      }
+      if (sumRes.ok) {
+        setSummary(await sumRes.json());
+      }
+    } catch (e) {
+      setEntries([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function exportCSV() {
+    if (!companyId) return;
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({ company_id: companyId });
+      if (entityType) params.set("entity_type", entityType);
+      if (action)     params.set("action",      action);
+      if (changedBy)  params.set("changed_by",  changedBy);
+      if (dateFrom)   params.set("date_from",   dateFrom);
+      if (dateTo)     params.set("date_to",     dateTo);
+
+      const res = await fetch(`${RAILWAY_AUDIT_URL}/audit/export?${params}`);
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `audit_log_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silent — user sees no change
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  // Load on first render
+  useEffect(() => { fetchLog(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+            <ScrollText className="w-4 h-4 text-slate-500" /> Audit Trail
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Immutable change log across all 7 entities — who changed what and when.
+          </p>
+        </div>
+        <Button
+          onClick={exportCSV}
+          disabled={exporting || !entries?.length}
+          variant="outline"
+          className="rounded-xl text-xs gap-1.5"
+        >
+          {exporting
+            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            : <Download className="w-3.5 h-3.5" />}
+          Export CSV
+        </Button>
+      </div>
+
+      {/* Summary cards */}
+      {summary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+            <p className="text-[10px] text-slate-400 uppercase font-semibold">Total events</p>
+            <p className="text-xl font-bold text-slate-800 mt-0.5">{summary.total?.toLocaleString() || 0}</p>
+          </div>
+          {Object.entries(summary.by_action || {}).map(([act, count]) => (
+            <div key={act} className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+              <p className="text-[10px] text-slate-400 uppercase font-semibold capitalize">{act}</p>
+              <p className="text-xl font-bold text-slate-800 mt-0.5">{count.toLocaleString()}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Filters */}
+      <Card className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Filter className="w-3.5 h-3.5 text-slate-400" />
+          <span className="text-xs font-semibold text-slate-600">Filters</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1 block">Entity</label>
+            <select
+              value={entityType}
+              onChange={e => setEntityType(e.target.value)}
+              className="w-full text-xs border border-slate-200 rounded-xl px-2.5 py-2 focus:outline-none focus:border-emerald-400 bg-white"
+            >
+              {ENTITY_OPTS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1 block">Action</label>
+            <select
+              value={action}
+              onChange={e => setAction(e.target.value)}
+              className="w-full text-xs border border-slate-200 rounded-xl px-2.5 py-2 focus:outline-none focus:border-emerald-400 bg-white"
+            >
+              {ACTION_OPTS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1 block">Changed by</label>
+            <input
+              value={changedBy}
+              onChange={e => setChangedBy(e.target.value)}
+              placeholder="user@email.com"
+              className="w-full text-xs border border-slate-200 rounded-xl px-2.5 py-2 focus:outline-none focus:border-emerald-400"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1 block">From date</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              className="w-full text-xs border border-slate-200 rounded-xl px-2.5 py-2 focus:outline-none focus:border-emerald-400"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase mb-1 block">To date</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              className="w-full text-xs border border-slate-200 rounded-xl px-2.5 py-2 focus:outline-none focus:border-emerald-400"
+            />
+          </div>
+          <div className="flex items-end">
+            <Button
+              onClick={fetchLog}
+              disabled={loading}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs gap-1.5"
+            >
+              {loading
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <RefreshCw className="w-3.5 h-3.5" />}
+              Apply
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Log table */}
+      {entries === null ? (
+        <div className="flex justify-center py-10">
+          <div className="w-6 h-6 border-4 border-slate-200 border-t-emerald-500 rounded-full animate-spin" />
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="text-center py-12 text-slate-400">
+          <ScrollText className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No audit events recorded yet.</p>
+          <p className="text-xs mt-1">Events are logged automatically when operators create, update, or delete records.</p>
+        </div>
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  {["Timestamp", "Entity", "Name / ID", "Action", "Changed by", "Changes"].map(h => (
+                    <th key={h} className="px-4 py-3 text-left font-semibold text-slate-600 whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry, i) => {
+                  const ts = entry.timestamp ? new Date(entry.timestamp) : null;
+                  const fields = entry.changed_fields || {};
+                  const fieldCount = Object.keys(fields).length;
+                  return (
+                    <tr key={i} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">
+                        {ts ? (
+                          <>
+                            <div>{ts.toLocaleDateString()}</div>
+                            <div className="text-[10px] text-slate-400">{ts.toLocaleTimeString()}</div>
+                          </>
+                        ) : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 font-medium text-slate-700 capitalize">
+                        {entry.entity_type || "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-600 max-w-[140px] truncate">
+                        <div className="truncate">{entry.entity_name || "—"}</div>
+                        {entry.entity_id && (
+                          <div className="text-[10px] text-slate-400 font-mono truncate">{entry.entity_id}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${ACTION_COLORS[entry.action] || "bg-slate-100 text-slate-600"}`}>
+                          {entry.action || "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-500 max-w-[120px] truncate">
+                        {entry.changed_by || <span className="text-slate-300">system</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-500">
+                        {fieldCount > 0 ? (
+                          <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">
+                            {fieldCount} field{fieldCount !== 1 ? "s" : ""}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-4 py-2.5 border-t border-slate-100 flex items-center justify-between">
+            <span className="text-[10px] text-slate-400">{entries.length} events shown</span>
+            <button onClick={fetchLog} className="text-[10px] text-emerald-600 hover:text-emerald-800 font-medium flex items-center gap-1">
+              <RefreshCw className="w-3 h-3" /> Refresh
+            </button>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 
 function DangerSection({ user }) {
   const [confirmText, setConfirmText] = useState("");
