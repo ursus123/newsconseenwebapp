@@ -66,18 +66,27 @@ export default function EmptyDatamartButton({ currentUser }) {
   if (!isSuperAdmin) return null;
 
   // ── Step 1: fetch all records grouped by entity
+  // Mirrors useEntityListFn: super_admin → list all; others → filter by company_id
   const fetchAll = async () => {
     const companyId = currentUser?.company_id;
+    const superAdmin = currentUser?.role === "super_admin";
     const records = {};
     for (const entity of DELETE_ORDER) {
       try {
         const ent = base44.entities[entity];
         if (!ent) { records[entity] = []; continue; }
-        const all = await ent.list({});
-        records[entity] = companyId
-          ? all.filter(r => !r.company_id || r.company_id === companyId)
-          : all;
-      } catch {
+        let rows;
+        if (superAdmin) {
+          // super_admin lists ALL records across all tenants
+          rows = await ent.list("-created_date");
+        } else if (companyId) {
+          // Scoped users only fetch their own workspace records
+          rows = await ent.filter({ company_id: companyId });
+        } else {
+          rows = [];
+        }
+        records[entity] = Array.isArray(rows) ? rows : [];
+      } catch (e) {
         records[entity] = [];
       }
     }
@@ -100,7 +109,7 @@ export default function EmptyDatamartButton({ currentUser }) {
         if (!ent) continue;
         const rows = records[entity] || [];
         for (const row of rows) {
-          try { await ent.delete(row.id); } catch { /* best effort */ }
+          try { await ent.delete(row.id); } catch (e) { /* best effort — 404 = already gone */ }
           done++;
           setProgress({ done, total, entity });
         }
@@ -130,7 +139,7 @@ export default function EmptyDatamartButton({ currentUser }) {
         for (const row of rows) {
           try {
             await ent.create(stripMeta(row));
-          } catch { /* best effort */ }
+          } catch (e) { /* best effort */ }
           done++;
           setProgress({ done, total: totalCount, entity });
         }
