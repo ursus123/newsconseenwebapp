@@ -42,6 +42,7 @@ import SetupWizard from "@/components/shared/SetupWizard";
 import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
 import UndoImportButton from "@/components/layout/UndoImportButton";
 import SmartImportButton from "@/components/layout/SmartImportButton";
+import EmptyDatamartButton from "@/components/layout/EmptyDatamartButton";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import TenantGuard from "@/components/shared/TenantGuard";
@@ -575,8 +576,9 @@ export default function Layout({ children, currentPageName }) {
               )}
             </div>
 
-            {/* Smart Import + Undo */}
+            {/* Empty Datamart + Smart Import + Undo */}
             <div className="flex items-center gap-1.5">
+              <EmptyDatamartButton currentUser={currentUser} />
               <SmartImportButton currentUser={currentUser} />
               <UndoImportButton />
             </div>
