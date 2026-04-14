@@ -1446,16 +1446,13 @@ export default function IntelligenceHub({ currentUser }) {
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
-  const TAB_CONTENT = {
-    map:          <MapTab />,
-    ml:           <MLTab />,
-    demographics: <DemographicsTab />,
-    staffing:     <StaffingTab />,
-    products:     <ProductsTab />,
-    economic:     <EconomicTab />,
-    news:         <NewsTab />,
-    apis:         <APIsTab />,
-  };
+  // IMPORTANT: call as plain functions, not JSX elements (<MapTab />).
+  // Defining components inside another component causes React to treat them
+  // as a new type on every render → full unmount/remount → Leaflet loses its
+  // DOM node references → "_leaflet_pos" crash.
+  // Calling as functions inlines the JSX without a React component boundary.
+  const TAB_RENDERERS = { map: MapTab, ml: MLTab, demographics: DemographicsTab, staffing: StaffingTab, products: ProductsTab, economic: EconomicTab, news: NewsTab, apis: APIsTab };
+  const activeContent = (TAB_RENDERERS[activeTab] || MapTab)();
 
   return (
     <div>
@@ -1497,7 +1494,7 @@ export default function IntelligenceHub({ currentUser }) {
       </div>
 
       {/* Tab content */}
-      {TAB_CONTENT[activeTab]}
+      {activeContent}
     </div>
   );
 }

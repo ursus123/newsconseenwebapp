@@ -63,9 +63,11 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 function FitBounds({ points }) {
   const map = useMap();
   useEffect(() => {
-    if (!points.length) return;
-    const bounds = L.latLngBounds(points.map((p) => [p.latitude, p.longitude]));
-    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+    if (!map || !points.length) return;
+    try {
+      const bounds = L.latLngBounds(points.map((p) => [parseFloat(p.latitude), parseFloat(p.longitude)]));
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+    } catch (_) {}
   }, [map, points]);
   return null;
 }
@@ -260,7 +262,7 @@ export default function AddressLeafletMap({ addresses = [], onAddressClick, onAu
                 key={addr.id}
                 position={[parseFloat(addr.latitude), parseFloat(addr.longitude)]}
                 icon={icon}
-                eventHandlers={{ click: () => handlePinClick(addr) }}
+                eventHandlers={{ click: () => { try { handlePinClick(addr); } catch (_) {} } }}
               >
                 <Popup>
                   <div className="text-sm leading-snug" style={{ minWidth: 180 }}>
