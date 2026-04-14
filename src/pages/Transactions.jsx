@@ -106,6 +106,120 @@ const TABS = [
   },
 ];
 
+// ── Person Ledger Panel ────────────────────────────────────────────
+// Shows all transactions linked to a specific person name — used for
+// fee-account views (students), salary audit (staff), and supplier history.
+function PersonLedgerPanel({ personName, transactions, onClose }) {
+  const txs = transactions.filter(t => {
+    const p = (t.primary_person || t.person_name || t.counterparty || "").toLowerCase();
+    return p.includes(personName.toLowerCase());
+  });
+
+  const totalCharged   = txs.filter(t => REVENUE_TYPES.includes(t.transaction_type)).reduce((s, t) => s + (t.amount || 0), 0);
+  const totalPaid      = txs.filter(t => REVENUE_TYPES.includes(t.transaction_type)).reduce((s, t) => s + (t.amount_paid || (t.payment_status === "paid" ? t.amount : 0) || 0), 0);
+  const totalExpense   = txs.filter(t => EXPENSE_TYPES.includes(t.transaction_type)).reduce((s, t) => s + (t.amount || 0), 0);
+  const outstanding    = totalCharged - totalPaid;
+
+  // Duplicate detection: same category + same amount appearing more than once in same calendar month
+  const dupKeys = {};
+  txs.forEach(t => {
+    if (!t.amount) return;
+    const mo = (t.date || t.created_date || "").slice(0, 7);
+    const key = `${t.transaction_type}|${t.amount}|${mo}`;
+    dupKeys[key] = (dupKeys[key] || 0) + 1;
+  });
+  const isDup = (t) => {
+    const mo = (t.date || t.created_date || "").slice(0, 7);
+    return (dupKeys[`${t.transaction_type}|${t.amount}|${mo}`] || 0) > 1;
+  };
+
+  const fmt = (n) => Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  if (!txs.length) return (
+    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between">
+      <p className="text-sm text-slate-500">No transactions found for <strong>{personName}</strong></p>
+      <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-sm">✕</button>
+    </div>
+  );
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="font-bold text-slate-800">Ledger — {personName}</p>
+          <p className="text-xs text-slate-400">{txs.length} transaction{txs.length !== 1 ? "s" : ""}</p>
+        </div>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-sm px-2">✕</button>
+      </div>
+
+      {/* Summary row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {totalCharged > 0 && (
+          <div className="bg-emerald-50 rounded-xl p-3">
+            <p className="text-[10px] text-slate-500">Total charged</p>
+            <p className="text-base font-black text-emerald-700">{fmt(totalCharged)}</p>
+          </div>
+        )}
+        {totalPaid > 0 && (
+          <div className="bg-emerald-50 rounded-xl p-3">
+            <p className="text-[10px] text-slate-500">Total paid</p>
+            <p className="text-base font-black text-emerald-600">{fmt(totalPaid)}</p>
+          </div>
+        )}
+        {outstanding > 0 && (
+          <div className="bg-amber-50 rounded-xl p-3">
+            <p className="text-[10px] text-slate-500">Outstanding</p>
+            <p className="text-base font-black text-amber-700">{fmt(outstanding)}</p>
+          </div>
+        )}
+        {totalExpense > 0 && (
+          <div className="bg-rose-50 rounded-xl p-3">
+            <p className="text-[10px] text-slate-500">Total expense</p>
+            <p className="text-base font-black text-rose-600">{fmt(totalExpense)}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Duplicate warning */}
+      {txs.some(isDup) && (
+        <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
+          <span className="text-rose-500 text-sm">⚠️</span>
+          <p className="text-xs text-rose-700 font-semibold">Possible duplicate payments detected — same amount in the same month.</p>
+        </div>
+      )}
+
+      {/* Transaction list */}
+      <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+        {txs.map(t => {
+          const isRev = REVENUE_TYPES.includes(t.transaction_type);
+          const isPartial = t.payment_status === "partial";
+          const dup = isDup(t);
+          return (
+            <div key={t.id} className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm ${
+              dup       ? "bg-rose-50 border border-rose-200" :
+              isPartial ? "bg-amber-50 border border-amber-200" :
+              "bg-slate-50 border border-slate-100"
+            }`}>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-slate-700 truncate">
+                  {t.description || t.transaction_type}
+                  {dup && <span className="ml-2 text-[10px] font-bold text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded-full">DUPLICATE</span>}
+                  {isPartial && <span className="ml-2 text-[10px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">PARTIAL</span>}
+                </p>
+                <p className="text-[10px] text-slate-400">{t.date || t.created_date?.slice(0,10)} · {t.payment_status || "—"}</p>
+              </div>
+              <p className={`font-bold ml-3 shrink-0 ${isRev ? "text-emerald-700" : "text-rose-600"}`}>
+                {isRev ? "+" : "-"}{fmt(t.amount || 0)}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function TransactionRow({ transaction, onEdit, onMarkPaid, onPost, onVoid, onExpand, isExpanded }) {
   const isRevenue   = REVENUE_TYPES.includes(transaction.transaction_type);
   const isExpense   = EXPENSE_TYPES.includes(transaction.transaction_type);
@@ -255,6 +369,7 @@ export default function Transactions() {
   const [period, setPeriod]               = useState("30d");
   const [dateRange, setDateRange]         = useState([null, null]); // [Date|null, Date|null]
   const [filterEnterprise, setFilterEnterprise] = useState("all");
+  const [personLedger, setPersonLedger]         = useState("");
   const [filterSource, setFilterSource]         = useState("all");
   const [filterTag, setFilterTag]               = useState("all");
   const [search, setSearch]                     = useState("");
@@ -570,6 +685,30 @@ export default function Transactions() {
           </div>
         );
       })()}
+
+      {/* Person ledger — search by name to see all their transactions */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          <input
+            value={personLedger}
+            onChange={(e) => setPersonLedger(e.target.value)}
+            placeholder="View ledger by person…"
+            className="w-full pl-8 pr-8 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+          />
+          {personLedger && (
+            <button onClick={() => setPersonLedger("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs">✕</button>
+          )}
+        </div>
+        {personLedger && <span className="text-xs text-slate-400">↓ ledger below</span>}
+      </div>
+      {personLedger.trim().length >= 2 && (
+        <PersonLedgerPanel
+          personName={personLedger.trim()}
+          transactions={transactions}
+          onClose={() => setPersonLedger("")}
+        />
+      )}
 
       {/* Period + Enterprise selectors */}
       <div className="flex items-center gap-3 flex-wrap">

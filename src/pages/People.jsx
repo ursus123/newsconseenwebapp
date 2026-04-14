@@ -15,7 +15,8 @@ import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
-import { Upload, Users, CheckCircle, Clock, Heart } from "lucide-react";
+import { Upload, Users, CheckCircle, Clock, Heart, ShieldAlert, Search } from "lucide-react";
+import { differenceInDays, parseISO, isValid } from "date-fns";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
@@ -120,6 +121,9 @@ const columns = [
           {row.email && (
             <p className="text-xs text-slate-400 mt-0.5">{row.email}</p>
           )}
+          <div className="flex flex-wrap gap-1 mt-1">
+            <CertExpiryBadge expiry={row.certification_expiry} />
+          </div>
         </div>
       </div>
     ),
@@ -173,6 +177,31 @@ const PEOPLE_PREVIEW_COLS = [
   { label: "Email",      render: (r) => r.email || "—" },
 ];
 
+// ── Certification expiry badge ────────────────────────────────────
+function CertExpiryBadge({ expiry }) {
+  if (!expiry) return null;
+  let d;
+  try { d = parseISO(expiry); } catch { return null; }
+  if (!isValid(d)) return null;
+  const days = differenceInDays(d, new Date());
+  if (days < 0) return (
+    <span className="flex items-center gap-1 text-[10px] font-bold bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full">
+      <ShieldAlert className="w-2.5 h-2.5" /> Cert expired
+    </span>
+  );
+  if (days <= 30) return (
+    <span className="flex items-center gap-1 text-[10px] font-semibold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full animate-pulse">
+      <ShieldAlert className="w-2.5 h-2.5" /> Cert {days}d left
+    </span>
+  );
+  if (days <= 90) return (
+    <span className="flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full">
+      <ShieldAlert className="w-2.5 h-2.5" /> Cert {days}d left
+    </span>
+  );
+  return null;
+}
+
 // ── Stat card ──────────────────────────────────────────────────────
 function StatCard({ icon: Icon, iconClass, label, value }) {
   return (
@@ -203,6 +232,7 @@ export default function People() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [heatmapOn, setHeatmapOn] = useState(false);
+  const [skillsFilter, setSkillsFilter] = useState("");
   const qc = useQueryClient();
   const { syncState, notifyTaxonomyChange } = useTaxonomySync();
   const { toast } = useToast();
@@ -299,6 +329,15 @@ export default function People() {
     if (filters.person_type) list = list.filter((p) => p.person_type === filters.person_type);
     if (filters.primary_role) list = list.filter((p) => p.primary_role === filters.primary_role);
     if (filters.country) list = list.filter((p) => (p.country || "").toLowerCase().includes(filters.country.toLowerCase()));
+    if (skillsFilter) {
+      const term = skillsFilter.toLowerCase();
+      list = list.filter((p) => {
+        const skills = (p.skills || "").toLowerCase();
+        const certName = (p.certification_name || "").toLowerCase();
+        const notes = (p.internal_notes || "").toLowerCase();
+        return skills.includes(term) || certName.includes(term) || notes.includes(term);
+      });
+    }
     if (!search) list.sort((a, b) => {
       if (sortBy === "name_asc")         return `${a.first_name}${a.last_name}`.localeCompare(`${b.first_name}${b.last_name}`);
       if (sortBy === "name_desc")        return `${b.first_name}${b.last_name}`.localeCompare(`${a.first_name}${a.last_name}`);
@@ -376,6 +415,23 @@ export default function People() {
 
       {/* Toolbar */}
       <PeopleToolbar search={search} setSearch={setSearch} groupBy={groupBy} setGroupBy={setGroupBy} sortBy={sortBy} setSortBy={setSortBy} filters={filters} setFilters={setFilters} />
+
+      {/* Skills / certification quick-filter */}
+      <div className="relative max-w-xs">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+        <input
+          value={skillsFilter}
+          onChange={(e) => setSkillsFilter(e.target.value)}
+          placeholder="Filter by skill or certification…"
+          className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+        />
+        {skillsFilter && (
+          <button
+            onClick={() => setSkillsFilter("")}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+          >✕</button>
+        )}
+      </div>
 
       <BulkActionBar
         selectedIds={selectedIds}

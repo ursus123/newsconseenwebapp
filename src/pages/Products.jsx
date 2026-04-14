@@ -22,7 +22,7 @@ import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { Upload, Package, AlertTriangle, DollarSign, Clock } from "lucide-react";
+import { Upload, Package, AlertTriangle, DollarSign, Clock, Wrench } from "lucide-react";
 import { differenceInDays, parseISO, isValid } from "date-fns";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
@@ -81,6 +81,37 @@ function ExpiryBadge({ expiryDate }) {
   );
   return null;
 }
+// ── Fleet / asset service status badge ─────────────────────────────
+// Parses "Next service due: YYYY-MM-DD" from internal_notes / description
+function parseServiceDue(row) {
+  const src = [row.internal_notes, row.description, row.notes].filter(Boolean).join(" ");
+  const m = src.match(/[Nn]ext service due[:\s]+(\d{4}-\d{2}-\d{2})/);
+  if (!m) return null;
+  try { return parseISO(m[1]); } catch { return null; }
+}
+
+function ServiceStatusBadge({ row }) {
+  const due = parseServiceDue(row);
+  if (!due || !isValid(due)) return null;
+  const days = differenceInDays(due, new Date());
+  if (days < 0) return (
+    <span className="flex items-center gap-1 text-[10px] font-bold bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full animate-pulse">
+      <Wrench className="w-2.5 h-2.5" /> Service overdue {Math.abs(days)}d
+    </span>
+  );
+  if (days <= 14) return (
+    <span className="flex items-center gap-1 text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
+      <Wrench className="w-2.5 h-2.5" /> Service in {days}d
+    </span>
+  );
+  if (days <= 60) return (
+    <span className="flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full">
+      <Wrench className="w-2.5 h-2.5" /> Service in {days}d
+    </span>
+  );
+  return null;
+}
+
 const itemTypeColor = (t) => ({
   physical:             "bg-blue-50 text-blue-700",
   living:               "bg-green-50 text-green-700",
@@ -101,6 +132,7 @@ const buildColumns = (recalls) => [
           {row.regulatory_status === "prescription" && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">Rx</span>}
           {recalls[row.id] && <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full font-bold animate-pulse">⚠️ RECALL</span>}
           <ExpiryBadge expiryDate={row.expiry_date} />
+          <ServiceStatusBadge row={row} />
         </div>
       </div>
     ),
