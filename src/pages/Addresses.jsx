@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import {
   Upload, MapPin, CheckCircle, Navigation, AlertCircle,
-  Map, Loader2, List,
+  Map, Loader2, List, BarChart2, X,
 } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
@@ -94,6 +94,7 @@ export default function Addresses() {
   const [geocodingAll, setGeocodingAll] = useState(false);
   const [geocodeProgress, setGeocodeProgress] = useState(null);
   const [geocodingRowId, setGeocodingRowId] = useState(null);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [viewMode, setViewMode] = useState("table");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ status: "", gps: "" });
@@ -302,18 +303,23 @@ export default function Addresses() {
       )}
 
       {/* View toggle */}
-      <div className="flex items-center gap-1 mb-3 p-1 bg-slate-100 rounded-xl w-fit">
-        <button
-          onClick={() => setViewMode("table")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === "table" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-        >
-          <List className="w-3.5 h-3.5" /> Table
-        </button>
-        <button
-          onClick={() => setViewMode("map")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === "map" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-        >
-          <Map className="w-3.5 h-3.5" /> Map
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+          <button
+            onClick={() => setViewMode("table")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === "table" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            <List className="w-3.5 h-3.5" /> Table
+          </button>
+          <button
+            onClick={() => setViewMode("map")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === "map" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            <Map className="w-3.5 h-3.5" /> Map
+          </button>
+        </div>
+        <button onClick={() => setAnalyticsOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-700 transition-all shadow-sm">
+          <BarChart2 className="w-3.5 h-3.5" /> Analytics
         </button>
       </div>
 
@@ -368,7 +374,20 @@ export default function Addresses() {
         onImport={(row) => base44.entities.Address.create(withScope(row))}
         currentUser={currentUser} previewColumns={ADDR_PREVIEW_COLS} requiredField="address_line1"
       />
-      <AddressAnalytics addresses={addresses} currentUser={currentUser} />
+
+      {analyticsOpen && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white shadow-sm">
+            <p className="font-bold text-slate-800">Addresses Analytics</p>
+            <button onClick={() => setAnalyticsOpen(false)} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
+              <X className="w-5 h-5 text-slate-500" />
+            </button>
+          </div>
+          <div className="p-6">
+            <AddressAnalytics addresses={addresses} currentUser={currentUser} standalone={true} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

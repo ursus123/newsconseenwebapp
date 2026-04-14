@@ -15,7 +15,7 @@ import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
-import { Upload, Users, CheckCircle, Clock, Heart, ShieldAlert, Search } from "lucide-react";
+import { Upload, Users, CheckCircle, Clock, Heart, ShieldAlert, Search, BarChart2, X } from "lucide-react";
 import { differenceInDays, parseISO, isValid } from "date-fns";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
@@ -232,6 +232,7 @@ export default function People() {
   const [currentUser, setCurrentUser] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [heatmapOn, setHeatmapOn] = useState(false);
   const [skillsFilter, setSkillsFilter] = useState("");
   const qc = useQueryClient();
@@ -416,7 +417,12 @@ export default function People() {
       )}
 
       {/* Toolbar */}
-      <PeopleToolbar search={search} setSearch={setSearch} groupBy={groupBy} setGroupBy={setGroupBy} sortBy={sortBy} setSortBy={setSortBy} filters={filters} setFilters={setFilters} />
+      <div className="flex items-center justify-between gap-3 mb-0">
+        <div className="flex-1 min-w-0"><PeopleToolbar search={search} setSearch={setSearch} groupBy={groupBy} setGroupBy={setGroupBy} sortBy={sortBy} setSortBy={setSortBy} filters={filters} setFilters={setFilters} /></div>
+        <button onClick={() => setAnalyticsOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-700 transition-all shadow-sm">
+            <BarChart2 className="w-3.5 h-3.5" /> Analytics
+          </button>
+      </div>
 
       {/* Skills / certification quick-filter */}
       <div className="relative max-w-xs">
@@ -533,7 +539,20 @@ export default function People() {
         previewColumns={PEOPLE_PREVIEW_COLS}
         requiredField="first_name"
       />
-      <PeopleAnalytics people={people} currentUser={currentUser} />
+
+      {analyticsOpen && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white shadow-sm">
+            <p className="font-bold text-slate-800">People Analytics</p>
+            <button onClick={() => setAnalyticsOpen(false)} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
+              <X className="w-5 h-5 text-slate-500" />
+            </button>
+          </div>
+          <div className="p-6">
+            <PeopleAnalytics people={people} currentUser={currentUser} standalone={true} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

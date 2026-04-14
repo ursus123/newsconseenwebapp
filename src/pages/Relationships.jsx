@@ -9,7 +9,7 @@ import BulkImportDialog from "../components/shared/BulkImportDialog";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Button } from "@/components/ui/button";
-import { Upload, Users, Building2, Package, Wrench, MapPin, Link2, CheckSquare, Network, List } from "lucide-react";
+import { Upload, Users, Building2, Package, Wrench, MapPin, Link2, CheckSquare, Network, List, BarChart2, X } from "lucide-react";
 import CytoscapeRelationshipGraph from "../components/network/CytoscapeRelationshipGraph";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
@@ -129,6 +129,7 @@ export default function Relationships() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [viewMode, setViewMode] = useState("table");
   const [currentUser, setCurrentUser] = useState(null);
   const qc = useQueryClient();
@@ -293,6 +294,9 @@ export default function Relationships() {
             <Network className="w-3.5 h-3.5" /> Graph
           </button>
         </div>
+        <button onClick={() => setAnalyticsOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-700 transition-all shadow-sm">
+          <BarChart2 className="w-3.5 h-3.5" /> Analytics
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-1 bg-slate-100 rounded-xl p-1 mb-4">
@@ -344,7 +348,20 @@ export default function Relationships() {
         />
       )}
 
-      <RelationshipAnalytics relationships={relationships} currentUser={currentUser} />
+
+      {analyticsOpen && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white shadow-sm">
+            <p className="font-bold text-slate-800">Relationships Analytics</p>
+            <button onClick={() => setAnalyticsOpen(false)} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
+              <X className="w-5 h-5 text-slate-500" />
+            </button>
+          </div>
+          <div className="p-6">
+            <RelationshipAnalytics relationships={relationships} currentUser={currentUser} standalone={true} />
+          </div>
+        </div>
+      )}
 
       <RelationshipForm
         open={formOpen}

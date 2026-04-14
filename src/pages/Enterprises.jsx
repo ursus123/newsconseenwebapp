@@ -17,6 +17,7 @@ import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import BulkActionBar from "../components/shared/BulkActionBar";
+import { BarChart2, X } from "lucide-react";
 import EnterprisesAnalytics from "@/components/enterprise/EnterprisesAnalytics";
 import { useToast } from "@/components/ui/use-toast";
 import SubEnterprisesPanel from "@/components/enterprise/SubEnterprisesPanel";
@@ -144,6 +145,7 @@ export default function Enterprises() {
   const [search, setSearch]         = useState("");
   const [sortBy, setSortBy]         = useState("created_date_desc");
   const [filters, setFilters]       = useState({ status: "", enterprise_type: "", operating_status: "", country: "" });
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [viewMode, setViewMode]     = useState("table");
   const [selectedIds, setSelectedIds] = useState([]);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
@@ -319,18 +321,23 @@ export default function Enterprises() {
           <div className="flex-1 min-w-0">
             <EnterpriseToolbar search={search} setSearch={setSearch} filters={filters} setFilters={setFilters} sortBy={sortBy} setSortBy={setSortBy} />
           </div>
-          <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1 shrink-0 self-start mt-0.5">
-            <button
-              onClick={() => setViewMode("table")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${viewMode === "table" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
-            >
-              ☰ Table
-            </button>
-            <button
-              onClick={() => setViewMode("cards")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${viewMode === "cards" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
-            >
-              ⊞ Cards
+          <div className="flex items-center gap-2 shrink-0 self-start mt-0.5">
+            <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+              <button
+                onClick={() => setViewMode("table")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${viewMode === "table" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
+              >
+                ☰ Table
+              </button>
+              <button
+                onClick={() => setViewMode("cards")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${viewMode === "cards" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
+              >
+                ⊞ Cards
+              </button>
+            </div>
+            <button onClick={() => setAnalyticsOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-700 transition-all shadow-sm">
+              <BarChart2 className="w-3.5 h-3.5" /> Analytics
             </button>
           </div>
         </div>
@@ -426,7 +433,20 @@ export default function Enterprises() {
         previewColumns={ENT_PREVIEW_COLS}
         requiredField="enterprise_name"
       />
-      <EnterprisesAnalytics enterprises={enterprises} currentUser={currentUser} />
+
+      {analyticsOpen && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white shadow-sm">
+            <p className="font-bold text-slate-800">Enterprises Analytics</p>
+            <button onClick={() => setAnalyticsOpen(false)} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
+              <X className="w-5 h-5 text-slate-500" />
+            </button>
+          </div>
+          <div className="p-6">
+            <EnterprisesAnalytics enterprises={enterprises} currentUser={currentUser} standalone={true} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

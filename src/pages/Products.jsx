@@ -22,7 +22,7 @@ import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { Upload, Package, AlertTriangle, DollarSign, Clock, Wrench } from "lucide-react";
+import { Upload, Package, AlertTriangle, DollarSign, Clock, Wrench, BarChart2, X } from "lucide-react";
 import { differenceInDays, parseISO, isValid } from "date-fns";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
@@ -198,6 +198,7 @@ const FILTER_DEFS = [
 ];
 
 export default function Products() {
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -323,6 +324,11 @@ export default function Products() {
           </Button>
         )}
       </PageHeader>
+      <div className="flex justify-end -mt-1 mb-2">
+        <button onClick={() => setAnalyticsOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-700 transition-all shadow-sm">
+            <BarChart2 className="w-3.5 h-3.5" /> Analytics
+          </button>
+      </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={Package} iconClass="bg-slate-100 text-slate-500" label="Total Items" value={products.length} />
@@ -448,7 +454,20 @@ export default function Products() {
           qc.refetchQueries({ queryKey: ["products"] });
         }}
       />
-      <ProductsAnalytics products={products} currentUser={currentUser} />
+
+      {analyticsOpen && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white shadow-sm">
+            <p className="font-bold text-slate-800">Products Analytics</p>
+            <button onClick={() => setAnalyticsOpen(false)} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
+              <X className="w-5 h-5 text-slate-500" />
+            </button>
+          </div>
+          <div className="p-6">
+            <ProductsAnalytics products={products} currentUser={currentUser} standalone={true} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

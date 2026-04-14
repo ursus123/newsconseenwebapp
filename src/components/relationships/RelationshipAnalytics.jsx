@@ -29,6 +29,16 @@ const TYPE_LABELS = {
 
 const PALETTE = ["#3b82f6","#10b981","#8b5cf6","#f59e0b","#06b6d4","#ef4444","#6366f1","#14b8a6","#f97316","#ec4899"];
 
+
+function CategoryHeader({ title, icon }) {
+  return (
+    <div className="col-span-full flex items-center gap-2 pt-3 pb-1 border-b border-slate-100 mb-1">
+      {icon && <span className="text-sm">{icon}</span>}
+      <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{title}</h3>
+    </div>
+  );
+}
+
 export default function RelationshipAnalytics({ relationships, currentUser = null }) {
   const [expanded, setExpanded] = useState(false);
 

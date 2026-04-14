@@ -38,8 +38,18 @@ function wrap(title, children) {
   );
 }
 
-export default function TransactionsAnalytics({ transactions = [], currentUser }) {
-  const [open, setOpen] = useState(false);
+
+function CategoryHeader({ title, icon }) {
+  return (
+    <div className="col-span-full flex items-center gap-2 pt-3 pb-1 border-b border-slate-100 mb-1">
+      {icon && <span className="text-sm">{icon}</span>}
+      <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{title}</h3>
+    </div>
+  );
+}
+
+export default function TransactionsAnalytics({ transactions = [], currentUser, standalone = false }) {
+  const [open, setOpen] = useState(standalone);
   const d = useMemo(() => {
     const now = new Date();
     const income = transactions.filter(t=>t.transaction_type==="sale_service"||t.transaction_type==="product_sale"||t.transaction_type==="service_fee");
@@ -68,10 +78,10 @@ export default function TransactionsAnalytics({ transactions = [], currentUser }
   if (transactions.length < 2) return null;
   return (
     <div className="mt-8 border border-slate-200 rounded-2xl overflow-hidden">
-      <button onClick={()=>setOpen(o=>!o)} className="w-full flex items-center justify-between px-5 py-3 bg-slate-50 hover:bg-slate-100 transition-colors">
+      {!standalone && <button onClick={()=>setOpen(o=>!o)} className="w-full flex items-center justify-between px-5 py-3 bg-slate-50 hover:bg-slate-100 transition-colors">
         <span className="text-sm font-bold text-slate-700">Transaction Analytics ({transactions.length} records)</span>
         {open ? <ChevronUp className="w-4 h-4 text-slate-400"/> : <ChevronDown className="w-4 h-4 text-slate-400"/>}
-      </button>
+      </button>}
       {open && (
         <div className="p-5 grid grid-cols-1 lg:grid-cols-3 gap-5">
           <ChartCard title="Revenue by Month" sql={`SELECT DATE_TRUNC('month',date) m, SUM(amount) FROM Transaction WHERE transaction_type IN ('sale_service','product_sale','service_fee') GROUP BY 1 ORDER BY 1;`} currentUser={currentUser} entity="Transactions"><ResponsiveContainer width="100%" height={180}><BarChart data={d.revenueByMonth} margin={{left:-10}}><XAxis dataKey="month" tick={{fontSize:10}}/><YAxis tick={{fontSize:10}}/><Tooltip formatter={(v)=>v.toLocaleString()}/><Bar dataKey="revenue" fill="#10b981" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></ChartCard>

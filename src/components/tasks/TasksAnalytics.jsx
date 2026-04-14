@@ -38,7 +38,17 @@ function wrap(title, children) {
   );
 }
 
-export default function TasksAnalytics({ tasks = [], currentUser }) {
+
+function CategoryHeader({ title, icon }) {
+  return (
+    <div className="col-span-full flex items-center gap-2 pt-3 pb-1 border-b border-slate-100 mb-1">
+      {icon && <span className="text-sm">{icon}</span>}
+      <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{title}</h3>
+    </div>
+  );
+}
+
+export default function TasksAnalytics({ tasks = [], currentUser, standalone = false }) {
   const [open, setOpen] = useState(true); // open by default since it's shown in overlay
   const d = useMemo(() => {
     const now = new Date();
