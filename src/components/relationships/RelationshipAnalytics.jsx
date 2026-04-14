@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from "react";
 import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area,
-  XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, RadarChart, Radar, PolarGrid, PolarAngleAxis, ScatterChart, Scatter, FunnelChart, Funnel, LabelList,
+  XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid, LabelList,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis,
 } from "recharts";
 import { format, subMonths, differenceInDays, parseISO } from "date-fns";
 import { ChevronDown, ChevronUp } from "lucide-react";
@@ -217,10 +218,11 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
         {data.peoplePerEnterprise.length > 0 ? (
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.peoplePerEnterprise} margin={{ left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
               <Tooltip />
-              <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              <Bar cursor="pointer" dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : <p className="text-xs text-slate-400 text-center py-12">No data</p>}
@@ -267,7 +269,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
               <XAxis dataKey="name" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
               <Tooltip />
-              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+              <Bar cursor="pointer" dataKey="value" radius={[4, 4, 0, 0]}>
                 {data.statusBreak.map((d, i) => <Cell key={i} fill={d.fill} />)}
               </Bar>
             </BarChart>
@@ -278,10 +280,11 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           {data.rolesData.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.rolesData} layout="vertical" margin={{ left: 0, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                 <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
                 <YAxis type="category" dataKey="role" tick={{ fontSize: 10 }} width={80} />
                 <Tooltip />
-                <Bar dataKey="count" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                <Bar cursor="pointer" dataKey="count" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : <p className="text-xs text-slate-400 text-center py-12">No role data</p>}
@@ -294,7 +297,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                 <Tooltip />
-                <Bar dataKey="count" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                <Bar cursor="pointer" dataKey="count" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : <p className="text-xs text-slate-400 text-center py-12">No item→enterprise data</p>}
@@ -308,7 +311,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
               <XAxis dataKey="range" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
               <Tooltip />
-              <Bar dataKey="count" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+              <Bar cursor="pointer" dataKey="count" fill="#06b6d4" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -320,7 +323,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                 <Tooltip />
-                <Bar dataKey="types" fill="#f97316" radius={[4, 4, 0, 0]} />
+                <Bar cursor="pointer" dataKey="types" fill="#f97316" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : <p className="text-xs text-slate-400 text-center py-12">No data</p>}
@@ -329,6 +332,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
         <ChartCard currentUser={currentUser} entity="Relationships" title="Cumulative Growth" description="Total relationships accumulated over 6 months" sql={`SELECT DATE_FORMAT(start_date,'%Y-%m') as month,\n  COUNT(*) OVER (ORDER BY start_date) as total\nFROM Relationship\nORDER BY month;`} tableData={data.cumulData}>
           <ResponsiveContainer width="100%" height={180}>
             <AreaChart data={data.cumulData} margin={{ left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
               <Tooltip />
@@ -346,7 +350,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                 <Tooltip />
-                <Bar dataKey="enterprises" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                <Bar cursor="pointer" dataKey="enterprises" fill="#6366f1" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : <p className="text-xs text-slate-400 text-center py-12">No data</p>}
@@ -355,10 +359,11 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
         <ChartCard currentUser={currentUser} entity="Relationships" title="Endings by Month" description="How many relationships ended each month" sql={`SELECT DATE_FORMAT(end_date,'%Y-%m') as month, COUNT(*) as ended\nFROM Relationship\nWHERE status = 'ended' AND end_date IS NOT NULL\n  AND end_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)\nGROUP BY month ORDER BY month;`} tableData={data.endedByMonth}>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.endedByMonth} margin={{ left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
               <Tooltip />
-              <Bar dataKey="ended" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              <Bar cursor="pointer" dataKey="ended" fill="#ef4444" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -370,7 +375,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                 <Tooltip />
-                <Bar dataKey="count" fill="#14b8a6" radius={[4, 4, 0, 0]} />
+                <Bar cursor="pointer" dataKey="count" fill="#14b8a6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : <p className="text-xs text-slate-400 text-center py-12">No enterprise→service data</p>}
@@ -382,10 +387,11 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           {data.peoplePerService.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.peoplePerService} layout="vertical" margin={{ left: 0, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                 <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
                 <Tooltip />
-                <Bar dataKey="count" fill="#06b6d4" radius={[0, 4, 4, 0]} />
+                <Bar cursor="pointer" dataKey="count" fill="#06b6d4" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : <p className="text-xs text-slate-400 text-center py-12">No person→service data</p>}
@@ -395,10 +401,11 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           {data.itemsPerPerson.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.itemsPerPerson} layout="vertical" margin={{ left: 0, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                 <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
                 <Tooltip />
-                <Bar dataKey="count" fill="#f59e0b" radius={[0, 4, 4, 0]} />
+                <Bar cursor="pointer" dataKey="count" fill="#f59e0b" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : <p className="text-xs text-slate-400 text-center py-12">No item→person data</p>}
@@ -408,10 +415,11 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           {data.churnByType.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.churnByType} layout="vertical" margin={{ left: 0, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                 <XAxis type="number" tick={{ fontSize: 10 }} unit="%" />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={110} />
                 <Tooltip formatter={(v) => `${v}%`} />
-                <Bar dataKey="churn" fill="#ef4444" radius={[0, 4, 4, 0]} />
+                <Bar cursor="pointer" dataKey="churn" fill="#ef4444" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : <p className="text-xs text-slate-400 text-center py-12">No churn data</p>}
@@ -422,12 +430,13 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
         <ChartCard currentUser={currentUser} entity="Relationships" title="Started vs Ended / Month" description="Net relationship flows over 6 months" sql={`SELECT DATE_FORMAT(start_date,'%Y-%m') as month,\n  COUNT(*) as started FROM Relationship GROUP BY month\nUNION\nSELECT DATE_FORMAT(end_date,'%Y-%m'), COUNT(*) as ended\nFROM Relationship WHERE status='ended' GROUP BY month;`} tableData={data.startEndOverlay}>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.startEndOverlay} margin={{ left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: 10 }} />
               <Bar dataKey="started" fill="#10b981" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="ended" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              <Bar cursor="pointer" dataKey="ended" fill="#ef4444" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -450,7 +459,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
                 <Tooltip formatter={(v) => `${v}%`} />
-                <Bar dataKey="health" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar cursor="pointer" dataKey="health" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : <p className="text-xs text-slate-400 text-center py-12">No data</p>}
