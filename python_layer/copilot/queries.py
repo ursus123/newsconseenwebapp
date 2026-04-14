@@ -2405,6 +2405,549 @@ def find_relationship_records(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# ADDITIONAL RAW RECORD TOOLS — Products and Addresses
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def find_product_records(
+    company_id: str,
+    name: Optional[str] = None,
+    item_type: Optional[str] = None,
+    status: Optional[str] = None,
+    low_stock_only: bool = False,
+    limit: int = 20,
+) -> dict:
+    """
+    Search for individual product/item records by name, type, or status.
+    Returns actual rows — names, stock levels, prices, expiry dates, unit of measure.
+    Used for: "find paracetamol", "show me all medications", "list active products",
+              "which livestock are we tracking?", "browse our service catalogue".
+
+    Queries raw.products directly; falls back to Base44 live.
+    """
+    where, params = [], {}
+    if name:
+        where.append("(name ILIKE :name OR item_subtype ILIKE :name)")
+        params["name"] = f"%{name}%"
+    if item_type:
+        where.append("item_type ILIKE :item_type")
+        params["item_type"] = f"%{item_type}%"
+    if status:
+        where.append("status ILIKE :status")
+        params["status"] = status
+    if low_stock_only:
+        where.append(
+            "(stock_quantity IS NOT NULL AND reorder_level IS NOT NULL "
+            " AND stock_quantity <= reorder_level) OR stock_quantity = 0"
+        )
+
+    rows = _raw_query(
+        "products", company_id, where, params,
+        select_cols=(
+            "id, name, item_type, item_subtype, item_class, status, "
+            "stock_quantity, reorder_level, unit_of_measure, unit_price, "
+            "expiry_date, batch_number, enterprise_name, created_date"
+        ),
+        order_by="name NULLS LAST",
+        limit=limit,
+    )
+
+    if not rows:
+        try:
+            df = _b44_products(company_id)
+            if not df.empty:
+                if name:
+                    for col in ("name", "item_subtype"):
+                        if col in df.columns:
+                            df = df[df[col].str.lower().str.contains(name.lower(), na=False)]
+                if item_type and "item_type" in df.columns:
+                    df = df[df["item_type"].str.lower().str.contains(item_type.lower(), na=False)]
+                if status and "status" in df.columns:
+                    df = df[df["status"].str.lower() == status.lower()]
+                if low_stock_only:
+                    import pandas as _pd2
+                    df["_sq"] = _pd2.to_numeric(df.get("stock_quantity"), errors="coerce")
+                    df["_rl"] = _pd2.to_numeric(df.get("reorder_level"),  errors="coerce")
+                    df = df[(df["_sq"] <= df["_rl"]) | (df["_sq"] == 0)]
+                keep = [c for c in ("id", "name", "item_type", "item_subtype", "item_class",
+                                     "status", "stock_quantity", "reorder_level",
+                                     "unit_of_measure", "unit_price", "expiry_date",
+                                     "batch_number", "enterprise_name") if c in df.columns]
+                rows = df[keep].head(limit).to_dict(orient="records")
+        except Exception as e:
+            logger.warning("find_product_records Base44 fallback: %s", e)
+        source = "base44_live"
+    else:
+        source = "raw"
+
+    logger.info("find_product_records: %d records (source=%s)", len(rows), source)
+    return {
+        "count":       len(rows),
+        "records":     rows,
+        "filters":     {"name": name, "item_type": item_type, "status": status, "low_stock_only": low_stock_only},
+        "data_source": source,
+    }
+
+
+def find_address_records(
+    company_id: str,
+    city: Optional[str] = None,
+    address_type: Optional[str] = None,
+    entity_name: Optional[str] = None,
+    limit: int = 20,
+) -> dict:
+    """
+    Search for individual address records by city, type, or linked entity.
+    Returns actual rows — street, city, country, GPS coordinates, linked entity.
+    Used for: "where is Branch X located?", "show all addresses in Nairobi",
+              "list delivery addresses", "what's the address for Enterprise Y?".
+
+    Queries raw.addresses directly; falls back to Base44 live.
+    """
+    where, params = [], {}
+    if city:
+        where.append("city ILIKE :city")
+        params["city"] = f"%{city}%"
+    if address_type:
+        where.append("address_type ILIKE :address_type")
+        params["address_type"] = f"%{address_type}%"
+    if entity_name:
+        where.append("(enterprise_name ILIKE :entity_name OR person_name ILIKE :entity_name OR label ILIKE :entity_name)")
+        params["entity_name"] = f"%{entity_name}%"
+
+    rows = _raw_query(
+        "addresses", company_id, where, params,
+        select_cols=(
+            "id, address_type, label, street_address, city, state_province, "
+            "country, postal_code, latitude, longitude, "
+            "enterprise_name, enterprise_id, person_name, person_id, "
+            "is_primary, created_date"
+        ),
+        order_by="city NULLS LAST, label NULLS LAST",
+        limit=limit,
+    )
+
+    if not rows:
+        try:
+            df = _read_raw_table("addresses", company_id)
+            if df.empty:
+                from etl.addresses import extract_addresses
+                df = _filter_by_company(extract_addresses(), company_id)
+            if not df.empty:
+                if city and "city" in df.columns:
+                    df = df[df["city"].str.lower().str.contains(city.lower(), na=False)]
+                if address_type and "address_type" in df.columns:
+                    df = df[df["address_type"].str.lower().str.contains(address_type.lower(), na=False)]
+                if entity_name:
+                    mask = False
+                    for col in ("enterprise_name", "person_name", "label"):
+                        if col in df.columns:
+                            mask = mask | df[col].str.lower().str.contains(entity_name.lower(), na=False)
+                    df = df[mask]
+                keep = [c for c in ("id", "address_type", "label", "street_address",
+                                     "city", "state_province", "country", "postal_code",
+                                     "latitude", "longitude", "enterprise_name",
+                                     "person_name", "is_primary") if c in df.columns]
+                rows = df[keep].head(limit).to_dict(orient="records")
+        except Exception as e:
+            logger.warning("find_address_records Base44 fallback: %s", e)
+        source = "base44_live"
+    else:
+        source = "raw"
+
+    logger.info("find_address_records: %d records (source=%s)", len(rows), source)
+    return {
+        "count":       len(rows),
+        "records":     rows,
+        "filters":     {"city": city, "address_type": address_type, "entity_name": entity_name},
+        "data_source": source,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CROSS-ENTITY JOIN TOOL — merge two raw tables in Python
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Supported join pairs and their join keys.
+# Left side is primary_entity, right side is secondary_entity.
+_JOIN_CONFIGS = {
+    ("people", "tasks"): {
+        "left_key":  "full_name",       # or "name" fallback
+        "right_key": "assigned_to",     # or "assignee_name" fallback
+        "alt_right": "assignee_name",
+    },
+    ("people", "transactions"): {
+        "left_key":  "full_name",
+        "right_key": "counterparty_name",
+        "alt_right": None,
+    },
+    ("people", "relationships"): {
+        "left_key":  "full_name",
+        "right_key": "person_name",
+        "alt_right": None,
+    },
+    ("enterprises", "people"): {
+        "left_key":  "name",
+        "right_key": "enterprise_name",
+        "alt_right": None,
+    },
+    ("enterprises", "tasks"): {
+        "left_key":  "name",
+        "right_key": "enterprise_name",
+        "alt_right": None,
+    },
+    ("enterprises", "transactions"): {
+        "left_key":  "name",
+        "right_key": "enterprise_name",
+        "alt_right": "counterparty_name",
+    },
+}
+
+
+def get_entity_join(
+    company_id: str,
+    primary_entity: str,
+    secondary_entity: str,
+    primary_filter: Optional[str] = None,
+    secondary_status_filter: Optional[str] = None,
+    secondary_overdue_only: bool = False,
+    limit: int = 30,
+) -> dict:
+    """
+    Cross-entity join — fetch records from two entities and merge them.
+    Used for: "show people at Branch X with their overdue tasks",
+              "which staff have open transactions?",
+              "list all relationships for people at Enterprise Y".
+
+    Supported pairs: people+tasks, people+transactions, people+relationships,
+                     enterprises+people, enterprises+tasks, enterprises+transactions.
+
+    primary_filter: filter value applied to the primary entity's name/filter column.
+    secondary_status_filter: status filter on the secondary entity.
+    secondary_overdue_only: for tasks, filter to overdue only.
+
+    Queries raw.* directly; falls back to Base44 live per entity.
+    """
+    import pandas as _pd2
+
+    key = (primary_entity, secondary_entity)
+    cfg = _JOIN_CONFIGS.get(key)
+    if not cfg:
+        return {
+            "error": (
+                f"Unsupported join: {primary_entity} + {secondary_entity}. "
+                f"Supported pairs: {', '.join(f'{a}+{b}' for a,b in _JOIN_CONFIGS)}"
+            )
+        }
+
+    # ── Fetch primary entity rows ─────────────────────────────────────────────
+    pri_where, pri_params = [], {}
+    if primary_filter:
+        if primary_entity == "people":
+            pri_where.append("(full_name ILIKE :pf OR name ILIKE :pf)")
+        else:  # enterprises
+            pri_where.append("name ILIKE :pf")
+        pri_params["pf"] = f"%{primary_filter}%"
+
+    primary_rows = _raw_query(
+        primary_entity, company_id, pri_where, pri_params,
+        select_cols="*", order_by="id", limit=200,
+    )
+    if not primary_rows:
+        # Base44 fallback
+        try:
+            fn_map = {"people": _b44_people, "enterprises": _b44_enterprises}
+            df = fn_map[primary_entity](company_id)
+            if not df.empty:
+                if primary_filter:
+                    name_col = "full_name" if "full_name" in df.columns else "name"
+                    if name_col in df.columns:
+                        df = df[df[name_col].str.lower().str.contains(primary_filter.lower(), na=False)]
+                primary_rows = df.to_dict(orient="records")
+        except Exception as e:
+            logger.warning("get_entity_join primary fallback: %s", e)
+
+    if not primary_rows:
+        return {"count": 0, "records": [], "note": f"No {primary_entity} found matching filter."}
+
+    # ── Fetch secondary entity rows ───────────────────────────────────────────
+    sec_where, sec_params = [], {}
+    if secondary_status_filter:
+        sec_where.append("status ILIKE :sec_status")
+        sec_params["sec_status"] = secondary_status_filter
+    if secondary_overdue_only and secondary_entity == "tasks":
+        sec_where.append("due_date < CURRENT_DATE AND status NOT IN ('completed','done','closed','cancelled')")
+
+    secondary_rows = _raw_query(
+        secondary_entity, company_id, sec_where, sec_params,
+        select_cols="*", order_by="id", limit=500,
+    )
+    if not secondary_rows:
+        try:
+            fn_map = {
+                "tasks":         _b44_tasks,
+                "transactions":  _b44_transactions,
+                "people":        _b44_people,
+                "relationships": lambda cid: _pd2.DataFrame(_read_raw_table("relationships", cid)),
+            }
+            fn = fn_map.get(secondary_entity)
+            if fn:
+                df = fn(company_id)
+                if not df.empty:
+                    if secondary_status_filter and "status" in df.columns:
+                        df = df[df["status"].str.lower() == secondary_status_filter.lower()]
+                    secondary_rows = df.to_dict(orient="records")
+        except Exception as e:
+            logger.warning("get_entity_join secondary fallback: %s", e)
+
+    if not secondary_rows:
+        return {"count": 0, "records": [], "note": f"No {secondary_entity} found."}
+
+    # ── Merge in Python ───────────────────────────────────────────────────────
+    left_key  = cfg["left_key"]
+    right_key = cfg["right_key"]
+    alt_right = cfg.get("alt_right")
+
+    df_left  = _pd2.DataFrame(primary_rows)
+    df_right = _pd2.DataFrame(secondary_rows)
+
+    # Resolve actual column names (some entities use full_name, some name)
+    if left_key not in df_left.columns and "name" in df_left.columns:
+        left_key = "name"
+    if right_key not in df_right.columns and alt_right and alt_right in df_right.columns:
+        right_key = alt_right
+
+    if left_key not in df_left.columns or right_key not in df_right.columns:
+        return {
+            "error": (
+                f"Join key mismatch: '{left_key}' not in {list(df_left.columns[:8])} "
+                f"or '{right_key}' not in {list(df_right.columns[:8])}"
+            )
+        }
+
+    # Normalise join keys to lowercase for case-insensitive match
+    df_left["_jk"]  = df_left[left_key].astype(str).str.lower().str.strip()
+    df_right["_jk"] = df_right[right_key].astype(str).str.lower().str.strip()
+
+    # Suffix secondary columns to avoid collision
+    merged = df_left.merge(
+        df_right, on="_jk", how="inner",
+        suffixes=("", f"_{secondary_entity[:-1]}")
+    ).drop(columns=["_jk"])
+
+    records = merged.head(limit).to_dict(orient="records")
+
+    logger.info(
+        "get_entity_join: %s+%s → %d merged records",
+        primary_entity, secondary_entity, len(records),
+    )
+    return {
+        "count":            len(records),
+        "primary_entity":   primary_entity,
+        "secondary_entity": secondary_entity,
+        "join_key":         f"{primary_entity}.{left_key} = {secondary_entity}.{right_key}",
+        "records":          records,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# WRITE-BACK TOOL — copilot requests an action through the approval gate
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def request_action(
+    company_id: str,
+    action_type: str,
+    entity: str,
+    label: str,
+    changes: Optional[dict] = None,
+    record_id: Optional[str] = None,
+    reasoning: Optional[str] = None,
+) -> dict:
+    """
+    Submit an action request through the approval gate.
+    Low-risk actions execute immediately (create_task, flag_record).
+    Higher-risk actions (update_record, create_transaction, send message) go to
+    the pending approvals queue for the operator to review in the Agents panel.
+
+    Used for: "create a follow-up task for John", "flag this record",
+              "mark this task as completed", "create an invoice for ABC Corp",
+              "send a reminder to this client".
+
+    Returns the status (executed/pending/notify) and an approval_id if queued.
+    """
+    from database import get_engine_safe as _get_engine
+
+    VALID_ACTIONS = {
+        "create_task", "create_follow_up", "update_task_status",
+        "flag_record", "update_record", "reassign_task",
+        "create_transaction", "send_client_message", "send_email",
+        "internal_alert",
+    }
+    if action_type not in VALID_ACTIONS:
+        return {
+            "error":  f"Unknown action_type '{action_type}'.",
+            "valid":  sorted(VALID_ACTIONS),
+        }
+
+    payload = {
+        "entity":    entity,
+        "record_id": record_id,
+        "changes":   changes or {},
+        "label":     label,
+        "source":    "copilot",
+    }
+
+    engine = _get_engine()
+    if not engine:
+        return {
+            "status":  "unavailable",
+            "message": "Database unavailable — action cannot be queued.",
+        }
+
+    try:
+        from agents.approval_gate import submit_action, get_risk_level
+        result = submit_action(
+            engine=engine,
+            company_id=company_id,
+            agent_name="copilot",
+            action_type=action_type,
+            action_label=label,
+            action_payload=payload,
+            reasoning=reasoning or f"Requested via copilot for {entity}",
+        )
+        risk = get_risk_level(action_type).value
+
+        status_msg = {
+            "executed": f"Action executed immediately (low risk: {risk}).",
+            "notified": f"Action executed and operator notified (risk: {risk}).",
+            "pending":  f"Action queued for approval in the Agents panel (risk: {risk}).",
+            "error":    "Action could not be submitted.",
+        }.get(result.get("status", ""), "Unknown status.")
+
+        return {
+            "status":      result.get("status"),
+            "approval_id": result.get("approval_id"),
+            "risk_level":  risk,
+            "action_type": action_type,
+            "label":       label,
+            "message":     status_msg,
+        }
+    except Exception as e:
+        logger.warning("request_action failed: %s", e)
+        return {"status": "error", "error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COPILOT PERSISTENT MEMORY — per-company key-value store (analytics.copilot_memory)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_COPILOT_MEMORY_DDL = """
+CREATE TABLE IF NOT EXISTS analytics.copilot_memory (
+    id          SERIAL PRIMARY KEY,
+    company_id  TEXT NOT NULL,
+    memory_type TEXT NOT NULL DEFAULT 'note',
+    key         TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (company_id, key)
+);
+CREATE INDEX IF NOT EXISTS idx_copilot_memory_company
+    ON analytics.copilot_memory (company_id);
+"""
+
+
+def _ensure_copilot_memory_table() -> bool:
+    """Create the table if it doesn't exist. Returns True on success."""
+    engine = get_engine_safe()
+    if not engine:
+        return False
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(_COPILOT_MEMORY_DDL))
+            conn.commit()
+        return True
+    except Exception as e:
+        logger.warning("copilot_memory: could not ensure table: %s", e)
+        return False
+
+
+def load_copilot_memory(company_id: str) -> list[dict]:
+    """
+    Load all persistent memory entries for this company.
+    Called automatically at the start of every ask() — not exposed as a tool.
+    Returns list of {key, value, memory_type, updated_at}.
+    """
+    engine = get_engine_safe()
+    if not engine:
+        return []
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT key, value, memory_type, updated_at
+                FROM analytics.copilot_memory
+                WHERE company_id = :cid
+                ORDER BY updated_at DESC
+                LIMIT 50
+            """), {"cid": company_id}).fetchall()
+            return [
+                {"key": r[0], "value": r[1], "memory_type": r[2], "updated_at": str(r[3])}
+                for r in rows
+            ]
+    except Exception as e:
+        logger.debug("load_copilot_memory: %s", e)
+        return []
+
+
+def save_copilot_memory(
+    company_id: str,
+    key: str,
+    value: str,
+    memory_type: str = "note",
+) -> dict:
+    """
+    Persist a memory entry for this company — survives across all future sessions.
+    Call this when the operator states a preference, names, context, or instruction
+    that will be useful in future conversations.
+
+    memory_type:
+      preference  — operator preference ("always show amounts in KES")
+      context     — background fact ("this is a school, not a hospital")
+      instruction — standing instruction ("always include headcount in summaries")
+      note        — general note
+
+    Used for: "remember that we call our clients 'patients'",
+              "always show costs in USD", "our fiscal year starts in July".
+    """
+    _ensure_copilot_memory_table()
+    engine = get_engine_safe()
+    if not engine:
+        return {"saved": False, "reason": "database unavailable"}
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("""
+                INSERT INTO analytics.copilot_memory
+                    (company_id, memory_type, key, value, updated_at)
+                VALUES (:cid, :mtype, :key, :value, NOW())
+                ON CONFLICT (company_id, key)
+                DO UPDATE SET
+                    value      = EXCLUDED.value,
+                    memory_type= EXCLUDED.memory_type,
+                    updated_at = NOW()
+            """), {"cid": company_id, "mtype": memory_type, "key": key, "value": value})
+            conn.commit()
+        logger.info("save_copilot_memory: saved '%s' for company %s", key, company_id)
+        return {
+            "saved":       True,
+            "key":         key,
+            "memory_type": memory_type,
+            "message":     f"I'll remember this for all future conversations: {key} = {value}",
+        }
+    except Exception as e:
+        logger.warning("save_copilot_memory: %s", e)
+        return {"saved": False, "reason": str(e)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # WEB-GROUNDED TOOLS — public data sources, no API key required
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -3325,6 +3868,212 @@ TOOL_DEFINITIONS = [
     },
     # ── Raw record lookup tools ──────────────────────────────────────────────
     {
+        "name": "find_product_records",
+        "description": (
+            "Search for individual product or item records by name, type, or status. "
+            "Returns actual rows — names, stock levels, prices, expiry dates, unit of measure. "
+            "Use this for questions like: "
+            "'Find paracetamol', 'Show me all medications', 'List active products', "
+            "'Which livestock are we tracking?', 'Browse the service catalogue', "
+            "'What do we sell?', 'Show physical inventory'. "
+            "Use get_product_summary for aggregate stock counts; use this to browse actual items."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Partial or full product name to search (case-insensitive).",
+                },
+                "item_type": {
+                    "type": "string",
+                    "enum": ["physical", "living", "digital", "service_package", "financial_instrument"],
+                    "description": "Filter by item type.",
+                },
+                "status": {
+                    "type": "string",
+                    "description": "Filter by status (e.g. 'active', 'inactive', 'discontinued').",
+                },
+                "low_stock_only": {
+                    "type": "boolean",
+                    "description": "If true, return only items at or below reorder level. Default false.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max records to return. Default 20.",
+                },
+            },
+        },
+    },
+    {
+        "name": "find_address_records",
+        "description": (
+            "Search for individual address records by city, type, or linked entity. "
+            "Returns actual rows — street, city, country, GPS coordinates, linked entity name. "
+            "Use this for questions like: "
+            "'Where is Branch X located?', 'Show all addresses in Nairobi', "
+            "'List our delivery addresses', 'What is the address for Enterprise Y?', "
+            "'Which branches are in Lagos?', 'Find the postal address for Person Z'. "
+            "Use get_address_overview for geographic counts; use this for actual addresses."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "city": {
+                    "type": "string",
+                    "description": "City to filter by (partial match).",
+                },
+                "address_type": {
+                    "type": "string",
+                    "description": "Filter by address type (e.g. 'physical', 'postal', 'delivery', 'billing').",
+                },
+                "entity_name": {
+                    "type": "string",
+                    "description": "Filter by linked enterprise, person, or label name (partial match).",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max records to return. Default 20.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_entity_join",
+        "description": (
+            "Fetch records from two entities and join them — answering cross-entity questions "
+            "in a single call instead of requiring multiple lookups. "
+            "Use this for questions like: "
+            "'Show me all people at Branch X with their overdue tasks', "
+            "'Which staff have open transactions?', "
+            "'List all relationships for people at Enterprise Y', "
+            "'Show clients at this branch with unpaid invoices', "
+            "'Which enterprises have pending tasks this week?'. "
+            "Supported pairs: people+tasks, people+transactions, people+relationships, "
+            "enterprises+people, enterprises+tasks, enterprises+transactions."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["primary_entity", "secondary_entity"],
+            "properties": {
+                "primary_entity": {
+                    "type": "string",
+                    "enum": ["people", "enterprises"],
+                    "description": "The primary (left-side) entity to join from.",
+                },
+                "secondary_entity": {
+                    "type": "string",
+                    "enum": ["tasks", "transactions", "people", "relationships"],
+                    "description": "The secondary (right-side) entity to join to.",
+                },
+                "primary_filter": {
+                    "type": "string",
+                    "description": "Filter the primary entity by name (e.g. enterprise name 'Branch X', person name 'John'). Partial match.",
+                },
+                "secondary_status_filter": {
+                    "type": "string",
+                    "description": "Filter the secondary entity by status (e.g. 'pending', 'unpaid', 'active').",
+                },
+                "secondary_overdue_only": {
+                    "type": "boolean",
+                    "description": "For tasks: only include overdue tasks. Default false.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max merged records to return. Default 30.",
+                },
+            },
+        },
+    },
+    {
+        "name": "request_action",
+        "description": (
+            "Request that the system take an action — create a task, update a record, "
+            "flag something, send a message, or create a transaction. "
+            "Low-risk actions (create_task, flag_record, update_task_status) execute immediately. "
+            "Higher-risk actions (update_record, create_transaction, send_client_message) "
+            "go to the pending approvals queue for the operator to review in the Agents panel. "
+            "Use this when the operator says: "
+            "'Create a follow-up task for John', 'Flag this client as high-risk', "
+            "'Mark task X as completed', 'Create an invoice for ABC Corp for $500', "
+            "'Send a reminder to this client', 'Update this record'. "
+            "Always tell the operator what action you are requesting and what its risk level is."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["action_type", "entity", "label"],
+            "properties": {
+                "action_type": {
+                    "type": "string",
+                    "enum": [
+                        "create_task", "create_follow_up", "update_task_status",
+                        "flag_record", "update_record", "reassign_task",
+                        "create_transaction", "send_client_message",
+                        "send_email", "internal_alert",
+                    ],
+                    "description": "The type of action to perform.",
+                },
+                "entity": {
+                    "type": "string",
+                    "enum": ["people", "enterprises", "products", "tasks", "transactions", "relationships", "addresses"],
+                    "description": "Which entity type this action affects.",
+                },
+                "label": {
+                    "type": "string",
+                    "description": "Human-readable description of the action, e.g. 'Create follow-up visit for John Mwangi'.",
+                },
+                "record_id": {
+                    "type": "string",
+                    "description": "ID of the specific record to act on (required for update/flag/status-change actions).",
+                },
+                "changes": {
+                    "type": "object",
+                    "description": "Fields to set on the record, e.g. {\"status\": \"completed\"} or {\"title\": \"Follow-up visit\", \"due_date\": \"2026-04-20\"}.",
+                },
+                "reasoning": {
+                    "type": "string",
+                    "description": "Why this action is being requested — shown to operator in the approval panel.",
+                },
+            },
+        },
+    },
+    {
+        "name": "save_copilot_memory",
+        "description": (
+            "Persist a memory entry that will be available in ALL future conversations with this operator. "
+            "Use this when the operator states a preference, standing instruction, background context, "
+            "or important fact about their organisation that you should always remember. "
+            "Use for things like: "
+            "'Remember that we call our clients patients', "
+            "'Always show amounts in KES not USD', "
+            "'Our fiscal year starts in July', "
+            "'The main branch is Westlands, not Headquarters', "
+            "'This is a school — students are our clients'. "
+            "Do NOT save transient facts (today's numbers, one-off answers). "
+            "Only save things the operator explicitly asks you to remember, "
+            "or that are clearly durable preferences they will want applied every time."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["key", "value"],
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "Short identifier for this memory, e.g. 'client_terminology', 'currency_preference', 'fiscal_year_start'.",
+                },
+                "value": {
+                    "type": "string",
+                    "description": "The memory content to store.",
+                },
+                "memory_type": {
+                    "type": "string",
+                    "enum": ["preference", "context", "instruction", "note"],
+                    "description": "Category: preference (display/format), context (background fact), instruction (standing rule), note (general).",
+                },
+            },
+        },
+    },
+    {
         "name": "find_people_records",
         "description": (
             "Search for individual people records by name, type, status, or linked enterprise. "
@@ -3903,6 +4652,14 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "find_transaction_records":     find_transaction_records,
         "inspect_raw_record":           inspect_raw_record,
         "find_relationship_records":    find_relationship_records,
+        "find_product_records":         find_product_records,
+        "find_address_records":         find_address_records,
+        # Cross-entity join
+        "get_entity_join":              get_entity_join,
+        # Write-back through approval gate
+        "request_action":               request_action,
+        # Persistent memory
+        "save_copilot_memory":          save_copilot_memory,
     }
 
     fn = dispatch.get(tool_name)

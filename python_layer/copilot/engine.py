@@ -18,7 +18,10 @@ import os
 import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from .queries import TOOL_DEFINITIONS, execute_tool, get_operator_context, QueryEngine
+from .queries import (
+    TOOL_DEFINITIONS, execute_tool, get_operator_context, QueryEngine,
+    load_copilot_memory, _ensure_copilot_memory_table,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +202,27 @@ RAW RECORD TOOLS (individual records from raw.* — use when operator asks for n
 - find_task_records        — search tasks by assignee/type/status/overdue; returns titles, due dates, outcomes
 - find_transaction_records — search transactions by counterparty/type/status/amount; returns actual invoice rows
 - find_relationship_records— search relationships by person/enterprise/type; returns org structure, assignments
+- find_product_records     — search products by name/type/status; returns stock levels, prices, expiry dates
+- find_address_records     — search addresses by city/type/entity; returns actual street addresses and GPS
 - inspect_raw_record       — fetch a single complete record by ID (drill-down after any tool returns an ID)
+
+CROSS-ENTITY TOOL:
+- get_entity_join — join two raw entity tables in one call.
+  Use when the question spans two entities: "people at Branch X with their overdue tasks",
+  "clients with unpaid invoices", "staff and their relationships".
+  Supported: people+tasks, people+transactions, people+relationships,
+             enterprises+people, enterprises+tasks, enterprises+transactions.
+
+ACTION TOOL (write-back through approval gate):
+- request_action — create tasks, update records, flag items, send messages, create transactions.
+  Low-risk actions (create_task, flag_record, update_task_status) execute immediately.
+  Higher-risk actions queue in the Agents approval panel for operator review.
+  Always tell the operator what you are requesting and its risk level before calling this.
+
+PERSISTENT MEMORY TOOL:
+- save_copilot_memory — persist a preference, instruction, or context fact for ALL future sessions.
+  Only call this when the operator explicitly asks you to remember something, or states a clear
+  standing preference. Never save transient facts (today's numbers, one-off answers).
 
 WHEN TO USE RAW vs AGGREGATE TOOLS:
 - "How many active staff?" → get_people_summary (aggregate count)
@@ -208,6 +231,9 @@ WHEN TO USE RAW vs AGGREGATE TOOLS:
 - "Which tasks are overdue?" → find_task_records with overdue_only=true (actual task titles)
 - "How much revenue this month?" → get_transaction_summary (aggregate sum)
 - "Show me invoices for ABC Corp" → find_transaction_records (actual rows)
+- "Show people at Branch X with their tasks" → get_entity_join (cross-entity)
+- "Create a follow-up task for John" → request_action (write-back)
+- "Remember that we call clients patients" → save_copilot_memory
 
 WEB & PUBLIC DATA TOOLS (query external/public sources):
 - web_search: multi-tier web search (Brave Search → DuckDuckGo → Wikipedia)
@@ -271,8 +297,9 @@ def build_system_prompt(company_id: str) -> str:
     Layers:
       1. Newsconseen self-knowledge (what the system is)
       2. Operator identity (who THIS operator is)
-      3. Tool instructions (how to use the tools)
-      4. Data quality note (only when score < 80 or critical issues exist)
+      3. Persistent memory — operator preferences/context from prior sessions
+      4. Tool instructions (how to use the tools)
+      5. Data quality note (only when score < 80 or critical issues exist)
     """
     ctx    = get_operator_context(company_id)
     name   = ctx.get("name", "this organisation")
@@ -290,9 +317,34 @@ def build_system_prompt(company_id: str) -> str:
         + (f"Website: {ctx['website']}\n" if ctx.get("website") else "")
     )
 
+    # ── Persistent memory — inject what the operator has told us before ───────
+    memory_section = ""
+    try:
+        memories = load_copilot_memory(company_id)
+        if memories:
+            lines = ["OPERATOR MEMORY (from prior conversations — apply these always)"]
+            lines.append("=" * 60)
+            for m in memories:
+                lines.append(f"[{m['memory_type']}] {m['key']}: {m['value']}")
+            lines.append(
+                "\nApply these remembered preferences and instructions to every response. "
+                "If the operator asks you to update or remove a memory, use save_copilot_memory "
+                "with the same key to overwrite it."
+            )
+            memory_section = "\n".join(lines)
+    except Exception:
+        pass
+
     readiness_note = _get_readiness_note(company_id)
-    base = f"{_SELF_KNOWLEDGE}\n\n{operator_identity}\n\n{_BASE_INSTRUCTIONS}"
-    return f"{base}\n\n{readiness_note}" if readiness_note else base
+
+    parts = [_SELF_KNOWLEDGE, operator_identity]
+    if memory_section:
+        parts.append(memory_section)
+    parts.append(_BASE_INSTRUCTIONS)
+    if readiness_note:
+        parts.append(readiness_note)
+
+    return "\n\n".join(parts)
 
 
 # ── Core tool loop ───────────────────────────────────────────────────────────
@@ -833,6 +885,11 @@ class CopilotEngine:
         self.backend         = backend
         self.railway_url     = railway_url
         self.query_engine    = QueryEngine(company_id)
+        # Ensure copilot memory table exists (idempotent, fast after first call)
+        try:
+            _ensure_copilot_memory_table()
+        except Exception:
+            pass
 
     def ask(
         self,
