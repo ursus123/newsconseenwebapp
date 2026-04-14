@@ -2,60 +2,109 @@ import React, { useState, useEffect } from "react";
 import { Trash2, Loader2, Undo2, RotateCcw, X, AlertTriangle } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 
-// ── Entity types in safe delete order (dependants first, roots last)
-// ── and safe re-create order (roots first, dependants last)
+// ── Entity order ───────────────────────────────────────────────────────────
 const DELETE_ORDER  = ["Relationship", "Transaction", "Task", "Address", "Service", "Product", "Person", "Enterprise"];
 const RESTORE_ORDER = ["Enterprise", "Person", "Product", "Service", "Address", "Task", "Transaction", "Relationship"];
 
-const BACKUP_KEY    = "datamartBackup";
 const BACKUP_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
-function readBackup() {
+// ── IndexedDB helpers (no size limit, async) ───────────────────────────────
+const IDB_DB      = "newsconseenDiag";
+const IDB_STORE   = "datamartBackup";
+const IDB_KEY     = "backup";
+const IDB_VERSION = 1;
+
+function openIDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_DB, IDB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror  = (e) => reject(e.target.error);
+  });
+}
+
+async function idbSet(value) {
+  const db = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).put(value, IDB_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = (e) => reject(e.target.error);
+  });
+}
+
+async function idbGet() {
+  const db = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(IDB_STORE, "readonly");
+    const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+    req.onsuccess = (e) => resolve(e.target.result ?? null);
+    req.onerror   = (e) => reject(e.target.error);
+  });
+}
+
+async function idbClear() {
+  const db = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).delete(IDB_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = (e) => reject(e.target.error);
+  });
+}
+
+// ── Backup read / write / clear ────────────────────────────────────────────
+async function readBackup() {
   try {
-    const raw = localStorage.getItem(BACKUP_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
+    const data = await idbGet();
+    if (!data) return null;
     if (Date.now() - new Date(data.deletedAt).getTime() > BACKUP_TTL_MS) {
-      localStorage.removeItem(BACKUP_KEY);
+      await idbClear();
       return null;
     }
     return data;
-  } catch {
+  } catch (e) {
     return null;
   }
 }
 
-function writeBackup(records) {
+async function writeBackup(records) {
   const counts = {};
   Object.entries(records).forEach(([k, v]) => { counts[k] = v.length; });
-  localStorage.setItem(BACKUP_KEY, JSON.stringify({
+  await idbSet({
     deletedAt: new Date().toISOString(),
     counts,
     records,
-  }));
+  });
   window.dispatchEvent(new Event("datamartBackupChanged"));
 }
 
-function clearBackup() {
-  localStorage.removeItem(BACKUP_KEY);
+async function clearBackup() {
+  await idbClear();
   window.dispatchEvent(new Event("datamartBackupChanged"));
 }
 
-// Strip Base44-managed fields before re-creating (IDs are re-assigned by the platform)
+// Strip platform-managed fields so Base44 assigns fresh IDs on re-create
 function stripMeta(record) {
   const { id, created_date, updated_date, ...rest } = record;
   return rest;
 }
 
+// ── Component ──────────────────────────────────────────────────────────────
 export default function EmptyDatamartButton({ currentUser }) {
-  const [phase, setPhase]     = useState("idle"); // idle | confirm | deleting | done | restoring
+  const [phase, setPhase]       = useState("idle"); // idle | confirm | deleting | done | restoring
   const [progress, setProgress] = useState({ done: 0, total: 0, entity: "" });
-  const [backup, setBackup]   = useState(null);
-  const [error, setError]     = useState(null);
+  const [backup, setBackup]     = useState(null);
+  const [error, setError]       = useState(null);
 
   const isSuperAdmin = currentUser?.role === "super_admin";
 
-  const refreshBackup = () => setBackup(readBackup());
+  const refreshBackup = () => readBackup().then(setBackup).catch(() => setBackup(null));
 
   useEffect(() => {
     refreshBackup();
@@ -65,22 +114,19 @@ export default function EmptyDatamartButton({ currentUser }) {
 
   if (!isSuperAdmin) return null;
 
-  // ── Step 1: fetch all records grouped by entity
-  // Mirrors useEntityListFn: super_admin → list all; others → filter by company_id
+  // ── Fetch all workspace records grouped by entity ────────────────────────
   const fetchAll = async () => {
-    const companyId = currentUser?.company_id;
+    const companyId  = currentUser?.company_id;
     const superAdmin = currentUser?.role === "super_admin";
-    const records = {};
+    const records    = {};
     for (const entity of DELETE_ORDER) {
       try {
         const ent = base44.entities[entity];
         if (!ent) { records[entity] = []; continue; }
         let rows;
         if (superAdmin) {
-          // super_admin lists ALL records across all tenants
           rows = await ent.list("-created_date");
         } else if (companyId) {
-          // Scoped users only fetch their own workspace records
           rows = await ent.filter({ company_id: companyId });
         } else {
           rows = [];
@@ -93,23 +139,26 @@ export default function EmptyDatamartButton({ currentUser }) {
     return records;
   };
 
-  // ── Step 2: delete all
+  // ── Delete ────────────────────────────────────────────────────────────────
   const handleEmpty = async () => {
     setPhase("deleting");
     setError(null);
     try {
       const records = await fetchAll();
-      writeBackup(records);
+
+      // Persist to IndexedDB before touching anything
+      await writeBackup(records);
+      await refreshBackup();
 
       const total = Object.values(records).reduce((s, arr) => s + arr.length, 0);
       let done = 0;
 
       for (const entity of DELETE_ORDER) {
-        const ent = base44.entities[entity];
+        const ent  = base44.entities[entity];
         if (!ent) continue;
         const rows = records[entity] || [];
         for (const row of rows) {
-          try { await ent.delete(row.id); } catch (e) { /* best effort — 404 = already gone */ }
+          try { await ent.delete(row.id); } catch (e) { /* 404 = already gone, continue */ }
           done++;
           setProgress({ done, total, entity });
         }
@@ -118,13 +167,13 @@ export default function EmptyDatamartButton({ currentUser }) {
       setPhase("done");
     } catch (err) {
       setError(err.message || "Unexpected error during deletion.");
-      setPhase("idle");
+      setPhase("confirm"); // stay on confirm so user can retry or cancel
     }
   };
 
-  // ── Step 3: undo — re-create all in restore order
+  // ── Undo / restore ────────────────────────────────────────────────────────
   const handleUndo = async () => {
-    const b = readBackup();
+    const b = await readBackup();
     if (!b) return;
     setPhase("restoring");
     setError(null);
@@ -133,19 +182,18 @@ export default function EmptyDatamartButton({ currentUser }) {
       let done = 0;
 
       for (const entity of RESTORE_ORDER) {
-        const ent = base44.entities[entity];
+        const ent  = base44.entities[entity];
         if (!ent) continue;
         const rows = b.records[entity] || [];
         for (const row of rows) {
-          try {
-            await ent.create(stripMeta(row));
-          } catch (e) { /* best effort */ }
+          try { await ent.create(stripMeta(row)); } catch (e) { /* best effort */ }
           done++;
           setProgress({ done, total: totalCount, entity });
         }
       }
 
-      clearBackup();
+      await clearBackup();
+      setBackup(null);
       setPhase("idle");
       window.dispatchEvent(new Event("lastBulkImportChanged"));
     } catch (err) {
@@ -154,12 +202,12 @@ export default function EmptyDatamartButton({ currentUser }) {
     }
   };
 
-  const handleCancel = () => { setPhase("idle"); setError(null); };
-  const handleDismiss = () => { clearBackup(); setPhase("idle"); setError(null); };
+  const handleCancel  = () => { setPhase("idle"); setError(null); };
+  const handleDismiss = async () => { await clearBackup(); setBackup(null); setPhase("idle"); setError(null); };
 
   const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
 
-  // ── Confirm dialog overlay
+  // ── Confirm dialog ────────────────────────────────────────────────────────
   if (phase === "confirm") {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -172,7 +220,7 @@ export default function EmptyDatamartButton({ currentUser }) {
               <p className="font-bold text-slate-800">Empty Datamart?</p>
               <p className="text-sm text-slate-500 mt-1">
                 This will delete <strong>all records</strong> across every entity for this workspace.
-                A backup is saved for 2 hours so you can undo immediately after.
+                A full backup is saved to browser storage for 2 hours so you can undo immediately after.
               </p>
             </div>
           </div>
@@ -200,7 +248,7 @@ export default function EmptyDatamartButton({ currentUser }) {
     );
   }
 
-  // ── Progress overlay (deleting or restoring)
+  // ── Progress overlay ──────────────────────────────────────────────────────
   if (phase === "deleting" || phase === "restoring") {
     const isRestoring = phase === "restoring";
     return (
@@ -230,26 +278,29 @@ export default function EmptyDatamartButton({ currentUser }) {
     );
   }
 
-  // ── Done state — show undo option
+  // ── Done toast ────────────────────────────────────────────────────────────
   if (phase === "done") {
-    const b = backup || readBackup();
-    const totalDeleted = b ? Object.values(b.counts).reduce((s, n) => s + n, 0) : 0;
+    const totalDeleted = backup
+      ? Object.values(backup.counts).reduce((s, n) => s + n, 0)
+      : 0;
     return (
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-2xl">
         <div className="flex items-center gap-2">
           <Trash2 className="w-4 h-4 text-rose-400" />
           <p className="text-sm font-semibold">Datamart emptied — {totalDeleted} records removed</p>
         </div>
-        <button
-          onClick={handleUndo}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs font-bold transition-colors whitespace-nowrap"
-        >
-          <Undo2 className="w-3.5 h-3.5" /> Undo
-        </button>
+        {backup && (
+          <button
+            onClick={handleUndo}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs font-bold transition-colors whitespace-nowrap"
+          >
+            <Undo2 className="w-3.5 h-3.5" /> Undo
+          </button>
+        )}
         <button
           onClick={handleDismiss}
           className="text-slate-400 hover:text-white transition-colors ml-1"
-          title="Dismiss (backup expires in 2h)"
+          title="Dismiss — backup stays for 2h"
         >
           <X className="w-4 h-4" />
         </button>
@@ -257,7 +308,7 @@ export default function EmptyDatamartButton({ currentUser }) {
     );
   }
 
-  // ── Idle — show the main button (and a restore pill if a backup exists)
+  // ── Idle ──────────────────────────────────────────────────────────────────
   return (
     <div className="flex items-center gap-1.5">
       {backup && (
