@@ -3858,6 +3858,18 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "get_anomaly_report",
+        "description": (
+            "Returns the latest anomaly detection report — statistical outliers in transactions "
+            "and tasks, plus metric drift detected since the last ETL run. "
+            "Use for questions like: 'Has anything unusual happened?', 'Any anomalies?', "
+            "'Are there unusual transactions?', 'Did headcount drop suddenly?', "
+            "'What has the system flagged?', 'Show me statistical alerts'. "
+            "Returns critical and warning severity anomalies with context."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "get_kpi_goals",
         "description": (
             "Returns all KPI goals for this company with current status: "
@@ -4666,6 +4678,48 @@ def get_kpi_goals(company_id: str) -> dict:
         return {"error": str(e), "goal_count": 0, "goals": []}
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# GAP 2 — ANOMALY DETECTION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_anomaly_report(company_id: str) -> dict:
+    """
+    Returns the latest anomaly detection report — statistical outliers in
+    transactions, tasks, and key metric drift detected since the last ETL run.
+    Used for: "has anything unusual happened?", "any anomalies?",
+              "did headcount change suddenly?", "unusual transactions",
+              "what's flagged?", "statistical alerts".
+    """
+    try:
+        from anomaly.routes import _CACHE, _is_stale
+        from anomaly.engine import evaluate
+
+        cached = _CACHE.get(company_id)
+        if cached and not _is_stale(cached):
+            report = cached
+        else:
+            # Run fresh — use cached snapshot as baseline for drift detection
+            baseline = cached.get("metrics_snapshot") if cached else None
+            report   = evaluate(company_id, baseline)
+            _CACHE[company_id] = report
+
+        anomalies = report.get("anomalies", [])
+        return {
+            "anomaly_count":   report.get("anomaly_count", 0),
+            "critical_count":  report.get("critical_count", 0),
+            "warning_count":   report.get("warning_count", 0),
+            "anomalies":       anomalies,
+            "evaluated_at":    report.get("evaluated_at"),
+            "note": (
+                "No anomalies detected — all metrics within normal range."
+                if not anomalies else None
+            ),
+        }
+    except Exception as e:
+        logger.warning("get_anomaly_report: %s", e)
+        return {"error": str(e), "anomaly_count": 0, "anomalies": []}
+
+
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
 
 def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
@@ -4727,6 +4781,7 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "save_copilot_memory":          save_copilot_memory,
         # Gap tools
         "get_kpi_goals":                get_kpi_goals,
+        "get_anomaly_report":           get_anomaly_report,
     }
 
     fn = dispatch.get(tool_name)
