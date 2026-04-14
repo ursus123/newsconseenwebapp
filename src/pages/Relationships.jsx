@@ -211,7 +211,7 @@ export default function Relationships() {
   };
 
   const handleDeleteAll = async () => {
-    for (const r of relationships) { try { await base44.entities.Relationship.delete(r.id); } catch {} }
+    for (const r of relationships) { try { await base44.entities.Relationship.delete(r.id); } catch (e) { /* 404 = already gone */ } }
     qc.invalidateQueries({ queryKey: ["relationships"] });
     qc.refetchQueries({ queryKey: ["relationships"] });
     triggerETL("relationship");

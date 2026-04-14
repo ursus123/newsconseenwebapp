@@ -307,9 +307,10 @@ export default function People() {
   };
 
   const handleDeleteAll = async () => {
-    for (const p of people) await base44.entities.Person.delete(p.id);
+    for (const p of people) { try { await base44.entities.Person.delete(p.id); } catch (e) { /* 404 = already gone */ } }
     qc.invalidateQueries({ queryKey: ["people"] });
     qc.refetchQueries({ queryKey: ["people"] });
+    triggerETL("people");
     toast({ title: `All ${people.length} people deleted` });
   };
 

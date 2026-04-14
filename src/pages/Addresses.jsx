@@ -193,7 +193,7 @@ export default function Addresses() {
   };
 
   const handleDeleteAll = async () => {
-    for (const a of addresses) { try { await base44.entities.Address.delete(a.id); } catch {} }
+    for (const a of addresses) { try { await base44.entities.Address.delete(a.id); } catch (e) { /* 404 = already gone */ } }
     qc.invalidateQueries({ queryKey: ["addresses"] });
     triggerETL("address");
     toast({ title: `All ${addresses.length} addresses deleted` });

@@ -247,6 +247,11 @@ export function transformPerson(row, currentUser) {
   if (row.relationship_to_org)     notes.push(`Relationship: ${row.relationship_to_org}`);
   if (row.organization)            notes.push(`Organization: ${row.organization}`);
 
+  // skills — coerce comma/semicolon string → array so Base44 accepts it
+  if (typeof row.skills === "string") {
+    row.skills = row.skills.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+  }
+
   // Handle certifications (multi-value semicolon-separated → certification_name)
   if (row.certifications && !row.certification_name) {
     const certs = row.certifications.split(/[;,]/).map(s => s.trim()).filter(Boolean);

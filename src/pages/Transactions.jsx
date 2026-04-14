@@ -569,9 +569,10 @@ export default function Transactions() {
   };
 
   const handleDeleteAll = async () => {
-    for (const t of transactions) await base44.entities.Transaction.delete(t.id);
+    for (const t of transactions) { try { await base44.entities.Transaction.delete(t.id); } catch (e) { /* 404 = already gone */ } }
     qc.invalidateQueries({ queryKey: ["transactions"] });
     qc.refetchQueries({ queryKey: ["transactions"] });
+    triggerETL("transaction");
     toast({ title: `All ${transactions.length} transactions deleted` });
   };
 

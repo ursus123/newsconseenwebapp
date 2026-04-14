@@ -260,9 +260,10 @@ export default function Products() {
   };
 
   const handleDeleteAll = async () => {
-    for (const p of products) await base44.entities.Product.delete(p.id);
+    for (const p of products) { try { await base44.entities.Product.delete(p.id); } catch (e) { /* 404 = already gone */ } }
     qc.invalidateQueries({ queryKey: ["products"] });
     qc.refetchQueries({ queryKey: ["products"] });
+    triggerETL("product");
     toast({ title: `All ${products.length} items deleted` });
   };
 

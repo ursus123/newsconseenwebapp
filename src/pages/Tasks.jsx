@@ -370,8 +370,9 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   };
 
   const handleDeleteAll = async () => {
-    for (const t of tasks) { try { await base44.entities.Task.delete(t.id); } catch {} }
+    for (const t of tasks) { try { await base44.entities.Task.delete(t.id); } catch (e) { /* 404 = already gone */ } }
     invalidate();
+    triggerETL("task");
     toast({ title: `All ${tasks.length} tasks deleted` });
   };
 

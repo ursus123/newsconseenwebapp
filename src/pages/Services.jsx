@@ -117,9 +117,10 @@ export default function Services() {
   const handleArchive = (item) => { updateMut.mutate({ id: item.id, data: { ...item, status: "archived" } }); setFormOpen(false); setEditing(null); };
 
   const handleDeleteAll = async () => {
-    for (const s of services) { try { await base44.entities.Service.delete(s.id); } catch {} }
+    for (const s of services) { try { await base44.entities.Service.delete(s.id); } catch (e) { /* 404 = already gone */ } }
     qc.invalidateQueries({ queryKey: ["services"] });
     qc.refetchQueries({ queryKey: ["services"] });
+    triggerETL("service");
     toast({ title: `All ${services.length} services deleted` });
   };
 

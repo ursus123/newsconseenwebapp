@@ -228,9 +228,10 @@ export default function Enterprises() {
   };
 
   const handleDeleteAll = async () => {
-    for (const e of enterprises) await base44.entities.Enterprise.delete(e.id);
+    for (const e of enterprises) { try { await base44.entities.Enterprise.delete(e.id); } catch (e) { /* 404 = already gone */ } }
     qc.invalidateQueries({ queryKey: ["enterprises"] });
     qc.refetchQueries({ queryKey: ["enterprises"] });
+    triggerETL("enterprise");
     toast({ title: `All ${enterprises.length} enterprises deleted` });
   };
 
