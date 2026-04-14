@@ -213,7 +213,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
 
   const coreCharts = (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-      <ChartCard currentUser={currentUser} entity="Relationships" title="People per Enterprise" description="How many people are assigned to each enterprise" sql={`SELECT enterprise_name, COUNT(*) as count\nFROM Relationship\nWHERE relationship_type = 'person_enterprise'\n  AND status != 'archived'\nGROUP BY enterprise_name\nORDER BY count DESC\nLIMIT 8;`}>
+      <ChartCard currentUser={currentUser} entity="Relationships" title="People per Enterprise" description="How many people are assigned to each enterprise" sql={`SELECT enterprise_name, COUNT(*) as count\nFROM Relationship\nWHERE relationship_type = 'person_enterprise'\n  AND status != 'archived'\nGROUP BY enterprise_name\nORDER BY count DESC\nLIMIT 8;`} tableData={data.peoplePerEnterprise}>
         {data.peoplePerEnterprise.length > 0 ? (
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.peoplePerEnterprise} margin={{ left: -20 }}>
@@ -226,7 +226,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
         ) : <p className="text-xs text-slate-400 text-center py-12">No data</p>}
       </ChartCard>
 
-      <ChartCard currentUser={currentUser} entity="Relationships" title="Types Breakdown" description="Distribution of all relationship types" sql={`SELECT relationship_type, COUNT(*) as count\nFROM Relationship\nGROUP BY relationship_type\nORDER BY count DESC;`}>
+      <ChartCard currentUser={currentUser} entity="Relationships" title="Types Breakdown" description="Distribution of all relationship types" sql={`SELECT relationship_type, COUNT(*) as count\nFROM Relationship\nGROUP BY relationship_type\nORDER BY count DESC;`} tableData={data.typeData}>
         <ResponsiveContainer width="100%" height={180}>
           <PieChart>
             <Pie data={data.typeData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} dataKey="value" labelLine={false}>
@@ -245,7 +245,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
         </div>
       </ChartCard>
 
-      <ChartCard currentUser={currentUser} entity="Relationships" title="New Relationships / Month" description="Relationships created in the last 6 months" sql={`SELECT DATE_FORMAT(start_date, '%Y-%m') as month, COUNT(*) as count\nFROM Relationship\nWHERE start_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)\nGROUP BY month\nORDER BY month ASC;`}>
+      <ChartCard currentUser={currentUser} entity="Relationships" title="New Relationships / Month" description="Relationships created in the last 6 months" sql={`SELECT DATE_FORMAT(start_date, '%Y-%m') as month, COUNT(*) as count\nFROM Relationship\nWHERE start_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)\nGROUP BY month\nORDER BY month ASC;`} tableData={data.monthData}>
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={data.monthData} margin={{ left: -20 }}>
             <XAxis dataKey="month" tick={{ fontSize: 10 }} />
@@ -261,7 +261,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
   const expandedCharts = (
     <div className="space-y-5 mt-5">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Status Breakdown" description="Active vs Ended vs Archived relationships" sql={`SELECT status, COUNT(*) as count\nFROM Relationship\nGROUP BY status;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Status Breakdown" description="Active vs Ended vs Archived relationships" sql={`SELECT status, COUNT(*) as count\nFROM Relationship\nGROUP BY status;`} tableData={data.statusBreak}>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.statusBreak} margin={{ left: -20 }}>
               <XAxis dataKey="name" tick={{ fontSize: 10 }} />
@@ -274,7 +274,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Top Roles" description="Most common roles across all relationships" sql={`SELECT role, COUNT(*) as count\nFROM Relationship\nWHERE role IS NOT NULL AND role != ''\nGROUP BY role\nORDER BY count DESC\nLIMIT 8;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Top Roles" description="Most common roles across all relationships" sql={`SELECT role, COUNT(*) as count\nFROM Relationship\nWHERE role IS NOT NULL AND role != ''\nGROUP BY role\nORDER BY count DESC\nLIMIT 8;`} tableData={data.rolesData}>
           {data.rolesData.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.rolesData} layout="vertical" margin={{ left: 0, right: 10 }}>
@@ -287,7 +287,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           ) : <p className="text-xs text-slate-400 text-center py-12">No role data</p>}
         </ChartCard>
 
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Items per Enterprise" description="How many items are assigned to each enterprise" sql={`SELECT enterprise_name, COUNT(*) as count\nFROM Relationship\nWHERE relationship_type = 'item_enterprise'\nGROUP BY enterprise_name\nORDER BY count DESC\nLIMIT 8;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Items per Enterprise" description="How many items are assigned to each enterprise" sql={`SELECT enterprise_name, COUNT(*) as count\nFROM Relationship\nWHERE relationship_type = 'item_enterprise'\nGROUP BY enterprise_name\nORDER BY count DESC\nLIMIT 8;`} tableData={data.itemsPerEnterprise}>
           {data.itemsPerEnterprise.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.itemsPerEnterprise} margin={{ left: -20 }}>
@@ -302,7 +302,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Relationship Duration" description="How long active relationships have been running" sql={`SELECT\n  CASE\n    WHEN DATEDIFF(NOW(), start_date) < 30 THEN '<30d'\n    WHEN DATEDIFF(NOW(), start_date) < 90 THEN '30-90d'\n    WHEN DATEDIFF(NOW(), start_date) < 180 THEN '90-180d'\n    WHEN DATEDIFF(NOW(), start_date) < 365 THEN '180d-1y'\n    ELSE '1y+'\n  END as range, COUNT(*) as count\nFROM Relationship\nWHERE status = 'active'\nGROUP BY range;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Relationship Duration" description="How long active relationships have been running" sql={`SELECT\n  CASE\n    WHEN DATEDIFF(NOW(), start_date) < 30 THEN '<30d'\n    WHEN DATEDIFF(NOW(), start_date) < 90 THEN '30-90d'\n    WHEN DATEDIFF(NOW(), start_date) < 180 THEN '90-180d'\n    WHEN DATEDIFF(NOW(), start_date) < 365 THEN '180d-1y'\n    ELSE '1y+'\n  END as range, COUNT(*) as count\nFROM Relationship\nWHERE status = 'active'\nGROUP BY range;`} tableData={data.durationData}>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.durationData} margin={{ left: -20 }}>
               <XAxis dataKey="range" tick={{ fontSize: 10 }} />
@@ -313,7 +313,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Enterprise Connectivity" description="Number of unique relationship types per enterprise" sql={`SELECT enterprise_name, COUNT(DISTINCT relationship_type) as types\nFROM Relationship\nWHERE enterprise_name IS NOT NULL\nGROUP BY enterprise_name\nORDER BY types DESC\nLIMIT 8;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Enterprise Connectivity" description="Number of unique relationship types per enterprise" sql={`SELECT enterprise_name, COUNT(DISTINCT relationship_type) as types\nFROM Relationship\nWHERE enterprise_name IS NOT NULL\nGROUP BY enterprise_name\nORDER BY types DESC\nLIMIT 8;`} tableData={data.entConnectivity}>
           {data.entConnectivity.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.entConnectivity} margin={{ left: -20 }}>
@@ -326,7 +326,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           ) : <p className="text-xs text-slate-400 text-center py-12">No data</p>}
         </ChartCard>
 
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Cumulative Growth" description="Total relationships accumulated over 6 months" sql={`SELECT DATE_FORMAT(start_date,'%Y-%m') as month,\n  COUNT(*) OVER (ORDER BY start_date) as total\nFROM Relationship\nORDER BY month;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Cumulative Growth" description="Total relationships accumulated over 6 months" sql={`SELECT DATE_FORMAT(start_date,'%Y-%m') as month,\n  COUNT(*) OVER (ORDER BY start_date) as total\nFROM Relationship\nORDER BY month;`} tableData={data.cumulData}>
           <ResponsiveContainer width="100%" height={180}>
             <AreaChart data={data.cumulData} margin={{ left: -20 }}>
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
@@ -339,7 +339,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Person Multi-Enterprise" description="People assigned to multiple enterprises" sql={`SELECT person_name, COUNT(DISTINCT enterprise_name) as enterprises\nFROM Relationship\nWHERE relationship_type = 'person_enterprise'\n  AND person_name IS NOT NULL\nGROUP BY person_name\nORDER BY enterprises DESC\nLIMIT 8;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Person Multi-Enterprise" description="People assigned to multiple enterprises" sql={`SELECT person_name, COUNT(DISTINCT enterprise_name) as enterprises\nFROM Relationship\nWHERE relationship_type = 'person_enterprise'\n  AND person_name IS NOT NULL\nGROUP BY person_name\nORDER BY enterprises DESC\nLIMIT 8;`} tableData={data.personConnectivity}>
           {data.personConnectivity.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.personConnectivity} margin={{ left: -20 }}>
@@ -352,7 +352,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           ) : <p className="text-xs text-slate-400 text-center py-12">No data</p>}
         </ChartCard>
 
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Endings by Month" description="How many relationships ended each month" sql={`SELECT DATE_FORMAT(end_date,'%Y-%m') as month, COUNT(*) as ended\nFROM Relationship\nWHERE status = 'ended' AND end_date IS NOT NULL\n  AND end_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)\nGROUP BY month ORDER BY month;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Endings by Month" description="How many relationships ended each month" sql={`SELECT DATE_FORMAT(end_date,'%Y-%m') as month, COUNT(*) as ended\nFROM Relationship\nWHERE status = 'ended' AND end_date IS NOT NULL\n  AND end_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)\nGROUP BY month ORDER BY month;`} tableData={data.endedByMonth}>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.endedByMonth} margin={{ left: -20 }}>
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
@@ -363,7 +363,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Services per Enterprise" description="How many services each enterprise has" sql={`SELECT enterprise_name, COUNT(*) as count\nFROM Relationship\nWHERE relationship_type = 'enterprise_service'\nGROUP BY enterprise_name\nORDER BY count DESC LIMIT 8;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Services per Enterprise" description="How many services each enterprise has" sql={`SELECT enterprise_name, COUNT(*) as count\nFROM Relationship\nWHERE relationship_type = 'enterprise_service'\nGROUP BY enterprise_name\nORDER BY count DESC LIMIT 8;`} tableData={data.servicesPerEnterprise}>
           {data.servicesPerEnterprise.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.servicesPerEnterprise} margin={{ left: -20 }}>
@@ -378,7 +378,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <ChartCard currentUser={currentUser} entity="Relationships" title="People per Service" description="Headcount assigned to each service" sql={`SELECT service_name, COUNT(*) as count\nFROM Relationship\nWHERE relationship_type = 'person_service'\nGROUP BY service_name ORDER BY count DESC LIMIT 8;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="People per Service" description="Headcount assigned to each service" sql={`SELECT service_name, COUNT(*) as count\nFROM Relationship\nWHERE relationship_type = 'person_service'\nGROUP BY service_name ORDER BY count DESC LIMIT 8;`} tableData={data.peoplePerService}>
           {data.peoplePerService.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.peoplePerService} layout="vertical" margin={{ left: 0, right: 10 }}>
@@ -391,7 +391,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           ) : <p className="text-xs text-slate-400 text-center py-12">No person→service data</p>}
         </ChartCard>
 
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Items per Person" description="Item custody distribution across people" sql={`SELECT person_name, COUNT(*) as count\nFROM Relationship\nWHERE relationship_type = 'item_person'\nGROUP BY person_name ORDER BY count DESC LIMIT 8;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Items per Person" description="Item custody distribution across people" sql={`SELECT person_name, COUNT(*) as count\nFROM Relationship\nWHERE relationship_type = 'item_person'\nGROUP BY person_name ORDER BY count DESC LIMIT 8;`} tableData={data.itemsPerPerson}>
           {data.itemsPerPerson.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.itemsPerPerson} layout="vertical" margin={{ left: 0, right: 10 }}>
@@ -404,7 +404,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           ) : <p className="text-xs text-slate-400 text-center py-12">No item→person data</p>}
         </ChartCard>
 
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Churn Rate by Type" description="% of relationships that have ended per type" sql={`SELECT relationship_type,\n  ROUND(100.0 * SUM(CASE WHEN status='ended' THEN 1 ELSE 0 END) / COUNT(*), 1) as churn_pct\nFROM Relationship\nGROUP BY relationship_type;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Churn Rate by Type" description="% of relationships that have ended per type" sql={`SELECT relationship_type,\n  ROUND(100.0 * SUM(CASE WHEN status='ended' THEN 1 ELSE 0 END) / COUNT(*), 1) as churn_pct\nFROM Relationship\nGROUP BY relationship_type;`} tableData={data.churnByType}>
           {data.churnByType.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.churnByType} layout="vertical" margin={{ left: 0, right: 10 }}>
@@ -419,7 +419,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Started vs Ended / Month" description="Net relationship flows over 6 months" sql={`SELECT DATE_FORMAT(start_date,'%Y-%m') as month,\n  COUNT(*) as started FROM Relationship GROUP BY month\nUNION\nSELECT DATE_FORMAT(end_date,'%Y-%m'), COUNT(*) as ended\nFROM Relationship WHERE status='ended' GROUP BY month;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Started vs Ended / Month" description="Net relationship flows over 6 months" sql={`SELECT DATE_FORMAT(start_date,'%Y-%m') as month,\n  COUNT(*) as started FROM Relationship GROUP BY month\nUNION\nSELECT DATE_FORMAT(end_date,'%Y-%m'), COUNT(*) as ended\nFROM Relationship WHERE status='ended' GROUP BY month;`} tableData={data.startEndOverlay}>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.startEndOverlay} margin={{ left: -20 }}>
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
@@ -432,7 +432,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Enterprise Size Tiers" description="Enterprises classified by assigned headcount" sql={`SELECT\n  CASE\n    WHEN people_count = 1 THEN 'Solo (1)'\n    WHEN people_count <= 5 THEN 'Small (2-5)'\n    WHEN people_count <= 20 THEN 'Medium (6-20)'\n    ELSE 'Large (21+)'\n  END as tier, COUNT(*) as count\nFROM (\n  SELECT enterprise_name, COUNT(*) as people_count\n  FROM Relationship\n  WHERE relationship_type='person_enterprise'\n  GROUP BY enterprise_name\n) t GROUP BY tier;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Enterprise Size Tiers" description="Enterprises classified by assigned headcount" sql={`SELECT\n  CASE\n    WHEN people_count = 1 THEN 'Solo (1)'\n    WHEN people_count <= 5 THEN 'Small (2-5)'\n    WHEN people_count <= 20 THEN 'Medium (6-20)'\n    ELSE 'Large (21+)'\n  END as tier, COUNT(*) as count\nFROM (\n  SELECT enterprise_name, COUNT(*) as people_count\n  FROM Relationship\n  WHERE relationship_type='person_enterprise'\n  GROUP BY enterprise_name\n) t GROUP BY tier;`} tableData={data.tierData}>
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
               <Pie data={data.tierData} cx="50%" cy="50%" outerRadius={70} dataKey="count" nameKey="tier" label={({ tier, count }) => count > 0 ? tier : ""} labelLine={false}>
@@ -443,7 +443,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard currentUser={currentUser} entity="Relationships" title="Relationship Health" description="% of active assignments per enterprise" sql={`SELECT enterprise_name,\n  ROUND(100.0 * SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) / COUNT(*), 0) as health\nFROM Relationship\nWHERE relationship_type='person_enterprise'\nGROUP BY enterprise_name ORDER BY health DESC LIMIT 8;`}>
+        <ChartCard currentUser={currentUser} entity="Relationships" title="Relationship Health" description="% of active assignments per enterprise" sql={`SELECT enterprise_name,\n  ROUND(100.0 * SUM(CASE WHEN status='active' THEN 1 ELSE 0 END) / COUNT(*), 0) as health\nFROM Relationship\nWHERE relationship_type='person_enterprise'\nGROUP BY enterprise_name ORDER BY health DESC LIMIT 8;`} tableData={data.healthData}>
           {data.healthData.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={data.healthData} margin={{ left: -20 }}>
@@ -459,7 +459,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
 
       {data.radarData.length > 0 && data.topEnts.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <ChartCard currentUser={currentUser} entity="Relationships" title="Relationship Type Radar — Top Enterprises" description="Coverage of relationship types across top enterprises" sql={`SELECT relationship_type, enterprise_name, COUNT(*) as count\nFROM Relationship\nWHERE enterprise_name IN (SELECT enterprise_name FROM Relationship\n  WHERE relationship_type='person_enterprise'\n  GROUP BY enterprise_name ORDER BY COUNT(*) DESC LIMIT 3)\nGROUP BY relationship_type, enterprise_name;`}>
+          <ChartCard currentUser={currentUser} entity="Relationships" title="Relationship Type Radar — Top Enterprises" description="Coverage of relationship types across top enterprises" sql={`SELECT relationship_type, enterprise_name, COUNT(*) as count\nFROM Relationship\nWHERE enterprise_name IN (SELECT enterprise_name FROM Relationship\n  WHERE relationship_type='person_enterprise'\n  GROUP BY enterprise_name ORDER BY COUNT(*) DESC LIMIT 3)\nGROUP BY relationship_type, enterprise_name;`} tableData={data.radarData}>
             <ResponsiveContainer width="100%" height={220}>
               <RadarChart data={data.radarData} cx="50%" cy="50%" outerRadius={80}>
                 <PolarGrid />
@@ -473,7 +473,7 @@ export default function RelationshipAnalytics({ relationships, currentUser = nul
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard currentUser={currentUser} entity="Relationships" title="Relationship Type Growth" description="How each relationship type has grown over 6 months" sql={`SELECT DATE_FORMAT(start_date,'%Y-%m') as month, relationship_type, COUNT(*) as count\nFROM Relationship\nWHERE start_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)\nGROUP BY month, relationship_type\nORDER BY month;`}>
+          <ChartCard currentUser={currentUser} entity="Relationships" title="Relationship Type Growth" description="How each relationship type has grown over 6 months" sql={`SELECT DATE_FORMAT(start_date,'%Y-%m') as month, relationship_type, COUNT(*) as count\nFROM Relationship\nWHERE start_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)\nGROUP BY month, relationship_type\nORDER BY month;`} tableData={data.typeMonthData}>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={data.typeMonthData} margin={{ left: -20 }}>
                 <XAxis dataKey="month" tick={{ fontSize: 10 }} />
