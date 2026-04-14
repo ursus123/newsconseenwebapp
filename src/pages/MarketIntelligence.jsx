@@ -372,6 +372,7 @@ export default function MarketIntelligence() {
   const [editingQuery, setEditingQuery]       = useState(null);
   const [showQueryEditor, setShowQueryEditor] = useState(false);
   const [operationalContext, setOperationalContext] = useState(null);
+  const [nominatimCoords, setNominatimCoords]       = useState({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -423,6 +424,41 @@ export default function MarketIntelligence() {
     }
     return coords;
   }, [allRelationships, allAddresses]);
+
+  // Auto-geocode enterprises that have no coords (direct, join, or cached)
+  // Uses Nominatim — same source as Address geocoding — rate-limited to 1 req/sec
+  useEffect(() => {
+    if (!myEnterprises.length) return;
+    const missing = myEnterprises.filter(e => {
+      const hasDirect = e.latitude != null && e.longitude != null;
+      const hasJoin   = !!enterpriseCoords[e.enterprise_name];
+      const hasCached = !!nominatimCoords[e.enterprise_name];
+      return !hasDirect && !hasJoin && !hasCached && (e.city || e.country || e.region);
+    });
+    if (!missing.length) return;
+    let cancelled = false;
+    (async () => {
+      for (const e of missing) {
+        if (cancelled) break;
+        const q = [e.enterprise_name, e.city, e.region, e.country].filter(Boolean).join(", ");
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
+            { headers: { "User-Agent": "newsconseen-app/1.0" } }
+          );
+          const data = await res.json();
+          if (data[0] && !cancelled) {
+            setNominatimCoords(prev => ({
+              ...prev,
+              [e.enterprise_name]: { latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon) },
+            }));
+          }
+        } catch (_) {}
+        await new Promise(r => setTimeout(r, 1100)); // Nominatim rate limit: 1 req/sec
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [myEnterprises, enterpriseCoords]); // nominatimCoords intentionally excluded to avoid loop
 
   const saveToHistory = useCallback((location, businessType, score) => {
     if (!currentUser?.email) return;
@@ -604,13 +640,27 @@ export default function MarketIntelligence() {
   // ── Nearby enterprises ─────────────────────────────────────────────────────
   // Use geocoordinate distance when overview lat/lon available; fall back to
   // city/region/country string match so we never show nothing unnecessarily.
+  // Three-tier coord resolver: direct fields → relationship→address join → Nominatim cache
+  const resolveCoords = (e) => {
+    if (e.latitude != null && e.longitude != null)
+      return { latitude: parseFloat(e.latitude), longitude: parseFloat(e.longitude) };
+    if (enterpriseCoords[e.enterprise_name])
+      return enterpriseCoords[e.enterprise_name];
+    if (nominatimCoords[e.enterprise_name])
+      return nominatimCoords[e.enterprise_name];
+    return null;
+  };
+
   const nearbyEnterprises = (() => {
-    if (!results?.location || myEnterprises.length === 0) return [];
+    if (myEnterprises.length === 0) return [];
+
+    // No location searched yet — show all enterprises so the panel is never empty
+    if (!results?.location) return myEnterprises;
+
     const ovLat = results.overview?.[0]?.lat;
     const ovLon = results.overview?.[0]?.lon;
     const radiusKm = results.radiusKm || 50;
 
-    // Haversine distance in km
     const distKm = (lat1, lon1, lat2, lon2) => {
       const R = 6371;
       const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -621,13 +671,11 @@ export default function MarketIntelligence() {
 
     if (ovLat != null && ovLon != null) {
       return myEnterprises.filter(e => {
-        const resolved = enterpriseCoords[e.enterprise_name];
-        const lat = e.latitude ?? resolved?.latitude;
-        const lon = e.longitude ?? resolved?.longitude;
-        if (lat != null && lon != null) {
-          return distKm(ovLat, ovLon, lat, lon) <= radiusKm;
+        const coords = resolveCoords(e);
+        if (coords) {
+          return distKm(ovLat, ovLon, coords.latitude, coords.longitude) <= radiusKm;
         }
-        // Fallback: string match on city/region/country if no coords
+        // Last resort: string match when no coords available at all
         const loc = results.location.toLowerCase();
         return (e.city && loc.includes(e.city.toLowerCase())) ||
                (e.region && loc.includes(e.region.toLowerCase())) ||
@@ -635,12 +683,12 @@ export default function MarketIntelligence() {
       });
     }
 
-    // No geocoordinates from overview — use relaxed string matching
+    // No geocoordinates from overview — relaxed string matching
     const loc = results.location.toLowerCase();
     const locParts = loc.split(/[,\s]+/).filter(p => p.length > 2);
     return myEnterprises.filter(e => {
-      const city    = e.city?.toLowerCase() || "";
-      const region  = e.region?.toLowerCase() || "";
+      const city   = e.city?.toLowerCase() || "";
+      const region = e.region?.toLowerCase() || "";
       const country = e.country?.toLowerCase() || "";
       return locParts.some(p => city.includes(p) || region.includes(p) || country.includes(p)) ||
              (city && loc.includes(city)) ||
@@ -912,16 +960,18 @@ export default function MarketIntelligence() {
                   </h3>
                   <div className="flex flex-col gap-3">
                     {nearbyEnterprises.length > 0 && nearbyEnterprises.map(e => {
-                      const resolvedCoords = enterpriseCoords[e.enterprise_name];
-                      const hasDirectCoords = e.latitude != null && e.longitude != null;
+                      const hasDirect  = e.latitude != null && e.longitude != null;
+                      const hasJoin    = !!enterpriseCoords[e.enterprise_name];
+                      const hasNominatim = !!nominatimCoords[e.enterprise_name];
+                      const coordSource = hasDirect ? null : hasJoin ? "via linked address" : hasNominatim ? "geocoded automatically" : null;
                       return (
                         <div key={e.id} className="flex items-start justify-between gap-4 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
                           <div>
                             <p className="font-semibold text-slate-800 text-sm">{e.enterprise_name}</p>
                             <p className="text-xs text-slate-500">{[e.city, e.region, e.country].filter(Boolean).join(", ")}</p>
                             {e.status && <p className="text-xs text-emerald-600 font-medium mt-0.5">{e.status}</p>}
-                            {!hasDirectCoords && resolvedCoords && (
-                              <p className="text-[10px] text-indigo-500 mt-0.5">Coordinates resolved via linked address</p>
+                            {coordSource && (
+                              <p className="text-[10px] text-indigo-400 mt-0.5">📍 {coordSource}</p>
                             )}
                           </div>
                           <Link to={createPageUrl("Enterprises")} className="text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1 whitespace-nowrap shrink-0">
