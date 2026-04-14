@@ -1994,9 +1994,11 @@ def _raw_query(
 
 def _b44_people_records(company_id: str, name_fragment: str = None,
                          person_type: str = None, status: str = None,
-                         enterprise_name: str = None, limit: int = 20) -> list:
+                         enterprise_name: str = None, at_risk_only: bool = False,
+                         limit: int = 20) -> list:
     """Base44 live fallback for find_people_records."""
     try:
+        from datetime import date, timedelta
         df = _b44_people(company_id)
         if df.empty:
             return []
@@ -2006,9 +2008,19 @@ def _b44_people_records(company_id: str, name_fragment: str = None,
                 axis=1,
             )
             df = df[mask]
-        for col, val in [("person_type", person_type), ("status", status)]:
-            if val and col in df.columns:
-                df = df[df[col].str.lower() == val.lower()]
+        if person_type and "person_type" in df.columns:
+            df = df[df["person_type"].str.lower() == person_type.lower()]
+        if at_risk_only:
+            cutoff = (date.today() - timedelta(days=90)).isoformat()
+            if "status" in df.columns and "end_date" in df.columns:
+                mask = (df["status"] == "inactive") | (
+                    df["end_date"].notna() & (df["end_date"].astype(str) >= cutoff)
+                )
+                df = df[mask]
+            elif "status" in df.columns:
+                df = df[df["status"] == "inactive"]
+        elif status and "status" in df.columns:
+            df = df[df["status"].str.lower() == status.lower()]
         if enterprise_name and "enterprise_name" in df.columns:
             df = df[df["enterprise_name"].str.lower().str.contains(enterprise_name.lower(), na=False)]
         keep = [c for c in ("id", "full_name", "name", "person_type", "person_subtype",
@@ -2026,13 +2038,18 @@ def find_people_records(
     person_type: Optional[str] = None,
     status: Optional[str] = None,
     enterprise_name: Optional[str] = None,
+    at_risk_only: bool = False,
     limit: int = 20,
 ) -> dict:
     """
     Search for individual people records by name, type, status, or enterprise.
     Returns actual rows — names, contact details, type, status, linked enterprise.
     Used for: "find John Doe", "show me all active nurses",
-              "which students are inactive?", "staff at Branch X".
+              "which students are inactive?", "staff at Branch X",
+              "who are the at-risk clients?", "show me inactive people by name".
+
+    at_risk_only=True: returns people with status='inactive' or recent end_date —
+    the individual names behind the churn risk count.
 
     Queries raw.people directly; falls back to Base44 live.
     """
@@ -2043,7 +2060,13 @@ def find_people_records(
     if person_type:
         where.append("person_type ILIKE :person_type")
         params["person_type"] = person_type
-    if status:
+    if at_risk_only:
+        # at-risk = inactive OR ended in the last 90 days
+        where.append(
+            "(status = 'inactive' OR "
+            " (end_date IS NOT NULL AND end_date >= CURRENT_DATE - INTERVAL '90 days'))"
+        )
+    elif status:
         where.append("status ILIKE :status")
         params["status"] = status
     if enterprise_name:
@@ -2062,7 +2085,7 @@ def find_people_records(
     )
 
     if not rows:
-        rows = _b44_people_records(company_id, name, person_type, status, enterprise_name, limit)
+        rows = _b44_people_records(company_id, name, person_type, status, enterprise_name, at_risk_only, limit)
         source = "base44_live"
     else:
         source = "raw"
@@ -2071,7 +2094,8 @@ def find_people_records(
     return {
         "count":       len(rows),
         "records":     rows,
-        "filters":     {"name": name, "person_type": person_type, "status": status, "enterprise_name": enterprise_name},
+        "filters":     {"name": name, "person_type": person_type, "status": status,
+                        "enterprise_name": enterprise_name, "at_risk_only": at_risk_only},
         "data_source": source,
     }
 
@@ -4146,6 +4170,10 @@ TOOL_DEFINITIONS = [
                 "enterprise_name": {
                     "type": "string",
                     "description": "Filter to people linked to this enterprise (partial match).",
+                },
+                "at_risk_only": {
+                    "type": "boolean",
+                    "description": "If true, return only people with status='inactive' or an end_date within the last 90 days. Use this to get the actual names behind a churn risk count.",
                 },
                 "limit": {
                     "type": "integer",
