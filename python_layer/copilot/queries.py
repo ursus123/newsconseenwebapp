@@ -3858,6 +3858,24 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "get_alert_history",
+        "description": (
+            "Returns alerts and notifications sent by the system in the last N days. "
+            "Use for questions like: 'What alerts were sent this week?', "
+            "'Has the system flagged anything?', 'Did we send a low-stock alert?', "
+            "'Show me recent automated notifications', 'What has the system done automatically?'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days_back": {
+                    "type": "integer",
+                    "description": "How many days of alert history to return. Default 7.",
+                },
+            },
+        },
+    },
+    {
         "name": "get_anomaly_report",
         "description": (
             "Returns the latest anomaly detection report — statistical outliers in transactions "
@@ -4679,6 +4697,89 @@ def get_kpi_goals(company_id: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# GAP 3 — ALERTS HISTORY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_alert_history(company_id: str, days_back: int = 7) -> dict:
+    """
+    Returns alerts that have been fired for this company in the last N days.
+    Reads from analytics.agent_approvals (agent actions that were notifications)
+    and the audit.change_log. Falls back to in-memory agent run logs.
+    Used for: "what alerts were sent this week?", "has the system flagged anything?",
+              "did we send a low-stock alert?", "show me recent notifications",
+              "what has the system done automatically?".
+    """
+    from datetime import datetime, timezone, timedelta
+    cutoff     = datetime.now(timezone.utc) - timedelta(days=days_back)
+    cutoff_iso = cutoff.isoformat()
+
+    alerts: list = []
+
+    # Tier 1 — analytics.agent_approvals (NOTIFY/APPROVE actions by agents)
+    engine = get_engine_safe()
+    if engine:
+        try:
+            with engine.connect() as conn:
+                rows = conn.execute(text("""
+                    SELECT agent_name, action_type, action_label, risk_level,
+                           status, created_at, resolved_by
+                    FROM analytics.agent_approvals
+                    WHERE company_id = :cid
+                      AND created_at >= :cutoff
+                      AND action_type IN (
+                          'internal_alert','send_client_message',
+                          'send_whatsapp','send_email','send_bulk_message'
+                      )
+                    ORDER BY created_at DESC
+                    LIMIT 50
+                """), {"cid": company_id, "cutoff": cutoff_iso}).fetchall()
+                cols = ["agent_name", "action_type", "action_label",
+                        "risk_level", "status", "created_at", "resolved_by"]
+                for r in rows:
+                    d = dict(zip(cols, r))
+                    d["created_at"] = str(d["created_at"])
+                    d["source"] = "agent_action"
+                    alerts.append(d)
+        except Exception as e:
+            logger.debug("get_alert_history: agent_approvals query failed — %s", e)
+
+    # Tier 2 — in-memory agent run logs (flag/notify actions from agent runs)
+    if not alerts:
+        try:
+            from agents.approval_gate import get_recent_runs
+            if engine:
+                runs = get_recent_runs(engine, company_id, limit=30)
+                for run in runs:
+                    if run.get("started_at", "") >= cutoff_iso:
+                        alerts.append({
+                            "agent_name":   run.get("agent_name"),
+                            "action_type":  "agent_run",
+                            "action_label": run.get("summary", "Agent run"),
+                            "status":       run.get("status"),
+                            "created_at":   str(run.get("started_at", "")),
+                            "source":       "agent_run",
+                        })
+        except Exception as e:
+            logger.debug("get_alert_history: agent run fallback failed — %s", e)
+
+    by_type: dict = {}
+    for a in alerts:
+        t = a.get("action_type", "unknown")
+        by_type[t] = by_type.get(t, 0) + 1
+
+    return {
+        "alert_count":  len(alerts),
+        "period_days":  days_back,
+        "by_type":      by_type,
+        "alerts":       alerts[:30],
+        "note": (
+            "No alerts sent in this period."
+            if not alerts else None
+        ),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # GAP 2 — ANOMALY DETECTION
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -4782,6 +4883,7 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         # Gap tools
         "get_kpi_goals":                get_kpi_goals,
         "get_anomaly_report":           get_anomaly_report,
+        "get_alert_history":            get_alert_history,
     }
 
     fn = dispatch.get(tool_name)

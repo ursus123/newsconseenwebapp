@@ -223,6 +223,7 @@ PERSISTENT MEMORY TOOL:
 - save_copilot_memory — persist a preference, instruction, or context fact for ALL future sessions.
 - get_kpi_goals       — KPI goal targets with current status (on_track/at_risk/behind/exceeded), actual values, progress %
 - get_anomaly_report  — statistical anomalies: z-score outliers in transactions/tasks + metric drift since last ETL
+- get_alert_history   — alerts and notifications sent by the system in the last N days
   Only call this when the operator explicitly asks you to remember something, or states a clear
   standing preference. Never save transient facts (today's numbers, one-off answers).
 
