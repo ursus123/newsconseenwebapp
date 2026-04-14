@@ -1,12 +1,17 @@
 import React, { useState } from "react";
-import { BarChart2, Code2, Pin, Check, Table2 } from "lucide-react";
+import { BarChart2, Code2, Pin, Check, Table2, Bot, X, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 
 export default function ChartCard({ title, description, sql, currentUser, entity, tableData, children }) {
   const [view, setView] = useState("chart");
   const [pinned, setPinned] = useState(false);
   const [pinning, setPinning] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [copilotLoading, setCopilotLoading] = useState(false);
+  const [copilotText, setCopilotText] = useState("");
   const navigate = useNavigate();
 
   const handlePin = async () => {
@@ -16,7 +21,7 @@ export default function ChartCard({ title, description, sql, currentUser, entity
       await base44.entities.ReportChart.create({
         title, sql_query: sql || "", chart_type: "bar", status: "active",
         company_id: currentUser?.company_id,
-        description: "Pinned from " + (entity || "analytics"),
+        description: (copilotText ? copilotText.slice(0, 400) + " [AI insight]" : "Pinned from " + (entity || "analytics")),
         shared_with_roles: ["admin","analyst","executive"],
       });
       setPinned(true);
@@ -30,6 +35,30 @@ export default function ChartCard({ title, description, sql, currentUser, entity
     sessionStorage.setItem("qb_load_sql", sql);
     sessionStorage.setItem("qb_load_title", title);
     navigate("/QueryBuilder");
+  };
+
+  const handleCopilot = async () => {
+    if (copilotOpen) { setCopilotOpen(false); return; }
+    setCopilotOpen(true);
+    if (copilotText) return; // already loaded
+    setCopilotLoading(true);
+    try {
+      const prompt = `Explain this ${entity || "analytics"} chart in 2-3 sentences for an operator: "${title}"${description ? ` (${description})` : ""}. ${sql ? `The underlying SQL is: ${sql}` : ""} Cite the analytics table used if relevant. Be concise and practical.`;
+      const resp = await fetch(`${RAILWAY_URL}/copilot/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: prompt, company_id: currentUser?.company_id }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        setCopilotText(data.answer || data.response || data.message || "No explanation available.");
+      } else {
+        setCopilotText("Copilot unavailable — check Railway connection.");
+      }
+    } catch (e) {
+      setCopilotText("Could not reach copilot. Ensure python_layer is running.");
+    }
+    setCopilotLoading(false);
   };
 
   const rows = Array.isArray(tableData) ? tableData : [];
@@ -94,6 +123,36 @@ export default function ChartCard({ title, description, sql, currentUser, entity
                 ))}
               </tbody>
             </table>
+          )}
+        </div>
+      )}
+
+      {/* Copilot explain button + panel */}
+      <div className="flex items-center justify-between mt-0.5">
+        <button
+          onClick={handleCopilot}
+          title={copilotOpen ? "Close AI explanation" : "Explain this chart with AI"}
+          className={`flex items-center gap-1.5 text-[10px] font-medium rounded-lg px-2 py-1 transition-all ${copilotOpen ? "bg-violet-100 text-violet-700" : "text-slate-400 hover:text-violet-600 hover:bg-violet-50"}`}
+        >
+          {copilotLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Bot className="w-3 h-3" />}
+          {copilotOpen ? "Hide AI" : "Explain"}
+        </button>
+        {copilotOpen && copilotText && (
+          <button onClick={() => { setCopilotOpen(false); }} className="text-slate-300 hover:text-slate-500 transition-colors">
+            <X className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+
+      {copilotOpen && (
+        <div className="rounded-xl bg-gradient-to-br from-violet-50 to-slate-50 border border-violet-100 p-3">
+          {copilotLoading ? (
+            <div className="flex items-center gap-2 text-[11px] text-violet-500">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Asking copilot...
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-700 leading-relaxed">{copilotText}</p>
           )}
         </div>
       )}
