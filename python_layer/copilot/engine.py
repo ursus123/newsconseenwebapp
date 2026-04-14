@@ -194,6 +194,21 @@ INTERNAL DATA TOOLS (query this organisation's own data):
 - get_operational_trends  — month-by-month task completion rate % and headcount changes
 - get_top_debtors         — counterparty names with highest outstanding amounts (collections priority)
 
+RAW RECORD TOOLS (individual records from raw.* — use when operator asks for names, not counts):
+- find_people_records      — search people by name/type/status/enterprise; returns actual rows with contact details
+- find_task_records        — search tasks by assignee/type/status/overdue; returns titles, due dates, outcomes
+- find_transaction_records — search transactions by counterparty/type/status/amount; returns actual invoice rows
+- find_relationship_records— search relationships by person/enterprise/type; returns org structure, assignments
+- inspect_raw_record       — fetch a single complete record by ID (drill-down after any tool returns an ID)
+
+WHEN TO USE RAW vs AGGREGATE TOOLS:
+- "How many active staff?" → get_people_summary (aggregate count)
+- "Who are our active staff?" → find_people_records (actual names)
+- "What is our task completion rate?" → get_task_summary (aggregate %)
+- "Which tasks are overdue?" → find_task_records with overdue_only=true (actual task titles)
+- "How much revenue this month?" → get_transaction_summary (aggregate sum)
+- "Show me invoices for ABC Corp" → find_transaction_records (actual rows)
+
 WEB & PUBLIC DATA TOOLS (query external/public sources):
 - web_search: multi-tier web search (Brave Search → DuckDuckGo → Wikipedia)
   Use for: market news, industry trends, competitor info, regulations, best practices

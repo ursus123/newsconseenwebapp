@@ -1946,6 +1946,465 @@ def get_top_debtors(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# RAW TABLE TOOLS — individual record lookup from raw.* (not aggregated)
+# These tools query raw.* directly, bypassing analytics.* aggregation.
+# They answer "show me the actual records" questions, not "how many" questions.
+# All queries are company-scoped, parameterised, and capped with LIMIT.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _raw_query(
+    table: str,
+    company_id: str,
+    where_clauses: list,
+    params: dict,
+    select_cols: str = "*",
+    order_by: str = "id",
+    limit: int = 20,
+) -> list:
+    """
+    Execute a parameterised SELECT against a raw.* table.
+    Always injects company_id filter. Returns list of dicts or [].
+    """
+    engine = get_engine_safe()
+    if not engine:
+        return []
+    try:
+        with engine.connect() as conn:
+            exists = conn.execute(
+                text(
+                    "SELECT 1 FROM information_schema.tables "
+                    "WHERE table_schema = 'raw' AND table_name = :t LIMIT 1"
+                ),
+                {"t": table},
+            ).fetchone()
+            if not exists:
+                return []
+            where = " AND ".join(["company_id = :company_id"] + where_clauses) if where_clauses else "company_id = :company_id"
+            sql = f"SELECT {select_cols} FROM raw.{table} WHERE {where} ORDER BY {order_by} LIMIT :_limit"
+            params["company_id"] = company_id
+            params["_limit"] = limit
+            result = conn.execute(text(sql), params)
+            rows = result.fetchall()
+            cols = list(result.keys())
+            return [dict(zip(cols, r)) for r in rows]
+    except Exception as e:
+        logger.warning("_raw_query(%s): %s", table, e)
+        return []
+
+
+def _b44_people_records(company_id: str, name_fragment: str = None,
+                         person_type: str = None, status: str = None,
+                         enterprise_name: str = None, limit: int = 20) -> list:
+    """Base44 live fallback for find_people_records."""
+    try:
+        df = _b44_people(company_id)
+        if df.empty:
+            return []
+        if name_fragment:
+            mask = df.apply(
+                lambda r: name_fragment.lower() in str(r.get("full_name", "") or r.get("name", "")).lower(),
+                axis=1,
+            )
+            df = df[mask]
+        for col, val in [("person_type", person_type), ("status", status)]:
+            if val and col in df.columns:
+                df = df[df[col].str.lower() == val.lower()]
+        if enterprise_name and "enterprise_name" in df.columns:
+            df = df[df["enterprise_name"].str.lower().str.contains(enterprise_name.lower(), na=False)]
+        keep = [c for c in ("id", "full_name", "name", "person_type", "person_subtype",
+                             "status", "phone", "email", "enterprise_name",
+                             "engagement_model", "created_date", "end_date") if c in df.columns]
+        return df[keep].head(limit).to_dict(orient="records")
+    except Exception as e:
+        logger.warning("_b44_people_records fallback: %s", e)
+        return []
+
+
+def find_people_records(
+    company_id: str,
+    name: Optional[str] = None,
+    person_type: Optional[str] = None,
+    status: Optional[str] = None,
+    enterprise_name: Optional[str] = None,
+    limit: int = 20,
+) -> dict:
+    """
+    Search for individual people records by name, type, status, or enterprise.
+    Returns actual rows — names, contact details, type, status, linked enterprise.
+    Used for: "find John Doe", "show me all active nurses",
+              "which students are inactive?", "staff at Branch X".
+
+    Queries raw.people directly; falls back to Base44 live.
+    """
+    where, params = [], {}
+    if name:
+        where.append("(full_name ILIKE :name OR name ILIKE :name)")
+        params["name"] = f"%{name}%"
+    if person_type:
+        where.append("person_type ILIKE :person_type")
+        params["person_type"] = person_type
+    if status:
+        where.append("status ILIKE :status")
+        params["status"] = status
+    if enterprise_name:
+        where.append("enterprise_name ILIKE :enterprise_name")
+        params["enterprise_name"] = f"%{enterprise_name}%"
+
+    rows = _raw_query(
+        "people", company_id, where, params,
+        select_cols=(
+            "id, full_name, name, person_type, person_subtype, status, "
+            "phone, email, enterprise_name, engagement_model, "
+            "availability_status, created_date, end_date"
+        ),
+        order_by="full_name NULLS LAST",
+        limit=limit,
+    )
+
+    if not rows:
+        rows = _b44_people_records(company_id, name, person_type, status, enterprise_name, limit)
+        source = "base44_live"
+    else:
+        source = "raw"
+
+    logger.info("find_people_records: %d records (source=%s)", len(rows), source)
+    return {
+        "count":       len(rows),
+        "records":     rows,
+        "filters":     {"name": name, "person_type": person_type, "status": status, "enterprise_name": enterprise_name},
+        "data_source": source,
+    }
+
+
+def find_task_records(
+    company_id: str,
+    assignee_name: Optional[str] = None,
+    task_type: Optional[str] = None,
+    status: Optional[str] = None,
+    overdue_only: bool = False,
+    days_back: Optional[int] = None,
+    limit: int = 20,
+) -> dict:
+    """
+    Search for individual task records by assignee, type, status, or overdue state.
+    Returns actual rows — titles, assignees, due dates, outcomes.
+    Used for: "show me overdue tasks", "what tasks are assigned to Mary?",
+              "pending visits this week", "which tasks did we miss?".
+
+    Queries raw.tasks directly; falls back to Base44 live.
+    """
+    where, params = [], {}
+    if assignee_name:
+        where.append("(assigned_to ILIKE :assignee OR assignee_name ILIKE :assignee)")
+        params["assignee"] = f"%{assignee_name}%"
+    if task_type:
+        where.append("task_type ILIKE :task_type")
+        params["task_type"] = f"%{task_type}%"
+    if status:
+        where.append("status ILIKE :status")
+        params["status"] = status
+    if overdue_only:
+        where.append("due_date < CURRENT_DATE AND status NOT IN ('completed', 'done', 'closed', 'cancelled')")
+    if days_back:
+        where.append("created_date >= CURRENT_DATE - INTERVAL '1 day' * :days_back")
+        params["days_back"] = days_back
+
+    rows = _raw_query(
+        "tasks", company_id, where, params,
+        select_cols=(
+            "id, title, task_type, status, assigned_to, assignee_name, "
+            "due_date, created_date, completed_date, outcome, priority, "
+            "enterprise_name, enterprise_id, notes"
+        ),
+        order_by="due_date NULLS LAST",
+        limit=limit,
+    )
+
+    if not rows:
+        try:
+            df = _b44_tasks(company_id)
+            if not df.empty:
+                import pandas as _pd2
+                from datetime import date as _date
+                if assignee_name:
+                    for col in ("assigned_to", "assignee_name"):
+                        if col in df.columns:
+                            df = df[df[col].str.lower().str.contains(assignee_name.lower(), na=False)]
+                if task_type and "task_type" in df.columns:
+                    df = df[df["task_type"].str.lower().str.contains(task_type.lower(), na=False)]
+                if status and "status" in df.columns:
+                    df = df[df["status"].str.lower() == status.lower()]
+                if overdue_only:
+                    if "due_date" in df.columns and "status" in df.columns:
+                        due = _pd2.to_datetime(df["due_date"], errors="coerce").dt.date
+                        df = df[
+                            due.apply(lambda d: d is not None and d < _date.today()) &
+                            ~df["status"].str.lower().isin(["completed", "done", "closed", "cancelled"])
+                        ]
+                if days_back and "created_date" in df.columns:
+                    from datetime import timedelta
+                    cutoff = _date.today() - timedelta(days=days_back)
+                    created = _pd2.to_datetime(df["created_date"], errors="coerce").dt.date
+                    df = df[created.apply(lambda d: d is not None and d >= cutoff)]
+                keep = [c for c in ("id", "title", "task_type", "status", "assigned_to",
+                                     "assignee_name", "due_date", "created_date",
+                                     "completed_date", "outcome", "priority",
+                                     "enterprise_name", "notes") if c in df.columns]
+                rows = df[keep].head(limit).to_dict(orient="records")
+        except Exception as e:
+            logger.warning("find_task_records Base44 fallback: %s", e)
+        source = "base44_live"
+    else:
+        source = "raw"
+
+    logger.info("find_task_records: %d records (source=%s)", len(rows), source)
+    return {
+        "count":       len(rows),
+        "records":     rows,
+        "filters": {
+            "assignee_name": assignee_name, "task_type": task_type,
+            "status": status, "overdue_only": overdue_only, "days_back": days_back,
+        },
+        "data_source": source,
+    }
+
+
+def find_transaction_records(
+    company_id: str,
+    counterparty_name: Optional[str] = None,
+    transaction_type: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    days_back: Optional[int] = None,
+    limit: int = 20,
+) -> dict:
+    """
+    Search for individual transaction records by counterparty, type, status, or amount.
+    Returns actual rows — amounts, dates, counterparties, payment status.
+    Note: raw.transactions includes ALL statuses (draft, voided, posted).
+    Used for: "show me invoices for Client X", "unpaid transactions above $1000",
+              "recent payments from ABC Corp", "all draft invoices".
+
+    Queries raw.transactions directly; falls back to Base44 live.
+    """
+    where, params = [], {}
+    if counterparty_name:
+        where.append("counterparty_name ILIKE :counterparty")
+        params["counterparty"] = f"%{counterparty_name}%"
+    if transaction_type:
+        where.append("transaction_type ILIKE :txn_type")
+        params["txn_type"] = f"%{transaction_type}%"
+    if payment_status:
+        where.append("payment_status ILIKE :pmt_status")
+        params["pmt_status"] = payment_status
+    if min_amount is not None:
+        where.append("amount >= :min_amount")
+        params["min_amount"] = min_amount
+    if days_back:
+        where.append("transaction_date >= CURRENT_DATE - INTERVAL '1 day' * :days_back")
+        params["days_back"] = days_back
+
+    rows = _raw_query(
+        "transactions", company_id, where, params,
+        select_cols=(
+            "id, transaction_type, status, payment_status, amount, currency, "
+            "transaction_date, due_date, counterparty_name, counterparty_id, "
+            "description, reference_number, enterprise_name, created_date"
+        ),
+        order_by="transaction_date DESC NULLS LAST",
+        limit=limit,
+    )
+
+    if not rows:
+        try:
+            df = _b44_transactions(company_id)
+            if not df.empty:
+                import pandas as _pd2
+                if counterparty_name and "counterparty_name" in df.columns:
+                    df = df[df["counterparty_name"].str.lower().str.contains(counterparty_name.lower(), na=False)]
+                if transaction_type and "transaction_type" in df.columns:
+                    df = df[df["transaction_type"].str.lower().str.contains(transaction_type.lower(), na=False)]
+                if payment_status and "payment_status" in df.columns:
+                    df = df[df["payment_status"].str.lower() == payment_status.lower()]
+                if min_amount is not None and "amount" in df.columns:
+                    df = df[_pd2.to_numeric(df["amount"], errors="coerce").fillna(0) >= min_amount]
+                if days_back and "transaction_date" in df.columns:
+                    from datetime import date as _date, timedelta
+                    cutoff = _date.today() - timedelta(days=days_back)
+                    txn_dt = _pd2.to_datetime(df["transaction_date"], errors="coerce").dt.date
+                    df = df[txn_dt.apply(lambda d: d is not None and d >= cutoff)]
+                keep = [c for c in ("id", "transaction_type", "status", "payment_status",
+                                     "amount", "currency", "transaction_date", "due_date",
+                                     "counterparty_name", "description", "reference_number",
+                                     "enterprise_name", "created_date") if c in df.columns]
+                rows = df[keep].head(limit).to_dict(orient="records")
+        except Exception as e:
+            logger.warning("find_transaction_records Base44 fallback: %s", e)
+        source = "base44_live"
+    else:
+        source = "raw"
+
+    logger.info("find_transaction_records: %d records (source=%s)", len(rows), source)
+    return {
+        "count":       len(rows),
+        "records":     rows,
+        "filters": {
+            "counterparty_name": counterparty_name, "transaction_type": transaction_type,
+            "payment_status": payment_status, "min_amount": min_amount, "days_back": days_back,
+        },
+        "data_source": source,
+    }
+
+
+def inspect_raw_record(
+    company_id: str,
+    entity: str,
+    record_id: str,
+) -> dict:
+    """
+    Fetch a single record from any raw.* table by its ID.
+    Used as a drill-down after another tool returns an ID —
+    e.g. "tell me more about task ID abc123", "show full record for person xyz".
+    Returns all columns for that record.
+    """
+    VALID_ENTITIES = {
+        "people", "enterprises", "products", "tasks",
+        "transactions", "relationships", "addresses",
+    }
+    if entity not in VALID_ENTITIES:
+        return {"error": f"Unknown entity '{entity}'. Valid: {sorted(VALID_ENTITIES)}"}
+
+    rows = _raw_query(
+        entity, company_id,
+        where_clauses=["id = :record_id"],
+        params={"record_id": record_id},
+        select_cols="*",
+        order_by="id",
+        limit=1,
+    )
+
+    if not rows:
+        # Base44 fallback — use the appropriate _b44_* helper and filter by id
+        try:
+            b44_fns = {
+                "people":        _b44_people,
+                "enterprises":   _b44_enterprises,
+                "products":      _b44_products,
+                "tasks":         _b44_tasks,
+                "transactions":  _b44_transactions,
+                "relationships": lambda cid: _read_raw_table("relationships", cid) or _pd.DataFrame(),
+                "addresses":     lambda cid: _read_raw_table("addresses", cid) or _pd.DataFrame(),
+            }
+            df = b44_fns[entity](company_id)
+            if not df.empty and "id" in df.columns:
+                match = df[df["id"].astype(str) == str(record_id)]
+                if not match.empty:
+                    return {
+                        "found":       True,
+                        "entity":      entity,
+                        "record_id":   record_id,
+                        "record":      match.iloc[0].to_dict(),
+                        "data_source": "base44_live",
+                    }
+        except Exception as e:
+            logger.warning("inspect_raw_record Base44 fallback: %s", e)
+        return {
+            "found":     False,
+            "entity":    entity,
+            "record_id": record_id,
+            "record":    None,
+        }
+
+    return {
+        "found":       True,
+        "entity":      entity,
+        "record_id":   record_id,
+        "record":      rows[0],
+        "data_source": "raw",
+    }
+
+
+def find_relationship_records(
+    company_id: str,
+    person_name: Optional[str] = None,
+    enterprise_name: Optional[str] = None,
+    relationship_type: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 20,
+) -> dict:
+    """
+    Search for individual relationship records — who is connected to whom.
+    Returns actual rows with person names, enterprise names, roles, and dates.
+    Used for: "who works at Branch X?", "what relationships does John have?",
+              "show all active employment relationships", "item custody for Product Y",
+              "which staff are assigned to Enterprise Z?".
+
+    Queries raw.relationships directly; falls back to Base44 live.
+    """
+    where, params = [], {}
+    if person_name:
+        where.append("person_name ILIKE :person_name")
+        params["person_name"] = f"%{person_name}%"
+    if enterprise_name:
+        where.append("enterprise_name ILIKE :enterprise_name")
+        params["enterprise_name"] = f"%{enterprise_name}%"
+    if relationship_type:
+        where.append("relationship_type ILIKE :rel_type")
+        params["rel_type"] = f"%{relationship_type}%"
+    if status:
+        where.append("status ILIKE :status")
+        params["status"] = status
+
+    rows = _raw_query(
+        "relationships", company_id, where, params,
+        select_cols=(
+            "id, relationship_type, status, person_name, person_id, "
+            "enterprise_name, enterprise_id, item_name, item_id, "
+            "role, start_date, end_date, notes, created_date"
+        ),
+        order_by="person_name NULLS LAST",
+        limit=limit,
+    )
+
+    if not rows:
+        try:
+            from etl.relationships import extract_relationships
+            df = _read_raw_table("relationships", company_id)
+            if df.empty:
+                df = _filter_by_company(extract_relationships(), company_id)
+            if not df.empty:
+                if person_name and "person_name" in df.columns:
+                    df = df[df["person_name"].str.lower().str.contains(person_name.lower(), na=False)]
+                if enterprise_name and "enterprise_name" in df.columns:
+                    df = df[df["enterprise_name"].str.lower().str.contains(enterprise_name.lower(), na=False)]
+                if relationship_type and "relationship_type" in df.columns:
+                    df = df[df["relationship_type"].str.lower().str.contains(relationship_type.lower(), na=False)]
+                if status and "status" in df.columns:
+                    df = df[df["status"].str.lower() == status.lower()]
+                keep = [c for c in ("id", "relationship_type", "status", "person_name",
+                                     "person_id", "enterprise_name", "enterprise_id",
+                                     "item_name", "item_id", "role",
+                                     "start_date", "end_date", "notes") if c in df.columns]
+                rows = df[keep].head(limit).to_dict(orient="records")
+        except Exception as e:
+            logger.warning("find_relationship_records Base44 fallback: %s", e)
+        source = "base44_live"
+    else:
+        source = "raw"
+
+    logger.info("find_relationship_records: %d records (source=%s)", len(rows), source)
+    return {
+        "count":       len(rows),
+        "records":     rows,
+        "filters": {
+            "person_name": person_name, "enterprise_name": enterprise_name,
+            "relationship_type": relationship_type, "status": status,
+        },
+        "data_source": source,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # WEB-GROUNDED TOOLS — public data sources, no API key required
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -2864,6 +3323,194 @@ TOOL_DEFINITIONS = [
         ),
         "input_schema": {"type": "object", "properties": {}},
     },
+    # ── Raw record lookup tools ──────────────────────────────────────────────
+    {
+        "name": "find_people_records",
+        "description": (
+            "Search for individual people records by name, type, status, or linked enterprise. "
+            "Returns actual rows with names, contact details, type, status, and enterprise. "
+            "Use this for questions like: "
+            "'Find John Doe', 'Is Mary still active?', 'Show me all active nurses', "
+            "'Which students are inactive?', 'Staff at Branch X', "
+            "'List all volunteers', 'Who are our contractors?'. "
+            "Use get_people_summary for aggregate counts; use this tool for actual names and records."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Partial or full name to search (case-insensitive). Leave blank to return all.",
+                },
+                "person_type": {
+                    "type": "string",
+                    "enum": ["staff", "client", "contact", "volunteer"],
+                    "description": "Filter by person type.",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["active", "inactive", "on_leave"],
+                    "description": "Filter by status.",
+                },
+                "enterprise_name": {
+                    "type": "string",
+                    "description": "Filter to people linked to this enterprise (partial match).",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max records to return. Default 20.",
+                },
+            },
+        },
+    },
+    {
+        "name": "find_task_records",
+        "description": (
+            "Search for individual task records by assignee, type, status, or overdue state. "
+            "Returns actual rows with titles, assignees, due dates, and outcomes. "
+            "Use this for questions like: "
+            "'What tasks are assigned to Mary?', 'Show me overdue tasks', "
+            "'Which visits were missed this week?', 'Pending tasks for Branch X', "
+            "'What did we complete yesterday?', 'Show all high-priority tasks'. "
+            "Use get_task_summary for aggregate counts; use this tool for actual task details."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "assignee_name": {
+                    "type": "string",
+                    "description": "Filter to tasks assigned to this person (partial match).",
+                },
+                "task_type": {
+                    "type": "string",
+                    "description": "Filter by task type (partial match, e.g. 'visit', 'delivery', 'inspection').",
+                },
+                "status": {
+                    "type": "string",
+                    "description": "Filter by status (e.g. 'pending', 'in_progress', 'completed', 'overdue').",
+                },
+                "overdue_only": {
+                    "type": "boolean",
+                    "description": "If true, return only tasks past their due date and not completed. Default false.",
+                },
+                "days_back": {
+                    "type": "integer",
+                    "description": "Limit to tasks created within this many days. Default: no limit.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max records to return. Default 20.",
+                },
+            },
+        },
+    },
+    {
+        "name": "find_transaction_records",
+        "description": (
+            "Search for individual transaction records by counterparty, type, payment status, or amount. "
+            "Returns actual rows — amounts, dates, counterparties, payment status. "
+            "Note: raw transactions include ALL statuses (draft, posted, voided). "
+            "Use this for questions like: "
+            "'Show me invoices for ABC Corp', 'Unpaid transactions over $500', "
+            "'Recent payments from John', 'All draft invoices', "
+            "'What has Client X paid?', 'Show me the largest transactions this month'. "
+            "Use get_transaction_summary for aggregate revenue; use this tool for actual invoice/payment details."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "counterparty_name": {
+                    "type": "string",
+                    "description": "Filter by counterparty/client/vendor name (partial match).",
+                },
+                "transaction_type": {
+                    "type": "string",
+                    "description": "Filter by transaction type (e.g. 'invoice', 'payment', 'expense', 'payroll').",
+                },
+                "payment_status": {
+                    "type": "string",
+                    "description": "Filter by payment status (e.g. 'unpaid', 'paid', 'partial', 'overdue').",
+                },
+                "min_amount": {
+                    "type": "number",
+                    "description": "Only return transactions at or above this amount.",
+                },
+                "days_back": {
+                    "type": "integer",
+                    "description": "Limit to transactions in the last N days.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max records to return. Default 20.",
+                },
+            },
+        },
+    },
+    {
+        "name": "inspect_raw_record",
+        "description": (
+            "Fetch the complete record for a single entity by its ID. "
+            "Use this as a drill-down after another tool returns a record ID — "
+            "e.g. after find_task_records returns a list, call this to get the full detail for one task. "
+            "Use for questions like: "
+            "'Tell me more about task abc123', 'Show full details for person xyz', "
+            "'What does that transaction record contain?', 'Get the full product record for id 456'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["entity", "record_id"],
+            "properties": {
+                "entity": {
+                    "type": "string",
+                    "enum": ["people", "enterprises", "products", "tasks", "transactions", "relationships", "addresses"],
+                    "description": "Which entity table to look up.",
+                },
+                "record_id": {
+                    "type": "string",
+                    "description": "The ID of the record to fetch.",
+                },
+            },
+        },
+    },
+    {
+        "name": "find_relationship_records",
+        "description": (
+            "Search for individual relationship records — who is connected to whom. "
+            "Returns actual rows with person names, enterprise names, roles, and dates. "
+            "Use this for questions like: "
+            "'Who works at Branch X?', 'What relationships does John have?', "
+            "'Show all employment relationships', 'Which staff are assigned to Enterprise Z?', "
+            "'What items does Person Y hold?', 'Who manages this location?', "
+            "'Show me active enrollments at School A'. "
+            "Use get_relationship_summary for aggregate counts; use this tool for actual assignments."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "person_name": {
+                    "type": "string",
+                    "description": "Filter by person name (partial match).",
+                },
+                "enterprise_name": {
+                    "type": "string",
+                    "description": "Filter by enterprise/organisation name (partial match).",
+                },
+                "relationship_type": {
+                    "type": "string",
+                    "description": "Filter by relationship type (e.g. 'employment', 'enrollment', 'person_enterprise', 'item_custody').",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["active", "ended", "archived"],
+                    "description": "Filter by relationship status.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max records to return. Default 20.",
+                },
+            },
+        },
+    },
     {
         "name": "get_product_at_risk",
         "description": (
@@ -3250,6 +3897,12 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "get_product_at_risk":     get_product_at_risk,
         "get_operational_trends":  get_operational_trends,
         "get_top_debtors":         get_top_debtors,
+        # Raw record lookup tools
+        "find_people_records":          find_people_records,
+        "find_task_records":            find_task_records,
+        "find_transaction_records":     find_transaction_records,
+        "inspect_raw_record":           inspect_raw_record,
+        "find_relationship_records":    find_relationship_records,
     }
 
     fn = dispatch.get(tool_name)
