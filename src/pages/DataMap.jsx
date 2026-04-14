@@ -14,6 +14,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
 import {
   RefreshCw, ExternalLink, Database, ShieldCheck, AlertTriangle,
   ChevronRight, Info, Layers, TrendingUp,
@@ -173,6 +174,7 @@ export default function DataMap() {
   const svgRef = useRef(null);
 
   const companyId = currentUser?.company_id;
+  const listFn    = useEntityListFn(currentUser);
 
   // Load current user once
   useEffect(() => {
@@ -200,12 +202,12 @@ export default function DataMap() {
       }
     } catch { /* fall through */ }
 
-    // Tier 2: Base44 live counts (if report unavailable or has no counts)
+    // Tier 2: Base44 live counts — company-scoped via listFn (fallback when report unavailable)
     try {
       const results = await Promise.allSettled(
         ENTITIES.map(e =>
           base44.entities[e.base44]
-            ? base44.entities[e.base44].list().then(arr => ({ id: e.id, count: arr.length }))
+            ? listFn(base44.entities[e.base44]).then(arr => ({ id: e.id, count: Array.isArray(arr) ? arr.length : 0 }))
             : Promise.resolve({ id: e.id, count: 0 }),
         ),
       );
@@ -215,7 +217,7 @@ export default function DataMap() {
       });
       setCounts(newCounts);
     } catch { /* silent */ }
-  }, [companyId]);
+  }, [companyId, listFn]);
 
   useEffect(() => {
     if (companyId) loadData(false).finally(() => { setLoading(false); setRefreshing(false); });

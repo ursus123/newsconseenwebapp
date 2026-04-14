@@ -302,20 +302,23 @@ export default function IntelligenceHub({ currentUser }) {
           listFn(base44.entities.Address),
         ]);
 
-        // Build address lookup: id → address record
-        const addrById = new Map();
-        addrs.forEach(a => addrById.set(a.id, a));
+        // Build address lookup by label AND address_line1 (Relationships store location as text, not ID)
+        const addrByLabel = new Map();
+        addrs.forEach(a => {
+          if (a.label)         addrByLabel.set(a.label.toLowerCase().trim(), a);
+          if (a.address_line1) addrByLabel.set(a.address_line1.toLowerCase().trim(), a);
+        });
 
         // Build enterprise → address coords map via enterprise_address relationships
-        // prefer active relationships; use enterprise_id if present, else enterprise_name
+        // Relationships store location as a text string matching addr.label / addr.address_line1
         const enterpriseCoords = new Map();
         rels
           .filter(r => r.relationship_type === "enterprise_address" && r.status !== "ended")
           .forEach(r => {
-            const addrId = r.address_id;
-            const entKey = r.enterprise_id || r.enterprise_name;
-            if (!entKey || !addrId) return;
-            const addr = addrById.get(addrId);
+            const entKey = r.enterprise_name;
+            const locKey = (r.location || "").toLowerCase().trim();
+            if (!entKey || !locKey) return;
+            const addr = addrByLabel.get(locKey);
             if (!addr?.latitude || !addr?.longitude) return;
             if (!enterpriseCoords.has(entKey)) {
               enterpriseCoords.set(entKey, { latitude: parseFloat(addr.latitude), longitude: parseFloat(addr.longitude) });
@@ -340,7 +343,7 @@ export default function IntelligenceHub({ currentUser }) {
   // Auto-geocode enterprises still missing coordinates using city/country (Nominatim fallback)
   useEffect(() => {
     if (!myEnterprises.length) return;
-    const missing = myEnterprises.filter(e => e._needsGeocode && (e.city || e.country));
+    const missing = myEnterprises.filter(e => e._needsGeocode);
     if (!missing.length) return;
     (async () => {
       const updated = [...myEnterprises];
@@ -365,8 +368,8 @@ export default function IntelligenceHub({ currentUser }) {
     const lat = parseFloat(manualLat);
     const lng = parseFloat(manualLng);
     if (!isNaN(lat) && !isNaN(lng)) return { ...ent, latitude: lat, longitude: lng };
-    // Try Nominatim
-    if (ent?.city || ent?.country) {
+    // Try Nominatim — use all available fields; fall back to name only
+    if (ent?.enterprise_name || ent?.city || ent?.country) {
       setGeocoding(true);
       const query = [ent?.enterprise_name, ent?.city, ent?.region, ent?.country].filter(Boolean).join(", ");
       const coords = await geocodeAddress(query);
