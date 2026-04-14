@@ -1603,6 +1603,349 @@ def get_service_overview(company_id: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# NEW OPERATIONAL INTELLIGENCE TOOLS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_product_at_risk(
+    company_id: str,
+    days_to_expiry: int = 30,
+    top_n: int = 20,
+) -> dict:
+    """
+    Returns specific product names + quantities that are at risk:
+    (a) stock at or below reorder level / out of stock,
+    (b) expiry within `days_to_expiry` days.
+    Used for: "what's about to expire?", "which items are low stock?",
+              "stock alerts", "what should we reorder?", "expiring products".
+
+    Reads analytics.product_summary; falls back to raw.products then Base44.
+    """
+    sql = """
+        SELECT
+            name,
+            item_type,
+            status,
+            stock_quantity,
+            reorder_level,
+            unit_of_measure,
+            expiry_date,
+            unit_price,
+            CASE
+                WHEN stock_quantity IS NOT NULL
+                     AND reorder_level IS NOT NULL
+                     AND stock_quantity <= reorder_level THEN 'low_stock'
+                WHEN stock_quantity = 0 THEN 'out_of_stock'
+                ELSE 'ok'
+            END AS stock_status,
+            CASE
+                WHEN expiry_date IS NOT NULL
+                     AND expiry_date >= CURRENT_DATE
+                     AND expiry_date <= CURRENT_DATE + INTERVAL '1 day' * :days
+                THEN true
+                ELSE false
+            END AS expiring_soon
+        FROM analytics.product_summary
+        WHERE company_id = :company_id
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date)
+              FROM analytics.product_summary
+              WHERE company_id = :company_id
+          )
+          AND (
+              (stock_quantity IS NOT NULL AND reorder_level IS NOT NULL
+               AND stock_quantity <= reorder_level)
+              OR stock_quantity = 0
+              OR (expiry_date IS NOT NULL
+                  AND expiry_date >= CURRENT_DATE
+                  AND expiry_date <= CURRENT_DATE + INTERVAL '1 day' * :days)
+          )
+        ORDER BY
+            CASE WHEN stock_quantity = 0 THEN 0
+                 WHEN stock_quantity IS NOT NULL AND reorder_level IS NOT NULL
+                      AND stock_quantity <= reorder_level THEN 1
+                 ELSE 2 END,
+            expiry_date NULLS LAST
+        LIMIT :top_n
+    """
+    rows, _dao, _src = _query_analytics(
+        "product_summary", sql,
+        {"company_id": company_id, "days": days_to_expiry, "top_n": top_n},
+        company_id,
+    )
+
+    if not rows:
+        df = _b44_products(company_id)
+        if not df.empty:
+            import pandas as _pd2
+            from datetime import date, timedelta
+
+            cutoff = date.today() + timedelta(days=days_to_expiry)
+            for col in ("stock_quantity", "reorder_level"):
+                if col not in df.columns:
+                    df[col] = None
+            if "expiry_date" not in df.columns:
+                df["expiry_date"] = None
+
+            df["_exp_dt"] = _pd2.to_datetime(df["expiry_date"], errors="coerce").dt.date
+            mask_low  = (
+                df["stock_quantity"].notna() & df["reorder_level"].notna() &
+                (df["stock_quantity"].astype(float) <= df["reorder_level"].astype(float))
+            )
+            mask_out  = df["stock_quantity"].astype(float, errors="ignore") == 0
+            mask_exp  = df["_exp_dt"].apply(
+                lambda d: d is not None and date.today() <= d <= cutoff
+            )
+            at_risk = df[mask_low | mask_out | mask_exp].copy()
+            if not at_risk.empty:
+                for col in ("name", "item_type", "status", "unit_of_measure", "unit_price"):
+                    if col not in at_risk.columns:
+                        at_risk[col] = None
+                rows = at_risk[
+                    ["name", "item_type", "status", "stock_quantity", "reorder_level",
+                     "unit_of_measure", "expiry_date", "unit_price"]
+                ].head(top_n).to_dict(orient="records")
+            _dao, _src = None, "base44_live"
+            logger.info("get_product_at_risk: Base44 fallback — %d at-risk items", len(rows))
+
+    low_stock_items  = [r for r in rows if r.get("stock_status") == "low_stock"
+                        or (r.get("stock_quantity") is not None
+                            and r.get("reorder_level") is not None
+                            and float(r.get("stock_quantity") or 0) <= float(r.get("reorder_level") or 0))]
+    out_of_stock     = [r for r in rows if (r.get("stock_quantity") or 1) == 0]
+    expiring         = [r for r in rows if r.get("expiring_soon") or r.get("expiry_date")]
+
+    return {
+        "at_risk_count":    len(rows),
+        "low_stock_count":  len(low_stock_items),
+        "out_of_stock_count": len(out_of_stock),
+        "expiring_soon_count": len(expiring),
+        "days_to_expiry_window": days_to_expiry,
+        "items":           rows,
+        "data_as_of":      _dao,
+        "data_source":     _src,
+    }
+
+
+def get_operational_trends(
+    company_id: str,
+    months: int = 6,
+) -> dict:
+    """
+    Returns month-by-month cross-entity operational trends:
+    task completion rate %, new people added, people who left, and headcount snapshot.
+    Used for: "how are we trending?", "completion rate over time",
+              "staff changes by month", "headcount trend", "operations last 6 months".
+
+    Reads analytics.task_summary + analytics.people_summary time series.
+    Falls back to Base44 live data.
+    """
+    task_sql = """
+        SELECT
+            TO_CHAR(snapshot_date, 'YYYY-MM') AS year_month,
+            SUM(total_tasks)                  AS total_tasks,
+            SUM(completed_tasks)              AS completed_tasks,
+            SUM(overdue_tasks)                AS overdue_tasks
+        FROM analytics.task_summary
+        WHERE company_id = :company_id
+          AND snapshot_date >= CURRENT_DATE - INTERVAL '1 month' * :months
+        GROUP BY year_month
+        ORDER BY year_month
+    """
+    people_sql = """
+        SELECT
+            TO_CHAR(snapshot_date, 'YYYY-MM') AS year_month,
+            SUM(total_people)                  AS headcount
+        FROM analytics.people_summary
+        WHERE company_id = :company_id
+          AND snapshot_date >= CURRENT_DATE - INTERVAL '1 month' * :months
+        GROUP BY year_month
+        ORDER BY year_month
+    """
+
+    task_rows  = _run(task_sql,   {"company_id": company_id, "months": months})
+    people_rows = _run(people_sql, {"company_id": company_id, "months": months})
+
+    # Merge by year_month
+    people_map = {r["year_month"]: int(r.get("headcount") or 0) for r in people_rows}
+
+    trend_months = []
+    prev_headcount = None
+    for r in task_rows:
+        ym         = r["year_month"]
+        total      = int(r.get("total_tasks") or 0)
+        completed  = int(r.get("completed_tasks") or 0)
+        overdue    = int(r.get("overdue_tasks") or 0)
+        headcount  = people_map.get(ym, 0)
+        rate       = round(completed / total * 100, 1) if total > 0 else None
+        delta      = (headcount - prev_headcount) if prev_headcount is not None else None
+        prev_headcount = headcount
+        trend_months.append({
+            "month":                 ym,
+            "total_tasks":           total,
+            "completed_tasks":       completed,
+            "overdue_tasks":         overdue,
+            "task_completion_rate":  rate,
+            "headcount":             headcount,
+            "headcount_change":      delta,
+        })
+
+    # Base44 fallback — derive from raw tasks and people
+    if not trend_months:
+        import pandas as _pd2
+        from datetime import date
+
+        df_tasks   = _b44_tasks(company_id)
+        df_people  = _b44_people(company_id)
+
+        if not df_tasks.empty:
+            if "created_date" in df_tasks.columns:
+                df_tasks["_ym"] = _pd2.to_datetime(
+                    df_tasks["created_date"], errors="coerce"
+                ).dt.strftime("%Y-%m")
+                for col in ("status", "due_date"):
+                    if col not in df_tasks.columns:
+                        df_tasks[col] = None
+                df_tasks["_completed"] = df_tasks["status"].str.lower().isin(
+                    ["completed", "done", "closed"]
+                )
+                df_tasks["_overdue"] = (
+                    _pd2.to_datetime(df_tasks["due_date"], errors="coerce").dt.date
+                    .apply(lambda d: d is not None and d < date.today())
+                ) & ~df_tasks["_completed"]
+
+                grp = df_tasks.groupby("_ym").agg(
+                    total_tasks=("id", "count"),
+                    completed_tasks=("_completed", "sum"),
+                    overdue_tasks=("_overdue", "sum"),
+                ).reset_index()
+
+                people_hc = {}
+                if not df_people.empty and "created_date" in df_people.columns:
+                    df_people["_ym"] = _pd2.to_datetime(
+                        df_people["created_date"], errors="coerce"
+                    ).dt.strftime("%Y-%m")
+                    people_hc = df_people.groupby("_ym").size().to_dict()
+
+                prev_hc = None
+                for _, row in grp.tail(months).iterrows():
+                    ym  = row["_ym"]
+                    tot = int(row["total_tasks"])
+                    cmp = int(row["completed_tasks"])
+                    ovd = int(row["overdue_tasks"])
+                    hc  = people_hc.get(ym, 0)
+                    rate = round(cmp / tot * 100, 1) if tot > 0 else None
+                    delta = (hc - prev_hc) if prev_hc is not None else None
+                    prev_hc = hc
+                    trend_months.append({
+                        "month": ym, "total_tasks": tot,
+                        "completed_tasks": cmp, "overdue_tasks": ovd,
+                        "task_completion_rate": rate,
+                        "headcount": hc, "headcount_change": delta,
+                    })
+        logger.info("get_operational_trends: Base44 fallback — %d months", len(trend_months))
+
+    avg_completion_rate = None
+    rates = [m["task_completion_rate"] for m in trend_months if m["task_completion_rate"] is not None]
+    if rates:
+        avg_completion_rate = round(sum(rates) / len(rates), 1)
+
+    return {
+        "months_requested":      months,
+        "months_returned":       len(trend_months),
+        "avg_completion_rate":   avg_completion_rate,
+        "trend":                 trend_months,
+    }
+
+
+def get_top_debtors(
+    company_id: str,
+    top_n: int = 10,
+) -> dict:
+    """
+    Returns individual counterparty names with their outstanding amounts —
+    sum of unpaid / partially-paid invoices/transactions.
+    Used for: "who owes us money?", "top debtors", "outstanding balances",
+              "who hasn't paid?", "largest unpaid invoices", "collections".
+
+    Reads analytics.transaction_summary; falls back to raw.transactions then Base44.
+    """
+    sql = """
+        SELECT
+            counterparty_name,
+            COUNT(*)                              AS invoice_count,
+            SUM(amount)                           AS total_outstanding,
+            MIN(due_date)                         AS oldest_due_date,
+            MAX(amount)                           AS largest_single_amount,
+            MIN(transaction_date)                 AS earliest_transaction
+        FROM analytics.transaction_summary
+        WHERE company_id       = :company_id
+          AND payment_status   IN ('unpaid', 'partial', 'overdue', 'pending')
+          AND transaction_type IN ('invoice', 'receivable', 'sale', 'credit_note')
+        GROUP BY counterparty_name
+        ORDER BY total_outstanding DESC NULLS LAST
+        LIMIT :top_n
+    """
+    rows, _dao, _src = _query_analytics(
+        "transaction_summary", sql,
+        {"company_id": company_id, "top_n": top_n},
+        company_id,
+    )
+
+    if not rows:
+        df = _b44_transactions(company_id)
+        if not df.empty:
+            import pandas as _pd2
+
+            unpaid_statuses = {"unpaid", "partial", "overdue", "pending"}
+            receivable_types = {"invoice", "receivable", "sale", "credit_note"}
+
+            for col in ("payment_status", "transaction_type", "amount",
+                        "due_date", "counterparty_name", "transaction_date"):
+                if col not in df.columns:
+                    df[col] = None
+
+            mask = (
+                df["payment_status"].str.lower().isin(unpaid_statuses) &
+                df["transaction_type"].str.lower().isin(receivable_types)
+            )
+            unpaid = df[mask].copy()
+
+            if unpaid.empty:
+                # Broader fallback: any status if type matches
+                unpaid = df[df["transaction_type"].str.lower().isin(receivable_types)].copy()
+
+            if not unpaid.empty:
+                unpaid["amount"] = _pd2.to_numeric(unpaid["amount"], errors="coerce").fillna(0)
+                grp = (
+                    unpaid.groupby("counterparty_name")
+                    .agg(
+                        invoice_count=("id", "count"),
+                        total_outstanding=("amount", "sum"),
+                        oldest_due_date=("due_date", "min"),
+                        largest_single_amount=("amount", "max"),
+                        earliest_transaction=("transaction_date", "min"),
+                    )
+                    .reset_index()
+                    .sort_values("total_outstanding", ascending=False)
+                    .head(top_n)
+                )
+                rows = grp.to_dict(orient="records")
+            _dao, _src = None, "base44_live"
+            logger.info("get_top_debtors: Base44 fallback — %d debtors", len(rows))
+
+    total_outstanding = sum(float(r.get("total_outstanding") or 0) for r in rows)
+
+    return {
+        "top_n_requested":   top_n,
+        "debtor_count":      len(rows),
+        "total_outstanding": round(total_outstanding, 2),
+        "debtors":           rows,
+        "data_as_of":        _dao,
+        "data_source":       _src,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # WEB-GROUNDED TOOLS — public data sources, no API key required
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -2521,6 +2864,75 @@ TOOL_DEFINITIONS = [
         ),
         "input_schema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "get_product_at_risk",
+        "description": (
+            "Returns specific product names and quantities that are at risk: "
+            "stock at or below reorder level, out of stock, or expiring soon. "
+            "Use this for questions like: "
+            "'What items are low stock?', 'What's about to expire?', "
+            "'Which products should we reorder?', 'Show me stock alerts', "
+            "'What inventory is at risk?', 'Products expiring this month'. "
+            "Returns individual item names, quantities, reorder levels, and expiry dates — "
+            "not just aggregate counts."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days_to_expiry": {
+                    "type": "integer",
+                    "description": "Expiry window in days. Items expiring within this many days are flagged. Default 30.",
+                },
+                "top_n": {
+                    "type": "integer",
+                    "description": "Maximum number of at-risk items to return. Default 20.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_operational_trends",
+        "description": (
+            "Returns month-by-month operational trends across tasks and people: "
+            "task completion rate %, headcount, and headcount changes. "
+            "Use this for questions like: "
+            "'How are we trending over the last 6 months?', "
+            "'Show me task completion rate by month', "
+            "'How has headcount changed?', "
+            "'Are we improving?', 'Operational performance over time', "
+            "'How many people did we add last quarter?'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "months": {
+                    "type": "integer",
+                    "description": "How many months of history to return. Default 6, max 24.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_top_debtors",
+        "description": (
+            "Returns the names of counterparties with the highest outstanding amounts — "
+            "unpaid or partially paid invoices and receivables. "
+            "Use this for questions like: "
+            "'Who owes us money?', 'Top debtors', 'Outstanding balances', "
+            "'Who hasn't paid?', 'Largest unpaid invoices', "
+            "'Collections priority list', 'Accounts receivable breakdown'. "
+            "Returns individual names, total outstanding, invoice count, and oldest due date."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "top_n": {
+                    "type": "integer",
+                    "description": "How many debtors to return, ranked by outstanding amount. Default 10.",
+                },
+            },
+        },
+    },
 ]
 
 
@@ -2834,6 +3246,10 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "get_workflow_summary":    get_workflow_summary,
         "get_audit_summary":       get_audit_summary,
         "get_automation_roi":      get_automation_roi,
+        # Operational intelligence tools
+        "get_product_at_risk":     get_product_at_risk,
+        "get_operational_trends":  get_operational_trends,
+        "get_top_debtors":         get_top_debtors,
     }
 
     fn = dispatch.get(tool_name)

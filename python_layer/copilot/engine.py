@@ -190,6 +190,9 @@ INTERNAL DATA TOOLS (query this organisation's own data):
 - get_relationship_summary— entity relationship map
 - get_address_overview    — location data
 - get_service_overview    — service catalogue
+- get_product_at_risk     — specific items below reorder level or expiring within N days (names + quantities)
+- get_operational_trends  — month-by-month task completion rate % and headcount changes
+- get_top_debtors         — counterparty names with highest outstanding amounts (collections priority)
 
 WEB & PUBLIC DATA TOOLS (query external/public sources):
 - web_search: multi-tier web search (Brave Search → DuckDuckGo → Wikipedia)
@@ -385,6 +388,46 @@ def _make_chart_config(tool_name: str, result: dict):
                 ],
                 "unit": "$",
             }
+
+        if tool_name == "get_top_debtors":
+            debtors = result.get("debtors", [])
+            if debtors:
+                data = [
+                    {
+                        "name": (str(d.get("counterparty_name") or "Unknown"))[:20],
+                        "Outstanding": round(float(d.get("total_outstanding") or 0), 2),
+                    }
+                    for d in debtors[:10]
+                    if float(d.get("total_outstanding") or 0) > 0
+                ]
+                if data:
+                    return {
+                        "type": "bar", "title": "Top Debtors — Outstanding Amount",
+                        "data": data,
+                        "keys": [{"key": "Outstanding", "color": "#ef4444"}],
+                        "unit": "$",
+                    }
+
+        if tool_name == "get_operational_trends":
+            trend = result.get("trend", [])
+            if trend:
+                data = [
+                    {
+                        "name": m.get("month", ""),
+                        "Completion %": m.get("task_completion_rate") or 0,
+                        "Headcount": m.get("headcount") or 0,
+                    }
+                    for m in trend
+                ]
+                if data:
+                    return {
+                        "type": "area", "title": "Operational Trends",
+                        "data": data,
+                        "keys": [
+                            {"key": "Completion %", "color": "#10b981"},
+                            {"key": "Headcount",    "color": "#3b82f6"},
+                        ],
+                    }
 
         if tool_name == "get_company_scorecard":
             sc = result.get("scorecard")
