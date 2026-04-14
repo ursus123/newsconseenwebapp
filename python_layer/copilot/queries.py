@@ -3858,6 +3858,18 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "get_kpi_goals",
+        "description": (
+            "Returns all KPI goals for this company with current status: "
+            "on_track, at_risk, behind, or exceeded. Shows target value, actual value, "
+            "progress %, days remaining in the period, and pace needed to hit the target. "
+            "Use for questions like: 'Are we on track?', 'Which goals are behind?', "
+            "'Show me our revenue target', 'How are we doing against targets?', "
+            "'What is our task completion goal?', 'Which goals have we exceeded?'."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "get_automation_roi",
         "description": (
             "Calculate the automation ROI — how many tasks were auto-created by workflows, how many alerts were "
@@ -4601,6 +4613,59 @@ def get_automation_roi(company_id: str) -> dict:
         return {"error": str(e)}
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# GAP 1 — KPI GOAL TRACKING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_kpi_goals(company_id: str) -> dict:
+    """
+    Returns all KPI goals for this company with their current status —
+    on_track, at_risk, behind, or exceeded.
+    Used for: "are we on track?", "which goals are behind?",
+              "show me our targets", "revenue goal progress",
+              "how are we doing against targets?", "what's our completion rate goal?".
+    """
+    try:
+        from goals.routes import _GOALS, _CACHE
+        from goals.engine import evaluate_goals
+
+        raw_goals = _GOALS.get(company_id, [])
+        if not raw_goals:
+            return {
+                "goal_count": 0,
+                "goals": [],
+                "note": "No KPI goals have been set yet. Goals can be configured in Settings > KPI Goals.",
+            }
+
+        # Use cached evaluation if available and fresh (< 1 hour old)
+        cached = _CACHE.get(company_id, [])
+        if cached:
+            goals = cached
+        else:
+            goals = evaluate_goals(company_id, raw_goals)
+
+        on_track  = [g for g in goals if g.get("status") == "on_track"]
+        at_risk   = [g for g in goals if g.get("status") == "at_risk"]
+        behind    = [g for g in goals if g.get("status") == "behind"]
+        exceeded  = [g for g in goals if g.get("status") == "exceeded"]
+
+        return {
+            "goal_count":      len(goals),
+            "on_track_count":  len(on_track),
+            "at_risk_count":   len(at_risk),
+            "behind_count":    len(behind),
+            "exceeded_count":  len(exceeded),
+            "goals":           goals,
+            "summary": (
+                f"{len(exceeded)} exceeded, {len(on_track)} on track, "
+                f"{len(at_risk)} at risk, {len(behind)} behind."
+            ),
+        }
+    except Exception as e:
+        logger.warning("get_kpi_goals: %s", e)
+        return {"error": str(e), "goal_count": 0, "goals": []}
+
+
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
 
 def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
@@ -4660,6 +4725,8 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "request_action":               request_action,
         # Persistent memory
         "save_copilot_memory":          save_copilot_memory,
+        # Gap tools
+        "get_kpi_goals":                get_kpi_goals,
     }
 
     fn = dispatch.get(tool_name)

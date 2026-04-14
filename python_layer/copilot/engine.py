@@ -221,6 +221,7 @@ ACTION TOOL (write-back through approval gate):
 
 PERSISTENT MEMORY TOOL:
 - save_copilot_memory — persist a preference, instruction, or context fact for ALL future sessions.
+- get_kpi_goals       — KPI goal targets with current status (on_track/at_risk/behind/exceeded), actual values, progress %
   Only call this when the operator explicitly asks you to remember something, or states a clear
   standing preference. Never save transient facts (today's numbers, one-off answers).
 
