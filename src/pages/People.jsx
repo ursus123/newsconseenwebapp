@@ -22,6 +22,7 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
+import PeopleAnalytics from "@/components/people/PeopleAnalytics";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import {
@@ -532,6 +533,7 @@ export default function People() {
         previewColumns={PEOPLE_PREVIEW_COLS}
         requiredField="first_name"
       />
+      <PeopleAnalytics people={people} currentUser={currentUser} />
     </div>
   );
 }

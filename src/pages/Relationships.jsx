@@ -344,7 +344,7 @@ export default function Relationships() {
         />
       )}
 
-      <RelationshipAnalytics relationships={relationships} />
+      <RelationshipAnalytics relationships={relationships} currentUser={currentUser} />
 
       <RelationshipForm
         open={formOpen}
@@ -365,6 +365,8 @@ export default function Relationships() {
         onClose={() => setBulkAssignOpen(false)}
         onAssign={handleBulkAssign}
         people={people} enterprises={enterprises} products={products} services={services} addresses={addresses}
+        existingRelationships={relationships}
+        currentUser={currentUser}
       />
 
       <BulkImportDialog

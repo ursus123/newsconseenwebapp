@@ -16,6 +16,7 @@ import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
+import TransactionsAnalytics from "@/components/transactions/TransactionsAnalytics";
 import { Checkbox } from "@/components/ui/checkbox";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import {
@@ -919,6 +920,7 @@ export default function Transactions() {
         ]}
         requiredField="date"
       />
+      <TransactionsAnalytics transactions={transactions} currentUser={currentUser} />
     </div>
   );
 }

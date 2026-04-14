@@ -19,15 +19,48 @@ const TYPES = [
   { id: "enterprise_address",    label: "Enterprise → Address",       leftLabel: "Enterprises",  rightLabel: "Address",      leftKey: "enterprise_name", rightKey: "location",           leftColor: "bg-emerald-100 text-emerald-700", rightColor: "bg-emerald-50 text-emerald-600" },
 ];
 
-function SelectableList({ items, selected, onToggle, searchPlaceholder, nameKey = "name", colorClass = "bg-slate-100 text-slate-700" }) {
+// Filter chip definitions per entity type
+const PERSON_TYPE_CHIPS = ["staff", "client", "contact", "volunteer"];
+const ITEM_TYPE_CHIPS   = ["physical", "living", "digital", "service_package", "financial_instrument"];
+const ENT_TIER_CHIPS    = ["headquarters", "regional_office", "branch", "subsidiary", "franchise", "department", "unit", "project"];
+
+function FilterChips({ options, active, onToggle }) {
+  return (
+    <div className="flex flex-wrap gap-1 mb-2">
+      {options.map(opt => (
+        <button
+          key={opt}
+          onClick={() => onToggle(opt)}
+          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all capitalize ${active === opt ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-500 border-slate-200 hover:border-slate-400"}`}
+        >
+          {opt.replace(/_/g, " ")}
+        </button>
+      ))}
+      {active && (
+        <button onClick={() => onToggle(null)} className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-rose-200 text-rose-500 bg-rose-50 hover:bg-rose-100">
+          Clear
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SelectableList({ items, selected, onToggle, searchPlaceholder, nameKey = "name", colorClass = "bg-slate-100 text-slate-700", chipOptions, chipField }) {
   const [search, setSearch] = useState("");
+  const [activeChip, setActiveChip] = useState(null);
+
   const filtered = useMemo(() => {
-    if (!search) return items;
-    return items.filter(i => (i[nameKey] || "").toLowerCase().includes(search.toLowerCase()));
-  }, [items, search, nameKey]);
+    let list = items;
+    if (activeChip && chipField) list = list.filter(i => i[chipField] === activeChip);
+    if (search) list = list.filter(i => (i[nameKey] || "").toLowerCase().includes(search.toLowerCase()));
+    return list;
+  }, [items, search, nameKey, activeChip, chipField]);
 
   return (
     <div className="flex flex-col h-full">
+      {chipOptions && chipOptions.length > 0 && (
+        <FilterChips options={chipOptions} active={activeChip} onToggle={setActiveChip} />
+      )}
       <div className="relative mb-2">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
         <input
@@ -42,15 +75,23 @@ function SelectableList({ items, selected, onToggle, searchPlaceholder, nameKey 
           Select all visible
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto space-y-1 max-h-52">
+      <div className="flex-1 overflow-y-auto space-y-1 max-h-48">
         {filtered.length === 0 && <p className="text-xs text-slate-400 text-center py-6">No items found</p>}
         {filtered.map(item => {
           const val = item[nameKey];
           const isSelected = selected.includes(val);
           return (
-            <label key={item.id || val} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${isSelected ? "bg-emerald-50 border border-emerald-200" : "hover:bg-slate-50 border border-transparent"}`}>
-              <Checkbox checked={isSelected} onCheckedChange={() => onToggle(val)} />
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${colorClass}`}>{val}</span>
+            <label key={item.id || val} className={`flex items-start gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${isSelected ? "bg-emerald-50 border border-emerald-200" : "hover:bg-slate-50 border border-transparent"}`}>
+              <Checkbox checked={isSelected} onCheckedChange={() => onToggle(val)} className="mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${colorClass}`}>{val}</span>
+                {item._subtitle && (
+                  <p className="text-[10px] text-slate-400 mt-0.5 truncate">{item._subtitle}</p>
+                )}
+              </div>
+              {item._badge && (
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 uppercase shrink-0">{item._badge}</span>
+              )}
             </label>
           );
         })}
@@ -59,15 +100,22 @@ function SelectableList({ items, selected, onToggle, searchPlaceholder, nameKey 
   );
 }
 
-function SingleSelect({ items, selected, onSelect, searchPlaceholder, nameKey = "name", colorClass = "bg-slate-100 text-slate-700" }) {
+function SingleSelect({ items, selected, onSelect, searchPlaceholder, nameKey = "name", colorClass = "bg-slate-100 text-slate-700", chipOptions, chipField }) {
   const [search, setSearch] = useState("");
+  const [activeChip, setActiveChip] = useState(null);
+
   const filtered = useMemo(() => {
-    if (!search) return items;
-    return items.filter(i => (i[nameKey] || "").toLowerCase().includes(search.toLowerCase()));
-  }, [items, search, nameKey]);
+    let list = items;
+    if (activeChip && chipField) list = list.filter(i => i[chipField] === activeChip);
+    if (search) list = list.filter(i => (i[nameKey] || "").toLowerCase().includes(search.toLowerCase()));
+    return list;
+  }, [items, search, nameKey, activeChip, chipField]);
 
   return (
     <div className="flex flex-col h-full">
+      {chipOptions && chipOptions.length > 0 && (
+        <FilterChips options={chipOptions} active={activeChip} onToggle={setActiveChip} />
+      )}
       <div className="relative mb-2">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
         <input
@@ -76,15 +124,23 @@ function SingleSelect({ items, selected, onSelect, searchPlaceholder, nameKey = 
           className="w-full pl-8 pr-3 h-8 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-400"
         />
       </div>
-      <div className="flex-1 overflow-y-auto space-y-1 max-h-52">
+      <div className="flex-1 overflow-y-auto space-y-1 max-h-48">
         {filtered.length === 0 && <p className="text-xs text-slate-400 text-center py-6">No items found</p>}
         {filtered.map(item => {
           const val = item[nameKey];
           const isSelected = selected === val;
           return (
-            <label key={item.id || val} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${isSelected ? "bg-emerald-50 border border-emerald-200" : "hover:bg-slate-50 border border-transparent"}`}>
-              <Checkbox checked={isSelected} onCheckedChange={() => onSelect(val)} />
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${colorClass}`}>{val}</span>
+            <label key={item.id || val} className={`flex items-start gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${isSelected ? "bg-emerald-50 border border-emerald-200" : "hover:bg-slate-50 border border-transparent"}`}>
+              <Checkbox checked={isSelected} onCheckedChange={() => onSelect(val)} className="mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${colorClass}`}>{val}</span>
+                {item._subtitle && (
+                  <p className="text-[10px] text-slate-400 mt-0.5 truncate">{item._subtitle}</p>
+                )}
+              </div>
+              {item._badge && (
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 uppercase shrink-0">{item._badge}</span>
+              )}
             </label>
           );
         })}
@@ -93,43 +149,85 @@ function SingleSelect({ items, selected, onSelect, searchPlaceholder, nameKey = 
   );
 }
 
-export default function BulkAssignDialog({ open, onClose, onAssign, people = [], enterprises = [], products = [], services = [], addresses = [] }) {
-  const [mode, setMode] = useState(null); // selected TYPES entry id
+export default function BulkAssignDialog({ open, onClose, onAssign, people = [], enterprises = [], products = [], services = [], addresses = [], existingRelationships = [], currentUser = null }) {
+  const [mode, setMode] = useState(null);
   const [leftSelected, setLeftSelected] = useState([]);
-  const [rightSelected, setRightSelected] = useState([]); // for many-to-many
-  const [rightSingle, setRightSingle] = useState(""); // for one-right modes
+  const [rightSelected, setRightSelected] = useState([]);
+  const [rightSingle, setRightSingle] = useState("");
   const [role, setRole] = useState("");
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState(false);
 
   const modeConfig = TYPES.find(t => t.id === mode);
 
+  // Build items with context (_badge for type, _subtitle for role)
+  const buildPeopleItems = () => people.map(p => ({
+    id: p.id,
+    name: `${p.first_name || ""} ${p.last_name || ""}`.trim() || p.first_name || "Unknown",
+    _badge: p.person_type,
+    _subtitle: p.primary_role || null,
+    person_type: p.person_type,
+  }));
+
+  const buildEnterpriseItems = () => enterprises.map(e => ({
+    id: e.id,
+    name: e.enterprise_name,
+    _badge: e.enterprise_tier,
+    _subtitle: e.enterprise_type ? `Type: ${e.enterprise_type}` : null,
+    enterprise_tier: e.enterprise_tier,
+  }));
+
+  const buildProductItems = () => products.map(p => ({
+    id: p.id,
+    name: p.name || p.product_name,
+    _badge: p.item_type,
+    _subtitle: p.item_class ? (Array.isArray(p.item_class) ? p.item_class[0] : p.item_class) : null,
+    item_type: p.item_type,
+  }));
+
   const getLeftItems = () => {
     if (!modeConfig) return [];
-    if (["person_enterprise", "people_enterprises", "person_service", "person_address", "person_person"].includes(mode)) return people.map(p => ({ id: p.id, name: `${p.first_name} ${p.last_name}` }));
-    if (["enterprise_person", "enterprise_service", "enterprise_address", "enterprise_enterprise"].includes(mode)) return enterprises.map(e => ({ id: e.id, name: e.enterprise_name }));
-    if (["item_enterprise", "item_person"].includes(mode)) return products.map(p => ({ id: p.id, name: p.name }));
+    if (["person_enterprise", "people_enterprises", "person_service", "person_address", "person_person"].includes(mode)) return buildPeopleItems();
+    if (["enterprise_person", "enterprise_service", "enterprise_address", "enterprise_enterprise"].includes(mode)) return buildEnterpriseItems();
+    if (["item_enterprise", "item_person"].includes(mode)) return buildProductItems();
     return [];
   };
 
   const getRightItems = () => {
     if (!modeConfig) return [];
-    if (["person_enterprise", "people_enterprises", "item_enterprise", "enterprise_service", "enterprise_enterprise"].includes(mode)) return enterprises.map(e => ({ id: e.id, name: e.enterprise_name }));
-    if (["enterprise_person", "item_person", "person_person"].includes(mode)) return people.map(p => ({ id: p.id, name: `${p.first_name} ${p.last_name}` }));
+    if (["person_enterprise", "people_enterprises", "item_enterprise", "enterprise_service", "enterprise_enterprise"].includes(mode)) return buildEnterpriseItems();
+    if (["enterprise_person", "item_person", "person_person"].includes(mode)) return buildPeopleItems();
     if (["person_service"].includes(mode)) return services.map(s => ({ id: s.id, name: s.name }));
     if (["person_address", "enterprise_address"].includes(mode)) return addresses.map(a => ({ id: a.id, name: a.label || a.address_line1 }));
     return [];
   };
 
+  // Chip config for left/right panels
+  const getLeftChips = () => {
+    if (["person_enterprise", "people_enterprises", "person_service", "person_address", "person_person"].includes(mode)) return { options: PERSON_TYPE_CHIPS, field: "person_type" };
+    if (["enterprise_person", "enterprise_service", "enterprise_address", "enterprise_enterprise"].includes(mode)) return { options: ENT_TIER_CHIPS, field: "enterprise_tier" };
+    if (["item_enterprise", "item_person"].includes(mode)) return { options: ITEM_TYPE_CHIPS, field: "item_type" };
+    return {};
+  };
+
+  const getRightChips = () => {
+    if (["person_enterprise", "people_enterprises", "item_enterprise", "enterprise_service", "enterprise_enterprise"].includes(mode)) return { options: ENT_TIER_CHIPS, field: "enterprise_tier" };
+    if (["enterprise_person", "item_person", "person_person"].includes(mode)) return { options: PERSON_TYPE_CHIPS, field: "person_type" };
+    return {};
+  };
+
   const isManyToMany = mode === "people_enterprises";
+  const isEnterprisePerson = mode === "enterprise_person";
   const leftItems = getLeftItems();
   const rightItems = getRightItems();
+  const leftChips = getLeftChips();
+  const rightChips = getRightChips();
 
   const toggleLeft = (val) => setLeftSelected(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]);
 
   const getPairsCount = () => {
     if (isManyToMany) return leftSelected.length * rightSelected.length;
+    if (isEnterprisePerson) return leftSelected.length * rightSelected.length;
     return leftSelected.length;
   };
 
@@ -155,22 +253,16 @@ export default function BulkAssignDialog({ open, onClose, onAssign, people = [],
       for (const l of leftSelected) for (const r of rightSelected) {
         pairs.push({ relationship_type: relType, person_name: l, enterprise_name: r, role, start_date: today, status: "active" });
       }
-    } else if (mode === "enterprise_person") {
-      const ent = leftSelected[0];
-      for (const p of rightItems.filter(i => leftSelected.length === 1 ? true : true)) {
-        // leftSelected are enterprise names, rightSingle is the person
-        // Actually in enterprise_person, left = enterprises, right = people
-      }
-      // Rebuild: left = enterprises (single), right = people (multi)
-      for (const p of rightItems.filter(i => true)) {
-        // not used directly, handled via leftSelected & rightSingle or rightSelected
+    } else if (isEnterprisePerson) {
+      // Left = enterprises (multi), Right = people (multi-select)
+      for (const ent of leftSelected) for (const person of rightSelected) {
+        pairs.push({ relationship_type: relType, enterprise_name: ent, person_name: person, role, start_date: today, status: "active" });
       }
     } else {
-      const rightVal = isManyToMany ? null : rightSingle;
+      const rightVal = rightSingle;
       for (const l of leftSelected) {
         const rec = { relationship_type: relType, role, start_date: today, status: "active" };
         if (["person_enterprise", "people_enterprises"].includes(mode)) { rec.person_name = l; rec.enterprise_name = rightVal; }
-        else if (mode === "enterprise_person") { rec.enterprise_name = l; rec.person_name = rightVal; }
         else if (mode === "item_enterprise") { rec.item_name = l; rec.enterprise_name = rightVal; }
         else if (mode === "item_person") { rec.item_name = l; rec.person_name = rightVal; }
         else if (mode === "person_service") { rec.person_name = l; rec.service_name = rightVal; }
@@ -182,11 +274,23 @@ export default function BulkAssignDialog({ open, onClose, onAssign, people = [],
         pairs.push(rec);
       }
     }
-    return pairs;
+
+    // Mark duplicates
+    return pairs.map(p => {
+      const isDuplicate = existingRelationships.some(r =>
+        r.relationship_type === p.relationship_type &&
+        (!p.person_name || r.person_name === p.person_name) &&
+        (!p.enterprise_name || r.enterprise_name === p.enterprise_name) &&
+        (!p.item_name || r.item_name === p.item_name) &&
+        (!p.service_name || r.service_name === p.service_name) &&
+        (!p.location || r.location === p.location)
+      );
+      return { ...p, isDuplicate };
+    });
   };
 
   const handleAssign = async () => {
-    const pairs = buildPairs();
+    const pairs = buildPairs().filter(p => !p.isDuplicate);
     if (pairs.length === 0) return;
     setLoading(true);
     await onAssign(pairs);
@@ -195,12 +299,18 @@ export default function BulkAssignDialog({ open, onClose, onAssign, people = [],
   };
 
   const handleClose = () => {
-    setMode(null); setLeftSelected([]); setRightSelected([]); setRightSingle(""); setRole(""); setPreview(false);
+    setMode(null); setLeftSelected([]); setRightSelected([]); setRightSingle(""); setRole("");
     onClose();
   };
 
   const pairs = mode ? buildPairs() : [];
-  const isValid = leftSelected.length > 0 && (isManyToMany ? rightSelected.length > 0 : !!rightSingle);
+  const newPairs = pairs.filter(p => !p.isDuplicate);
+  const dupPairs = pairs.filter(p => p.isDuplicate);
+  const isValid = leftSelected.length > 0 && (isManyToMany || isEnterprisePerson ? rightSelected.length > 0 : !!rightSingle);
+
+  // Helper to get display names for a pair
+  const pairLeft = (p) => p.person_name || p.enterprise_name || p.item_name || "—";
+  const pairRight = (p) => p.secondary_person || p.secondary_enterprise || (p.person_name && p.enterprise_name ? p.enterprise_name : null) || p.enterprise_name || p.person_name || p.service_name || p.location || "—";
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -248,15 +358,18 @@ export default function BulkAssignDialog({ open, onClose, onAssign, people = [],
                   searchPlaceholder={`Search ${modeConfig.leftLabel}...`}
                   nameKey="name"
                   colorClass={modeConfig.leftColor}
+                  chipOptions={leftChips.options}
+                  chipField={leftChips.field}
                 />
               </div>
 
               {/* Right panel */}
               <div className="bg-slate-50 rounded-xl p-4 flex flex-col">
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-                  Target {modeConfig.rightLabel} {isManyToMany && <span className="text-emerald-600">({rightSelected.length} selected)</span>}
+                  Target {modeConfig.rightLabel}{" "}
+                  {(isManyToMany || isEnterprisePerson) && <span className="text-emerald-600">({rightSelected.length} selected)</span>}
                 </p>
-                {isManyToMany ? (
+                {isManyToMany || isEnterprisePerson ? (
                   <SelectableList
                     items={rightItems}
                     selected={rightSelected}
@@ -264,6 +377,8 @@ export default function BulkAssignDialog({ open, onClose, onAssign, people = [],
                     searchPlaceholder={`Search ${modeConfig.rightLabel}...`}
                     nameKey="name"
                     colorClass={modeConfig.rightColor}
+                    chipOptions={rightChips.options}
+                    chipField={rightChips.field}
                   />
                 ) : (
                   <SingleSelect
@@ -273,6 +388,8 @@ export default function BulkAssignDialog({ open, onClose, onAssign, people = [],
                     searchPlaceholder={`Search ${modeConfig.rightLabel}...`}
                     nameKey="name"
                     colorClass={modeConfig.rightColor}
+                    chipOptions={rightChips.options}
+                    chipField={rightChips.field}
                   />
                 )}
               </div>
@@ -292,29 +409,53 @@ export default function BulkAssignDialog({ open, onClose, onAssign, people = [],
               </div>
             </div>
 
-            {/* Preview summary */}
-            {isValid && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
-                <p className="text-sm font-semibold text-emerald-700 mb-2">
-                  📋 Preview: {getPairsCount()} relationship{getPairsCount() !== 1 ? "s" : ""} will be created
-                </p>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {pairs.slice(0, 10).map((p, i) => (
-                    <p key={i} className="text-xs text-emerald-600">
-                      {p.person_name || p.enterprise_name || p.item_name} → {p.secondary_person || p.secondary_enterprise || p.enterprise_name || p.person_name || p.service_name || p.location}
-                      {p.role && <span className="text-emerald-400"> ({p.role})</span>}
-                    </p>
-                  ))}
-                  {pairs.length > 10 && <p className="text-xs text-emerald-400">...and {pairs.length - 10} more</p>}
+            {/* Preview table */}
+            {isValid && pairs.length > 0 && (
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-200">
+                  <p className="text-xs font-bold text-slate-600">
+                    Preview: {newPairs.length} new · {dupPairs.length > 0 && <span className="text-amber-600">{dupPairs.length} duplicate{dupPairs.length !== 1 ? "s" : ""}</span>}
+                  </p>
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-slate-50 border-b border-slate-100">
+                      <tr>
+                        <th className="text-left px-3 py-1.5 text-slate-500 font-semibold">Left</th>
+                        <th className="text-left px-3 py-1.5 text-slate-500 font-semibold">Right</th>
+                        <th className="text-left px-3 py-1.5 text-slate-500 font-semibold">Role</th>
+                        <th className="text-left px-3 py-1.5 text-slate-500 font-semibold">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pairs.slice(0, 20).map((p, i) => (
+                        <tr key={i} className={`border-b border-slate-50 ${p.isDuplicate ? "bg-amber-50" : "bg-white"}`}>
+                          <td className="px-3 py-1.5 font-medium text-slate-700 truncate max-w-[120px]">{pairLeft(p)}</td>
+                          <td className="px-3 py-1.5 text-slate-600 truncate max-w-[120px]">{pairRight(p)}</td>
+                          <td className="px-3 py-1.5 text-slate-400">{p.role || "—"}</td>
+                          <td className="px-3 py-1.5">
+                            {p.isDuplicate ? (
+                              <span className="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 font-semibold text-[10px]">Already exists</span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700 font-semibold text-[10px]">New</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {pairs.length > 20 && (
+                        <tr><td colSpan={4} className="px-3 py-1.5 text-slate-400 text-center">...and {pairs.length - 20} more</td></tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
 
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={handleClose}>Cancel</Button>
-              <Button disabled={!isValid || loading} onClick={handleAssign}
+              <Button disabled={!isValid || loading || newPairs.length === 0} onClick={handleAssign}
                 className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
-                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Assigning...</> : `Assign ${getPairsCount()} Relationship${getPairsCount() !== 1 ? "s" : ""}`}
+                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Assigning...</> : `Assign ${newPairs.length} Relationship${newPairs.length !== 1 ? "s" : ""}`}
               </Button>
             </div>
           </div>

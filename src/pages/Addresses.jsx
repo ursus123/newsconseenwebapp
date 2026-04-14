@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
+import AddressAnalytics from "@/components/addresses/AddressAnalytics";
 import {
   ADDRESS_FIELDS, ADDRESS_MAPPING_RULES, ADDRESS_TEMPLATE_EXAMPLE,
   ADDRESS_TEMPLATE_INSTRUCTIONS, validateAddress, transformAddress,
@@ -317,7 +318,7 @@ export default function Addresses() {
       </div>
 
       {viewMode === "map" ? (
-        <AddressLeafletMap addresses={processedAddresses} onAddressClick={(row) => setDetailAddress(row)} />
+        <AddressLeafletMap addresses={processedAddresses} onAddressClick={(row) => setDetailAddress(row)} onAutoGeocode={handleGeocodeAll} />
       ) : (
         <>
           <SearchFilterBar
@@ -367,6 +368,7 @@ export default function Addresses() {
         onImport={(row) => base44.entities.Address.create(withScope(row))}
         currentUser={currentUser} previewColumns={ADDR_PREVIEW_COLS} requiredField="address_line1"
       />
+      <AddressAnalytics addresses={addresses} currentUser={currentUser} />
     </div>
   );
 }

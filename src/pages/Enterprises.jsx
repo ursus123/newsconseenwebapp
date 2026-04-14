@@ -17,6 +17,7 @@ import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import BulkActionBar from "../components/shared/BulkActionBar";
+import EnterprisesAnalytics from "@/components/enterprise/EnterprisesAnalytics";
 import { useToast } from "@/components/ui/use-toast";
 import SubEnterprisesPanel from "@/components/enterprise/SubEnterprisesPanel";
 import EnterpriseCard from "@/components/enterprise/EnterpriseCard";
@@ -425,6 +426,7 @@ export default function Enterprises() {
         previewColumns={ENT_PREVIEW_COLS}
         requiredField="enterprise_name"
       />
+      <EnterprisesAnalytics enterprises={enterprises} currentUser={currentUser} />
     </div>
   );
 }

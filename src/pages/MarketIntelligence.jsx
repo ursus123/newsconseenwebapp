@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import IntelligenceHub from "@/components/marketintelligence/IntelligenceHub";
 
 import { base44 } from "@/api/base44Client";
@@ -390,6 +390,40 @@ export default function MarketIntelligence() {
     refetchOnMount: "always",
   });
 
+  const { data: allRelationships = [] } = useQuery({
+    queryKey: ["mi_relationships", currentUser?.company_id],
+    queryFn: () => listFn(base44.entities.Relationship),
+    enabled: !!currentUser?.company_id,
+    staleTime: 0,
+  });
+
+  const { data: allAddresses = [] } = useQuery({
+    queryKey: ["mi_addresses", currentUser?.company_id],
+    queryFn: () => listFn(base44.entities.Address),
+    enabled: !!currentUser?.company_id,
+    staleTime: 0,
+  });
+
+  // Build enterprise → coordinates map via enterprise_address relationships
+  const enterpriseCoords = useMemo(() => {
+    const coords = {};
+    const entAddrRels = allRelationships.filter(
+      r => r.relationship_type === "enterprise_address" && r.enterprise_name && r.location
+    );
+    for (const rel of entAddrRels) {
+      const addr = allAddresses.find(
+        a => (a.label === rel.location || a.address_line1 === rel.location) && a.latitude && a.longitude
+      );
+      if (addr && !coords[rel.enterprise_name]) {
+        coords[rel.enterprise_name] = {
+          latitude: parseFloat(addr.latitude),
+          longitude: parseFloat(addr.longitude),
+        };
+      }
+    }
+    return coords;
+  }, [allRelationships, allAddresses]);
+
   const saveToHistory = useCallback((location, businessType, score) => {
     if (!currentUser?.email) return;
     const entry   = { location, businessType, score, ts: Date.now() };
@@ -587,8 +621,11 @@ export default function MarketIntelligence() {
 
     if (ovLat != null && ovLon != null) {
       return myEnterprises.filter(e => {
-        if (e.latitude != null && e.longitude != null) {
-          return distKm(ovLat, ovLon, e.latitude, e.longitude) <= radiusKm;
+        const resolved = enterpriseCoords[e.enterprise_name];
+        const lat = e.latitude ?? resolved?.latitude;
+        const lon = e.longitude ?? resolved?.longitude;
+        if (lat != null && lon != null) {
+          return distKm(ovLat, ovLon, lat, lon) <= radiusKm;
         }
         // Fallback: string match on city/region/country if no coords
         const loc = results.location.toLowerCase();
@@ -874,18 +911,25 @@ export default function MarketIntelligence() {
                     <span className="ml-auto text-[10px] font-normal text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Live from python_layer</span>
                   </h3>
                   <div className="flex flex-col gap-3">
-                    {nearbyEnterprises.length > 0 && nearbyEnterprises.map(e => (
-                      <div key={e.id} className="flex items-start justify-between gap-4 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
-                        <div>
-                          <p className="font-semibold text-slate-800 text-sm">{e.enterprise_name}</p>
-                          <p className="text-xs text-slate-500">{[e.city, e.region, e.country].filter(Boolean).join(", ")}</p>
-                          {e.status && <p className="text-xs text-emerald-600 font-medium mt-0.5">{e.status}</p>}
+                    {nearbyEnterprises.length > 0 && nearbyEnterprises.map(e => {
+                      const resolvedCoords = enterpriseCoords[e.enterprise_name];
+                      const hasDirectCoords = e.latitude != null && e.longitude != null;
+                      return (
+                        <div key={e.id} className="flex items-start justify-between gap-4 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                          <div>
+                            <p className="font-semibold text-slate-800 text-sm">{e.enterprise_name}</p>
+                            <p className="text-xs text-slate-500">{[e.city, e.region, e.country].filter(Boolean).join(", ")}</p>
+                            {e.status && <p className="text-xs text-emerald-600 font-medium mt-0.5">{e.status}</p>}
+                            {!hasDirectCoords && resolvedCoords && (
+                              <p className="text-[10px] text-indigo-500 mt-0.5">Coordinates resolved via linked address</p>
+                            )}
+                          </div>
+                          <Link to={createPageUrl("Enterprises")} className="text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1 whitespace-nowrap shrink-0">
+                            View <ExternalLink className="w-3 h-3" />
+                          </Link>
                         </div>
-                        <Link to={createPageUrl("Enterprises")} className="text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1 whitespace-nowrap shrink-0">
-                          View <ExternalLink className="w-3 h-3" />
-                        </Link>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     {/* Analytics stats grid */}
                     <div className="grid grid-cols-3 gap-3 mt-1 pt-3 border-t border-slate-100">

@@ -27,6 +27,7 @@ import { differenceInDays, parseISO, isValid } from "date-fns";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
+import ProductsAnalytics from "@/components/products/ProductsAnalytics";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
@@ -447,6 +448,7 @@ export default function Products() {
           qc.refetchQueries({ queryKey: ["products"] });
         }}
       />
+      <ProductsAnalytics products={products} currentUser={currentUser} />
     </div>
   );
 }

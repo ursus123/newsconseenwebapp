@@ -25,7 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Pencil, Trash2, Calendar, User, Building2, CheckCircle, AlertCircle, Clock, ShieldCheck, Filter, LayoutGrid, List, CalendarDays, X, Upload, Search, Tag } from "lucide-react";
+import { Pencil, Trash2, Calendar, User, Building2, CheckCircle, AlertCircle, Clock, ShieldCheck, Filter, LayoutGrid, List, CalendarDays, X, Upload, Search, Tag, BarChart2 } from "lucide-react";
+import TasksAnalytics from "@/components/tasks/TasksAnalytics";
 import { tagColor } from "@/components/shared/TagInput";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
@@ -232,6 +233,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkAssignee, setBulkAssignee] = useState("");
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const qc = useQueryClient();
   const perms = usePermissions(currentUser);
   const withScope = useWithScope(currentUser);
@@ -415,13 +417,19 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
             </Button>
           )}
         </PageHeader>
-        <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-          {[{ key: "kanban", icon: LayoutGrid, label: "Kanban" }, { key: "list", icon: List, label: "List" }, { key: "timeline", icon: CalendarDays, label: "Timeline" }, { key: "calendar", icon: Calendar, label: "Calendar" }].map(({ key, icon: Icon, label }) => (
-            <button key={key} onClick={() => setViewMode(key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === key ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700"}`}>
-              <Icon className="w-3.5 h-3.5" /> {label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+            {[{ key: "kanban", icon: LayoutGrid, label: "Kanban" }, { key: "list", icon: List, label: "List" }, { key: "timeline", icon: CalendarDays, label: "Timeline" }, { key: "calendar", icon: Calendar, label: "Calendar" }].map(({ key, icon: Icon, label }) => (
+              <button key={key} onClick={() => setViewMode(key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === key ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700"}`}>
+                <Icon className="w-3.5 h-3.5" /> {label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setAnalyticsOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-700 transition-all shadow-sm">
+            <BarChart2 className="w-3.5 h-3.5" /> Analytics
+          </button>
         </div>
       </div>
 
@@ -613,6 +621,20 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         previewColumns={TASK_PREVIEW_COLS}
         requiredField="title"
       />
+
+      {analyticsOpen && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white shadow-sm">
+            <p className="font-bold text-slate-800">Task Analytics</p>
+            <button onClick={() => setAnalyticsOpen(false)} className="p-1 rounded-lg hover:bg-slate-100 transition-colors">
+              <X className="w-5 h-5 text-slate-500" />
+            </button>
+          </div>
+          <div className="p-6">
+            <TasksAnalytics tasks={tasks} currentUser={currentUser} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
