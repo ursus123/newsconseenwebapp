@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import { BarChart2, Code2, Pin, Check, Table2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 
 export default function ChartCard({ title, description, sql, currentUser, entity, tableData, children }) {
   const [view, setView] = useState("chart");
   const [pinned, setPinned] = useState(false);
   const [pinning, setPinning] = useState(false);
+  const navigate = useNavigate();
 
   const handlePin = async () => {
     if (pinning || pinned) return;
@@ -24,8 +26,10 @@ export default function ChartCard({ title, description, sql, currentUser, entity
   };
 
   const handleOpenInQB = () => {
-    if (sql) localStorage.setItem("qb_preload_sql", sql);
-    window.location.hash = "/Reports";
+    if (!sql) return;
+    sessionStorage.setItem("qb_load_sql", sql);
+    sessionStorage.setItem("qb_load_title", title);
+    navigate("/QueryBuilder");
   };
 
   const rows = Array.isArray(tableData) ? tableData : [];
