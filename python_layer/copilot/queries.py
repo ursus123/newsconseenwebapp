@@ -2624,6 +2624,31 @@ _JOIN_CONFIGS = {
         "right_key": "enterprise_name",
         "alt_right": "counterparty_name",
     },
+    ("enterprises", "relationships"): {
+        "left_key":  "name",
+        "right_key": "enterprise_name",
+        "alt_right": "related_enterprise_name",
+    },
+    ("enterprises", "addresses"): {
+        "left_key":  "name",
+        "right_key": "enterprise_name",
+        "alt_right": None,
+    },
+    ("people", "addresses"): {
+        "left_key":  "full_name",
+        "right_key": "person_name",
+        "alt_right": None,
+    },
+    ("products", "transactions"): {
+        "left_key":  "name",
+        "right_key": "item_name",
+        "alt_right": "product_name",
+    },
+    ("tasks", "people"): {
+        "left_key":  "assigned_to",
+        "right_key": "full_name",
+        "alt_right": "name",
+    },
 }
 
 
@@ -2643,7 +2668,9 @@ def get_entity_join(
               "list all relationships for people at Enterprise Y".
 
     Supported pairs: people+tasks, people+transactions, people+relationships,
-                     enterprises+people, enterprises+tasks, enterprises+transactions.
+                     people+addresses, enterprises+people, enterprises+tasks,
+                     enterprises+transactions, enterprises+relationships,
+                     enterprises+addresses, products+transactions, tasks+people.
 
     primary_filter: filter value applied to the primary entity's name/filter column.
     secondary_status_filter: status filter on the secondary entity.
@@ -2679,7 +2706,13 @@ def get_entity_join(
     if not primary_rows:
         # Base44 fallback
         try:
-            fn_map = {"people": _b44_people, "enterprises": _b44_enterprises}
+            fn_map = {
+                "people":      _b44_people,
+                "enterprises": _b44_enterprises,
+                "tasks":       _b44_tasks,
+                "transactions": _b44_transactions,
+                "products":    lambda cid: _pd2.DataFrame(_read_raw_table("products", cid)),
+            }
             df = fn_map[primary_entity](company_id)
             if not df.empty:
                 if primary_filter:
@@ -2711,7 +2744,10 @@ def get_entity_join(
                 "tasks":         _b44_tasks,
                 "transactions":  _b44_transactions,
                 "people":        _b44_people,
+                "enterprises":   _b44_enterprises,
                 "relationships": lambda cid: _pd2.DataFrame(_read_raw_table("relationships", cid)),
+                "addresses":     lambda cid: _pd2.DataFrame(_read_raw_table("addresses", cid)),
+                "products":      lambda cid: _pd2.DataFrame(_read_raw_table("products", cid)),
             }
             fn = fn_map.get(secondary_entity)
             if fn:
@@ -4016,7 +4052,9 @@ TOOL_DEFINITIONS = [
             "'Show clients at this branch with unpaid invoices', "
             "'Which enterprises have pending tasks this week?'. "
             "Supported pairs: people+tasks, people+transactions, people+relationships, "
-            "enterprises+people, enterprises+tasks, enterprises+transactions."
+            "people+addresses, enterprises+people, enterprises+tasks, "
+            "enterprises+transactions, enterprises+relationships, enterprises+addresses, "
+            "products+transactions, tasks+people."
         ),
         "input_schema": {
             "type": "object",
@@ -4024,12 +4062,12 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "primary_entity": {
                     "type": "string",
-                    "enum": ["people", "enterprises"],
+                    "enum": ["people", "enterprises", "products", "tasks"],
                     "description": "The primary (left-side) entity to join from.",
                 },
                 "secondary_entity": {
                     "type": "string",
-                    "enum": ["tasks", "transactions", "people", "relationships"],
+                    "enum": ["tasks", "transactions", "people", "relationships", "addresses"],
                     "description": "The secondary (right-side) entity to join to.",
                 },
                 "primary_filter": {
