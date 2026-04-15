@@ -3062,6 +3062,51 @@ def save_copilot_memory(
         return {"saved": False, "reason": str(e)}
 
 
+def list_copilot_memory(company_id: str) -> dict:
+    """
+    Return all persistent memory entries saved for this operator.
+    Used for: "what do you remember about us?", "show me your saved memories",
+              "what preferences have I set?", "list your memory".
+    """
+    entries = load_copilot_memory(company_id)
+    return {
+        "count":   len(entries),
+        "entries": entries,
+        "note":    (
+            "These memories are applied to every conversation automatically. "
+            "Use delete_copilot_memory to remove any entry by its key."
+        ) if entries else "No memories saved yet. Use save_copilot_memory to add one.",
+    }
+
+
+def delete_copilot_memory(company_id: str, key: str) -> dict:
+    """
+    Delete a specific persistent memory entry by its key.
+    Used for: "forget that", "remove the memory about X",
+              "delete the fiscal_year_start memory", "clear preference Y".
+    """
+    engine = get_engine_safe()
+    if not engine:
+        return {"deleted": False, "reason": "database unavailable"}
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                DELETE FROM analytics.copilot_memory
+                WHERE company_id = :cid AND key = :key
+            """), {"cid": company_id, "key": key})
+            conn.commit()
+            affected = result.rowcount if hasattr(result, "rowcount") else 1
+        if affected:
+            logger.info("delete_copilot_memory: deleted '%s' for company %s", key, company_id)
+            return {"deleted": True, "key": key,
+                    "message": f"Memory '{key}' has been forgotten. It will not affect future conversations."}
+        return {"deleted": False, "key": key,
+                "message": f"No memory found with key '{key}'. Use list_copilot_memory to see saved keys."}
+    except Exception as e:
+        logger.warning("delete_copilot_memory: %s", e)
+        return {"deleted": False, "reason": str(e)}
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # WEB-GROUNDED TOOLS — public data sources, no API key required
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -4234,6 +4279,40 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "list_copilot_memory",
+        "description": (
+            "List all persistent memory entries saved for this operator. "
+            "Use this when the operator asks: "
+            "'What do you remember about us?', 'Show me your saved memories', "
+            "'What preferences have I set?', 'What standing instructions do you have?'. "
+            "Returns all keys, values, and memory types currently stored."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "delete_copilot_memory",
+        "description": (
+            "Delete a specific persistent memory entry by its key. "
+            "Use this when the operator says: "
+            "'Forget that', 'Remove the memory about X', "
+            "'Delete the fiscal_year_start preference', 'Clear that instruction'. "
+            "Use list_copilot_memory first if you need to confirm the exact key."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["key"],
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "The exact key of the memory entry to delete.",
+                },
+            },
+        },
+    },
+    {
         "name": "find_people_records",
         "description": (
             "Search for individual people records by name, type, status, or linked enterprise. "
@@ -5077,6 +5156,8 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "request_action":               request_action,
         # Persistent memory
         "save_copilot_memory":          save_copilot_memory,
+        "list_copilot_memory":          list_copilot_memory,
+        "delete_copilot_memory":        delete_copilot_memory,
         # Gap tools
         "get_kpi_goals":                get_kpi_goals,
         "get_anomaly_report":           get_anomaly_report,
