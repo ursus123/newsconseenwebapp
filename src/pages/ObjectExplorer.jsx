@@ -1233,11 +1233,9 @@ export default function ObjectExplorer() {
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data) return;
-        const scores = data.by_entity || {};
-        setDqScores(scores);
+        setDqScores(data.by_entity || {});
         setDqIssues(data.issues || []);
-        const vals = Object.values(scores).filter(v => v != null);
-        if (vals.length) setAvgScore(Math.round(vals.reduce((a, b) => a + b, 0) / vals.length));
+        setAvgScore(data.overall_score ?? null);
       })
       .catch(() => {});
   }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
