@@ -673,6 +673,7 @@ const { data } = useQuery({ queryFn: () => fetch(`${RAILWAY_URL}/open-data/excha
 - Use PostgreSQL for analytics acceleration and clean data export — never as the sole data source
 - Keep DataModels.jsx and ObjectExplorer.jsx as accurate technical/imagery references (see rule below)
 - Declare `backend` + `APP_ONTOLOGY` for every app added to APP_REGISTRY (see Applications rule below)
+- Add every new PostgreSQL table to etl/setup.py or enrichment/setup.py so it pre-exists from startup (see Datamart DDL rule below)
 
 ### Applications — ontology and datamart as backend (RULE)
 
@@ -707,6 +708,54 @@ external API, or bespoke backend:
 2. Add to APP_ONTOLOGY with the entities it reads/writes
 3. If ontology-backed: implement company_id scoping and ETL trigger after mutations
 4. If datamart-backed: implement three-tier fallback
+
+### Datamart DDL — pre-create all tables at startup (RULE)
+
+Every PostgreSQL table in the datamart must be declared in a startup DDL file and
+pre-created when the python_layer boots — not created lazily on the first ETL write.
+
+**Why this matters:**
+Pandas `to_sql(if_exists="replace")` and `to_sql(if_exists="append")` only create a table
+when the first data batch is written. Until then, the table does not exist in PostgreSQL.
+This means:
+- DataModels.jsx PostgreSQL view shows a schema that does not actually exist in the DB
+- QueryBuilder SQL editor returns "relation does not exist" errors
+- Copilot query tools fail silently — the agent has no schema knowledge to reason about
+- Three-tier fallback logs spurious errors that mask real failures
+
+Pre-creating tables with full column schemas at startup gives the copilot and query engine
+complete schema awareness from the first deploy, even before any operator has loaded data.
+The agent can reason about what *could* be in the datamart, not just what currently is.
+
+**Two DDL files — keep them in sync with any new table:**
+
+| File | Covers |
+|------|--------|
+| `python_layer/etl/setup.py` → `ensure_all_analytics_tables(engine)` | All `raw.*` and `analytics.*` tables: 9 raw, 9 core analytics, 11 enhanced analytics, `copilot_memory` |
+| `python_layer/enrichment/setup.py` → `ensure_enrichment_tables(engine)` | All 5 `analytics.*_enrichment` tables with Phase A + Phase B columns |
+
+Both are called in `app.py` lifespan on every startup. Both use `CREATE TABLE IF NOT EXISTS` — safe on every redeploy.
+
+**Pattern for every new table:**
+```python
+# python_layer/etl/setup.py  (or enrichment/setup.py for enrichment tables)
+_NEW_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS analytics.my_new_table (
+    company_id      TEXT,
+    snapshot_date   DATE,
+    -- ... all columns, all nullable
+    loaded_at       TIMESTAMP
+)
+"""
+# Add to the relevant _DDL list so ensure_*() picks it up automatically
+```
+
+**Rules:**
+- Every `CREATE TABLE IF NOT EXISTS` added to any python_layer file must also be added to
+  `etl/setup.py` or `enrichment/setup.py` so it pre-exists from startup
+- All columns must be nullable — startup DDL creates empty shells, not schema-enforced tables
+- After adding a new table to a DDL file, update DataModels.jsx to match (see rule below)
+- Never rely on `to_sql()` as the sole mechanism for table creation
 
 ### DataModels and ObjectExplorer — living technical references (RULE)
 
