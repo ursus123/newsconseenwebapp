@@ -210,6 +210,11 @@ class BaseConnector(ABC):
                 load_results["failed"],
             )
 
+            # Fire ETL for every entity that received records so that
+            # analytics.*, copilot, alerts, and dashboards reflect the
+            # new data immediately — not after the next manual ETL run.
+            self._trigger_etl(transformed)
+
             status = "completed" if not self.run_stats["unmapped"] else "needs_review"
 
         except Exception as e:
@@ -351,6 +356,72 @@ class BaseConnector(ABC):
             "connector: created %s external_id=%s", entity_name, external_id
         )
         return "created"
+
+    def _trigger_etl(self, transformed: dict[str, list]) -> None:
+        """
+        Fire ETL refresh for every entity that received records.
+
+        Called fire-and-forget after load() so that analytics.*,
+        copilot, alerts, and dashboard stat cards reflect the new
+        data without waiting for the next scheduled ETL run.
+
+        Entity name → ETL endpoint mapping mirrors the cron pipeline.
+        Failures are logged but never surfaced to the caller — ETL
+        is best-effort from the connector's perspective; the data
+        is already safely in Base44.
+        """
+        import os
+        import threading
+
+        # Entity name in transformed dict → ETL slug used in /load/{slug}-summary
+        ENTITY_ETL_SLUGS = {
+            "people":        "people",
+            "enterprises":   "enterprise",
+            "products":      "product",
+            "transactions":  "transaction",
+            "relationships": "relationship",
+            "tasks":         "task",
+            "addresses":     "address",
+            "services":      "service",
+        }
+
+        railway_url = os.getenv(
+            "RAILWAY_URL",
+            "https://newsconseenwebapp-production.up.railway.app",
+        )
+
+        entities_written = [e for e, records in transformed.items() if records]
+        if not entities_written:
+            return
+
+        def _fire():
+            import requests as req
+            for entity in entities_written:
+                slug = ENTITY_ETL_SLUGS.get(entity)
+                if not slug:
+                    continue
+                try:
+                    resp = req.post(
+                        f"{railway_url}/load/{slug}-summary",
+                        params={"company_id": self.company_id},
+                        timeout=60,
+                    )
+                    if resp.ok:
+                        logger.info(
+                            "connector ETL triggered: /load/%s-summary (company=%s)",
+                            slug, self.company_id,
+                        )
+                    else:
+                        logger.warning(
+                            "connector ETL trigger returned %d for %s: %s",
+                            resp.status_code, slug, resp.text[:200],
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "connector ETL trigger failed for %s — %s", slug, exc
+                    )
+
+        threading.Thread(target=_fire, daemon=True).start()
 
     def _find_by_external_id(self, url: str, external_id: str) -> dict | None:
         """
