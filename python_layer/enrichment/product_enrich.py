@@ -8,6 +8,7 @@ Enrich Product records with:
 Writes to analytics.product_enrichment — one row per product.
 """
 
+import json
 import logging
 import pandas as pd
 
@@ -56,12 +57,31 @@ def enrich_products(products_df: pd.DataFrame, company_id: str, force: bool = Fa
             "item_class":   str(p.get("item_class", "") or ""),
         }
 
-        # ── Barcode enrichment ─────────────────────────────────────────────────
+        # ── Barcode enrichment (Phase A) ───────────────────────────────────────
         if barcode:
             barcode_result = lookup_barcode(barcode)
             row.update(barcode_result)
         else:
             row["enrichment_status"] = "no_barcode"
+
+        # ── Phase B: domain-specific enrichment ────────────────────────────────
+        try:
+            from enrichment.product_domain.dispatcher import dispatch_product
+            domain_result = dispatch_product(name or "", dict(p))
+            if domain_result:
+                row["domain_data"]       = json.dumps(domain_result)
+                row["domain_enriched_by"] = domain_result.get("_source", "")
+                # Promote key fields to top-level columns for easy querying
+                for key in ("drug_class", "drug_rxnorm_name", "drug_ingredients",
+                            "food_category", "food_brand", "calories_per_100g",
+                            "vehicle_make", "vehicle_model", "recall_count",
+                            "chem_formula", "chem_molecular_weight",
+                            "fda_device_class", "fda_medical_specialty",
+                            "pkg_name", "pkg_latest_version", "pkg_license"):
+                    if key in domain_result:
+                        row[key] = domain_result[key]
+        except Exception as _de:
+            logger.debug("product domain dispatch skipped: %s", _de)
 
         # ── FX normalisation ───────────────────────────────────────────────────
         if price_s is not None:

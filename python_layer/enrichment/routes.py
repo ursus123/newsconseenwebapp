@@ -184,3 +184,106 @@ def get_company_lookup(
         return lookup_company(name, country)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Company lookup failed: {exc}")
+
+
+# ------------------------------------------------------------------
+# Phase B — Domain-specific open-data proxy endpoints
+# ------------------------------------------------------------------
+
+@router.get("/open-data/medication/{name}")
+def get_medication(name: str):
+    """Drug data from NIH RxNorm: RxCUI, generic name, drug class, ingredients."""
+    try:
+        from enrichment.product_domain.medications import enrich_medication
+        return enrich_medication(name, {})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"RxNorm lookup failed: {exc}")
+
+
+@router.get("/open-data/food/{name}")
+def get_food(name: str):
+    """Food/nutrition data from USDA FoodData Central: calories, macros, food group."""
+    try:
+        from enrichment.product_domain.food import enrich_food
+        return enrich_food(name, {})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"USDA FoodData lookup failed: {exc}")
+
+
+@router.get("/open-data/vehicle/vin/{vin}")
+def get_vehicle_vin(vin: str):
+    """Decode a 17-character VIN via NHTSA vPIC: make, model, year, fuel type."""
+    try:
+        from enrichment.product_domain.vehicles import enrich_vehicle
+        return enrich_vehicle(vin, {"vin": vin})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"NHTSA VIN decode failed: {exc}")
+
+
+@router.get("/open-data/vehicle/recalls")
+def get_vehicle_recalls(
+    make: str = Query(...),
+    model: str = Query(...),
+):
+    """NHTSA safety recall history for a make + model combination."""
+    try:
+        from enrichment.product_domain.vehicles import enrich_vehicle
+        return enrich_vehicle(f"{make} {model}", {"make": make, "model": model})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"NHTSA recalls lookup failed: {exc}")
+
+
+@router.get("/open-data/chemical/{name}")
+def get_chemical(name: str):
+    """Chemical compound data from PubChem: formula, molecular weight, GHS hazard."""
+    try:
+        from enrichment.product_domain.chemicals import enrich_chemical
+        return enrich_chemical(name, {})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"PubChem lookup failed: {exc}")
+
+
+@router.get("/open-data/medical-device/{name}")
+def get_medical_device(name: str):
+    """FDA device classification: device class (I/II/III), product code, specialty."""
+    try:
+        from enrichment.product_domain.devices import enrich_device
+        return enrich_device(name, {})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"FDA openFDA lookup failed: {exc}")
+
+
+@router.get("/open-data/software/{name}")
+def get_software(name: str):
+    """Software package data from npm registry and PyPI: version, license, description."""
+    try:
+        from enrichment.product_domain.software import enrich_software
+        return enrich_software(name, {})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Package registry lookup failed: {exc}")
+
+
+@router.get("/open-data/npi/organization")
+def get_npi_organization(
+    name: str = Query(...),
+    state: Optional[str] = Query(None, description="US state code, e.g. NY, CA"),
+):
+    """NPPES NPI lookup for healthcare organisations: NPI number, taxonomy, license."""
+    try:
+        from enrichment.enterprise_domain.npi_lookup import lookup_npi_organization
+        return lookup_npi_organization(name, state=state)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"NPI organisation lookup failed: {exc}")
+
+
+@router.get("/open-data/npi/provider")
+def get_npi_provider(
+    name: str = Query(...),
+    state: Optional[str] = Query(None, description="US state code, e.g. NY, CA"),
+):
+    """NPPES NPI lookup for individual healthcare providers: NPI number, taxonomy, license."""
+    try:
+        from enrichment.enterprise_domain.npi_lookup import lookup_npi_person
+        return lookup_npi_person(name, state=state)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"NPI provider lookup failed: {exc}")

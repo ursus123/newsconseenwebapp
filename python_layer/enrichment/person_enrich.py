@@ -59,6 +59,22 @@ def enrich_people(people_df: pd.DataFrame, company_id: str, force: bool = False)
             row["email_valid"]  = None
             row["email_domain"] = None
 
+        # ── Phase B: domain-specific enrichment (healthcare → NPI) ────────────
+        try:
+            from enrichment.person_domain.dispatcher import dispatch_person
+            person_name = row.get("person_name", "")
+            domain_result = dispatch_person(person_name, dict(p))
+            if domain_result:
+                import json
+                row["domain_data"]       = json.dumps(domain_result)
+                row["domain_enriched_by"] = domain_result.get("_source", "")
+                for key in ("npi_number", "npi_taxonomy_code", "npi_taxonomy_desc",
+                            "npi_state", "npi_enumeration_date", "npi_status"):
+                    if key in domain_result:
+                        row[key] = domain_result[key]
+        except Exception as _de:
+            logger.debug("person domain dispatch skipped: %s", _de)
+
         row["enriched_at"] = pd.Timestamp.now(tz="UTC").isoformat()
         rows.append(row)
 

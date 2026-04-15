@@ -49,6 +49,21 @@ def enrich_enterprises(enterprises_df: pd.DataFrame, company_id: str, force: boo
             row["enrichment_status"] = "skipped"
             row["reason"]            = "name_too_short"
 
+        # ── Phase B: domain-specific enrichment (healthcare → NPI) ────────────
+        try:
+            from enrichment.enterprise_domain.dispatcher import dispatch_enterprise
+            domain_result = dispatch_enterprise(name, dict(e))
+            if domain_result:
+                import json
+                row["domain_data"]       = json.dumps(domain_result)
+                row["domain_enriched_by"] = domain_result.get("_source", "")
+                for key in ("npi_number", "npi_taxonomy_code", "npi_taxonomy_desc",
+                            "npi_state", "npi_enumeration_date", "npi_status"):
+                    if key in domain_result:
+                        row[key] = domain_result[key]
+        except Exception as _de:
+            logger.debug("enterprise domain dispatch skipped: %s", _de)
+
         row["enriched_at"] = pd.Timestamp.now(tz="UTC").isoformat()
         rows.append(row)
 
