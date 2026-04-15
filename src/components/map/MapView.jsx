@@ -16,16 +16,32 @@ export default function MapView() {
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [selectedMarker, setSelectedMarker] = useState(null);
 
-  // Fetch enterprises
-  const { data: enterprises = [], isLoading: enterprisesLoading } = useQuery({
-    queryKey: ["enterprises-map"],
-    queryFn: () => base44.entities.Enterprise.list(),
+  // Current user — needed for company_id scoping
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
-  // Fetch addresses
+  const companyId = currentUser?.company_id;
+
+  // Fetch enterprises — scoped to this tenant
+  const { data: enterprises = [], isLoading: enterprisesLoading } = useQuery({
+    queryKey: ["enterprises-map", companyId],
+    queryFn: () => base44.entities.Enterprise.filter({ company_id: companyId }),
+    enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+
+  // Fetch addresses — scoped to this tenant
   const { data: addresses = [], isLoading: addressesLoading } = useQuery({
-    queryKey: ["addresses-map"],
-    queryFn: () => base44.entities.Address.list(),
+    queryKey: ["addresses-map", companyId],
+    queryFn: () => base44.entities.Address.filter({ company_id: companyId }),
+    enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // Combine and filter location data

@@ -202,7 +202,7 @@ const PIE_COLORS = ["#10b981","#3b82f6","#f59e0b","#f43f5e","#8b5cf6","#06b6d4",
 // ────────────────────────────────────────────────────────────────────────────
 // MAIN COMPONENT
 // ────────────────────────────────────────────────────────────────────────────
-export default function IntelligenceHub({ currentUser }) {
+export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
   const [activeTab, setActiveTab] = useState("map");
 
   // State
@@ -329,8 +329,8 @@ export default function IntelligenceHub({ currentUser }) {
 
         const updated = myEnterprises.map(ent => {
           if (ent.latitude && ent.longitude) return ent;
-          // Try by ID first, then by name
-          const coords = enterpriseCoords.get(ent.id) || enterpriseCoords.get(ent.enterprise_name);
+          // Keys are enterprise_name strings — ID lookup never matches, name lookup is correct
+          const coords = enterpriseCoords.get(ent.enterprise_name);
           if (!coords) return ent;
           return { ...ent, latitude: coords.latitude, longitude: coords.longitude, _needsGeocode: false, _coordSource: "address_relationship" };
         });
@@ -360,6 +360,26 @@ export default function IntelligenceHub({ currentUser }) {
       setMyEnterprises(updated);
     })();
   }, [myEnterprises.length]);
+
+  // Apply parent-supplied coord hints (from MarketIntelligence enterpriseCoords + nominatimCoords)
+  // whenever enrichedCoords changes. This handles the case where parent resolves coords after
+  // IntelligenceHub's own enterprise load has already run.
+  useEffect(() => {
+    if (!myEnterprises.length) return;
+    const entries = Object.entries(enrichedCoords);
+    if (!entries.length) return;
+    let changed = false;
+    const updated = /** @type {any[]} */ (myEnterprises).map(ent => {
+      if (ent.latitude && ent.longitude) return ent;
+      const match = entries.find(([k]) => k === ent.enterprise_name);
+      if (!match) return ent;
+      const hint = match[1];
+      if (!hint || !hint.latitude || !hint.longitude) return ent;
+      changed = true;
+      return { ...ent, latitude: hint.latitude, longitude: hint.longitude, _needsGeocode: false, _coordSource: "parent" };
+    });
+    if (changed) setMyEnterprises(updated);
+  }, [enrichedCoords]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Geocode selected enterprise on-demand if still missing coords
   async function ensureCoords(ent) {

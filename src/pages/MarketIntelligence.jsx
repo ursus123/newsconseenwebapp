@@ -818,7 +818,7 @@ export default function MarketIntelligence() {
 
       {/* ── Intelligence Hub mode ── */}
       {pageMode === "intelligence" && (
-        <IntelligenceHub currentUser={currentUser} />
+        <IntelligenceHub currentUser={currentUser} enrichedCoords={{ ...enterpriseCoords, ...nominatimCoords }} />
       )}
 
       {/* ── Location Research mode ── */}

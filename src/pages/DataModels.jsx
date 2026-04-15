@@ -305,6 +305,536 @@ const API_TABLES = [
   },
 ];
 
+// ─── PostgreSQL Schema View — raw.* tables (verbatim Base44 mirrors) ──────────
+// Written by ETL extract phase. company_id = ALL tenants (no filter on extract).
+// NOTE: All joins are name-based string matches, NOT SQL FK constraints.
+const PG_RAW_TABLES = [
+  {
+    id: "raw_people", label: "raw.people", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Person records from Base44. Name-based joins only — no FK constraints.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "first_name / last_name", type: "TEXT" },
+      { name: "person_type", type: "TEXT: staff|client|contact|volunteer" },
+      { name: "person_subtype", type: "TEXT (name-join → MasterDataOption)" },
+      { name: "engagement_model", type: "TEXT" },
+      { name: "status", type: "TEXT: active|inactive|on_leave" },
+      { name: "availability_status", type: "TEXT" },
+      { name: "email / phone", type: "TEXT" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_enterprises", label: "raw.enterprises", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Enterprise records from Base44. Self-ref parent via name-join.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "enterprise_name", type: "TEXT" },
+      { name: "enterprise_type", type: "TEXT" },
+      { name: "enterprise_subtype", type: "TEXT (name-join)" },
+      { name: "enterprise_tier", type: "TEXT" },
+      { name: "parent_enterprise_id", type: "TEXT (name-join → self)" },
+      { name: "status / operating_status", type: "TEXT" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_products", label: "raw.products", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Product records. item_subtype resolved via name-join at analytics time.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "name / sku", type: "TEXT" },
+      { name: "item_type / item_class", type: "TEXT" },
+      { name: "item_subtype", type: "TEXT (name-join)" },
+      { name: "stock_quantity / reorder_level", type: "FLOAT" },
+      { name: "unit_price / cost_price", type: "FLOAT" },
+      { name: "expiry_date", type: "DATE" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_tasks", label: "raw.tasks", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Task records. enterprise + assigned_to_name are string references.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "title", type: "TEXT" },
+      { name: "task_type", type: "TEXT (name-join)" },
+      { name: "status / priority", type: "TEXT" },
+      { name: "enterprise", type: "TEXT (name-join → raw.enterprises)" },
+      { name: "assigned_to_name", type: "TEXT (name-join → raw.people)" },
+      { name: "due_date / completed_date", type: "DATE" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_transactions", label: "raw.transactions", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Transaction records. Financial ledger of the operation.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "transaction_type", type: "TEXT" },
+      { name: "amount / currency", type: "FLOAT / TEXT" },
+      { name: "status / payment_status", type: "TEXT" },
+      { name: "enterprise / counterparty", type: "TEXT (name-join)" },
+      { name: "source_task_id", type: "TEXT (name-join → raw.tasks)" },
+      { name: "due_date / invoice_date", type: "DATE" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_relationships", label: "raw.relationships", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Relationship records. Links any two entities via triple name-join.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "relationship_type", type: "TEXT (name-join)" },
+      { name: "person_name", type: "TEXT (name-join → raw.people)" },
+      { name: "enterprise_name", type: "TEXT (name-join → raw.enterprises)" },
+      { name: "item_name", type: "TEXT (name-join → raw.products)" },
+      { name: "role / status", type: "TEXT" },
+      { name: "start_date / end_date", type: "DATE" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_addresses", label: "raw.addresses", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Address records from Base44. Geocoded via OSM Nominatim on ETL.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "label", type: "TEXT" },
+      { name: "address_line1 / city", type: "TEXT" },
+      { name: "state_region / country", type: "TEXT" },
+      { name: "postal_code", type: "TEXT" },
+      { name: "latitude / longitude", type: "FLOAT (geocoded)" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_services", label: "raw.services", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Service/Appointment records. client_name and provider_name are name-joins to raw.people.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "service_type", type: "TEXT (name-join)" },
+      { name: "client_name / provider_name", type: "TEXT (name-join)" },
+      { name: "enterprise", type: "TEXT (name-join)" },
+      { name: "status", type: "TEXT" },
+      { name: "scheduled_date", type: "DATE" },
+      { name: "duration_minutes", type: "INT" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_geospatial", label: "raw.geospatial", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Geocoded locations for all entity types. Populated from Address records + OSM.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "entity_type / entity_id", type: "TEXT" },
+      { name: "address_text", type: "TEXT" },
+      { name: "latitude / longitude", type: "FLOAT" },
+      { name: "city / country", type: "TEXT" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+];
+
+// ── analytics.* — ETL aggregation tables ─────────────────────────────────────
+// GROUP BY summaries. No individual record identity — aggregations only.
+// Read by Copilot, Alerts, Dashboard stat cards, QueryBuilder.
+const PG_ANALYTICS_TABLES = [
+  {
+    id: "an_people", label: "analytics.people_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Headcount by person_type × status. GROUP BY aggregate — no row-level identity.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "person_type", type: "TEXT" },
+      { name: "status", type: "TEXT" },
+      { name: "total_count", type: "INT" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_enterprises", label: "analytics.enterprise_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Enterprise counts by type × status. Branch/HQ breakdown.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "enterprise_type", type: "TEXT" },
+      { name: "status / operating_status", type: "TEXT" },
+      { name: "total_count", type: "INT" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_products", label: "analytics.product_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Stock levels and product counts by item_type × item_class.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "item_type / item_class", type: "TEXT" },
+      { name: "status", type: "TEXT" },
+      { name: "total_count / total_stock", type: "INT / FLOAT" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_tasks", label: "analytics.task_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Task completion rates by type × status. SLA and operations dashboards.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "task_type / status", type: "TEXT" },
+      { name: "total_tasks", type: "INT" },
+      { name: "completed_tasks", type: "INT" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_transactions", label: "analytics.transaction_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Revenue and expense aggregates by transaction_type × payment_status.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "transaction_type / payment_status", type: "TEXT" },
+      { name: "total_amount", type: "FLOAT" },
+      { name: "total_count", type: "INT" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_relationships", label: "analytics.relationship_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Network link counts by relationship_type × status.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "relationship_type / status", type: "TEXT" },
+      { name: "total_count", type: "INT" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_addresses", label: "analytics.address_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Geographic distribution of addresses by city × country.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "city / country", type: "TEXT" },
+      { name: "total_count", type: "INT" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_services", label: "analytics.service_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Service delivery stats by type × status.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "service_type / status", type: "TEXT" },
+      { name: "total_count", type: "INT" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_geospatial", label: "analytics.geospatial_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Aggregated geographic distribution with centroid calculation per entity_type.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "entity_type / city / country", type: "TEXT" },
+      { name: "lat_center / lon_center", type: "FLOAT" },
+      { name: "record_count", type: "INT" },
+      { name: "snapshot_date", type: "DATE" },
+    ],
+  },
+];
+
+// ── analytics.* — Intelligence tables (agents + copilot) ─────────────────────
+// These live in the analytics schema but serve the autonomous layer.
+// Written by agents and copilot at runtime — NOT by the ETL pipeline.
+const PG_INTELLIGENCE_TABLES = [
+  {
+    id: "an_agent_memory", label: "analytics.agent_memory", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe",
+    icon: "🧠", layer: "Intelligence",
+    description: "Per-company persistent agent memory. Accumulates observations, preferences, baselines, and outcomes across runs. Confidence-weighted UPSERT on each run.",
+    fields: [
+      { name: "id", type: "SERIAL PK", pk: true },
+      { name: "company_id / agent_name", type: "TEXT" },
+      { name: "memory_type", type: "TEXT: observation|preference|baseline|outcome|calendar" },
+      { name: "key / value", type: "TEXT / JSONB" },
+      { name: "confidence", type: "FLOAT (0–1)" },
+      { name: "observation_count", type: "INT" },
+      { name: "created_at / updated_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_agent_approvals", label: "analytics.agent_approvals", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe",
+    icon: "✋", layer: "Intelligence",
+    description: "Human-in-the-loop approval queue. High-risk agent actions pause here until operator approves or rejects.",
+    fields: [
+      { name: "id", type: "TEXT PK (uuid)", pk: true },
+      { name: "company_id / agent_name", type: "TEXT" },
+      { name: "action_type / action_label", type: "TEXT" },
+      { name: "action_payload", type: "JSONB" },
+      { name: "risk_level", type: "TEXT: auto|notify|approve|critical" },
+      { name: "status", type: "TEXT: pending|approved|rejected" },
+      { name: "reasoning", type: "TEXT" },
+      { name: "created_at / resolved_at", type: "TIMESTAMPTZ" },
+      { name: "resolved_by / resolution_note", type: "TEXT" },
+      { name: "executed_at / execution_result", type: "TIMESTAMPTZ / JSONB" },
+    ],
+  },
+  {
+    id: "an_agent_runs", label: "analytics.agent_runs", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe",
+    icon: "⚙️", layer: "Intelligence",
+    description: "Execution log for every agent run. Tracks actions taken, pending approvals, findings, and errors per company per agent.",
+    fields: [
+      { name: "id", type: "TEXT PK (uuid)", pk: true },
+      { name: "company_id / agent_name", type: "TEXT" },
+      { name: "trigger", type: "TEXT: scheduled|manual|alert" },
+      { name: "status", type: "TEXT: running|completed|failed" },
+      { name: "started_at / finished_at", type: "TIMESTAMPTZ" },
+      { name: "actions_taken / actions_pending", type: "INT" },
+      { name: "summary", type: "TEXT" },
+      { name: "findings", type: "JSONB []" },
+      { name: "error", type: "TEXT" },
+    ],
+  },
+  {
+    id: "an_copilot_memory", label: "analytics.copilot_memory", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe",
+    icon: "💬", layer: "Intelligence",
+    description: "Persistent copilot memory per company. Key-value notes that survive across sessions. Loaded at the start of every ask().",
+    fields: [
+      { name: "id", type: "SERIAL PK", pk: true },
+      { name: "company_id", type: "TEXT" },
+      { name: "memory_type", type: "TEXT: note|preference|context" },
+      { name: "key / value", type: "TEXT" },
+      { name: "created_at / updated_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+];
+
+// ── audit.* — Immutable change log ────────────────────────────────────────────
+const PG_AUDIT_TABLES = [
+  {
+    id: "audit_change_log", label: "audit.change_log", color: "#b91c1c", bg: "#fff1f2", border: "#fecdd3",
+    icon: "🔒", layer: "audit.*",
+    description: "Immutable change history for all 7 entities. Written by agent actions and ETL mutations. Indexed by company + entity_type + timestamp.",
+    fields: [
+      { name: "id", type: "SERIAL PK", pk: true },
+      { name: "company_id", type: "TEXT" },
+      { name: "entity_type", type: "TEXT: person|enterprise|product|..." },
+      { name: "entity_id / entity_name", type: "TEXT" },
+      { name: "action", type: "TEXT: create|update|delete|agent_action" },
+      { name: "changed_by", type: "TEXT (user email or agent name)" },
+      { name: "changed_fields", type: "JSONB" },
+      { name: "timestamp", type: "TIMESTAMPTZ DEFAULT NOW()" },
+    ],
+  },
+];
+
+// ── PostgreSQL view edges ─────────────────────────────────────────────────────
+const PG_EDGES = [
+  // ETL: raw.* → analytics.* (aggregate transform)
+  { from: "raw_people",        to: "an_people",        label: "ETL aggregate", style: "etl" },
+  { from: "raw_enterprises",   to: "an_enterprises",   label: "ETL aggregate", style: "etl" },
+  { from: "raw_products",      to: "an_products",      label: "ETL aggregate", style: "etl" },
+  { from: "raw_tasks",         to: "an_tasks",         label: "ETL aggregate", style: "etl" },
+  { from: "raw_transactions",  to: "an_transactions",  label: "ETL aggregate", style: "etl" },
+  { from: "raw_relationships", to: "an_relationships", label: "ETL aggregate", style: "etl" },
+  { from: "raw_addresses",     to: "an_addresses",     label: "ETL aggregate", style: "etl" },
+  { from: "raw_services",      to: "an_services",      label: "ETL aggregate", style: "etl" },
+  { from: "raw_geospatial",    to: "an_geospatial",    label: "ETL aggregate", style: "etl" },
+  // Name-joins between raw.* tables (string-based, not SQL FK)
+  { from: "raw_tasks",         to: "raw_enterprises",  label: "enterprise (name-join)" },
+  { from: "raw_tasks",         to: "raw_people",       label: "assigned_to_name (name-join)" },
+  { from: "raw_transactions",  to: "raw_tasks",        label: "source_task_id (name-join)" },
+  { from: "raw_relationships", to: "raw_people",       label: "person_name (name-join)" },
+  { from: "raw_relationships", to: "raw_enterprises",  label: "enterprise_name (name-join)" },
+  // Agent tables (written by agents at runtime)
+  { from: "an_agent_runs",     to: "an_agent_memory",  label: "updates memory", style: "trigger" },
+  { from: "an_agent_approvals",to: "an_agent_runs",    label: "approved → run", style: "trigger" },
+  // Analytics → copilot memory (copilot reads analytics, writes memory)
+  { from: "an_people",         to: "an_copilot_memory",label: "context source", style: "api_blue" },
+  // Audit trail (raw mutations → change_log)
+  { from: "raw_people",        to: "audit_change_log", label: "mutation log", style: "api_orange" },
+  { from: "raw_enterprises",   to: "audit_change_log", label: "mutation log", style: "api_orange" },
+  { from: "raw_products",      to: "audit_change_log", label: "mutation log", style: "api_orange" },
+];
+
+// ── PostgreSQL view default positions ─────────────────────────────────────────
+const DEFAULT_PG_POSITIONS = {
+  // raw.* (y=60) — 9 tables, spacing=170
+  raw_people:        { x: 20,   y: 60  },
+  raw_enterprises:   { x: 190,  y: 60  },
+  raw_products:      { x: 360,  y: 60  },
+  raw_tasks:         { x: 530,  y: 60  },
+  raw_transactions:  { x: 700,  y: 60  },
+  raw_relationships: { x: 870,  y: 60  },
+  raw_addresses:     { x: 1040, y: 60  },
+  raw_services:      { x: 1210, y: 60  },
+  raw_geospatial:    { x: 1380, y: 60  },
+  // analytics.* (y=460) — same x as raw counterparts for clear ETL flow
+  an_people:         { x: 20,   y: 460 },
+  an_enterprises:    { x: 190,  y: 460 },
+  an_products:       { x: 360,  y: 460 },
+  an_tasks:          { x: 530,  y: 460 },
+  an_transactions:   { x: 700,  y: 460 },
+  an_relationships:  { x: 870,  y: 460 },
+  an_addresses:      { x: 1040, y: 460 },
+  an_services:       { x: 1210, y: 460 },
+  an_geospatial:     { x: 1380, y: 460 },
+  // Intelligence (y=860)
+  an_agent_memory:    { x: 80,   y: 860 },
+  an_agent_approvals: { x: 450,  y: 860 },
+  an_agent_runs:      { x: 820,  y: 860 },
+  an_copilot_memory:  { x: 1190, y: 860 },
+  // Audit (y=1080)
+  audit_change_log:   { x: 580,  y: 1080 },
+};
+
+const PG_LAYER_COLORS = {
+  "raw.*":        "bg-teal-50 text-teal-700 border-teal-200",
+  "analytics.*":  "bg-indigo-50 text-indigo-700 border-indigo-200",
+  "Intelligence": "bg-purple-50 text-purple-700 border-purple-200",
+  "audit.*":      "bg-rose-50 text-rose-700 border-rose-200",
+};
+
+// ── API Catalogue — python_layer FastAPI endpoint groups ─────────────────────
+const API_CATALOGUE = [
+  {
+    name: "Core ETL", prefix: "/", color: "#2563eb", bg: "#eff6ff",
+    desc: "ETL pipeline — triggers Base44 → raw.* → analytics.* synchronization",
+    endpoints: [
+      { method: "GET",  path: "/health",                   desc: "Health check + ETL timestamps + table row counts" },
+      { method: "POST", path: "/cron/etl-all",             desc: "Full ETL for all entities + all tenants (cron use)" },
+      { method: "POST", path: "/load/{entity}-summary",    desc: "Single-entity ETL: people|enterprise|product|task|transaction|..." },
+      { method: "GET",  path: "/raw/{entity}",             desc: "Read raw.* table — requires company_id param" },
+    ],
+  },
+  {
+    name: "Copilot", prefix: "/copilot", color: "#0891b2", bg: "#ecfeff",
+    desc: "Claude-powered Q&A grounded in operator data. Tool loop with 10+ query tools.",
+    endpoints: [
+      { method: "POST", path: "/copilot/ask",              desc: "Submit query → tool loop → grounded answer (streaming)" },
+      { method: "GET",  path: "/copilot/status",           desc: "Backend availability + ANTHROPIC_API_KEY check" },
+      { method: "GET",  path: "/copilot/memory",           desc: "Read analytics.copilot_memory for company" },
+      { method: "DELETE",path: "/copilot/memory/{key}",   desc: "Remove a memory entry by key" },
+    ],
+  },
+  {
+    name: "Agents", prefix: "/agents", color: "#7c3aed", bg: "#f5f3ff",
+    desc: "8 autonomous agents (Operations, Revenue, Retention, Inventory, Onboarding, Compliance, Network, Market). Orchestrator + approval gate + agent memory.",
+    endpoints: [
+      { method: "POST", path: "/agents/run",               desc: "Trigger all agents for company (orchestrator entry point)" },
+      { method: "GET",  path: "/agents/runs",              desc: "List recent runs from analytics.agent_runs" },
+      { method: "GET",  path: "/agents/approvals",         desc: "Pending approvals — status=pending" },
+      { method: "POST", path: "/agents/approvals/{id}/approve", desc: "Approve a pending agent action" },
+      { method: "POST", path: "/agents/approvals/{id}/reject",  desc: "Reject a pending agent action" },
+      { method: "GET",  path: "/agents/memory",            desc: "Read analytics.agent_memory by company + agent_name" },
+    ],
+  },
+  {
+    name: "Alerts", prefix: "/alerts", color: "#f59e0b", bg: "#fffbeb",
+    desc: "Alert engine — 10 alert types, WhatsApp/Email/SMS delivery. Per-company rule config.",
+    endpoints: [
+      { method: "GET",  path: "/alerts",                   desc: "List active alert rules for company" },
+      { method: "POST", path: "/alerts",                   desc: "Create or update an alert rule" },
+      { method: "DELETE",path: "/alerts/{id}",            desc: "Delete alert rule" },
+      { method: "GET",  path: "/alerts/history",           desc: "Alert fire history log for company" },
+      { method: "POST", path: "/alerts/evaluate",          desc: "Force-evaluate all rules now (also called by cron)" },
+    ],
+  },
+  {
+    name: "ML Models", prefix: "/ml", color: "#10b981", bg: "#f0fdf4",
+    desc: "Survival analysis (churn risk), K-means segmentation, demand forecasting, time-series.",
+    endpoints: [
+      { method: "GET",  path: "/ml/churn-risk",            desc: "Kaplan-Meier survival — person churn probability scores" },
+      { method: "GET",  path: "/ml/segments",              desc: "K-means segmentation of people or products" },
+      { method: "GET",  path: "/ml/demand-forecast",       desc: "12-week demand forecast per product (time-series)" },
+      { method: "POST", path: "/ml/train",                 desc: "Re-train models on latest company data" },
+    ],
+  },
+  {
+    name: "Network", prefix: "/network", color: "#0284c7", bg: "#f0f9ff",
+    desc: "Multi-tenant network intelligence — cross-branch KPI comparison, performance benchmarking.",
+    endpoints: [
+      { method: "GET",  path: "/network/compare",          desc: "Cross-branch KPI comparison (requires NETWORK_ADMIN_KEY)" },
+      { method: "GET",  path: "/network/registry",         desc: "List all registered companies in the network" },
+      { method: "POST", path: "/network/register",         desc: "Register company in network" },
+    ],
+  },
+  {
+    name: "Connectors", prefix: "/connectors", color: "#ec4899", bg: "#fdf2f8",
+    desc: "35 connectors across 9 categories: file, database, mobile_money, hr_payroll, accounting, health, education, pos, government.",
+    endpoints: [
+      { method: "GET",  path: "/connectors",               desc: "List all available connectors by category" },
+      { method: "POST", path: "/connectors/connect",       desc: "Connect + dry run (returns sample data, no write)" },
+      { method: "POST", path: "/connectors/sync",          desc: "Execute sync: connector source → raw.* → analytics.*" },
+      { method: "GET",  path: "/connectors/history",       desc: "Sync run history per connector" },
+    ],
+  },
+  {
+    name: "Audit Trail", prefix: "/audit", color: "#dc2626", bg: "#fff1f2",
+    desc: "Immutable change log — all entity mutations. Stored in audit.change_log.",
+    endpoints: [
+      { method: "GET",  path: "/audit/changes",            desc: "Read audit.change_log with entity_type + date range filters" },
+      { method: "POST", path: "/audit/log",                desc: "Write audit entry (called internally by agents + ETL)" },
+      { method: "GET",  path: "/audit/summary",            desc: "Aggregate counts by entity_type × action" },
+    ],
+  },
+  {
+    name: "Data Quality", prefix: "/dataquality", color: "#16a34a", bg: "#f0fdf4",
+    desc: "AI Readiness scoring — field completeness weighted by record count across all 7 entities.",
+    endpoints: [
+      { method: "GET",  path: "/dataquality/report",       desc: "Per-entity completeness scores + overall_score (weighted mean)" },
+      { method: "POST", path: "/dataquality/evaluate",     desc: "Force re-evaluation for company" },
+    ],
+  },
+  {
+    name: "Open Data", prefix: "/open-data", color: "#6366f1", bg: "#eef2ff",
+    desc: "Free public APIs: OSM geocoding, Open-Meteo weather, RxNorm medications, World Bank indicators.",
+    endpoints: [
+      { method: "GET",  path: "/open-data/geospatial/geocode", desc: "OSM Nominatim — address text → lat/lon" },
+      { method: "GET",  path: "/open-data/weather/{city}", desc: "Open-Meteo — current conditions, no API key required" },
+      { method: "GET",  path: "/open-data/medications",    desc: "NIH RxNorm drug name + interaction lookup" },
+      { method: "GET",  path: "/open-data/worldbank",      desc: "World Bank economic indicators by country + year" },
+    ],
+  },
+  {
+    name: "Webhooks & n8n", prefix: "/webhook", color: "#78716c", bg: "#fafaf9",
+    desc: "Webhook receiver for external events + n8n workflow emitter for event-driven automation.",
+    endpoints: [
+      { method: "POST", path: "/webhook/receive",          desc: "Receive webhook events from external systems" },
+      { method: "GET",  path: "/webhook/events",           desc: "List recent webhook events" },
+      { method: "POST", path: "/n8n/emit",                 desc: "Emit event to n8n — triggers downstream workflows" },
+    ],
+  },
+];
+
 // ─── All edges ─────────────────────────────────────────────────────────────────
 const EDGES = [
   // ── Taxonomy wires (cyan dashed) — MasterDataOption classifies entity subtypes
@@ -383,14 +913,23 @@ const DEFAULT_POSITIONS = {
 };
 
 // ─── Auto-layout ──────────────────────────────────────────────────────────────
-function computeAutoLayout(allTables) {
-  const ROW_CONFIG = {
-    "Open Data APIs":      { y: 60,  cols: 6 },
-    "Master Entities":     { y: 300, cols: 3 },
-    "Taxonomy":            { y: 300, cols: 2, offset: 3 },
-    "Supporting Entities": { y: 560, cols: 3 },
-    "Analytics Layer":     { y: 820, cols: 7 },
-  };
+const ONTOLOGY_ROW_CONFIG = {
+  "Open Data APIs":      { y: 60,  cols: 6 },
+  "Master Entities":     { y: 300, cols: 3 },
+  "Taxonomy":            { y: 300, cols: 2, offset: 3 },
+  "Supporting Entities": { y: 560, cols: 3 },
+  "Analytics Layer":     { y: 820, cols: 7 },
+};
+
+const PG_ROW_CONFIG = {
+  "raw.*":        { y: 60,   cols: 9 },
+  "analytics.*":  { y: 460,  cols: 9 },
+  "Intelligence": { y: 860,  cols: 4 },
+  "audit.*":      { y: 1080, cols: 1 },
+};
+
+function computeAutoLayout(allTables, rowConfig = ONTOLOGY_ROW_CONFIG) {
+  const ROW_CONFIG = rowConfig;
   const byLayer = {};
   allTables.forEach(t => {
     if (!byLayer[t.layer]) byLayer[t.layer] = [];
@@ -500,11 +1039,13 @@ function generateTableDDL(table) {
 
 // ─── Main component ────────────────────────────────────────────────────────────
 export default function DataModels() {
+  const [view, setView]               = useState("ontology"); // "ontology" | "postgresql" | "api"
   const [zoom, setZoom]               = useState(0.7);
   const [pan, setPan]                 = useState({ x: 0, y: 0 });
   const [panDrag, setPanDrag]         = useState(null);
   const [nodeDrag, setNodeDrag]       = useState(null);
   const [positions, setPositions]     = useState(DEFAULT_POSITIONS);
+  const [pgPositions, setPgPositions] = useState(DEFAULT_PG_POSITIONS);
   const [selectedTable, setSelectedTable] = useState(null);
   const [hoveredTable, setHoveredTable]   = useState(null);
   const [hoveredEdge, setHoveredEdge]     = useState(null);
@@ -518,6 +1059,17 @@ export default function DataModels() {
   const canvasRef     = useRef(null);
   const exportMenuRef = useRef(null);
 
+  // Reset layer filter and selection when switching views
+  useEffect(() => {
+    setSelectedTable(null);
+    setSearchQuery("");
+    if (view === "postgresql") {
+      setEnabledLayers(new Set(Object.keys(PG_LAYER_COLORS)));
+    } else {
+      setEnabledLayers(new Set(ALL_LAYERS));
+    }
+  }, [view]);
+
   useEffect(() => { const unsub = NotebookStore.subscribe(setNotebooks); return unsub; }, []);
 
   useEffect(() => {
@@ -530,38 +1082,65 @@ export default function DataModels() {
   useEffect(() => {
     const handler = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      if (e.key === "r" || e.key === "R") { setZoom(0.7); setPan({ x: 0, y: 0 }); setPositions(DEFAULT_POSITIONS); }
+      if (e.key === "r" || e.key === "R") {
+        setZoom(0.7); setPan({ x: 0, y: 0 });
+        if (view === "postgresql") setPgPositions(DEFAULT_PG_POSITIONS);
+        else setPositions(DEFAULT_POSITIONS);
+      }
       if (e.key === "Escape") { setSelectedTable(null); setSearchQuery(""); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [view]);
+
+  // ── View-derived constants ────────────────────────────────────────────────
+  const isPGView       = view === "postgresql";
+  const isAPIView      = view === "api";
+  const activeLayerColors = isPGView ? PG_LAYER_COLORS : LAYER_COLORS;
+  const activeAllLayers   = isPGView ? Object.keys(PG_LAYER_COLORS) : ALL_LAYERS;
+  const activeCanvasH     = isPGView ? 1260 : CANVAS_H;
+  const activeSetPositions = isPGView ? setPgPositions : setPositions;
 
   // ── Build node lists ──────────────────────────────────────────────────────
   const externalNodes = Object.values(notebooks).filter(n => n.connected);
-  const allTables = [
-    ...TABLES,
-    ...ANALYTICS_TABLES,
-    ...API_TABLES,
-    ...externalNodes.map(nb => ({
-      id: nb.id, label: nb.name,
-      color: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd",
-      icon: nb.type === "api" ? "🌐" : "🐍",
-      layer: "External Sources", description: nb.type === "api" ? "API Connector" : "Python Script",
-      fields: [{ name: "id", type: "PK", pk: true }, ...(nb.outputSchema || []).map(c => ({ name: c.name, type: c.type }))],
-      isExternal: true,
-    })),
-  ];
 
-  const fullPositions = { ...positions };
-  externalNodes.forEach((nb, i) => {
-    if (!fullPositions[nb.id]) fullPositions[nb.id] = { x: 60 + i * 280, y: 1580 };
-  });
+  const allTables = isPGView
+    ? [
+        ...PG_RAW_TABLES,
+        ...PG_ANALYTICS_TABLES,
+        ...PG_INTELLIGENCE_TABLES,
+        ...PG_AUDIT_TABLES,
+      ]
+    : [
+        ...TABLES,
+        ...ANALYTICS_TABLES,
+        ...API_TABLES,
+        ...externalNodes.map(nb => ({
+          id: nb.id, label: nb.name,
+          color: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd",
+          icon: nb.type === "api" ? "🌐" : "🐍",
+          layer: "External Sources", description: nb.type === "api" ? "API Connector" : "Python Script",
+          fields: [{ name: "id", type: "PK", pk: true }, ...(nb.outputSchema || []).map(c => ({ name: c.name, type: c.type }))],
+          isExternal: true,
+        })),
+      ];
 
-  const allEdges = [
-    ...EDGES,
-    ...externalNodes.map(nb => ({ from: nb.id, to: "Enterprise", label: "feeds →", style: "etl" })),
-  ];
+  const fullPositions = isPGView
+    ? { ...pgPositions }
+    : (() => {
+        const fp = { ...positions };
+        externalNodes.forEach((nb, i) => {
+          if (!fp[nb.id]) fp[nb.id] = { x: 60 + i * 280, y: 1580 };
+        });
+        return fp;
+      })();
+
+  const allEdges = isPGView
+    ? PG_EDGES
+    : [
+        ...EDGES,
+        ...externalNodes.map(nb => ({ from: nb.id, to: "Enterprise", label: "feeds →", style: "etl" })),
+      ];
 
   // ── Search & filter ───────────────────────────────────────────────────────
   const q          = searchQuery.trim().toLowerCase();
@@ -610,24 +1189,27 @@ export default function DataModels() {
     if (nodeDrag) {
       const dx = (e.clientX - nodeDrag.startMouseX) / zoom;
       const dy = (e.clientY - nodeDrag.startMouseY) / zoom;
-      setPositions(prev => ({ ...prev, [nodeDrag.id]: { x: Math.max(0, nodeDrag.startNodeX + dx), y: Math.max(0, nodeDrag.startNodeY + dy) } }));
+      activeSetPositions(prev => ({ ...prev, [nodeDrag.id]: { x: Math.max(0, nodeDrag.startNodeX + dx), y: Math.max(0, nodeDrag.startNodeY + dy) } }));
     } else if (panDrag) {
       setPan({ x: e.clientX - panDrag.startX, y: e.clientY - panDrag.startY });
     }
-  }, [nodeDrag, panDrag, zoom]);
+  }, [nodeDrag, panDrag, zoom, activeSetPositions]);
 
   const handleMouseUp = () => { setNodeDrag(null); setPanDrag(null); };
 
   const handleAutoLayout = () => {
     setAnimating(true);
-    setPositions(prev => ({ ...prev, ...computeAutoLayout(allTables) }));
+    activeSetPositions(prev => ({
+      ...prev,
+      ...computeAutoLayout(allTables, isPGView ? PG_ROW_CONFIG : ONTOLOGY_ROW_CONFIG),
+    }));
     setTimeout(() => setAnimating(false), 600);
   };
 
   // ── Mini-map ──────────────────────────────────────────────────────────────
   const MM_W = 180, MM_H = 110;
   const mmScaleX = MM_W / CANVAS_W;
-  const mmScaleY = MM_H / CANVAS_H;
+  const mmScaleY = MM_H / activeCanvasH;
 
   const handleMiniMapClick = e => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -689,12 +1271,28 @@ export default function DataModels() {
               Data Models &amp; Architecture
             </h1>
             <p className="text-xs text-slate-500 mt-0.5 max-w-2xl">
-              The universal ontology — 3 master entities, 4 supporting entities, and the MasterDataOption taxonomy that makes it industry-agnostic.
-              <span className="text-slate-400 ml-1">Layer 1 (Base44) → ETL @mutation → Layer 2 (analytics.*), enriched by open data connectors.</span>
+              {view === "ontology" && <>The universal ontology — 3 master entities, 4 supporting entities, MasterDataOption taxonomy.{" "}<span className="text-slate-400">Layer 1 (Base44) → ETL @mutation → Layer 2 (analytics.*), enriched by open data.</span></>}
+              {view === "postgresql" && <>Actual PostgreSQL schema — raw.* verbatim mirrors, analytics.* aggregations, intelligence tables (agents/copilot), audit trail. All joins are name-based string matches; no SQL FK constraints.</>}
+              {view === "api" && <>python_layer FastAPI endpoint catalogue — all routes grouped by router. Deployed on Railway.</>}
             </p>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* View toggle */}
+            <div className="flex border border-slate-200 rounded-xl overflow-hidden bg-white shrink-0">
+              {[
+                { id: "ontology",    label: "Ontology",    Icon: GitBranch },
+                { id: "postgresql",  label: "PostgreSQL",  Icon: Database  },
+                { id: "api",         label: "API Catalogue", Icon: ChevronRight },
+              ].map(({ id, label, Icon }) => (
+                <button key={id} onClick={() => setView(id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-r border-slate-200 last:border-0 ${
+                    view === id ? "bg-indigo-500 text-white" : "text-slate-600 hover:bg-slate-50"
+                  }`}>
+                  <Icon className="w-3.5 h-3.5" /> {label}
+                </button>
+              ))}
+            </div>
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -716,26 +1314,36 @@ export default function DataModels() {
             )}
 
             {/* Zoom */}
-            <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-1 py-1">
-              <button onClick={() => setZoom(z => Math.max(0.25, z - 0.1))} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><ZoomOut className="w-4 h-4" /></button>
-              <span className="text-xs font-mono text-slate-500 w-10 text-center">{Math.round(zoom * 100)}%</span>
-              <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><ZoomIn className="w-4 h-4" /></button>
-            </div>
+            {!isAPIView && (
+              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-1 py-1">
+                <button onClick={() => setZoom(z => Math.max(0.25, z - 0.1))} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><ZoomOut className="w-4 h-4" /></button>
+                <span className="text-xs font-mono text-slate-500 w-10 text-center">{Math.round(zoom * 100)}%</span>
+                <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><ZoomIn className="w-4 h-4" /></button>
+              </div>
+            )}
 
             {/* Auto Layout */}
-            <button onClick={handleAutoLayout}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-medium rounded-xl transition-colors">
-              <LayoutGrid className="w-3.5 h-3.5" /> Auto Layout
-            </button>
+            {!isAPIView && (
+              <button onClick={handleAutoLayout}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-medium rounded-xl transition-colors">
+                <LayoutGrid className="w-3.5 h-3.5" /> Auto Layout
+              </button>
+            )}
 
             {/* Reset */}
-            <button
-              onClick={() => { setZoom(0.7); setPan({ x: 0, y: 0 }); setPositions(DEFAULT_POSITIONS); }}
-              title="Reset view (R)"
-              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 transition-colors"
-            >
-              <Maximize2 className="w-4 h-4" />
-            </button>
+            {!isAPIView && (
+              <button
+                onClick={() => {
+                  setZoom(0.7); setPan({ x: 0, y: 0 });
+                  if (isPGView) setPgPositions(DEFAULT_PG_POSITIONS);
+                  else setPositions(DEFAULT_POSITIONS);
+                }}
+                title="Reset view (R)"
+                className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 transition-colors"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Export */}
             <div ref={exportMenuRef} className="relative">
@@ -762,50 +1370,89 @@ export default function DataModels() {
         </div>
 
         {/* ── Edge legend + Layer filter ── */}
-        <div className="flex flex-wrap items-center gap-1.5 mt-2">
-          {/* Layer pills */}
-          {ALL_LAYERS.map(layer => {
-            const cls     = LAYER_COLORS[layer];
-            const enabled = enabledLayers.has(layer);
-            return (
-              <button key={layer}
-                onClick={() => setEnabledLayers(prev => { const next = new Set(prev); if (next.has(layer)) next.delete(layer); else next.add(layer); return next; })}
-                className={`text-[11px] px-2.5 py-0.5 rounded-full border font-medium transition-all ${enabled ? cls : "bg-slate-100 text-slate-400 border-slate-200 opacity-50"}`}
-              >
-                {layer}
-              </button>
-            );
-          })}
+        {!isAPIView && (
+          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+            {/* Layer pills */}
+            {activeAllLayers.map(layer => {
+              const cls     = activeLayerColors[layer];
+              const enabled = enabledLayers.has(layer);
+              return (
+                <button key={layer}
+                  onClick={() => setEnabledLayers(prev => { const next = new Set(prev); if (next.has(layer)) next.delete(layer); else next.add(layer); return next; })}
+                  className={`text-[11px] px-2.5 py-0.5 rounded-full border font-medium transition-all ${enabled ? cls : "bg-slate-100 text-slate-400 border-slate-200 opacity-50"}`}
+                >
+                  {layer}
+                </button>
+              );
+            })}
 
-          {/* Divider */}
-          <span className="w-px h-4 bg-slate-200 mx-1" />
+            {/* Divider */}
+            <span className="w-px h-4 bg-slate-200 mx-1" />
 
-          {/* Edge type legend */}
-          <span className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-white border border-slate-200 px-2.5 py-0.5 rounded-full">
-            <svg width="18" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke="#10b981" strokeWidth="2" /></svg>
-            FK Relationship
-          </span>
-          <span className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-white border border-slate-200 px-2.5 py-0.5 rounded-full">
-            <svg width="18" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke="#2563eb" strokeWidth="2" strokeDasharray="5,3" /></svg>
-            Airflow ETL
-          </span>
-          <span className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-white border border-slate-200 px-2.5 py-0.5 rounded-full">
-            <svg width="18" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke="#ea580c" strokeWidth="2" strokeDasharray="3,4" /></svg>
-            Open Data API
-          </span>
+            {/* Edge type legend */}
+            <span className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-white border border-slate-200 px-2.5 py-0.5 rounded-full">
+              <svg width="18" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke="#10b981" strokeWidth="2" /></svg>
+              {isPGView ? "Name-join (string ref)" : "FK Relationship"}
+            </span>
+            <span className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-white border border-slate-200 px-2.5 py-0.5 rounded-full">
+              <svg width="18" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke="#2563eb" strokeWidth="2" strokeDasharray="5,3" /></svg>
+              ETL @mutation
+            </span>
+            {!isPGView && (
+              <span className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-white border border-slate-200 px-2.5 py-0.5 rounded-full">
+                <svg width="18" height="8"><line x1="0" y1="4" x2="18" y2="4" stroke="#ea580c" strokeWidth="2" strokeDasharray="3,4" /></svg>
+                Open Data API
+              </span>
+            )}
 
-          {/* Keyboard hint */}
-          <span className="ml-auto flex items-center gap-1 text-[10px] text-slate-400">
-            <Keyboard className="w-3 h-3" /> Press <kbd className="bg-slate-100 px-1 rounded text-[10px]">R</kbd> to reset · <kbd className="bg-slate-100 px-1 rounded text-[10px]">Esc</kbd> to clear
-          </span>
-        </div>
+            {/* Keyboard hint */}
+            <span className="ml-auto flex items-center gap-1 text-[10px] text-slate-400">
+              <Keyboard className="w-3 h-3" /> Press <kbd className="bg-slate-100 px-1 rounded text-[10px]">R</kbd> to reset · <kbd className="bg-slate-100 px-1 rounded text-[10px]">Esc</kbd> to clear
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ── Main canvas + side panel ── */}
       <div className="flex gap-3 flex-1 overflow-hidden">
 
+        {/* API Catalogue view */}
+        {isAPIView && (
+          <div className="flex-1 overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 gap-3">
+              {API_CATALOGUE.map(group => (
+                <div key={group.name} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                  <div className="px-4 py-3 border-b border-slate-100 flex items-start gap-3" style={{ backgroundColor: group.bg }}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm" style={{ color: group.color }}>{group.name}</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/70 border border-slate-200 text-slate-500">{group.prefix}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{group.desc}</p>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-slate-50">
+                    {group.endpoints.map((ep, i) => (
+                      <div key={i} className="px-4 py-2 flex items-start gap-3 hover:bg-slate-50 transition-colors">
+                        <span className={`text-[10px] font-bold shrink-0 mt-0.5 px-1.5 py-0.5 rounded font-mono ${
+                          ep.method === "GET"    ? "bg-emerald-100 text-emerald-700" :
+                          ep.method === "POST"   ? "bg-blue-100 text-blue-700" :
+                          ep.method === "DELETE" ? "bg-rose-100 text-rose-700" :
+                          "bg-amber-100 text-amber-700"
+                        }`}>{ep.method}</span>
+                        <code className="text-[11px] text-slate-700 font-mono shrink-0 mt-0.5">{ep.path}</code>
+                        <span className="text-[11px] text-slate-400 leading-snug">{ep.desc}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Canvas */}
-        <div
+        {!isAPIView && <div
           ref={containerRef}
           className={`flex-1 border border-slate-200 rounded-2xl bg-slate-50 overflow-hidden relative ${nodeDrag || panDrag ? "cursor-grabbing" : "cursor-grab"}`}
           onMouseDown={handleCanvasMouseDown}
@@ -825,10 +1472,10 @@ export default function DataModels() {
 
           <div
             ref={canvasRef}
-            style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "top left", width: CANVAS_W, height: CANVAS_H, position: "relative" }}
+            style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "top left", width: CANVAS_W, height: activeCanvasH, position: "relative" }}
           >
             {/* SVG edges */}
-            <svg style={{ position: "absolute", top: 0, left: 0, width: CANVAS_W, height: CANVAS_H, overflow: "visible", pointerEvents: "none" }}>
+            <svg style={{ position: "absolute", top: 0, left: 0, width: CANVAS_W, height: activeCanvasH, overflow: "visible", pointerEvents: "none" }}>
               <defs>
                 {[
                   { id: "arrow-green",      fill: "#10b981" },
@@ -896,7 +1543,7 @@ export default function DataModels() {
               const isSelected     = selectedTable === table.id;
               const isHovered      = hoveredTable === table.id;
               const isDragging     = nodeDrag?.id === table.id;
-              const layerCls       = LAYER_COLORS[table.layer] || "bg-slate-100 text-slate-600 border-slate-300";
+              const layerCls       = activeLayerColors[table.layer] || "bg-slate-100 text-slate-600 border-slate-300";
               const isMatch        = matchingIds ? matchingIds.has(table.id) : true;
               const isDimmed       = (matchingIds && !isMatch) || ((hoveredTable || selectedTable) && !isSelected && !isHovered && !highlightedEdges.size);
               const connectedToActive = (hoveredTable || selectedTable) && highlightedEdges.size > 0 &&
@@ -975,10 +1622,10 @@ export default function DataModels() {
             </svg>
             <p className="absolute bottom-1 left-1.5 text-[8px] text-slate-500 font-mono">mini-map · click to pan</p>
           </div>
-        </div>
+        </div>}
 
-        {/* ── Detail panel ── */}
-        <div className="w-64 shrink-0 space-y-3 overflow-y-auto">
+        {/* ── Detail panel (canvas views only) ── */}
+        {!isAPIView && <div className="w-64 shrink-0 space-y-3 overflow-y-auto">
 
           {/* Table detail */}
           {selected ? (
@@ -1001,7 +1648,7 @@ export default function DataModels() {
                     {ddlCopied ? <CheckCheck className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </div>
-                <span className={`mt-2 inline-block text-[10px] px-2 py-0.5 rounded-full border font-medium ${LAYER_COLORS[selected.layer] || ""}`}>
+                <span className={`mt-2 inline-block text-[10px] px-2 py-0.5 rounded-full border font-medium ${activeLayerColors[selected.layer] || ""}`}>
                   {selected.layer}
                 </span>
               </div>
@@ -1063,14 +1710,24 @@ export default function DataModels() {
           <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Schema Stats</p>
             <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: "Base Tables",    value: TABLES.length },
-                { label: "Edges",          value: EDGES.length },
-                { label: "Open APIs",      value: API_TABLES.length },
-                { label: "Analytics",      value: ANALYTICS_TABLES.length },
-                { label: "ETL Pipelines",  value: 7 },
-                { label: "Layers",         value: ALL_LAYERS.length },
-              ].map(({ label, value }) => (
+              {(isPGView
+                ? [
+                    { label: "raw.* Tables",     value: PG_RAW_TABLES.length },
+                    { label: "analytics.*",       value: PG_ANALYTICS_TABLES.length },
+                    { label: "Intelligence",      value: PG_INTELLIGENCE_TABLES.length },
+                    { label: "audit.* Tables",    value: PG_AUDIT_TABLES.length },
+                    { label: "ETL Flows",         value: 9 },
+                    { label: "Layers",            value: Object.keys(PG_LAYER_COLORS).length },
+                  ]
+                : [
+                    { label: "Base Tables",    value: TABLES.length },
+                    { label: "Edges",          value: EDGES.length },
+                    { label: "Open APIs",      value: API_TABLES.length },
+                    { label: "Analytics",      value: ANALYTICS_TABLES.length },
+                    { label: "ETL Pipelines",  value: 7 },
+                    { label: "Layers",         value: ALL_LAYERS.length },
+                  ]
+              ).map(({ label, value }) => (
                 <div key={label} className="bg-slate-50 rounded-xl px-3 py-2 text-center">
                   <p className="text-lg font-bold text-slate-700">{value}</p>
                   <p className="text-[10px] text-slate-400">{label}</p>
@@ -1083,17 +1740,27 @@ export default function DataModels() {
           <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2">
             <div className="flex items-center gap-1.5 mb-1">
               <Info className="w-3.5 h-3.5 text-slate-400" />
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Data Flow Summary</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                {isPGView ? "Schema Layers" : "Data Flow Summary"}
+              </p>
             </div>
-            {[
-              { step: "0", label: "Open APIs",  color: "#ea580c", desc: "OSM, RxNorm, OpenFDA, Weather, World Bank — enrich records automatically" },
-              { step: "1", label: "Ingest",     color: "#6366f1", desc: "People, Enterprises, Products, Services created via UI or bulk import" },
-              { step: "2", label: "Connect",    color: "#ec4899", desc: "Person↔Enterprise, Item↔Enterprise links established" },
-              { step: "3", label: "Operate",    color: "#f97316", desc: "Tasks assigned per enterprise — work planned and tracked" },
-              { step: "4", label: "Ledger",     color: "#dc2626", desc: "Tasks trigger Transactions — stock moves, revenue recorded" },
-              { step: "5", label: "ETL",        color: "#2563eb", desc: "Airflow pulls from Base44 → transforms → loads into PostgreSQL" },
-              { step: "6", label: "Analytics",  color: "#7c3aed", desc: "QueryBuilder & Reports read analytics tables — never the live DB" },
-            ].map(({ step, label, color, desc }) => (
+            {(isPGView
+              ? [
+                  { step: "1", label: "raw.*",        color: "#0f766e", desc: "Verbatim Base44 mirrors. All joins are string name-matches, not SQL FK constraints." },
+                  { step: "2", label: "analytics.*",  color: "#4338ca", desc: "ETL aggregations. GROUP BY summaries — no row identity. Read by copilot/alerts/dashboard." },
+                  { step: "3", label: "Intelligence", color: "#7c3aed", desc: "agent_memory, agent_approvals, agent_runs, copilot_memory — written by agents at runtime." },
+                  { step: "4", label: "audit.*",      color: "#b91c1c", desc: "Immutable change_log. Every entity mutation written here by agents + ETL." },
+                ]
+              : [
+                  { step: "0", label: "Open APIs",  color: "#ea580c", desc: "OSM, RxNorm, OpenFDA, Weather, World Bank — enrich records automatically" },
+                  { step: "1", label: "Ingest",     color: "#6366f1", desc: "People, Enterprises, Products, Services created via UI or bulk import" },
+                  { step: "2", label: "Connect",    color: "#ec4899", desc: "Person↔Enterprise, Item↔Enterprise links established" },
+                  { step: "3", label: "Operate",    color: "#f97316", desc: "Tasks assigned per enterprise — work planned and tracked" },
+                  { step: "4", label: "Ledger",     color: "#dc2626", desc: "Tasks trigger Transactions — stock moves, revenue recorded" },
+                  { step: "5", label: "ETL",        color: "#2563eb", desc: "Mutation triggers Base44 → raw.* → analytics.* after every form save" },
+                  { step: "6", label: "Analytics",  color: "#7c3aed", desc: "QueryBuilder & Reports read analytics tables — never the live DB" },
+                ]
+            ).map(({ step, label, color, desc }) => (
               <div key={step} className="flex gap-2 text-[11px]">
                 <span className="font-black shrink-0 w-4 text-right" style={{ color }}>{step}</span>
                 <span className="font-semibold shrink-0" style={{ color }}>{label}</span>
@@ -1101,7 +1768,7 @@ export default function DataModels() {
               </div>
             ))}
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );
