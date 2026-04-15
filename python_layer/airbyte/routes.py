@@ -9,6 +9,11 @@
 # GET  /airbyte/jobs/{connection_id}— recent sync job history
 # GET  /airbyte/supported           — sources Newsconseen can auto-map
 #
+# POST /airbyte/discover            — auto-discover streams + suggest entity mappings
+#   Calls Airbyte's /v1/sources/discover_schema for a source_id, then
+#   pattern-matches each field name to Newsconseen canonical fields.
+#   Returns suggested mappings the operator can review before running transform.
+#
 # POST /airbyte/transform           — transform Airbyte raw data → entities
 #   Called after a sync completes. Reads from the airbyte.* PostgreSQL schema,
 #   maps to Newsconseen entities, writes to raw.*, triggers ETL analytics.
@@ -495,6 +500,203 @@ def airbyte_sync_webhook(
         "status":        "received",
         "connection_id": payload.connectionId,
         "note":          "Add source_name and company_id to webhook body for auto-transform",
+    }
+
+
+# ── Field-inference helper ───────────────────────────────────────────────────
+
+# Pattern → canonical Newsconseen field. Order: specific before general.
+_FIELD_HINTS: list[tuple] = [
+    # Identity
+    ({"id", "external_id", "record_id", "source_id"},               "external_id"),
+    # Name
+    ({"first_name", "firstname", "given_name"},                      "first_name"),
+    ({"last_name", "lastname", "surname", "family_name"},            "last_name"),
+    ({"full_name", "name", "display_name", "customer_name",
+      "company_name", "organisation_name", "organization_name"},     "name"),
+    # Contact
+    ({"email", "email_address", "e_mail"},                           "email"),
+    ({"phone", "phone_number", "mobile", "cell", "tel",
+      "telephone", "msisdn"},                                         "phone"),
+    # Person-specific
+    ({"person_type", "role", "type", "member_type",
+      "employee_type", "student_type"},                               "person_type"),
+    ({"status", "active", "is_active"},                              "status"),
+    ({"date_of_birth", "dob", "birthday"},                           "date_of_birth"),
+    ({"gender", "sex"},                                              "gender"),
+    # Enterprise
+    ({"enterprise_type", "org_type", "business_type",
+      "organisation_type", "organization_type"},                      "enterprise_type"),
+    ({"industry", "sector", "category"},                             "industry"),
+    ({"website", "url", "web_address"},                              "website"),
+    # Transaction / financial
+    ({"amount", "total", "price", "cost", "value",
+      "transaction_amount", "trans_amount"},                          "amount"),
+    ({"currency"},                                                    "currency"),
+    ({"transaction_date", "date", "created_at", "order_date",
+      "payment_date", "timestamp"},                                   "date"),
+    ({"transaction_type", "payment_type", "order_type"},             "transaction_type"),
+    ({"payment_status", "order_status", "fulfillment_status"},       "payment_status"),
+    ({"reference_number", "reference", "invoice_number", "order_id"},"reference_number"),
+    # Product
+    ({"sku", "product_code", "item_code"},                           "sku"),
+    ({"price", "unit_price", "sale_price"},                          "unit_price"),
+    ({"quantity", "qty", "stock", "inventory"},                      "quantity"),
+    ({"item_type", "product_type", "item_class"},                    "item_type"),
+    # Address
+    ({"address", "street", "street_address", "address_line_1"},     "address_line_1"),
+    ({"city", "town"},                                               "city"),
+    ({"country", "country_code"},                                    "country"),
+    ({"zip_code", "zip", "postal_code", "postcode"},                 "zip_code"),
+]
+
+# Stream name keywords → likely Newsconseen entity
+_ENTITY_HINTS: list[tuple[set, str]] = [
+    ({"customer", "user", "person", "employee", "student",
+      "member", "patient", "contact", "staff", "volunteer"},    "people"),
+    ({"company", "organisation", "organization", "enterprise",
+      "business", "account", "branch", "store", "location"},    "enterprises"),
+    ({"order", "transaction", "payment", "invoice", "sale",
+      "purchase", "receipt", "charge"},                         "transactions"),
+    ({"product", "item", "inventory", "sku", "catalogue",
+      "catalog", "listing", "variant"},                         "products"),
+    ({"task", "activity", "appointment", "visit",
+      "job", "ticket", "event"},                                "tasks"),
+]
+
+
+def _infer_entity(stream_name: str) -> str:
+    """Guess Newsconseen entity from stream name keywords."""
+    lower = stream_name.lower()
+    for keywords, entity in _ENTITY_HINTS:
+        if any(kw in lower for kw in keywords):
+            return entity
+    return "people"   # safe default
+
+
+def _suggest_field_mapping(fields: list[str]) -> dict[str, str]:
+    """
+    Pattern-match a list of source field names to Newsconseen canonical fields.
+    Returns {source_field: canonical_field} for matched fields only.
+    """
+    mapping = {}
+    for field in fields:
+        lower = field.lower().replace("-", "_").replace(" ", "_")
+        for keyword_set, canonical in _FIELD_HINTS:
+            if lower in keyword_set or any(kw in lower for kw in keyword_set):
+                mapping[field] = canonical
+                break
+    return mapping
+
+
+# ── Discover endpoint ────────────────────────────────────────────────────────
+
+class DiscoverRequest(BaseModel):
+    """
+    Discover streams and auto-suggest field mappings for an Airbyte source.
+
+    source_id:   Airbyte source UUID (from GET /airbyte/sources)
+    source_name: Optional label to check STREAM_MAPPINGS first for known sources.
+
+    Returns per-stream:
+      - fields discovered from Airbyte schema
+      - suggested entity type (people/enterprises/products/transactions/tasks)
+      - suggested field mapping {source_field → newsconseen_canonical_field}
+      - whether the mapping is from STREAM_MAPPINGS (known) or auto-inferred (new)
+    """
+    source_id:   str
+    source_name: Optional[str] = None
+
+
+@router.post("/discover")
+def discover_streams(
+    request: DiscoverRequest,
+    x_airbyte_secret: Optional[str] = Header(None),
+):
+    """
+    Auto-discover Airbyte source streams and suggest Newsconseen entity mappings.
+
+    For operators connecting a new source not yet in STREAM_MAPPINGS:
+      1. Call POST /airbyte/discover with source_id
+      2. Review the suggested mappings in the Connectors UI
+      3. Confirm or adjust, then call POST /airbyte/transform using the
+         confirmed mapping via the IngestRequest.mapping field
+
+    For known sources (shopify, hubspot, etc.) the response includes
+    the existing STREAM_MAPPINGS config alongside the live schema so
+    operators can see if new fields were added upstream.
+    """
+    _check_secret(x_airbyte_secret)
+
+    client = AirbyteClient()
+    if not client._available:
+        raise HTTPException(status_code=503, detail="AIRBYTE_API_URL not configured")
+
+    try:
+        schema_response = client.get_stream_schema(request.source_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Airbyte schema discovery failed: {e}")
+
+    # Airbyte returns: {"catalog": {"streams": [{"stream": {"name": "...", "jsonSchema": {...}}}]}}
+    catalog = schema_response.get("catalog", {})
+    raw_streams = catalog.get("streams", [])
+
+    source_name = (request.source_name or "").lower()
+    known_source = STREAM_MAPPINGS.get(source_name, {})
+
+    discovered = []
+    for entry in raw_streams:
+        stream_info  = entry.get("stream", entry)  # handle both wrapper formats
+        stream_name  = stream_info.get("name", "unknown")
+        json_schema  = stream_info.get("jsonSchema", stream_info.get("json_schema", {}))
+
+        # Extract field names from the JSON schema
+        props  = json_schema.get("properties", {})
+        fields = list(props.keys()) if props else []
+
+        # Check STREAM_MAPPINGS first — use known config if available
+        known_config = known_source.get(stream_name) or known_source.get("*")
+        if known_config:
+            discovered.append({
+                "stream":        stream_name,
+                "fields":        fields,
+                "entity":        known_config.get("entity", "people"),
+                "mapping":       known_config.get("mapping", {}),
+                "source":        "stream_mappings",
+                "note":          "Using existing Newsconseen mapping. Verify fields match.",
+            })
+            continue
+
+        # Auto-infer from field names and stream name
+        entity  = _infer_entity(stream_name)
+        mapping = _suggest_field_mapping(fields)
+
+        discovered.append({
+            "stream":   stream_name,
+            "fields":   fields,
+            "entity":   entity,
+            "mapping":  mapping,
+            "source":   "auto_inferred",
+            "note":     (
+                "Auto-inferred mapping. Review and adjust before running transform. "
+                "Unmapped fields are ignored unless you add them to the mapping."
+            ),
+        })
+
+    mapped_count = sum(1 for s in discovered if s["source"] == "stream_mappings")
+    inferred_count = len(discovered) - mapped_count
+
+    return {
+        "source_id":      request.source_id,
+        "source_name":    source_name or None,
+        "streams_found":  len(discovered),
+        "known_streams":  mapped_count,
+        "inferred_streams": inferred_count,
+        "streams":        discovered,
+        "next_steps": {
+            "transform": "POST /airbyte/transform with source_name + streams list",
+            "ingest":    "POST /airbyte/ingest with mapping dict for custom sources",
+        },
     }
 
 
