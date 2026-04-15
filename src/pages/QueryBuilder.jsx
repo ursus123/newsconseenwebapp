@@ -282,42 +282,52 @@ export default function QueryBuilder() {
     queryKey: ["snap_enterprises", currentUser?.company_id],
     queryFn: () => listFn(base44.entities.Enterprise),
     enabled: !!currentUser,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const { data: peopleSnap = [] } = useQuery({
     queryKey: ["snap_people", currentUser?.company_id],
     queryFn: () => listFn(base44.entities.Person),
     enabled: !!currentUser,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const { data: productsSnap = [] } = useQuery({
     queryKey: ["snap_products", currentUser?.company_id],
     queryFn: () => listFn(base44.entities.Product),
     enabled: !!currentUser,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const { data: tasksSnap = [] } = useQuery({
     queryKey: ["snap_tasks", currentUser?.company_id],
     queryFn: () => listFn(base44.entities.Task),
     enabled: !!currentUser,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const { data: transactionsSnap = [] } = useQuery({
     queryKey: ["snap_transactions", currentUser?.company_id],
     queryFn: () => listFn(base44.entities.Transaction),
     enabled: !!currentUser,
-  });
-  const { data: medicationsSnap = [] } = useQuery({
-    queryKey: ["snap_medications", currentUser?.company_id],
-    queryFn: () => listFn(base44.entities.MedicationProfile),
-    enabled: !!currentUser,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const { data: addressesSnap = [] } = useQuery({
     queryKey: ["snap_addresses", currentUser?.company_id],
     queryFn: () => listFn(base44.entities.Address),
     enabled: !!currentUser,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const masterDataSnapshot = {
-    enterprises: enterprisesSnap, people: peopleSnap, products: productsSnap,
-    tasks: tasksSnap, transactions: transactionsSnap, medication_profiles: medicationsSnap,
-    addresses: addressesSnap,
+    enterprises:   enterprisesSnap,
+    people:        peopleSnap,
+    products:      productsSnap,
+    tasks:         tasksSnap,
+    transactions:  transactionsSnap,
+    addresses:     addressesSnap,
   };
 
   const qc = useQueryClient();
@@ -352,7 +362,7 @@ export default function QueryBuilder() {
     const startTime = Date.now();
     const currentUploaded = UploadedDataStore.getAll();
     try {
-      const result = await executeSQL(runSql, currentUploaded);
+      const result = await executeSQL(runSql, currentUploaded, currentUser?.company_id, masterDataSnapshot);
       if (result.type === "select") { setResults(result.rows); if (result.rows.length > 0) setShowChart(false); }
       setMessage(result.message);
       const entry = { sql: runSql, status: "ok", message: result.message, rows: result.rows?.length ?? 0, ts: new Date().toISOString(), ms: Date.now() - startTime };

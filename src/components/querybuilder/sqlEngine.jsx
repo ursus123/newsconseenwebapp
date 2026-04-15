@@ -6,18 +6,38 @@ const RAILWAY_BASE = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 const RAILWAY_HEADERS = { "x-api-key": RAILWAY_API_KEY };
 
+// Entity name → ETL slug for /load/{slug}-summary
+const _ETL_SLUGS = {
+  enterprises:   "enterprise",
+  people:        "people",
+  products:      "product",
+  tasks:         "task",
+  transactions:  "transaction",
+  services:      "service",
+  relationships: "relationship",
+  addresses:     "address",
+};
+
+// Fire-and-forget ETL refresh after any mutation — never blocks the caller
+function _triggerETL(entityName) {
+  const slug = _ETL_SLUGS[entityName];
+  if (!slug) return;
+  fetch(`${RAILWAY_BASE}/load/${slug}-summary`, { method: "POST" }).catch(() => {});
+}
+
+// The 7 canonical entities from the universal ontology + Service (supporting entity).
+// DO NOT add non-canonical entities here — use person_type/item_type filters instead.
+// e.g. medications → products WHERE item_type='physical'
+//      clients     → people   WHERE person_type='client'
 export const MASTER_TABLES = {
-  enterprises:        { entity: "Enterprise",        label: "Enterprises" },
-  people:             { entity: "Person",             label: "People" },
-  products:           { entity: "Product",            label: "Products" },
-  services:           { entity: "Service",            label: "Services" },
-  addresses:          { entity: "Address",            label: "Addresses" },
-  relationships:      { entity: "Relationship",       label: "Relationships" },
-  tasks:              { entity: "Task",               label: "Tasks" },
-  transactions:       { entity: "Transaction",        label: "Transactions" },
-  medication_profiles:{ entity: "MedicationProfile",  label: "Medication Profiles" },
-  reports:            { entity: "Report",             label: "Reports" },
-  clients:            { entity: "Client",             label: "Clients" },
+  enterprises:   { entity: "Enterprise",   label: "Enterprises" },
+  people:        { entity: "Person",       label: "People" },
+  products:      { entity: "Product",      label: "Products" },
+  services:      { entity: "Service",      label: "Services" },
+  addresses:     { entity: "Address",      label: "Addresses" },
+  relationships: { entity: "Relationship", label: "Relationships" },
+  tasks:         { entity: "Task",         label: "Tasks" },
+  transactions:  { entity: "Transaction",  label: "Transactions" },
 };
 
 export const PROTECTED_TABLES = new Set(["enterprises", "people", "products", "services", "addresses"]);
@@ -1404,25 +1424,6 @@ export const MASTER_SCHEMA = {
     { col: "description", type: "VARCHAR" }, { col: "due_date", type: "DATE" },
     { col: "created_date", type: "DATETIME" },
   ],
-  medication_profiles: [
-    { col: "id", type: "VARCHAR" }, { col: "client_name", type: "VARCHAR" },
-    { col: "medication_name", type: "VARCHAR" }, { col: "strength", type: "VARCHAR" },
-    { col: "route", type: "ENUM" }, { col: "frequency", type: "VARCHAR" },
-    { col: "status", type: "ENUM" }, { col: "prescriber", type: "VARCHAR" },
-    { col: "start_date", type: "DATE" }, { col: "created_date", type: "DATETIME" },
-  ],
-  reports: [
-    { col: "id", type: "VARCHAR" }, { col: "title", type: "VARCHAR" },
-    { col: "type", type: "ENUM" }, { col: "status", type: "ENUM" },
-    { col: "date_range_start", type: "DATE" }, { col: "date_range_end", type: "DATE" },
-    { col: "created_date", type: "DATETIME" },
-  ],
-  clients: [
-    { col: "id", type: "VARCHAR" }, { col: "business_name", type: "VARCHAR" },
-    { col: "contact_person", type: "VARCHAR" }, { col: "email", type: "VARCHAR" },
-    { col: "industry", type: "ENUM" }, { col: "status", type: "ENUM" },
-    { col: "monthly_revenue", type: "FLOAT" }, { col: "created_date", type: "DATETIME" },
-  ],
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -1625,13 +1626,19 @@ function parseColDefs(colStr) {
 }
 
 // Load rows for a table name
-async function loadTable(name, uploadedTables, companyId) {
+async function loadTable(name, uploadedTables, companyId, masterDataSnapshot = {}) {
   const lower = name.toLowerCase();
   if (uploadedTables && Object.prototype.hasOwnProperty.call(uploadedTables, lower)) {
     return uploadedTables[lower].rows.map((r) => ({ ...r }));
   }
   if (MASTER_TABLES[lower]) {
-    return base44.entities[MASTER_TABLES[lower].entity].list("-created_date", 2000);
+    // Use pre-loaded, company-scoped snapshot when available (avoids cross-tenant fetch)
+    if (masterDataSnapshot[lower] && masterDataSnapshot[lower].length > 0) {
+      return masterDataSnapshot[lower];
+    }
+    // Fallback: fetch live from Base44 scoped to this tenant
+    const filter = companyId ? { company_id: companyId } : {};
+    return base44.entities[MASTER_TABLES[lower].entity].filter(filter);
   }
   if (ANALYTICS_TABLES[lower]) {
     return fetchAnalyticsTable(lower, companyId);
@@ -1643,7 +1650,7 @@ async function loadTable(name, uploadedTables, companyId) {
 }
 
 // ── Main executeSQL ────────────────────────────────────────────────────────
-export async function executeSQL(sql, uploadedTables) {
+export async function executeSQL(sql, uploadedTables, companyId, masterDataSnapshot = {}) {
   const s = sql.trim().replace(/\s+/g, " ");
   const upper = s.toUpperCase();
 
@@ -1713,7 +1720,7 @@ export async function executeSQL(sql, uploadedTables) {
     const colStr = colsMatch ? colsMatch[1].trim() : "*";
 
     // ── Load main table ───────────────────────────────────────────────────
-    let rows = await loadTable(mainTable, uploadedTables);
+    let rows = await loadTable(mainTable, uploadedTables, companyId, masterDataSnapshot);
     if (rows === null) throw new Error(`Unknown table "${mainTable}".`);
 
     // Tag with alias for JOIN disambiguation
@@ -1730,7 +1737,7 @@ export async function executeSQL(sql, uploadedTables) {
       const [, joinTableName, joinAlias, onClause] = jm;
       const jName = joinTableName.toLowerCase();
       const jAlias = joinAlias ? joinAlias.toLowerCase() : jName;
-      let joinRows = await loadTable(jName, uploadedTables);
+      let joinRows = await loadTable(jName, uploadedTables, companyId, masterDataSnapshot);
       if (!joinRows) joinRows = [];
 
       // Parse ON: left = right
@@ -1871,7 +1878,7 @@ export async function executeSQL(sql, uploadedTables) {
     const dest = destTable.toLowerCase();
     const src  = srcTable.toLowerCase();
     if (!MASTER_TABLES[dest]) throw new Error(`INSERT destination "${dest}" must be a known master table.`);
-    let srcRows = await loadTable(src, uploadedTables);
+    let srcRows = await loadTable(src, uploadedTables, companyId, masterDataSnapshot);
     if (!srcRows) throw new Error(`Source table "${src}" not found.`);
     if (whereClause) srcRows = applyWhere(srcRows, `SELECT * FROM x WHERE ${whereClause}`);
     const exprDefs = selectStr.split(",").map((e, i) => {
@@ -1891,9 +1898,11 @@ export async function executeSQL(sql, uploadedTables) {
       exprDefs.forEach(({ type: exprType, field, value, alias }) => {
         payload[alias] = exprType === "literal" ? value : (row[field] !== undefined ? row[field] : row[field?.toLowerCase()]);
       });
+      if (companyId) payload.company_id = companyId;
       await entity.create(payload);
       inserted++;
     }
+    _triggerETL(dest);
     return { type: "mutation", rows: [], message: `✓ Inserted ${inserted} row(s) into ${dest}.` };
   }
 
@@ -1907,7 +1916,9 @@ export async function executeSQL(sql, uploadedTables) {
     const vals = valsStr.split(",").map((v) => v.trim().replace(/^['"]|['"]$/g, ""));
     const payload = {}; cols.forEach((c, i) => { payload[c] = vals[i] ?? ""; });
     if (MASTER_TABLES[dest]) {
+      if (companyId) payload.company_id = companyId;
       const created = await base44.entities[MASTER_TABLES[dest].entity].create(payload);
+      _triggerETL(dest);
       return { type: "mutation", rows: [created], message: `✓ Inserted 1 row into ${dest}.` };
     } else {
       UploadedDataStore.addRow(dest, payload);
@@ -1928,10 +1939,13 @@ export async function executeSQL(sql, uploadedTables) {
     });
     if (MASTER_TABLES[tbl]) {
       const entity = base44.entities[MASTER_TABLES[tbl].entity];
-      const allRows = await entity.list("-created_date", 2000);
+      // Scope fetch to this tenant — never touch other companies' records
+      const filter = companyId ? { company_id: companyId } : {};
+      const allRows = await entity.filter(filter);
       const matched = applyWhere(allRows, `SELECT * FROM x WHERE ${whereStr}`);
       if (!matched.length) return { type: "mutation", rows: [], message: "No rows matched." };
       for (const row of matched) await entity.update(row.id, updates);
+      _triggerETL(tbl);
       return { type: "mutation", rows: [], message: `✓ Updated ${matched.length} row(s) in ${tbl}.` };
     } else if (uploadedTables[tbl]) {
       const rows = uploadedTables[tbl].rows;
@@ -1951,9 +1965,12 @@ export async function executeSQL(sql, uploadedTables) {
     if (PROTECTED_TABLES.has(tbl)) throw new Error(`❌ DELETE blocked on protected table "${tbl}".`);
     if (MASTER_TABLES[tbl]) {
       const entity = base44.entities[MASTER_TABLES[tbl].entity];
-      const allRows = await entity.list("-created_date", 2000);
+      // Scope fetch to this tenant — never delete other companies' records
+      const filter = companyId ? { company_id: companyId } : {};
+      const allRows = await entity.filter(filter);
       const matched = whereStr ? applyWhere(allRows, `SELECT * FROM x WHERE ${whereStr}`) : allRows;
       for (const row of matched) await entity.delete(row.id);
+      _triggerETL(tbl);
       return { type: "mutation", rows: [], message: `✓ Deleted ${matched.length} row(s) from ${tbl}.` };
     } else if (uploadedTables[tbl]) {
       if (whereStr) {
@@ -1971,6 +1988,7 @@ export async function executeSQL(sql, uploadedTables) {
   }
 
   throw new Error("Unsupported SQL. Supported: SELECT, INSERT, UPDATE, DELETE.");
+}
 }
 
 // ── Mutation detector ─────────────────────────────────────────────────────
