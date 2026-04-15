@@ -4564,73 +4564,108 @@ def _search_records_semantically(
 def get_workflow_summary(company_id: str, days_back: int = 30) -> dict:
     """
     Return active workflows, recent run counts, and top-performing workflows.
-    Falls back to in-memory store if called directly.
+    Tier 1: in-memory _WORKFLOWS/_RUN_LOG (live, populated by workflows router).
+    Tier 2: analytics.agent_runs PostgreSQL table (persists across restarts).
     """
+    from datetime import datetime, timezone, timedelta
+    cutoff     = datetime.now(timezone.utc) - timedelta(days=days_back)
+    cutoff_iso = cutoff.isoformat()
+
+    # ── Tier 1: in-memory ────────────────────────────────────────────────────
     try:
         from workflows.routes import _WORKFLOWS, _RUN_LOG
-        from datetime import datetime, timezone, timedelta
-
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
-        wfs    = [w for w in _WORKFLOWS.values() if w.get("company_id") == company_id]
+        wfs         = [w for w in _WORKFLOWS.values() if w.get("company_id") == company_id]
         recent_runs = [
             r for r in _RUN_LOG
-            if r.get("company_id") == company_id
-            and r.get("started_at", "") >= cutoff.isoformat()
+            if r.get("company_id") == company_id and r.get("started_at", "") >= cutoff_iso
         ]
+        if wfs or recent_runs:
+            total_active = sum(1 for w in wfs if w.get("is_active"))
+            by_trigger: dict = {}
+            for w in wfs:
+                t = w.get("trigger", {}).get("type", "unknown")
+                by_trigger[t] = by_trigger.get(t, 0) + 1
+            run_counts: dict = {}
+            for r in recent_runs:
+                wid = r.get("workflow_id", "?")
+                run_counts[wid] = run_counts.get(wid, 0) + 1
+            top_workflows = sorted(
+                [{"id": w["id"], "name": w["name"], "runs": run_counts.get(w["id"], 0),
+                  "is_active": w.get("is_active"), "trigger": w.get("trigger", {}).get("type")}
+                 for w in wfs],
+                key=lambda x: x["runs"], reverse=True
+            )[:5]
+            completed = sum(1 for r in recent_runs if r.get("status") in ("completed", "completed_with_errors"))
+            errors    = sum(1 for r in recent_runs if r.get("status") == "error")
+            return {
+                "total_workflows": len(wfs), "active_workflows": total_active,
+                "by_trigger_type": by_trigger, "total_runs": len(recent_runs),
+                "completed_runs": completed, "error_runs": errors,
+                "top_workflows": top_workflows, "period_days": days_back,
+                "data_source": "in_memory",
+            }
+    except Exception:
+        pass
 
-        total_active = sum(1 for w in wfs if w.get("is_active"))
-        by_trigger   = {}
-        for w in wfs:
-            t = w.get("trigger", {}).get("type", "unknown")
-            by_trigger[t] = by_trigger.get(t, 0) + 1
-
-        # Per-workflow run counts
-        run_counts: dict = {}
-        for r in recent_runs:
-            wid = r.get("workflow_id", "?")
-            run_counts[wid] = run_counts.get(wid, 0) + 1
-
-        top_workflows = sorted(
-            [{"id": w["id"], "name": w["name"], "runs": run_counts.get(w["id"], 0),
-              "is_active": w.get("is_active"), "trigger": w.get("trigger", {}).get("type")}
-             for w in wfs],
-            key=lambda x: x["runs"], reverse=True
-        )[:5]
-
-        completed = sum(1 for r in recent_runs if r.get("status") in ("completed", "completed_with_errors"))
-        errors    = sum(1 for r in recent_runs if r.get("status") == "error")
-
-        return {
-            "total_workflows":  len(wfs),
-            "active_workflows": total_active,
-            "by_trigger_type":  by_trigger,
-            "total_runs":       len(recent_runs),
-            "completed_runs":   completed,
-            "error_runs":       errors,
-            "top_workflows":    top_workflows,
-            "period_days":      days_back,
-        }
+    # ── Tier 2: analytics.agent_runs ─────────────────────────────────────────
+    try:
+        engine = get_engine_safe()
+        if engine:
+            with engine.connect() as conn:
+                rows = conn.execute(text("""
+                    SELECT agent_name, trigger, status, started_at, finished_at,
+                           actions_taken, actions_pending, summary
+                    FROM analytics.agent_runs
+                    WHERE company_id = :cid AND started_at >= :cutoff
+                    ORDER BY started_at DESC
+                    LIMIT 200
+                """), {"cid": company_id, "cutoff": cutoff_iso}).fetchall()
+                cols = ["agent_name", "trigger", "status", "started_at", "finished_at",
+                        "actions_taken", "actions_pending", "summary"]
+                recent_runs = [dict(zip(cols, r)) for r in rows]
+                by_agent: dict = {}
+                by_trigger_pg: dict = {}
+                completed = errors = 0
+                for r in recent_runs:
+                    by_agent[r["agent_name"]] = by_agent.get(r["agent_name"], 0) + 1
+                    by_trigger_pg[r["trigger"]] = by_trigger_pg.get(r["trigger"], 0) + 1
+                    if r["status"] in ("completed", "completed_with_errors"):
+                        completed += 1
+                    elif r["status"] == "error":
+                        errors += 1
+                top_agents = sorted(
+                    [{"name": k, "runs": v} for k, v in by_agent.items()],
+                    key=lambda x: x["runs"], reverse=True
+                )[:5]
+                return {
+                    "total_workflows": len(by_agent),
+                    "active_workflows": None,
+                    "by_trigger_type": by_trigger_pg,
+                    "total_runs": len(recent_runs),
+                    "completed_runs": completed,
+                    "error_runs": errors,
+                    "top_workflows": top_agents,
+                    "period_days": days_back,
+                    "data_source": "analytics.agent_runs",
+                }
     except Exception as e:
-        return {"error": str(e), "total_workflows": 0, "total_runs": 0}
+        logger.warning("get_workflow_summary PG fallback: %s", e)
+
+    return {"total_workflows": 0, "total_runs": 0, "period_days": days_back,
+            "note": "No workflow data available yet."}
 
 
 def get_audit_summary(company_id: str, days_back: int = 7, entity_type: Optional[str] = None) -> dict:
     """
     Return recent audit log entries — who changed what and when.
-    Falls back to the in-memory audit log.
+    Tier 1: in-memory _AUDIT_LOG (live, populated by audit router).
+    Tier 2: audit.change_log PostgreSQL table (persists across restarts).
     """
-    try:
-        from audit.routes import _AUDIT_LOG
-        from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timezone, timedelta
+    cutoff     = datetime.now(timezone.utc) - timedelta(days=days_back)
+    cutoff_iso = cutoff.isoformat()
 
-        cutoff  = datetime.now(timezone.utc) - timedelta(days=days_back)
-        entries = [
-            e for e in _AUDIT_LOG
-            if e.get("company_id") == company_id
-            and e.get("timestamp", "") >= cutoff.isoformat()
-            and (not entity_type or e.get("entity_type") == entity_type)
-        ]
-
+    def _summarise(entries: list) -> dict:
         by_action: dict = {}
         by_entity: dict = {}
         by_user:   dict = {}
@@ -4639,9 +4674,7 @@ def get_audit_summary(company_id: str, days_back: int = 7, entity_type: Optional
             by_entity[e.get("entity_type", "?")] = by_entity.get(e.get("entity_type", "?"), 0) + 1
             u = (e.get("changed_by") or "unknown").split("@")[0]
             by_user[u] = by_user.get(u, 0) + 1
-
-        recent = sorted(entries, key=lambda x: x.get("timestamp", ""), reverse=True)[:10]
-
+        recent = sorted(entries, key=lambda x: str(x.get("timestamp", "")), reverse=True)[:10]
         return {
             "total_changes":  len(entries),
             "period_days":    days_back,
@@ -4654,13 +4687,55 @@ def get_audit_summary(company_id: str, days_back: int = 7, entity_type: Optional
                     "type":   e.get("entity_type"),
                     "action": e.get("action"),
                     "by":     (e.get("changed_by") or "").split("@")[0],
-                    "when":   e.get("timestamp", "")[:16],
+                    "when":   str(e.get("timestamp", ""))[:16],
                 }
                 for e in recent
             ],
         }
+
+    # ── Tier 1: in-memory ────────────────────────────────────────────────────
+    try:
+        from audit.routes import _AUDIT_LOG
+        entries = [
+            e for e in _AUDIT_LOG
+            if e.get("company_id") == company_id
+            and str(e.get("timestamp", "")) >= cutoff_iso
+            and (not entity_type or e.get("entity_type") == entity_type)
+        ]
+        if entries:
+            result = _summarise(entries)
+            result["data_source"] = "in_memory"
+            return result
+    except Exception:
+        pass
+
+    # ── Tier 2: audit.change_log ─────────────────────────────────────────────
+    try:
+        engine = get_engine_safe()
+        if engine:
+            with engine.connect() as conn:
+                et_clause = "AND entity_type = :et" if entity_type else ""
+                rows = conn.execute(text(f"""
+                    SELECT entity_type, entity_id, entity_name, action,
+                           changed_by, timestamp
+                    FROM audit.change_log
+                    WHERE company_id = :cid AND timestamp >= :cutoff
+                    {et_clause}
+                    ORDER BY timestamp DESC
+                    LIMIT 500
+                """), {"cid": company_id, "cutoff": cutoff_iso,
+                       **({"et": entity_type} if entity_type else {})}).fetchall()
+                cols = ["entity_type", "entity_id", "entity_name", "action", "changed_by", "timestamp"]
+                entries = [dict(zip(cols, r)) for r in rows]
+                if entries:
+                    result = _summarise(entries)
+                    result["data_source"] = "audit.change_log"
+                    return result
     except Exception as e:
-        return {"error": str(e), "total_changes": 0}
+        logger.warning("get_audit_summary PG fallback: %s", e)
+
+    return {"total_changes": 0, "period_days": days_back,
+            "note": "No audit data available yet."}
 
 
 def get_automation_roi(company_id: str) -> dict:
