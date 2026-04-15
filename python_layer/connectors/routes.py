@@ -38,14 +38,230 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/connectors", tags=["Connectors"])
 
 
-# ── Schedule store ────────────────────────────────────────────────────────────
-# In-memory for now. Production would persist to PostgreSQL connectors.schedules.
+# ── Schedule store ─────────────────────────────────────────────────────────────
+# Primary: PostgreSQL connectors.schedules (survives redeploys).
+# Fallback: in-memory dict (used when DB is unavailable — temporary only).
 # Key: "{company_id}:{connector_id}"
 _SCHEDULE_STORE: dict[str, dict] = {}
 
-# Simple run log (in addition to Base44 ConnectorRun entity)
+# Simple run log (also persisted to connectors.run_log when DB is available)
 _RUN_LOG: list[dict] = []
 _RUN_LOG_MAX = 500
+
+_SCHEDULES_DDL = """
+CREATE SCHEMA IF NOT EXISTS connectors;
+
+CREATE TABLE IF NOT EXISTS connectors.schedules (
+    key              TEXT PRIMARY KEY,       -- "{company_id}:{connector_id}"
+    company_id       TEXT NOT NULL,
+    connector_id     TEXT NOT NULL,
+    connector_name   TEXT,
+    frequency        TEXT NOT NULL DEFAULT 'manual',
+    run_at_hour      INT  DEFAULT 0,
+    run_at_day       INT  DEFAULT 1,
+    entity_type      TEXT DEFAULT 'people',
+    is_active        BOOLEAN DEFAULT TRUE,
+    credentials_enc  TEXT,                   -- JSON, stored as-is (no PII in creds)
+    next_run_at      TIMESTAMPTZ,
+    last_run_at      TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS connectors.run_log (
+    id           SERIAL PRIMARY KEY,
+    company_id   TEXT NOT NULL,
+    connector_id TEXT NOT NULL,
+    triggered_by TEXT DEFAULT 'manual',
+    status       TEXT NOT NULL,
+    records_extracted INT DEFAULT 0,
+    records_created   INT DEFAULT 0,
+    records_updated   INT DEFAULT 0,
+    error        TEXT,
+    started_at   TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
+"""
+
+
+def _ensure_schedule_tables() -> bool:
+    """Create connectors.schedules and connectors.run_log if not present. Returns True on success."""
+    from database import get_engine_safe
+    from sqlalchemy import text
+    engine = get_engine_safe()
+    if not engine:
+        return False
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(_SCHEDULES_DDL))
+            conn.commit()
+        return True
+    except Exception as e:
+        logger.debug("schedule tables setup skipped — %s", e)
+        return False
+
+
+def _db_load_schedules() -> dict[str, dict]:
+    """Load all schedules from PostgreSQL into a dict keyed by '{company_id}:{connector_id}'."""
+    from database import get_engine_safe
+    from sqlalchemy import text
+    engine = get_engine_safe()
+    if not engine:
+        return {}
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text("SELECT * FROM connectors.schedules")).fetchall()
+            cols = conn.execute(text("SELECT * FROM connectors.schedules LIMIT 0")).keys()
+        result = {}
+        for row in rows:
+            entry = dict(zip(cols, row))
+            # Deserialise credentials
+            creds_raw = entry.pop("credentials_enc", None)
+            entry["credentials"] = json.loads(creds_raw) if creds_raw else None
+            # Convert timestamps to ISO strings
+            for ts_col in ("next_run_at", "last_run_at", "created_at", "updated_at"):
+                val = entry.get(ts_col)
+                if val and hasattr(val, "isoformat"):
+                    entry[ts_col] = val.isoformat()
+            result[entry["key"]] = entry
+        return result
+    except Exception as e:
+        logger.debug("_db_load_schedules: %s", e)
+        return {}
+
+
+def _db_save_schedule(key: str, entry: dict) -> bool:
+    """Upsert a schedule row into PostgreSQL. Returns True on success."""
+    from database import get_engine_safe
+    from sqlalchemy import text
+    engine = get_engine_safe()
+    if not engine:
+        return False
+    try:
+        creds_enc = json.dumps(entry.get("credentials")) if entry.get("credentials") else None
+
+        def _parse_ts(val):
+            if not val:
+                return None
+            if hasattr(val, "isoformat"):
+                return val
+            try:
+                return datetime.fromisoformat(str(val))
+            except Exception:
+                return None
+
+        with engine.connect() as conn:
+            conn.execute(text("""
+                INSERT INTO connectors.schedules
+                    (key, company_id, connector_id, connector_name, frequency,
+                     run_at_hour, run_at_day, entity_type, is_active, credentials_enc,
+                     next_run_at, last_run_at, updated_at)
+                VALUES
+                    (:key, :company_id, :connector_id, :connector_name, :frequency,
+                     :run_at_hour, :run_at_day, :entity_type, :is_active, :creds,
+                     :next_run_at, :last_run_at, NOW())
+                ON CONFLICT (key) DO UPDATE SET
+                    connector_name   = EXCLUDED.connector_name,
+                    frequency        = EXCLUDED.frequency,
+                    run_at_hour      = EXCLUDED.run_at_hour,
+                    run_at_day       = EXCLUDED.run_at_day,
+                    entity_type      = EXCLUDED.entity_type,
+                    is_active        = EXCLUDED.is_active,
+                    credentials_enc  = COALESCE(EXCLUDED.credentials_enc, connectors.schedules.credentials_enc),
+                    next_run_at      = EXCLUDED.next_run_at,
+                    last_run_at      = EXCLUDED.last_run_at,
+                    updated_at       = NOW()
+            """), {
+                "key":            key,
+                "company_id":     entry["company_id"],
+                "connector_id":   entry["connector_id"],
+                "connector_name": entry.get("connector_name", ""),
+                "frequency":      entry.get("frequency", "manual"),
+                "run_at_hour":    entry.get("run_at_hour", 0),
+                "run_at_day":     entry.get("run_at_day", 1),
+                "entity_type":    entry.get("entity_type", "people"),
+                "is_active":      entry.get("is_active", True),
+                "creds":          creds_enc,
+                "next_run_at":    _parse_ts(entry.get("next_run_at")),
+                "last_run_at":    _parse_ts(entry.get("last_run_at")),
+            })
+            conn.commit()
+        return True
+    except Exception as e:
+        logger.warning("_db_save_schedule: %s", e)
+        return False
+
+
+def _db_delete_schedule(key: str) -> bool:
+    from database import get_engine_safe
+    from sqlalchemy import text
+    engine = get_engine_safe()
+    if not engine:
+        return False
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("DELETE FROM connectors.schedules WHERE key = :k"), {"k": key})
+            conn.commit()
+        return True
+    except Exception as e:
+        logger.warning("_db_delete_schedule: %s", e)
+        return False
+
+
+def _db_append_run_log(entry: dict) -> None:
+    from database import get_engine_safe
+    from sqlalchemy import text
+    engine = get_engine_safe()
+    if not engine:
+        return
+    try:
+        def _parse_ts(val):
+            if not val:
+                return None
+            try:
+                return datetime.fromisoformat(str(val))
+            except Exception:
+                return None
+        with engine.connect() as conn:
+            conn.execute(text("""
+                INSERT INTO connectors.run_log
+                    (company_id, connector_id, triggered_by, status,
+                     records_extracted, records_created, records_updated,
+                     error, started_at, completed_at)
+                VALUES
+                    (:company_id, :connector_id, :triggered_by, :status,
+                     :extracted, :created, :updated,
+                     :error, :started_at, :completed_at)
+            """), {
+                "company_id":   entry.get("company_id", ""),
+                "connector_id": entry.get("connector_id", ""),
+                "triggered_by": entry.get("triggered_by", "manual"),
+                "status":       entry.get("status", "unknown"),
+                "extracted":    entry.get("records_extracted", 0),
+                "created":      entry.get("records_created", 0),
+                "updated":      entry.get("records_updated", 0),
+                "error":        entry.get("error"),
+                "started_at":   _parse_ts(entry.get("started_at")),
+                "completed_at": _parse_ts(entry.get("completed_at")),
+            })
+            conn.commit()
+    except Exception as e:
+        logger.debug("_db_append_run_log: %s", e)
+
+
+def _get_schedule_store() -> dict[str, dict]:
+    """
+    Return the live schedule store.
+    On first call (empty in-memory), load from PostgreSQL.
+    Falls back to in-memory if DB is unavailable.
+    """
+    global _SCHEDULE_STORE
+    if not _SCHEDULE_STORE:
+        loaded = _db_load_schedules()
+        if loaded:
+            _SCHEDULE_STORE = loaded
+            logger.info("schedules: loaded %d schedule(s) from PostgreSQL", len(loaded))
+    return _SCHEDULE_STORE
 
 
 def _now_iso() -> str:
@@ -97,9 +313,10 @@ class ConnectorScheduleConfig(BaseModel):
 @router.get("/schedule")
 def get_schedules(company_id: str = Query(...)):
     """List all active connector schedules for a company. Credentials are stripped from responses."""
+    store = _get_schedule_store()
     prefix = f"{company_id}:"
     schedules = []
-    for k, v in _SCHEDULE_STORE.items():
+    for k, v in store.items():
         if k.startswith(prefix):
             safe = {key: val for key, val in v.items() if key != "credentials"}
             safe["has_credentials"] = bool(v.get("credentials"))
@@ -111,35 +328,43 @@ def get_schedules(company_id: str = Query(...)):
 def save_schedule(config: ConnectorScheduleConfig):
     """
     Save or update the sync schedule for a connector.
-    Schedules are stored in-memory (Railway resets clear them — acceptable for now).
+    Persisted to PostgreSQL connectors.schedules — survives Railway redeploys.
+    Falls back to in-memory if DB is unavailable.
     """
+    _ensure_schedule_tables()
+    store = _get_schedule_store()
     key = f"{config.company_id}:{config.connector_id}"
     entry = config.dict()
+    entry["key"]         = key
     entry["created_at"]  = entry.get("created_at", _now_iso())
     entry["updated_at"]  = _now_iso()
     entry["next_run_at"] = _compute_next_run(
         config.frequency, config.run_at_hour, config.run_at_day
     )
-    entry["last_run_at"] = _SCHEDULE_STORE.get(key, {}).get("last_run_at")
+    entry["last_run_at"] = store.get(key, {}).get("last_run_at")
     # Preserve previously stored credentials if none supplied this call
     if entry.get("credentials") is None:
-        entry["credentials"] = _SCHEDULE_STORE.get(key, {}).get("credentials")
-    _SCHEDULE_STORE[key] = entry
+        entry["credentials"] = store.get(key, {}).get("credentials")
+    store[key] = entry
+
+    # Persist to PostgreSQL — credentials stored alongside schedule config
+    persisted = _db_save_schedule(key, entry)
     logger.info(
-        "schedule saved: company=%s connector=%s freq=%s next=%s has_creds=%s",
+        "schedule saved: company=%s connector=%s freq=%s next=%s has_creds=%s db=%s",
         config.company_id, config.connector_id, config.frequency,
-        entry["next_run_at"], bool(entry.get("credentials")),
+        entry["next_run_at"], bool(entry.get("credentials")), persisted,
     )
-    # Return entry without credentials — never expose stored creds in API response
     safe = {k: v for k, v in entry.items() if k != "credentials"}
-    return {"status": "saved", **safe}
+    return {"status": "saved", "persisted_to_db": persisted, **safe}
 
 
 @router.delete("/schedule/{connector_id}")
 def delete_schedule(connector_id: str, company_id: str = Query(...)):
-    """Remove a connector schedule."""
+    """Remove a connector schedule from both memory and PostgreSQL."""
+    store = _get_schedule_store()
     key = f"{company_id}:{connector_id}"
-    removed = _SCHEDULE_STORE.pop(key, None)
+    removed = store.pop(key, None)
+    _db_delete_schedule(key)
     return {"status": "deleted" if removed else "not_found", "connector_id": connector_id}
 
 
@@ -150,15 +375,15 @@ def run_scheduled_connectors(x_cron_secret: Optional[str] = Header(None)):
     Called by Railway cron every hour: POST /connectors/run-scheduled
     Header: x-cron-secret
 
-    Note: scheduled runs use the entity_type saved with the schedule.
-    Credentials are not stored — scheduled syncs work only for connectors
-    that don't require runtime credentials (database connectors with saved
-    config, or future credential-vault integration).
+    Schedules and credentials are loaded from PostgreSQL connectors.schedules
+    so this works correctly after Railway redeploys.
     """
+    _ensure_schedule_tables()
+    store = _get_schedule_store()
     triggered = []
     now = datetime.now(timezone.utc)
 
-    for key, sched in list(_SCHEDULE_STORE.items()):
+    for key, sched in list(store.items()):
         if not sched.get("is_active"):
             continue
         if sched.get("frequency") == "manual":
@@ -221,12 +446,15 @@ def run_scheduled_connectors(x_cron_secret: Optional[str] = Header(None)):
             logger.error("run-scheduled: %s failed — %s", connector_id, e)
             run_entry.update({"status": "failed", "error": str(e), "completed_at": _now_iso()})
 
-        # Update last_run and compute next_run
-        _SCHEDULE_STORE[key]["last_run_at"] = _now_iso()
-        _SCHEDULE_STORE[key]["next_run_at"] = _compute_next_run(
+        # Update last_run and compute next_run — persist to DB
+        store[key]["last_run_at"] = _now_iso()
+        store[key]["next_run_at"] = _compute_next_run(
             sched["frequency"], sched.get("run_at_hour", 0), sched.get("run_at_day", 1)
         )
+        _db_save_schedule(key, store[key])
 
+        # Persist run log entry to DB + in-memory
+        _db_append_run_log(run_entry)
         _RUN_LOG.append(run_entry)
         if len(_RUN_LOG) > _RUN_LOG_MAX:
             del _RUN_LOG[: len(_RUN_LOG) - _RUN_LOG_MAX]
@@ -248,13 +476,46 @@ def connector_runs(
 ):
     """
     Return recent connector run log entries for a company.
-    Combines in-memory run log from scheduled runs.
+    Reads from PostgreSQL connectors.run_log when available,
+    falls back to in-memory run log.
     """
+    from database import get_engine_safe
+    from sqlalchemy import text
+
+    engine = get_engine_safe()
+    if engine:
+        try:
+            sql = """
+                SELECT company_id, connector_id, triggered_by, status,
+                       records_extracted, records_created, records_updated,
+                       error,
+                       started_at::text  AS started_at,
+                       completed_at::text AS completed_at
+                FROM connectors.run_log
+                WHERE company_id = :cid
+            """
+            params: dict = {"cid": company_id}
+            if connector_id:
+                sql += " AND connector_id = :conn_id"
+                params["conn_id"] = connector_id
+            sql += " ORDER BY started_at DESC LIMIT :lim"
+            params["lim"] = limit
+            with engine.connect() as conn:
+                rows = conn.execute(text(sql), params).fetchall()
+                cols = ["company_id", "connector_id", "triggered_by", "status",
+                        "records_extracted", "records_created", "records_updated",
+                        "error", "started_at", "completed_at"]
+                entries = [dict(zip(cols, row)) for row in rows]
+            return {"runs": entries, "total": len(entries), "source": "postgresql"}
+        except Exception as e:
+            logger.debug("connector_runs: DB read failed, falling back to memory — %s", e)
+
+    # In-memory fallback
     entries = [r for r in _RUN_LOG if r.get("company_id") == company_id]
     if connector_id:
         entries = [r for r in entries if r.get("connector_id") == connector_id]
     entries.sort(key=lambda r: r.get("started_at", ""), reverse=True)
-    return {"runs": entries[:limit], "total": len(entries)}
+    return {"runs": entries[:limit], "total": len(entries), "source": "memory"}
 
 
 @router.get("/catalog")

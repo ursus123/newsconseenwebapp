@@ -145,6 +145,15 @@ async def lifespan(app: FastAPI):
             ensure_audit_table(engine)
         except Exception as e:
             logger.warning("Startup: Audit table setup skipped — %s", e)
+
+        # Connector schedules + run_log tables (survives redeploys)
+        try:
+            from connectors.routes import _ensure_schedule_tables, _get_schedule_store
+            _ensure_schedule_tables()
+            loaded = _get_schedule_store()
+            logger.info("Startup: connector schedules ready — %d schedule(s) loaded", len(loaded))
+        except Exception as e:
+            logger.warning("Startup: Connector schedule tables skipped — %s", e)
     else:
         logger.warning("Startup: DATABASE_URL not set — analytics store unavailable")
 
