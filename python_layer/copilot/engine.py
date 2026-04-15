@@ -304,6 +304,9 @@ def build_system_prompt(company_id: str) -> str:
       4. Tool instructions (how to use the tools)
       5. Data quality note (only when score < 80 or critical issues exist)
     """
+    from datetime import date as _date
+    today_str = _date.today().isoformat()
+
     ctx    = get_operator_context(company_id)
     name   = ctx.get("name", "this organisation")
     etype  = ctx.get("enterprise_type", "commercial")
@@ -312,6 +315,7 @@ def build_system_prompt(company_id: str) -> str:
     operator_identity = (
         f"CURRENT OPERATOR\n"
         f"================\n"
+        f"TODAY: {today_str}\n"
         f"You are answering for: {name}\n"
         f"Enterprise type: {etype}\n"
         f"Operating status: {status}\n"
