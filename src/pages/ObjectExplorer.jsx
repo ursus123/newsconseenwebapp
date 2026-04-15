@@ -350,6 +350,103 @@ function NodeDetailPanel({ selection, navigate, onClose }) {
   );
 }
 
+// ── EdgeDetailPanel ───────────────────────────────────────────────────────────
+function EdgeDetailPanel({ selection, navigate, onClose }) {
+  const { edgeInfo } = selection;
+  const srcDef = TYPE_MAP[edgeInfo.source];
+  const tgtDef = TYPE_MAP[edgeInfo.target];
+  if (!srcDef || !tgtDef) return null;
+  const SrcIcon = srcDef.icon;
+  const TgtIcon = tgtDef.icon;
+
+  return (
+    <div className="w-72 bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm flex flex-col shrink-0">
+      {/* Header */}
+      <div className="flex items-center gap-3 p-4 border-b border-indigo-200 bg-indigo-50">
+        <div className="w-10 h-10 rounded-xl bg-white border border-indigo-200 flex items-center justify-center shrink-0">
+          <Link2 className="w-5 h-5 text-indigo-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-black text-slate-800">Relationship</p>
+          <p className="text-xs font-mono text-indigo-600 truncate">{edgeInfo.label}</p>
+        </div>
+        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/60 text-slate-400 hover:text-slate-600 transition-colors shrink-0">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+
+        {/* Join visualisation */}
+        <div className="flex items-center gap-2">
+          <div className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl ${srcDef.bg} border ${srcDef.border}`}>
+            <SrcIcon className={`w-4 h-4 ${srcDef.color} shrink-0`} />
+            <span className={`text-xs font-bold ${srcDef.color} truncate`}>{srcDef.label}</span>
+          </div>
+          <div className="flex flex-col items-center shrink-0">
+            <span className="text-slate-400 text-base leading-none">→</span>
+            <span className="text-[9px] text-slate-400 font-mono mt-0.5 max-w-[52px] text-center leading-tight">{edgeInfo.label}</span>
+          </div>
+          <div className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl ${tgtDef.bg} border ${tgtDef.border}`}>
+            <TgtIcon className={`w-4 h-4 ${tgtDef.color} shrink-0`} />
+            <span className={`text-xs font-bold ${tgtDef.color} truncate`}>{tgtDef.label}</span>
+          </div>
+        </div>
+
+        {/* Join field */}
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Join Field</p>
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
+            <span className="text-xs font-mono text-slate-700">{edgeInfo.label}</span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+            Records in <span className="font-semibold text-slate-600">{srcDef.label}</span> link to{" "}
+            <span className="font-semibold text-slate-600">{tgtDef.label}</span> via the{" "}
+            <span className="font-mono text-indigo-600">{edgeInfo.label}</span> field.
+          </p>
+        </div>
+
+        {/* Entity descriptions */}
+        <div className="space-y-3">
+          <div>
+            <div className={`flex items-center gap-1.5 mb-1`}>
+              <SrcIcon className={`w-3 h-3 ${srcDef.color}`} />
+              <span className={`text-[10px] font-bold uppercase tracking-widest ${srcDef.color}`}>{srcDef.label}</span>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">{srcDef.description}</p>
+          </div>
+          <div>
+            <div className={`flex items-center gap-1.5 mb-1`}>
+              <TgtIcon className={`w-3 h-3 ${tgtDef.color}`} />
+              <span className={`text-[10px] font-bold uppercase tracking-widest ${tgtDef.color}`}>{tgtDef.label}</span>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">{tgtDef.description}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer CTAs */}
+      <div className="p-4 border-t border-slate-100 space-y-2">
+        <button
+          onClick={() => navigate(createPageUrl(srcDef.routePage))}
+          className={`w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl ${srcDef.bg} ${srcDef.color} text-xs font-bold border ${srcDef.border} hover:opacity-80 transition-opacity`}
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          View {srcDef.label}
+        </button>
+        <button
+          onClick={() => navigate(createPageUrl(tgtDef.routePage))}
+          className={`w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl ${tgtDef.bg} ${tgtDef.color} text-xs font-bold border ${tgtDef.border} hover:opacity-80 transition-opacity`}
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          View {tgtDef.label}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── OntologyGraph ─────────────────────────────────────────────────────────────
 function OntologyGraph({ allObjects, loaded, loading, mode, onNodeSelect }) {
   const containerRef    = useRef(null);
@@ -399,7 +496,7 @@ function OntologyGraph({ allObjects, loaded, loading, mode, onNodeSelect }) {
       userZoomingEnabled:  true,
       userPanningEnabled:  true,
       boxSelectionEnabled: false,
-      autoungrabify:       mode === "live",   // lock entity nodes in live mode so drag is free
+      autoungrabify:       false,
       minZoom: 0.25,
       maxZoom: 3,
       style: [
@@ -512,8 +609,24 @@ function OntologyGraph({ allObjects, loaded, loading, mode, onNodeSelect }) {
             "opacity":             0.7,
           },
         },
+        // ── Dimmed state — applied to unfocused elements on selection ──
+        {
+          selector: ".dimmed",
+          style: {
+            "opacity": 0.1,
+          },
+        },
       ],
     });
+
+    // ── Focus helpers ─────────────────────────────────────────────────────────
+    const applyFocus = (focusedEles) => {
+      cy.elements().addClass("dimmed");
+      focusedEles.removeClass("dimmed");
+    };
+    const clearFocus = () => {
+      cy.elements().removeClass("dimmed");
+    };
 
     // ── Event: node tap ───────────────────────────────────────────────────────
     cy.on("tap", "node", evt => {
@@ -522,16 +635,20 @@ function OntologyGraph({ allObjects, loaded, loading, mode, onNodeSelect }) {
 
       // Record node (live mode only)
       if (node.hasClass("record")) {
-        const record  = node.data("record");
-        const typeKey = node.data("typeKey");
+        const record      = node.data("record");
+        const typeKey     = node.data("typeKey");
+        const parentNode  = cy.getElementById(typeKey);
+        const recEdge     = cy.edges(`[source="${typeKey}"][target="${nodeId}"]`);
+        applyFocus(node.union(parentNode).union(recEdge));
         onNodeSelect({ type: "record", record, typeDef: TYPE_MAP[typeKey] });
         return;
       }
 
-      // Entity node — schema mode: just select
+      // Entity node — schema mode: highlight neighbourhood
       if (mode === "schema") {
         const typeDef = TYPE_MAP[nodeId];
         if (typeDef) {
+          applyFocus(node.closedNeighborhood());
           onNodeSelect({ type: "entity", typeKey: nodeId, typeDef, count: counts[nodeId], isLive: false });
         }
         return;
@@ -543,7 +660,8 @@ function OntologyGraph({ allObjects, loaded, loading, mode, onNodeSelect }) {
 
       const isExpanded = expandedRef.current === nodeId;
 
-      // Remove all existing record nodes + their edges
+      // Remove all existing record nodes + their edges, clear focus first
+      clearFocus();
       cy.elements(".record, .rec-edge").remove();
 
       if (isExpanded) {
@@ -553,9 +671,9 @@ function OntologyGraph({ allObjects, loaded, loading, mode, onNodeSelect }) {
       } else {
         // Expand: add record nodes radially around entity node
         expandedRef.current = nodeId;
-        const records = (allObjectsRef.current[nodeId] || []).slice(0, 15);
+        const records   = (allObjectsRef.current[nodeId] || []).slice(0, 15);
         const parentPos = node.position();
-        const n = records.length;
+        const n         = records.length;
 
         if (n > 0) {
           const radius = Math.max(185, 80 + n * 14);
@@ -586,18 +704,41 @@ function OntologyGraph({ allObjects, loaded, loading, mode, onNodeSelect }) {
 
           cy.add([...newNodes, ...newEdges]);
 
-          // Animate record nodes in (fade via opacity)
+          // Animate in, then apply focus: entity + all its record nodes + rec-edges
           cy.elements(".record").style({ opacity: 0 });
-          cy.elements(".record").animate({ style: { opacity: 1 } }, { duration: 280 });
+          cy.elements(".record").animate({ style: { opacity: 1 } }, { duration: 280, complete: () => {
+            const expanded = cy.getElementById(nodeId)
+              .union(cy.elements(".record"))
+              .union(cy.elements(".rec-edge"));
+            applyFocus(expanded);
+          }});
+        } else {
+          // No records — focus entity node only
+          applyFocus(node.closedNeighborhood());
         }
 
         onNodeSelect({ type: "entity", typeKey: nodeId, typeDef, count: counts[nodeId], isLive: true });
       }
     });
 
-    // Canvas tap → deselect
+    // ── Event: edge tap ───────────────────────────────────────────────────────
+    cy.on("tap", "edge", evt => {
+      const edge     = evt.target;
+      const edgeData = edge.data();
+      // Highlight the edge + both its endpoint nodes
+      applyFocus(edge.union(edge.connectedNodes()));
+      const edgeInfo = ONTOLOGY_EDGES.find(e => e.id === edgeData.id);
+      if (edgeInfo) {
+        onNodeSelect({ type: "edge", edgeInfo });
+      }
+    });
+
+    // Canvas tap → deselect + clear focus
     cy.on("tap", evt => {
-      if (evt.target === cy) onNodeSelect(null);
+      if (evt.target === cy) {
+        clearFocus();
+        onNodeSelect(null);
+      }
     });
 
     cy.ready(() => cy.fit(undefined, 48));
@@ -820,7 +961,9 @@ export default function ObjectExplorer() {
   const graphPanel = graphSelection
     ? graphSelection.type === "record"
       ? <RecordDetailPanel selection={graphSelection} navigate={navigate} onClose={() => setGraphSelection(null)} />
-      : <NodeDetailPanel   selection={graphSelection} navigate={navigate} onClose={() => setGraphSelection(null)} />
+      : graphSelection.type === "edge"
+        ? <EdgeDetailPanel  selection={graphSelection} navigate={navigate} onClose={() => setGraphSelection(null)} />
+        : <NodeDetailPanel  selection={graphSelection} navigate={navigate} onClose={() => setGraphSelection(null)} />
     : null;
 
   return (
