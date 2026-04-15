@@ -8,6 +8,8 @@
  */
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import cytoscape from "cytoscape";
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { useNavigate } from "react-router-dom";
@@ -15,7 +17,7 @@ import {
   Search, Users, Building2, Package, CheckSquare, Receipt,
   Link2, MapPin, X, ExternalLink, Loader2,
   ChevronRight, Layers, GitBranch, Maximize2, Sparkles,
-  Activity,
+  Activity, Box,
 } from "lucide-react";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 
@@ -442,6 +444,226 @@ function EdgeDetailPanel({ selection, navigate, onClose }) {
           <ExternalLink className="w-3.5 h-3.5" />
           View {tgtDef.label}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Graph3D ───────────────────────────────────────────────────────────────────
+const NODE_3D_POSITIONS = {
+  Person:       new THREE.Vector3(-200,   0,    0),
+  Enterprise:   new THREE.Vector3( 200,   0,    0),
+  Product:      new THREE.Vector3( 380,  150,   80),
+  Task:         new THREE.Vector3(  40,  220,  -90),
+  Transaction:  new THREE.Vector3(  40, -190,   60),
+  Relationship: new THREE.Vector3(-370,  120,  -70),
+  Address:      new THREE.Vector3( 310, -140,  -90),
+};
+
+function makeSpriteTexture(label, countStr, hexColor) {
+  const canvas  = document.createElement("canvas");
+  canvas.width  = 320;
+  canvas.height = 80;
+  const ctx     = canvas.getContext("2d");
+  // Background pill
+  ctx.fillStyle = "rgba(15,23,42,0.82)";
+  ctx.beginPath();
+  ctx.roundRect(0, 0, 320, 80, 10);
+  ctx.fill();
+  // Label text
+  ctx.font         = "bold 26px system-ui, sans-serif";
+  ctx.fillStyle    = hexColor;
+  ctx.textAlign    = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(label, 160, 36);
+  // Count text
+  ctx.font         = "18px system-ui, sans-serif";
+  ctx.fillStyle    = "rgba(255,255,255,0.55)";
+  ctx.fillText(countStr, 160, 62);
+  return new THREE.CanvasTexture(canvas);
+}
+
+function Graph3D({ allObjects, loaded, loading, onNodeSelect }) {
+  const mountRef = useRef(null);
+  const frameRef = useRef(null);
+
+  useEffect(() => {
+    if (!mountRef.current || !loaded) return;
+
+    const container = mountRef.current;
+    const W = container.clientWidth  || 800;
+    const H = container.clientHeight || 520;
+
+    // ── Renderer ─────────────────────────────────────────────────────────────
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(W, H);
+    renderer.setClearColor(0x0f172a);
+    container.appendChild(renderer.domElement);
+
+    // ── Scene & Camera ───────────────────────────────────────────────────────
+    const scene  = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(55, W / H, 1, 6000);
+    camera.position.set(0, 120, 780);
+    camera.lookAt(0, 0, 0);
+
+    // ── Lights ───────────────────────────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.85);
+    dir.position.set(400, 600, 300);
+    scene.add(dir);
+
+    // ── OrbitControls ────────────────────────────────────────────────────────
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.autoRotate      = true;
+    controls.autoRotateSpeed = 0.45;
+    controls.enableDamping   = true;
+    controls.dampingFactor   = 0.06;
+    controls.minDistance     = 200;
+    controls.maxDistance     = 1800;
+    controls.target.set(0, 0, 0);
+
+    const toDispose = [];
+    const sphereMeshes = [];
+
+    // ── Edges ─────────────────────────────────────────────────────────────────
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.55 });
+    toDispose.push(lineMat);
+
+    for (const e of ONTOLOGY_EDGES) {
+      const srcPos = NODE_3D_POSITIONS[e.source];
+      const tgtPos = NODE_3D_POSITIONS[e.target];
+      if (!srcPos || !tgtPos) continue;
+      const geom = new THREE.BufferGeometry().setFromPoints([srcPos.clone(), tgtPos.clone()]);
+      scene.add(new THREE.Line(geom, lineMat));
+      toDispose.push(geom);
+    }
+
+    // ── Entity nodes (spheres + label sprites) ────────────────────────────────
+    for (const t of OBJECT_TYPES) {
+      const pos   = NODE_3D_POSITIONS[t.key];
+      const count = (allObjects[t.key] || []).length;
+
+      // Sphere
+      const geom   = new THREE.SphereGeometry(34, 36, 36);
+      const mat    = new THREE.MeshPhongMaterial({ color: new THREE.Color(NODE_COLORS[t.key]), shininess: 100, specular: new THREE.Color(0x888888) });
+      const sphere = new THREE.Mesh(geom, mat);
+      sphere.position.copy(pos);
+      sphere.userData.typeKey = t.key;
+      scene.add(sphere);
+      sphereMeshes.push(sphere);
+      toDispose.push(geom, mat);
+
+      // Glow ring (torus)
+      const tGeom = new THREE.TorusGeometry(38, 2, 8, 48);
+      const tMat  = new THREE.MeshBasicMaterial({ color: new THREE.Color(NODE_COLORS[t.key]), transparent: true, opacity: 0.35 });
+      const torus = new THREE.Mesh(tGeom, tMat);
+      torus.position.copy(pos);
+      torus.rotation.x = Math.PI / 2;
+      scene.add(torus);
+      toDispose.push(tGeom, tMat);
+
+      // Label sprite
+      const tex       = makeSpriteTexture(t.label, count.toLocaleString(), NODE_COLORS[t.key]);
+      const sMat      = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+      const sprite    = new THREE.Sprite(sMat);
+      sprite.scale.set(130, 32, 1);
+      sprite.position.copy(pos);
+      sprite.position.y += 58;
+      scene.add(sprite);
+      toDispose.push(tex, sMat);
+    }
+
+    // ── Raycaster for clicks ──────────────────────────────────────────────────
+    const raycaster = new THREE.Raycaster();
+    const pointer   = new THREE.Vector2();
+    let   isDragging = false;
+    let   dragStart  = { x: 0, y: 0 };
+
+    const onPointerDown = (e) => { dragStart = { x: e.clientX, y: e.clientY }; isDragging = false; };
+    const onPointerMove = (e) => {
+      if (Math.hypot(e.clientX - dragStart.x, e.clientY - dragStart.y) > 4) isDragging = true;
+    };
+    const onClick = (e) => {
+      if (isDragging) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x  = ((e.clientX - rect.left) / rect.width)  *  2 - 1;
+      pointer.y  = ((e.clientY - rect.top)  / rect.height) * -2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(sphereMeshes);
+      if (hits.length > 0) {
+        const typeKey = hits[0].object.userData.typeKey;
+        const typeDef = TYPE_MAP[typeKey];
+        const count   = (allObjects[typeKey] || []).length;
+        onNodeSelect({ type: "entity", typeKey, typeDef, count, isLive: false });
+      }
+    };
+    renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    renderer.domElement.addEventListener("pointermove", onPointerMove);
+    renderer.domElement.addEventListener("click",       onClick);
+
+    // ── Resize ───────────────────────────────────────────────────────────────
+    const onResize = () => {
+      if (!container) return;
+      const w = container.clientWidth  || 800;
+      const h = container.clientHeight || 520;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    };
+    window.addEventListener("resize", onResize);
+
+    // ── Animation loop ────────────────────────────────────────────────────────
+    const animate = () => {
+      frameRef.current = requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    return () => {
+      cancelAnimationFrame(frameRef.current);
+      renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+      renderer.domElement.removeEventListener("pointermove", onPointerMove);
+      renderer.domElement.removeEventListener("click",       onClick);
+      window.removeEventListener("resize", onResize);
+      controls.dispose();
+      for (const d of toDispose) d.dispose?.();
+      renderer.dispose();
+      if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
+    };
+  }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading || !loaded) {
+    return (
+      <div className="flex-1 bg-slate-900 rounded-2xl border border-slate-700 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-violet-400 mx-auto mb-3" />
+          <p className="text-sm text-slate-400 font-medium">Loading 3D ontology…</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex-1 min-h-0 bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden">
+      <div ref={mountRef} className="absolute inset-0" style={{ cursor: "grab" }} />
+
+      {/* Color legend */}
+      <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 z-10 max-w-xs pointer-events-none">
+        {OBJECT_TYPES.map(t => (
+          <div key={t.key} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800/80 border border-slate-700">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: NODE_COLORS[t.key] }} />
+            <span style={{ color: NODE_COLORS[t.key] }}>{t.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Hint */}
+      <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
+        <p className="text-[10px] text-slate-400 bg-slate-900/80 px-2 py-1 rounded-lg border border-slate-700">
+          Drag to orbit · Scroll to zoom · Click sphere to inspect
+        </p>
       </div>
     </div>
   );
@@ -980,6 +1202,7 @@ export default function ObjectExplorer() {
         <p className="text-slate-500 text-sm ml-11">
           {mode === "schema" && "Visualise your operational ontology — entities, relationships, and live record counts."}
           {mode === "live"   && "Explore real records. Click any entity node to expand its top records on the canvas."}
+          {mode === "3d"     && "Rotate the 3D ontology sphere — drag to orbit, scroll to zoom, click any sphere to inspect."}
           {mode === "search" && `Search across all ontology objects — People, Enterprises, Products, Tasks, Transactions, Relationships, Addresses.${loaded ? ` ${totalObjects.toLocaleString()} objects indexed.` : ""}`}
         </p>
       </div>
@@ -989,6 +1212,7 @@ export default function ObjectExplorer() {
         {[
           { id: "schema", label: "Schema",  Icon: GitBranch },
           { id: "live",   label: "Live",    Icon: Activity  },
+          { id: "3d",     label: "3D",      Icon: Box       },
           { id: "search", label: "Search",  Icon: Search    },
         ].map(({ id, label, Icon }) => (
           <button
@@ -1014,6 +1238,19 @@ export default function ObjectExplorer() {
             loaded={loaded}
             loading={loading}
             mode={mode}
+            onNodeSelect={setGraphSelection}
+          />
+          {graphPanel}
+        </div>
+      )}
+
+      {/* ── 3D MODE ──────────────────────────────────────────────────────────── */}
+      {mode === "3d" && (
+        <div className="flex gap-4 flex-1" style={{ minHeight: "520px" }}>
+          <Graph3D
+            allObjects={allObjects}
+            loaded={loaded}
+            loading={loading}
             onNodeSelect={setGraphSelection}
           />
           {graphPanel}
