@@ -1989,7 +1989,6 @@ export async function executeSQL(sql, uploadedTables, companyId, masterDataSnaps
 
   throw new Error("Unsupported SQL. Supported: SELECT, INSERT, UPDATE, DELETE.");
 }
-}
 
 // ── Mutation detector ─────────────────────────────────────────────────────
 export function detectMutation(sql) {
