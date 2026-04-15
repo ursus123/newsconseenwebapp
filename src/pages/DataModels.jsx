@@ -4,190 +4,194 @@ import { ZoomIn, ZoomOut, Maximize2, GitBranch, Database, ArrowRight, Download, 
 import { NotebookStore } from "@/components/querybuilder/NotebookStore";
 import html2canvas from "html2canvas";
 
-// ─── Schema: Master entities ──────────────────────────────────────────────────
+// ─── Schema: 7 canonical entities + MasterDataOption taxonomy ────────────────
+//
+// Source of truth: ARCHITECTURE.md + CLAUDE.md
+//   Three master entities:   Person · Enterprise · Product
+//   Four supporting:         Task · Transaction · Relationship · Address
+//   Universal taxonomy:      MasterDataOption
+//
+// Removed from previous version (violated CLAUDE.md):
+//   ✗ MedicationProfile  — industry-specific; medications = Product (item_type=physical)
+//   ✗ Service            — not a canonical entity; services = Product (item_type=service_package)
+//   ✗ User / UserAppAccess / ImportLog / Report / SavedDashboardWidget — platform internals
+
 const TABLES = [
+  // ── Three Master Entities ──────────────────────────────────────────────────
   {
-    id: "Enterprise", label: "Enterprise", color: "#6366f1", bg: "#eef2ff", border: "#c7d2fe",
-    icon: "🏢", layer: "Master Data", description: "Core business entity — holds all org-level metadata",
-    fields: [
-      { name: "id", type: "PK", pk: true },
-      { name: "enterprise_name", type: "string" },
-      { name: "status", type: "enum" },
-      { name: "enterprise_type", type: "enum" },
-      { name: "city / country", type: "string" },
-      { name: "legal_structure", type: "enum" },
-      { name: "linked_service_ids", type: "array" },
-    ],
-  },
-  {
-    id: "Person", label: "Person", color: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd",
-    icon: "👤", layer: "Master Data", description: "Employees, clients, patients, and external contacts",
+    id: "Person", label: "Person", color: "#3b82f6", bg: "#eff6ff", border: "#bfdbfe",
+    icon: "👤", layer: "Master Entities",
+    description: "Any human in any role. person_type drives the taxonomy: staff · client · contact · volunteer",
     fields: [
       { name: "id", type: "PK", pk: true },
       { name: "first_name / last_name", type: "string" },
-      { name: "person_type", type: "enum" },
-      { name: "status", type: "enum" },
-      { name: "primary_role", type: "string" },
+      { name: "person_type", type: "enum: staff|client|contact|volunteer" },
+      { name: "person_subtype", type: "FK → MasterDataOption", fk: true },
+      { name: "engagement_model", type: "enum: employed|contracted|enrolled|..." },
+      { name: "status", type: "enum: active|inactive|on_leave" },
+      { name: "availability_status", type: "enum" },
       { name: "email / phone", type: "string" },
+      { name: "company_id", type: "tenant scope" },
     ],
   },
   {
-    id: "Product", label: "Product", color: "#f59e0b", bg: "#fffbeb", border: "#fde68a",
-    icon: "📦", layer: "Master Data", description: "Inventory items, fixed assets, and medications",
+    id: "Enterprise", label: "Enterprise", color: "#f59e0b", bg: "#fffbeb", border: "#fde68a",
+    icon: "🏢", layer: "Master Entities",
+    description: "Any organisation, location, or operational unit. Self-referencing for multi-branch hierarchy.",
+    fields: [
+      { name: "id", type: "PK", pk: true },
+      { name: "enterprise_name", type: "string" },
+      { name: "enterprise_type", type: "enum: commercial|nonprofit|government|household|cooperative|trust" },
+      { name: "enterprise_subtype", type: "FK → MasterDataOption", fk: true },
+      { name: "enterprise_tier", type: "enum: headquarters|branch|department|..." },
+      { name: "parent_enterprise_id", type: "FK → Enterprise (self)", fk: true },
+      { name: "status", type: "enum: active|inactive|prospect|archived" },
+      { name: "operating_status", type: "enum: open|closed|temporarily_closed|seasonal" },
+      { name: "company_id", type: "tenant scope" },
+    ],
+  },
+  {
+    id: "Product", label: "Product", color: "#f43f5e", bg: "#fff1f2", border: "#fecdd3",
+    icon: "📦", layer: "Master Entities",
+    description: "Any item, service, resource, or deliverable. Covers physical goods, living assets, digital licenses, service packages, and financial instruments.",
     fields: [
       { name: "id", type: "PK", pk: true },
       { name: "name / sku", type: "string" },
-      { name: "item_type", type: "enum" },
-      { name: "stock_quantity", type: "number" },
+      { name: "item_type", type: "enum: physical|living|digital|service_package|financial_instrument" },
+      { name: "item_subtype", type: "FK → MasterDataOption", fk: true },
+      { name: "item_class", type: "enum: perishable|controlled|serialized|consumable|..." },
+      { name: "item_variant", type: "string (size/dosage/breed/model)" },
+      { name: "stock_quantity / reorder_level", type: "number" },
       { name: "unit_price / cost_price", type: "number" },
-      { name: "status", type: "enum" },
+      { name: "expiry_date", type: "date" },
+      { name: "company_id", type: "tenant scope" },
+    ],
+  },
+  // ── Four Supporting Entities ───────────────────────────────────────────────
+  {
+    id: "Task", label: "Task", color: "#8b5cf6", bg: "#f5f3ff", border: "#ddd6fe",
+    icon: "✅", layer: "Supporting Entities",
+    description: "Any activity, appointment, shift, or work order. Triggers a Transaction on completion when configured.",
+    fields: [
+      { name: "id", type: "PK", pk: true },
+      { name: "title", type: "string" },
+      { name: "task_type", type: "FK → MasterDataOption", fk: true },
+      { name: "status", type: "enum: open|in_progress|completed|cancelled" },
+      { name: "priority", type: "enum: low|medium|high|urgent" },
+      { name: "enterprise", type: "FK → Enterprise", fk: true },
+      { name: "assigned_to_name", type: "FK → Person", fk: true },
+      { name: "due_date / completed_date", type: "date" },
+      { name: "company_id", type: "tenant scope" },
     ],
   },
   {
-    id: "Service", label: "Service", color: "#10b981", bg: "#f0fdf4", border: "#bbf7d0",
-    icon: "⚙️", layer: "Master Data", description: "Defined service catalog with pricing and SLAs",
+    id: "Transaction", label: "Transaction", color: "#10b981", bg: "#f0fdf4", border: "#bbf7d0",
+    icon: "💳", layer: "Supporting Entities",
+    description: "Any financial record — income, expense, invoice, payment, or payroll. The financial ledger of the operation.",
     fields: [
       { name: "id", type: "PK", pk: true },
-      { name: "name / short_code", type: "string" },
-      { name: "category", type: "enum" },
-      { name: "pricing_model", type: "enum" },
-      { name: "price", type: "number" },
+      { name: "transaction_type", type: "enum: income|expense|invoice|payment|payroll|stock_adjustment" },
+      { name: "amount / currency", type: "number/string" },
+      { name: "status", type: "enum: draft|posted|void" },
+      { name: "payment_status", type: "enum: unpaid|paid|overdue|partial" },
+      { name: "enterprise", type: "FK → Enterprise", fk: true },
+      { name: "counterparty", type: "FK → Person", fk: true },
+      { name: "source_task_id", type: "FK → Task", fk: true },
+      { name: "due_date / invoice_date", type: "date" },
+      { name: "company_id", type: "tenant scope" },
     ],
   },
   {
-    id: "Address", label: "Address", color: "#8b5cf6", bg: "#faf5ff", border: "#ddd6fe",
-    icon: "📍", layer: "Master Data", description: "Physical locations linked to people & enterprises",
+    id: "Relationship", label: "Relationship", color: "#6366f1", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "🔗", layer: "Supporting Entities",
+    description: "Links any two entities. Person↔Enterprise · Person↔Product · Enterprise↔Product. relationship_type is operator-defined.",
     fields: [
       { name: "id", type: "PK", pk: true },
-      { name: "label", type: "string" },
-      { name: "address_line1", type: "string" },
-      { name: "city / country", type: "string" },
-      { name: "linked_enterprises", type: "array" },
-    ],
-  },
-  {
-    id: "Relationship", label: "Relationship", color: "#ec4899", bg: "#fdf2f8", border: "#f9a8d4",
-    icon: "🔗", layer: "Connections", description: "Person↔Enterprise, Item↔Enterprise, Item↔Person assignments",
-    fields: [
-      { name: "id", type: "PK", pk: true },
-      { name: "relationship_type", type: "enum" },
+      { name: "relationship_type", type: "FK → MasterDataOption", fk: true },
       { name: "person_name", type: "FK → Person", fk: true },
       { name: "enterprise_name", type: "FK → Enterprise", fk: true },
       { name: "item_name", type: "FK → Product", fk: true },
       { name: "role / status", type: "string/enum" },
+      { name: "start_date / end_date", type: "date" },
+      { name: "company_id", type: "tenant scope" },
     ],
   },
   {
-    id: "Task", label: "Task", color: "#f97316", bg: "#fff7ed", border: "#fed7aa",
-    icon: "✅", layer: "Operations", description: "Operational task assignments with outcome tracking",
+    id: "Address", label: "Address", color: "#14b8a6", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📍", layer: "Supporting Entities",
+    description: "Any physical or postal location. Linked to enterprises and people via the Relationship entity.",
     fields: [
       { name: "id", type: "PK", pk: true },
-      { name: "task_type", type: "enum" },
-      { name: "title", type: "string" },
-      { name: "status / priority", type: "enum" },
-      { name: "enterprise", type: "FK → Enterprise", fk: true },
-      { name: "assigned_to_email", type: "FK → User", fk: true },
-      { name: "trigger_transaction", type: "boolean" },
+      { name: "label", type: "string" },
+      { name: "address_line1 / address_line2", type: "string" },
+      { name: "city / state_region / country", type: "string" },
+      { name: "postal_code", type: "string" },
+      { name: "latitude / longitude", type: "number (geocoded)" },
+      { name: "company_id", type: "tenant scope" },
     ],
   },
+  // ── Universal Taxonomy ─────────────────────────────────────────────────────
   {
-    id: "Transaction", label: "Transaction", color: "#dc2626", bg: "#fef2f2", border: "#fecaca",
-    icon: "💳", layer: "Ledger", description: "Financial & operational ledger — income, expenses, stock",
+    id: "MasterDataOption", label: "MasterDataOption", color: "#0891b2", bg: "#ecfeff", border: "#a5f3fc",
+    icon: "🏷️", layer: "Taxonomy",
+    description: "Operator-defined taxonomy. Classifies person_subtype, enterprise_subtype, item_subtype, task_type, and relationship_type at runtime — no code change required.",
     fields: [
       { name: "id", type: "PK", pk: true },
-      { name: "transaction_type", type: "enum" },
-      { name: "date / amount", type: "date/number" },
-      { name: "enterprise", type: "FK → Enterprise", fk: true },
-      { name: "primary_person", type: "FK → Person", fk: true },
-      { name: "source_task_id", type: "FK → Task", fk: true },
-      { name: "payment_status", type: "enum" },
-    ],
-  },
-  {
-    id: "MedicationProfile", label: "Medication Profile", color: "#0891b2", bg: "#ecfeff", border: "#a5f3fc",
-    icon: "💊", layer: "Healthcare", description: "Client medication records — schedule, dosage, prescriber",
-    fields: [
-      { name: "id", type: "PK", pk: true },
-      { name: "client_name", type: "FK → Person", fk: true },
-      { name: "medication_name", type: "string" },
-      { name: "strength / route", type: "string/enum" },
-      { name: "status", type: "enum" },
-      { name: "schedule_times", type: "array" },
-    ],
-  },
-  {
-    id: "Report", label: "Report", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe",
-    icon: "📊", layer: "Intelligence", description: "Generated reports, exports, and shared intelligence",
-    fields: [
-      { name: "id", type: "PK", pk: true },
-      { name: "title", type: "string" },
-      { name: "type", type: "enum" },
-      { name: "date_range_start/end", type: "date" },
-      { name: "status", type: "enum" },
-    ],
-  },
-  {
-    id: "User", label: "User (Auth)", color: "#475569", bg: "#f8fafc", border: "#cbd5e1",
-    icon: "🔐", layer: "Auth", description: "Authenticated platform users — stamped with company_id",
-    fields: [
-      { name: "id", type: "PK", pk: true },
-      { name: "full_name / email", type: "string" },
-      { name: "role", type: "enum" },
-      { name: "company_id", type: "FK → Enterprise", fk: true },
-    ],
-  },
-  {
-    id: "SavedDashboardWidget", label: "SavedDashboardWidget", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe",
-    icon: "📌", layer: "Intelligence", description: "Pinned QueryBuilder dashboard widgets",
-    fields: [
-      { name: "id", type: "PK", pk: true },
-      { name: "title", type: "string" },
-      { name: "sql", type: "text" },
-      { name: "chart_type", type: "enum" },
-      { name: "created_by", type: "FK → User", fk: true },
-      { name: "created_date", type: "datetime" },
-    ],
-  },
-  {
-    id: "ImportLog", label: "ImportLog", color: "#0891b2", bg: "#ecfeff", border: "#a5f3fc",
-    icon: "📥", layer: "Operations", description: "Bulk import history — tracks file, row counts, errors",
-    fields: [
-      { name: "id", type: "PK", pk: true },
-      { name: "entity_type", type: "string" },
-      { name: "file_name", type: "string" },
-      { name: "rows_imported", type: "number" },
-      { name: "rows_failed", type: "number" },
-      { name: "imported_by", type: "FK → User", fk: true },
-      { name: "enterprise_assigned", type: "FK → Enterprise", fk: true },
-    ],
-  },
-  {
-    id: "UserAppAccess", label: "UserAppAccess", color: "#475569", bg: "#f8fafc", border: "#cbd5e1",
-    icon: "🔑", layer: "Auth", description: "Per-user report and page access control list",
-    fields: [
-      { name: "id", type: "PK", pk: true },
-      { name: "user_email", type: "FK → User", fk: true },
-      { name: "allowed_reports", type: "array" },
-      { name: "allowed_pages", type: "array" },
+      { name: "entity_type", type: "person|enterprise|item|task|relationship" },
+      { name: "field_name", type: "person_subtype|enterprise_subtype|..." },
+      { name: "value / label", type: "string" },
+      { name: "parent_value", type: "string (person_type etc.)" },
+      { name: "is_system_default", type: "boolean" },
+      { name: "company_id", type: "null = system · company_id = custom" },
     ],
   },
 ];
 
-// ── Analytics Layer nodes ──────────────────────────────────────────────────────
+// ── Layer 2 — Deployable Datamart (Railway PostgreSQL analytics.*) ─────────────
+// One analytics table per canonical entity. Populated by ETL @mutation.
+// Read by QueryBuilder, Copilot, Alerts, Agents. Never read directly from Base44.
 const ANALYTICS_TABLES = [
   {
-    id: "analytics_enterprises", label: "analytics_enterprises", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe",
-    icon: "📊", layer: "Analytics Layer", description: "Aggregated enterprise summaries (Railway PostgreSQL)",
+    id: "analytics_people", label: "analytics.people_summary", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe",
+    icon: "📊", layer: "Analytics Layer",
+    description: "Headcount summaries by person_type and status. Source: Person →  ETL → PostgreSQL.",
     fields: [
+      { name: "company_id", type: "tenant scope" },
+      { name: "person_type", type: "enum" },
       { name: "status", type: "enum" },
-      { name: "enterprise_type", type: "enum" },
-      { name: "enterprise_count", type: "INT" },
+      { name: "total_count", type: "INT" },
     ],
   },
   {
-    id: "analytics_tasks", label: "analytics_tasks", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe",
-    icon: "📊", layer: "Analytics Layer", description: "Task completion summaries by type and status",
+    id: "analytics_enterprises", label: "analytics.enterprise_summary", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe",
+    icon: "📊", layer: "Analytics Layer",
+    description: "Enterprise counts by type and operating status.",
     fields: [
+      { name: "company_id", type: "tenant scope" },
+      { name: "enterprise_type", type: "enum" },
+      { name: "status", type: "enum" },
+      { name: "total_count", type: "INT" },
+    ],
+  },
+  {
+    id: "analytics_products", label: "analytics.product_summary", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe",
+    icon: "📊", layer: "Analytics Layer",
+    description: "Product counts, stock levels, and expiry alerts by item_type and item_class.",
+    fields: [
+      { name: "company_id", type: "tenant scope" },
+      { name: "item_type", type: "enum" },
+      { name: "item_class", type: "enum" },
+      { name: "status", type: "enum" },
+      { name: "total_count", type: "INT" },
+      { name: "total_stock", type: "FLOAT" },
+    ],
+  },
+  {
+    id: "analytics_tasks", label: "analytics.task_summary", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe",
+    icon: "📊", layer: "Analytics Layer",
+    description: "Task completion rates by type and status. Drives SLA and operations dashboards.",
+    fields: [
+      { name: "company_id", type: "tenant scope" },
       { name: "task_type", type: "enum" },
       { name: "status", type: "enum" },
       { name: "total_tasks", type: "INT" },
@@ -195,23 +199,36 @@ const ANALYTICS_TABLES = [
     ],
   },
   {
-    id: "analytics_transactions", label: "analytics_transactions", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe",
-    icon: "📊", layer: "Analytics Layer", description: "Transaction volume and amount summaries",
+    id: "analytics_transactions", label: "analytics.transaction_summary", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe",
+    icon: "📊", layer: "Analytics Layer",
+    description: "Revenue and expense summaries by transaction_type, month, and payment status.",
     fields: [
+      { name: "company_id", type: "tenant scope" },
       { name: "transaction_type", type: "enum" },
-      { name: "status", type: "enum" },
-      { name: "total_transactions", type: "INT" },
+      { name: "payment_status", type: "enum" },
       { name: "total_amount", type: "FLOAT" },
-      { name: "avg_amount", type: "FLOAT" },
+      { name: "total_count", type: "INT" },
     ],
   },
   {
-    id: "analytics_people", label: "analytics_people", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe",
-    icon: "📊", layer: "Analytics Layer", description: "People headcount summaries by type and status",
+    id: "analytics_relationships", label: "analytics.relationship_summary", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe",
+    icon: "📊", layer: "Analytics Layer",
+    description: "Relationship network counts by type and status.",
     fields: [
-      { name: "person_type", type: "enum" },
+      { name: "company_id", type: "tenant scope" },
+      { name: "relationship_type", type: "enum" },
       { name: "status", type: "enum" },
-      { name: "people_count", type: "INT" },
+      { name: "total_count", type: "INT" },
+    ],
+  },
+  {
+    id: "analytics_addresses", label: "analytics.address_summary", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe",
+    icon: "📊", layer: "Analytics Layer",
+    description: "Geographic distribution of addresses by city and country.",
+    fields: [
+      { name: "company_id", type: "tenant scope" },
+      { name: "city / country", type: "string" },
+      { name: "total_count", type: "INT" },
     ],
   },
 ];
@@ -290,86 +307,89 @@ const API_TABLES = [
 
 // ─── All edges ─────────────────────────────────────────────────────────────────
 const EDGES = [
-  // Core FK edges (solid green)
-  { from: "Relationship", to: "Person",      label: "person_name" },
-  { from: "Relationship", to: "Enterprise",  label: "enterprise_name" },
-  { from: "Relationship", to: "Product",     label: "item_name" },
-  { from: "Task",         to: "Enterprise",  label: "enterprise" },
-  { from: "Task",         to: "Person",      label: "related_person" },
-  { from: "Task",         to: "Product",     label: "related_item" },
-  { from: "Task",         to: "Transaction", label: "triggers →", style: "trigger" },
-  { from: "Transaction",  to: "Enterprise",  label: "enterprise" },
-  { from: "Transaction",  to: "Person",      label: "primary_person" },
-  { from: "Transaction",  to: "Task",        label: "source_task_id" },
-  { from: "MedicationProfile", to: "Person", label: "client_id" },
-  { from: "Enterprise",   to: "Service",     label: "linked_service_ids" },
-  { from: "Enterprise",   to: "Person",      label: "linked_employee_ids" },
-  { from: "User",         to: "Enterprise",  label: "company_id" },
-  { from: "Address",      to: "Enterprise",  label: "linked_enterprises" },
-  { from: "Address",      to: "Person",      label: "linked_people" },
-  { from: "SavedDashboardWidget", to: "User", label: "created_by" },
-  { from: "ImportLog",    to: "User",        label: "imported_by" },
-  { from: "ImportLog",    to: "Enterprise",  label: "enterprise_assigned" },
-  { from: "UserAppAccess", to: "User",       label: "user_email" },
-  // ETL edges (blue dashed) — Airflow daily pipeline
-  { from: "Enterprise",  to: "analytics_enterprises",  label: "Airflow ETL @daily", style: "etl" },
-  { from: "Task",        to: "analytics_tasks",         label: "Airflow ETL @daily", style: "etl" },
-  { from: "Transaction", to: "analytics_transactions",  label: "Airflow ETL @daily", style: "etl" },
-  { from: "Person",      to: "analytics_people",        label: "Airflow ETL @daily", style: "etl" },
-  // Open Data API edges (orange dotted) — external enrichment
-  { from: "Enterprise",   to: "osm_places",          label: "geocodes address",   style: "api_orange" },
-  { from: "Enterprise",   to: "open_meteo_weather",  label: "weather enrichment", style: "api_blue" },
-  { from: "Product",      to: "medications_rxnorm",  label: "medication lookup",  style: "api_purple" },
-  { from: "Product",      to: "fda_openfda",         label: "recall check",       style: "api_red" },
-  { from: "Transaction",  to: "exchange_rates",      label: "currency conversion",style: "api_green" },
+  // ── Taxonomy wires (cyan dashed) — MasterDataOption classifies entity subtypes
+  { from: "MasterDataOption", to: "Person",       label: "person_subtype",       style: "taxonomy" },
+  { from: "MasterDataOption", to: "Enterprise",   label: "enterprise_subtype",   style: "taxonomy" },
+  { from: "MasterDataOption", to: "Product",      label: "item_subtype",         style: "taxonomy" },
+  { from: "MasterDataOption", to: "Task",         label: "task_type",            style: "taxonomy" },
+  { from: "MasterDataOption", to: "Relationship", label: "relationship_type",    style: "taxonomy" },
+
+  // ── Core FK edges (solid green) — ontology links between the 7 entities
+  { from: "Relationship", to: "Person",       label: "person_name"          },
+  { from: "Relationship", to: "Enterprise",   label: "enterprise_name"      },
+  { from: "Relationship", to: "Product",      label: "item_name"            },
+  { from: "Task",         to: "Enterprise",   label: "enterprise"           },
+  { from: "Task",         to: "Person",       label: "assigned_to_name"     },
+  { from: "Task",         to: "Transaction",  label: "triggers →",          style: "trigger" },
+  { from: "Transaction",  to: "Enterprise",   label: "enterprise"           },
+  { from: "Transaction",  to: "Person",       label: "counterparty"         },
+  { from: "Transaction",  to: "Task",         label: "source_task_id"       },
+  { from: "Address",      to: "Enterprise",   label: "linked_enterprises"   },
+  { from: "Address",      to: "Person",       label: "linked_people"        },
+  { from: "Enterprise",   to: "Enterprise",   label: "parent_enterprise_id" },
+
+  // ── ETL edges (blue dashed) — fires after every mutation, not just @daily
+  { from: "Person",       to: "analytics_people",        label: "ETL @mutation", style: "etl" },
+  { from: "Enterprise",   to: "analytics_enterprises",   label: "ETL @mutation", style: "etl" },
+  { from: "Product",      to: "analytics_products",      label: "ETL @mutation", style: "etl" },
+  { from: "Task",         to: "analytics_tasks",         label: "ETL @mutation", style: "etl" },
+  { from: "Transaction",  to: "analytics_transactions",  label: "ETL @mutation", style: "etl" },
+  { from: "Relationship", to: "analytics_relationships", label: "ETL @mutation", style: "etl" },
+  { from: "Address",      to: "analytics_addresses",     label: "ETL @mutation", style: "etl" },
+
+  // ── Open Data enrichment edges (dotted) — external APIs enrich master entities
+  { from: "Enterprise",  to: "osm_places",         label: "geocoding",          style: "api_orange" },
+  { from: "Enterprise",  to: "open_meteo_weather", label: "weather context",    style: "api_blue"   },
+  { from: "Enterprise",  to: "worldbank",          label: "economic indicators", style: "api_orange" },
+  { from: "Product",     to: "medications_rxnorm", label: "drug name lookup",   style: "api_purple" },
+  { from: "Product",     to: "fda_openfda",        label: "recall check",       style: "api_red"    },
+  { from: "Transaction", to: "exchange_rates",     label: "currency conversion", style: "api_green"  },
 ];
 
 // ─── Default node positions ────────────────────────────────────────────────────
+// Three-layer layout (top→bottom):
+//   Row 0 (y=60)  — Open Data Enrichment APIs
+//   Row 1 (y=300) — Layer 1: Three Master Entities
+//   Row 2 (y=300) — Layer 1: MasterDataOption (taxonomy hub, right side)
+//   Row 3 (y=560) — Layer 1: Four Supporting Entities
+//   Row 4 (y=820) — Layer 2: Deployable Datamart (analytics.*)
 const DEFAULT_POSITIONS = {
-  // Open Data APIs row
-  osm_places:             { x: 40,   y: 60  },
-  open_meteo_weather:     { x: 290,  y: 60  },
-  medications_rxnorm:     { x: 540,  y: 60  },
-  fda_openfda:            { x: 790,  y: 60  },
-  worldbank:              { x: 1040, y: 60  },
-  exchange_rates:         { x: 1290, y: 60  },
-  // Master Data row
-  Enterprise:             { x: 40,   y: 340 },
-  Person:                 { x: 290,  y: 340 },
-  Product:                { x: 540,  y: 340 },
-  Service:                { x: 790,  y: 340 },
-  Address:                { x: 1040, y: 340 },
-  // Connections + Auth row
-  Relationship:           { x: 40,   y: 620 },
-  User:                   { x: 290,  y: 620 },
-  UserAppAccess:          { x: 540,  y: 620 },
-  // Operations + Ledger row
-  Task:                   { x: 40,   y: 900 },
-  Transaction:            { x: 290,  y: 900 },
-  ImportLog:              { x: 540,  y: 900 },
-  // Healthcare + Intelligence row
-  MedicationProfile:      { x: 40,   y: 1160 },
-  Report:                 { x: 290,  y: 1160 },
-  SavedDashboardWidget:   { x: 540,  y: 1160 },
-  // Analytics Layer row
-  analytics_enterprises:  { x: 40,   y: 1420 },
-  analytics_tasks:        { x: 290,  y: 1420 },
-  analytics_transactions: { x: 540,  y: 1420 },
-  analytics_people:       { x: 790,  y: 1420 },
+  // Open Data Enrichment (y=60)
+  osm_places:              { x: 40,   y: 60  },
+  open_meteo_weather:      { x: 300,  y: 60  },
+  medications_rxnorm:      { x: 560,  y: 60  },
+  fda_openfda:             { x: 820,  y: 60  },
+  worldbank:               { x: 1080, y: 60  },
+  exchange_rates:          { x: 1340, y: 60  },
+  // Layer 1 — Three Master Entities (y=300)
+  Person:                  { x: 60,   y: 300 },
+  Enterprise:              { x: 340,  y: 300 },
+  Product:                 { x: 620,  y: 300 },
+  // Layer 1 — Taxonomy hub (y=300, right of masters)
+  Address:                 { x: 900,  y: 300 },
+  MasterDataOption:        { x: 1180, y: 300 },
+  // Layer 1 — Four Supporting Entities (y=560)
+  Task:                    { x: 60,   y: 560 },
+  Transaction:             { x: 340,  y: 560 },
+  Relationship:            { x: 620,  y: 560 },
+  // Layer 2 — Deployable Datamart — analytics.* (y=820)
+  analytics_people:        { x: 40,   y: 820 },
+  analytics_enterprises:   { x: 250,  y: 820 },
+  analytics_products:      { x: 460,  y: 820 },
+  analytics_tasks:         { x: 670,  y: 820 },
+  analytics_transactions:  { x: 880,  y: 820 },
+  analytics_relationships: { x: 1090, y: 820 },
+  analytics_addresses:     { x: 1300, y: 820 },
 };
 
 // ─── Auto-layout ──────────────────────────────────────────────────────────────
 function computeAutoLayout(allTables) {
   const ROW_CONFIG = {
-    "Open Data APIs":   { y: 60,   cols: 6 },
-    "Master Data":      { y: 340,  cols: 5 },
-    "Connections":      { y: 620,  cols: 3 },
-    "Auth":             { y: 620,  cols: 3, offset: 3 },
-    "Operations":       { y: 900,  cols: 3 },
-    "Ledger":           { y: 900,  cols: 3, offset: 3 },
-    "Healthcare":       { y: 1160, cols: 3 },
-    "Intelligence":     { y: 1160, cols: 3, offset: 3 },
-    "Analytics Layer":  { y: 1420, cols: 4 },
+    "Open Data APIs":      { y: 60,  cols: 6 },
+    "Master Entities":     { y: 300, cols: 3 },
+    "Taxonomy":            { y: 300, cols: 2, offset: 3 },
+    "Supporting Entities": { y: 560, cols: 3 },
+    "Analytics Layer":     { y: 820, cols: 7 },
   };
   const byLayer = {};
   allTables.forEach(t => {
@@ -391,8 +411,8 @@ function computeAutoLayout(allTables) {
 const TABLE_W      = 215;
 const TABLE_H_BASE = 60;
 const FIELD_H      = 18;
-const CANVAS_W     = 1600;
-const CANVAS_H     = 1660;
+const CANVAS_W     = 1620;
+const CANVAS_H     = 1060;
 
 function tableHeight(t) { return TABLE_H_BASE + t.fields.length * FIELD_H + 10; }
 
@@ -417,20 +437,17 @@ function getEdgePoint(fromId, toId, positions, tables) {
 
 // ─── Styles ────────────────────────────────────────────────────────────────────
 const LAYER_COLORS = {
-  "Master Data":     "bg-indigo-50 text-indigo-700 border-indigo-200",
-  "Connections":     "bg-pink-50 text-pink-700 border-pink-200",
-  "Operations":      "bg-orange-50 text-orange-700 border-orange-200",
-  "Ledger":          "bg-red-50 text-red-700 border-red-200",
-  "Healthcare":      "bg-cyan-50 text-cyan-700 border-cyan-200",
-  "Intelligence":    "bg-violet-50 text-violet-700 border-violet-200",
-  "Auth":            "bg-slate-100 text-slate-600 border-slate-300",
-  "Analytics Layer": "bg-blue-50 text-blue-700 border-blue-200",
-  "Open Data APIs":  "bg-emerald-50 text-emerald-700 border-emerald-200",
+  "Master Entities":     "bg-blue-50 text-blue-700 border-blue-200",
+  "Supporting Entities": "bg-violet-50 text-violet-700 border-violet-200",
+  "Taxonomy":            "bg-cyan-50 text-cyan-700 border-cyan-200",
+  "Analytics Layer":     "bg-indigo-50 text-indigo-700 border-indigo-200",
+  "Open Data APIs":      "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
 
 const ALL_LAYERS = Object.keys(LAYER_COLORS);
 
 function edgeStyle(style) {
+  if (style === "taxonomy")   return { color: "#0891b2", dash: "5,3",  marker: "arrow-etl",        label_color: "#0891b2" };
   if (style === "etl")        return { color: "#2563eb", dash: "8,4",  marker: "arrow-etl",        label_color: "#2563eb" };
   if (style === "trigger")    return { color: "#f97316", dash: "6,3",  marker: "arrow-orange",     label_color: "#f97316" };
   if (style === "api_orange") return { color: "#ea580c", dash: "4,5",  marker: "arrow-api-orange", label_color: "#ea580c" };
@@ -672,8 +689,8 @@ export default function DataModels() {
               Data Models &amp; Architecture
             </h1>
             <p className="text-xs text-slate-500 mt-0.5 max-w-2xl">
-              Complete view of Newsconseen's data architecture — Master entities, Relationships, Operations, Analytics Layer, and Open Data integrations.
-              <span className="text-slate-400 ml-1">This diagram shows how operational data flows: Base44 → daily ETL → analytics tables, enriched by external open data sources.</span>
+              The universal ontology — 3 master entities, 4 supporting entities, and the MasterDataOption taxonomy that makes it industry-agnostic.
+              <span className="text-slate-400 ml-1">Layer 1 (Base44) → ETL @mutation → Layer 2 (analytics.*), enriched by open data connectors.</span>
             </p>
           </div>
 
