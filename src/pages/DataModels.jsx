@@ -867,6 +867,12 @@ const PG_EDGES = [
   { from: "raw_people",        to: "audit_change_log", label: "mutation log", style: "api_orange" },
   { from: "raw_enterprises",   to: "audit_change_log", label: "mutation log", style: "api_orange" },
   { from: "raw_products",      to: "audit_change_log", label: "mutation log", style: "api_orange" },
+  // Phase A enrichment: raw.* → analytics.*_enrichment
+  { from: "raw_people",        to: "an_person_enrichment",      label: "Phase A enrich", style: "etl" },
+  { from: "raw_enterprises",   to: "an_enterprise_enrichment",  label: "Phase A enrich", style: "etl" },
+  { from: "raw_products",      to: "an_product_enrichment",     label: "Phase A enrich", style: "etl" },
+  { from: "raw_transactions",  to: "an_transaction_enrichment", label: "Phase A enrich", style: "etl" },
+  { from: "raw_addresses",     to: "an_address_enrichment",     label: "Phase A enrich", style: "etl" },
 ];
 
 // ── PostgreSQL view default positions ─────────────────────────────────────────
@@ -891,6 +897,12 @@ const DEFAULT_PG_POSITIONS = {
   an_addresses:      { x: 1040, y: 460 },
   an_services:       { x: 1210, y: 460 },
   an_geospatial:     { x: 1380, y: 460 },
+  // Phase A enrichment (y=660) — same x-alignment as raw/analytics counterparts
+  an_person_enrichment:      { x: 20,   y: 660 },
+  an_enterprise_enrichment:  { x: 190,  y: 660 },
+  an_product_enrichment:     { x: 360,  y: 660 },
+  an_transaction_enrichment: { x: 700,  y: 660 },
+  an_address_enrichment:     { x: 1040, y: 660 },
   // Intelligence (y=860)
   an_agent_memory:    { x: 80,   y: 860 },
   an_agent_approvals: { x: 450,  y: 860 },
@@ -901,10 +913,12 @@ const DEFAULT_PG_POSITIONS = {
 };
 
 const PG_LAYER_COLORS = {
-  "raw.*":        "bg-teal-50 text-teal-700 border-teal-200",
-  "analytics.*":  "bg-indigo-50 text-indigo-700 border-indigo-200",
-  "Intelligence": "bg-purple-50 text-purple-700 border-purple-200",
-  "audit.*":      "bg-rose-50 text-rose-700 border-rose-200",
+  "raw.*":                "bg-teal-50 text-teal-700 border-teal-200",
+  "analytics.*":          "bg-indigo-50 text-indigo-700 border-indigo-200",
+  "analytics.intelligence":"bg-sky-50 text-sky-700 border-sky-200",
+  "analytics.enrichment": "bg-emerald-50 text-emerald-700 border-emerald-200",
+  "Intelligence":         "bg-purple-50 text-purple-700 border-purple-200",
+  "audit.*":              "bg-rose-50 text-rose-700 border-rose-200",
 };
 
 // ── API Catalogue — python_layer FastAPI endpoint groups ─────────────────────
