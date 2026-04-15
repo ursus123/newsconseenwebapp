@@ -612,6 +612,39 @@ Fix: add variables to Railway OR make them Optional[str] = None in settings.py.
 
 ## Hard rules for Claude in this repo
 
+### API gateway rule — ALL external APIs must go through python_layer (RULE)
+
+Every external or public API call — whether it enriches the ontology, powers analytics,
+or provides reference data — **must be proxied through python_layer**. The React frontend
+must never call any third-party or public API directly.
+
+**Why:** python_layer is the single API gateway for Newsconseen. Routing all external calls
+through it gives us: company_id scoping, rate-limit management, caching, error normalisation,
+audit logging, and the ability to swap providers without touching the frontend.
+
+**Applies to:**
+- Public data APIs (OSM, Open-Meteo, RxNorm, World Bank — already in `/open-data/*`)
+- Enrichment APIs (geocoding, company lookup, exchange rates, regulatory data)
+- Any future third-party integration (SMS providers, payment gateways, ERP connectors)
+- Copilot web search (Brave/DuckDuckGo — already proxied via `web_search` tool)
+
+**Pattern:**
+```python
+# python_layer: expose a thin proxy endpoint
+@app.get("/open-data/exchange-rates")
+def get_exchange_rates(base: str = "USD"):
+    r = httpx.get(f"https://api.exchangerate.host/latest?base={base}")
+    return r.json()
+
+# React: always fetch from RAILWAY_URL, never from the provider directly
+const { data } = useQuery({ queryFn: () => fetch(`${RAILWAY_URL}/open-data/exchange-rates`) })
+```
+
+**Never:**
+- `fetch("https://api.some-provider.com/...")` directly from React components
+- `axios.get("https://external-api.com/...")` in any frontend file
+- Embed third-party API keys in the frontend bundle
+
 ### Never
 - Hardcode person_type values like "employee", "student", "vendor"
 - Query Base44 entities directly for analytics stat card values when python_layer is available
