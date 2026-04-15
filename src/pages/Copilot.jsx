@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Sparkles, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { useLocation } from "react-router-dom";
 import CopilotChat from "@/components/copilot/copilotchat";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
@@ -9,6 +10,8 @@ const COPILOT_BACKEND = import.meta.env.VITE_COPILOT_BACKEND || "anthropic";
 const BACKEND_LABEL = COPILOT_BACKEND === "openai" ? "Powered by GPT-4o" : "Powered by Claude";
 
 export default function Copilot() {
+  const location = useLocation();
+  const prefillMessage = location.state?.prefillMessage || "";
   const [currentUser, setCurrentUser] = useState(null);
   const [backendStatus, setBackendStatus]   = useState(null); // null | "ok" | "degraded" | "unreachable"
 
@@ -69,7 +72,7 @@ export default function Copilot() {
 
       {/* Chat — fills remaining height */}
       <div className="flex-1 min-h-0">
-        <CopilotChat currentUser={currentUser} className="h-full" />
+        <CopilotChat currentUser={currentUser} className="h-full" initialMessage={prefillMessage} />
       </div>
     </div>
   );

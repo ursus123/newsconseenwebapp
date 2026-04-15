@@ -992,17 +992,25 @@ function HistoryPanel({ companyId, onRestore, onClose }) {
 }
 
 // ── Main CopilotChat component ───────────────────────────────────────────────
-export default function CopilotChat({ currentUser, className = "" }) {
+export default function CopilotChat({ currentUser, className = "", initialMessage = "" }) {
   const navigate = useNavigate();
   const [mode, setMode]           = useState("operations");
   const [messages, setMessages]   = useState([]);
-  const [input, setInput]         = useState("");
+  const [input, setInput]         = useState(initialMessage || "");
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState(null);
   const [context, setContext]     = useState(null);
   const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef             = useRef(null);
   const inputRef                   = useRef(null);
+
+  // Pre-fill from parent (Object Explorer "Ask Copilot" deep-link)
+  useEffect(() => {
+    if (initialMessage) {
+      setInput(initialMessage);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openQueryBuilder = useCallback(() => navigate("/QueryBuilder"), [navigate]);
 
