@@ -146,6 +146,13 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("Startup: Audit table setup skipped — %s", e)
 
+        # Phase A+B — Enrichment tables (created empty; populated by enrichment engine)
+        try:
+            from enrichment.setup import ensure_enrichment_tables
+            ensure_enrichment_tables(engine)
+        except Exception as e:
+            logger.warning("Startup: Enrichment table setup skipped — %s", e)
+
         # Connector schedules + run_log tables (survives redeploys)
         try:
             from connectors.routes import _ensure_schedule_tables, _get_schedule_store
