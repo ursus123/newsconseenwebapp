@@ -1,8 +1,19 @@
 import React from "react";
 import { Lock, Sparkles } from "lucide-react";
-import { COLOR_MAP } from "./appRegistry";
+import { COLOR_MAP, ONTOLOGY_MAP } from "./appRegistry";
 
 const PLAN_LABELS = { starter: "Starter", professional: "Professional", consultant: "Consultant" };
+
+function OntologyBadge({ typeKey }) {
+  const t = ONTOLOGY_MAP[typeKey];
+  if (!t) return null;
+  const Icon = t.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${t.bg} ${t.color} border ${t.border}`}>
+      <Icon className="w-2 h-2" />{typeKey}
+    </span>
+  );
+}
 
 export default function AppCard({ app, isLocked, onLaunch, onUpgrade }) {
   const colors = COLOR_MAP[app.color] || COLOR_MAP.slate;
@@ -49,6 +60,15 @@ export default function AppCard({ app, isLocked, onLaunch, onUpgrade }) {
         </span>
         <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">{app.description}</p>
       </div>
+
+      {/* Ontology object badges */}
+      {app.ontologyObjects && app.ontologyObjects.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {app.ontologyObjects.map((key) => (
+            <OntologyBadge key={key} typeKey={key} />
+          ))}
+        </div>
+      )}
 
       {/* Bottom: launch button */}
       {isLocked ? (

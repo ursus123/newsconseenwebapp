@@ -20,6 +20,7 @@ import {
   Loader2, History, Settings, ArrowRight, Lock, Unlock,
   Edit3, Save, X, FileText, Activity,
 } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
@@ -33,6 +34,21 @@ const triggerETL = (entity) =>
 const TYPE_ICONS = {
   Person: Users, Enterprise: Building2, Product: Package,
   Task: CheckSquare, Transaction: Receipt, Relationship: Link2, Address: MapPin,
+};
+
+// ── Static button color map — avoids dynamic Tailwind class construction ──────
+const ACTION_BTN_COLOR = {
+  "text-blue-600":    "bg-blue-600 hover:bg-blue-700",
+  "text-cyan-600":    "bg-cyan-600 hover:bg-cyan-700",
+  "text-violet-600":  "bg-violet-600 hover:bg-violet-700",
+  "text-indigo-600":  "bg-indigo-600 hover:bg-indigo-700",
+  "text-emerald-600": "bg-emerald-600 hover:bg-emerald-700",
+  "text-amber-600":   "bg-amber-600 hover:bg-amber-700",
+  "text-rose-600":    "bg-rose-600 hover:bg-rose-700",
+  "text-red-600":     "bg-red-600 hover:bg-red-700",
+  "text-teal-600":    "bg-teal-600 hover:bg-teal-700",
+  "text-slate-600":   "bg-slate-600 hover:bg-slate-700",
+  "text-orange-600":  "bg-orange-600 hover:bg-orange-700",
 };
 
 // ── System default action types ───────────────────────────────────────────────
@@ -50,10 +66,10 @@ const SYSTEM_ACTIONS = [
     requiresApproval: false,
     etlEntities: ["people", "relationship"],
     fields: [
-      { key: "full_name", label: "Full Name", type: "text", required: true },
-      { key: "email",     label: "Email",     type: "text", required: false },
-      { key: "phone",     label: "Phone",     type: "text", required: false },
-      { key: "enterprise_name", label: "Enroll into Enterprise", type: "text", required: false },
+      { key: "full_name",       label: "Full Name",               type: "text",   required: true },
+      { key: "email",           label: "Email",                   type: "text",   required: false },
+      { key: "phone",           label: "Phone",                   type: "text",   required: false },
+      { key: "enterprise_name", label: "Enroll into Enterprise",  type: "text",   required: false },
     ],
     execute: async (params, currentUser, listFn, withScope) => {
       const person = await base44.entities.Person.create(withScope({
@@ -92,11 +108,11 @@ const SYSTEM_ACTIONS = [
     requiresApproval: false,
     etlEntities: ["task"],
     fields: [
-      { key: "title",             label: "Task Title",       type: "text",   required: true },
-      { key: "assigned_to_name",  label: "Assign To",        type: "text",   required: false },
-      { key: "due_date",          label: "Due Date",         type: "date",   required: false },
-      { key: "enterprise",        label: "Enterprise",       type: "text",   required: false },
-      { key: "priority",          label: "Priority",         type: "select", options: ["low","medium","high","critical"], required: false },
+      { key: "title",            label: "Task Title",  type: "text",   required: true },
+      { key: "assigned_to_name", label: "Assign To",   type: "text",   required: false },
+      { key: "due_date",         label: "Due Date",    type: "date",   required: false },
+      { key: "enterprise",       label: "Enterprise",  type: "text",   required: false },
+      { key: "priority",         label: "Priority",    type: "select", options: ["low","medium","high","critical"], required: false },
     ],
     execute: async (params, currentUser, listFn, withScope) => {
       const task = await base44.entities.Task.create(withScope({
@@ -124,11 +140,11 @@ const SYSTEM_ACTIONS = [
     requiresApproval: true,
     etlEntities: ["transaction"],
     fields: [
-      { key: "enterprise",        label: "Client / Enterprise", type: "text",   required: true },
-      { key: "description",       label: "Description",         type: "text",   required: true },
-      { key: "amount",            label: "Amount",              type: "number", required: true },
-      { key: "currency",          label: "Currency",            type: "select", options: ["USD","EUR","GBP","ZAR","KES","NGN","GHS"], required: false },
-      { key: "due_date",          label: "Due Date",            type: "date",   required: false },
+      { key: "enterprise",  label: "Client / Enterprise", type: "text",   required: true },
+      { key: "description", label: "Description",         type: "text",   required: true },
+      { key: "amount",      label: "Amount",              type: "number", required: true },
+      { key: "currency",    label: "Currency",            type: "select", options: ["USD","EUR","GBP","ZAR","KES","NGN","GHS"], required: false },
+      { key: "due_date",    label: "Due Date",            type: "date",   required: false },
     ],
     execute: async (params, currentUser, listFn, withScope) => {
       const tx = await base44.entities.Transaction.create(withScope({
@@ -157,12 +173,12 @@ const SYSTEM_ACTIONS = [
     requiresApproval: true,
     etlEntities: ["people", "relationship"],
     fields: [
-      { key: "full_name",         label: "Full Name",         type: "text",   required: true },
-      { key: "email",             label: "Email",             type: "text",   required: false },
-      { key: "phone",             label: "Phone",             type: "text",   required: false },
-      { key: "person_subtype",    label: "Role / Job Title",  type: "text",   required: false },
-      { key: "engagement_model",  label: "Engagement",        type: "select", options: ["employed","contracted","freelance","volunteer"], required: false },
-      { key: "enterprise_name",   label: "Enterprise",        type: "text",   required: false },
+      { key: "full_name",        label: "Full Name",        type: "text",   required: true },
+      { key: "email",            label: "Email",            type: "text",   required: false },
+      { key: "phone",            label: "Phone",            type: "text",   required: false },
+      { key: "person_subtype",   label: "Role / Job Title", type: "text",   required: false },
+      { key: "engagement_model", label: "Engagement",       type: "select", options: ["employed","contracted","freelance","volunteer"], required: false },
+      { key: "enterprise_name",  label: "Enterprise",       type: "text",   required: false },
     ],
     execute: async (params, currentUser, listFn, withScope) => {
       const person = await base44.entities.Person.create(withScope({
@@ -204,16 +220,17 @@ const SYSTEM_ACTIONS = [
     requiresApproval: true,
     etlEntities: ["enterprise", "relationship"],
     fields: [
-      { key: "enterprise_name",    label: "Branch Name",         type: "text",   required: true },
-      { key: "enterprise_tier",    label: "Tier",                type: "select", options: ["branch","subsidiary","department","unit","project","franchise"], required: false },
-      { key: "city",               label: "City",                type: "text",   required: false },
-      { key: "country",            label: "Country",             type: "text",   required: false },
-      { key: "parent_enterprise",  label: "Parent Enterprise",   type: "text",   required: false },
+      { key: "enterprise_name",   label: "Branch Name",       type: "text",   required: true },
+      { key: "enterprise_type",   label: "Enterprise Type",   type: "select", options: ["commercial","nonprofit","government","household","cooperative","trust"], required: false },
+      { key: "enterprise_tier",   label: "Tier",              type: "select", options: ["branch","subsidiary","department","unit","project","franchise"], required: false },
+      { key: "city",              label: "City",              type: "text",   required: false },
+      { key: "country",           label: "Country",           type: "text",   required: false },
+      { key: "parent_enterprise", label: "Parent Enterprise", type: "text",   required: false },
     ],
     execute: async (params, currentUser, listFn, withScope) => {
       const ent = await base44.entities.Enterprise.create(withScope({
         enterprise_name: params.enterprise_name,
-        enterprise_type: "commercial",
+        enterprise_type: params.enterprise_type || "commercial",
         enterprise_tier: params.enterprise_tier || "branch",
         city: params.city || undefined,
         country: params.country || undefined,
@@ -238,6 +255,12 @@ const SYSTEM_ACTIONS = [
     },
   },
 ];
+
+// Stub execute for custom actions loaded from localStorage (execute fn is not serialisable)
+const CUSTOM_EXECUTE_STUB = async () => ({
+  status: "custom_action",
+  note: "Custom actions require python_layer implementation",
+});
 
 // ── ExecuteActionModal ────────────────────────────────────────────────────────
 function ExecuteActionModal({ action, currentUser, listFn, withScope, onClose, onSuccess }) {
@@ -403,6 +426,7 @@ function ExecuteActionModal({ action, currentUser, listFn, withScope, onClose, o
 // ── ActionCard ────────────────────────────────────────────────────────────────
 function ActionCard({ action, onExecute, execCount }) {
   const [expanded, setExpanded] = useState(false);
+  const btnColor = ACTION_BTN_COLOR[action.color] || "bg-slate-600 hover:bg-slate-700";
 
   return (
     <div className={`bg-white border ${expanded ? action.border : "border-slate-100"} rounded-2xl overflow-hidden shadow-sm transition-colors`}>
@@ -421,7 +445,7 @@ function ActionCard({ action, onExecute, execCount }) {
             {action.isCustom && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Custom</span>
             )}
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500`}>{action.category}</span>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{action.category}</span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5 leading-snug">{action.description}</p>
         </div>
@@ -432,8 +456,7 @@ function ActionCard({ action, onExecute, execCount }) {
           <Button
             size="sm"
             onClick={() => onExecute(action)}
-            className={`rounded-xl h-8 text-xs ${action.color.replace("text-", "bg-").replace("600", "600")} text-white hover:opacity-90`}
-            style={{ backgroundColor: undefined }}
+            className={`rounded-xl h-8 text-xs text-white ${btnColor}`}
           >
             <Play className="w-3 h-3 mr-1" /> Execute
           </Button>
@@ -480,20 +503,18 @@ function ActionCard({ action, onExecute, execCount }) {
 
 // ── AuditLog ──────────────────────────────────────────────────────────────────
 function AuditLog({ companyId }) {
-  const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const { data: logs = [], isLoading } = useQuery({
+    queryKey: ["kinetic_log", companyId],
+    queryFn: () =>
+      fetch(`${RAILWAY_URL}/kinetic/log?company_id=${encodeURIComponent(companyId)}&limit=20`, { headers: API_HEADERS })
+        .then(r => r.ok ? r.json() : { logs: [] })
+        .then(d => d.logs || []),
+    enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
-  useEffect(() => {
-    if (!companyId) return;
-    setLoading(true);
-    fetch(`${RAILWAY_URL}/kinetic/log?company_id=${encodeURIComponent(companyId)}&limit=20`, { headers: API_HEADERS })
-      .then(r => r.ok ? r.json() : { logs: [] })
-      .then(data => setLogs(data.logs || []))
-      .catch(() => setLogs([]))
-      .finally(() => setLoading(false));
-  }, [companyId]);
-
-  if (loading) return (
+  if (isLoading) return (
     <div className="flex items-center gap-2 text-slate-400 text-sm p-4">
       <Loader2 className="w-4 h-4 animate-spin" /> Loading audit log…
     </div>
@@ -526,26 +547,44 @@ function AuditLog({ companyId }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function KineticLayer() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const qc = useQueryClient();
   const [executingAction, setExecutingAction] = useState(null);
   const [activeTab, setActiveTab] = useState("actions");
   const [customActions, setCustomActions] = useState([]);
   const [execCounts, setExecCounts] = useState({});
   const [showNewAction, setShowNewAction] = useState(false);
   const [newAction, setNewAction] = useState({ name: "", description: "", category: "Custom", requiresApproval: false });
-  const listFn = useEntityListFn(currentUser);
-  const withScope = useWithScope(currentUser);
   const { toast } = useToast();
 
-  useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
+  // currentUser via React Query — staleTime:0 + refetchOnMount ensures fresh data on tab switch
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
+  // Desktop cache fix — refetch on tab visibility change
+  useEffect(() => {
+    const fn = () => {
+      if (document.visibilityState === "visible")
+        qc.refetchQueries({ queryKey: ["currentUser"] });
+    };
+    document.addEventListener("visibilitychange", fn);
+    return () => document.removeEventListener("visibilitychange", fn);
+  }, [qc]);
+
+  const listFn = useEntityListFn(currentUser);
+  const withScope = useWithScope(currentUser);
+
+  // Load per-company custom actions and exec counts from localStorage
   useEffect(() => {
     if (!currentUser) return;
     const cid = currentUser.company_id || "default";
     try {
-      setCustomActions(JSON.parse(localStorage.getItem(`kinetic_custom_${cid}`) || "[]"));
+      const loaded = JSON.parse(localStorage.getItem(`kinetic_custom_${cid}`) || "[]");
+      // Restore execute stub — the fn is not serialisable and is stripped on save
+      setCustomActions(loaded.map(a => ({ ...a, execute: CUSTOM_EXECUTE_STUB })));
       setExecCounts(JSON.parse(localStorage.getItem(`kinetic_counts_${cid}`) || "{}"));
     } catch { /* ignore */ }
   }, [currentUser?.company_id]);
@@ -576,11 +615,12 @@ export default function KineticLayer() {
       etlEntities: ["people"],
       isCustom: true,
       fields: [],
-      execute: async () => ({ status: "custom_action", note: "Custom actions require python_layer implementation" }),
+      execute: CUSTOM_EXECUTE_STUB,
     };
     const updated = [...customActions, action];
     setCustomActions(updated);
-    localStorage.setItem(`kinetic_custom_${cid}`, JSON.stringify(updated.map(a => ({ ...a, execute: undefined }))));
+    // Strip execute fn — not serialisable; stub is restored on load (see useEffect above)
+    localStorage.setItem(`kinetic_custom_${cid}`, JSON.stringify(updated.map(({ execute, ...rest }) => rest)));
     setShowNewAction(false);
     setNewAction({ name: "", description: "", category: "Custom", requiresApproval: false });
     toast({ title: "Custom action registered" });
@@ -588,7 +628,6 @@ export default function KineticLayer() {
 
   const allActions = [...SYSTEM_ACTIONS, ...customActions];
   const totalExec = Object.values(execCounts).reduce((s, n) => s + n, 0);
-
   const categories = [...new Set(allActions.map(a => a.category))];
 
   return (
@@ -615,10 +654,10 @@ export default function KineticLayer() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "System Actions",  value: SYSTEM_ACTIONS.length, icon: Zap,      color: "text-violet-600", bg: "bg-violet-50" },
-          { label: "Custom Actions",  value: customActions.length,  icon: Plus,     color: "text-indigo-600", bg: "bg-indigo-50" },
-          { label: "Total Executed",  value: totalExec,             icon: Activity, color: "text-emerald-600",bg: "bg-emerald-50" },
-          { label: "Write-back",      value: "Active",              icon: ArrowRight,color:"text-blue-600",   bg: "bg-blue-50"   },
+          { label: "System Actions", value: SYSTEM_ACTIONS.length, icon: Zap,       color: "text-violet-600", bg: "bg-violet-50"  },
+          { label: "Custom Actions", value: customActions.length,  icon: Plus,      color: "text-indigo-600", bg: "bg-indigo-50"  },
+          { label: "Total Executed", value: totalExec,             icon: Activity,  color: "text-emerald-600",bg: "bg-emerald-50" },
+          { label: "Write-back",     value: "Active",              icon: ArrowRight,color: "text-blue-600",   bg: "bg-blue-50"    },
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="bg-white border border-slate-100 rounded-2xl p-4 flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
