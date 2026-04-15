@@ -1004,14 +1004,6 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
   const messagesEndRef             = useRef(null);
   const inputRef                   = useRef(null);
 
-  // Pre-fill from parent (Object Explorer "Ask Copilot" deep-link)
-  useEffect(() => {
-    if (initialMessage) {
-      setInput(initialMessage);
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const openQueryBuilder = useCallback(() => navigate("/QueryBuilder"), [navigate]);
 
   const companyId  = currentUser?.company_id;

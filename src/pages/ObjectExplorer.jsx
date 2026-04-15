@@ -357,8 +357,8 @@ function OntologyGraph({ allObjects, loaded, loading, mode, onNodeSelect }) {
   const allObjectsRef   = useRef(allObjects);
   const expandedRef     = useRef(null);           // typeKey of currently expanded entity (live mode)
 
-  // Keep ref fresh without triggering cy re-init
-  useEffect(() => { allObjectsRef.current = allObjects; }, [allObjects]);
+  // Update ref in render — safe for mutable refs, avoids an extra useEffect
+  allObjectsRef.current = allObjects;
 
   const counts = useMemo(() => {
     const out = {};
