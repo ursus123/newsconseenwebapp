@@ -210,6 +210,11 @@ class BaseConnector(ABC):
                 load_results["failed"],
             )
 
+            # Mirror synced records into raw.* so ML, copilot, and the
+            # three-tier fallback chain can access connector data without
+            # waiting for the next scheduled ETL cron run.
+            self._write_raw_records(transformed)
+
             # Fire ETL for every entity that received records so that
             # analytics.*, copilot, alerts, and dashboards reflect the
             # new data immediately — not after the next manual ETL run.
@@ -356,6 +361,96 @@ class BaseConnector(ABC):
             "connector: created %s external_id=%s", entity_name, external_id
         )
         return "created"
+
+    def _write_raw_records(self, transformed: dict[str, list]) -> None:
+        """
+        Mirror synced records into the raw.* PostgreSQL tables.
+
+        Uses delete-then-append (not full replace) so records for other
+        tenants are never wiped. Only this company's rows are touched.
+
+        Called fire-and-forget after load() — database unavailability
+        never fails the connector run (data is already safely in Base44).
+
+        Entity name → raw table mapping mirrors the ETL cron convention:
+            people       → raw.people
+            enterprises  → raw.enterprises
+            products     → raw.products
+            transactions → raw.transactions
+            relationships→ raw.relationships
+            tasks        → raw.tasks
+            addresses    → raw.addresses
+            services     → raw.services
+        """
+        import threading
+        import pandas as pd
+
+        # Only entities with records
+        entities_written = {
+            entity: records
+            for entity, records in transformed.items()
+            if records
+        }
+        if not entities_written:
+            return
+
+        company_id = self.company_id
+
+        def _write():
+            try:
+                from database import get_engine_safe
+                from etl.load import _sanitize_for_sql
+            except Exception as exc:
+                logger.warning("connector raw write: import failed — %s", exc)
+                return
+
+            engine = get_engine_safe()
+            if not engine:
+                logger.debug("connector raw write: no DB engine, skipping")
+                return
+
+            for entity, records in entities_written.items():
+                try:
+                    df = pd.DataFrame(records)
+                    if df.empty:
+                        continue
+
+                    # Ensure company_id is stamped on every row
+                    df["company_id"] = company_id
+
+                    df = _sanitize_for_sql(df)
+                    df["_loaded_at"] = pd.Timestamp.now()
+
+                    with engine.begin() as conn:
+                        # Delete this company's existing rows — safe for multi-tenant tables
+                        conn.execute(
+                            __import__("sqlalchemy").text(
+                                f"DELETE FROM raw.{entity} WHERE company_id = :cid"
+                            ),
+                            {"cid": company_id},
+                        )
+
+                    # Append new rows
+                    df.to_sql(
+                        entity,
+                        engine,
+                        schema="raw",
+                        if_exists="append",
+                        index=False,
+                    )
+
+                    logger.info(
+                        "connector raw write: %d rows → raw.%s (company=%s)",
+                        len(df), entity, company_id,
+                    )
+
+                except Exception as exc:
+                    # Table may not exist yet — harmless, ETL cron will create it
+                    logger.warning(
+                        "connector raw write: failed for raw.%s — %s", entity, exc
+                    )
+
+        threading.Thread(target=_write, daemon=True).start()
 
     def _trigger_etl(self, transformed: dict[str, list]) -> None:
         """
