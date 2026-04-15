@@ -1387,9 +1387,12 @@ def get_ml_predictions(company_id: str, model: Optional[str] = None) -> dict:
     Used for: "what is the retention risk", "LTV segments", "staffing forecast",
               "who is at risk of leaving", "ML insights", "model predictions"
 
-    Reads from raw.ml_predictions — populated after each model run via
-    POST /ml/retention-risk, /ml/ltv-segmentation, etc.
+    Tier 1: raw.ml_predictions — populated after each model run via
+            POST /ml/retention-risk, /ml/ltv-segmentation, etc.
+    Tier 2: Heuristic estimate derived from raw.people (status + end_date).
     """
+    import json as _json
+
     filters = ["company_id = :company_id"]
     params: dict = {"company_id": company_id}
     if model:
@@ -1408,7 +1411,6 @@ def get_ml_predictions(company_id: str, model: Optional[str] = None) -> dict:
     predictions = []
     for r in rows:
         try:
-            import json as _json
             result = _json.loads(r.get("result_json") or "{}")
         except Exception:
             result = {}
@@ -1418,13 +1420,66 @@ def get_ml_predictions(company_id: str, model: Optional[str] = None) -> dict:
             "result":      result,
         })
 
+    if predictions:
+        return {
+            "predictions":      predictions,
+            "count":            len(predictions),
+            "models_available": [p["model"] for p in predictions],
+            "note":             None,
+        }
+
+    # ── Tier 2: heuristic from raw.people ────────────────────────────────────
+    if not model or model in ("retention_risk", "churn"):
+        try:
+            from datetime import date, timedelta
+            cutoff = (date.today() - timedelta(days=90)).isoformat()
+            people_rows = _raw_query(
+                "people", company_id, [], {},
+                select_cols="status, end_date, person_type",
+                order_by="status",
+                limit=5000,
+            )
+            if people_rows:
+                total  = len(people_rows)
+                inactive = sum(1 for p in people_rows if p.get("status") == "inactive")
+                ended_90 = sum(
+                    1 for p in people_rows
+                    if p.get("end_date") and str(p["end_date"]) >= cutoff
+                )
+                at_risk = max(inactive, ended_90)
+                risk_pct = round(at_risk / total * 100, 1) if total else 0
+                heuristic = {
+                    "model":       "retention_risk",
+                    "computed_at": date.today().isoformat(),
+                    "result": {
+                        "total_people":     total,
+                        "at_risk_count":    at_risk,
+                        "at_risk_pct":      risk_pct,
+                        "inactive_count":   inactive,
+                        "ended_90d_count":  ended_90,
+                        "estimate_method":  "heuristic_from_raw_people",
+                        "note": (
+                            "Estimated from status and end_date — run POST /ml/retention-risk "
+                            "for a full survival-analysis score per person."
+                        ),
+                    },
+                }
+                return {
+                    "predictions":      [heuristic],
+                    "count":            1,
+                    "models_available": ["retention_risk"],
+                    "note":             "Heuristic estimate only — ML model has not been run yet.",
+                }
+        except Exception as e:
+            logger.warning("get_ml_predictions heuristic fallback: %s", e)
+
     return {
-        "predictions":       predictions,
-        "count":             len(predictions),
-        "models_available":  [p["model"] for p in predictions],
-        "note": (
-            "No ML predictions stored yet — run POST /ml/retention-risk or /ml/ltv-segmentation first."
-            if not predictions else None
+        "predictions":      [],
+        "count":            0,
+        "models_available": [],
+        "note":             (
+            "No ML predictions stored yet — run POST /ml/retention-risk "
+            "or /ml/ltv-segmentation first."
         ),
     }
 
