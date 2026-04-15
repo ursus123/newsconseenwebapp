@@ -4572,6 +4572,123 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    # ── Intelligence analytics tools ─────────────────────────────────────────
+    {
+        "name": "get_kpi_snapshot",
+        "description": (
+            "Returns the cross-entity business snapshot: total headcount, staff, clients, "
+            "total revenue, expenses, net profit, task completion rate, open overdue invoices, "
+            "dead stock count, churn risk count, and overall health score. "
+            "Use for questions like: 'How is the business doing?', 'Give me a summary', "
+            "'What is our revenue?', 'How many staff do we have?', 'Health check', 'KPI overview'."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_top_clients",
+        "description": (
+            "Returns top clients ranked by lifetime revenue with RFM segment and churn risk. "
+            "Use for questions like: 'Who are our best clients?', 'Top customers by revenue', "
+            "'Which clients are at risk?', 'Show me high value clients', "
+            "'Who hasn't bought recently?', 'Client segmentation'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "top_n": {"type": "integer", "description": "Number of clients to return. Default 10."},
+                "segment": {
+                    "type": "string",
+                    "enum": ["high_value", "at_risk", "new", "lost", "dormant", "regular"],
+                    "description": "Filter by RFM segment.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_staff_leaderboard",
+        "description": (
+            "Returns staff ranked by a performance metric. "
+            "Use for questions like: 'Who are my top performers?', 'Which staff complete the most tasks?', "
+            "'SLA performance', 'Staff efficiency', 'Team performance report', 'Workload distribution'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "metric": {
+                    "type": "string",
+                    "enum": ["completion_rate_pct", "tasks_completed_30d", "on_time_rate_pct",
+                             "workload_score", "sla_breach_rate_pct"],
+                    "description": "Metric to rank by. Default: completion_rate_pct.",
+                },
+                "top_n": {"type": "integer", "description": "Number of staff to return. Default 10."},
+            },
+        },
+    },
+    {
+        "name": "get_ar_report",
+        "description": (
+            "Returns accounts receivable aging — outstanding unpaid invoices by aging bucket. "
+            "Use for questions like: 'What's outstanding?', 'Overdue invoices', 'AR aging', "
+            "'Who owes us money?', 'How much is past due?', 'Cash flow risk', 'Collection status'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "bucket": {
+                    "type": "string",
+                    "enum": ["current", "1_30", "31_60", "61_90", "90plus"],
+                    "description": "Filter to a specific aging bucket.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_inventory_health",
+        "description": (
+            "Returns inventory health: stock coverage days, dead stock, and reorder urgency per product. "
+            "Use for questions like: 'What's running low?', 'Inventory status', 'What needs reordering?', "
+            "'Dead stock', 'Out of stock products', 'Stock coverage days'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "urgency": {
+                    "type": "string",
+                    "enum": ["critical", "high", "medium", "low", "none"],
+                    "description": "Filter by reorder urgency.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_network_kpis",
+        "description": (
+            "Returns cross-branch performance comparison: revenue, tasks, staff, clients per branch. "
+            "Use for questions like: 'How do branches compare?', 'Which branch is performing best?', "
+            "'Network performance', 'Cross-branch report', 'Which location has most revenue?', "
+            "'Branch ranking', 'Underperforming branches'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tier": {
+                    "type": "string",
+                    "enum": ["top", "above_average", "average", "below_average", "bottom"],
+                    "description": "Filter by performance tier.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_concentration_risk",
+        "description": (
+            "Returns HHI concentration risk — how dependent the business is on a single client, "
+            "enterprise, or staff member. Includes overall risk level and actionable flags. "
+            "Use for questions like: 'How concentrated is our revenue?', 'Are we too dependent on one client?', "
+            "'Concentration risk', 'Revenue diversification', 'Business resilience'."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
 ]
 
 
@@ -5097,6 +5214,338 @@ def get_anomaly_report(company_id: str) -> dict:
         return {"error": str(e), "anomaly_count": 0, "anomalies": []}
 
 
+# ── Intelligence analytics tools ─────────────────────────────────────────────
+
+def get_kpi_snapshot(company_id: str) -> dict:
+    """
+    Returns the cross-entity business snapshot for the company:
+    headcount, revenue, expenses, net profit, task completion, open invoices,
+    dead stock count, churn risk count, and the overall health score.
+    Used for: "how is the business doing?", "give me a summary", "health check",
+              "what is our revenue?", "how many staff do we have?", "KPI overview".
+    """
+    rows, data_as_of, source = _query_analytics(
+        "kpi_summary",
+        "SELECT * FROM analytics.kpi_summary WHERE company_id = :cid LIMIT 1",
+        {"cid": company_id},
+        company_id,
+    )
+    if rows:
+        return {"snapshot": rows[0], "data_as_of": data_as_of, "source": source}
+    # Fallback: recompute from raw tables
+    try:
+        import sys, os
+        sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+        from etl.kpi_summary import transform_kpi_summary
+        _ppl  = _b44_people(company_id)
+        _txs  = _b44_transactions(company_id)
+        _tsks = _b44_tasks(company_id)
+        _prds = _b44_products(company_id)
+        _ents = _b44_enterprises(company_id)
+        df = transform_kpi_summary(_ppl, _txs, _tsks, _prds, _ents, _pd.DataFrame())
+        if not df.empty:
+            row = df[df["company_id"] == company_id]
+            if not row.empty:
+                return {"snapshot": row.iloc[0].where(row.iloc[0].notna(), None).to_dict(),
+                        "data_as_of": "Base44 live", "source": "base44_live"}
+    except Exception as e:
+        logger.warning("get_kpi_snapshot fallback: %s", e)
+    return {"snapshot": {}, "data_as_of": "unavailable", "source": "none",
+            "note": "Run POST /load/kpi-summary to populate this table."}
+
+
+def get_top_clients(company_id: str, top_n: int = 10, segment: str = None) -> dict:
+    """
+    Returns top clients ranked by lifetime revenue, with RFM segment and churn risk.
+    Optional `segment` filter: high_value / at_risk / new / lost / dormant / regular.
+    Used for: "who are our best clients?", "top customers by revenue",
+              "which clients are at risk?", "show me high value clients",
+              "who hasn't bought recently?", "client segmentation".
+    """
+    sql = """
+        SELECT person_name, person_type, enterprise,
+               total_revenue, transaction_count, avg_transaction_value,
+               recency_days, rfm_segment, churn_risk, clv_estimate,
+               first_transaction_date, last_transaction_date
+        FROM analytics.client_value
+        WHERE company_id = :cid
+    """
+    params: dict = {"cid": company_id}
+    if segment:
+        sql += " AND rfm_segment = :seg"
+        params["seg"] = segment
+    sql += " ORDER BY total_revenue DESC NULLS LAST LIMIT :n"
+    params["n"] = top_n
+
+    rows, data_as_of, source = _query_analytics("client_value", sql, params, company_id)
+    if rows:
+        return {"clients": rows, "count": len(rows), "data_as_of": data_as_of, "source": source}
+    # Fallback: recompute
+    try:
+        from etl.client_value import transform_client_value
+        df = transform_client_value(_b44_people(company_id), _b44_transactions(company_id), _pd.DataFrame())
+        if not df.empty:
+            df = df[df["company_id"] == company_id].sort_values("total_revenue", ascending=False).head(top_n)
+            return {"clients": df.where(df.notna(), None).to_dict(orient="records"),
+                    "count": len(df), "data_as_of": "Base44 live", "source": "base44_live"}
+    except Exception as e:
+        logger.warning("get_top_clients fallback: %s", e)
+    return {"clients": [], "count": 0, "note": "Run POST /load/client-value to populate this table."}
+
+
+def get_staff_leaderboard(company_id: str, metric: str = "completion_rate_pct", top_n: int = 10) -> dict:
+    """
+    Returns staff ranked by a performance metric.
+    Available metrics: completion_rate_pct, tasks_completed_30d, on_time_rate_pct,
+                       workload_score, sla_breach_rate_pct.
+    Used for: "who are my top performers?", "which staff complete the most tasks?",
+              "SLA performance", "staff efficiency", "team performance report",
+              "who has the most overdue tasks?", "workload distribution".
+    """
+    valid_metrics = {
+        "completion_rate_pct", "tasks_completed_30d", "on_time_rate_pct",
+        "workload_score", "sla_breach_rate_pct", "tasks_assigned_total",
+    }
+    if metric not in valid_metrics:
+        metric = "completion_rate_pct"
+
+    asc = metric == "sla_breach_rate_pct"  # lower is better for SLA breaches
+    order = "ASC" if asc else "DESC"
+
+    sql = f"""
+        SELECT person_name, person_type, enterprise,
+               tasks_assigned_total, tasks_completed_total, tasks_open, tasks_overdue,
+               completion_rate_pct, on_time_rate_pct, sla_breach_rate_pct,
+               avg_completion_days, tasks_completed_30d, workload_score, performance_tier
+        FROM analytics.staff_performance
+        WHERE company_id = :cid
+        ORDER BY {metric} {order} NULLS LAST
+        LIMIT :n
+    """
+    rows, data_as_of, source = _query_analytics("staff_performance", sql, {"cid": company_id, "n": top_n}, company_id)
+    if rows:
+        return {"staff": rows, "count": len(rows), "ranked_by": metric,
+                "data_as_of": data_as_of, "source": source}
+    try:
+        from etl.staff_performance import transform_staff_performance
+        df = transform_staff_performance(_b44_people(company_id), _b44_tasks(company_id), _pd.DataFrame())
+        if not df.empty:
+            df = df[df["company_id"] == company_id].sort_values(metric, ascending=asc).head(top_n)
+            return {"staff": df.where(df.notna(), None).to_dict(orient="records"),
+                    "count": len(df), "ranked_by": metric,
+                    "data_as_of": "Base44 live", "source": "base44_live"}
+    except Exception as e:
+        logger.warning("get_staff_leaderboard fallback: %s", e)
+    return {"staff": [], "count": 0, "note": "Run POST /load/staff-performance to populate this table."}
+
+
+def get_ar_report(company_id: str, bucket: str = None) -> dict:
+    """
+    Returns accounts receivable aging — outstanding invoices by aging bucket.
+    Optional `bucket` filter: current / 1_30 / 31_60 / 61_90 / 90plus.
+    Used for: "what's outstanding?", "overdue invoices", "AR aging",
+              "who owes us money?", "how much is past due?",
+              "accounts receivable", "collection risk", "cash flow".
+    """
+    # Summary first
+    summary_rows, data_as_of, source = _query_analytics(
+        "ar_aging_summary",
+        "SELECT * FROM analytics.ar_aging_summary WHERE company_id = :cid LIMIT 1",
+        {"cid": company_id},
+        company_id,
+    )
+
+    # Detail
+    detail_sql = "SELECT * FROM analytics.ar_aging WHERE company_id = :cid"
+    params: dict = {"cid": company_id}
+    if bucket:
+        detail_sql += " AND aging_bucket = :bucket"
+        params["bucket"] = bucket
+    detail_sql += " ORDER BY days_overdue DESC LIMIT 100"
+
+    detail_rows = _run(detail_sql, params) if not (data_as_of == "Base44 live") else []
+
+    if summary_rows:
+        return {
+            "summary":  summary_rows[0],
+            "detail":   detail_rows,
+            "bucket_filter": bucket,
+            "data_as_of": data_as_of,
+            "source":   source,
+        }
+    # Fallback
+    try:
+        from etl.ar_aging import transform_ar_aging
+        detail_df, sum_df = transform_ar_aging(_b44_transactions(company_id))
+        summary = sum_df[sum_df["company_id"] == company_id].to_dict(orient="records")
+        detail  = detail_df[detail_df["company_id"] == company_id]
+        if bucket:
+            detail = detail[detail["aging_bucket"] == bucket]
+        return {
+            "summary":  summary[0] if summary else {},
+            "detail":   detail.head(100).where(detail.notna(), None).to_dict(orient="records"),
+            "bucket_filter": bucket,
+            "data_as_of": "Base44 live", "source": "base44_live",
+        }
+    except Exception as e:
+        logger.warning("get_ar_report fallback: %s", e)
+    return {"summary": {}, "detail": [],
+            "note": "Run POST /load/ar-aging to populate this table."}
+
+
+def get_inventory_health(company_id: str, urgency: str = None) -> dict:
+    """
+    Returns inventory health: stock coverage days, dead stock, reorder urgency per product.
+    Optional `urgency` filter: critical / high / medium / low / none.
+    Used for: "what's running low?", "inventory status", "stock levels",
+              "what needs reordering?", "dead stock", "slow moving items",
+              "out of stock products", "stock coverage", "days of supply".
+    """
+    sql = """
+        SELECT product_name, item_type, item_class, unit_of_measure,
+               stock_quantity, reorder_level, out_of_stock, below_reorder,
+               units_sold_30d, revenue_30d, avg_daily_sales_30d,
+               stock_coverage_days, dead_stock, reorder_urgency, last_sale_date, days_since_last_sale
+        FROM analytics.product_velocity
+        WHERE company_id = :cid
+    """
+    params: dict = {"cid": company_id}
+    if urgency:
+        sql += " AND reorder_urgency = :urg"
+        params["urg"] = urgency
+    sql += " ORDER BY CASE reorder_urgency WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, stock_coverage_days ASC NULLS FIRST LIMIT 100"
+
+    rows, data_as_of, source = _query_analytics("product_velocity", sql, params, company_id)
+    if rows:
+        critical = sum(1 for r in rows if r.get("reorder_urgency") == "critical")
+        out_of_stock = sum(1 for r in rows if r.get("out_of_stock"))
+        dead = sum(1 for r in rows if r.get("dead_stock"))
+        return {
+            "products": rows, "count": len(rows),
+            "critical_count": critical, "out_of_stock_count": out_of_stock, "dead_stock_count": dead,
+            "urgency_filter": urgency, "data_as_of": data_as_of, "source": source,
+        }
+    try:
+        from etl.product_velocity import transform_product_velocity
+        df = transform_product_velocity(_b44_products(company_id), _b44_transactions(company_id))
+        if not df.empty:
+            df = df[df["company_id"] == company_id]
+            if urgency:
+                df = df[df["reorder_urgency"] == urgency]
+            return {
+                "products": df.head(100).where(df.notna(), None).to_dict(orient="records"),
+                "count": len(df),
+                "critical_count": int((df["reorder_urgency"] == "critical").sum()),
+                "out_of_stock_count": int(df["out_of_stock"].sum()),
+                "dead_stock_count": int(df["dead_stock"].sum()),
+                "urgency_filter": urgency, "data_as_of": "Base44 live", "source": "base44_live",
+            }
+    except Exception as e:
+        logger.warning("get_inventory_health fallback: %s", e)
+    return {"products": [], "count": 0,
+            "note": "Run POST /load/product-velocity to populate this table."}
+
+
+def get_network_kpis(company_id: str, tier: str = None) -> dict:
+    """
+    Returns cross-branch performance comparison: revenue, tasks, staff, clients per branch.
+    Optional `tier` filter: top / above_average / average / below_average / bottom.
+    Used for: "how do branches compare?", "which branch is performing best?",
+              "network performance", "cross-branch report", "which location has most revenue?",
+              "branch ranking", "top performing branch", "underperforming branches".
+    """
+    sql = """
+        SELECT enterprise_name, enterprise_type, enterprise_tier, operating_status,
+               city, region, staff_count, client_count,
+               revenue_30d, expense_30d, net_profit_30d, transaction_count_30d,
+               overdue_invoice_count, open_tasks, overdue_tasks, completion_rate_pct,
+               low_stock_count, out_of_stock_count,
+               revenue_rank, completion_rank, performance_score, performance_tier
+        FROM analytics.network_summary
+        WHERE company_id = :cid
+    """
+    params: dict = {"cid": company_id}
+    if tier:
+        sql += " AND performance_tier = :tier"
+        params["tier"] = tier
+    sql += " ORDER BY performance_score DESC NULLS LAST LIMIT 50"
+
+    rows, data_as_of, source = _query_analytics("network_summary", sql, params, company_id)
+    if rows:
+        return {
+            "branches": rows, "count": len(rows),
+            "tier_filter": tier, "data_as_of": data_as_of, "source": source,
+        }
+    try:
+        from etl.network_summary import transform_network_summary
+        df = transform_network_summary(
+            _b44_enterprises(company_id), _b44_people(company_id),
+            _b44_transactions(company_id), _b44_tasks(company_id),
+            _b44_products(company_id), _pd.DataFrame()
+        )
+        if not df.empty:
+            df = df[df["company_id"] == company_id]
+            if tier:
+                df = df[df["performance_tier"] == tier]
+            return {
+                "branches": df.head(50).where(df.notna(), None).to_dict(orient="records"),
+                "count": len(df), "tier_filter": tier,
+                "data_as_of": "Base44 live", "source": "base44_live",
+            }
+    except Exception as e:
+        logger.warning("get_network_kpis fallback: %s", e)
+    return {"branches": [], "count": 0,
+            "note": "Run POST /load/network-summary to populate this table."}
+
+
+def get_concentration_risk(company_id: str) -> dict:
+    """
+    Returns HHI concentration risk: how dependent the business is on a single client,
+    enterprise, or staff member. Includes risk level and actionable flags.
+    Used for: "how concentrated is our revenue?", "are we too dependent on one client?",
+              "concentration risk", "HHI", "revenue diversification",
+              "single client risk", "staff dependency risk", "business resilience".
+    """
+    rows, data_as_of, source = _query_analytics(
+        "concentration_risk",
+        "SELECT * FROM analytics.concentration_risk WHERE company_id = :cid LIMIT 1",
+        {"cid": company_id},
+        company_id,
+    )
+    if rows:
+        r = rows[0]
+        flags = [f.strip() for f in (r.get("concentration_flags") or "").split(",") if f.strip()]
+        return {
+            "risk_level": r.get("concentration_risk_level"),
+            "flags": flags,
+            "revenue_hhi": r.get("revenue_hhi"),
+            "revenue_concentration": r.get("revenue_concentration"),
+            "top_client_name": r.get("top_client_name"),
+            "top_client_revenue_pct": r.get("top_client_revenue_pct"),
+            "top_3_clients_revenue_pct": r.get("top_3_clients_revenue_pct"),
+            "client_hhi": r.get("client_hhi"),
+            "staff_hhi": r.get("staff_hhi"),
+            "single_staff_enterprises": r.get("single_staff_enterprises"),
+            "no_staff_enterprises": r.get("no_staff_enterprises"),
+            "data_as_of": data_as_of, "source": source,
+        }
+    try:
+        from etl.concentration_risk import transform_concentration_risk
+        df = transform_concentration_risk(
+            _b44_people(company_id), _b44_transactions(company_id), _b44_enterprises(company_id)
+        )
+        if not df.empty:
+            row = df[df["company_id"] == company_id]
+            if not row.empty:
+                r = row.iloc[0].where(row.iloc[0].notna(), None).to_dict()
+                flags = [f.strip() for f in (r.get("concentration_flags") or "").split(",") if f.strip()]
+                return {**r, "flags": flags, "data_as_of": "Base44 live", "source": "base44_live"}
+    except Exception as e:
+        logger.warning("get_concentration_risk fallback: %s", e)
+    return {"risk_level": "unknown", "flags": [],
+            "note": "Run POST /load/concentration-risk to populate this table."}
+
+
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
 
 def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
@@ -5162,6 +5611,14 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "get_kpi_goals":                get_kpi_goals,
         "get_anomaly_report":           get_anomaly_report,
         "get_alert_history":            get_alert_history,
+        # Intelligence analytics tools
+        "get_kpi_snapshot":             get_kpi_snapshot,
+        "get_top_clients":              get_top_clients,
+        "get_staff_leaderboard":        get_staff_leaderboard,
+        "get_ar_report":                get_ar_report,
+        "get_inventory_health":         get_inventory_health,
+        "get_network_kpis":             get_network_kpis,
+        "get_concentration_risk":       get_concentration_risk,
     }
 
     fn = dispatch.get(tool_name)

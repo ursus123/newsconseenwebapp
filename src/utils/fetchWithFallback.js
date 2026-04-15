@@ -153,3 +153,64 @@ export const fetchTransactionsFallback = (companyId, base44Fn, opts = {}) =>
 
 export const fetchEnterprisesFallback = (companyId, base44Fn, opts = {}) =>
   fetchWithFallback({ analyticsEndpoint: "/enterprise-summary",   rawEntity: "enterprises",  base44Fn, companyId, ...opts });
+
+// ── Intelligence analytics (analytics-only, no raw fallback entity) ───────────
+// These tables have no equivalent raw.* entity — they are derived aggregates.
+// The fallback is the GET endpoint itself which recomputes live from Base44.
+
+export const fetchKpiSnapshot = async (companyId) => {
+  try {
+    const r = await fetch(`${RAILWAY_URL}/analytics/kpi-summary?company_id=${encodeURIComponent(companyId)}`);
+    if (r.ok) { const d = await r.json(); if (d?.length > 0) return d[0]; }
+  } catch (_) {}
+  return null;
+};
+
+export const fetchTopClients = async (companyId, { topN = 20, segment } = {}) => {
+  try {
+    let url = `${RAILWAY_URL}/analytics/client-value?company_id=${encodeURIComponent(companyId)}`;
+    const r = await fetch(url);
+    if (r.ok) { const d = await r.json(); return d || []; }
+  } catch (_) {}
+  return [];
+};
+
+export const fetchStaffPerformance = async (companyId) => {
+  try {
+    const r = await fetch(`${RAILWAY_URL}/analytics/staff-performance?company_id=${encodeURIComponent(companyId)}`);
+    if (r.ok) { const d = await r.json(); return d || []; }
+  } catch (_) {}
+  return [];
+};
+
+export const fetchArAgingSummary = async (companyId) => {
+  try {
+    const r = await fetch(`${RAILWAY_URL}/analytics/ar-aging-summary?company_id=${encodeURIComponent(companyId)}`);
+    if (r.ok) { const d = await r.json(); return d?.[0] || null; }
+  } catch (_) {}
+  return null;
+};
+
+export const fetchProductVelocity = async (companyId) => {
+  try {
+    const r = await fetch(`${RAILWAY_URL}/analytics/product-velocity?company_id=${encodeURIComponent(companyId)}`);
+    if (r.ok) { const d = await r.json(); return d || []; }
+  } catch (_) {}
+  return [];
+};
+
+export const fetchNetworkSummary = async (companyId) => {
+  try {
+    const r = await fetch(`${RAILWAY_URL}/analytics/network-summary?company_id=${encodeURIComponent(companyId)}`);
+    if (r.ok) { const d = await r.json(); return d || []; }
+  } catch (_) {}
+  return [];
+};
+
+export const fetchConcentrationRisk = async (companyId) => {
+  try {
+    const r = await fetch(`${RAILWAY_URL}/analytics/concentration-risk?company_id=${encodeURIComponent(companyId)}`);
+    if (r.ok) { const d = await r.json(); return d?.[0] || null; }
+  } catch (_) {}
+  return null;
+};

@@ -227,6 +227,17 @@ PERSISTENT MEMORY TOOL:
   Only call this when the operator explicitly asks you to remember something, or states a clear
   standing preference. Never save transient facts (today's numbers, one-off answers).
 
+INTELLIGENCE ANALYTICS TOOLS (deep pre-computed insights):
+- get_kpi_snapshot      — one-row business snapshot: revenue, expenses, headcount, health score
+- get_top_clients       — top clients by lifetime revenue with RFM segment + churn risk
+- get_staff_leaderboard — staff ranked by completion rate, SLA breach rate, or workload
+- get_ar_report         — accounts receivable aging: outstanding invoices by bucket (0-30/31-60/61-90/90+)
+- get_inventory_health  — stock coverage days, dead stock, reorder urgency per product
+- get_network_kpis      — cross-branch performance: revenue_rank, performance_score, tier per enterprise
+- get_concentration_risk — HHI revenue/client/staff concentration risk + actionable flags
+  Use these when the question is about trends, rankings, risk, or strategic insight
+  (not just raw counts). They read from pre-computed analytics tables — much faster than re-deriving.
+
 WHEN TO USE RAW vs AGGREGATE TOOLS:
 - "How many active staff?" → get_people_summary (aggregate count)
 - "Who are our active staff?" → find_people_records (actual names)

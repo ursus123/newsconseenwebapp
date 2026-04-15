@@ -39,6 +39,9 @@ import {
   fetchTasksFallback,
   fetchProductsFallback,
   fetchTransactionsFallback,
+  fetchKpiSnapshot,
+  fetchArAgingSummary,
+  fetchConcentrationRisk,
 } from "@/utils/fetchWithFallback";
 import PlottableTransactionTimeline from "../components/dashboard/PlottableTransactionTimeline";
 import MLDashboard from "../components/ml/MLDashboard";
@@ -195,6 +198,58 @@ function AutomationFeed({ companyId }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── Intelligence Signals ─────────────────────────────────────────────────────
+// Three risk/performance signal cards sourced from the deep analytics tables.
+// Renders only when at least one signal has meaningful data.
+function IntelligenceSignals({ kpiSnapshot, arSummary, concRisk }) {
+  const snap = /** @type {any} */ (kpiSnapshot);
+  const ar   = /** @type {any} */ (arSummary);
+  const cr   = /** @type {any} */ (concRisk);
+
+  if (!snap && !ar && !cr) return null;
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {snap?.net_profit_30d != null && (
+        <Card className="p-4 border-l-4 border-emerald-400">
+          <p className="text-xs text-slate-500 mb-1 font-medium uppercase tracking-wide">Net Profit (30d)</p>
+          <p className={`text-2xl font-bold ${snap.net_profit_30d >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
+            {snap.net_profit_30d >= 0 ? "+" : ""}
+            {snap.net_profit_30d.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </p>
+          {snap.health_score != null && (
+            <p className="text-xs text-slate-400 mt-1">Health score: {snap.health_score}/100</p>
+          )}
+        </Card>
+      )}
+      {ar?.total_outstanding > 0 && (
+        <Card className="p-4 border-l-4 border-amber-400">
+          <p className="text-xs text-slate-500 mb-1 font-medium uppercase tracking-wide">Outstanding AR</p>
+          <p className="text-2xl font-bold text-amber-700">
+            {ar.total_outstanding.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </p>
+          {ar.bucket_90plus_amount > 0 && (
+            <p className="text-xs text-rose-500 mt-1">
+              {ar.bucket_90plus_amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} overdue 90d+
+            </p>
+          )}
+        </Card>
+      )}
+      {cr?.concentration_risk_level && cr.concentration_risk_level !== "low" && (
+        <Card className="p-4 border-l-4 border-rose-400">
+          <p className="text-xs text-slate-500 mb-1 font-medium uppercase tracking-wide">Concentration Risk</p>
+          <p className="text-2xl font-bold text-rose-700 capitalize">{cr.concentration_risk_level}</p>
+          {cr.top_client_revenue_pct > 0 && (
+            <p className="text-xs text-slate-400 mt-1">
+              Top client: {cr.top_client_revenue_pct}% of revenue
+            </p>
+          )}
+        </Card>
+      )}
     </div>
   );
 }
@@ -795,6 +850,32 @@ function AdminDashboard({ user }) {
     analyticsRefetchKeys.forEach(key => qc.invalidateQueries({ queryKey: [key, companyId] }));
   }, [qc, companyId]);
 
+  // ── Intelligence analytics — KPI snapshot + risk signals ────────────────────
+  const { data: kpiSnapshot } = useQuery({
+    queryKey:       ["kpi-snapshot", companyId],
+    queryFn:        () => fetchKpiSnapshot(companyId),
+    enabled:        !!companyId,
+    staleTime:      60000,
+    refetchOnMount: "always",
+    retry:          false,
+  });
+  const { data: arSummary } = useQuery({
+    queryKey:       ["ar-aging-summary", companyId],
+    queryFn:        () => fetchArAgingSummary(companyId),
+    enabled:        !!companyId,
+    staleTime:      60000,
+    refetchOnMount: "always",
+    retry:          false,
+  });
+  const { data: concRisk } = useQuery({
+    queryKey:       ["concentration-risk", companyId],
+    queryFn:        () => fetchConcentrationRisk(companyId),
+    enabled:        !!companyId,
+    staleTime:      60000,
+    refetchOnMount: "always",
+    retry:          false,
+  });
+
   // ── Aggregations — 3-tier aware ─────────────────────────────────────────────
   // Tier 1 (analytics): pre-aggregated summary rows  → use summary-specific fields
   // Tier 2 (raw) / Tier 3 (base44): full entity records → aggregate client-side
@@ -1068,6 +1149,9 @@ function AdminDashboard({ user }) {
         <LowStockAlert products={products} lowStockCount={lowStockCount} />
         <FinancialAlerts transactions={transactions} />
       </div>
+
+      {/* ── Intelligence Signals ── */}
+      <IntelligenceSignals kpiSnapshot={kpiSnapshot} arSummary={arSummary} concRisk={concRisk} />
 
       {/* ── 30-Day Trend Charts ── */}
       <TrendCharts companyId={companyId} />

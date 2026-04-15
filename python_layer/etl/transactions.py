@@ -72,9 +72,16 @@ def transform_transactions(df: pd.DataFrame) -> pd.DataFrame:
         outstanding_amount  — total posted revenue not yet reconciled
         is_revenue          — True if transaction_type is a revenue type
         is_expense          — True if transaction_type is an expense type
-        revenue_last_7d     — posted revenue transactions in last 7 days
-        revenue_last_30d    — posted revenue transactions in last 30 days
-        expense_last_30d    — posted expense transactions in last 30 days
+        revenue_last_7d          — posted revenue transactions in last 7 days (count)
+        revenue_last_30d         — posted revenue transactions in last 30 days (count)
+        expense_last_30d         — posted expense transactions in last 30 days (count)
+        revenue_amount_last_7d   — sum of posted revenue amounts in last 7 days
+        revenue_amount_last_30d  — sum of posted revenue amounts in last 30 days
+        revenue_amount_last_90d  — sum of posted revenue amounts in last 90 days
+        revenue_amount_prev_30d  — sum of posted revenue amounts in 30-60 day window
+        expense_amount_last_30d  — sum of posted expense amounts in last 30 days
+        expense_amount_prev_30d  — sum of posted expense amounts in 30-60 day window
+        avg_days_to_pay          — mean(payment_date - transaction_date) for paid records
 
     Groups by: enterprise_id, company_id, transaction_type, status
     """
@@ -146,25 +153,45 @@ def transform_transactions(df: pd.DataFrame) -> pd.DataFrame:
     df["outstanding_amount"] = df["amount"].where(df["is_revenue"], 0)
 
     # ----------------------------------------------------------
-    # Windowed revenue/expense flags
+    # Windowed revenue/expense boolean flags (counts)
     # ----------------------------------------------------------
-    df["revenue_last_7d"] = (
-        df["is_revenue"]
-        & df["effective_date"].notna()
-        & (df["effective_date"] >= now - pd.Timedelta(days=7))
+    in_7d  = df["effective_date"].notna() & (df["effective_date"] >= now - pd.Timedelta(days=7))
+    in_30d = df["effective_date"].notna() & (df["effective_date"] >= now - pd.Timedelta(days=30))
+    in_90d = df["effective_date"].notna() & (df["effective_date"] >= now - pd.Timedelta(days=90))
+    # prev window: 30–60 days ago
+    in_prev_30d = (
+        df["effective_date"].notna()
+        & (df["effective_date"] >= now - pd.Timedelta(days=60))
+        & (df["effective_date"] <  now - pd.Timedelta(days=30))
     )
 
-    df["revenue_last_30d"] = (
-        df["is_revenue"]
-        & df["effective_date"].notna()
-        & (df["effective_date"] >= now - pd.Timedelta(days=30))
-    )
+    df["revenue_last_7d"]  = df["is_revenue"] & in_7d
+    df["revenue_last_30d"] = df["is_revenue"] & in_30d
+    df["expense_last_30d"] = df["is_expense"] & in_30d
 
-    df["expense_last_30d"] = (
-        df["is_expense"]
-        & df["effective_date"].notna()
-        & (df["effective_date"] >= now - pd.Timedelta(days=30))
-    )
+    # Monetary amount windowed columns
+    df["revenue_amount_last_7d"]  = df["amount"].where(df["is_revenue"] & in_7d,  0.0)
+    df["revenue_amount_last_30d"] = df["amount"].where(df["is_revenue"] & in_30d, 0.0)
+    df["revenue_amount_last_90d"] = df["amount"].where(df["is_revenue"] & in_90d, 0.0)
+    df["revenue_amount_prev_30d"] = df["amount"].where(df["is_revenue"] & in_prev_30d, 0.0)
+    df["expense_amount_last_30d"] = df["amount"].where(df["is_expense"] & in_30d, 0.0)
+    df["expense_amount_prev_30d"] = df["amount"].where(df["is_expense"] & in_prev_30d, 0.0)
+
+    # Days to pay: requires payment_date field (optional on Base44 transactions)
+    if "payment_date" in df.columns:
+        df["payment_date_dt"] = pd.to_datetime(df["payment_date"], errors="coerce", utc=True)
+        df["_days_to_pay"] = (
+            (df["payment_date_dt"] - df["effective_date"])
+            .dt.total_seconds()
+            .div(86400)
+            .where(
+                df["payment_date_dt"].notna() & df["effective_date"].notna()
+                & df["is_revenue"],
+                other=float("nan"),
+            )
+        )
+    else:
+        df["_days_to_pay"] = float("nan")
 
     # ----------------------------------------------------------
     # Safe groupBy
@@ -181,6 +208,13 @@ def transform_transactions(df: pd.DataFrame) -> pd.DataFrame:
             revenue_last_7d=("revenue_last_7d", "sum"),
             revenue_last_30d=("revenue_last_30d", "sum"),
             expense_last_30d=("expense_last_30d", "sum"),
+            revenue_amount_last_7d=("revenue_amount_last_7d", "sum"),
+            revenue_amount_last_30d=("revenue_amount_last_30d", "sum"),
+            revenue_amount_last_90d=("revenue_amount_last_90d", "sum"),
+            revenue_amount_prev_30d=("revenue_amount_prev_30d", "sum"),
+            expense_amount_last_30d=("expense_amount_last_30d", "sum"),
+            expense_amount_prev_30d=("expense_amount_prev_30d", "sum"),
+            avg_days_to_pay=("_days_to_pay", "mean"),
         )
         .reset_index()
     )
@@ -198,8 +232,17 @@ def transform_transactions(df: pd.DataFrame) -> pd.DataFrame:
     # ----------------------------------------------------------
     # Round monetary columns to 2 decimal places
     # ----------------------------------------------------------
-    for col in ["total_amount", "avg_amount", "outstanding_amount"]:
-        summary[col] = summary[col].fillna(0.0).round(2)
+    for col in [
+        "total_amount", "avg_amount", "outstanding_amount",
+        "revenue_amount_last_7d", "revenue_amount_last_30d",
+        "revenue_amount_last_90d", "revenue_amount_prev_30d",
+        "expense_amount_last_30d", "expense_amount_prev_30d",
+    ]:
+        if col in summary.columns:
+            summary[col] = summary[col].fillna(0.0).round(2)
+
+    if "avg_days_to_pay" in summary.columns:
+        summary["avg_days_to_pay"] = summary["avg_days_to_pay"].round(1)
 
     # Cast integer columns
     for col in ["total_transactions", "revenue_last_7d",
@@ -233,4 +276,11 @@ def _empty_summary() -> pd.DataFrame:
         "revenue_last_7d",
         "revenue_last_30d",
         "expense_last_30d",
+        "revenue_amount_last_7d",
+        "revenue_amount_last_30d",
+        "revenue_amount_last_90d",
+        "revenue_amount_prev_30d",
+        "expense_amount_last_30d",
+        "expense_amount_prev_30d",
+        "avg_days_to_pay",
     ])

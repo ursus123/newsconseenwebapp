@@ -853,11 +853,12 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         from etl.entity_index import transform_entity_index
         from etl.company_scorecard import transform_company_scorecard
 
-        _ppl  = raw_data.get("people",       pd.DataFrame())
-        _txs  = raw_data.get("transactions",  pd.DataFrame())
-        _tsks = raw_data.get("tasks",         pd.DataFrame())
-        _ents = raw_data.get("enterprises",   pd.DataFrame())
-        _prds = raw_data.get("products",      pd.DataFrame())
+        _ppl  = raw_data.get("people",        pd.DataFrame())
+        _txs  = raw_data.get("transactions",   pd.DataFrame())
+        _tsks = raw_data.get("tasks",          pd.DataFrame())
+        _ents = raw_data.get("enterprises",    pd.DataFrame())
+        _prds = raw_data.get("products",       pd.DataFrame())
+        _rels = raw_data.get("relationships",  pd.DataFrame())
 
         # monthly_kpis
         try:
@@ -885,6 +886,78 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         except Exception as _e:
             enhanced_result["company_scorecard"] = {"status": "error", "detail": str(_e)}
             logger.warning("cron: company_scorecard failed — %s", _e)
+
+        # ── Deep analytics intelligence tables ────────────────────────────────
+        # kpi_summary — cross-entity one-row-per-company business snapshot
+        try:
+            from etl.kpi_summary import transform_kpi_summary
+            _ks_df = transform_kpi_summary(_ppl, _txs, _tsks, _prds, _ents, _rels)
+            enhanced_result["kpi_summary"] = load_dataframe_replace(_ks_df, "kpi_summary")
+            logger.info("cron: kpi_summary — %d company rows", len(_ks_df))
+        except Exception as _e:
+            enhanced_result["kpi_summary"] = {"status": "error", "detail": str(_e)}
+            logger.warning("cron: kpi_summary failed — %s", _e)
+
+        # client_value — RFM, CLV, churn risk per client
+        try:
+            from etl.client_value import transform_client_value
+            _cv_df = transform_client_value(_ppl, _txs, _rels)
+            enhanced_result["client_value"] = load_dataframe_replace(_cv_df, "client_value")
+            logger.info("cron: client_value — %d client rows", len(_cv_df))
+        except Exception as _e:
+            enhanced_result["client_value"] = {"status": "error", "detail": str(_e)}
+            logger.warning("cron: client_value failed — %s", _e)
+
+        # staff_performance — throughput, SLA, utilization per staff
+        try:
+            from etl.staff_performance import transform_staff_performance
+            _sp_df = transform_staff_performance(_ppl, _tsks, _rels)
+            enhanced_result["staff_performance"] = load_dataframe_replace(_sp_df, "staff_performance")
+            logger.info("cron: staff_performance — %d staff rows", len(_sp_df))
+        except Exception as _e:
+            enhanced_result["staff_performance"] = {"status": "error", "detail": str(_e)}
+            logger.warning("cron: staff_performance failed — %s", _e)
+
+        # ar_aging — accounts receivable aging + summary
+        try:
+            from etl.ar_aging import transform_ar_aging
+            _ar_detail, _ar_summary = transform_ar_aging(_txs)
+            enhanced_result["ar_aging"]         = load_dataframe_replace(_ar_detail,  "ar_aging")
+            enhanced_result["ar_aging_summary"] = load_dataframe_replace(_ar_summary, "ar_aging_summary")
+            logger.info("cron: ar_aging — %d invoices, %d companies", len(_ar_detail), len(_ar_summary))
+        except Exception as _e:
+            enhanced_result["ar_aging"] = {"status": "error", "detail": str(_e)}
+            logger.warning("cron: ar_aging failed — %s", _e)
+
+        # product_velocity — stock coverage, sell-through, dead stock
+        try:
+            from etl.product_velocity import transform_product_velocity
+            _pv_df = transform_product_velocity(_prds, _txs)
+            enhanced_result["product_velocity"] = load_dataframe_replace(_pv_df, "product_velocity")
+            logger.info("cron: product_velocity — %d product rows", len(_pv_df))
+        except Exception as _e:
+            enhanced_result["product_velocity"] = {"status": "error", "detail": str(_e)}
+            logger.warning("cron: product_velocity failed — %s", _e)
+
+        # network_summary — cross-branch KPI comparison per enterprise
+        try:
+            from etl.network_summary import transform_network_summary
+            _ns_df = transform_network_summary(_ents, _ppl, _txs, _tsks, _prds, _rels)
+            enhanced_result["network_summary"] = load_dataframe_replace(_ns_df, "network_summary")
+            logger.info("cron: network_summary — %d enterprise rows", len(_ns_df))
+        except Exception as _e:
+            enhanced_result["network_summary"] = {"status": "error", "detail": str(_e)}
+            logger.warning("cron: network_summary failed — %s", _e)
+
+        # concentration_risk — HHI revenue/client/staff per company
+        try:
+            from etl.concentration_risk import transform_concentration_risk
+            _cr_df = transform_concentration_risk(_ppl, _txs, _ents)
+            enhanced_result["concentration_risk"] = load_dataframe_replace(_cr_df, "concentration_risk")
+            logger.info("cron: concentration_risk — %d company rows", len(_cr_df))
+        except Exception as _e:
+            enhanced_result["concentration_risk"] = {"status": "error", "detail": str(_e)}
+            logger.warning("cron: concentration_risk failed — %s", _e)
 
     except Exception as _enh_err:
         logger.warning("cron: enhanced analytics step failed — %s", _enh_err)
@@ -1068,6 +1141,65 @@ def cron_etl_company(
         except Exception as _e:
             enhanced_result["company_scorecard"] = {"status": "error", "detail": str(_e)}
             logger.warning("ETL-company: company_scorecard failed — %s", _e)
+
+        _rels = filter_by_company(raw_data.get("relationships", pd.DataFrame()), company_id)
+
+        try:
+            from etl.kpi_summary import transform_kpi_summary
+            _ks_df = transform_kpi_summary(_ppl, _txs, _tsks, _prds, _ents, _rels)
+            enhanced_result["kpi_summary"] = load_dataframe_replace(_ks_df, "kpi_summary")
+        except Exception as _e:
+            enhanced_result["kpi_summary"] = {"status": "error", "detail": str(_e)}
+            logger.warning("ETL-company: kpi_summary failed — %s", _e)
+
+        try:
+            from etl.client_value import transform_client_value
+            _cv_df = transform_client_value(_ppl, _txs, _rels)
+            enhanced_result["client_value"] = load_dataframe_replace(_cv_df, "client_value")
+        except Exception as _e:
+            enhanced_result["client_value"] = {"status": "error", "detail": str(_e)}
+            logger.warning("ETL-company: client_value failed — %s", _e)
+
+        try:
+            from etl.staff_performance import transform_staff_performance
+            _sp_df = transform_staff_performance(_ppl, _tsks, _rels)
+            enhanced_result["staff_performance"] = load_dataframe_replace(_sp_df, "staff_performance")
+        except Exception as _e:
+            enhanced_result["staff_performance"] = {"status": "error", "detail": str(_e)}
+            logger.warning("ETL-company: staff_performance failed — %s", _e)
+
+        try:
+            from etl.ar_aging import transform_ar_aging
+            _ar_detail, _ar_summary = transform_ar_aging(_txs)
+            enhanced_result["ar_aging"]         = load_dataframe_replace(_ar_detail,  "ar_aging")
+            enhanced_result["ar_aging_summary"] = load_dataframe_replace(_ar_summary, "ar_aging_summary")
+        except Exception as _e:
+            enhanced_result["ar_aging"] = {"status": "error", "detail": str(_e)}
+            logger.warning("ETL-company: ar_aging failed — %s", _e)
+
+        try:
+            from etl.product_velocity import transform_product_velocity
+            _pv_df = transform_product_velocity(_prds, _txs)
+            enhanced_result["product_velocity"] = load_dataframe_replace(_pv_df, "product_velocity")
+        except Exception as _e:
+            enhanced_result["product_velocity"] = {"status": "error", "detail": str(_e)}
+            logger.warning("ETL-company: product_velocity failed — %s", _e)
+
+        try:
+            from etl.network_summary import transform_network_summary
+            _ns_df = transform_network_summary(_ents, _ppl, _txs, _tsks, _prds, _rels)
+            enhanced_result["network_summary"] = load_dataframe_replace(_ns_df, "network_summary")
+        except Exception as _e:
+            enhanced_result["network_summary"] = {"status": "error", "detail": str(_e)}
+            logger.warning("ETL-company: network_summary failed — %s", _e)
+
+        try:
+            from etl.concentration_risk import transform_concentration_risk
+            _cr_df = transform_concentration_risk(_ppl, _txs, _ents)
+            enhanced_result["concentration_risk"] = load_dataframe_replace(_cr_df, "concentration_risk")
+        except Exception as _e:
+            enhanced_result["concentration_risk"] = {"status": "error", "detail": str(_e)}
+            logger.warning("ETL-company: concentration_risk failed — %s", _e)
 
     except Exception as _enh_err:
         enhanced_result = {"status": "error", "detail": str(_enh_err)}
@@ -1440,3 +1572,296 @@ def load_geospatial_summary(
             result["postgis_geom_updated"] = f"skipped ({_e})"
 
     return result
+
+
+# ── Intelligence analytics — GET + POST load endpoints ────────────────────────
+
+# KPI Summary ────────────────────────────────────────────────────────────────
+
+@app.get("/analytics/kpi-summary", tags=["Analytics"])
+def get_kpi_summary(company_id: Optional[str] = Query(None)):
+    """Cross-entity business snapshot — one row per company."""
+    from database import get_engine_safe
+    engine = get_engine_safe()
+    if engine:
+        try:
+            df = pd.read_sql("SELECT * FROM analytics.kpi_summary", engine)
+            if not df.empty:
+                if company_id:
+                    df = df[df["company_id"] == company_id]
+                return df.where(df.notna(), None).to_dict(orient="records")
+        except Exception:
+            pass
+    # Fallback: recompute live
+    _ppl  = filter_by_company(people.extract_people(),               company_id)
+    _txs  = filter_by_company(transactions.extract_transactions(),   company_id)
+    _tsks = filter_by_company(tasks.extract_tasks(),                 company_id)
+    _prds = filter_by_company(products.extract_products(),           company_id)
+    _ents = filter_by_company(enterprises.extract_enterprises(),     company_id)
+    _rels = filter_by_company(relationships.extract_relationships(), company_id)
+    from etl.kpi_summary import transform_kpi_summary
+    df = transform_kpi_summary(_ppl, _txs, _tsks, _prds, _ents, _rels)
+    return df.where(df.notna(), None).to_dict(orient="records")
+
+
+@app.post("/load/kpi-summary", tags=["ETL"])
+def load_kpi_summary(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    _ppl  = filter_by_company(people.extract_people(),               company_id)
+    _txs  = filter_by_company(transactions.extract_transactions(),   company_id)
+    _tsks = filter_by_company(tasks.extract_tasks(),                 company_id)
+    _prds = filter_by_company(products.extract_products(),           company_id)
+    _ents = filter_by_company(enterprises.extract_enterprises(),     company_id)
+    _rels = filter_by_company(relationships.extract_relationships(), company_id)
+    from etl.kpi_summary import transform_kpi_summary
+    return load_dataframe_replace(transform_kpi_summary(_ppl, _txs, _tsks, _prds, _ents, _rels), "kpi_summary")
+
+
+# Client Value ────────────────────────────────────────────────────────────────
+
+@app.get("/analytics/client-value", tags=["Analytics"])
+def get_client_value(company_id: Optional[str] = Query(None)):
+    """RFM + CLV + churn risk per client."""
+    from database import get_engine_safe
+    engine = get_engine_safe()
+    if engine:
+        try:
+            df = pd.read_sql("SELECT * FROM analytics.client_value", engine)
+            if not df.empty:
+                if company_id:
+                    df = df[df["company_id"] == company_id]
+                return df.where(df.notna(), None).to_dict(orient="records")
+        except Exception:
+            pass
+    _ppl  = filter_by_company(people.extract_people(),               company_id)
+    _txs  = filter_by_company(transactions.extract_transactions(),   company_id)
+    _rels = filter_by_company(relationships.extract_relationships(), company_id)
+    from etl.client_value import transform_client_value
+    df = transform_client_value(_ppl, _txs, _rels)
+    return df.where(df.notna(), None).to_dict(orient="records")
+
+
+@app.post("/load/client-value", tags=["ETL"])
+def load_client_value(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    _ppl  = filter_by_company(people.extract_people(),               company_id)
+    _txs  = filter_by_company(transactions.extract_transactions(),   company_id)
+    _rels = filter_by_company(relationships.extract_relationships(), company_id)
+    from etl.client_value import transform_client_value
+    return load_dataframe_replace(transform_client_value(_ppl, _txs, _rels), "client_value")
+
+
+# Staff Performance ────────────────────────────────────────────────────────────
+
+@app.get("/analytics/staff-performance", tags=["Analytics"])
+def get_staff_performance(company_id: Optional[str] = Query(None)):
+    """Task throughput, SLA breach rate, workload score per staff member."""
+    from database import get_engine_safe
+    engine = get_engine_safe()
+    if engine:
+        try:
+            df = pd.read_sql("SELECT * FROM analytics.staff_performance", engine)
+            if not df.empty:
+                if company_id:
+                    df = df[df["company_id"] == company_id]
+                return df.where(df.notna(), None).to_dict(orient="records")
+        except Exception:
+            pass
+    _ppl  = filter_by_company(people.extract_people(),               company_id)
+    _tsks = filter_by_company(tasks.extract_tasks(),                 company_id)
+    _rels = filter_by_company(relationships.extract_relationships(), company_id)
+    from etl.staff_performance import transform_staff_performance
+    df = transform_staff_performance(_ppl, _tsks, _rels)
+    return df.where(df.notna(), None).to_dict(orient="records")
+
+
+@app.post("/load/staff-performance", tags=["ETL"])
+def load_staff_performance(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    _ppl  = filter_by_company(people.extract_people(),               company_id)
+    _tsks = filter_by_company(tasks.extract_tasks(),                 company_id)
+    _rels = filter_by_company(relationships.extract_relationships(), company_id)
+    from etl.staff_performance import transform_staff_performance
+    return load_dataframe_replace(transform_staff_performance(_ppl, _tsks, _rels), "staff_performance")
+
+
+# AR Aging ────────────────────────────────────────────────────────────────────
+
+@app.get("/analytics/ar-aging", tags=["Analytics"])
+def get_ar_aging(company_id: Optional[str] = Query(None)):
+    """Accounts receivable aging detail — one row per unpaid invoice."""
+    from database import get_engine_safe
+    engine = get_engine_safe()
+    if engine:
+        try:
+            df = pd.read_sql("SELECT * FROM analytics.ar_aging", engine)
+            if not df.empty:
+                if company_id:
+                    df = df[df["company_id"] == company_id]
+                return df.where(df.notna(), None).to_dict(orient="records")
+        except Exception:
+            pass
+    _txs = filter_by_company(transactions.extract_transactions(), company_id)
+    from etl.ar_aging import transform_ar_aging
+    detail, _ = transform_ar_aging(_txs)
+    return detail.where(detail.notna(), None).to_dict(orient="records")
+
+
+@app.get("/analytics/ar-aging-summary", tags=["Analytics"])
+def get_ar_aging_summary(company_id: Optional[str] = Query(None)):
+    """AR aging bucket totals per company."""
+    from database import get_engine_safe
+    engine = get_engine_safe()
+    if engine:
+        try:
+            df = pd.read_sql("SELECT * FROM analytics.ar_aging_summary", engine)
+            if not df.empty:
+                if company_id:
+                    df = df[df["company_id"] == company_id]
+                return df.where(df.notna(), None).to_dict(orient="records")
+        except Exception:
+            pass
+    _txs = filter_by_company(transactions.extract_transactions(), company_id)
+    from etl.ar_aging import transform_ar_aging
+    _, summary = transform_ar_aging(_txs)
+    return summary.where(summary.notna(), None).to_dict(orient="records")
+
+
+@app.post("/load/ar-aging", tags=["ETL"])
+def load_ar_aging(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    _txs = filter_by_company(transactions.extract_transactions(), company_id)
+    from etl.ar_aging import transform_ar_aging
+    detail, summary = transform_ar_aging(_txs)
+    r1 = load_dataframe_replace(detail,  "ar_aging")
+    r2 = load_dataframe_replace(summary, "ar_aging_summary")
+    return {"ar_aging": r1, "ar_aging_summary": r2}
+
+
+# Product Velocity ────────────────────────────────────────────────────────────
+
+@app.get("/analytics/product-velocity", tags=["Analytics"])
+def get_product_velocity(company_id: Optional[str] = Query(None)):
+    """Stock coverage, sell-through velocity, dead stock per product."""
+    from database import get_engine_safe
+    engine = get_engine_safe()
+    if engine:
+        try:
+            df = pd.read_sql("SELECT * FROM analytics.product_velocity", engine)
+            if not df.empty:
+                if company_id:
+                    df = df[df["company_id"] == company_id]
+                return df.where(df.notna(), None).to_dict(orient="records")
+        except Exception:
+            pass
+    _prds = filter_by_company(products.extract_products(),         company_id)
+    _txs  = filter_by_company(transactions.extract_transactions(), company_id)
+    from etl.product_velocity import transform_product_velocity
+    df = transform_product_velocity(_prds, _txs)
+    return df.where(df.notna(), None).to_dict(orient="records")
+
+
+@app.post("/load/product-velocity", tags=["ETL"])
+def load_product_velocity(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    _prds = filter_by_company(products.extract_products(),         company_id)
+    _txs  = filter_by_company(transactions.extract_transactions(), company_id)
+    from etl.product_velocity import transform_product_velocity
+    return load_dataframe_replace(transform_product_velocity(_prds, _txs), "product_velocity")
+
+
+# Network Summary ─────────────────────────────────────────────────────────────
+
+@app.get("/analytics/network-summary", tags=["Analytics"])
+def get_network_summary(company_id: Optional[str] = Query(None)):
+    """Cross-branch performance comparison — one row per enterprise."""
+    from database import get_engine_safe
+    engine = get_engine_safe()
+    if engine:
+        try:
+            df = pd.read_sql("SELECT * FROM analytics.network_summary", engine)
+            if not df.empty:
+                if company_id:
+                    df = df[df["company_id"] == company_id]
+                return df.where(df.notna(), None).to_dict(orient="records")
+        except Exception:
+            pass
+    _ents = filter_by_company(enterprises.extract_enterprises(),     company_id)
+    _ppl  = filter_by_company(people.extract_people(),               company_id)
+    _txs  = filter_by_company(transactions.extract_transactions(),   company_id)
+    _tsks = filter_by_company(tasks.extract_tasks(),                 company_id)
+    _prds = filter_by_company(products.extract_products(),           company_id)
+    _rels = filter_by_company(relationships.extract_relationships(), company_id)
+    from etl.network_summary import transform_network_summary
+    df = transform_network_summary(_ents, _ppl, _txs, _tsks, _prds, _rels)
+    return df.where(df.notna(), None).to_dict(orient="records")
+
+
+@app.post("/load/network-summary", tags=["ETL"])
+def load_network_summary(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    _ents = filter_by_company(enterprises.extract_enterprises(),     company_id)
+    _ppl  = filter_by_company(people.extract_people(),               company_id)
+    _txs  = filter_by_company(transactions.extract_transactions(),   company_id)
+    _tsks = filter_by_company(tasks.extract_tasks(),                 company_id)
+    _prds = filter_by_company(products.extract_products(),           company_id)
+    _rels = filter_by_company(relationships.extract_relationships(), company_id)
+    from etl.network_summary import transform_network_summary
+    return load_dataframe_replace(
+        transform_network_summary(_ents, _ppl, _txs, _tsks, _prds, _rels), "network_summary"
+    )
+
+
+# Concentration Risk ──────────────────────────────────────────────────────────
+
+@app.get("/analytics/concentration-risk", tags=["Analytics"])
+def get_concentration_risk(company_id: Optional[str] = Query(None)):
+    """Revenue, client, and staff HHI concentration risk per company."""
+    from database import get_engine_safe
+    engine = get_engine_safe()
+    if engine:
+        try:
+            df = pd.read_sql("SELECT * FROM analytics.concentration_risk", engine)
+            if not df.empty:
+                if company_id:
+                    df = df[df["company_id"] == company_id]
+                return df.where(df.notna(), None).to_dict(orient="records")
+        except Exception:
+            pass
+    _ppl  = filter_by_company(people.extract_people(),             company_id)
+    _txs  = filter_by_company(transactions.extract_transactions(), company_id)
+    _ents = filter_by_company(enterprises.extract_enterprises(),   company_id)
+    from etl.concentration_risk import transform_concentration_risk
+    df = transform_concentration_risk(_ppl, _txs, _ents)
+    return df.where(df.notna(), None).to_dict(orient="records")
+
+
+@app.post("/load/concentration-risk", tags=["ETL"])
+def load_concentration_risk(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    _ppl  = filter_by_company(people.extract_people(),             company_id)
+    _txs  = filter_by_company(transactions.extract_transactions(), company_id)
+    _ents = filter_by_company(enterprises.extract_enterprises(),   company_id)
+    from etl.concentration_risk import transform_concentration_risk
+    return load_dataframe_replace(transform_concentration_risk(_ppl, _txs, _ents), "concentration_risk")
