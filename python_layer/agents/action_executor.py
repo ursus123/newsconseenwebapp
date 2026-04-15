@@ -225,12 +225,61 @@ def _exec_trigger_etl(company_id: str, inputs: dict) -> dict:
     return {"entity_type": None, "entity_id": None, "triggered": True, "entity": entity}
 
 
+def _exec_create_person(company_id: str, inputs: dict) -> dict:
+    url = getattr(settings, "base44_people_url", None)
+    if not url:
+        return {"error": "BASE44_PEOPLE_URL not configured"}
+    person = {k: v for k, v in {
+        "company_id":    company_id,
+        "full_name":     inputs.get("full_name") or inputs.get("name", ""),
+        "person_type":   inputs.get("person_type", "client"),
+        "person_subtype": inputs.get("person_subtype", ""),
+        "status":        inputs.get("status", "active"),
+        "phone":         inputs.get("phone", ""),
+        "email":         inputs.get("email", ""),
+        "enterprise_name": inputs.get("enterprise_name", ""),
+        "engagement_model": inputs.get("engagement_model", ""),
+        "notes":         inputs.get("notes", f"Created by agent at {_now_iso()[:10]}"),
+    }.items() if v not in ("", None)}
+    if not person.get("full_name"):
+        return {"error": "full_name is required for create_person"}
+    result = _post_base44(url, person)
+    _fire_etl("people")
+    return {"entity_type": "person", "entity_id": result.get("id")}
+
+
+def _exec_create_product(company_id: str, inputs: dict) -> dict:
+    url = getattr(settings, "base44_products_url", None)
+    if not url:
+        return {"error": "BASE44_PRODUCTS_URL not configured"}
+    product = {k: v for k, v in {
+        "company_id":   company_id,
+        "name":         inputs.get("name", ""),
+        "item_type":    inputs.get("item_type", "physical"),
+        "item_class":   inputs.get("item_class", ""),
+        "item_subtype": inputs.get("item_subtype", ""),
+        "unit_of_measure": inputs.get("unit_of_measure", "piece"),
+        "unit_price":   inputs.get("unit_price"),
+        "stock_level":  inputs.get("stock_level"),
+        "reorder_point": inputs.get("reorder_point"),
+        "status":       inputs.get("status", "active"),
+        "notes":        inputs.get("notes", f"Created by agent at {_now_iso()[:10]}"),
+    }.items() if v not in ("", None)}
+    if not product.get("name"):
+        return {"error": "name is required for create_product"}
+    result = _post_base44(url, product)
+    _fire_etl("product")
+    return {"entity_type": "product", "entity_id": result.get("id")}
+
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 _HANDLERS = {
     "create_task":           _exec_create_task,
     "create_follow_up":      _exec_create_task,
     "create_purchase_order": _exec_create_task,
+    "create_person":         _exec_create_person,
+    "create_product":        _exec_create_product,
     "flag_record":           _exec_flag_record,
     "update_record":         _exec_update_record,
     "update_task_status":    _exec_update_task_status,

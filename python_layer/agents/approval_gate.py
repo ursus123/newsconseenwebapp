@@ -106,6 +106,8 @@ ACTION_RISK_MAP = {
     "create_transaction":   RiskLevel.APPROVE,
     "create_purchase_order":RiskLevel.APPROVE,
     "bulk_update":          RiskLevel.APPROVE,
+    "create_person":        RiskLevel.APPROVE,
+    "create_product":       RiskLevel.APPROVE,
 
     # Critical — always requires explicit approval, never auto
     "delete_record":        RiskLevel.CRITICAL,

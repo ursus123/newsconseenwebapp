@@ -4169,6 +4169,7 @@ TOOL_DEFINITIONS = [
                         "flag_record", "update_record", "reassign_task",
                         "create_transaction", "send_client_message",
                         "send_email", "internal_alert",
+                        "create_person", "create_product",
                     ],
                     "description": "The type of action to perform.",
                 },
