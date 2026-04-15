@@ -634,6 +634,7 @@ async def run_connector(
     connector_id:     str = Form(...),
     entity_type:      Optional[str] = Form(None),
     credentials_json: Optional[str] = Form(None),
+    column_map_json:  Optional[str] = Form(None),
     file:             Optional[UploadFile] = File(None),
     dry_run:          bool = Form(False),
 ):
@@ -668,6 +669,17 @@ async def run_connector(
                 credentials.update(extra)
         except Exception as e:
             logger.warning("run_connector: could not parse credentials_json — %s", e)
+
+    # Explicit column mapping — applies to file, DB, and API connectors.
+    # Sent by the UI after the operator reviews /connectors/suggest-columns output.
+    # Overrides any column_map already present in credentials_json.
+    if column_map_json:
+        try:
+            cmap = json.loads(column_map_json)
+            if isinstance(cmap, dict):
+                credentials["column_map"] = cmap
+        except Exception as e:
+            logger.warning("run_connector: could not parse column_map_json — %s", e)
 
     # File-based connectors
     if file:
