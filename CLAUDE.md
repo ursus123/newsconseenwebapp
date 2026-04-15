@@ -627,6 +627,7 @@ Fix: add variables to Railway OR make them Optional[str] = None in settings.py.
 - Filter ETL by a single company_id — ETL loads ALL tenants, isolation is at READ time
 - Add a COMPANY_ID environment variable to scope ETL to one tenant
 - Suggest any Railway variable or config that assumes a single client
+- Add an app to APP_REGISTRY without declaring its `backend` and `APP_ONTOLOGY` entry
 
 ### Always
 - Trigger ETL after every entity mutation
@@ -637,6 +638,68 @@ Fix: add variables to Railway OR make them Optional[str] = None in settings.py.
 - Make new settings.py fields Optional[str] = None
 - Implement three-tier fallback (analytics → raw → Base44 live) in every data-reading feature
 - Use PostgreSQL for analytics acceleration and clean data export — never as the sole data source
+- Keep DataModels.jsx and ObjectExplorer.jsx as accurate technical/imagery references (see rule below)
+- Declare `backend` + `APP_ONTOLOGY` for every app added to APP_REGISTRY (see Applications rule below)
+
+### Applications — ontology and datamart as backend (RULE)
+
+Every application in APP_REGISTRY is a purpose-built operational interface. All applications
+must be backed by the Newsconseen data infrastructure — never by an independent database,
+external API, or bespoke backend:
+
+**Two and only two backend modes:**
+
+| Backend | Layer | When to use | Data path |
+|---------|-------|-------------|-----------|
+| `ontology` | Layer 1 — Base44 entities | Write-heavy apps: forms, intake, data entry, mutations | Reads/writes base44.entities.* with company_id stamped on every record |
+| `datamart` | Layer 2 — python_layer | Read-heavy apps: dashboards, reports, analytics views | Reads python_layer endpoints with three-tier fallback (analytics → raw → Base44 live) |
+
+**Rules:**
+- Every entry in APP_REGISTRY must declare `backend: "ontology"` or `backend: "datamart"`
+- Every entry in APP_REGISTRY must have a corresponding entry in APP_ONTOLOGY listing
+  which of the 7 canonical entities (Person, Enterprise, Product, Task, Transaction,
+  Relationship, Address) the app reads or writes — this is the architectural contract
+- Ontology-backed apps must always stamp `company_id: currentUser?.company_id` on every
+  created or updated record — never allow tenant bleed
+- Datamart-backed apps must implement three-tier fallback (analytics → raw → Base44 live)
+  and never show empty if Base44 has data
+- Applications must never hardcode industry-specific labels — use MasterDataOption /
+  TaxonomySelect for any field that varies by operator (person_subtype, task_type, etc.)
+- Streamlit-generated apps are datamart-backed only — they read from python_layer and
+  never write directly to Base44
+- Config-rendered React apps can be either backend — ontology for forms, datamart for views
+
+**When adding a new app:**
+1. Add to APP_REGISTRY with `backend` field
+2. Add to APP_ONTOLOGY with the entities it reads/writes
+3. If ontology-backed: implement company_id scoping and ETL trigger after mutations
+4. If datamart-backed: implement three-tier fallback
+
+### DataModels and ObjectExplorer — living technical references (RULE)
+
+**DataModels.jsx** must always be an accurate, up-to-date technical reference of the actual
+PostgreSQL schema and system architecture as it exists in the codebase:
+- **Ontology view**: 7 canonical entities + MasterDataOption, open data APIs, analytics pipeline.
+  Update this view whenever a new entity, field, or relationship is added to ARCHITECTURE.md.
+- **PostgreSQL view**: actual raw.*, analytics.*, audit.* table schemas sourced from real DDL
+  in the python_layer (agent_memory.py, approval_gate.py, copilot/queries.py, audit/routes.py).
+  Update this view whenever a new CREATE TABLE is added to any python_layer file.
+- **API Catalogue**: all FastAPI routers and their key endpoints.
+  Update this view whenever a new router is mounted in app.py.
+
+**ObjectExplorer.jsx** must always reflect the 7 canonical business entities with live operator
+data from Base44. It is the operational view (runtime records), not the schema view.
+- Schema mode shows nodes for the 7 entities with AI Readiness borders sourced from
+  /dataquality/report.
+- Live mode shows actual record counts from the analytics layer.
+- 3D mode is a Three.js render of the same 7 entities.
+
+Rule: DataModels = "what does the architecture look like technically right now?"
+      ObjectExplorer = "what entities does this operator have data in right now?"
+
+When adding a new phase, database table, or API router:
+1. Update DataModels.jsx to include the new table/endpoint
+2. Verify ObjectExplorer still accurately reflects the 7-entity ontology
 
 ### Protected files — ask before modifying
 ```
