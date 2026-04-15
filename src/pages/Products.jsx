@@ -203,7 +203,12 @@ export default function Products() {
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [activeTab, setActiveTab] = useState("all");
   const [recalls, setRecalls] = useState({});
   const [search, setSearch] = useState("");
@@ -213,8 +218,6 @@ export default function Products() {
   const [heatmapOn, setHeatmapOn] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
-
-  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   useEffect(() => {
     const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["products"] }); };

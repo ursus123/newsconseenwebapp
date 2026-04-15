@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   User, Lock, Building2, Shield, Palette, RefreshCw, Key, Info,
   Save, Eye, EyeOff, X, CheckCircle2, Monitor, Trash2, Database,
@@ -751,12 +751,14 @@ function AboutSection({ user }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function DesktopSettings() {
+  const qc = useQueryClient();
   const [active, setActive] = useState("profile");
-  const [user, setUser]     = useState(null);
-
-  useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
-  }, []);
+  const { data: user = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
   if (!user) return (
     <div className="flex items-center justify-center h-screen"
@@ -831,7 +833,7 @@ export default function DesktopSettings() {
       {/* ── Right content ────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-lg mx-auto">
-          <ActiveSection user={user} onUpdate={setUser} />
+          <ActiveSection user={user} onUpdate={() => qc.invalidateQueries({ queryKey: ["currentUser"] })} />
         </div>
       </div>
     </div>

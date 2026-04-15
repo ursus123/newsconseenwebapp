@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import NetworkDashboard from "@/components/network/NetworkDashboard";
 import NetworkMap from "@/components/network/NetworkMap";
 
 export default function NetworkPage() {
-  const [currentUser, setCurrentUser] = useState(null);
-
-  useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
   if (!currentUser) {
     return (

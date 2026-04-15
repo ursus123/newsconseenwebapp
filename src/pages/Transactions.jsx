@@ -366,7 +366,12 @@ export default function Transactions() {
   const [voidTarget, setVoidTarget]       = useState(null);
   const [postTarget, setPostTarget]       = useState(null);
   const [expanded, setExpanded]           = useState(null);
-  const [currentUser, setCurrentUser]     = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [activeTab, setActiveTab]         = useState("outstanding");
   const [period, setPeriod]               = useState("30d");
   const [dateRange, setDateRange]         = useState([null, null]); // [Date|null, Date|null]
@@ -379,8 +384,6 @@ export default function Transactions() {
   const [deleteAllOpen, setDeleteAllOpen]       = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
-
-  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   useEffect(() => {
     const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["transactions"] }); };
@@ -406,24 +409,32 @@ export default function Transactions() {
     queryKey: ["enterprises", companyId],
     queryFn: () => listFn(base44.entities.Enterprise),
     enabled: currentUser !== null,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: people = [] } = useQuery({
     queryKey: ["people-tx", companyId],
     queryFn: () => listFn(base44.entities.Person),
     enabled: currentUser !== null,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: services = [] } = useQuery({
     queryKey: ["services-tx", companyId],
     queryFn: () => listFn(base44.entities.Service),
     enabled: currentUser !== null,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: products = [] } = useQuery({
     queryKey: ["tx-products-page", companyId],
     queryFn: () => listFn(base44.entities.Product),
     enabled: currentUser !== null,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const createMut = useMutation({

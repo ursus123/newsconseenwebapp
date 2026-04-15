@@ -355,6 +355,7 @@ function MLInsightsPanel({ currentUser, onBack }) {
     },
     enabled: !!companyId,
     staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: mlStatus = {} } = useQuery({
@@ -363,6 +364,8 @@ function MLInsightsPanel({ currentUser, onBack }) {
       const r = await fetch(`${RAILWAY_URL}/ml/status`, { headers: RAIL_HEADERS });
       return r.json();
     },
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: rawStats = {} } = useQuery({
@@ -400,6 +403,7 @@ function MLInsightsPanel({ currentUser, onBack }) {
     },
     enabled: !!companyId,
     staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const MODEL_META = {
@@ -581,7 +585,12 @@ function canUserSee(item, currentUser) {
 }
 
 export default function Reports() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [selected, setSelected] = useState({ type: "all-charts", id: "all-charts" });
   const [view, setView] = useState("folders"); // folders | chart-builder | report-builder | report-viewer | chart-viewer | ml-insights | market-template | superset
   const [editingChart, setEditingChart] = useState(null);
@@ -596,10 +605,6 @@ export default function Reports() {
 
   const qc = useQueryClient();
 
-  useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
-
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
 
   const { data: folders = [] } = useQuery({
@@ -608,6 +613,8 @@ export default function Reports() {
       ? base44.entities.ChartFolder.filter({ status: "active" })
       : base44.entities.ChartFolder.filter({ status: "active", company_id: currentUser.company_id }),
     enabled: !!currentUser?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: allCharts = [] } = useQuery({
@@ -616,6 +623,8 @@ export default function Reports() {
       ? base44.entities.ReportChart.filter({ status: "active" })
       : base44.entities.ReportChart.filter({ status: "active", company_id: currentUser.company_id }),
     enabled: !!currentUser?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: allReports = [] } = useQuery({
@@ -624,12 +633,16 @@ export default function Reports() {
       ? base44.entities.Report.list()
       : base44.entities.Report.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: pinnedWidgets = [] } = useQuery({
     queryKey: ["pinnedWidgets", currentUser?.company_id],
     queryFn: () => base44.entities.SavedDashboardWidget.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const createFolderMut = useMutation({

@@ -8,7 +8,7 @@
 // Uses currentUser.company_id — never hardcodes tenant IDs.
 // ==============================================================
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
@@ -135,6 +135,7 @@ function EntityCard({ cfg, companyId, onRepair }) {
     queryFn: () => listFn(cfg.entity()),
     enabled: !!companyId,
     staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // Compute metrics
@@ -282,13 +283,14 @@ function EntityCard({ cfg, companyId, onRepair }) {
 
 // ── Main page ──────────────────────────────────────────────────────
 export default function DataRepair() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [repairKey, setRepairKey] = useState(0);
   const qc = useQueryClient();
-
-  useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
 
   const handleRepairAll = useCallback(() => {
     setRepairKey(k => k + 1);

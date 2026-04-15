@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -257,9 +257,12 @@ async function extractDataFromFile(file) {
 export default function AddClient() {
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
-  const [currentUser, setCurrentUser] = useState(null);
-
-  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
   // Step 0
   const [clientType, setClientType] = useState(null); // "individual" | "business" | "both"
@@ -287,9 +290,9 @@ export default function AddClient() {
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
 
-  const { data: people = [] } = useQuery({ queryKey: ["people", currentUser?.company_id], queryFn: () => base44.entities.Person.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser });
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", currentUser?.company_id], queryFn: () => base44.entities.Enterprise.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser });
-  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", currentUser?.company_id], queryFn: () => base44.entities.Address.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser });
+  const { data: people = [] } = useQuery({ queryKey: ["people", currentUser?.company_id], queryFn: () => base44.entities.Person.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser, staleTime: 0, refetchOnMount: "always" });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", currentUser?.company_id], queryFn: () => base44.entities.Enterprise.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser, staleTime: 0, refetchOnMount: "always" });
+  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", currentUser?.company_id], queryFn: () => base44.entities.Address.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser, staleTime: 0, refetchOnMount: "always" });
 
   const needsPerson = clientType === "individual" || clientType === "both";
   const needsEnterprise = clientType === "business" || clientType === "both";

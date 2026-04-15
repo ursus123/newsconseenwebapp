@@ -18,6 +18,7 @@ import DailyBriefing from "@/components/desktop/DailyBriefing";
 import EnterpriseContextSwitcher from "@/components/desktop/EnterpriseContextSwitcher";
 import { usePWA } from "@/hooks/usePWA";
 import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
 import { useLockStore } from "@/desktop/lockStore";
 import LockScreen from "@/components/desktop/LockScreen";
 
@@ -32,7 +33,12 @@ const WALLPAPERS = [
 ];
 
 export default function Desktop() {
-  const [user, setUser]               = useState(null);
+  const { data: user = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [notifOpen, setNotifOpen]     = useState(false);
   const [wallpaperIdx, setWallpaperIdx] = useState(0);
   const [contextMenu, setContextMenu] = useState(null);
@@ -52,8 +58,6 @@ export default function Desktop() {
   const lockStore   = useLockStore();
 
   useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
-    
     // Load wallpaper from current profile
     setWallpaperIdx(profileMgr.currentProfile.theme.wallpaperIdx);
 

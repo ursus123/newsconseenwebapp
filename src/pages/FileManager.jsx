@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
 import {
   Folder, FileText, BarChart2, Download, Trash2, Upload,
   FolderPlus, Edit2, Search, Grid, List, ChevronRight,
@@ -44,7 +45,12 @@ const SIDEBAR_SECTIONS = [
 const MAX_STORAGE_MB = 500;
 
 export default function FileManager() {
-  const [user, setUser] = useState(null);
+  const { data: user = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState("personal");
@@ -67,7 +73,6 @@ export default function FileManager() {
   const fileInputRef = useRef();
 
   useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
     // Load all users for sharing
     base44.entities.User.list(undefined, 100).then(setUsers).catch(() => {});
     // Load file shares

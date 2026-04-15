@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -77,11 +77,14 @@ function CancelDialog({ onClose, onConfirm, loading }) {
 export default function Billing() {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
-
-  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   const companyId = currentUser?.company_id;
 
@@ -89,36 +92,48 @@ export default function Billing() {
     queryKey: ["enterprises_billing", companyId],
     queryFn: () => base44.entities.Enterprise.filter({ enterprise_name: companyId }),
     enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: users = [] } = useQuery({
     queryKey: ["users_billing", companyId],
     queryFn: () => base44.entities.User.filter({ company_id: companyId }),
     enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: people = [] } = useQuery({
     queryKey: ["people_billing", companyId],
     queryFn: () => base44.entities.Person.filter({ company_id: companyId }),
     enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: products = [] } = useQuery({
     queryKey: ["products_billing", companyId],
     queryFn: () => base44.entities.Product.filter({ company_id: companyId }),
     enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: transactions = [] } = useQuery({
     queryKey: ["transactions_billing", companyId],
     queryFn: () => base44.entities.Transaction.filter({ company_id: companyId }),
     enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["tasks_billing", companyId],
     queryFn: () => base44.entities.Task.filter({ company_id: companyId }),
     enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const enterprise = enterprises.find((e) => e.enterprise_name === companyId) || enterprises[0];

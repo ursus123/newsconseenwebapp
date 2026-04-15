@@ -131,11 +131,14 @@ export default function Relationships() {
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [viewMode, setViewMode] = useState("table");
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const qc = useQueryClient();
   const { toast } = useToast();
-
-  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   useEffect(() => {
     const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["relationships"] }); };
@@ -148,13 +151,13 @@ export default function Relationships() {
   const withScope = useWithScope(currentUser);
 
   const { data: relationships = [] } = useQuery({ queryKey: ["relationships", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Relationship), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
-  const { data: people = [] } = useQuery({ queryKey: ["people", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Person), enabled: currentUser !== null });
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Enterprise), enabled: currentUser !== null });
-  const { data: products = [] } = useQuery({ queryKey: ["products", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Product), enabled: currentUser !== null });
-  const { data: services = [] } = useQuery({ queryKey: ["services", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Service), enabled: currentUser !== null });
-  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Address), enabled: currentUser !== null });
-  const { data: tasks = [] } = useQuery({ queryKey: ["tasks", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Task), enabled: currentUser !== null });
-  const { data: transactions = [] } = useQuery({ queryKey: ["transactions", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Transaction), enabled: currentUser !== null });
+  const { data: people = [] } = useQuery({ queryKey: ["people", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Person), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Enterprise), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: products = [] } = useQuery({ queryKey: ["products", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Product), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: services = [] } = useQuery({ queryKey: ["services", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Service), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Address), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: tasks = [] } = useQuery({ queryKey: ["tasks", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Task), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: transactions = [] } = useQuery({ queryKey: ["transactions", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Transaction), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
 
 
   const updateMut = useMutation({

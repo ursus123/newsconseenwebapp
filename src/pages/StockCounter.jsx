@@ -32,7 +32,12 @@ const TABS = [
 export default function StockCounter() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [activeTab, setActiveTab] = useState("sheet");
   const [session, setSession] = useState(null);
   const [showNewSession, setShowNewSession] = useState(false);
@@ -42,10 +47,6 @@ export default function StockCounter() {
   const [draftInfo, setDraftInfo] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
-
-  useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
 
   // Check for saved draft
   useEffect(() => {
@@ -73,30 +74,40 @@ export default function StockCounter() {
     queryKey: ["sc_products", currentUser?.company_id],
     queryFn: () => base44.entities.Product.filter({ company_id: currentUser.company_id, status: "active" }),
     enabled: !!currentUser?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["sc_enterprises", currentUser?.company_id],
     queryFn: () => base44.entities.Enterprise.filter({ company_id: currentUser.company_id, status: "active" }),
     enabled: !!currentUser?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: addresses = [] } = useQuery({
     queryKey: ["sc_addresses", currentUser?.company_id],
     queryFn: () => base44.entities.Address.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: relationships = [] } = useQuery({
     queryKey: ["sc_relationships", currentUser?.company_id],
     queryFn: () => base44.entities.Relationship.filter({ company_id: currentUser.company_id, relationship_type: "item_enterprise" }),
     enabled: !!currentUser?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: countHistory = [] } = useQuery({
     queryKey: ["sc_history", currentUser?.company_id],
     queryFn: () => base44.entities.Task.filter({ company_id: currentUser.company_id, task_type: "stock_count", status: "completed" }),
     enabled: !!currentUser?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // Auto-save session to localStorage whenever it changes

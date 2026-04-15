@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import {
   Layers, Plus, Trash2, Eye, Save, Users, Building2, Package,
@@ -778,20 +779,23 @@ function ViewCard({ view, onEdit, onDelete, onRun }) {
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export default function ObjectViews() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [views, setViews]             = useState([]);
   const [editingView, setEditingView] = useState(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [activeType, setActiveType]   = useState("All");
   const [search, setSearch]           = useState("");
 
-  useEffect(() => {
-    base44.auth.me().then(u => {
-      setCurrentUser(u);
-      const saved = JSON.parse(localStorage.getItem(VIEWS_KEY(u?.company_id || "global")) || "[]");
-      setViews(saved);
-    }).catch(() => {});
-  }, []);
+  React.useEffect(() => {
+    if (!currentUser) return;
+    const saved = JSON.parse(localStorage.getItem(VIEWS_KEY(currentUser?.company_id || "global")) || "[]");
+    setViews(saved);
+  }, [currentUser?.company_id]);
 
   function persist(updated) {
     setViews(updated);

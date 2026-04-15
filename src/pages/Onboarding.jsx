@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
@@ -84,7 +85,12 @@ export default function Onboarding() {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
   // Per-step data
   const [selectedType, setSelectedType] = useState("");
@@ -99,12 +105,10 @@ export default function Onboarding() {
   const [provisionResult, setProvisionResult]     = useState(null);
   const [provisioning, setProvisioning]           = useState(false);
 
-  useEffect(() => {
-    base44.auth.me().then((u) => {
-      setCurrentUser(u);
-      setWorkspaceData((prev) => ({ ...prev, full_name: prev.full_name || u.full_name || "" }));
-    }).catch(() => {});
-  }, []);
+  React.useEffect(() => {
+    if (!currentUser) return;
+    setWorkspaceData((prev) => ({ ...prev, full_name: prev.full_name || currentUser.full_name || "" }));
+  }, [currentUser?.full_name]);
 
   // ── Validation ─────────────────────────────────────────────────────────────
   const validateType = () => !!selectedType;

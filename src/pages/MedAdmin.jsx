@@ -35,7 +35,12 @@ const triggerETL = (entity) =>
 const DARK_KEY = (email) => `medadmin_dark_mode_${email}`;
 
 export default function MedAdmin() {
-  const [user, setUser] = useState(null);
+  const { data: user = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [activeTab, setActiveTab] = useState("home");
   const [selectedClient, setSelectedClient] = useState(null);
   const [prnOpen, setPrnOpen] = useState(false);
@@ -48,12 +53,10 @@ export default function MedAdmin() {
   const qc = useQueryClient();
 
   useEffect(() => {
-    base44.auth.me().then((u) => {
-      setUser(u);
-      const saved = localStorage.getItem(DARK_KEY(u.email));
-      if (saved === "1") setDarkMode(true);
-    }).catch(() => {});
-  }, []);
+    if (!user?.email) return;
+    const saved = localStorage.getItem(DARK_KEY(user.email));
+    if (saved === "1") setDarkMode(true);
+  }, [user?.email]);
 
   const handleDarkModeChange = (val) => {
     setDarkMode(val);
@@ -70,24 +73,32 @@ export default function MedAdmin() {
     queryKey: ["med-people", user?.company_id],
     queryFn: () => queryPatients(user?.company_id),
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: products = [] } = useQuery({
     queryKey: ["med-products", user?.company_id],
     queryFn: () => queryProducts({ tier: 2, companyId: user?.company_id }),
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["med-enterprises", user?.company_id],
     queryFn: () => queryEnterprises({ status: "active", companyId: user?.company_id }),
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: addresses = [] } = useQuery({
     queryKey: ["med-addresses", user?.company_id],
     queryFn: () => queryAddresses(user?.company_id),
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // Do NOT auto-select first client — require explicit selection for safety
@@ -101,6 +112,8 @@ export default function MedAdmin() {
       company_id: user?.company_id,
     }, "-scheduled_date", 500),
     enabled: !!selectedClient,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // All tasks for client switcher stats (broader query)
@@ -108,6 +121,8 @@ export default function MedAdmin() {
     queryKey: ["med-tasks-all-clients", user?.company_id],
     queryFn: () => base44.entities.Task.filter({ task_type: "medication_admin", scheduled_date: format(new Date(), "yyyy-MM-dd"), company_id: user?.company_id }, "-created_date", 200),
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const handleRefresh = () => {

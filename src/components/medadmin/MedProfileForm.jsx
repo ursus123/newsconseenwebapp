@@ -42,6 +42,8 @@ function MedSearchInput({ value, onChange }) {
   const { data: products = [] } = useQuery({
     queryKey: ["products-med"],
     queryFn: () => base44.entities.Product.list(),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const filteredProducts = products.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
@@ -165,9 +167,12 @@ export default function MedProfileForm({ client, existing, onClose, onSuccess })
     start_date: format(new Date(), "yyyy-MM-dd"),
   });
   const [loading, setLoading] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
-
-  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
   const set = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 

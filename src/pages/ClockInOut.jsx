@@ -165,7 +165,12 @@ function TransferModal({ enterprises, onConfirm, onClose }) {
 }
 
 export default function ClockInOut() {
-  const [user, setUser] = useState(null);
+  const { data: user = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [toast, setToast] = useState(null);
   const [showTransfer, setShowTransfer] = useState(false);
   const [showClockInModal, setShowClockInModal] = useState(false);
@@ -178,14 +183,12 @@ export default function ClockInOut() {
   const qc = useQueryClient();
 
   useEffect(() => {
-    base44.auth.me().then((u) => {
-      setUser(u);
-      // Restore last enterprise
-      const saved = localStorage.getItem(LAST_ENTERPRISE_KEY(u.email));
-      if (saved) setCurrentEnterprise(saved);
-      setOfflineQueue(getOfflineQueue(u.email));
-    }).catch(() => {});
-  }, []);
+    if (!user?.email) return;
+    // Restore last enterprise and offline queue once user is known
+    const saved = localStorage.getItem(LAST_ENTERPRISE_KEY(user.email));
+    if (saved) setCurrentEnterprise(saved);
+    setOfflineQueue(getOfflineQueue(user.email));
+  }, [user?.email]);
 
   // Online/offline detection
   useEffect(() => {
@@ -216,6 +219,8 @@ export default function ClockInOut() {
     queryKey: ["clock-tasks", user?.email, todayStr()],
     queryFn: () => base44.entities.Task.filter({ assigned_to_email: user.email, scheduled_date: todayStr() }, "-created_date"),
     enabled: !!user?.email,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // All tasks for history/week tabs
@@ -223,12 +228,16 @@ export default function ClockInOut() {
     queryKey: ["clock-tasks-all", user?.email],
     queryFn: () => base44.entities.Task.filter({ assigned_to_email: user.email }, "-scheduled_date", 200),
     enabled: !!user?.email && (activeTab === "week" || activeTab === "history"),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["enterprises-app"],
     queryFn: () => queryEnterprises({ status: "active" }),
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // Derive state

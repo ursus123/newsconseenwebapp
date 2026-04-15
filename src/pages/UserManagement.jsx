@@ -429,15 +429,18 @@ function InviteForm({ enterprises, isSuperAdmin, currentUser, onSuccess }) {
 }
 
 export default function UserManagement() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [savedMsg, setSavedMsg] = useState(null);
   const [savingEmail, setSavingEmail] = useState(null);
   const [search, setSearch] = useState("");
   const [filterRole, setFilterRole] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const qc = useQueryClient();
-
-  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
   const isSuperAdmin = currentUser?.role === "super_admin";
@@ -448,6 +451,8 @@ export default function UserManagement() {
       ? base44.entities.User.list()
       : base44.entities.User.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser && isAdmin,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: accessRecords = [] } = useQuery({
@@ -456,6 +461,8 @@ export default function UserManagement() {
       ? base44.entities.UserAppAccess.list()
       : base44.entities.UserAppAccess.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser && isAdmin,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: allReports = [] } = useQuery({
@@ -464,6 +471,8 @@ export default function UserManagement() {
       ? base44.entities.Report.list("-created_date")
       : base44.entities.Report.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser && isAdmin,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: enterprises = [] } = useQuery({
@@ -472,6 +481,8 @@ export default function UserManagement() {
       ? base44.entities.Enterprise.list()
       : base44.entities.Enterprise.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser && isAdmin,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const saveMut = useMutation({

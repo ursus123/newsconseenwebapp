@@ -357,7 +357,12 @@ function AnalysisProgressBar({ sections, results }) {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 export default function MarketIntelligence() {
-  const [currentUser, setCurrentUser]         = useState(null);
+  const { data: currentUser = null }           = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const listFn = useEntityListFn(currentUser);
   const [pageMode, setPageMode]               = useState("intelligence"); // "intelligence" | "research"
   const [params, setParams]                   = useState({ location: "", businessType: "home_healthcare", radiusKm: 30 });
@@ -376,12 +381,10 @@ export default function MarketIntelligence() {
   const { toast } = useToast();
 
   useEffect(() => {
-    base44.auth.me().then(u => {
-      setCurrentUser(u);
-      const saved = localStorage.getItem(`${HISTORY_KEY_PREFIX}${u?.email}`);
-      if (saved) setHistory(JSON.parse(saved));
-    }).catch(() => {});
-  }, []);
+    if (!currentUser?.email) return;
+    const saved = localStorage.getItem(`${HISTORY_KEY_PREFIX}${currentUser.email}`);
+    if (saved) setHistory(JSON.parse(saved));
+  }, [currentUser?.email]);
 
   const { data: myEnterprises = [] } = useQuery({
     queryKey: ["mi_enterprises", currentUser?.company_id],
@@ -396,6 +399,7 @@ export default function MarketIntelligence() {
     queryFn: () => listFn(base44.entities.Relationship),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: allAddresses = [] } = useQuery({
@@ -403,6 +407,7 @@ export default function MarketIntelligence() {
     queryFn: () => listFn(base44.entities.Address),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // Build enterprise → coordinates map via enterprise_address relationships

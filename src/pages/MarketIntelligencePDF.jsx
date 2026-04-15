@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -45,21 +45,24 @@ function MetricGrid({ items }) {
 }
 
 export default function MarketIntelligencePDF() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [selectedReport, setSelectedReport] = useState(null);
   const [saving, setSaving] = useState(false);
   const [printing, setPrinting] = useState(false);
   const reportRef = useRef(null);
   const { toast } = useToast();
 
-  React.useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
-
   const { data: folders = [] } = useQuery({
     queryKey: ["mi_pdf_folders", currentUser?.company_id],
     queryFn: () => base44.entities.ChartFolder.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const marketFolder = folders.find(f => f.name === "Market Research");
@@ -68,6 +71,8 @@ export default function MarketIntelligencePDF() {
     queryKey: ["mi_pdf_reports", marketFolder?.id],
     queryFn: () => base44.entities.Report.filter({ folder_id: marketFolder.id }),
     enabled: !!marketFolder?.id,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // Parse section text into structured data

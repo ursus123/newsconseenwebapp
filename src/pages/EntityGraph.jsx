@@ -119,6 +119,8 @@ export default function EntityGraph() {
   const { data: currentUser } = useQuery({
     queryKey: ["currentUser"],
     queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const listFn = useEntityListFn(currentUser);
 

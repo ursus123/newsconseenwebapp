@@ -29,15 +29,19 @@ function Field({ label, required, children }) {
 }
 
 export default function InviteUser() {
-  const [currentUser, setCurrentUser] = React.useState(null);
-  React.useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const isSuperAdmin = currentUser?.role === "super_admin";
 
   const [form, setForm] = useState({ first_name: "", last_name: "", email: "", phone: "", enterprise_name: "", company_id: "", role: "user" });
   const [status, setStatus] = useState(null); // null | "loading" | "success" | "error"
   const [errorMsg, setErrorMsg] = useState("");
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises"], queryFn: () => base44.entities.Enterprise.list() });
-  const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers"], queryFn: () => base44.entities.User.list() });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises"], queryFn: () => base44.entities.Enterprise.list(), staleTime: 0, refetchOnMount: "always" });
+  const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers"], queryFn: () => base44.entities.User.list(), staleTime: 0, refetchOnMount: "always" });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 

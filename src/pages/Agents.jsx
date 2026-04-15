@@ -5,7 +5,7 @@
 // Tabs: Dashboard | Approvals | Market Intelligence | Run Log
 // ==============================================================
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import AgentDashboard from "@/components/agents/AgentDashboard";
@@ -191,14 +191,15 @@ const TABS = [
 ];
 
 export default function Agents() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [activeTab, setActiveTab]     = useState("dashboard");
 
   const qc = useQueryClient();
-
-  useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
 
   const companyId = currentUser?.company_id;
 
@@ -212,6 +213,8 @@ export default function Agents() {
     },
     enabled:  !!companyId,
     refetchInterval: 30000,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const pendingCount = pendingData?.pending?.length || 0;
 

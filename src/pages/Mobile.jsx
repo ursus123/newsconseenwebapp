@@ -16,7 +16,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, isToday, parseISO } from "date-fns";
 import {
   CheckCircle2, Clock, Plus, RefreshCw, Wifi, WifiOff,
@@ -608,7 +608,12 @@ const TABS = [
 
 // ── Main Mobile shell ──────────────────────────────────────────────────────────
 export default function Mobile() {
-  const [user,         setUser]         = useState(null);
+  const { data: user = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [activeTab,    setActiveTab]    = useState("today");
   const [queueCount,   setQueueCount]   = useState(0);
   const [installDismissed, setInstallDismissed] = useState(
@@ -616,10 +621,6 @@ export default function Mobile() {
   );
 
   const { isOnline, installPrompt, isInstalled } = usePWA();
-
-  useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
-  }, []);
 
   // Poll offline queue count
   useEffect(() => {

@@ -141,7 +141,12 @@ export default function Enterprises() {
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing]       = useState(null);
   const [deleting, setDeleting]     = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [search, setSearch]         = useState("");
   const [sortBy, setSortBy]         = useState("created_date_desc");
   const [filters, setFilters]       = useState({ status: "", enterprise_type: "", operating_status: "", country: "" });

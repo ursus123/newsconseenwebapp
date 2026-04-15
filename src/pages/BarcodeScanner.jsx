@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -38,7 +39,12 @@ export function playBeep(error = false) {
 }
 
 export default function BarcodeScanner() {
-  const [user, setUser] = useState(null);
+  const { data: user = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [products, setProducts] = useState([]);
   const [enterprises, setEnterprises] = useState([]);
   const [selectedEnterprise, setSelectedEnterprise] = useState("");
@@ -61,10 +67,6 @@ export default function BarcodeScanner() {
   const barcodeInputRef = useRef(null);
   const productCardRef = useRef(null);
   const [manualBarcode, setManualBarcode] = useState("");
-
-  useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (!user) return;

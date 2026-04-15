@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Sparkles, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useLocation } from "react-router-dom";
@@ -12,12 +13,13 @@ const BACKEND_LABEL = COPILOT_BACKEND === "openai" ? "Powered by GPT-4o" : "Powe
 export default function Copilot() {
   const location = useLocation();
   const prefillMessage = location.state?.prefillMessage || "";
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [backendStatus, setBackendStatus]   = useState(null); // null | "ok" | "degraded" | "unreachable"
-
-  useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
 
   // Check copilot backend on mount
   useEffect(() => {

@@ -77,7 +77,12 @@ export default function Services() {
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ status: "", service_type: "", pricing_model: "" });
@@ -85,8 +90,6 @@ export default function Services() {
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
-
-  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   useEffect(() => {
     const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["services"] }); };

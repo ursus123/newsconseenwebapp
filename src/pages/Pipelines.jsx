@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -30,12 +30,13 @@ export default function Pipelines() {
   const [etlLoading, setEtlLoading] = useState(false);
   const [etlResult, setEtlResult] = useState(null);
   const [lastTriggered, setLastTriggered] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const { toast } = useToast();
-
-  useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
 
   // Live health check — shows actual last-run timestamps from the API
   const { data: healthData, refetch: refetchHealth } = useQuery({
@@ -46,6 +47,7 @@ export default function Pipelines() {
       return r.json();
     },
     staleTime: 30000,
+    refetchOnMount: "always",
     retry: false,
   });
 

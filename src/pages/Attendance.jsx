@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -16,15 +16,16 @@ import TeacherProfilePage from "@/components/attendance/TeacherProfilePage";
 
 export default function Attendance() {
   const [tab, setTab] = useState("mark"); // "mark" | "register"
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   // Register sub-views
   const [regView, setRegView] = useState("dashboard");
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedPerson, setSelectedPerson] = useState(null);
-
-  useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
 
   const navigateReg = (v, data = {}) => {
     setRegView(v);
@@ -43,6 +44,8 @@ export default function Attendance() {
   const { data: people = [] } = useQuery({
     queryKey: ["people-list"],
     queryFn: () => base44.entities.Person.list(),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // Fetch attendance records with filters
@@ -54,6 +57,8 @@ export default function Attendance() {
       if (filterType) query.person_type = filterType;
       return await base44.entities.Attendance.filter(query);
     },
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const handleSubmit = async (e) => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Lock, Eye, EyeOff, User } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
 
 // ── Clock for lock screen ──────────────────────────────────────────────────────
 function LockClock() {
@@ -25,7 +26,12 @@ function LockClock() {
 
 // ── Lock Screen ────────────────────────────────────────────────────────────────
 export default function LockScreen({ onUnlock, wallpaperValue, profileName }) {
-  const [user, setUser] = useState(null);
+  const { data: user = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [showPin, setShowPin] = useState(false);
@@ -34,7 +40,6 @@ export default function LockScreen({ onUnlock, wallpaperValue, profileName }) {
   const inputRef = useRef(null);
 
   useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
     // Auto-focus after short delay
     const t = setTimeout(() => inputRef.current?.focus(), 300);
     return () => clearTimeout(t);

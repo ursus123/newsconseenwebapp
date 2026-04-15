@@ -60,9 +60,10 @@ function AutomationFeed({ companyId }) {
       if (!r.ok) return { runs: [] };
       return r.json();
     },
-    enabled:   !!companyId,
-    staleTime: 30000,
-    retry:     false,
+    enabled:         !!companyId,
+    staleTime:       30000,
+    refetchOnMount:  "always",
+    retry:           false,
   });
 
   const { data: auditData } = useQuery({
@@ -72,9 +73,10 @@ function AutomationFeed({ companyId }) {
       if (!r.ok) return { entries: [] };
       return r.json();
     },
-    enabled:   !!companyId,
-    staleTime: 30000,
-    retry:     false,
+    enabled:        !!companyId,
+    staleTime:      30000,
+    refetchOnMount: "always",
+    retry:          false,
   });
 
   const { data: autotaskData } = useQuery({
@@ -84,9 +86,10 @@ function AutomationFeed({ companyId }) {
       if (!r.ok) return { tasks: [] };
       return r.json();
     },
-    enabled:   !!companyId,
-    staleTime: 30000,
-    retry:     false,
+    enabled:        !!companyId,
+    staleTime:      30000,
+    refetchOnMount: "always",
+    retry:          false,
   });
 
   const wfRuns    = wfRunsData?.runs   || [];
@@ -209,6 +212,7 @@ function AgentInsightStrip({ companyId }) {
     },
     enabled: !!companyId,
     staleTime: 60000,
+    refetchOnMount: "always",
     retry: false,
   });
 
@@ -221,6 +225,7 @@ function AgentInsightStrip({ companyId }) {
     },
     enabled: !!companyId,
     staleTime: 60000,
+    refetchOnMount: "always",
     retry: false,
   });
 
@@ -550,6 +555,8 @@ function WorkerDashboard({ user }) {
       )
     ),
     enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const updateMut = useMutation({
@@ -756,24 +763,32 @@ function AdminDashboard({ user }) {
     queryFn:  () => fetchPeopleFallback(companyId,
       () => listFn(base44.entities.Person)),
     enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const { data: taskAnalytics        = _empty, isLoading: loadingTasks }    = useQuery({
     queryKey: ["analytics-tasks",        companyId],
     queryFn:  () => fetchTasksFallback(companyId,
       () => listFn(base44.entities.Task)),
     enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const { data: productAnalytics     = _empty, isLoading: loadingProducts } = useQuery({
     queryKey: ["analytics-products",     companyId],
     queryFn:  () => fetchProductsFallback(companyId,
       () => listFn(base44.entities.Product)),
     enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const { data: transactionAnalytics = _empty, isLoading: loadingTx }       = useQuery({
     queryKey: ["analytics-transactions", companyId],
     queryFn:  () => fetchTransactionsFallback(companyId,
       () => listFn(base44.entities.Transaction)),
     enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const handleRefreshAnalytics = useCallback(() => {
@@ -1166,16 +1181,14 @@ function AdminDashboard({ user }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const [user, setUser]     = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { data: user = null, isLoading } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
-  useEffect(() => {
-    base44.auth.me()
-      .then(u => { setUser(u); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-48 text-slate-400">
         <Clock className="w-5 h-5 animate-spin mr-2" /> Loading…

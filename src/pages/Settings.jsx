@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -229,18 +229,24 @@ const DEFAULT_NOTIF = {
 };
 
 export default function Settings() {
-  const [user, setUser] = useState(null);
+  const qc = useQueryClient();
+  const { data: user = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [activeTab, setActiveTab] = useState(() => {
     const h = window.location.hash.replace("#", "");
     return ALL_TABS.find((t) => t.id === h)?.id || "profile";
   });
 
-  useEffect(() => { base44.auth.me().then(setUser).catch(() => {}); }, []);
-
   const { data: enterprises = [] } = useQuery({
     queryKey: ["enterprises-settings"],
     queryFn: () => base44.entities.Enterprise.list(),
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const myEnterprise = enterprises.find((e) => e.id === user?.company_id) ||
@@ -291,7 +297,7 @@ export default function Settings() {
         </div>
 
         <div className="flex-1 min-w-0">
-          {activeTab === "profile"       && <ProfileSection user={user} myEnterprise={myEnterprise} onUserUpdated={setUser} />}
+          {activeTab === "profile"       && <ProfileSection user={user} myEnterprise={myEnterprise} onUserUpdated={() => qc.invalidateQueries({ queryKey: ["currentUser"] })} />}
           {activeTab === "password"      && <PasswordSection />}
           {activeTab === "notifications" && <NotificationsSection user={user} />}
           {activeTab === "sessions"      && <SessionsSection />}

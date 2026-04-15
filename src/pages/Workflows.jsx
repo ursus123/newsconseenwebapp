@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -562,15 +562,18 @@ function WorkflowFormModal({ companyId, existing, onClose, onSaved }) {
 
 // ── Main Workflows page ───────────────────────────────────────────────────────
 export default function Workflows() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [formOpen,    setFormOpen]    = useState(false);
   const [editing,     setEditing]     = useState(null);
   const [activeTab,   setActiveTab]   = useState("workflows"); // workflows | runs
   const [running,     setRunning]     = useState(null);
   const { toast } = useToast();
   const qc = useQueryClient();
-
-  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   const companyId = currentUser?.company_id;
 
@@ -597,6 +600,7 @@ export default function Workflows() {
     },
     enabled: !!companyId && activeTab === "runs",
     staleTime: 0,
+    refetchOnMount: "always",
   });
 
   async function handleToggle(wf) {

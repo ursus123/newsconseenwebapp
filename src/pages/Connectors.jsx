@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -1691,6 +1691,7 @@ function WebhookSection({ currentUser }) {
     },
     enabled: !!companyId,
     staleTime: 30_000,
+    refetchOnMount: "always",
   });
 
   const { data: eventsData } = useQuery({
@@ -1703,6 +1704,7 @@ function WebhookSection({ currentUser }) {
     },
     enabled: !!companyId,
     staleTime: 15_000,
+    refetchOnMount: "always",
     refetchInterval: 30_000,
   });
 
@@ -2017,6 +2019,7 @@ function WritebackSection({ currentUser }) {
     },
     enabled: !!companyId,
     staleTime: 30_000,
+    refetchOnMount: "always",
   });
 
   const { data: logData } = useQuery({
@@ -2029,6 +2032,7 @@ function WritebackSection({ currentUser }) {
     },
     enabled: !!companyId,
     staleTime: 15_000,
+    refetchOnMount: "always",
     refetchInterval: 60_000,
   });
 
@@ -2327,7 +2331,12 @@ function WritebackSection({ currentUser }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Connectors() {
-  const [currentUser, setCurrentUser]                       = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [dbModalConnector, setDbModalConnector]             = useState(null);
   const [fileModalConnector, setFileModalConnector]         = useState(null);
   const [sheetsModalConnector, setSheetsModalConnector]     = useState(null);
@@ -2335,10 +2344,6 @@ export default function Connectors() {
   const [scheduleModalConnector, setScheduleModalConnector] = useState(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-
-  useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
 
   const { data: catalogData = { connectors: STATIC_CATALOG }, isLoading: catalogLoading } = useQuery({
     queryKey: ["connector-catalog"],
@@ -2359,6 +2364,7 @@ export default function Connectors() {
       }
     },
     staleTime: 60_000,
+    refetchOnMount: "always",
   });
 
   const connectorsByCategory = catalogData.connectors.reduce((acc, conn) => {
@@ -2412,6 +2418,8 @@ export default function Connectors() {
       }
     },
     enabled: !!currentUser?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
     refetchInterval: 30_000,
   });
 
@@ -2430,6 +2438,7 @@ export default function Connectors() {
     },
     enabled: !!currentUser?.company_id,
     staleTime: 60_000,
+    refetchOnMount: "always",
   });
 
   // Index schedules by connector_id for fast lookup
@@ -2451,6 +2460,8 @@ export default function Connectors() {
   const { data: masterData = [] } = useQuery({
     queryKey: ["master-data-options"],
     queryFn: () => base44.entities.MasterDataOption.list(),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const saveMappingMutation = useMutation({

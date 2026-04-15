@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, addWeeks, subWeeks, addMonths, subMonths } from "date-fns";
@@ -27,7 +27,12 @@ import ShiftModal from "@/components/staffschedule/ShiftModal";
 import StaffMySchedule from "@/components/staffschedule/StaffMySchedule";
 
 export default function StaffSchedule() {
-  const [user, setUser] = useState(null);
+  const { data: user = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [baseDate, setBaseDate] = useState(new Date());
   const [view, setView] = useState("week"); // week | day | month
   const [selectedEnterprise, setSelectedEnterprise] = useState("");
@@ -38,10 +43,6 @@ export default function StaffSchedule() {
   const [publishResult, setPublishResult] = useState(null);
   const qc = useQueryClient();
 
-  useEffect(() => {
-    base44.auth.me().then((u) => { setUser(u); }).catch(() => {});
-  }, []);
-
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
   // Data queries
@@ -49,12 +50,16 @@ export default function StaffSchedule() {
     queryKey: ["sched-people", user?.company_id],
     queryFn: () => base44.entities.Person.filter({ status: "active", company_id: user?.company_id }),
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["sched-enterprises", user?.company_id],
     queryFn: () => base44.entities.Enterprise.filter({ status: "active", company_id: user?.company_id }),
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const weekDays = getWeekDays(baseDate);
@@ -65,12 +70,16 @@ export default function StaffSchedule() {
     queryKey: ["shift-tasks", weekStart, weekEnd, selectedEnterprise, user?.company_id],
     queryFn: () => base44.entities.Task.filter({ task_type: "shift", company_id: user?.company_id }, "-scheduled_date", 500),
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: leaveTasks = [] } = useQuery({
     queryKey: ["leave-tasks-sched", user?.company_id],
     queryFn: () => base44.entities.Task.filter({ task_type: "leave_request", status: "completed", company_id: user?.company_id }, "-scheduled_date", 200),
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const { data: clockTasks = [] } = useQuery({
@@ -80,6 +89,8 @@ export default function StaffSchedule() {
       company_id: user?.company_id,
     }, "-scheduled_date", 500).then((tasks) => tasks.filter((t) => ["clock_in", "clock_out"].includes(t.task_type))),
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // Filter shifts to current week/month

@@ -7,6 +7,7 @@
  * Sprint 3: 3D toggle (pending).
  */
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import cytoscape from "cytoscape";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -1186,7 +1187,12 @@ function ObjectViewPanel({ object, typeDef, onClose, navigate }) {
 export default function ObjectExplorer() {
   const navigate = useNavigate();
 
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [mode, setMode]               = useState("schema");    // "schema" | "live" | "3d" | "search"
   const [query, setQuery]             = useState("");
   const [loading, setLoading]         = useState(false);
@@ -1205,7 +1211,6 @@ export default function ObjectExplorer() {
 
   const listFn = useEntityListFn(currentUser);
 
-  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   useEffect(() => {
     if (!currentUser || loaded) return;

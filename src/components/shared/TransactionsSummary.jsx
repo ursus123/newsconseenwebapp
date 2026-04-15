@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { TRANSACTION_SOURCES } from "@/utils/createTransaction";
@@ -25,13 +25,14 @@ export default function TransactionsSummary({
   maxRows = 5,
   currentUser,
 }) {
-  const [user, setUser] = useState(currentUser || null);
-
-  useEffect(() => {
-    if (!currentUser) {
-      base44.auth.me().then(setUser).catch(() => {});
-    }
-  }, [currentUser]);
+  const { data: fetchedUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+    enabled: !currentUser,
+  });
+  const user = currentUser || fetchedUser;
 
   const { data: transactions = [] } = useQuery({
     queryKey: ["tx-summary", source, enterprise, user?.company_id],
@@ -42,6 +43,8 @@ export default function TransactionsSummary({
       return base44.entities.Transaction.filter(filter, "-created_date", maxRows * 3);
     },
     enabled: !!user?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
     refetchInterval: 5000,
   });
 

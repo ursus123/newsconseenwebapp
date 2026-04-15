@@ -253,11 +253,14 @@ function PermissionCard({ title, subtitle, icon: Icon, roleKey, perm, onSave, av
 }
 
 export default function Permissions() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [savedMsg, setSavedMsg] = useState(null);
   const qc = useQueryClient();
-
-  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   const isSuperAdmin = currentUser?.role === "super_admin";
   const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
@@ -269,6 +272,8 @@ export default function Permissions() {
       ? base44.entities.RolePermissions.list()
       : base44.entities.RolePermissions.filter({ company_id: companyId }),
     enabled: !!currentUser && isAdmin,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const saveMut = useMutation({

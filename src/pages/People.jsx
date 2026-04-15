@@ -229,7 +229,12 @@ export default function People() {
   const [sortBy, setSortBy]           = useState("created_date_desc");
   const [filters, setFilters]         = useState({ status: "", availability_status: "", person_type: "", country: "", primary_role: "" });
   const [activeTypeTab, setActiveTypeTab] = useState("all");
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [selectedIds, setSelectedIds] = useState([]);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
@@ -238,8 +243,6 @@ export default function People() {
   const qc = useQueryClient();
   const { syncState, notifyTaxonomyChange } = useTaxonomySync();
   const { toast } = useToast();
-
-  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
 
   useEffect(() => {
     const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["people"] }); };

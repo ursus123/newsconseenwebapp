@@ -311,6 +311,7 @@ function ColdStartBanner({ companyId }) {
     },
     enabled: !dismissed,
     staleTime: 60000,
+    refetchOnMount: "always",
     retry: false,
   });
 
@@ -629,7 +630,12 @@ function ResultsView({ data, modelId, onPushToBase44, pushing }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function MLModels() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { data: currentUser = null } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [expandedModel, setExpandedModel] = useState(null);
   const [kernels, setKernels] = useState({});
   const [results, setResults] = useState({});
@@ -639,10 +645,6 @@ export default function MLModels() {
   const [newForm, setNewForm] = useState({ name: "", description: "", endpoint: "", code: "" });
   const [pushing, setPushing] = useState({});
   const { toast } = useToast();
-
-  useEffect(() => {
-    base44.auth.me().then(setCurrentUser).catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (!currentUser) return;

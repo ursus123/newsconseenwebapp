@@ -640,12 +640,12 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
 }
 
 export default function Tasks() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loadingUser, setLoadingUser] = useState(true);
-
-  useEffect(() => {
-    base44.auth.me().then((u) => { setCurrentUser(u); setLoadingUser(false); }).catch(() => setLoadingUser(false));
-  }, []);
+  const { data: currentUser = null, isLoading: loadingUser } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
   const isSuperAdmin = currentUser?.role === "super_admin";
@@ -654,12 +654,12 @@ export default function Tasks() {
   const qcRoot = useQueryClient();
 
   const { data: tasks = [], isLoading } = useQuery({ queryKey: ["tasks", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Task), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
-  const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.User.list() : base44.entities.User.filter({ company_id: companyId }), enabled: isAdmin });
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Enterprise), enabled: isAdmin });
-  const { data: products = [] } = useQuery({ queryKey: ["products", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Product), enabled: isAdmin });
-  const { data: services = [] } = useQuery({ queryKey: ["services", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Service), enabled: isAdmin });
-  const { data: people = [] } = useQuery({ queryKey: ["people", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Person), enabled: isAdmin });
-  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Address), enabled: isAdmin });
+  const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.User.list() : base44.entities.User.filter({ company_id: companyId }), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Enterprise), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
+  const { data: products = [] } = useQuery({ queryKey: ["products", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Product), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
+  const { data: services = [] } = useQuery({ queryKey: ["services", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Service), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
+  const { data: people = [] } = useQuery({ queryKey: ["people", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Person), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
+  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Address), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
 
   useEffect(() => {
     const unsub = base44.entities.Enterprise.subscribe(() => qcRoot.invalidateQueries({ queryKey: ["enterprises"] }));
