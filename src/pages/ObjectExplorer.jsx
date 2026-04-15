@@ -1,17 +1,21 @@
 /**
- * Object Explorer — cross-entity semantic search across the entire ontology.
- * Searches all 7 entity types simultaneously and returns unified results.
- * Clicking any result opens an inline Object View.
+ * Object Explorer — two modes:
+ *   Search  — cross-entity semantic search across the entire ontology
+ *   Ontology Graph — Cytoscape.js canvas showing the 7-node schema with live counts
+ *
+ * Sprint 1: Schema mode — fixed-layout graph, live counts, node detail panel.
+ * Sprint 2: Live mode — click-to-expand individual records.
+ * Sprint 3: 3D toggle.
  */
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import cytoscape from "cytoscape";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { useNavigate } from "react-router-dom";
 import {
   Search, Users, Building2, Package, CheckSquare, Receipt,
-  Link2, MapPin, Wrench, X, ExternalLink, Loader2,
-  ChevronRight, Tag, Calendar, DollarSign, Activity,
-  Globe, Hash, Phone, Mail, Layers,
+  Link2, MapPin, X, ExternalLink, Loader2,
+  ChevronRight, Layers, GitBranch, ZoomIn, ZoomOut, Maximize2,
 } from "lucide-react";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 
@@ -32,6 +36,7 @@ const OBJECT_TYPES = [
     secondaryField: "person_type",
     routePage: "People",
     properties: ["person_type", "person_subtype", "status", "engagement_model", "email", "phone"],
+    description: "Any human in any role — staff, clients, contacts, volunteers.",
   },
   {
     key: "Enterprise",
@@ -48,6 +53,7 @@ const OBJECT_TYPES = [
     secondaryField: "enterprise_type",
     routePage: "Enterprises",
     properties: ["enterprise_type", "enterprise_tier", "status", "operating_status", "city", "country"],
+    description: "Any organisation, location, or operational unit.",
   },
   {
     key: "Product",
@@ -57,13 +63,14 @@ const OBJECT_TYPES = [
     bg: "bg-rose-50",
     border: "border-rose-200",
     badgeBg: "bg-rose-100",
-    badgeText: "text-rose-700",
+    badgeText: "bg-rose-700",
     entity: "Product",
     searchFields: ["name", "short_name", "item_type", "item_class", "sku", "description"],
     primaryField: "name",
     secondaryField: "item_type",
     routePage: "Products",
     properties: ["item_type", "item_class", "unit_of_measure", "status", "stock_quantity", "list_price"],
+    description: "Any item, service, resource, or deliverable.",
   },
   {
     key: "Task",
@@ -80,6 +87,7 @@ const OBJECT_TYPES = [
     secondaryField: "status",
     routePage: "Tasks",
     properties: ["task_type", "status", "priority", "assigned_to_name", "due_date", "enterprise"],
+    description: "Any activity, visit, appointment, shift, or work order.",
   },
   {
     key: "Transaction",
@@ -96,6 +104,7 @@ const OBJECT_TYPES = [
     secondaryField: "transaction_type",
     routePage: "Transactions",
     properties: ["transaction_type", "status", "payment_status", "amount", "currency", "enterprise"],
+    description: "Any financial record — invoice, payment, expense, or payroll.",
   },
   {
     key: "Relationship",
@@ -112,6 +121,7 @@ const OBJECT_TYPES = [
     secondaryField: "person_name",
     routePage: "Relationships",
     properties: ["relationship_type", "status", "role", "start_date", "person_name", "enterprise_name"],
+    description: "Links any two entities — person↔enterprise, person↔item, etc.",
   },
   {
     key: "Address",
@@ -128,12 +138,50 @@ const OBJECT_TYPES = [
     secondaryField: "city",
     routePage: "Addresses",
     properties: ["label", "address_line1", "city", "state_region", "country", "postal_code"],
+    description: "Any physical or postal location.",
   },
 ];
 
 const TYPE_MAP = Object.fromEntries(OBJECT_TYPES.map(t => [t.key, t]));
 
-// ── Fuzzy match ───────────────────────────────────────────────────────────────
+// ── Graph constants ───────────────────────────────────────────────────────────
+// Colors used by Cytoscape (canvas, not Tailwind)
+const NODE_COLORS = {
+  Person:       "#3b82f6",
+  Enterprise:   "#f59e0b",
+  Product:      "#f43f5e",
+  Task:         "#8b5cf6",
+  Transaction:  "#10b981",
+  Relationship: "#6366f1",
+  Address:      "#14b8a6",
+};
+
+// Fixed positions in a ~900×520 coordinate space — cy.fit() scales them
+const PRESET_POSITIONS = {
+  Relationship: { x: 110,  y: 150 },
+  Task:         { x: 420,  y:  95 },
+  Person:       { x: 230,  y: 295 },
+  Enterprise:   { x: 580,  y: 295 },
+  Product:      { x: 820,  y: 140 },
+  Transaction:  { x: 420,  y: 460 },
+  Address:      { x: 700,  y: 450 },
+};
+
+// Directed edges: source → target, labelled with the join field
+const ONTOLOGY_EDGES = [
+  { id: "e-rel-person",    source: "Relationship", target: "Person",      label: "person_name"      },
+  { id: "e-rel-ent",      source: "Relationship", target: "Enterprise",   label: "enterprise_name"  },
+  { id: "e-person-task",  source: "Person",       target: "Task",         label: "assigned_to"      },
+  { id: "e-ent-task",     source: "Enterprise",   target: "Task",         label: "enterprise"       },
+  { id: "e-ent-person",   source: "Enterprise",   target: "Person",       label: "employs / serves" },
+  { id: "e-person-txn",   source: "Person",       target: "Transaction",  label: "counterparty"     },
+  { id: "e-ent-txn",      source: "Enterprise",   target: "Transaction",  label: "enterprise"       },
+  { id: "e-prod-txn",     source: "Product",      target: "Transaction",  label: "item_name"        },
+  { id: "e-person-addr",  source: "Person",       target: "Address",      label: "person_name"      },
+  { id: "e-ent-addr",     source: "Enterprise",   target: "Address",      label: "enterprise_name"  },
+];
+
+// ── Fuzzy match (search mode) ─────────────────────────────────────────────────
 function matchesQuery(obj, fields, query) {
   const q = query.toLowerCase();
   return fields.some(f => {
@@ -155,10 +203,10 @@ function ObjectTypeBadge({ typeKey }) {
   );
 }
 
-// ── ResultCard ────────────────────────────────────────────────────────────────
+// ── ResultCard (search mode) ──────────────────────────────────────────────────
 function ResultCard({ result, typeDef, onSelect, isSelected }) {
   const Icon = typeDef.icon;
-  const primary = result[typeDef.primaryField] || result.id?.slice(0, 8) || "—";
+  const primary   = result[typeDef.primaryField]   || result.id?.slice(0, 8) || "—";
   const secondary = result[typeDef.secondaryField] || "";
 
   return (
@@ -183,17 +231,11 @@ function ResultCard({ result, typeDef, onSelect, isSelected }) {
   );
 }
 
-// ── ObjectViewPanel ───────────────────────────────────────────────────────────
+// ── ObjectViewPanel (search mode) ────────────────────────────────────────────
 function ObjectViewPanel({ object, typeDef, onClose, navigate }) {
   if (!object || !typeDef) return null;
   const Icon = typeDef.icon;
   const primary = object[typeDef.primaryField] || "—";
-
-  const propGroups = typeDef.properties.map(key => ({
-    key,
-    label: key.replace(/_/g, " "),
-    value: object[key],
-  })).filter(p => p.value !== undefined && p.value !== null && p.value !== "");
 
   const allProps = Object.entries(object)
     .filter(([k, v]) => !["id", "created_date", "updated_date", "company_id", "__typename"].includes(k) && v !== null && v !== undefined && v !== "")
@@ -201,7 +243,6 @@ function ObjectViewPanel({ object, typeDef, onClose, navigate }) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Panel header */}
       <div className={`flex items-center gap-3 p-4 border-b ${typeDef.border} ${typeDef.bg}`}>
         <div className={`w-10 h-10 rounded-xl bg-white border ${typeDef.border} flex items-center justify-center shrink-0`}>
           <Icon className={`w-5 h-5 ${typeDef.color}`} />
@@ -211,11 +252,7 @@ function ObjectViewPanel({ object, typeDef, onClose, navigate }) {
           <ObjectTypeBadge typeKey={typeDef.key} />
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={() => navigate(createPageUrl(typeDef.routePage))}
-            className={`p-1.5 rounded-lg hover:${typeDef.bg} transition-colors`}
-            title={`Open ${typeDef.label}`}
-          >
+          <button onClick={() => navigate(createPageUrl(typeDef.routePage))} className={`p-1.5 rounded-lg hover:${typeDef.bg} transition-colors`}>
             <ExternalLink className={`w-4 h-4 ${typeDef.color}`} />
           </button>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600">
@@ -223,8 +260,6 @@ function ObjectViewPanel({ object, typeDef, onClose, navigate }) {
           </button>
         </div>
       </div>
-
-      {/* Properties */}
       <div className="flex-1 overflow-y-auto p-4 space-y-1">
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Properties</p>
         {allProps.map(([key, value]) => (
@@ -234,21 +269,322 @@ function ObjectViewPanel({ object, typeDef, onClose, navigate }) {
             </span>
             <span className="text-[11px] text-slate-700 flex-1 break-words">
               {Array.isArray(value)
-                ? value.map((v, i) => (
-                    <span key={i} className="inline-block bg-slate-100 rounded px-1.5 py-0.5 mr-1 mb-1 text-[10px] font-medium">{String(v)}</span>
-                  ))
-                : typeof value === "boolean"
-                  ? value ? "Yes" : "No"
-                  : String(value)
+                ? value.map((v, i) => <span key={i} className="inline-block bg-slate-100 rounded px-1.5 py-0.5 mr-1 mb-1 text-[10px] font-medium">{String(v)}</span>)
+                : typeof value === "boolean" ? (value ? "Yes" : "No")
+                : String(value)
               }
             </span>
           </div>
         ))}
       </div>
-
-      {/* Footer: ID */}
       <div className="px-4 py-2 border-t border-slate-100 bg-slate-50">
         <p className="text-[10px] text-slate-400 font-mono truncate">id: {object.id}</p>
+      </div>
+    </div>
+  );
+}
+
+// ── OntologyGraph (Cytoscape canvas) ─────────────────────────────────────────
+function OntologyGraph({ allObjects, loaded, loading, onNodeSelect }) {
+  const containerRef = useRef(null);
+  const cyRef        = useRef(null);
+
+  const counts = useMemo(() => {
+    const out = {};
+    for (const t of OBJECT_TYPES) out[t.key] = (allObjects[t.key] || []).length;
+    return out;
+  }, [allObjects]);
+
+  // Stable key: only changes when counts actually change (usually once, after load)
+  const countsKey = useMemo(() => OBJECT_TYPES.map(t => counts[t.key]).join(","), [counts]);
+
+  useEffect(() => {
+    if (!containerRef.current || !loaded) return;
+
+    // Destroy previous instance before re-init
+    if (cyRef.current) {
+      cyRef.current.destroy();
+      cyRef.current = null;
+    }
+
+    const nodes = OBJECT_TYPES.map(t => ({
+      data: {
+        id:    t.key,
+        label: `${t.label}\n${counts[t.key].toLocaleString()}`,
+        color: NODE_COLORS[t.key],
+      },
+      position: { ...PRESET_POSITIONS[t.key] },
+    }));
+
+    const edges = ONTOLOGY_EDGES.map(e => ({
+      data: { id: e.id, source: e.source, target: e.target, label: e.label },
+    }));
+
+    const cy = cytoscape({
+      container: containerRef.current,
+      elements:  { nodes, edges },
+      layout:    { name: "preset" },
+      style: [
+        {
+          selector: "node",
+          style: {
+            "background-color":  "data(color)",
+            "label":             "data(label)",
+            "color":             "#ffffff",
+            "text-valign":       "center",
+            "text-halign":       "center",
+            "font-size":         "11px",
+            "font-weight":       "bold",
+            "text-wrap":         "wrap",
+            "text-max-width":    "84px",
+            "width":             "92px",
+            "height":            "92px",
+            "border-width":      "2px",
+            "border-color":      "rgba(255,255,255,0.35)",
+            "shadow-blur":       "18px",
+            "shadow-color":      "data(color)",
+            "shadow-opacity":    0.45,
+            "shadow-offset-x":   "0px",
+            "shadow-offset-y":   "5px",
+          },
+        },
+        {
+          selector: "node:selected",
+          style: {
+            "border-width":  "4px",
+            "border-color":  "#ffffff",
+            "shadow-blur":   "28px",
+            "shadow-opacity": 0.7,
+          },
+        },
+        {
+          selector: "node:active",
+          style: { "overlay-opacity": 0.08 },
+        },
+        {
+          selector: "edge",
+          style: {
+            "width":                    1.8,
+            "line-color":               "#cbd5e1",
+            "target-arrow-color":       "#cbd5e1",
+            "target-arrow-shape":       "triangle",
+            "arrow-scale":              0.9,
+            "curve-style":              "bezier",
+            "label":                    "data(label)",
+            "font-size":                "9px",
+            "color":                    "#94a3b8",
+            "text-background-color":    "#f8fafc",
+            "text-background-opacity":  0.9,
+            "text-background-padding":  "2px",
+            "text-rotation":            "autorotate",
+          },
+        },
+        {
+          selector: "edge:selected",
+          style: {
+            "line-color":           "#6366f1",
+            "target-arrow-color":   "#6366f1",
+            "width":                2.5,
+          },
+        },
+      ],
+      userZoomingEnabled:    true,
+      userPanningEnabled:    true,
+      boxSelectionEnabled:   false,
+      autoungrabify:         false,
+      minZoom:               0.3,
+      maxZoom:               3,
+    });
+
+    // Node click → select
+    cy.on("tap", "node", evt => {
+      const typeKey = evt.target.id();
+      const typeDef = TYPE_MAP[typeKey];
+      if (typeDef) onNodeSelect({ typeKey, typeDef, count: counts[typeKey] });
+    });
+
+    // Canvas click → deselect
+    cy.on("tap", evt => {
+      if (evt.target === cy) onNodeSelect(null);
+    });
+
+    // Fit with padding after rendering
+    cy.ready(() => cy.fit(undefined, 48));
+
+    cyRef.current = cy;
+
+    return () => {
+      cy.destroy();
+      cyRef.current = null;
+    };
+  }, [countsKey, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleFit     = () => cyRef.current?.fit(undefined, 48);
+  const handleZoomIn  = () => cyRef.current?.zoom({ level: Math.min((cyRef.current?.zoom() || 1) * 1.3, 3), renderedPosition: { x: containerRef.current?.clientWidth / 2, y: containerRef.current?.clientHeight / 2 } });
+  const handleZoomOut = () => cyRef.current?.zoom({ level: Math.max((cyRef.current?.zoom() || 1) * 0.75, 0.3), renderedPosition: { x: containerRef.current?.clientWidth / 2, y: containerRef.current?.clientHeight / 2 } });
+
+  if (loading || !loaded) {
+    return (
+      <div className="flex-1 bg-white rounded-2xl border border-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-violet-400 mx-auto mb-3" />
+          <p className="text-sm text-slate-500 font-medium">Loading ontology…</p>
+          <p className="text-xs text-slate-400 mt-1">Fetching entity counts</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex-1 min-h-0 bg-white rounded-2xl border border-slate-100 overflow-hidden">
+      {/* Background grid pattern */}
+      <div
+        className="absolute inset-0 opacity-30"
+        style={{
+          backgroundImage: "radial-gradient(circle, #cbd5e1 1px, transparent 1px)",
+          backgroundSize: "28px 28px",
+        }}
+      />
+
+      {/* Cytoscape canvas */}
+      <div ref={containerRef} className="absolute inset-0" />
+
+      {/* Legend strip */}
+      <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 z-10 max-w-sm">
+        {OBJECT_TYPES.map(t => {
+          const Icon = t.icon;
+          return (
+            <div
+              key={t.key}
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold ${t.bg} ${t.color} border ${t.border}`}
+            >
+              <Icon className="w-2.5 h-2.5" />
+              {t.label}
+              <span className="opacity-60">
+                {(counts[t.key] || 0).toLocaleString()}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Zoom controls */}
+      <div className="absolute bottom-4 right-4 flex flex-col gap-1 z-10">
+        <button
+          onClick={handleZoomIn}
+          className="w-8 h-8 bg-white rounded-lg shadow border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-bold text-base leading-none"
+          title="Zoom in"
+        >
+          +
+        </button>
+        <button
+          onClick={handleFit}
+          className="w-8 h-8 bg-white rounded-lg shadow border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50"
+          title="Fit all"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={handleZoomOut}
+          className="w-8 h-8 bg-white rounded-lg shadow border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-bold text-base leading-none"
+          title="Zoom out"
+        >
+          −
+        </button>
+      </div>
+
+      {/* Hint */}
+      <div className="absolute bottom-4 left-4 z-10">
+        <p className="text-[10px] text-slate-400 bg-white/80 px-2 py-1 rounded-lg border border-slate-100">
+          Click a node to inspect · Drag to pan · Scroll to zoom
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── NodeDetailPanel (ontology mode) ──────────────────────────────────────────
+function NodeDetailPanel({ selection, navigate, onClose }) {
+  if (!selection) return null;
+  const { typeKey, typeDef, count } = selection;
+  const Icon = typeDef.icon;
+
+  const connectedEdges = ONTOLOGY_EDGES.filter(
+    e => e.source === typeKey || e.target === typeKey
+  );
+
+  return (
+    <div className="w-72 bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm flex flex-col shrink-0">
+      {/* Header */}
+      <div className={`flex items-center gap-3 p-4 border-b ${typeDef.border} ${typeDef.bg}`}>
+        <div className={`w-10 h-10 rounded-xl bg-white border ${typeDef.border} flex items-center justify-center shrink-0`}>
+          <Icon className={`w-5 h-5 ${typeDef.color}`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-black text-slate-800">{typeDef.label}</p>
+          <p className={`text-xs font-bold ${typeDef.color}`}>
+            {count.toLocaleString()} record{count !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/60 text-slate-400 hover:text-slate-600 transition-colors shrink-0">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+
+        {/* Description */}
+        <p className="text-xs text-slate-500 leading-relaxed">{typeDef.description}</p>
+
+        {/* Key fields */}
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Universal Fields</p>
+          <div className="space-y-0.5">
+            {typeDef.properties.map(p => (
+              <div key={p} className="flex items-center gap-2 py-1 border-b border-slate-50 last:border-0">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0`} style={{ background: NODE_COLORS[typeKey] }} />
+                <span className="text-[11px] text-slate-600 capitalize">{p.replace(/_/g, " ")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Connections */}
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+            Connects To ({connectedEdges.length})
+          </p>
+          <div className="space-y-0.5">
+            {connectedEdges.map(e => {
+              const other    = e.source === typeKey ? e.target : e.source;
+              const dir      = e.source === typeKey ? "→" : "←";
+              const otherDef = TYPE_MAP[other];
+              if (!otherDef) return null;
+              const OtherIcon = otherDef.icon;
+              return (
+                <div key={e.id} className="flex items-center gap-2 py-1 border-b border-slate-50 last:border-0">
+                  <OtherIcon className={`w-3 h-3 shrink-0 ${otherDef.color}`} />
+                  <span className="text-[11px] text-slate-600 font-medium flex-1">
+                    <span className="text-slate-400">{dir}</span> {other}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono shrink-0">{e.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer CTA */}
+      <div className="p-4 border-t border-slate-100">
+        <button
+          onClick={() => navigate(createPageUrl(typeDef.routePage))}
+          className={`w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl ${typeDef.bg} ${typeDef.color} text-xs font-bold border ${typeDef.border} hover:opacity-80 transition-opacity`}
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          View all {typeDef.label}
+        </button>
       </div>
     </div>
   );
@@ -257,31 +593,34 @@ function ObjectViewPanel({ object, typeDef, onClose, navigate }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ObjectExplorer() {
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState(null);
-  const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [allObjects, setAllObjects] = useState({});     // { TypeKey: [...records] }
-  const [loaded, setLoaded] = useState(false);
-  const [selectedType, setSelectedType] = useState("all");
-  const [selectedObject, setSelectedObject] = useState(null);
+
+  const [currentUser, setCurrentUser]     = useState(null);
+  const [mode, setMode]                   = useState("ontology");   // "search" | "ontology"
+  const [query, setQuery]                 = useState("");
+  const [loading, setLoading]             = useState(false);
+  const [allObjects, setAllObjects]       = useState({});
+  const [loaded, setLoaded]               = useState(false);
+  const [selectedType, setSelectedType]   = useState("all");
+  const [selectedObject, setSelectedObject]   = useState(null);
   const [selectedTypeDef, setSelectedTypeDef] = useState(null);
+  const [selectedNode, setSelectedNode]       = useState(null);    // ontology mode selection
+
   const listFn = useEntityListFn(currentUser);
 
   useEffect(() => {
     base44.auth.me().then(setCurrentUser).catch(() => {});
   }, []);
 
-  // Load all entities once user is ready
+  // Load all entities once
   useEffect(() => {
     if (!currentUser || loaded) return;
     const load = async () => {
       setLoading(true);
       const results = {};
       await Promise.allSettled(
-        OBJECT_TYPES.map(async (t) => {
+        OBJECT_TYPES.map(async t => {
           try {
-            const data = await listFn(base44.entities[t.entity]);
-            results[t.key] = data || [];
+            results[t.key] = (await listFn(base44.entities[t.entity])) || [];
           } catch {
             results[t.key] = [];
           }
@@ -292,34 +631,34 @@ export default function ObjectExplorer() {
       setLoading(false);
     };
     load();
-  }, [currentUser, loaded]);
+  }, [currentUser, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Compute filtered results
-  const filteredResults = React.useMemo(() => {
+  // Search results
+  const filteredResults = useMemo(() => {
     if (!query.trim() || query.length < 2) return {};
-    const out = {};
+    const out  = {};
     const types = selectedType === "all" ? OBJECT_TYPES : OBJECT_TYPES.filter(t => t.key === selectedType);
     for (const t of types) {
-      const records = allObjects[t.key] || [];
-      const matched = records.filter(r => matchesQuery(r, t.searchFields, query));
-      if (matched.length > 0) out[t.key] = matched.slice(0, 12);
+      const matched = (allObjects[t.key] || []).filter(r => matchesQuery(r, t.searchFields, query));
+      if (matched.length) out[t.key] = matched.slice(0, 12);
     }
     return out;
   }, [query, allObjects, selectedType]);
 
-  const totalResults = Object.values(filteredResults).reduce((s, arr) => s + arr.length, 0);
-  const totalObjects = Object.values(allObjects).reduce((s, arr) => s + arr.length, 0);
+  const totalResults = Object.values(filteredResults).reduce((s, a) => s + a.length, 0);
+  const totalObjects = Object.values(allObjects).reduce((s, a) => s + a.length, 0);
 
   const handleSelect = (obj, typeDef) => {
     setSelectedObject(obj);
     setSelectedTypeDef(typeDef);
   };
 
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-0 min-h-full">
 
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-5">
         <div className="flex items-center gap-3 mb-1">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
             <Layers className="w-4 h-4 text-white" />
@@ -327,154 +666,205 @@ export default function ObjectExplorer() {
           <h1 className="text-2xl font-black text-slate-800">Object Explorer</h1>
         </div>
         <p className="text-slate-500 text-sm ml-11">
-          Search across all ontology objects — People, Enterprises, Products, Tasks, Transactions, Relationships, Addresses.
-          {loaded && <span className="ml-2 text-slate-400">{totalObjects.toLocaleString()} objects indexed.</span>}
+          {mode === "ontology"
+            ? "Visualise your operational ontology — entities, relationships, and live record counts."
+            : "Search across all ontology objects — People, Enterprises, Products, Tasks, Transactions, Relationships, Addresses."
+          }
+          {loaded && mode === "search" && (
+            <span className="ml-2 text-slate-400">{totalObjects.toLocaleString()} objects indexed.</span>
+          )}
         </p>
       </div>
 
-      {/* Search bar */}
-      <div className="relative mb-4">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-        {loading && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />}
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Search by name, email, city, type, invoice number..."
-          autoFocus
-          className="w-full pl-12 pr-12 py-3.5 rounded-2xl border border-slate-200 bg-white text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm text-base"
-        />
-        {query && (
-          <button onClick={() => { setQuery(""); setSelectedObject(null); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      {/* Type filter tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+      {/* Mode toggle */}
+      <div className="flex items-center gap-2 mb-4">
         <button
-          onClick={() => setSelectedType("all")}
-          className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${selectedType === "all" ? "bg-slate-800 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+          onClick={() => { setMode("ontology"); setSelectedObject(null); }}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+            mode === "ontology"
+              ? "bg-violet-600 text-white shadow-sm"
+              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
         >
-          All Types
+          <GitBranch className="w-3.5 h-3.5" />
+          Ontology Graph
         </button>
-        {OBJECT_TYPES.map(t => {
-          const Icon = t.icon;
-          const count = (allObjects[t.key] || []).length;
-          return (
-            <button
-              key={t.key}
-              onClick={() => setSelectedType(t.key)}
-              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${selectedType === t.key ? `${t.bg} ${t.color} border ${t.border}` : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
-            >
-              <Icon className="w-3 h-3" />
-              {t.label}
-              {count > 0 && <span className="text-[10px] opacity-70">({count})</span>}
-            </button>
-          );
-        })}
+        <button
+          onClick={() => { setMode("search"); setSelectedNode(null); }}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+            mode === "search"
+              ? "bg-violet-600 text-white shadow-sm"
+              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          <Search className="w-3.5 h-3.5" />
+          Search
+        </button>
       </div>
 
-      {/* Results area */}
-      <div className="flex flex-1 gap-4 min-h-0">
-
-        {/* Results list */}
-        <div className={`flex flex-col ${selectedObject ? "w-full lg:w-1/2" : "w-full"} gap-4`}>
-
-          {/* Empty / loading states */}
-          {!loaded && loading && (
-            <div className="flex items-center justify-center py-16 text-slate-400 bg-white rounded-2xl border border-slate-100">
-              <Loader2 className="w-6 h-6 animate-spin mr-3" />
-              <span className="text-sm">Indexing all ontology objects…</span>
-            </div>
-          )}
-
-          {loaded && !query && (
-            <div className="bg-white border border-slate-100 rounded-2xl p-8 text-center">
-              <Layers className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-slate-500">Start typing to search the ontology</p>
-              <p className="text-xs text-slate-400 mt-1">Search by name, email, city, type, role, status — any field</p>
-              <div className="flex flex-wrap gap-2 justify-center mt-5">
-                {OBJECT_TYPES.map(t => {
-                  const Icon = t.icon;
-                  const count = (allObjects[t.key] || []).length;
-                  return (
-                    <div key={t.key} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${t.border} ${t.bg}`}>
-                      <Icon className={`w-3.5 h-3.5 ${t.color}`} />
-                      <span className={`text-xs font-bold ${t.color}`}>{t.label}</span>
-                      <span className="text-[10px] text-slate-400">{count}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {loaded && query.length >= 2 && totalResults === 0 && (
-            <div className="bg-white border border-slate-100 rounded-2xl p-8 text-center">
-              <Search className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-slate-500">No objects found for "{query}"</p>
-              <p className="text-xs text-slate-400 mt-1">Try a different term or check a different object type</p>
-            </div>
-          )}
-
-          {loaded && query.length >= 2 && totalResults > 0 && (
-            <>
-              <p className="text-xs text-slate-400 font-medium px-1">
-                {totalResults} result{totalResults !== 1 ? "s" : ""} for <strong className="text-slate-600">"{query}"</strong>
-              </p>
-              {Object.entries(filteredResults).map(([typeKey, records]) => {
-                const typeDef = TYPE_MAP[typeKey];
-                if (!typeDef) return null;
-                const Icon = typeDef.icon;
-                return (
-                  <div key={typeKey} className="bg-white border border-slate-100 rounded-2xl p-4">
-                    <div className={`flex items-center gap-2 mb-3 pb-2 border-b ${typeDef.border}`}>
-                      <Icon className={`w-4 h-4 ${typeDef.color}`} />
-                      <span className={`text-xs font-bold ${typeDef.color}`}>{typeDef.label}</span>
-                      <span className="text-[10px] text-slate-400 ml-auto">{records.length} match{records.length !== 1 ? "es" : ""}</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {records.map(r => (
-                        <ResultCard
-                          key={r.id}
-                          result={r}
-                          typeDef={typeDef}
-                          onSelect={handleSelect}
-                          isSelected={selectedObject?.id === r.id}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </>
-          )}
-        </div>
-
-        {/* Object view panel */}
-        {selectedObject && selectedTypeDef && (
-          <div className="hidden lg:flex lg:w-1/2 bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm flex-col">
-            <ObjectViewPanel
-              object={selectedObject}
-              typeDef={selectedTypeDef}
-              onClose={() => { setSelectedObject(null); setSelectedTypeDef(null); }}
-              navigate={navigate}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Mobile object view */}
-      {selectedObject && selectedTypeDef && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-white overflow-y-auto">
-          <ObjectViewPanel
-            object={selectedObject}
-            typeDef={selectedTypeDef}
-            onClose={() => { setSelectedObject(null); setSelectedTypeDef(null); }}
-            navigate={navigate}
+      {/* ── ONTOLOGY GRAPH MODE ─────────────────────────────────────────────── */}
+      {mode === "ontology" && (
+        <div className="flex gap-4 flex-1" style={{ minHeight: "520px" }}>
+          <OntologyGraph
+            allObjects={allObjects}
+            loaded={loaded}
+            loading={loading}
+            onNodeSelect={setSelectedNode}
           />
+          {selectedNode && (
+            <NodeDetailPanel
+              selection={selectedNode}
+              navigate={navigate}
+              onClose={() => setSelectedNode(null)}
+            />
+          )}
         </div>
+      )}
+
+      {/* ── SEARCH MODE ─────────────────────────────────────────────────────── */}
+      {mode === "search" && (
+        <>
+          {/* Search bar */}
+          <div className="relative mb-4">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            {loading && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />}
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search by name, email, city, type, invoice number…"
+              autoFocus
+              className="w-full pl-12 pr-12 py-3.5 rounded-2xl border border-slate-200 bg-white text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm"
+            />
+            {query && (
+              <button onClick={() => { setQuery(""); setSelectedObject(null); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Type filter tabs */}
+          <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+            <button
+              onClick={() => setSelectedType("all")}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${selectedType === "all" ? "bg-slate-800 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+            >
+              All Types
+            </button>
+            {OBJECT_TYPES.map(t => {
+              const Icon  = t.icon;
+              const count = (allObjects[t.key] || []).length;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setSelectedType(t.key)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${selectedType === t.key ? `${t.bg} ${t.color} border ${t.border}` : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                >
+                  <Icon className="w-3 h-3" />
+                  {t.label}
+                  {count > 0 && <span className="text-[10px] opacity-70">({count})</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Results */}
+          <div className="flex flex-1 gap-4 min-h-0">
+            <div className={`flex flex-col ${selectedObject ? "w-full lg:w-1/2" : "w-full"} gap-4`}>
+              {!loaded && loading && (
+                <div className="flex items-center justify-center py-16 text-slate-400 bg-white rounded-2xl border border-slate-100">
+                  <Loader2 className="w-6 h-6 animate-spin mr-3" />
+                  <span className="text-sm">Indexing all ontology objects…</span>
+                </div>
+              )}
+
+              {loaded && !query && (
+                <div className="bg-white border border-slate-100 rounded-2xl p-8 text-center">
+                  <Layers className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                  <p className="text-sm font-semibold text-slate-500">Start typing to search the ontology</p>
+                  <p className="text-xs text-slate-400 mt-1">Search by name, email, city, type, role, status — any field</p>
+                  <div className="flex flex-wrap gap-2 justify-center mt-5">
+                    {OBJECT_TYPES.map(t => {
+                      const Icon  = t.icon;
+                      const count = (allObjects[t.key] || []).length;
+                      return (
+                        <div key={t.key} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${t.border} ${t.bg}`}>
+                          <Icon className={`w-3.5 h-3.5 ${t.color}`} />
+                          <span className={`text-xs font-bold ${t.color}`}>{t.label}</span>
+                          <span className="text-[10px] text-slate-400">{count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {loaded && query.length >= 2 && totalResults === 0 && (
+                <div className="bg-white border border-slate-100 rounded-2xl p-8 text-center">
+                  <Search className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                  <p className="text-sm font-semibold text-slate-500">No objects found for "{query}"</p>
+                  <p className="text-xs text-slate-400 mt-1">Try a different term or check a different object type</p>
+                </div>
+              )}
+
+              {loaded && query.length >= 2 && totalResults > 0 && (
+                <>
+                  <p className="text-xs text-slate-400 font-medium px-1">
+                    {totalResults} result{totalResults !== 1 ? "s" : ""} for <strong className="text-slate-600">"{query}"</strong>
+                  </p>
+                  {Object.entries(filteredResults).map(([typeKey, records]) => {
+                    const typeDef = TYPE_MAP[typeKey];
+                    if (!typeDef) return null;
+                    const Icon = typeDef.icon;
+                    return (
+                      <div key={typeKey} className="bg-white border border-slate-100 rounded-2xl p-4">
+                        <div className={`flex items-center gap-2 mb-3 pb-2 border-b ${typeDef.border}`}>
+                          <Icon className={`w-4 h-4 ${typeDef.color}`} />
+                          <span className={`text-xs font-bold ${typeDef.color}`}>{typeDef.label}</span>
+                          <span className="text-[10px] text-slate-400 ml-auto">{records.length} match{records.length !== 1 ? "es" : ""}</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {records.map(r => (
+                            <ResultCard
+                              key={r.id}
+                              result={r}
+                              typeDef={typeDef}
+                              onSelect={handleSelect}
+                              isSelected={selectedObject?.id === r.id}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+
+            {/* Object view panel */}
+            {selectedObject && selectedTypeDef && (
+              <div className="hidden lg:flex lg:w-1/2 bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm flex-col">
+                <ObjectViewPanel
+                  object={selectedObject}
+                  typeDef={selectedTypeDef}
+                  onClose={() => { setSelectedObject(null); setSelectedTypeDef(null); }}
+                  navigate={navigate}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Mobile object view */}
+          {selectedObject && selectedTypeDef && (
+            <div className="lg:hidden fixed inset-0 z-50 bg-white overflow-y-auto">
+              <ObjectViewPanel
+                object={selectedObject}
+                typeDef={selectedTypeDef}
+                onClose={() => { setSelectedObject(null); setSelectedTypeDef(null); }}
+                navigate={navigate}
+              />
+            </div>
+          )}
+        </>
       )}
     </div>
   );
