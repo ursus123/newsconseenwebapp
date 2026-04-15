@@ -407,6 +407,14 @@ try:
 except Exception as _ingest_err:
     logger.warning("Ingest router failed to load — %s", _ingest_err)
 
+# Phase A — Universal Ontology Enrichment
+try:
+    from enrichment.routes import router as enrichment_router
+    app.include_router(enrichment_router)
+    logger.info("Enrichment router loaded")
+except Exception as _enr_err:
+    logger.warning("Enrichment router failed to load — %s", _enr_err)
+
 
 # ----------------------------------------------------------
 # Helper Functions
@@ -976,6 +984,24 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     except Exception as _ml_err:
         logger.warning("cron: ML models failed — %s", _ml_err)
 
+    # ── Step 6: Phase A enrichment — per-company for all companies ───────────
+    all_enrich_result = {}
+    try:
+        from enrichment.engine import run_enrichment
+        for _cid in company_ids:
+            _e_raw = {
+                "people":       filter_by_company(raw_data.get("people",       pd.DataFrame()), _cid),
+                "enterprises":  filter_by_company(raw_data.get("enterprises",  pd.DataFrame()), _cid),
+                "products":     filter_by_company(raw_data.get("products",     pd.DataFrame()), _cid),
+                "transactions": filter_by_company(raw_data.get("transactions", pd.DataFrame()), _cid),
+                "addresses":    filter_by_company(raw_data.get("addresses",    pd.DataFrame()), _cid),
+            }
+            all_enrich_result[_cid] = run_enrichment(_e_raw, _cid)
+        logger.info("cron: enrichment complete — %d companies", len(all_enrich_result))
+    except Exception as _enr_err:
+        all_enrich_result = {"status": "error", "detail": str(_enr_err)}
+        logger.warning("cron: enrichment failed — %s", _enr_err)
+
     return {
         "cron_run":               True,
         "version":                "5.0.0",
@@ -993,6 +1019,7 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
         "goal_tracking":          goals_result,
         "enhanced_analytics":     enhanced_result,
         "ml_predictions":         ml_result,
+        "enrichment":             all_enrich_result,
     }
 
 
@@ -1205,6 +1232,24 @@ def cron_etl_company(
         enhanced_result = {"status": "error", "detail": str(_enh_err)}
         logger.warning("ETL-company: enhanced analytics failed — %s", _enh_err)
 
+    # ── Step 5: Phase A enrichment — geocode, phone, email, company reg, FX ──
+    enrich_result = {}
+    try:
+        from enrichment.engine import run_enrichment
+        _addrs = filter_by_company(raw_data.get("addresses", pd.DataFrame()), company_id)
+        _enrich_raw = {
+            "people":       _ppl,
+            "enterprises":  _ents,
+            "products":     _prds,
+            "transactions": _txs,
+            "addresses":    _addrs,
+        }
+        enrich_result = run_enrichment(_enrich_raw, company_id)
+        logger.info("ETL-company: enrichment complete — %s", enrich_result)
+    except Exception as _enr_err:
+        enrich_result = {"status": "error", "detail": str(_enr_err)}
+        logger.warning("ETL-company: enrichment failed — %s", _enr_err)
+
     success_count = sum(1 for r in results.values() if r.get("status") == "success")
 
     return {
@@ -1217,6 +1262,7 @@ def cron_etl_company(
         "all_success":        success_count == len(results),
         "results":            results,
         "enhanced_analytics": enhanced_result,
+        "enrichment":         enrich_result,
     }
 
 

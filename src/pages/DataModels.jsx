@@ -686,6 +686,74 @@ const PG_ANALYTICS_TABLES = [
       { name: "concentration_flags", type: "TEXT (comma-separated flag list)" },
     ],
   },
+  // ── Phase A — Universal Ontology Enrichment tables ───────────────────────
+  {
+    id: "an_person_enrichment", label: "analytics.person_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
+    icon: "🔍", layer: "analytics.enrichment",
+    description: "Per-person contact validation. Phone normalised to E.164, email MX-checked, disposable domains flagged. Written by Phase A enrichment engine.",
+    fields: [
+      { name: "company_id / person_id / person_name / person_type", type: "TEXT" },
+      { name: "phone_valid", type: "BOOL" },
+      { name: "phone_e164", type: "TEXT (E.164 format, e.g. +254712345678)" },
+      { name: "phone_country / phone_carrier / phone_line_type", type: "TEXT" },
+      { name: "email_valid / email_format_valid / email_domain_valid / email_disposable", type: "BOOL" },
+      { name: "email_domain", type: "TEXT" },
+      { name: "enrichment_status", type: "TEXT: enriched|skipped|error" },
+      { name: "enriched_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_enterprise_enrichment", label: "analytics.enterprise_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
+    icon: "🔍", layer: "analytics.enrichment",
+    description: "Per-enterprise company registration data from OpenCorporates (free tier). Includes jurisdiction, registration number, incorporation date, status.",
+    fields: [
+      { name: "company_id / enterprise_id / enterprise_name / enterprise_type / country", type: "TEXT" },
+      { name: "reg_number / reg_status / jurisdiction", type: "TEXT" },
+      { name: "incorporation_date", type: "TEXT (ISO date)" },
+      { name: "company_type / registered_address / opencorporates_url", type: "TEXT" },
+      { name: "enrichment_status", type: "TEXT: enriched|skipped|not_found|error" },
+      { name: "enriched_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_product_enrichment", label: "analytics.product_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
+    icon: "🔍", layer: "analytics.enrichment",
+    description: "Per-product barcode lookup (Open Food Facts → UPC Item DB) plus FX price normalisation to USD. Universal across food, electronics, pharmaceuticals.",
+    fields: [
+      { name: "company_id / product_id / product_name / item_type / item_class", type: "TEXT" },
+      { name: "barcode_name / brand / category / manufacturer", type: "TEXT" },
+      { name: "allergens / nutriscore / ecoscore", type: "TEXT" },
+      { name: "price_original / price_currency / price_usd / fx_rate", type: "FLOAT / TEXT" },
+      { name: "enrichment_status", type: "TEXT: enriched|no_barcode|not_found|error" },
+      { name: "enriched_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_transaction_enrichment", label: "analytics.transaction_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
+    icon: "🔍", layer: "analytics.enrichment",
+    description: "Per-transaction FX normalisation to USD via open.er-api.com (24h cached). Enables cross-currency revenue aggregation for multi-currency operators.",
+    fields: [
+      { name: "company_id / transaction_id / transaction_type / status / base_currency", type: "TEXT" },
+      { name: "amount_original / amount_usd / fx_rate", type: "FLOAT" },
+      { name: "fx_date", type: "TEXT (ISO date)" },
+      { name: "enrichment_status", type: "TEXT: enriched|fx_not_found|parse_error" },
+      { name: "enriched_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_address_enrichment", label: "analytics.address_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
+    icon: "🔍", layer: "analytics.enrichment",
+    description: "Per-address geocoordinates, timezone, and administrative hierarchy via OSM Nominatim (forward/reverse geocode) + timezonefinder (offline).",
+    fields: [
+      { name: "company_id / address_id / entity_type / entity_name", type: "TEXT" },
+      { name: "lat / lon", type: "FLOAT" },
+      { name: "timezone", type: "TEXT (e.g. Africa/Nairobi)" },
+      { name: "admin_level1 / admin_level2 / admin_level3", type: "TEXT (country/region/district)" },
+      { name: "country_code / postcode / formatted_address", type: "TEXT" },
+      { name: "enrichment_status", type: "TEXT: enriched|skipped|geocode_failed|error" },
+      { name: "enriched_at", type: "TIMESTAMPTZ" },
+    ],
+  },
 ];
 
 // ── analytics.* — Intelligence tables (agents + copilot) ─────────────────────
@@ -968,6 +1036,22 @@ const API_CATALOGUE = [
       { method: "POST", path: "/load/network-summary",         desc: "ETL: recompute analytics.network_summary" },
       { method: "GET",  path: "/analytics/concentration-risk", desc: "HHI revenue/client/staff concentration risk per company" },
       { method: "POST", path: "/load/concentration-risk",      desc: "ETL: recompute analytics.concentration_risk" },
+    ],
+  },
+  {
+    name: "Phase A Enrichment", prefix: "/enrichment", color: "#059669", bg: "#ecfdf5",
+    desc: "Universal ontology enrichment — phone/email validation, company registration lookup, barcode data, FX normalisation, geocoding. All via free/no-key APIs or offline libraries.",
+    endpoints: [
+      { method: "GET",  path: "/enrichment/status",          desc: "Coverage stats per entity (raw rows vs enriched rows)" },
+      { method: "POST", path: "/enrichment/run",             desc: "Trigger full Phase A enrichment for a company_id" },
+      { method: "GET",  path: "/enrichment/people",          desc: "Read analytics.person_enrichment for company" },
+      { method: "GET",  path: "/enrichment/enterprises",     desc: "Read analytics.enterprise_enrichment for company" },
+      { method: "GET",  path: "/enrichment/products",        desc: "Read analytics.product_enrichment for company" },
+      { method: "GET",  path: "/enrichment/transactions",    desc: "Read analytics.transaction_enrichment for company" },
+      { method: "GET",  path: "/enrichment/addresses",       desc: "Read analytics.address_enrichment for company" },
+      { method: "GET",  path: "/open-data/exchange-rates",   desc: "FX rates (open.er-api.com, 24h cache) — proxied from python_layer" },
+      { method: "GET",  path: "/open-data/barcode/{ean}",    desc: "Barcode lookup: Open Food Facts → UPC Item DB" },
+      { method: "GET",  path: "/open-data/company-lookup",   desc: "Company registration: OpenCorporates free tier" },
     ],
   },
 ];

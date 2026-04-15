@@ -39,6 +39,11 @@ python-dotenv
 # Geospatial (used by geospatial ETL)
 geopy
 
+# Phase A — Ontology Enrichment
+phonenumbers          # offline phone validation + carrier/type
+timezonefinder        # offline timezone from lat/lon
+dnspython             # DNS MX check for email validation
+
 # Alerts (Phase 3B)
 sendgrid
 
