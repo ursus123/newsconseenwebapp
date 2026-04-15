@@ -818,13 +818,14 @@ Phase A  Enrichment       ✅ Universal ontology enrichment — phone/email/geoc
 Phase B  Enrichment       ✅ Domain-specific enrichment — medications, food, vehicles, chemicals, devices, software, NPI
 Phase C  Enrichment       ✅ Compliance & risk — OFAC SDN sanctions, World Bank WGI, GDELT news, AML flags
 Phase D  Enrichment       ✅ Scoring & synthesis — entity_scores, relationship/task enrichment (7/7 entities), get_entity_risk_report copilot tool
+Phase E  Enrichment       ✅ Predictive & temporal — spend_trend, churn_probability, CLV segment (person); revenue_trend, payment_behavior, avg_days_to_pay (enterprise); demand_trend, stockout_risk, days_of_stock, demand_forecast_30d (product); is_recurring, recurrence_count, seasonal_flag, days_since_prior_tx (transaction)
 ```
 
 ---
 
-## Current state (as of 2026-04-12)
+## Current state (as of 2026-04-15)
 
-All Phases 1–8 and Enrichment Phases A–D are implemented and deployed. The system is fully operational.
+All Phases 1–8 and Enrichment Phases A–E are implemented and deployed. The system is fully operational.
 
 ```
 COMPLETED (Phases 1–6)

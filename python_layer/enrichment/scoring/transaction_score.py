@@ -64,6 +64,23 @@ def score(row: dict) -> dict:
     if enrichment_status == "fx_not_found":
         flags.append("fx_conversion_failed")
 
+    # ── Phase E: recurrence & seasonal signals ────────────────────────────────
+    is_recurring = row.get("is_recurring")
+    if is_recurring is True:
+        recurrence_count = _float(row.get("recurrence_count"), 0.0)
+        if recurrence_count >= 5:
+            flags.append("high_frequency_recurring")
+        elif recurrence_count >= 2:
+            flags.append("recurring_transaction")
+        # Recurring transactions are not themselves high-risk, but improve intelligence
+        # score by demonstrating predictable cash flow
+
+    # Phase E completeness
+    for field in ("is_recurring", "seasonal_flag", "days_since_prior_tx"):
+        total += 1
+        if row.get(field) is not None:
+            filled += 1
+
     risk_score        = round(min(risk, 100.0), 1)
     quality_score     = round((filled / total * 100) if total else 0.0, 1)
     intelligence_score = round((quality_score * 0.3 + (100 - risk_score) * 0.7), 1)

@@ -690,7 +690,7 @@ const PG_ANALYTICS_TABLES = [
   {
     id: "an_person_enrichment", label: "analytics.person_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
     icon: "🔍", layer: "analytics.enrichment",
-    description: "Phase A+B+C person enrichment. Phase A: phone E.164, email MX-check. Phase B: NPPES NPI for healthcare staff. Phase C: OFAC SDN sanctions screening + PEP flag.",
+    description: "Phase A+B+C+E person enrichment. Phase A: phone E.164, email MX-check. Phase B: NPPES NPI for healthcare staff. Phase C: OFAC SDN sanctions screening + PEP flag. Phase E: spend_trend, churn_probability, CLV segment, 30-day transaction activity.",
     fields: [
       { name: "company_id / person_id / person_name / person_type", type: "TEXT" },
       { name: "phone_valid", type: "BOOL" },
@@ -706,6 +706,11 @@ const PG_ANALYTICS_TABLES = [
       { name: "sanctions_list / sanctions_score", type: "TEXT / FLOAT (Phase C — OFAC_SDN, confidence 0–1)" },
       { name: "pep_flag", type: "BOOL (Phase C — Politically Exposed Person, inferred from SDN program)" },
       { name: "sanctions_checked_at", type: "TEXT (Phase C — ISO timestamp of last SDN check)" },
+      { name: "spend_trend", type: "TEXT: rising|stable|falling (Phase E — 30d vs prior 30d spend)" },
+      { name: "days_since_last_transaction", type: "INT (Phase E — recency signal)" },
+      { name: "transaction_count_30d / transaction_volume_30d_usd", type: "INT / FLOAT (Phase E — 30-day activity)" },
+      { name: "churn_probability", type: "FLOAT 0–100 (Phase E — heuristic disengagement likelihood)" },
+      { name: "clv_segment", type: "TEXT: high|medium|low|inactive (Phase E — customer lifetime value tier)" },
       { name: "enrichment_status", type: "TEXT: enriched|skipped|error" },
       { name: "enriched_at", type: "TIMESTAMPTZ" },
     ],
@@ -713,7 +718,7 @@ const PG_ANALYTICS_TABLES = [
   {
     id: "an_enterprise_enrichment", label: "analytics.enterprise_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
     icon: "🔍", layer: "analytics.enrichment",
-    description: "Phase A+B+C enterprise enrichment. Phase A: OpenCorporates registration. Phase B: NPPES NPI for healthcare orgs. Phase C: OFAC sanctions, World Bank country risk (WGI 0–100), GDELT news sentiment.",
+    description: "Phase A+B+C+E enterprise enrichment. Phase A: OpenCorporates registration. Phase B: NPPES NPI for healthcare orgs. Phase C: OFAC sanctions, World Bank country risk (WGI 0–100), GDELT news sentiment. Phase E: revenue_trend, payment_behavior, avg_days_to_pay, relationship_count.",
     fields: [
       { name: "company_id / enterprise_id / enterprise_name / enterprise_type / country", type: "TEXT" },
       { name: "reg_number / reg_status / jurisdiction", type: "TEXT" },
@@ -730,6 +735,10 @@ const PG_ANALYTICS_TABLES = [
       { name: "country_governance_index", type: "FLOAT -2.5 to +2.5 (Phase C — raw WGI composite)" },
       { name: "news_mention_count", type: "INT (Phase C — GDELT mentions last 30 days)" },
       { name: "news_sentiment / news_avg_tone", type: "TEXT / FLOAT (Phase C — positive|neutral|negative)" },
+      { name: "revenue_trend", type: "TEXT: rising|stable|falling (Phase E — 30d vs prior 30d inflow)" },
+      { name: "payment_behavior", type: "TEXT: always_on_time|sometimes_late|often_late (Phase E)" },
+      { name: "avg_days_to_pay", type: "FLOAT (Phase E — avg days between invoice due date and payment)" },
+      { name: "relationship_count", type: "INT (Phase E — active relationships for this enterprise)" },
       { name: "enrichment_status", type: "TEXT: enriched|skipped|not_found|error" },
       { name: "enriched_at", type: "TIMESTAMPTZ" },
     ],
@@ -737,7 +746,7 @@ const PG_ANALYTICS_TABLES = [
   {
     id: "an_product_enrichment", label: "analytics.product_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
     icon: "🔍", layer: "analytics.enrichment",
-    description: "Phase A+B product enrichment. Phase A: barcode + FX. Phase B: domain dispatcher → 6 APIs keyed by item_type/item_subtype (medications, food, vehicles, chemicals, devices, software).",
+    description: "Phase A+B+E product enrichment. Phase A: barcode + FX. Phase B: domain dispatcher → 6 APIs keyed by item_type/item_subtype (medications, food, vehicles, chemicals, devices, software). Phase E: demand_trend, stockout_risk, days_of_stock, demand_forecast_30d.",
     fields: [
       { name: "company_id / product_id / product_name / item_type / item_class", type: "TEXT" },
       { name: "barcode_name / brand / category / manufacturer", type: "TEXT (Phase A — barcode)" },
@@ -751,6 +760,12 @@ const PG_ANALYTICS_TABLES = [
       { name: "pkg_name / pkg_latest_version / pkg_license", type: "TEXT (Phase B — software via npm/PyPI)" },
       { name: "domain_data", type: "TEXT (JSON — full domain enrichment payload)" },
       { name: "domain_enriched_by", type: "TEXT: rxnorm|usda_fooddata|nhtsa|pubchem|fda_openfda|npm_pypi|null" },
+      { name: "demand_trend", type: "TEXT: rising|stable|falling (Phase E — units sold 30d vs prior 30d)" },
+      { name: "velocity_change_pct", type: "FLOAT (Phase E — % change in sell-through rate)" },
+      { name: "days_of_stock", type: "INT (Phase E — estimated days of stock at current velocity)" },
+      { name: "stockout_risk", type: "TEXT: high|medium|low|none (Phase E — ≤7d=high, ≤21d=medium)" },
+      { name: "demand_forecast_30d", type: "FLOAT (Phase E — projected units sold next 30 days)" },
+      { name: "last_sold_days", type: "INT (Phase E — days since last recorded sale)" },
       { name: "enrichment_status", type: "TEXT: enriched|no_barcode|not_found|error" },
       { name: "enriched_at", type: "TIMESTAMPTZ" },
     ],
@@ -758,7 +773,7 @@ const PG_ANALYTICS_TABLES = [
   {
     id: "an_transaction_enrichment", label: "analytics.transaction_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
     icon: "🔍", layer: "analytics.enrichment",
-    description: "Phase A+C transaction enrichment. Phase A: FX normalisation to USD (open.er-api.com). Phase C: AML risk flags — round_number, just_below_limit, velocity, anomaly Z-score.",
+    description: "Phase A+C+E transaction enrichment. Phase A: FX normalisation to USD. Phase C: AML risk flags — round_number, just_below_limit, velocity, anomaly Z-score. Phase E: recurrence detection, seasonal flag, days since prior transaction.",
     fields: [
       { name: "company_id / transaction_id / transaction_type / status / base_currency", type: "TEXT" },
       { name: "amount_original / amount_usd / fx_rate", type: "FLOAT (Phase A)" },
@@ -767,6 +782,10 @@ const PG_ANALYTICS_TABLES = [
       { name: "aml_flags", type: "TEXT (JSON array: round_number|just_below_limit|velocity|anomaly)" },
       { name: "anomaly_score", type: "FLOAT (Phase C — Z-score vs peer transactions of same type)" },
       { name: "anomaly_flag", type: "BOOL (Phase C — |Z-score| ≥ 2.5)" },
+      { name: "is_recurring", type: "BOOL (Phase E — same amount+counterparty seen ≥2 times)" },
+      { name: "recurrence_count", type: "INT (Phase E — times this pattern repeated)" },
+      { name: "seasonal_flag", type: "TEXT: Q1|Q2|Q3|Q4 (Phase E — calendar quarter of transaction)" },
+      { name: "days_since_prior_tx", type: "INT (Phase E — days from previous tx with same counterparty)" },
       { name: "enrichment_status", type: "TEXT: enriched|fx_not_found|parse_error" },
       { name: "enriched_at", type: "TIMESTAMPTZ" },
     ],

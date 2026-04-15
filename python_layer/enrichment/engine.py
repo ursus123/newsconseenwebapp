@@ -1,9 +1,17 @@
 """
 enrichment/engine.py
 ---------------------
-EnrichmentEngine — orchestrates Phase A universal ontology enrichment.
+EnrichmentEngine — orchestrates Phases A–E universal ontology enrichment.
 
-Calls all 5 per-entity enrichment modules and persists results to
+Phases covered per run:
+  Phase A — universal identity (phone, email, geocoding, FX, barcode, company reg)
+  Phase B — domain-specific (medications, food, vehicles, chemicals, devices, software, NPI)
+  Phase C — compliance & risk (OFAC SDN sanctions, World Bank WGI, GDELT news, AML flags)
+  Phase D — scoring & synthesis (entity_scores, relationship/task enrichment)
+  Phase E — predictive & temporal (spend_trend, churn_probability, CLV, demand_trend,
+             stockout_risk, payment_behavior, recurrence detection)
+
+Calls all per-entity enrichment modules and persists results to
 analytics.{entity}_enrichment tables in PostgreSQL.
 
 Usage:
@@ -58,18 +66,22 @@ def run_enrichment(
     if not _ENRICH_OK:
         return {"error": "enrichment modules unavailable"}
 
+    # transactions_df is passed to Phase E temporal modules that need cross-entity context
+    transactions_df = raw_data.get("transactions", pd.DataFrame())
+    relationships_df = raw_data.get("relationships", pd.DataFrame())
+
     entity_map = [
-        ("people",       raw_data.get("people",       pd.DataFrame()), enrich_people),
-        ("enterprises",  raw_data.get("enterprises",  pd.DataFrame()), enrich_enterprises),
-        ("products",     raw_data.get("products",     pd.DataFrame()), enrich_products),
-        ("transactions", raw_data.get("transactions", pd.DataFrame()), enrich_transactions),
-        ("addresses",    raw_data.get("addresses",    pd.DataFrame()), enrich_addresses),
+        ("people",       raw_data.get("people",       pd.DataFrame()), enrich_people,       {"transactions_df": transactions_df}),
+        ("enterprises",  raw_data.get("enterprises",  pd.DataFrame()), enrich_enterprises,  {"transactions_df": transactions_df, "relationships_df": relationships_df}),
+        ("products",     raw_data.get("products",     pd.DataFrame()), enrich_products,     {"transactions_df": transactions_df}),
+        ("transactions", transactions_df,                               enrich_transactions, {}),
+        ("addresses",    raw_data.get("addresses",    pd.DataFrame()), enrich_addresses,    {}),
     ]
 
     summary = {}
-    for entity_key, df, enrich_fn in entity_map:
+    for entity_key, df, enrich_fn, extra_kwargs in entity_map:
         try:
-            enriched_df = enrich_fn(df, company_id, force=force)
+            enriched_df = enrich_fn(df, company_id, force=force, **extra_kwargs)
             if enriched_df.empty:
                 summary[entity_key] = {"status": "empty", "rows": 0, "error": None}
                 continue

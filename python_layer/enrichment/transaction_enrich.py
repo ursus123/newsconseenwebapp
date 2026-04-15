@@ -17,7 +17,7 @@ from enrichment.exchange_rates import convert_to_usd
 logger = logging.getLogger(__name__)
 
 
-def enrich_transactions(transactions_df: pd.DataFrame, company_id: str, force: bool = False) -> pd.DataFrame:
+def enrich_transactions(transactions_df: pd.DataFrame, company_id: str, force: bool = False, **_kwargs) -> pd.DataFrame:
     """
     For each transaction in company_id:
       Phase A: convert amount to USD using live FX rates.
@@ -43,6 +43,16 @@ def enrich_transactions(transactions_df: pd.DataFrame, company_id: str, force: b
     # Pad to length of txs in case batch returned fewer rows
     while len(aml_results) < len(txs):
         aml_results.append({})
+
+    # ── Phase E: pre-compute temporal batch (recurrence, seasonal, prior-tx) ──
+    temporal_results: list = []
+    try:
+        from enrichment.temporal.transaction_temporal import compute_transaction_temporal_batch
+        temporal_results = compute_transaction_temporal_batch(txs)
+    except Exception as _te:
+        logger.debug("transaction Phase E temporal skipped: %s", _te)
+    while len(temporal_results) < len(txs):
+        temporal_results.append({})
 
     today = datetime.date.today().isoformat()
     rows  = []
@@ -93,6 +103,11 @@ def enrich_transactions(transactions_df: pd.DataFrame, company_id: str, force: b
             row["aml_flags"]      = aml.get("aml_flags", "[]")
             row["anomaly_score"]  = aml.get("anomaly_score")
             row["anomaly_flag"]   = aml.get("anomaly_flag", False)
+
+        # ── Phase E: temporal signals ─────────────────────────────────────────
+        temporal = temporal_results[idx] if idx < len(temporal_results) else {}
+        if temporal:
+            row.update(temporal)
 
         row["enriched_at"] = pd.Timestamp.now(tz="UTC").isoformat()
         rows.append(row)

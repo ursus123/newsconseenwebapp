@@ -73,6 +73,31 @@ def score(row: dict) -> dict:
         filled += 1
     total += 1
 
+    # ── Phase E: churn / CLV risk signals ────────────────────────────────────
+    churn = _float(row.get("churn_probability"), 0.0)
+    if churn >= 70:
+        flags.append("high_churn_risk")
+        risk += 8.0
+    elif churn >= 40:
+        flags.append("medium_churn_risk")
+        risk += 3.0
+
+    clv = str(row.get("clv_segment", "") or "")
+    if clv == "inactive":
+        flags.append("inactive_client")
+        risk += 5.0
+
+    spend = str(row.get("spend_trend", "") or "")
+    if spend == "falling":
+        flags.append("declining_spend")
+        risk += 4.0
+
+    # Phase E completeness
+    for field in ("spend_trend", "churn_probability", "clv_segment"):
+        total += 1
+        if row.get(field) is not None:
+            filled += 1
+
     risk_score        = round(min(risk, 100.0), 1)
     quality_score     = round((filled / total * 100) if total else 0.0, 1)
     intelligence_score = round((quality_score * 0.4 + (100 - risk_score) * 0.6), 1)

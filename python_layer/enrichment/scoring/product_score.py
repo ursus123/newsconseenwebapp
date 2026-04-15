@@ -69,6 +69,32 @@ def score(row: dict) -> dict:
     else:
         flags.append("no_domain_enrichment")
 
+    # ── Phase E: demand / stockout risk signals ───────────────────────────────
+    stockout = str(row.get("stockout_risk", "") or "")
+    if stockout == "high":
+        flags.append("stockout_imminent")
+        risk += 15.0
+    elif stockout == "medium":
+        flags.append("stockout_risk")
+        risk += 6.0
+
+    demand = str(row.get("demand_trend", "") or "")
+    if demand == "falling":
+        flags.append("falling_demand")
+        risk += 5.0
+
+    dos = row.get("days_of_stock")
+    if dos is not None and dos == 0:
+        if "stockout_imminent" not in flags:
+            flags.append("out_of_stock")
+            risk += 20.0
+
+    # Phase E completeness
+    for field in ("demand_trend", "stockout_risk", "days_of_stock"):
+        total += 1
+        if row.get(field) is not None:
+            filled += 1
+
     risk_score        = round(min(risk, 100.0), 1)
     quality_score     = round((filled / total * 100) if total else 0.0, 1)
     intelligence_score = round((quality_score * 0.5 + (100 - risk_score) * 0.5), 1)

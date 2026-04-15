@@ -62,6 +62,26 @@ def score(row: dict) -> dict:
         if row.get(field):
             filled += 1
 
+    # ── Phase E: payment behaviour risk signals ───────────────────────────────
+    payment = str(row.get("payment_behavior", "") or "")
+    if payment == "often_late":
+        flags.append("often_late_payer")
+        risk += 12.0
+    elif payment == "sometimes_late":
+        flags.append("sometimes_late_payer")
+        risk += 5.0
+
+    revenue = str(row.get("revenue_trend", "") or "")
+    if revenue == "falling":
+        flags.append("declining_revenue")
+        risk += 6.0
+
+    # Phase E completeness
+    for field in ("revenue_trend", "payment_behavior", "relationship_count"):
+        total += 1
+        if row.get(field) is not None:
+            filled += 1
+
     risk_score        = round(min(risk, 100.0), 1)
     quality_score     = round((filled / total * 100) if total else 0.0, 1)
     intelligence_score = round((quality_score * 0.4 + (100 - risk_score) * 0.6), 1)

@@ -1,15 +1,19 @@
 """
 enrichment/setup.py
 ---------------------
-DDL for the 5 analytics enrichment tables.
+DDL for the analytics enrichment tables.
 Called at startup — creates tables if they don't exist.
 All columns are nullable so partial enrichment rows load cleanly.
 
 Phases covered per table:
   person_enrichment      Phase A (phone/email) + B (NPI) + C (sanctions/PEP)
+                         + E (spend_trend, churn_probability, CLV, 30d activity)
   enterprise_enrichment  Phase A (OpenCorporates) + B (NPI) + C (sanctions/country risk/news)
+                         + E (revenue_trend, payment_behavior, avg_days_to_pay, relationship_count)
   product_enrichment     Phase A (barcode/FX) + B (domain: medication/food/vehicle/chemical/device/software)
+                         + E (demand_trend, stockout_risk, velocity_change_pct, days_of_stock, demand_forecast_30d)
   transaction_enrichment Phase A (FX) + C (AML flags/anomaly)
+                         + E (is_recurring, recurrence_count, seasonal_flag, days_since_prior_tx)
   address_enrichment     Phase A (geocoding/timezone) + C (country risk)
   entity_scores          Phase D synthesis — composite risk/quality/intelligence scores per entity
   relationship_enrichment Phase D — link strength, risk contagion, health (6th entity)
@@ -62,6 +66,13 @@ _DDL = [
         sanctions_score         DOUBLE PRECISION,
         pep_flag                BOOLEAN,
         sanctions_checked_at    TEXT,
+        -- Phase E: predictive & temporal
+        spend_trend                 TEXT,
+        days_since_last_transaction INTEGER,
+        transaction_count_30d       INTEGER,
+        transaction_volume_30d_usd  DOUBLE PRECISION,
+        churn_probability           DOUBLE PRECISION,
+        clv_segment                 TEXT,
         -- Meta
         enrichment_status       TEXT,
         reason                  TEXT,
@@ -113,6 +124,11 @@ _DDL = [
         news_mention_count      INTEGER,
         news_sentiment          TEXT,
         news_avg_tone           DOUBLE PRECISION,
+        -- Phase E: predictive & temporal
+        revenue_trend           TEXT,
+        payment_behavior        TEXT,
+        avg_days_to_pay         DOUBLE PRECISION,
+        relationship_count      INTEGER,
         -- Meta
         enrichment_status       TEXT,
         reason                  TEXT,
@@ -201,6 +217,13 @@ _DDL = [
         -- Domain
         domain_data             TEXT,
         domain_enriched_by      TEXT,
+        -- Phase E: predictive & temporal
+        demand_trend            TEXT,
+        velocity_change_pct     DOUBLE PRECISION,
+        days_of_stock           INTEGER,
+        stockout_risk           TEXT,
+        demand_forecast_30d     DOUBLE PRECISION,
+        last_sold_days          INTEGER,
         -- Meta
         enrichment_status       TEXT,
         reason                  TEXT,
@@ -227,6 +250,11 @@ _DDL = [
         aml_flags               TEXT,
         anomaly_score           DOUBLE PRECISION,
         anomaly_flag            BOOLEAN,
+        -- Phase E: predictive & temporal
+        is_recurring            BOOLEAN,
+        recurrence_count        INTEGER,
+        seasonal_flag           TEXT,
+        days_since_prior_tx     INTEGER,
         -- Meta
         enrichment_status       TEXT,
         reason                  TEXT,

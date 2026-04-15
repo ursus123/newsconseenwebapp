@@ -23,7 +23,7 @@ _LON_FIELDS     = ["longitude", "lon", "lng"]
 _POSTCODE_FIELDS = ["postcode", "postal_code", "zip_code", "zip"]
 
 
-def enrich_addresses(addresses_df: pd.DataFrame, company_id: str, force: bool = False) -> pd.DataFrame:
+def enrich_addresses(addresses_df: pd.DataFrame, company_id: str, force: bool = False, **_kwargs) -> pd.DataFrame:
     """
     For each address in company_id:
       - If lat/lon present: reverse geocode for admin hierarchy + timezone

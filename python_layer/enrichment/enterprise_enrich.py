@@ -13,7 +13,13 @@ from enrichment.company_lookup import lookup_company
 logger = logging.getLogger(__name__)
 
 
-def enrich_enterprises(enterprises_df: pd.DataFrame, company_id: str, force: bool = False) -> pd.DataFrame:
+def enrich_enterprises(
+    enterprises_df: pd.DataFrame,
+    company_id: str,
+    force: bool = False,
+    transactions_df: pd.DataFrame | None = None,
+    relationships_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """
     For each enterprise in company_id, look up company registration via OpenCorporates.
     Skips enterprises with very short names or obvious non-company names.
@@ -100,6 +106,15 @@ def enrich_enterprises(enterprises_df: pd.DataFrame, company_id: str, force: boo
                     row["news_avg_tone"]       = news.get("news_avg_tone", 0.0)
         except Exception as _ce:
             logger.debug("enterprise Phase C news skipped: %s", _ce)
+
+        # ── Phase E: predictive & temporal signals ─────────────────────────────
+        if transactions_df is not None and not transactions_df.empty:
+            try:
+                from enrichment.temporal.enterprise_temporal import enrich_enterprise_temporal
+                temporal = enrich_enterprise_temporal(dict(e), transactions_df, relationships_df)
+                row.update(temporal)
+            except Exception as _te:
+                logger.debug("enterprise Phase E temporal skipped: %s", _te)
 
         row["enriched_at"] = pd.Timestamp.now(tz="UTC").isoformat()
         rows.append(row)

@@ -27,7 +27,12 @@ _PRICE_FIELDS    = ["price", "unit_price", "selling_price", "cost_price", "list_
 _CURRENCY_FIELDS = ["currency", "price_currency", "currency_code"]
 
 
-def enrich_products(products_df: pd.DataFrame, company_id: str, force: bool = False) -> pd.DataFrame:
+def enrich_products(
+    products_df: pd.DataFrame,
+    company_id: str,
+    force: bool = False,
+    transactions_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """
     For each product in company_id:
       - If barcode present: look up Open Food Facts / UPC Item DB
@@ -94,6 +99,15 @@ def enrich_products(products_df: pd.DataFrame, company_id: str, force: bool = Fa
                 row["fx_rate"]         = fx_rate
             except (ValueError, TypeError):
                 pass
+
+        # ── Phase E: predictive & temporal signals ─────────────────────────────
+        if transactions_df is not None and not transactions_df.empty:
+            try:
+                from enrichment.temporal.product_temporal import enrich_product_temporal
+                temporal = enrich_product_temporal(dict(p), transactions_df)
+                row.update(temporal)
+            except Exception as _te:
+                logger.debug("product Phase E temporal skipped: %s", _te)
 
         row["enriched_at"] = pd.Timestamp.now(tz="UTC").isoformat()
         rows.append(row)

@@ -14,7 +14,12 @@ from enrichment.email_check import validate_email
 logger = logging.getLogger(__name__)
 
 
-def enrich_people(people_df: pd.DataFrame, company_id: str, force: bool = False) -> pd.DataFrame:
+def enrich_people(
+    people_df: pd.DataFrame,
+    company_id: str,
+    force: bool = False,
+    transactions_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """
     For each person in company_id:
       - Validate phone number (phonenumbers lib, offline)
@@ -88,6 +93,15 @@ def enrich_people(people_df: pd.DataFrame, company_id: str, force: bool = False)
                 row["sanctions_checked_at"]   = sanction_result.get("sanctions_checked_at", "")
         except Exception as _ce:
             logger.debug("person Phase C sanctions skipped: %s", _ce)
+
+        # ── Phase E: predictive & temporal signals ─────────────────────────────
+        if transactions_df is not None and not transactions_df.empty:
+            try:
+                from enrichment.temporal.person_temporal import enrich_person_temporal
+                temporal = enrich_person_temporal(dict(p), transactions_df)
+                row.update(temporal)
+            except Exception as _te:
+                logger.debug("person Phase E temporal skipped: %s", _te)
 
         row["enriched_at"] = pd.Timestamp.now(tz="UTC").isoformat()
         rows.append(row)
