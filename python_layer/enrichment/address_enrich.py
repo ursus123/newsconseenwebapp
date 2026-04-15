@@ -68,6 +68,20 @@ def enrich_addresses(addresses_df: pd.DataFrame, company_id: str, force: bool = 
                 result = {"enrichment_status": "skipped", "reason": "no_address_data"}
 
         row.update(result)
+
+        # ── Phase C: country risk (World Bank WGI) ─────────────────────────────
+        try:
+            from enrichment.compliance.country_risk import get_country_risk
+            # Prefer iso2 from geocoder result, fall back to raw address field
+            iso2 = row.get("country_code") or _str(a, _COUNTRY_FIELDS)[:2]
+            if iso2 and len(iso2) == 2:
+                risk = get_country_risk(iso2)
+                if risk:
+                    row["country_risk_score"] = risk.get("country_risk_score")
+                    row["country_risk_label"] = risk.get("country_risk_label", "")
+        except Exception as _ce:
+            logger.debug("address Phase C country risk skipped: %s", _ce)
+
         row["enriched_at"] = pd.Timestamp.now(tz="UTC").isoformat()
         rows.append(row)
 

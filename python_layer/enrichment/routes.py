@@ -287,3 +287,59 @@ def get_npi_provider(
         return lookup_npi_person(name, state=state)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"NPI provider lookup failed: {exc}")
+
+
+# ------------------------------------------------------------------
+# Phase C — Compliance & Risk Intelligence proxy endpoints
+# ------------------------------------------------------------------
+
+@router.get("/open-data/sanctions/{name}")
+def get_sanctions_screening(name: str):
+    """
+    Screen a person or entity name against the OFAC SDN (Specially Designated Nationals) list.
+    Source: US Treasury — updated daily. Cached 24 h in-process. No API key required.
+    Returns: sanctions_hit, sanctions_list, sanctions_score (0–1), pep_flag.
+    """
+    try:
+        from enrichment.compliance.sanctions import screen_name
+        return screen_name(name)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Sanctions screening failed: {exc}")
+
+
+@router.get("/open-data/country-risk/{iso2}")
+def get_country_risk(iso2: str):
+    """
+    Governance risk score for a 2-letter ISO country code.
+    Source: World Bank Governance Indicators (WGI) — 6 dimensions averaged.
+    Returns: country_risk_score (0–100, higher=safer), country_risk_label, country_governance_index.
+    Cached 7 days per country.
+    """
+    try:
+        from enrichment.compliance.country_risk import get_country_risk as _get
+        result = _get(iso2)
+        if not result:
+            raise HTTPException(status_code=404, detail=f"No WGI data for country: {iso2}")
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Country risk lookup failed: {exc}")
+
+
+@router.get("/open-data/news/{entity}")
+def get_news_mentions(entity: str):
+    """
+    News mention count and sentiment for an entity name (last 30 days).
+    Source: GDELT Project DOC 2.0 API — global news corpus. No API key required.
+    Returns: news_mention_count, news_sentiment (positive|neutral|negative), news_avg_tone.
+    Cached 24 h per entity.
+    """
+    try:
+        from enrichment.compliance.news_mentions import get_news_mentions as _get
+        result = _get(entity)
+        if not result:
+            return {"news_mention_count": 0, "news_sentiment": "neutral", "news_avg_tone": 0.0}
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"News mentions lookup failed: {exc}")

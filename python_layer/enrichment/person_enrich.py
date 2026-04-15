@@ -75,6 +75,20 @@ def enrich_people(people_df: pd.DataFrame, company_id: str, force: bool = False)
         except Exception as _de:
             logger.debug("person domain dispatch skipped: %s", _de)
 
+        # ── Phase C: sanctions screening (OFAC SDN list) ──────────────────────
+        try:
+            from enrichment.compliance.sanctions import screen_name
+            person_name = row.get("person_name", "")
+            if person_name:
+                sanction_result = screen_name(person_name)
+                row["sanctions_hit"]          = sanction_result.get("sanctions_hit")
+                row["sanctions_list"]         = sanction_result.get("sanctions_list", "")
+                row["sanctions_score"]        = sanction_result.get("sanctions_score", 0.0)
+                row["pep_flag"]               = sanction_result.get("pep_flag")
+                row["sanctions_checked_at"]   = sanction_result.get("sanctions_checked_at", "")
+        except Exception as _ce:
+            logger.debug("person Phase C sanctions skipped: %s", _ce)
+
         row["enriched_at"] = pd.Timestamp.now(tz="UTC").isoformat()
         rows.append(row)
 

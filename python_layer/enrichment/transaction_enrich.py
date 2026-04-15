@@ -1,7 +1,10 @@
 """
 enrichment/transaction_enrich.py
 ----------------------------------
-Enrich Transaction records with FX normalisation to USD.
+Enrich Transaction records with:
+  Phase A: FX normalisation to USD (open.er-api.com, 24h cached)
+  Phase C: AML risk flags (pure Python — round number, velocity, anomaly Z-score)
+
 Writes to analytics.transaction_enrichment — one row per transaction.
 """
 
@@ -16,7 +19,10 @@ logger = logging.getLogger(__name__)
 
 def enrich_transactions(transactions_df: pd.DataFrame, company_id: str, force: bool = False) -> pd.DataFrame:
     """
-    For each transaction in company_id: convert amount to USD using live FX rates.
+    For each transaction in company_id:
+      Phase A: convert amount to USD using live FX rates.
+      Phase C: compute AML flags using batch peer context.
+
     Returns DataFrame ready for analytics.transaction_enrichment.
     """
     if transactions_df.empty:
@@ -27,10 +33,21 @@ def enrich_transactions(transactions_df: pd.DataFrame, company_id: str, force: b
     if txs.empty:
         return pd.DataFrame()
 
+    # ── Phase C: pre-compute AML batch context (needs all rows at once) ───────
+    aml_results: list = []
+    try:
+        from enrichment.compliance.aml_flags import compute_aml_batch
+        aml_results = compute_aml_batch(transactions_df, company_id)
+    except Exception as _ae:
+        logger.debug("transaction Phase C AML skipped: %s", _ae)
+    # Pad to length of txs in case batch returned fewer rows
+    while len(aml_results) < len(txs):
+        aml_results.append({})
+
     today = datetime.date.today().isoformat()
     rows  = []
 
-    for _, t in txs.iterrows():
+    for idx, (_, t) in enumerate(txs.iterrows()):
         amount_raw = t.get("amount", 0)
         currency   = str(t.get("currency") or t.get("currency_code") or "USD").upper().strip()
 
@@ -42,6 +59,7 @@ def enrich_transactions(transactions_df: pd.DataFrame, company_id: str, force: b
             "base_currency":     currency,
         }
 
+        # ── Phase A: FX conversion ────────────────────────────────────────────
         try:
             amount_f = float(str(amount_raw).replace(",", "") or 0)
             row["amount_original"] = round(amount_f, 4)
@@ -67,6 +85,14 @@ def enrich_transactions(transactions_df: pd.DataFrame, company_id: str, force: b
         except (ValueError, TypeError) as e:
             row["enrichment_status"] = "parse_error"
             row["reason"]            = str(e)[:120]
+
+        # ── Phase C: AML flags ────────────────────────────────────────────────
+        aml = aml_results[idx] if idx < len(aml_results) else {}
+        if aml:
+            row["aml_risk_score"] = aml.get("aml_risk_score", 0.0)
+            row["aml_flags"]      = aml.get("aml_flags", "[]")
+            row["anomaly_score"]  = aml.get("anomaly_score")
+            row["anomaly_flag"]   = aml.get("anomaly_flag", False)
 
         row["enriched_at"] = pd.Timestamp.now(tz="UTC").isoformat()
         rows.append(row)

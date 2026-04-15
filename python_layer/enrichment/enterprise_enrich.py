@@ -64,6 +64,43 @@ def enrich_enterprises(enterprises_df: pd.DataFrame, company_id: str, force: boo
         except Exception as _de:
             logger.debug("enterprise domain dispatch skipped: %s", _de)
 
+        # ── Phase C: sanctions screening (OFAC SDN list) ──────────────────────
+        try:
+            from enrichment.compliance.sanctions import screen_name
+            if name:
+                sanction_result = screen_name(name)
+                row["sanctions_hit"]          = sanction_result.get("sanctions_hit")
+                row["sanctions_list"]         = sanction_result.get("sanctions_list", "")
+                row["sanctions_score"]        = sanction_result.get("sanctions_score", 0.0)
+                row["sanctions_checked_at"]   = sanction_result.get("sanctions_checked_at", "")
+        except Exception as _ce:
+            logger.debug("enterprise Phase C sanctions skipped: %s", _ce)
+
+        # ── Phase C: country risk (World Bank WGI) ─────────────────────────────
+        try:
+            from enrichment.compliance.country_risk import get_country_risk
+            iso2 = country_code or country[:2].upper() if country else ""
+            if iso2:
+                risk = get_country_risk(iso2)
+                if risk:
+                    row["country_risk_score"]      = risk.get("country_risk_score")
+                    row["country_risk_label"]      = risk.get("country_risk_label", "")
+                    row["country_governance_index"] = risk.get("country_governance_index")
+        except Exception as _ce:
+            logger.debug("enterprise Phase C country risk skipped: %s", _ce)
+
+        # ── Phase C: news mentions (GDELT) ─────────────────────────────────────
+        try:
+            from enrichment.compliance.news_mentions import get_news_mentions
+            if name and len(name) >= 5:
+                news = get_news_mentions(name)
+                if news:
+                    row["news_mention_count"] = news.get("news_mention_count", 0)
+                    row["news_sentiment"]      = news.get("news_sentiment", "neutral")
+                    row["news_avg_tone"]       = news.get("news_avg_tone", 0.0)
+        except Exception as _ce:
+            logger.debug("enterprise Phase C news skipped: %s", _ce)
+
         row["enriched_at"] = pd.Timestamp.now(tz="UTC").isoformat()
         rows.append(row)
 

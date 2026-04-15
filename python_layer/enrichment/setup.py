@@ -4,6 +4,13 @@ enrichment/setup.py
 DDL for the 5 analytics enrichment tables.
 Called at startup — creates tables if they don't exist.
 All columns are nullable so partial enrichment rows load cleanly.
+
+Phases covered per table:
+  person_enrichment      Phase A (phone/email) + B (NPI) + C (sanctions/PEP)
+  enterprise_enrichment  Phase A (OpenCorporates) + B (NPI) + C (sanctions/country risk/news)
+  product_enrichment     Phase A (barcode/FX) + B (domain: medication/food/vehicle/chemical/device/software)
+  transaction_enrichment Phase A (FX) + C (AML flags/anomaly)
+  address_enrichment     Phase A (geocoding/timezone) + C (country risk)
 """
 
 import logging
@@ -46,6 +53,12 @@ _DDL = [
         -- Domain
         domain_data             TEXT,
         domain_enriched_by      TEXT,
+        -- Phase C: sanctions (OFAC SDN)
+        sanctions_hit           BOOLEAN,
+        sanctions_list          TEXT,
+        sanctions_score         DOUBLE PRECISION,
+        pep_flag                BOOLEAN,
+        sanctions_checked_at    TEXT,
         -- Meta
         enrichment_status       TEXT,
         reason                  TEXT,
@@ -84,6 +97,19 @@ _DDL = [
         -- Domain
         domain_data             TEXT,
         domain_enriched_by      TEXT,
+        -- Phase C: sanctions (OFAC SDN)
+        sanctions_hit           BOOLEAN,
+        sanctions_list          TEXT,
+        sanctions_score         DOUBLE PRECISION,
+        sanctions_checked_at    TEXT,
+        -- Phase C: country risk (World Bank WGI)
+        country_risk_score      DOUBLE PRECISION,
+        country_risk_label      TEXT,
+        country_governance_index DOUBLE PRECISION,
+        -- Phase C: news mentions (GDELT)
+        news_mention_count      INTEGER,
+        news_sentiment          TEXT,
+        news_avg_tone           DOUBLE PRECISION,
         -- Meta
         enrichment_status       TEXT,
         reason                  TEXT,
@@ -180,6 +206,7 @@ _DDL = [
     """,
 
     # ── Transaction ───────────────────────────────────────────────────────────
+    # (product_enrichment has no Phase C columns — domain dispatch covers it fully)
     """
     CREATE TABLE IF NOT EXISTS analytics.transaction_enrichment (
         company_id              TEXT,
@@ -192,6 +219,11 @@ _DDL = [
         amount_usd              DOUBLE PRECISION,
         fx_rate                 DOUBLE PRECISION,
         fx_date                 TEXT,
+        -- Phase C: AML risk flags
+        aml_risk_score          DOUBLE PRECISION,
+        aml_flags               TEXT,
+        anomaly_score           DOUBLE PRECISION,
+        anomaly_flag            BOOLEAN,
         -- Meta
         enrichment_status       TEXT,
         reason                  TEXT,
@@ -216,6 +248,9 @@ _DDL = [
         country_code            TEXT,
         postcode                TEXT,
         formatted_address       TEXT,
+        -- Phase C: country risk (World Bank WGI)
+        country_risk_score      DOUBLE PRECISION,
+        country_risk_label      TEXT,
         -- Meta
         enrichment_status       TEXT,
         reason                  TEXT,
