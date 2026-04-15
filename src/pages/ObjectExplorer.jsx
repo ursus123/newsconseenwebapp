@@ -17,9 +17,34 @@ import {
   Search, Users, Building2, Package, CheckSquare, Receipt,
   Link2, MapPin, X, ExternalLink, Loader2,
   ChevronRight, Layers, GitBranch, Maximize2, Sparkles,
-  Activity, Box,
+  Activity, Box, ShieldCheck, AlertTriangle,
 } from "lucide-react";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
+
+const RAILWAY_URL    = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
+const API_HEADERS    = RAILWAY_API_KEY
+  ? { "x-api-key": RAILWAY_API_KEY }
+  : {};
+
+// Map ObjectExplorer type keys → dataquality report entity keys
+const DQ_KEY_MAP = {
+  Person:       "people",
+  Enterprise:   "enterprises",
+  Product:      "products",
+  Task:         "tasks",
+  Transaction:  "transactions",
+  Address:      "addresses",
+  Relationship: "relationships",
+};
+
+function healthColor(score) {
+  if (score == null) return { border: "rgba(255,255,255,0.35)", badge: "bg-slate-100 text-slate-500", label: null };
+  if (score >= 90)   return { border: "#10b981", badge: "bg-emerald-100 text-emerald-700", label: "Excellent" };
+  if (score >= 75)   return { border: "#3b82f6", badge: "bg-blue-100 text-blue-700",       label: "Good"      };
+  if (score >= 60)   return { border: "#f59e0b", badge: "bg-amber-100 text-amber-700",     label: "Fair"      };
+  return               { border: "#ef4444", badge: "bg-rose-100 text-rose-700",       label: "Poor"      };
+}
 
 // ── Ontology type registry ────────────────────────────────────────────────────
 const OBJECT_TYPES = [
@@ -265,9 +290,14 @@ function RecordDetailPanel({ selection, navigate, onClose }) {
 }
 
 // ── NodeDetailPanel (entity node — schema & live) ─────────────────────────────
-function NodeDetailPanel({ selection, navigate, onClose }) {
+function NodeDetailPanel({ selection, navigate, onClose, dqScores, dqIssues }) {
   const { typeKey, typeDef, count, isLive } = selection;
   const Icon = typeDef.icon;
+
+  const dqKey   = DQ_KEY_MAP[typeKey];
+  const dqScore = dqKey != null ? dqScores?.[dqKey] : null;
+  const hc      = healthColor(dqScore != null ? dqScore : null);
+  const issues  = (dqIssues || []).filter(i => i.entity_type === dqKey);
 
   const connectedEdges = ONTOLOGY_EDGES.filter(
     e => e.source === typeKey || e.target === typeKey
@@ -313,6 +343,33 @@ function NodeDetailPanel({ selection, navigate, onClose }) {
             ))}
           </div>
         </div>
+
+        {/* Data Quality section — shown when report is available */}
+        {dqScore != null && (
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Data Quality</p>
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${hc.badge}`}>
+                <ShieldCheck className="w-3 h-3" />
+                AI Readiness {dqScore}% — {hc.label}
+              </span>
+            </div>
+            {issues.length > 0 ? (
+              <div className="space-y-0.5">
+                {issues.slice(0, 5).map((iss, i) => (
+                  <div key={i} className="flex items-start gap-2 py-1 border-b border-slate-50 last:border-0">
+                    <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0 mt-0.5" />
+                    <span className="text-[11px] text-slate-600 leading-snug">
+                      {iss.message || iss.description || iss.issue || JSON.stringify(iss)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-emerald-600">No issues detected</p>
+            )}
+          </div>
+        )}
 
         <div>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
@@ -670,7 +727,7 @@ function Graph3D({ allObjects, loaded, loading, onNodeSelect }) {
 }
 
 // ── OntologyGraph ─────────────────────────────────────────────────────────────
-function OntologyGraph({ allObjects, loaded, loading, mode, onNodeSelect }) {
+function OntologyGraph({ allObjects, loaded, loading, mode, onNodeSelect, dqScores }) {
   const containerRef    = useRef(null);
   const cyRef           = useRef(null);
   const allObjectsRef   = useRef(allObjects);
@@ -699,9 +756,10 @@ function OntologyGraph({ allObjects, loaded, loading, mode, onNodeSelect }) {
 
     const nodes = OBJECT_TYPES.map(t => ({
       data: {
-        id:         t.key,
-        label:      `${t.label}\n${counts[t.key].toLocaleString()}`,
-        nodeColor:  NODE_COLORS[t.key],
+        id:                t.key,
+        label:             `${t.label}\n${counts[t.key].toLocaleString()}`,
+        nodeColor:         NODE_COLORS[t.key],
+        healthBorderColor: healthColor(dqScores?.[DQ_KEY_MAP[t.key]] ?? null).border,
       },
       position: { ...PRESET_POSITIONS[t.key] },
     }));
@@ -737,8 +795,8 @@ function OntologyGraph({ allObjects, loaded, loading, mode, onNodeSelect }) {
             "text-max-width":     "84px",
             "width":              "92px",
             "height":             "92px",
-            "border-width":       "2px",
-            "border-color":       "rgba(255,255,255,0.35)",
+            "border-width":       "3px",
+            "border-color":       "data(healthBorderColor)",
             "shadow-blur":        "18px",
             "shadow-color":       "data(nodeColor)",
             "shadow-opacity":     0.45,
@@ -967,7 +1025,7 @@ function OntologyGraph({ allObjects, loaded, loading, mode, onNodeSelect }) {
     cyRef.current = cy;
 
     return () => { cy.destroy(); cyRef.current = null; };
-  }, [countsKey, loaded, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [countsKey, loaded, mode, dqScores]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFit = () => cyRef.current?.fit(undefined, 48);
   const handleZoomIn  = () => {
@@ -1129,7 +1187,7 @@ export default function ObjectExplorer() {
   const navigate = useNavigate();
 
   const [currentUser, setCurrentUser] = useState(null);
-  const [mode, setMode]               = useState("schema");    // "schema" | "live" | "search"
+  const [mode, setMode]               = useState("schema");    // "schema" | "live" | "3d" | "search"
   const [query, setQuery]             = useState("");
   const [loading, setLoading]         = useState(false);
   const [allObjects, setAllObjects]   = useState({});
@@ -1140,6 +1198,10 @@ export default function ObjectExplorer() {
   // Search mode selection
   const [searchObject, setSearchObject]       = useState(null);
   const [searchTypeDef, setSearchTypeDef]     = useState(null);
+  // Data quality report
+  const [dqScores, setDqScores] = useState({});
+  const [dqIssues, setDqIssues] = useState([]);
+  const [avgScore, setAvgScore] = useState(null);
 
   const listFn = useEntityListFn(currentUser);
 
@@ -1163,6 +1225,23 @@ export default function ObjectExplorer() {
     load();
   }, [currentUser, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fetch data quality report — fire after user loads, best-effort
+  useEffect(() => {
+    const companyId = currentUser?.company_id;
+    if (!companyId) return;
+    fetch(`${RAILWAY_URL}/dataquality/report?company_id=${companyId}`, { headers: API_HEADERS })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const scores = data.by_entity || {};
+        setDqScores(scores);
+        setDqIssues(data.issues || []);
+        const vals = Object.values(scores).filter(v => v != null);
+        if (vals.length) setAvgScore(Math.round(vals.reduce((a, b) => a + b, 0) / vals.length));
+      })
+      .catch(() => {});
+  }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const filteredResults = useMemo(() => {
     if (!query.trim() || query.length < 2) return {};
     const out   = {};
@@ -1185,7 +1264,7 @@ export default function ObjectExplorer() {
       ? <RecordDetailPanel selection={graphSelection} navigate={navigate} onClose={() => setGraphSelection(null)} />
       : graphSelection.type === "edge"
         ? <EdgeDetailPanel  selection={graphSelection} navigate={navigate} onClose={() => setGraphSelection(null)} />
-        : <NodeDetailPanel  selection={graphSelection} navigate={navigate} onClose={() => setGraphSelection(null)} />
+        : <NodeDetailPanel  selection={graphSelection} navigate={navigate} onClose={() => setGraphSelection(null)} dqScores={dqScores} dqIssues={dqIssues} />
     : null;
 
   return (
@@ -1198,6 +1277,12 @@ export default function ObjectExplorer() {
             <Layers className="w-4 h-4 text-white" />
           </div>
           <h1 className="text-2xl font-black text-slate-800">Object Explorer</h1>
+          {avgScore != null && (
+            <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${healthColor(avgScore).badge}`}>
+              <ShieldCheck className="w-3 h-3" />
+              AI Readiness {avgScore}%
+            </span>
+          )}
         </div>
         <p className="text-slate-500 text-sm ml-11">
           {mode === "schema" && "Visualise your operational ontology — entities, relationships, and live record counts."}
@@ -1239,6 +1324,7 @@ export default function ObjectExplorer() {
             loading={loading}
             mode={mode}
             onNodeSelect={setGraphSelection}
+            dqScores={dqScores}
           />
           {graphPanel}
         </div>

@@ -35,7 +35,6 @@ import {
   Zap,
   Layers,
   Tags,
-  Map,
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import SetupWizard from "@/components/shared/SetupWizard";
@@ -80,7 +79,6 @@ const NAV_CONFIG = {
       items: [
         { name: "Reports",             icon: BarChart2 },
         { name: "QueryBuilder",        label: "Query Builder",        icon: Code2 },
-        { name: "DataMap",             label: "Data Map",             icon: Map },
         { name: "MarketIntelligence",  label: "Market Intelligence",  icon: TrendingUp },
         { name: "copilot",             label: "Copilot",              icon: Sparkles },
         { name: "alerts",              label: "Alerts",               icon: Bell, badge: "alerts" },
@@ -146,7 +144,6 @@ const NAV_CONFIG = {
       items: [
         { name: "Reports",            icon: BarChart2 },
         { name: "QueryBuilder",       label: "Query Builder",       icon: Code2 },
-        { name: "DataMap",            label: "Data Map",            icon: Map },
         { name: "MarketIntelligence", label: "Market Intelligence", icon: TrendingUp },
         { name: "copilot",            label: "Copilot",             icon: Sparkles },
         { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
