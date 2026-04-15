@@ -812,15 +812,19 @@ Phase 4F Agent Memory     ✅ Per-company persistent memory + self-calibration
 Phase 4G LLM Optimise     ✅ Haiku triage, Sonnet execution, Opus strategy routing
 Phase 5  ML Models        ✅ Frontend + backend — survival, segmentation, demand forecast
 Phase 6  Mobile           ✅ PWA offline-first field entry, IndexedDB sync, bottom nav
-Phase 7  Connector Sync   🔲 Scheduled connector runs + sync history dashboard
-Phase 8  Audit Trail      🔲 Immutable change log across all 7 entities
+Phase 7  Connector Sync   ✅ Scheduled connector runs + sync history dashboard
+Phase 8  Audit Trail      ✅ Immutable change log across all 7 entities
+Phase A  Enrichment       ✅ Universal ontology enrichment — phone/email/geocoding/FX/barcode/company registration
+Phase B  Enrichment       ✅ Domain-specific enrichment — medications, food, vehicles, chemicals, devices, software, NPI
+Phase C  Enrichment       ✅ Compliance & risk — OFAC SDN sanctions, World Bank WGI, GDELT news, AML flags
+Phase D  Enrichment       ✅ Scoring & synthesis — entity_scores, relationship/task enrichment (7/7 entities), get_entity_risk_report copilot tool
 ```
 
 ---
 
 ## Current state (as of 2026-04-12)
 
-All Phases 1–6 are implemented and deployed. The system is fully operational.
+All Phases 1–8 and Enrichment Phases A–D are implemented and deployed. The system is fully operational.
 
 ```
 COMPLETED (Phases 1–6)

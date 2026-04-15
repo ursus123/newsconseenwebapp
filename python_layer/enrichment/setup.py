@@ -11,6 +11,9 @@ Phases covered per table:
   product_enrichment     Phase A (barcode/FX) + B (domain: medication/food/vehicle/chemical/device/software)
   transaction_enrichment Phase A (FX) + C (AML flags/anomaly)
   address_enrichment     Phase A (geocoding/timezone) + C (country risk)
+  entity_scores          Phase D synthesis — composite risk/quality/intelligence scores per entity
+  relationship_enrichment Phase D — link strength, risk contagion, health (6th entity)
+  task_enrichment        Phase D — overdue, SLA risk, completion likelihood (7th entity)
 """
 
 import logging
@@ -257,12 +260,81 @@ _DDL = [
         enriched_at             TEXT
     )
     """,
+
+    # ── Phase D: Entity Scores (synthesis) ───────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.entity_scores (
+        company_id              TEXT,
+        entity_type             TEXT,
+        entity_id               TEXT,
+        entity_name             TEXT,
+        -- Composite scores
+        risk_score              DOUBLE PRECISION,
+        quality_score           DOUBLE PRECISION,
+        intelligence_score      DOUBLE PRECISION,
+        -- Flags + reasoning
+        top_flags               TEXT,
+        score_reasoning         TEXT,
+        needs_review            BOOLEAN,
+        -- Meta
+        score_version           TEXT,
+        scored_at               TEXT
+    )
+    """,
+
+    # ── Phase D: Relationship enrichment (6th entity) ─────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.relationship_enrichment (
+        company_id              TEXT,
+        relationship_id         TEXT,
+        relationship_type       TEXT,
+        entity_a_id             TEXT,
+        entity_a_type           TEXT,
+        entity_b_id             TEXT,
+        entity_b_type           TEXT,
+        -- Network intelligence
+        is_active               BOOLEAN,
+        tenure_days             INTEGER,
+        link_strength_score     DOUBLE PRECISION,
+        transaction_count       INTEGER,
+        transaction_volume_usd  DOUBLE PRECISION,
+        last_transaction_date   TEXT,
+        -- Risk contagion
+        risk_contagion_score    DOUBLE PRECISION,
+        risk_contagion_source   TEXT,
+        relationship_health     TEXT,
+        -- Meta
+        enriched_at             TEXT
+    )
+    """,
+
+    # ── Phase D: Task enrichment (7th entity) ────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.task_enrichment (
+        company_id              TEXT,
+        task_id                 TEXT,
+        task_type               TEXT,
+        status                  TEXT,
+        priority                TEXT,
+        assigned_to             TEXT,
+        -- Operational intelligence
+        overdue_days            INTEGER,
+        is_overdue              BOOLEAN,
+        completion_likelihood   DOUBLE PRECISION,
+        assignee_workload       INTEGER,
+        priority_score          DOUBLE PRECISION,
+        sla_risk                TEXT,
+        -- Meta
+        enriched_at             TEXT
+    )
+    """,
 ]
 
 
 def ensure_enrichment_tables(engine) -> None:
     """
-    Create all 5 analytics enrichment tables if they don't exist.
+    Create all 8 analytics enrichment tables if they don't exist
+    (5 Phase A/B/C + 3 Phase D: entity_scores, relationship, task).
     Safe to call on every startup — uses CREATE TABLE IF NOT EXISTS.
     """
     try:

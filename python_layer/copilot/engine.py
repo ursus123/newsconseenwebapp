@@ -235,6 +235,7 @@ INTELLIGENCE ANALYTICS TOOLS (deep pre-computed insights):
 - get_inventory_health  — stock coverage days, dead stock, reorder urgency per product
 - get_network_kpis      — cross-branch performance: revenue_rank, performance_score, tier per enterprise
 - get_concentration_risk — HHI revenue/client/staff concentration risk + actionable flags
+- get_entity_risk_report — Phase D composite risk scores: sanctions, AML, country risk, recalls across all entity types
   Use these when the question is about trends, rankings, risk, or strategic insight
   (not just raw counts). They read from pre-computed analytics tables — much faster than re-deriving.
 

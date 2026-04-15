@@ -4689,6 +4689,37 @@ TOOL_DEFINITIONS = [
         ),
         "input_schema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "get_entity_risk_report",
+        "description": (
+            "Phase D — Returns the highest-risk entities from analytics.entity_scores. "
+            "Composite risk_score (0–100) synthesises all enrichment signals: "
+            "sanctions hits, AML flags, anomaly scores, country risk, negative news, "
+            "device recalls, controlled substances, and data quality gaps. "
+            "Use for questions like: 'Show me high-risk entities', 'Which people are flagged?', "
+            "'Any sanctions matches?', 'Risk report', 'Compliance check', "
+            "'High-risk transactions', 'Flagged enterprises', 'AML flags'. "
+            "Filter by entity_type (person|enterprise|product|transaction|address) "
+            "and min_risk_score to narrow results."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity_type": {
+                    "type": "string",
+                    "description": "Filter to one entity type: person|enterprise|product|transaction|address. Omit for all types.",
+                },
+                "min_risk_score": {
+                    "type": "number",
+                    "description": "Minimum risk score to return (0–100). Default 50.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max entities to return. Default 20.",
+                },
+            },
+        },
+    },
 ]
 
 
@@ -5546,6 +5577,55 @@ def get_concentration_risk(company_id: str) -> dict:
             "note": "Run POST /load/concentration-risk to populate this table."}
 
 
+def get_entity_risk_report(
+    company_id: str,
+    entity_type: Optional[str] = None,
+    min_risk_score: float = 50.0,
+    limit: int = 20,
+) -> dict:
+    """
+    Phase D — Return the highest-risk entities from analytics.entity_scores.
+
+    Parameters
+    ----------
+    entity_type     : filter to one type: person|enterprise|product|transaction|address
+                      None = all types
+    min_risk_score  : only return entities with risk_score >= this value (0–100)
+    limit           : max rows to return
+
+    Returns
+    -------
+    {
+        "entities": [{"entity_type", "entity_id", "entity_name", "risk_score",
+                       "quality_score", "top_flags", "score_reasoning", "scored_at"}],
+        "total":    int,
+        "high_risk_count": int,
+        "note":     str
+    }
+    """
+    try:
+        from enrichment.scoring.engine import get_top_risk_entities
+        entities = get_top_risk_entities(
+            company_id,
+            entity_type=entity_type,
+            min_risk_score=min_risk_score,
+            limit=limit,
+        )
+        high_risk = sum(1 for e in entities if (e.get("risk_score") or 0) >= 75)
+        return {
+            "entities":        entities,
+            "total":           len(entities),
+            "high_risk_count": high_risk,
+            "note": (
+                f"Showing top {len(entities)} entities with risk_score ≥ {min_risk_score}. "
+                "Run POST /enrichment/run to refresh scores."
+            ),
+        }
+    except Exception as e:
+        logger.warning("get_entity_risk_report failed: %s", e)
+        return {"entities": [], "total": 0, "high_risk_count": 0, "error": str(e)}
+
+
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
 
 def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
@@ -5619,6 +5699,7 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "get_inventory_health":         get_inventory_health,
         "get_network_kpis":             get_network_kpis,
         "get_concentration_risk":       get_concentration_risk,
+        "get_entity_risk_report":       get_entity_risk_report,
     }
 
     fn = dispatch.get(tool_name)

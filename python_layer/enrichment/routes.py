@@ -293,6 +293,53 @@ def get_npi_provider(
 # Phase C — Compliance & Risk Intelligence proxy endpoints
 # ------------------------------------------------------------------
 
+@router.get("/enrichment/scores")
+def get_entity_scores(
+    company_id: str = Query(...),
+    entity_type: Optional[str] = Query(None, description="Filter: person|enterprise|product|transaction|address"),
+    min_risk_score: float = Query(0.0, description="Minimum risk_score to return (0–100)"),
+    needs_review: Optional[bool] = Query(None, description="If true, return only needs_review=true"),
+):
+    """
+    Query analytics.entity_scores — Phase D composite scores.
+    Returns risk_score, quality_score, intelligence_score, top_flags per entity.
+    """
+    engine = get_engine_safe()
+    if engine is None:
+        return []
+    try:
+        clauses = ["company_id = :cid", "risk_score >= :min_risk"]
+        params: dict = {"cid": company_id, "min_risk": min_risk_score}
+        if entity_type:
+            clauses.append("entity_type = :et")
+            params["et"] = entity_type
+        if needs_review is True:
+            clauses.append("needs_review = TRUE")
+        where = " AND ".join(clauses)
+        sql = f"SELECT * FROM analytics.entity_scores WHERE {where} ORDER BY risk_score DESC LIMIT 500"
+        df = pd.read_sql(text(sql), engine, params=params)
+        return df.where(df.notna(), None).to_dict(orient="records")
+    except Exception as exc:
+        logger.warning("enrichment.routes: entity_scores query failed — %s", exc)
+        return []
+
+
+@router.get("/enrichment/relationships")
+def get_relationship_enrichment(company_id: str = Query(...)):
+    """Read analytics.relationship_enrichment for company."""
+    return _read_enrichment_table("relationship_enrichment", company_id)
+
+
+@router.get("/enrichment/tasks")
+def get_task_enrichment(company_id: str = Query(...)):
+    """Read analytics.task_enrichment for company."""
+    return _read_enrichment_table("task_enrichment", company_id)
+
+
+# ------------------------------------------------------------------
+# Phase C — Compliance & Risk Intelligence proxy endpoints
+# ------------------------------------------------------------------
+
 @router.get("/open-data/sanctions/{name}")
 def get_sanctions_screening(name: str):
     """

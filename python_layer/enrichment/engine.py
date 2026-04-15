@@ -86,6 +86,16 @@ def run_enrichment(
             logger.exception("enrichment.engine: %s failed (company=%s)", entity_key, company_id)
             summary[entity_key] = {"status": "error", "rows": 0, "error": str(exc)[:200]}
 
+    # ── Phase D: score all enriched entities ──────────────────────────────────
+    try:
+        from enrichment.scoring.engine import run_scoring
+        scoring_summary = run_scoring(company_id)
+        summary["_scoring"] = scoring_summary
+        logger.info("enrichment.engine: scoring complete (company=%s)", company_id)
+    except Exception as exc:
+        logger.warning("enrichment.engine: scoring skipped — %s", exc)
+        summary["_scoring"] = {"error": str(exc)[:200]}
+
     return summary
 
 

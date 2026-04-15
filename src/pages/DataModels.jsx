@@ -787,6 +787,56 @@ const PG_ANALYTICS_TABLES = [
       { name: "enriched_at", type: "TIMESTAMPTZ" },
     ],
   },
+  // ── Phase D: Scoring & Synthesis ─────────────────────────────────────────
+  {
+    id: "an_entity_scores", label: "analytics.entity_scores", color: "#7c3aed", bg: "#f5f3ff", border: "#c4b5fd",
+    icon: "🎯", layer: "analytics.scoring",
+    description: "Phase D synthesis — one composite score row per entity per company. Synthesises all A+B+C enrichment signals into risk_score, quality_score, intelligence_score, and top_flags. The single table copilot and agents query for risk prioritisation.",
+    fields: [
+      { name: "company_id / entity_type / entity_id / entity_name", type: "TEXT" },
+      { name: "risk_score", type: "FLOAT 0–100 (higher = more risk flags)" },
+      { name: "quality_score", type: "FLOAT 0–100 (higher = more enrichment fields populated)" },
+      { name: "intelligence_score", type: "FLOAT 0–100 (composite signal depth)" },
+      { name: "top_flags", type: "TEXT (comma-separated: sanctions_hit|aml_high_risk|very_high_country_risk|...)" },
+      { name: "score_reasoning", type: "TEXT (human-readable explanation for copilot)" },
+      { name: "needs_review", type: "BOOL (risk_score ≥ 50)" },
+      { name: "score_version", type: "TEXT (scorer version — D.1)" },
+      { name: "scored_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_relationship_enrichment", label: "analytics.relationship_enrichment", color: "#7c3aed", bg: "#f5f3ff", border: "#c4b5fd",
+    icon: "🔗", layer: "analytics.scoring",
+    description: "Phase D relationship enrichment (6th entity). Link strength score based on transaction frequency/recency. Risk contagion from Phase C entity scores of both parties. Health label: green/amber/red.",
+    fields: [
+      { name: "company_id / relationship_id / relationship_type", type: "TEXT" },
+      { name: "entity_a_id / entity_a_type / entity_b_id / entity_b_type", type: "TEXT" },
+      { name: "is_active", type: "BOOL" },
+      { name: "tenure_days", type: "INT (days since start_date)" },
+      { name: "link_strength_score", type: "FLOAT 0–100 (log-scale tx count + recency bonus)" },
+      { name: "transaction_count / transaction_volume_usd", type: "INT / FLOAT (between these two entities)" },
+      { name: "last_transaction_date", type: "TEXT (ISO date)" },
+      { name: "risk_contagion_score", type: "FLOAT 0–100 (max risk_score of either party)" },
+      { name: "risk_contagion_source", type: "TEXT: entity_a|entity_b" },
+      { name: "relationship_health", type: "TEXT: green|amber|red" },
+      { name: "enriched_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_task_enrichment", label: "analytics.task_enrichment", color: "#7c3aed", bg: "#f5f3ff", border: "#c4b5fd",
+    icon: "📋", layer: "analytics.scoring",
+    description: "Phase D task enrichment (7th entity). SLA risk, overdue days, completion likelihood from assignee's historical completion rate (analytics.staff_performance). Priority score escalates with overdue_days.",
+    fields: [
+      { name: "company_id / task_id / task_type / status / priority / assigned_to", type: "TEXT" },
+      { name: "overdue_days", type: "INT (negative = future due date)" },
+      { name: "is_overdue", type: "BOOL" },
+      { name: "completion_likelihood", type: "FLOAT 0–100 (from assignee history, adjusted for workload)" },
+      { name: "assignee_workload", type: "INT (count of open tasks for this assignee)" },
+      { name: "priority_score", type: "FLOAT 0–100 (base priority + overdue escalation)" },
+      { name: "sla_risk", type: "TEXT: green|amber|red" },
+      { name: "enriched_at", type: "TIMESTAMPTZ" },
+    ],
+  },
 ];
 
 // ── analytics.* — Intelligence tables (agents + copilot) ─────────────────────
@@ -906,6 +956,17 @@ const PG_EDGES = [
   { from: "raw_products",      to: "an_product_enrichment",     label: "Phase A enrich", style: "etl" },
   { from: "raw_transactions",  to: "an_transaction_enrichment", label: "Phase A enrich", style: "etl" },
   { from: "raw_addresses",     to: "an_address_enrichment",     label: "Phase A enrich", style: "etl" },
+  // Phase D: enrichment → entity_scores (synthesis)
+  { from: "an_person_enrichment",      to: "an_entity_scores", label: "Phase D score", style: "etl" },
+  { from: "an_enterprise_enrichment",  to: "an_entity_scores", label: "Phase D score", style: "etl" },
+  { from: "an_product_enrichment",     to: "an_entity_scores", label: "Phase D score", style: "etl" },
+  { from: "an_transaction_enrichment", to: "an_entity_scores", label: "Phase D score", style: "etl" },
+  { from: "an_address_enrichment",     to: "an_entity_scores", label: "Phase D score", style: "etl" },
+  // Phase D: raw.* → relationship/task enrichment (6th + 7th entity)
+  { from: "raw_relationships", to: "an_relationship_enrichment", label: "Phase D enrich", style: "etl" },
+  { from: "raw_tasks",         to: "an_task_enrichment",         label: "Phase D enrich", style: "etl" },
+  // Phase D: entity_scores → relationship contagion
+  { from: "an_entity_scores",  to: "an_relationship_enrichment", label: "risk contagion", style: "api_orange" },
 ];
 
 // ── PostgreSQL view default positions ─────────────────────────────────────────
@@ -936,7 +997,11 @@ const DEFAULT_PG_POSITIONS = {
   an_product_enrichment:     { x: 360,  y: 660 },
   an_transaction_enrichment: { x: 700,  y: 660 },
   an_address_enrichment:     { x: 1040, y: 660 },
-  // Intelligence (y=860)
+  // Phase D: Scoring & Synthesis + 6th/7th entity (y=840)
+  an_entity_scores:          { x: 80,   y: 840 },
+  an_relationship_enrichment:{ x: 460,  y: 840 },
+  an_task_enrichment:        { x: 840,  y: 840 },
+  // Intelligence (y=1020)
   an_agent_memory:    { x: 80,   y: 860 },
   an_agent_approvals: { x: 450,  y: 860 },
   an_agent_runs:      { x: 820,  y: 860 },
@@ -950,6 +1015,7 @@ const PG_LAYER_COLORS = {
   "analytics.*":          "bg-indigo-50 text-indigo-700 border-indigo-200",
   "analytics.intelligence":"bg-sky-50 text-sky-700 border-sky-200",
   "analytics.enrichment": "bg-emerald-50 text-emerald-700 border-emerald-200",
+  "analytics.scoring":    "bg-violet-50 text-violet-700 border-violet-200",
   "Intelligence":         "bg-purple-50 text-purple-700 border-purple-200",
   "audit.*":              "bg-rose-50 text-rose-700 border-rose-200",
 };
@@ -1096,6 +1162,9 @@ const API_CATALOGUE = [
       { method: "GET",  path: "/enrichment/products",             desc: "Read analytics.product_enrichment for company" },
       { method: "GET",  path: "/enrichment/transactions",         desc: "Read analytics.transaction_enrichment for company" },
       { method: "GET",  path: "/enrichment/addresses",            desc: "Read analytics.address_enrichment for company" },
+      { method: "GET",  path: "/enrichment/scores",               desc: "Phase D: analytics.entity_scores — composite risk/quality/intelligence per entity" },
+      { method: "GET",  path: "/enrichment/relationships",        desc: "Phase D: analytics.relationship_enrichment — link strength, risk contagion, health" },
+      { method: "GET",  path: "/enrichment/tasks",                desc: "Phase D: analytics.task_enrichment — SLA risk, overdue, completion likelihood" },
       { method: "GET",  path: "/open-data/exchange-rates",        desc: "Phase A: FX rates (open.er-api.com, 24h cache)" },
       { method: "GET",  path: "/open-data/barcode/{ean}",         desc: "Phase A: Barcode — Open Food Facts → UPC Item DB" },
       { method: "GET",  path: "/open-data/company-lookup",        desc: "Phase A: Company registration — OpenCorporates" },
