@@ -153,6 +153,14 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("Startup: Enrichment table setup skipped — %s", e)
 
+        # Pre-create all analytics.* and raw.* tables so they appear in
+        # DataModels and are queryable before the first ETL run
+        try:
+            from etl.setup import ensure_all_analytics_tables
+            ensure_all_analytics_tables(engine)
+        except Exception as e:
+            logger.warning("Startup: Analytics table setup skipped — %s", e)
+
         # Connector schedules + run_log tables (survives redeploys)
         try:
             from connectors.routes import _ensure_schedule_tables, _get_schedule_store
