@@ -428,7 +428,7 @@ export default function Products() {
       />
       <ProductForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }}
         onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)}
-        onArchive={handleArchive} initialData={editing} />
+        onArchive={handleArchive} initialData={editing} currentUser={currentUser} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name} />
       <BulkImportDialog
         entityName="Products"
