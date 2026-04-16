@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@base44/sdk": "^0.8.26",
-    "@base44/vite-plugin": "^1.0.9",
+    "@base44/vite-plugin": "^1.0.10",
     "@blueprintjs/core": "^5.10.3",
     "@blueprintjs/datetime2": "^2.3.3",
     "@blueprintjs/table": "^5.2.3",
