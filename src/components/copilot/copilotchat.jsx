@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import ReactMarkdown from "react-markdown";
 import {
   Send, Loader2, Sparkles, ThumbsUp, ThumbsDown, AlertTriangle,
   ChevronDown, ChevronUp, BarChart2, Globe, Brain, BookOpen,
@@ -98,117 +97,108 @@ function useCopy(text) {
   return [copied, copy];
 }
 
-// ── Markdown prose renderer ──────────────────────────────────────────────────
-// Custom component overrides give markdown a clean, document-like look.
-const MD_COMPONENTS = {
-  // Headings
-  h1: ({ children }) => (
-    <h1 className="text-base font-bold text-slate-800 mt-3 mb-1.5 first:mt-0">{children}</h1>
-  ),
-  h2: ({ children }) => (
-    <h2 className="text-sm font-bold text-slate-800 mt-3 mb-1 first:mt-0">{children}</h2>
-  ),
-  h3: ({ children }) => (
-    <h3 className="text-sm font-semibold text-slate-700 mt-2 mb-0.5 first:mt-0">{children}</h3>
-  ),
-  // Paragraphs — add small gap between consecutive paragraphs
-  p: ({ children }) => (
-    <p className="text-sm leading-relaxed text-slate-800 mb-2 last:mb-0">{children}</p>
-  ),
-  // Strong / bold
-  strong: ({ children }) => (
-    <strong className="font-semibold text-slate-900">{children}</strong>
-  ),
-  // Emphasis
-  em: ({ children }) => <em className="italic text-slate-700">{children}</em>,
-  // Bullet list
-  ul: ({ children }) => (
-    <ul className="list-disc list-inside space-y-0.5 my-1.5 text-sm text-slate-700">{children}</ul>
-  ),
-  // Ordered list
-  ol: ({ children }) => (
-    <ol className="list-decimal list-inside space-y-0.5 my-1.5 text-sm text-slate-700">{children}</ol>
-  ),
-  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-  // Blockquote
-  blockquote: ({ children }) => (
-    <blockquote className="border-l-3 border-emerald-400 pl-3 my-2 text-slate-600 italic text-sm">
-      {children}
-    </blockquote>
-  ),
-  // Horizontal rule
-  hr: () => <hr className="border-slate-200 my-3" />,
-  // Inline code — react-markdown v9 doesn't pass `inline` prop.
-  // `pre` handles fenced code blocks; `code` here is always inline backticks.
-  code: ({ children }) => (
-    <code className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-[12px] font-mono border border-slate-200">
-      {children}
-    </code>
-  ),
-  // Code block (pre + code) — override both so the block renders cleanly
-  pre: ({ children }) => (
-    <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 my-2 overflow-x-auto text-[12px] font-mono leading-relaxed">
-      {/* Reset the inline code styles that the `code` component applies */}
-      <code style={{ background: "transparent", border: "none", padding: 0, borderRadius: 0, color: "inherit" }}>
-        {typeof children === "object" && children?.props?.children
-          ? children.props.children
-          : children}
-      </code>
-    </pre>
-  ),
-  // Links
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-blue-600 hover:text-blue-800 underline underline-offset-2"
-    >
-      {children}
-    </a>
-  ),
-  // GFM Tables — styled like a proper data table
-  table: ({ children }) => (
-    <div className="my-3 overflow-x-auto rounded-xl border border-slate-200">
-      <table className="w-full text-xs border-collapse">{children}</table>
-    </div>
-  ),
-  thead: ({ children }) => (
-    <thead className="bg-slate-50 border-b border-slate-200">{children}</thead>
-  ),
-  tbody: ({ children }) => <tbody>{children}</tbody>,
-  tr: ({ children }) => (
-    <tr className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
-      {children}
-    </tr>
-  ),
-  th: ({ children }) => (
-    <th className="px-3 py-2 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wide whitespace-nowrap">
-      {children}
-    </th>
-  ),
-  td: ({ children }) => (
-    <td className="px-3 py-2 text-slate-700 whitespace-nowrap">{children}</td>
-  ),
-};
+// ── Markdown prose renderer — no external deps ───────────────────────────────
+function renderInline(text) {
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[([^\]]+)\]\(([^)]+)\))/g);
+  const out = [];
+  let i = 0;
+  while (i < parts.length) {
+    const p = parts[i];
+    if (!p) { i++; continue; }
+    if (p.startsWith("**") && p.endsWith("**"))
+      out.push(<strong key={i} className="font-semibold text-slate-900">{p.slice(2, -2)}</strong>);
+    else if (p.startsWith("*") && p.endsWith("*") && p.length > 2)
+      out.push(<em key={i} className="italic text-slate-700">{p.slice(1, -1)}</em>);
+    else if (p.startsWith("`") && p.endsWith("`") && p.length > 2)
+      out.push(<code key={i} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-[12px] font-mono border border-slate-200">{p.slice(1, -1)}</code>);
+    else if (p.startsWith("[")) {
+      const m = p.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+      if (m) out.push(<a key={i} href={m[2]} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline underline-offset-2">{m[1]}</a>);
+      else out.push(p);
+    } else out.push(p);
+    i++;
+  }
+  return out;
+}
 
 function MarkdownContent({ content }) {
-  const [plugins, setPlugins] = useState([]);
-
-  useEffect(() => {
-    import("remark-gfm")
-      .then(m => setPlugins([m.default || m]))
-      .catch(() => setPlugins([]));
-  }, []);
-
-  return (
-    <ReactMarkdown
-      remarkPlugins={plugins}
-      components={MD_COMPONENTS}
-    >
-      {content}
-    </ReactMarkdown>
-  );
+  const lines = (content || "").split("\n");
+  const elements = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    // Fenced code block
+    if (line.startsWith("```")) {
+      const lang = line.slice(3).trim();
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith("```")) { codeLines.push(lines[i]); i++; }
+      elements.push(
+        <pre key={i} className="bg-slate-900 text-slate-100 rounded-xl p-4 my-2 overflow-x-auto text-[12px] font-mono leading-relaxed">
+          <code>{codeLines.join("\n")}</code>
+        </pre>
+      );
+    // Table (GFM)
+    } else if (line.includes("|") && lines[i + 1]?.match(/^[\s|:-]+$/)) {
+      const headers = line.split("|").map(s => s.trim()).filter(Boolean);
+      i += 2; // skip separator
+      const rows = [];
+      while (i < lines.length && lines[i].includes("|")) {
+        rows.push(lines[i].split("|").map(s => s.trim()).filter(Boolean));
+        i++;
+      }
+      elements.push(
+        <div key={i} className="my-3 overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full text-xs border-collapse">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>{headers.map((h, hi) => <th key={hi} className="px-3 py-2 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wide whitespace-nowrap">{h}</th>)}</tr>
+            </thead>
+            <tbody>{rows.map((r, ri) => <tr key={ri} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">{r.map((c, ci) => <td key={ci} className="px-3 py-2 text-slate-700 whitespace-nowrap">{c}</td>)}</tr>)}</tbody>
+          </table>
+        </div>
+      );
+      continue;
+    // Headings
+    } else if (line.startsWith("### ")) {
+      elements.push(<h3 key={i} className="text-sm font-semibold text-slate-700 mt-2 mb-0.5">{renderInline(line.slice(4))}</h3>);
+    } else if (line.startsWith("## ")) {
+      elements.push(<h2 key={i} className="text-sm font-bold text-slate-800 mt-3 mb-1">{renderInline(line.slice(3))}</h2>);
+    } else if (line.startsWith("# ")) {
+      elements.push(<h1 key={i} className="text-base font-bold text-slate-800 mt-3 mb-1.5">{renderInline(line.slice(2))}</h1>);
+    // Blockquote
+    } else if (line.startsWith("> ")) {
+      elements.push(<blockquote key={i} className="border-l-2 border-emerald-400 pl-3 my-2 text-slate-600 italic text-sm">{renderInline(line.slice(2))}</blockquote>);
+    // HR
+    } else if (/^---+$/.test(line.trim())) {
+      elements.push(<hr key={i} className="border-slate-200 my-3" />);
+    // Bullet list
+    } else if (line.startsWith("- ") || line.startsWith("* ")) {
+      const items = [];
+      while (i < lines.length && (lines[i].startsWith("- ") || lines[i].startsWith("* "))) {
+        items.push(<li key={i} className="leading-relaxed">{renderInline(lines[i].slice(2))}</li>);
+        i++;
+      }
+      elements.push(<ul key={`ul${i}`} className="list-disc list-inside space-y-0.5 my-1.5 text-sm text-slate-700">{items}</ul>);
+      continue;
+    // Ordered list
+    } else if (/^\d+\.\s/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
+        items.push(<li key={i} className="leading-relaxed">{renderInline(lines[i].replace(/^\d+\.\s/, ""))}</li>);
+        i++;
+      }
+      elements.push(<ol key={`ol${i}`} className="list-decimal list-inside space-y-0.5 my-1.5 text-sm text-slate-700">{items}</ol>);
+      continue;
+    // Blank line
+    } else if (line.trim() === "") {
+      elements.push(<div key={i} className="h-1" />);
+    // Paragraph
+    } else {
+      elements.push(<p key={i} className="text-sm leading-relaxed text-slate-800 mb-2">{renderInline(line)}</p>);
+    }
+    i++;
+  }
+  return <div>{elements}</div>;
 }
 
 // ── Inline chart renderer ────────────────────────────────────────────────────
