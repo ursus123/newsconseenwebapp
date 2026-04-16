@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Check, ChevronRight, Monitor, Layers, Zap, Grid3x3, Bell, Settings, Users, BarChart2, CheckSquare, Receipt, GitBranch, Code2, ArrowRight, Star, Globe, Shield, Cpu, Wifi, Package, Lock, Eye, EyeOff } from "lucide-react";
+import { Check, ChevronRight, Monitor, Layers, Zap, Grid3x3, Bell, Settings, Users, BarChart2, CheckSquare, Receipt, GitBranch, Code2, ArrowRight, Star, Globe, Shield, Cpu, Wifi, Package, Lock, Eye, EyeOff, Download } from "lucide-react";
+import { usePWA } from "@/hooks/usePWA";
 import TrendChartsSection from "@/components/landing/TrendChartsSection";
 import RoleDashboardPreview from "@/components/landing/RoleDashboardPreview";
 
@@ -301,6 +302,7 @@ function GridBackground() {
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Landing() {
   const navigate = useNavigate();
+  const { canInstall, promptInstall, isInstalled } = usePWA();
   const [activeWorkflow, setActiveWorkflow] = useState(0);
 
   useEffect(() => {
@@ -330,6 +332,15 @@ export default function Landing() {
           </div>
           <div className="flex items-center gap-3">
             <button onClick={() => base44.auth.redirectToLogin(window.location.origin + "/Dashboard")} className="text-sm text-slate-400 hover:text-white transition-colors">Sign in</button>
+            {isInstalled ? (
+              <button onClick={() => navigate("/Desktop")} className="flex items-center gap-1.5 text-sm text-emerald-400 hover:text-emerald-300 font-semibold transition-colors">
+                <Monitor className="w-4 h-4" /> Open Desktop
+              </button>
+            ) : canInstall ? (
+              <button onClick={promptInstall} className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-white/10 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
+                <Download className="w-4 h-4" /> Install App
+              </button>
+            ) : null}
             <button onClick={() => navigate("/onboarding")} className="bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors shadow-md shadow-emerald-500/20">
               Sign Up
             </button>
@@ -369,6 +380,21 @@ export default function Landing() {
               >
                 Sign In <ArrowRight className="w-4 h-4" />
               </button>
+              {isInstalled ? (
+                <button
+                  onClick={() => navigate("/Desktop")}
+                  className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-emerald-500/30 text-emerald-400 font-semibold px-6 py-4 rounded-2xl text-base transition-all"
+                >
+                  <Monitor className="w-5 h-5" /> Open Desktop
+                </button>
+              ) : canInstall ? (
+                <button
+                  onClick={promptInstall}
+                  className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold px-6 py-4 rounded-2xl text-base transition-all"
+                >
+                  <Download className="w-5 h-5" /> Install Desktop App
+                </button>
+              ) : null}
             </div>
             <p className="text-slate-600 text-xs mt-4">14-day free trial · No credit card required</p>
           </div>
