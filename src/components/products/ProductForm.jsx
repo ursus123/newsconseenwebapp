@@ -40,7 +40,10 @@ const ITEM_TYPE_OPTIONS = [
 ];
 
 
-const ITEM_CLASSES = ["asset", "inventory", "service", "digital"];
+const ITEM_CLASSES = [
+  "perishable", "non_perishable", "hazardous", "controlled", "regulated",
+  "unrestricted", "serialized", "non_serialized", "consumable", "reusable", "returnable",
+];
 
 function Field({ label, children, required }) {
   return (
