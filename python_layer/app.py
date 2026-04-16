@@ -173,7 +173,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Startup: DATABASE_URL not set — analytics store unavailable")
 
     # ----------------------------------------------------------
-    # ETL scheduler — runs /cron/etl-all every 5 minutes
+    # ETL scheduler — runs /cron/etl-all every 15 minutes
     # Keeps analytics tables fresh without relying on frontend
     # mutation triggers or manual Railway cron jobs.
     # ----------------------------------------------------------
@@ -199,13 +199,13 @@ async def lifespan(app: FastAPI):
         scheduler.add_job(
             _run_etl_background,
             trigger="interval",
-            minutes=5,
+            minutes=15,
             id="etl_all",
             max_instances=1,          # never overlap; skip if previous run is still going
             misfire_grace_time=60,    # tolerate up to 60s latency before skipping
         )
         scheduler.start()
-        logger.info("Startup: ETL scheduler started — running every 5 minutes")
+        logger.info("Startup: ETL scheduler started — running every 15 minutes")
     except Exception as _sched_err:
         logger.warning("Startup: ETL scheduler failed to start — %s", _sched_err)
 
