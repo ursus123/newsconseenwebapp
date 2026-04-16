@@ -1,7 +1,38 @@
 import React, { useState, useRef, useEffect } from "react";
 import { X, Send, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import ReactMarkdown from "react-markdown";
+
+// Simple markdown renderer — no external deps (avoids duplicate React from react-markdown)
+function SimpleMarkdown({ text }) {
+  const lines = text.split("\n");
+  return (
+    <div>
+      {lines.map((line, i) => {
+        if (line.startsWith("### ")) return <p key={i} className="font-semibold text-white mb-1">{line.slice(4)}</p>;
+        if (line.startsWith("## "))  return <p key={i} className="font-semibold text-white mb-1">{line.slice(3)}</p>;
+        if (line.startsWith("# "))   return <p key={i} className="font-bold text-white mb-1">{line.slice(2)}</p>;
+        if (line.startsWith("- ") || line.startsWith("* ")) {
+          return <div key={i} className="flex gap-1.5 mb-0.5"><span className="text-emerald-400 shrink-0">·</span><span>{renderInline(line.slice(2))}</span></div>;
+        }
+        if (/^\d+\.\s/.test(line)) {
+          const [num, ...rest] = line.split(/\.\s/);
+          return <div key={i} className="flex gap-1.5 mb-0.5"><span className="text-emerald-400 shrink-0">{num}.</span><span>{renderInline(rest.join(". "))}</span></div>;
+        }
+        if (line.trim() === "") return <div key={i} className="h-1.5" />;
+        return <p key={i} className="mb-0.5">{renderInline(line)}</p>;
+      })}
+    </div>
+  );
+}
+
+function renderInline(text) {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) return <strong key={i} className="text-white font-semibold">{part.slice(2, -2)}</strong>;
+    if (part.startsWith("`") && part.endsWith("`")) return <code key={i} className="text-emerald-300 bg-white/10 px-1 rounded text-[10px]">{part.slice(1, -1)}</code>;
+    return part;
+  });
+}
 
 const RAILWAY_URL   = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
@@ -35,16 +66,7 @@ function Message({ msg }) {
         {isUser ? (
           msg.content
         ) : (
-          <ReactMarkdown
-            components={{
-              p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
-              strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>,
-              ul: ({ children }) => <ul className="list-disc ml-4 mb-1">{children}</ul>,
-              li: ({ children }) => <li className="mb-0.5">{children}</li>,
-            }}
-          >
-            {msg.content}
-          </ReactMarkdown>
+          <SimpleMarkdown text={msg.content} />
         )}
       </div>
     </div>
