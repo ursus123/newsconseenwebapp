@@ -97,6 +97,8 @@ export default defineConfig({
     // Sub-paths only — no base 'react' or 'react-dom' alias here, which
     // prevents prefix-matching from mangling 'react/jsx-dev-runtime'.
     alias: {
+      'react':                 path.join(reactDir, 'index.js'),
+      'react-dom':             path.join(reactDomDir, 'index.js'),
       'react/jsx-dev-runtime': SUBPATH_MAP['react/jsx-dev-runtime'],
       'react/jsx-runtime':     SUBPATH_MAP['react/jsx-runtime'],
       'react-dom/client':      SUBPATH_MAP['react-dom/client'],
@@ -113,11 +115,12 @@ export default defineConfig({
       'react/jsx-dev-runtime',
       'react-dom/client',
     ],
-    exclude: ['@base44/sdk'],
+    exclude: [],
   },
   build: {
     rollupOptions: {
       plugins: [rollupFixPlugin],
+      external: [],
     },
   },
 })
