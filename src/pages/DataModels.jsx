@@ -921,6 +921,20 @@ const PG_INTELLIGENCE_TABLES = [
       { name: "created_at / updated_at", type: "TIMESTAMPTZ" },
     ],
   },
+  {
+    id: "an_backup_log", label: "analytics.backup_log", color: "#0369a1", bg: "#f0f9ff", border: "#bae6fd",
+    icon: "💾", layer: "Infrastructure",
+    description: "Database backup history. Written by POST /backup/run. Each row records one backup run — status, size, storage backends (local + S3), and duration.",
+    fields: [
+      { name: "backup_id", type: "TEXT PK (e.g. backup_20260415_120000)", pk: true },
+      { name: "started_at / ended_at", type: "TEXT (ISO timestamps)" },
+      { name: "status", type: "TEXT: success|error" },
+      { name: "size_bytes", type: "BIGINT — compressed dump size" },
+      { name: "storage", type: "TEXT (JSON array — backends: local, s3)" },
+      { name: "error", type: "TEXT — error message if status=error" },
+      { name: "duration_s", type: "FLOAT — wall-clock seconds" },
+    ],
+  },
 ];
 
 // ── audit.* — Immutable change log ────────────────────────────────────────────
@@ -1184,6 +1198,9 @@ const API_CATALOGUE = [
       { method: "GET",  path: "/enrichment/scores",               desc: "Phase D: analytics.entity_scores — composite risk/quality/intelligence per entity" },
       { method: "GET",  path: "/enrichment/relationships",        desc: "Phase D: analytics.relationship_enrichment — link strength, risk contagion, health" },
       { method: "GET",  path: "/enrichment/tasks",                desc: "Phase D: analytics.task_enrichment — SLA risk, overdue, completion likelihood" },
+      { method: "POST", path: "/backup/run",                      desc: "Infra: trigger DB backup — pg_dump → gzip → local + S3. Requires x-cron-secret." },
+      { method: "GET",  path: "/backup/status",                   desc: "Infra: last backup result + success rate. Public — no auth required." },
+      { method: "GET",  path: "/backup/list",                     desc: "Infra: recent backup log entries from analytics.backup_log. Requires x-cron-secret." },
       { method: "GET",  path: "/open-data/exchange-rates",        desc: "Phase A: FX rates (open.er-api.com, 24h cache)" },
       { method: "GET",  path: "/open-data/barcode/{ean}",         desc: "Phase A: Barcode — Open Food Facts → UPC Item DB" },
       { method: "GET",  path: "/open-data/company-lookup",        desc: "Phase A: Company registration — OpenCorporates" },

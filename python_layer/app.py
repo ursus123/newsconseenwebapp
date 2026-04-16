@@ -430,6 +430,14 @@ try:
 except Exception as _enr_err:
     logger.warning("Enrichment router failed to load — %s", _enr_err)
 
+# Production Infra — Backup system
+try:
+    from backup.routes import router as backup_router
+    app.include_router(backup_router)
+    logger.info("Backup router loaded")
+except Exception as _bkp_err:
+    logger.warning("Backup router failed to load — %s", _bkp_err)
+
 
 # ----------------------------------------------------------
 # Helper Functions
@@ -553,44 +561,111 @@ def root():
 @app.get("/health", tags=["Health"])
 def health():
     import os
+    import time
     from sqlalchemy import text
 
-    db_status = "unavailable"
-    engine    = get_engine_safe()
+    t_start = time.monotonic()
+
+    # ── Database connectivity ─────────────────────────────────────────────────
+    db_status        = "unavailable"
+    db_latency_ms    = None
+    analytics_tables = {}
+    last_etl_at      = None
+    last_backup_at   = None
+
+    engine = get_engine_safe()
     if engine:
         try:
+            t0 = time.monotonic()
             with engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
+            db_latency_ms = round((time.monotonic() - t0) * 1000, 1)
             db_status = "connected"
+
+            # Row counts for core analytics tables (non-blocking best-effort)
+            try:
+                with engine.connect() as conn:
+                    for tbl in ("people_summary", "enterprise_summary",
+                                "product_summary", "transaction_summary",
+                                "task_summary"):
+                        try:
+                            n = conn.execute(
+                                text(f"SELECT COUNT(*) FROM analytics.{tbl}")
+                            ).scalar()
+                            analytics_tables[tbl] = int(n or 0)
+                        except Exception:
+                            analytics_tables[tbl] = None
+            except Exception:
+                pass
+
+            # Last ETL timestamp
+            try:
+                with engine.connect() as conn:
+                    row = conn.execute(
+                        text("""
+                            SELECT MAX(loaded_at)
+                            FROM analytics.people_summary
+                        """)
+                    ).scalar()
+                    if row:
+                        last_etl_at = str(row)
+            except Exception:
+                pass
+
+            # Last backup timestamp
+            try:
+                with engine.connect() as conn:
+                    row = conn.execute(
+                        text("""
+                            SELECT started_at FROM analytics.backup_log
+                            WHERE status = 'success'
+                            ORDER BY started_at DESC LIMIT 1
+                        """)
+                    ).scalar()
+                    if row:
+                        last_backup_at = str(row)
+            except Exception:
+                pass
+
         except Exception as e:
             db_status = f"error: {str(e)[:100]}"
 
+    # ── Copilot ───────────────────────────────────────────────────────────────
     copilot_backend = os.getenv("COPILOT_BACKEND", "")
     copilot_key_set = bool(
-        os.getenv("ANTHROPIC_API_KEY") or
-        os.getenv("OPENAI_API_KEY")
+        os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY")
     )
     backend_display = {
-        "anthropic": "claude",
-        "claude":    "claude",
-        "openai":    "openai",
+        "anthropic": "claude", "claude": "claude", "openai": "openai",
     }.get(copilot_backend, copilot_backend)
 
-    return {
-        "status":   "ok" if db_status == "connected" else "degraded",
-        "version":  "4.9.0",
-        "api":      "ok",
-        "database": db_status,
+    # ── Backup config ─────────────────────────────────────────────────────────
+    backup_configured = bool(os.getenv("BACKUP_S3_BUCKET"))
 
-        # Layer 2
+    # ── Response time ─────────────────────────────────────────────────────────
+    health_latency_ms = round((time.monotonic() - t_start) * 1000, 1)
+
+    return {
+        "status":             "ok" if db_status == "connected" else "degraded",
+        "version":            "4.9.0",
+        "api":                "ok",
+        "health_latency_ms":  health_latency_ms,
+
+        # Layer 2 — database
+        "database":           db_status,
+        "db_latency_ms":      db_latency_ms,
+        "analytics_tables":   analytics_tables,
+        "last_etl_at":        last_etl_at,
+
+        # Layer 2 — feature flags
         "etl_enabled":        True,
         "ml_enabled":         os.getenv("ML_ENABLED", "false").lower() == "true",
         "open_data_enabled":  True,
         "connectors_enabled": True,
 
         # Layer 3A — Copilot
-        "copilot_enabled":  bool(copilot_backend and copilot_key_set),
-        "copilot_backend":  backend_display or "not configured",
+        "copilot_enabled":    bool(copilot_backend and copilot_key_set),
+        "copilot_backend":    backend_display or "not configured",
 
         # Layer 3B — Alerts
         "alerts_enabled": True,
@@ -605,6 +680,10 @@ def health():
 
         # Layer 3C — Network
         "network_enabled": True,
+
+        # Production infra
+        "backup_configured":  backup_configured,
+        "last_backup_at":     last_backup_at,
     }
 
 

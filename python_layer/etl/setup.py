@@ -554,6 +554,21 @@ _OTHER_DDL = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_copilot_memory_company ON analytics.copilot_memory (company_id)",
+
+    # ── Production Infra: backup log ─────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.backup_log (
+        backup_id   TEXT PRIMARY KEY,
+        started_at  TEXT,
+        ended_at    TEXT,
+        status      TEXT,
+        size_bytes  BIGINT,
+        storage     TEXT,
+        error       TEXT,
+        duration_s  DOUBLE PRECISION
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_backup_log_started ON analytics.backup_log (started_at DESC)",
 ]
 
 
