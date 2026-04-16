@@ -516,17 +516,6 @@ export default function TenantAdmin() {
     staleTime: 60000,
   });
 
-  if (currentUser && currentUser.role !== "super_admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-slate-500 text-sm">
-        <div className="text-center">
-          <Shield className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="font-medium">Access restricted to super_admin</p>
-        </div>
-      </div>
-    );
-  }
-
   // Platform health
   const { data: health } = useQuery({
     queryKey: ["admin-health"],
@@ -569,6 +558,17 @@ export default function TenantAdmin() {
     onSuccess:  () => { showMsg("Tenant reactivated", "success"); refetchTenants(); qc.invalidateQueries(["admin-tenant-detail", selectedTenant]); },
     onError:    (e) => showMsg(e.message, "error"),
   });
+
+  if (currentUser && currentUser.role !== "super_admin") {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-slate-500 text-sm">
+        <div className="text-center">
+          <Shield className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          <p className="font-medium">Access restricted to super_admin</p>
+        </div>
+      </div>
+    );
+  }
 
   function showMsg(text, type = "success") {
     setActionMsg({ text, type });
