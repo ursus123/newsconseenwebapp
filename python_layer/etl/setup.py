@@ -569,6 +569,75 @@ _OTHER_DDL = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_backup_log_started ON analytics.backup_log (started_at DESC)",
+
+    # ── Onboarding: tenant provisioning log ──────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.onboarding_log (
+        id                     SERIAL PRIMARY KEY,
+        company_id             TEXT,
+        enterprise_type        TEXT,
+        cluster                TEXT,
+        taxonomy_count         INTEGER,
+        workflows_created      INTEGER,
+        ai_readiness_score     INTEGER,
+        steps_completed        INTEGER,
+        people_added           INTEGER,
+        products_added         INTEGER,
+        tasks_created          INTEGER,
+        invites_sent           INTEGER,
+        provisioned_at         TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_onboarding_log_company ON analytics.onboarding_log (company_id)",
+
+    # ── BI Export: access log ─────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.bi_export_log (
+        id          SERIAL PRIMARY KEY,
+        company_id  TEXT,
+        report      TEXT,
+        format      TEXT,
+        file_size_bytes BIGINT,
+        exported_at TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_bi_export_log_company ON analytics.bi_export_log (company_id, exported_at DESC)",
+
+    # ── Platform admin: audit log + tenant flags ──────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.admin_audit_log (
+        id           SERIAL PRIMARY KEY,
+        action       TEXT,
+        company_id   TEXT,
+        performed_by TEXT,
+        detail       TEXT,
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_admin_audit_company ON analytics.admin_audit_log (company_id, created_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS analytics.tenant_flags (
+        company_id  TEXT,
+        flag        TEXT,
+        set_by      TEXT,
+        set_at      TIMESTAMPTZ DEFAULT NOW(),
+        reason      TEXT,
+        PRIMARY KEY (company_id, flag)
+    )
+    """,
+
+    # ── Security: 2FA / TOTP secrets ─────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.user_2fa_secrets (
+        user_id     TEXT PRIMARY KEY,
+        company_id  TEXT,
+        secret      TEXT,
+        status      TEXT DEFAULT 'pending',
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        verified_at TIMESTAMPTZ
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_user_2fa_company ON analytics.user_2fa_secrets (company_id)",
 ]
 
 

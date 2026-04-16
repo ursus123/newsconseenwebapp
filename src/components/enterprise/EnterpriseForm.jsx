@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ENTERPRISE_TYPE_GROUPS, OBJECTIVE_OPTIONS, ENTERPRISE_SUB_TYPES } from "./typeConfig";
+import { ENTERPRISE_TYPE_GROUPS, OBJECTIVE_OPTIONS } from "./typeConfig";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";

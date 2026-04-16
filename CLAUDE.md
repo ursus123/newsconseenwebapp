@@ -825,10 +825,10 @@ Phase E  Enrichment       ✅ Predictive & temporal — spend_trend, churn_proba
 
 ## Current state (as of 2026-04-15)
 
-All Phases 1–8 and Enrichment Phases A–E are implemented and deployed. The system is fully operational.
+All Phases 1–8, Enrichment Phases A–E, Production Infra, Onboarding flow, BI Export, Multi-tenant Admin UI, and Security hardening are implemented and deployed.
 
 ```
-COMPLETED (Phases 1–6)
+COMPLETED
   ✅ All 7 core entities with forms, lists, bulk import, taxonomy
   ✅ ETL pipeline — all 9 entities, multi-tenant, three-tier fallback
   ✅ Copilot — claude-sonnet-4-6, tool loop, 7 query tools, session memory
@@ -838,25 +838,44 @@ COMPLETED (Phases 1–6)
      LLM router (Haiku/Sonnet/Opus), market research with weekly briefings
   ✅ ML models — survival, segmentation, demand forecasting, time series (frontend + backend)
   ✅ Mobile — PWA offline-first field entry, IndexedDB sync queue, bottom nav
-  ✅ Connectors — 35 connectors (9 categories): file, database, mobile_money, hr_payroll,
-     accounting, health, education, pos, government — all with real API implementations
-     and ApiConnectModal UI with credentials form + dry run + sync result
-  ✅ Desktop cache fix — all 7 entity list pages
-  ✅ entityFetchFn — all 6 BulkImportDialog usages
-  ✅ Branding — fully white-label, all Palantir/Foundry references removed
-  ✅ Agents page in sidebar navigation for super_admin, admin, executive
+  ✅ Connectors — 35 connectors (9 categories) with ApiConnectModal UI
+  ✅ Connector Sync Scheduler (Phase 7) — cron-based runs, sync history dashboard
+  ✅ Audit Trail (Phase 8) — immutable change log, Settings > Audit Trail with filters + CSV export
+  ✅ Enrichment Phase A — phone/email/geocoding/FX/barcode/company registration
+  ✅ Enrichment Phase B — medications, food, vehicles, chemicals, devices, software, NPI
+  ✅ Enrichment Phase C — OFAC SDN, World Bank WGI, GDELT news, AML flags
+  ✅ Enrichment Phase D — entity_scores, relationship/task enrichment, risk report copilot tool
+  ✅ Enrichment Phase E — predictive/temporal: spend_trend, churn_probability, CLV (person);
+     revenue_trend, payment_behavior, avg_days_to_pay (enterprise); demand_trend, stockout_risk,
+     days_of_stock, demand_forecast_30d (product); is_recurring, recurrence_count,
+     seasonal_flag, days_since_prior_tx (transaction)
+  ✅ Production Infra — pytest CI with coverage, DB backup (pg_dump → gzip → local+S3),
+     Locust load tests, retry/circuit-breaker reliability, enhanced /health endpoint
+  ✅ Onboarding flow — 7-step frontend wizard (frontend already existed) + backend
+     python_layer/onboarding/: POST /onboarding/provision (taxonomy seed, default workflows,
+     AI readiness score, connector/agent recommendations), GET /onboarding/status/{company_id},
+     GET /onboarding/industries; analytics.onboarding_log DDL; DataModels.jsx updated
+  ✅ Multi-tenant Admin UI — super_admin-only /TenantAdmin page; python_layer/admin/ (list tenants,
+     create+provision, ETL trigger, suspend/reactivate, audit log); ADMIN_SECRET in settings.py;
+     analytics.admin_audit_log + analytics.tenant_flags DDL; DataModels.jsx + Layout.jsx + App.jsx updated
+  ✅ BI Export — download button on every chart/report; Power BI (.xlsx), Tableau (.twbx),
+     CSV/Looker Studio; GET /bi/export?report=&format=&company_id=; python_layer/bi/ package
+     (generators, excel, tableau, csv_export, routes); ExportMenu component on TrendCharts +
+     Dashboard stat section; analytics.bi_export_log DDL; DataModels.jsx updated
+  ✅ Security hardening — (1) SecurityHeadersMiddleware: HSTS, CSP, X-Frame DENY, nosniff,
+     Referrer-Policy, Permissions-Policy on all responses; (2) RateLimitMiddleware: sliding-window
+     per-IP on 7 sensitive route prefixes; (3) TOTP 2FA: pyotp + qrcode, QR setup + verify flow
+     in Settings > Security tab, analytics.user_2fa_secrets DDL; (4) OAuth2 OIDC: Google +
+     Microsoft sign-in with CSRF state nonce, identity claims returned to frontend; (5) SOC 2
+     compliance evidence endpoint GET /security/compliance (CC6.1–CC7.2, A.12.3, A.14.2, A.17.1);
+     python_layer/security/ package: headers, ratelimit, totp, oauth2, compliance, routes;
+     middleware + router mounted in app.py; DataModels.jsx updated
 
 PENDING (operational — requires Railway access)
   ⏳ Run POST /cron/etl-all to populate analytics tables
   ⏳ Verify /health returns 200 and copilot tool calls return data
   ⏳ Configure ALERT_DEFAULT_EMAIL / ALERT_DEFAULT_WHATSAPP env vars
   ⏳ Set OPUS_ENABLED=true when Opus budget is approved
-
-NEXT BUILD MILESTONE
-  Phase 7 — Connector Sync Scheduler: cron-based automatic connector runs,
-            per-connector schedule config, sync history log in Connectors UI
-  Phase 8 — Audit Trail: immutable change log across all 7 entities,
-            visible in Settings > Audit Trail with filter/export
 ```
 
 ---

@@ -4,13 +4,14 @@ import { DESKTOP_CATEGORIES } from "@/desktop/desktopApps";
 import { motion, AnimatePresence } from "framer-motion";
 
 const CATEGORY_ICONS = {
-  All:         "🌐",
-  Operations:  "⚡",
-  Inventory:   "📦",
-  Finance:     "💰",
-  Analytics:   "📊",
-  Healthcare:  "🏥",
-  Tools:       "🔧",
+  All:           "🌐",
+  Operations:    "⚡",
+  Inventory:     "📦",
+  Finance:       "💰",
+  Analytics:     "📊",
+  Intelligence:  "🧠",
+  Healthcare:    "🏥",
+  Tools:         "🔧",
 };
 
 function ContextMenu({ app, x, y, onClose, onOpenApp, onToggleTaskbar, onToggleDesktop, isPinnedTaskbar, isPinnedDesktop }) {

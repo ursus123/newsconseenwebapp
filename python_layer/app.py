@@ -243,6 +243,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Security headers — stamps HSTS, CSP, X-Frame-Options, etc. on every response
+try:
+    from security.headers import SecurityHeadersMiddleware
+    app.add_middleware(SecurityHeadersMiddleware)
+    logger.info("Startup: security headers middleware enabled")
+except Exception as _sec_hdr_err:
+    logger.warning("Security headers middleware not loaded — %s", _sec_hdr_err)
+
+# Rate limiting — per-IP sliding window on sensitive endpoints
+try:
+    from security.ratelimit import RateLimitMiddleware
+    app.add_middleware(RateLimitMiddleware)
+    logger.info("Startup: rate limit middleware enabled")
+except Exception as _rl_err:
+    logger.warning("Rate limit middleware not loaded — %s", _rl_err)
+
 # ----------------------------------------------------------
 # API Key middleware — enforced only when API_KEY is set
 # Allows: /, /health, /docs, /openapi.json, /redoc (always)
@@ -437,6 +453,30 @@ try:
     logger.info("Backup router loaded")
 except Exception as _bkp_err:
     logger.warning("Backup router failed to load — %s", _bkp_err)
+
+# BI Export — Power BI / Tableau / CSV downloads
+try:
+    from bi.routes import router as bi_router
+    app.include_router(bi_router)
+    logger.info("BI export router loaded")
+except Exception as _bi_err:
+    logger.warning("BI export router failed to load — %s", _bi_err)
+
+# Platform Admin — multi-tenant management
+try:
+    from admin.routes import router as admin_router
+    app.include_router(admin_router)
+    logger.info("Platform admin router loaded")
+except Exception as _adm_err:
+    logger.warning("Platform admin router failed to load — %s", _adm_err)
+
+# Security — 2FA, OAuth2, compliance evidence, rate limit stats
+try:
+    from security.routes import router as security_router
+    app.include_router(security_router)
+    logger.info("Security router loaded")
+except Exception as _sec_err:
+    logger.warning("Security router failed to load — %s", _sec_err)
 
 
 # ----------------------------------------------------------

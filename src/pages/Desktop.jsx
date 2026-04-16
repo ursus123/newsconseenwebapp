@@ -15,6 +15,7 @@ import PWAInstallBanner from "@/components/desktop/PWAInstallBanner";
 import GlobalSearch from "@/components/desktop/GlobalSearch";
 import DesktopWidgets from "@/components/desktop/DesktopWidgets";
 import DailyBriefing from "@/components/desktop/DailyBriefing";
+import CopilotWidget from "@/components/desktop/CopilotWidget";
 import EnterpriseContextSwitcher from "@/components/desktop/EnterpriseContextSwitcher";
 import { usePWA } from "@/hooks/usePWA";
 import { base44 } from "@/api/base44Client";
@@ -40,6 +41,7 @@ export default function Desktop() {
     refetchOnMount: "always",
   });
   const [notifOpen, setNotifOpen]     = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const [wallpaperIdx, setWallpaperIdx] = useState(0);
   const [contextMenu, setContextMenu] = useState(null);
   const [iconContextMenuOpen, setIconContextMenuOpen] = useState(false);
@@ -51,11 +53,18 @@ export default function Desktop() {
   const quickActionsRef = useRef(null);
 
   const wm          = useWindowManager();
-  const notifStore  = useNotifications();
+  const notifStore  = useNotifications(user?.company_id);
   const launcher    = useLauncherStore();
   const profileMgr  = useProfileStore();
   const pwa         = usePWA();
   const lockStore   = useLockStore();
+
+  // Railway warm-up ping — fires once on mount to wake the server before
+  // DailyBriefing and the notification store make their data requests.
+  useEffect(() => {
+    fetch("https://newsconseenwebapp-production.up.railway.app/health", { method: "GET" })
+      .catch(() => {}); // fire and forget — never block UI
+  }, []);
 
   useEffect(() => {
     // Load wallpaper from current profile
@@ -169,8 +178,14 @@ export default function Desktop() {
       if (e.key === "Escape") {
         launcher.closeLauncher();
         setNotifOpen(false);
+        setCopilotOpen(false);
         setContextMenu(null);
         setQuickActionsOpen(false);
+      }
+      // Ctrl+I = toggle Copilot widget
+      if (e.ctrlKey && e.key === "i") {
+        e.preventDefault();
+        setCopilotOpen(v => !v);
       }
       if (e.ctrlKey && e.code === "Space") {
         e.preventDefault();
@@ -390,7 +405,7 @@ export default function Desktop() {
 
         {/* Global Search — centered */}
         <div className="flex-1 flex justify-center px-2">
-          <GlobalSearch onOpenApp={handleOpenApp} isLight={isLight} />
+          <GlobalSearch onOpenApp={handleOpenApp} isLight={isLight} companyId={user?.company_id} />
         </div>
 
         {/* Divider */}
@@ -455,6 +470,27 @@ export default function Desktop() {
             {user.full_name || user.email}
           </span>
         )}
+
+        {/* Copilot quick button */}
+        <button
+          onClick={() => setCopilotOpen(v => !v)}
+          style={{
+            height: 22, borderRadius: 11, padding: "0 10px",
+            display: "flex", alignItems: "center", gap: 4,
+            fontSize: 11, fontWeight: 600, flexShrink: 0,
+            background: copilotOpen
+              ? "rgba(16,185,129,0.22)"
+              : (isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.10)"),
+            border: copilotOpen
+              ? "1px solid rgba(16,185,129,0.40)"
+              : (isLight ? "1px solid rgba(0,0,0,0.10)" : "1px solid rgba(255,255,255,0.14)"),
+            color: copilotOpen ? "#10b981" : textColor,
+            cursor: "pointer",
+          }}
+          title="Copilot (Ctrl+I)"
+        >
+          🧠 Copilot
+        </button>
 
         <span style={{ fontSize: 11, color: mutedColor, flexShrink: 0, display: "none" }} className="sm:block">
           Ctrl+Space
@@ -542,6 +578,13 @@ export default function Desktop() {
         onOpenApp={handleOpenApp}
       />
 
+      {/* Copilot Widget */}
+      <CopilotWidget
+        open={copilotOpen}
+        onClose={() => setCopilotOpen(false)}
+        user={user}
+      />
+
       {/* Taskbar */}
       <Taskbar
         windows={wm.windows}
@@ -551,6 +594,8 @@ export default function Desktop() {
         onCloseWindow={wm.closeWindow}
         onToggleLauncher={launcher.toggleLauncher}
         onToggleNotifications={() => setNotifOpen(v => !v)}
+        onToggleCopilot={() => setCopilotOpen(v => !v)}
+        copilotOpen={copilotOpen}
         unreadCount={notifStore.unreadCount}
         pinnedApps={profileMgr.currentProfile.pinnedApps}
         launcherOpen={launcher.isOpen}

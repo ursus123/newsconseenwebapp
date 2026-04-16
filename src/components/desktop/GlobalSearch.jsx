@@ -15,7 +15,7 @@ function getTitle(cfg, record) {
   return record[cfg.titleField] || "(untitled)";
 }
 
-export default function GlobalSearch({ onOpenApp, isLight }) {
+export default function GlobalSearch({ onOpenApp, isLight, companyId }) {
   const [query, setQuery]       = useState("");
   const [results, setResults]   = useState([]);
   const [loading, setLoading]   = useState(false);
@@ -59,7 +59,8 @@ export default function GlobalSearch({ onOpenApp, isLight }) {
     setLoading(true);
     try {
       const searches = ENTITY_CONFIG.map(async (cfg) => {
-        const items = await base44.entities[cfg.key].list("-created_date", 100);
+        const filter = companyId ? { company_id: companyId } : {};
+        const items = await base44.entities[cfg.key].filter(filter, "-created_date", 100);
         const ql = q.toLowerCase();
         const filtered = items.filter(item => {
           const title = getTitle(cfg, item) || "";

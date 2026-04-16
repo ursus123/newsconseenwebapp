@@ -10,7 +10,7 @@ import {
   Eye, EyeOff, Save, Building2, Mail, Shield, Calendar, X, Settings as SettingsIcon, Palette, Bug,
   Globe, Copy, Trash2, Loader2, Brain, Zap, CheckCircle2, Clock,
   ScrollText, Download, Filter, RefreshCw, Send, Plus,
-  TrendingUp, ChevronRight, ShieldCheck,
+  TrendingUp, ChevronRight, ShieldCheck, KeyRound, Smartphone, LogIn,
 } from "lucide-react";
 import BrandingSection from "@/components/settings/BrandingSection";
 import ErrorLogSection from "@/components/settings/ErrorLogSection";
@@ -215,6 +215,7 @@ const ALL_TABS = [
   { id: "reports",       label: "Report Delivery",  icon: Send,         adminOnly: true  },
   { id: "autotask",      label: "Auto-Remediation", icon: Zap,          adminOnly: true  },
   { id: "goals",         label: "KPI Goals",        icon: Calendar,     adminOnly: true  },
+  { id: "security",      label: "Security",         icon: KeyRound,     adminOnly: false },
   { id: "audit",         label: "Audit Trail",      icon: ScrollText,   adminOnly: true  },
   { id: "readiness",     label: "AI Readiness",   icon: ShieldCheck,  adminOnly: true  },
   { id: "error_log",     label: "Error Log",      icon: Bug,           adminOnly: true  },
@@ -307,6 +308,7 @@ export default function Settings() {
           {activeTab === "reports"       && <ReportsSection user={user} enterprise={myEnterprise} />}
           {activeTab === "autotask"      && <AutoTaskSection user={user} />}
           {activeTab === "goals"         && <GoalsSection user={user} />}
+          {activeTab === "security"      && <SecuritySection user={user} />}
           {activeTab === "audit"         && <AuditTrailSection user={user} />}
           {activeTab === "readiness"     && <AIReadinessSection user={user} />}
           {activeTab === "error_log"     && <ErrorLogSection user={user} />}
@@ -573,6 +575,255 @@ function SessionsSection() {
         <p className="text-xs text-slate-500">To sign out of all devices, change your password — this will invalidate all existing sessions.</p>
       </div>
     </Card>
+  );
+}
+
+// ── Security Section (2FA + OAuth2) ──────────────────────────────────────────
+const RAILWAY_SEC_URL = "https://newsconseenwebapp-production.up.railway.app";
+
+function SecuritySection({ user }) {
+  const [status2fa, setStatus2fa]   = useState(null);   // {enabled, status}
+  const [setup, setSetup]           = useState(null);   // {qr_image_b64, secret}
+  const [verifyCode, setVerifyCode] = useState("");
+  const [oauth2, setOauth2]         = useState(null);   // {providers:[…]}
+  const [loading, setLoading]       = useState(false);
+  const [msg, setMsg]               = useState(null);   // {type,text}
+
+  const userId = user?.id || user?._id || user?.user_id || "";
+  const companyId = user?.company_id || "";
+  const userEmail = user?.email || "";
+
+  // Fetch 2FA status + OAuth2 providers on mount
+  useEffect(() => {
+    if (!userId) return;
+    fetch(`${RAILWAY_SEC_URL}/security/2fa/status?user_id=${encodeURIComponent(userId)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setStatus2fa(d))
+      .catch(() => {});
+    fetch(`${RAILWAY_SEC_URL}/security/oauth2/providers`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setOauth2(d))
+      .catch(() => {});
+  }, [userId]);
+
+  async function handleSetup2FA() {
+    setLoading(true); setMsg(null);
+    try {
+      const r = await fetch(`${RAILWAY_SEC_URL}/security/2fa/setup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, company_id: companyId, user_email: userEmail }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Setup failed");
+      setSetup(d);
+    } catch (e) {
+      setMsg({ type: "error", text: e.message });
+    } finally { setLoading(false); }
+  }
+
+  async function handleVerify2FA() {
+    if (!verifyCode.trim()) return;
+    setLoading(true); setMsg(null);
+    try {
+      const r = await fetch(`${RAILWAY_SEC_URL}/security/2fa/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, code: verifyCode }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Verification failed");
+      setSetup(null);
+      setVerifyCode("");
+      setStatus2fa({ enabled: true, status: "active" });
+      setMsg({ type: "success", text: "2FA is now active. You'll be asked for a code on each login." });
+    } catch (e) {
+      setMsg({ type: "error", text: e.message });
+    } finally { setLoading(false); }
+  }
+
+  async function handleDisable2FA() {
+    if (!confirm("Disable 2FA? This will remove your authenticator app requirement.")) return;
+    setLoading(true); setMsg(null);
+    try {
+      const r = await fetch(`${RAILWAY_SEC_URL}/security/2fa?user_id=${encodeURIComponent(userId)}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Failed to disable 2FA");
+      setStatus2fa({ enabled: false, status: "not_enrolled" });
+      setSetup(null);
+      setMsg({ type: "success", text: "2FA disabled." });
+    } catch (e) {
+      setMsg({ type: "error", text: e.message });
+    } finally { setLoading(false); }
+  }
+
+  async function handleOAuth2Login(provider) {
+    setLoading(true); setMsg(null);
+    try {
+      const r = await fetch(`${RAILWAY_SEC_URL}/security/oauth2/${provider}/authorize`);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "OAuth2 not configured");
+      window.location.href = d.auth_url;
+    } catch (e) {
+      setMsg({ type: "error", text: e.message });
+      setLoading(false);
+    }
+  }
+
+  const is2faActive = status2fa?.enabled && status2fa?.status === "active";
+
+  return (
+    <div className="space-y-6">
+      <Banner type={msg?.type} message={msg?.text} onDismiss={() => setMsg(null)} />
+
+      {/* Two-Factor Authentication */}
+      <Card className="p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center">
+            <Smartphone className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-slate-800">Two-Factor Authentication</h3>
+            <p className="text-xs text-slate-500">Require a 6-digit code from your authenticator app on each login</p>
+          </div>
+          {is2faActive && (
+            <span className="ml-auto text-xs font-medium bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full">Active</span>
+          )}
+        </div>
+
+        {is2faActive ? (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              2FA is enabled on your account. Your authenticator app is configured and required at login.
+            </p>
+            <Button variant="outline" size="sm" onClick={handleDisable2FA} disabled={loading}
+              className="text-rose-600 border-rose-200 hover:bg-rose-50">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Disable 2FA
+            </Button>
+          </div>
+        ) : setup ? (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Scan the QR code with <strong>Google Authenticator</strong>, <strong>Authy</strong>, or any TOTP app.
+              Then enter the 6-digit code below to activate.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-6 items-start">
+              {setup.qr_image_b64 && (
+                <img src={setup.qr_image_b64} alt="2FA QR code" className="w-40 h-40 border rounded-xl" />
+              )}
+              <div className="space-y-3 flex-1">
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">Manual entry key</p>
+                  <code className="text-xs bg-slate-100 px-3 py-2 rounded-lg font-mono block break-all">{setup.secret}</code>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-700">Verification code</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text" inputMode="numeric" maxLength={6}
+                      value={verifyCode} onChange={e => setVerifyCode(e.target.value.replace(/\D/g, ""))}
+                      placeholder="000000"
+                      className="w-32 px-3 py-2 border rounded-lg text-center text-lg font-mono tracking-widest"
+                    />
+                    <Button onClick={handleVerify2FA} disabled={loading || verifyCode.length < 6}>
+                      {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CheckCircle2 className="w-4 h-4 mr-1" />}
+                      Activate
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              2FA is not enabled. Add an extra layer of security by linking your authenticator app.
+            </p>
+            <Button size="sm" onClick={handleSetup2FA} disabled={loading}>
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Smartphone className="w-4 h-4 mr-2" />}
+              Enable 2FA
+            </Button>
+          </div>
+        )}
+      </Card>
+
+      {/* OAuth2 Social Login */}
+      <Card className="p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+            <LogIn className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-slate-800">Social Login</h3>
+            <p className="text-xs text-slate-500">Link your account to a Google or Microsoft identity</p>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Google */}
+          <button
+            onClick={() => handleOAuth2Login("google")}
+            disabled={loading || !(oauth2?.providers?.find(p => p.id === "google")?.configured)}
+            className="flex items-center gap-3 px-4 py-2.5 border rounded-xl text-sm font-medium
+              hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            Sign in with Google
+            {!(oauth2?.providers?.find(p => p.id === "google")?.configured) && (
+              <span className="text-xs text-slate-400 ml-1">(not configured)</span>
+            )}
+          </button>
+
+          {/* Microsoft */}
+          <button
+            onClick={() => handleOAuth2Login("microsoft")}
+            disabled={loading || !(oauth2?.providers?.find(p => p.id === "microsoft")?.configured)}
+            className="flex items-center gap-3 px-4 py-2.5 border rounded-xl text-sm font-medium
+              hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+              <path fill="#F25022" d="M1 1h10v10H1z"/>
+              <path fill="#00A4EF" d="M13 1h10v10H13z"/>
+              <path fill="#7FBA00" d="M1 13h10v10H1z"/>
+              <path fill="#FFB900" d="M13 13h10v10H13z"/>
+            </svg>
+            Sign in with Microsoft
+            {!(oauth2?.providers?.find(p => p.id === "microsoft")?.configured) && (
+              <span className="text-xs text-slate-400 ml-1">(not configured)</span>
+            )}
+          </button>
+        </div>
+        <p className="text-xs text-slate-400 mt-3">
+          OAuth2 providers require GOOGLE_CLIENT_ID / MICROSOFT_CLIENT_ID env vars on Railway to activate.
+        </p>
+      </Card>
+
+      {/* Security Headers status */}
+      <Card className="p-5">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-emerald-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-slate-800">Security Headers</h3>
+            <p className="text-xs text-slate-500">HTTP security headers applied to all API responses</p>
+          </div>
+          <span className="ml-auto text-xs font-medium bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full">Active</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {["HSTS", "CSP", "X-Frame-Options: DENY", "X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy"].map(h => (
+            <div key={h} className="flex items-center gap-1.5 text-xs text-slate-600">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              {h}
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
   );
 }
 

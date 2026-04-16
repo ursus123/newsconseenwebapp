@@ -50,6 +50,7 @@ import TrendCharts from "../components/dashboard/TrendCharts";
 import GeoMap from "../components/dashboard/GeoMap";
 import SupersetEmbed from "../components/dashboard/SupersetEmbed";
 import N8nEmbed from "../components/dashboard/N8nEmbed";
+import ExportMenu from "@/components/shared/ExportMenu";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 
@@ -1058,6 +1059,15 @@ function AdminDashboard({ user }) {
       <AgentInsightStrip companyId={companyId} />
 
       {/* ── Stat Cards ── */}
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Overview</h2>
+        <div className="flex items-center gap-2">
+          <ExportMenu report="people"       companyId={companyId} label="People"       size="sm" />
+          <ExportMenu report="transactions" companyId={companyId} label="Revenue"      size="sm" />
+          <ExportMenu report="products"     companyId={companyId} label="Products"     size="sm" />
+          <ExportMenu report="scores"       companyId={companyId} label="Risk Scores"  size="sm" />
+        </div>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {visibleCards.has("people") && (
           <StatCard

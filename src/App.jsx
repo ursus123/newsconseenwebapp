@@ -36,6 +36,7 @@ import ObjectViews from './pages/ObjectViews';
 import Landing from './pages/Landing';
 import Agents from './pages/Agents';
 import Workflows from './pages/Workflows';
+import TenantAdmin from './pages/TenantAdmin';
 import Mobile from './pages/Mobile';
 import Layout from './Layout.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
@@ -130,6 +131,7 @@ const AuthenticatedApp = () => {
       <Route path="/agents" element={<LayoutWrapper currentPageName="Agents"><Agents /></LayoutWrapper>} />
       <Route path="/Workflows" element={<LayoutWrapper currentPageName="Workflows"><Workflows /></LayoutWrapper>} />
       <Route path="/ObjectViews" element={<LayoutWrapper currentPageName="Object Views"><ObjectViews /></LayoutWrapper>} />
+      <Route path="/TenantAdmin" element={<LayoutWrapper currentPageName="Tenant Admin"><TenantAdmin /></LayoutWrapper>} />
       {/* Desktop Shell — NO layout wrapper, full screen */}
       <Route path="/Desktop" element={<Desktop />} />
       <Route path="/DesktopSettings" element={<DesktopSettings />} />

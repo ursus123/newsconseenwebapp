@@ -81,6 +81,12 @@ class Settings(BaseSettings):
     airbyte_workspace_id:   Optional[str] = None   # Airbyte workspace ID
     airbyte_webhook_secret: Optional[str] = None   # secures /airbyte/webhook endpoint
 
+    # ----------------------------------------------------------
+    # Platform admin secret — protects /admin/* endpoints
+    # Set ADMIN_SECRET in Railway env vars.
+    # ----------------------------------------------------------
+    admin_secret: Optional[str] = None
+
     class Config:
         env_file       = ".env"
         case_sensitive = False

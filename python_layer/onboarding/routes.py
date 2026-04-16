@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -75,10 +75,10 @@ def _p(value, label, parent):
     return {"entity_type": "person", "field_name": "person_subtype",
             "value": value, "label": label, "parent_value": parent}
 
-def _t(value, label):
-    """task_type entry"""
+def _t(value, label, parent_value=None):
+    """task_type entry. parent_value is stamped at provision time with enterprise_type."""
     return {"entity_type": "task", "field_name": "task_type",
-            "value": value, "label": label, "parent_value": None}
+            "value": value, "label": label, "parent_value": parent_value}
 
 def _e(value, label, parent):
     """enterprise_subtype entry"""
@@ -103,12 +103,17 @@ _TEMPLATES: dict[str, dict] = {
             _p("specialist",        "Specialist",        "contact"),
             _p("insurer",           "Insurer",           "contact"),
             _p("supplier",          "Supplier",          "contact"),
-            _t("appointment",       "Appointment"),
-            _t("follow_up",         "Follow-up"),
-            _t("medication_review", "Medication Review"),
-            _t("home_visit",        "Home Visit"),
-            _t("discharge",         "Discharge"),
-            _t("lab_test",          "Lab Test"),
+            _t("appointment",          "Appointment"),
+            _t("follow_up",            "Follow-up"),
+            _t("home_visit",           "Home Visit"),
+            _t("medication_review",    "Medication Review"),
+            _t("care_plan_update",     "Care Plan Update"),
+            _t("assessment",           "Assessment"),
+            _t("discharge",            "Discharge"),
+            _t("lab_test",             "Lab Test"),
+            _t("incident_report",      "Incident Report"),
+            _t("staff_handover",       "Staff Handover"),
+            _t("training",             "Training / Compliance"),
             _e("clinic",            "Clinic",            "commercial"),
             _e("hospital",          "Hospital",          "commercial"),
             _e("pharmacy",          "Pharmacy",          "commercial"),
@@ -145,12 +150,17 @@ _TEMPLATES: dict[str, dict] = {
             _p("guardian",            "Guardian",            "contact"),
             _p("board_member",        "Board Member",        "contact"),
             _p("donor",               "Donor",               "contact"),
-            _t("class_session",       "Class Session"),
-            _t("assessment",          "Assessment"),
-            _t("parent_meeting",      "Parent Meeting"),
-            _t("exam",                "Exam"),
-            _t("field_trip",          "Field Trip"),
-            _t("enrolment",           "Enrolment"),
+            _t("class_session",        "Class Session"),
+            _t("assessment",           "Assessment"),
+            _t("exam",                 "Exam"),
+            _t("enrolment",            "Enrolment"),
+            _t("parent_meeting",       "Parent Meeting"),
+            _t("field_trip",           "Field Trip"),
+            _t("lesson_planning",      "Lesson Planning"),
+            _t("teacher_observation",  "Teacher Observation"),
+            _t("report_card",          "Report Card / Progress Report"),
+            _t("club_meeting",         "Club / Activity Meeting"),
+            _t("graduation",           "Graduation / Ceremony"),
             _e("school",              "School",              "commercial"),
             _e("campus",              "Campus",              "commercial"),
             _e("training_center",     "Training Center",     "commercial"),
@@ -186,11 +196,15 @@ _TEMPLATES: dict[str, dict] = {
             _p("donor",                "Donor",                "contact"),
             _p("partner_org",          "Partner Organisation", "contact"),
             _p("government_contact",   "Government Contact",   "contact"),
-            _t("field_visit",          "Field Visit"),
-            _t("community_meeting",    "Community Meeting"),
-            _t("report_submission",    "Report Submission"),
-            _t("donor_update",         "Donor Update"),
-            _t("beneficiary_assessment", "Beneficiary Assessment"),
+            _t("field_visit",              "Field Visit"),
+            _t("beneficiary_assessment",   "Beneficiary Assessment"),
+            _t("community_meeting",        "Community Meeting"),
+            _t("report_submission",        "Report Submission"),
+            _t("donor_update",             "Donor Update"),
+            _t("case_review",              "Case Review"),
+            _t("volunteer_coordination",   "Volunteer Coordination"),
+            _t("grant_application",        "Grant Application"),
+            _t("event_planning",           "Event Planning"),
             _e("ngo",                  "NGO",                  "nonprofit"),
             _e("community_group",      "Community Group",      "nonprofit"),
             _e("faith_organisation",   "Faith Organisation",   "nonprofit"),
@@ -225,12 +239,17 @@ _TEMPLATES: dict[str, dict] = {
             _p("buyer",              "Buyer",              "contact"),
             _p("supplier",           "Supplier",           "contact"),
             _p("extension_officer",  "Extension Officer",  "contact"),
-            _t("planting",           "Planting"),
-            _t("harvesting",         "Harvesting"),
-            _t("animal_health_check","Animal Health Check"),
-            _t("soil_testing",       "Soil Testing"),
-            _t("irrigation",         "Irrigation"),
-            _t("market_sale",        "Market Sale"),
+            _t("planting",             "Planting"),
+            _t("harvesting",           "Harvesting"),
+            _t("feeding_round",        "Feeding Round"),
+            _t("animal_health_check",  "Animal Health Check"),
+            _t("vaccination",          "Vaccination"),
+            _t("soil_testing",         "Soil Testing"),
+            _t("irrigation",           "Irrigation"),
+            _t("weighing",             "Weighing / Measurement"),
+            _t("market_sale",          "Market Sale"),
+            _t("equipment_maintenance","Equipment Maintenance"),
+            _t("financial_record",     "Financial Record Entry"),
             _e("farm",               "Farm",               "commercial"),
             _e("cooperative",        "Cooperative",        "cooperative"),
             _e("processing_unit",    "Processing Unit",    "commercial"),
@@ -265,11 +284,16 @@ _TEMPLATES: dict[str, dict] = {
             _p("wholesale_buyer",  "Wholesale Buyer",  "client"),
             _p("supplier",         "Supplier",         "contact"),
             _p("distributor",      "Distributor",      "contact"),
-            _t("stock_replenishment", "Stock Replenishment"),
-            _t("customer_order",   "Customer Order"),
-            _t("delivery",         "Delivery"),
-            _t("returns_processing","Returns Processing"),
-            _t("stocktake",        "Stocktake"),
+            _t("stock_replenishment",  "Stock Replenishment"),
+            _t("customer_order",       "Customer Order"),
+            _t("delivery",             "Delivery"),
+            _t("stocktake",            "Stocktake"),
+            _t("returns_processing",   "Returns Processing"),
+            _t("price_update",         "Price Update"),
+            _t("supplier_meeting",     "Supplier Meeting"),
+            _t("staff_rota",           "Staff Rota / Scheduling"),
+            _t("cash_up",              "Cash Up / End of Day"),
+            _t("customer_complaint",   "Customer Complaint"),
             _e("store",            "Store",            "commercial"),
             _e("branch",           "Branch",           "commercial"),
             _e("warehouse",        "Warehouse",        "commercial"),
@@ -303,11 +327,15 @@ _TEMPLATES: dict[str, dict] = {
             _p("citizen",          "Citizen",          "client"),
             _p("business_entity",  "Business Entity",  "client"),
             _p("partner_agency",   "Partner Agency",   "contact"),
-            _t("inspection",       "Inspection"),
-            _t("permit_processing","Permit Processing"),
-            _t("public_hearing",   "Public Hearing"),
-            _t("compliance_review","Compliance Review"),
-            _t("report_filing",    "Report Filing"),
+            _t("inspection",           "Inspection"),
+            _t("permit_processing",    "Permit Processing"),
+            _t("compliance_review",    "Compliance Review"),
+            _t("report_filing",        "Report Filing"),
+            _t("public_hearing",       "Public Hearing"),
+            _t("case_management",      "Case Management"),
+            _t("community_outreach",   "Community Outreach"),
+            _t("budget_review",        "Budget Review"),
+            _t("emergency_response",   "Emergency Response"),
             _e("department",       "Department",       "government"),
             _e("agency",           "Agency",           "government"),
             _e("municipality",     "Municipality",     "government"),
@@ -341,11 +369,16 @@ _TEMPLATES: dict[str, dict] = {
             _p("prospect",           "Prospect",           "client"),
             _p("vendor",             "Vendor",             "contact"),
             _p("partner",            "Partner",            "contact"),
-            _t("sales_call",         "Sales Call"),
-            _t("proposal",           "Proposal"),
-            _t("contract_review",    "Contract Review"),
-            _t("invoice_follow_up",  "Invoice Follow-up"),
-            _t("support_ticket",     "Support Ticket"),
+            _t("client_meeting",       "Client Meeting"),
+            _t("sales_call",           "Sales Call"),
+            _t("proposal",             "Proposal"),
+            _t("contract_review",      "Contract Review"),
+            _t("invoice_follow_up",    "Invoice Follow-up"),
+            _t("support_ticket",       "Support Ticket"),
+            _t("onboarding_call",      "Onboarding Call"),
+            _t("project_update",       "Project Update"),
+            _t("technical_review",     "Technical Review"),
+            _t("team_meeting",         "Team Meeting"),
             _e("client_company",     "Client Company",     "commercial"),
             _e("partner_org",        "Partner Organisation","commercial"),
             _e("branch",             "Branch",             "commercial"),
@@ -373,6 +406,21 @@ _TEMPLATES: dict[str, dict] = {
 
 # All unknown types fall back to commercial defaults
 _TEMPLATES["default"] = _TEMPLATES["commercial"]
+
+
+# ── Universal task types — seeded for every operator under parent_value="general" ─
+# These appear in the task form when no enterprise is selected, and supplement
+# the industry-specific types when an enterprise IS selected.
+_UNIVERSAL_TASKS = [
+    _t("meeting",           "Meeting",              parent_value="general"),
+    _t("phone_call",        "Phone Call",            parent_value="general"),
+    _t("follow_up",         "Follow-up",             parent_value="general"),
+    _t("document_review",   "Document Review",       parent_value="general"),
+    _t("training",          "Training",              parent_value="general"),
+    _t("report",            "Report",                parent_value="general"),
+    _t("admin_task",        "Admin Task",            parent_value="general"),
+    _t("other",             "Other",                 parent_value="general"),
+]
 
 
 # ── Industry metadata ──────────────────────────────────────────────────────────
@@ -596,7 +644,19 @@ def provision_tenant(req: ProvisionRequest):
         logger.warning("onboarding: workflow creation failed — %s", e)
         workflows_created = []
 
-    taxonomy_count = len(template.get("taxonomy", []))
+    # ── Build taxonomy: stamp enterprise_type as parent_value for task entries ──
+    # task_type MasterDataOption records are scoped to enterprise_type so that
+    # TaxonomySelect in TaskForm shows industry-relevant options when an
+    # enterprise is selected.  Universal tasks are seeded under "general" so
+    # they appear when no enterprise context exists.
+    taxonomy = []
+    for entry in template.get("taxonomy", []):
+        if entry.get("field_name") == "task_type":
+            entry = {**entry, "parent_value": req.enterprise_type.lower()}
+        taxonomy.append(entry)
+    taxonomy.extend(_UNIVERSAL_TASKS)
+
+    taxonomy_count = len(taxonomy)
     ai_readiness   = _compute_ai_readiness(
         taxonomy_count=taxonomy_count,
         workflows_created=len(workflows_created),
@@ -609,6 +669,17 @@ def provision_tenant(req: ProvisionRequest):
 
     industry_meta = _INDUSTRY_META_MAP.get(cluster, _INDUSTRY_META_MAP.get("commercial", {}))
 
+    # ── Persist provisioning log ───────────────────────────────────────────────
+    _log_provision(
+        company_id=req.company_id,
+        enterprise_type=req.enterprise_type,
+        cluster=cluster,
+        taxonomy_count=taxonomy_count,
+        workflows_created=len(workflows_created),
+        ai_readiness_score=ai_readiness,
+        req=req,
+    )
+
     return {
         "status":                  "provisioned",
         "company_id":              req.company_id,
@@ -616,9 +687,93 @@ def provision_tenant(req: ProvisionRequest):
         "cluster":                 cluster,
         "workflows_created":       len(workflows_created),
         "workflow_names":          workflows_created,
-        "taxonomy":                template.get("taxonomy", []),
+        "taxonomy":                taxonomy,
         "taxonomy_count":          taxonomy_count,
         "ai_readiness_score":      ai_readiness,
         "recommended_connectors":  industry_meta.get("recommended_connectors", []),
         "recommended_agents":      industry_meta.get("recommended_agents", []),
     }
+
+
+def _log_provision(
+    company_id: str,
+    enterprise_type: str,
+    cluster: str,
+    taxonomy_count: int,
+    workflows_created: int,
+    ai_readiness_score: int,
+    req: "ProvisionRequest",
+) -> None:
+    """Write a row to analytics.onboarding_log. Fire-and-forget — swallows errors."""
+    try:
+        from database import get_engine_safe
+        engine = get_engine_safe()
+        if not engine:
+            return
+        with engine.begin() as conn:
+            from sqlalchemy import text
+            conn.execute(text("""
+                INSERT INTO analytics.onboarding_log
+                    (company_id, enterprise_type, cluster, taxonomy_count,
+                     workflows_created, ai_readiness_score, steps_completed,
+                     people_added, products_added, tasks_created, invites_sent)
+                VALUES
+                    (:company_id, :enterprise_type, :cluster, :taxonomy_count,
+                     :workflows_created, :ai_readiness_score, :steps_completed,
+                     :people_added, :products_added, :tasks_created, :invites_sent)
+                ON CONFLICT DO NOTHING
+            """), {
+                "company_id":          company_id,
+                "enterprise_type":     enterprise_type,
+                "cluster":             cluster,
+                "taxonomy_count":      taxonomy_count,
+                "workflows_created":   workflows_created,
+                "ai_readiness_score":  ai_readiness_score,
+                "steps_completed":     req.steps_completed,
+                "people_added":        req.people_added,
+                "products_added":      req.products_added,
+                "tasks_created":       req.tasks_created,
+                "invites_sent":        req.invites_sent,
+            })
+    except Exception as exc:
+        logger.debug("onboarding: log write skipped — %s", exc)
+
+
+@router.get("/status/{company_id}")
+def get_onboarding_status(company_id: str):
+    """
+    Return the most recent onboarding provisioning record for a company.
+    Returns 404 if this company has not been provisioned yet.
+    """
+    try:
+        from database import get_engine_safe
+        from sqlalchemy import text
+        engine = get_engine_safe()
+        if engine:
+            with engine.connect() as conn:
+                row = conn.execute(text("""
+                    SELECT company_id, enterprise_type, cluster,
+                           taxonomy_count, workflows_created, ai_readiness_score,
+                           steps_completed, provisioned_at
+                    FROM analytics.onboarding_log
+                    WHERE company_id = :company_id
+                    ORDER BY provisioned_at DESC
+                    LIMIT 1
+                """), {"company_id": company_id}).fetchone()
+
+                if row:
+                    return {
+                        "provisioned":         True,
+                        "company_id":          row.company_id,
+                        "enterprise_type":     row.enterprise_type,
+                        "cluster":             row.cluster,
+                        "taxonomy_count":      row.taxonomy_count,
+                        "workflows_created":   row.workflows_created,
+                        "ai_readiness_score":  row.ai_readiness_score,
+                        "steps_completed":     row.steps_completed,
+                        "provisioned_at":      str(row.provisioned_at),
+                    }
+    except Exception as exc:
+        logger.debug("onboarding status: DB lookup failed — %s", exc)
+
+    raise HTTPException(status_code=404, detail="No onboarding record found for this company")

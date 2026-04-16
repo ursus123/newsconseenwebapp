@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Save, X, CheckCircle, AlertCircle, ExternalLink } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import TagInput from "@/components/shared/TagInput";
+import TaxonomySelect from "@/components/shared/TaxonomySelect";
 
 export const TASK_TYPE_GROUPS = [
   {
@@ -181,24 +182,14 @@ function SectionDivider({ label }) {
   );
 }
 
-export default function TaskForm({ open, onClose, onSubmit, initialData, appUsers, enterprises, products, services, people }) {
+export default function TaskForm({ open, onClose, onSubmit, initialData, appUsers, enterprises, products, services, people, currentUser }) {
   const [form, setForm] = useState({});
-  const [appAccessMap, setAppAccessMap] = useState({});
 
   useEffect(() => {
     if (open) {
       setForm(initialData || { status: "open", priority: "normal", outcome: "pending", trigger_transaction: false });
     }
   }, [open, initialData]);
-
-  // Build a map of user email => allowed apps
-  useEffect(() => {
-    const map = {};
-    (appUsers || []).forEach((u) => {
-      map[u.email] = [];
-    });
-    setAppAccessMap(map);
-  }, [appUsers]);
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
@@ -212,28 +203,16 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, appUser
     set("assigned_to_name", u ? u.full_name || u.email : email);
   };
 
-  // Get available task types for the selected user
-  const availableTaskTypes = () => {
-    if (!form.assigned_to_email) return TASK_TYPE_GROUPS;
-    
-    // Get user's allowed apps
-    const userAllowedApps = appAccessMap[form.assigned_to_email] || [];
-    
-    // Filter task type groups and types based on user app access
-    return TASK_TYPE_GROUPS.map((group) => ({
-      ...group,
-      types: group.types.filter((t) => {
-        const appNeeded = TASK_TYPE_TO_APP[t.value];
-        // Show task if no specific app mapping or if user has access
-        return !appNeeded || userAllowedApps.includes(appNeeded);
-      }),
-    })).filter((g) => g.types.length > 0);
-  };
+  // Derive enterprise context for task type scoping (Option 2).
+  // Uses enterprise_type (e.g. "school", "clinic") — matches what onboarding seeds.
+  // Falls back to "general" so universal task types always appear.
+  const selectedEnterprise = (enterprises || []).find(
+    (e) => e.enterprise_name === form.enterprise || e.id === form.enterprise
+  );
+  const enterpriseParentValue = selectedEnterprise?.enterprise_type || "general";
 
-  // Get app to navigate to
-  const getTaskApp = () => {
-    return TASK_TYPE_TO_APP[form.task_type];
-  };
+  // Get app to navigate to (for built-in mapped types — backward compat)
+  const getTaskApp = () => TASK_TYPE_TO_APP[form.task_type];
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -256,35 +235,30 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, appUser
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
 
-            {/* Task Type */}
-             <Field label="Task Type" required>
-               <div className="space-y-2">
-                 <Select value={form.task_type || ""} onValueChange={(v) => set("task_type", v)}>
-                   <SelectTrigger className="rounded-xl"><SelectValue placeholder={form.assigned_to_email ? "Select task type..." : "Assign user first..."} /></SelectTrigger>
-                   <SelectContent className="max-h-72">
-                     {availableTaskTypes().map((g) => (
-                       <React.Fragment key={g.group}>
-                         <div className="px-2 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider bg-slate-50">{g.group}</div>
-                         {g.types.map((t) => (
-                           <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                         ))}
-                       </React.Fragment>
-                     ))}
-                   </SelectContent>
-                 </Select>
-                 {getTaskApp() && (
-                   <a
-                     href={createPageUrl(getTaskApp())}
-                     target="_blank"
-                     rel="noopener noreferrer"
-                     className="inline-flex items-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
-                   >
-                     <ExternalLink className="w-3.5 h-3.5" />
-                     Go to {getTaskApp()} App
-                   </a>
-                 )}
-               </div>
-             </Field>
+            {/* Task Type — operator-defined via MasterDataOption, scoped to enterprise type */}
+            <Field label="Task Type" required>
+              <div className="space-y-2">
+                <TaxonomySelect
+                  entityType="task"
+                  fieldName="task_type"
+                  parentValue={enterpriseParentValue}
+                  companyId={currentUser?.company_id}
+                  value={form.task_type || ""}
+                  onChange={(v) => set("task_type", v)}
+                />
+                {getTaskApp() && (
+                  <a
+                    href={createPageUrl(getTaskApp())}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Go to {getTaskApp()} App
+                  </a>
+                )}
+              </div>
+            </Field>
 
             {/* Title */}
             <Field label="Task Title / Instructions" required>

@@ -128,7 +128,7 @@ export const AuthProvider = ({ children }) => {
 
   const navigateToLogin = async () => {
     const base44 = await getBase44();
-    base44.auth.redirectToLogin(window.location.href);
+    base44.auth.redirectToLogin(window.location.origin + "/Dashboard");
   };
 
   // Refresh user data (e.g. after onboarding_complete is set)

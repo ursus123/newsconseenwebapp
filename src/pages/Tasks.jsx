@@ -574,6 +574,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         products={products}
         services={services}
         people={people}
+        currentUser={currentUser}
       />
 
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.title} />

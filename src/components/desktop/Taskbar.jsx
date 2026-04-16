@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { DESKTOP_APPS } from "@/desktop/desktopApps";
-import { Bell, Lock } from "lucide-react";
+import { Bell, Lock, Sparkles } from "lucide-react";
 
 // ── Clock ─────────────────────────────────────────────────────────────────────
 function Clock() {
@@ -146,6 +146,8 @@ export default function Taskbar({
   onCloseWindow,
   onToggleLauncher,
   onToggleNotifications,
+  onToggleCopilot,
+  copilotOpen,
   unreadCount,
   pinnedApps,
   launcherOpen,
@@ -263,6 +265,23 @@ export default function Taskbar({
             className="relative w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all"
           >
             <Lock className="w-4 h-4" />
+          </button>
+        </Tooltip>
+
+        {/* Copilot */}
+        <Tooltip label="Copilot  (Ctrl+I)">
+          <button
+            onClick={onToggleCopilot}
+            className="relative w-9 h-9 rounded-xl flex items-center justify-center transition-all"
+            style={{
+              background: copilotOpen ? "rgba(16,185,129,0.20)" : "transparent",
+              color: copilotOpen ? "#10b981" : "#94a3b8",
+              border: copilotOpen ? "1px solid rgba(16,185,129,0.35)" : "1px solid transparent",
+            }}
+            onMouseEnter={e => { if (!copilotOpen) { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "white"; } }}
+            onMouseLeave={e => { if (!copilotOpen) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#94a3b8"; } }}
+          >
+            <Sparkles className="w-4 h-4" />
           </button>
         </Tooltip>
 

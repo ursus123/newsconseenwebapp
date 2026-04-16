@@ -47,6 +47,10 @@ dnspython             # DNS MX check for email validation
 # Alerts (Phase 3B)
 sendgrid
 
+# Security — 2FA / TOTP
+pyotp
+qrcode[pil]
+
 # Utilities
 tenacity
 orjson

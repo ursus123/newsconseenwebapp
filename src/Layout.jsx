@@ -105,6 +105,7 @@ const NAV_CONFIG = {
     {
       section: "Admin Tools",
       items: [
+        { name: "TenantAdmin",    label: "Tenant Admin",    icon: ShieldCheck },
         { name: "UserManagement", label: "User Management", icon: UserCog },
         { name: "Permissions",    icon: Shield },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },

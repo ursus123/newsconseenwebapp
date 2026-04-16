@@ -329,7 +329,7 @@ export default function Landing() {
             <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => base44.auth.redirectToLogin()} className="text-sm text-slate-400 hover:text-white transition-colors">Sign in</button>
+            <button onClick={() => base44.auth.redirectToLogin(window.location.origin + "/Dashboard")} className="text-sm text-slate-400 hover:text-white transition-colors">Sign in</button>
             <button onClick={() => navigate("/onboarding")} className="bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors shadow-md shadow-emerald-500/20">
               Sign Up
             </button>
@@ -364,7 +364,7 @@ export default function Landing() {
                 <Monitor className="w-5 h-5" /> Get Started Free
               </button>
               <button
-                onClick={() => base44.auth.redirectToLogin()}
+                onClick={() => base44.auth.redirectToLogin(window.location.origin + "/Dashboard")}
                 className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold px-6 py-4 rounded-2xl text-base transition-all"
               >
                 Sign In <ArrowRight className="w-4 h-4" />

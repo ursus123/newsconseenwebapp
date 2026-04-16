@@ -13,6 +13,7 @@ import {
 import { format, subDays, parseISO } from "date-fns";
 import { TrendingUp, Users, ArrowLeftRight, ClipboardList } from "lucide-react";
 import { RAILWAY_URL } from "@/utils/fetchWithFallback";
+import ExportMenu from "@/components/shared/ExportMenu";
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ function mergeTrend(skeleton, rows, dateField, valueField) {
 
 // ── Chart wrapper ─────────────────────────────────────────────────────────────
 
-function TrendCard({ title, icon: Icon, color, data, valueLabel, isLoading, note }) {
+function TrendCard({ title, icon: Icon, color, data, valueLabel, isLoading, note, report, companyId }) {
   const gradientId = `grad-${color}`;
   const strokeColor = {
     blue:   "#3b82f6",
@@ -63,14 +64,19 @@ function TrendCard({ title, icon: Icon, color, data, valueLabel, isLoading, note
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <div className={`w-8 h-8 rounded-lg bg-${color}-50 flex items-center justify-center`}>
-          <Icon className={`w-4 h-4 text-${color}-500`} />
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2">
+          <div className={`w-8 h-8 rounded-lg bg-${color}-50 flex items-center justify-center`}>
+            <Icon className={`w-4 h-4 text-${color}-500`} />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
+            {note && <p className="text-[10px] text-slate-400">{note}</p>}
+          </div>
         </div>
-        <div>
-          <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
-          {note && <p className="text-[10px] text-slate-400">{note}</p>}
-        </div>
+        {report && companyId && (
+          <ExportMenu report={report} companyId={companyId} size="sm" />
+        )}
       </div>
 
       {isLoading ? (
@@ -168,8 +174,11 @@ export default function TrendCharts({ companyId }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-slate-700">30-Day Trends</h2>
-        <span className="text-xs text-slate-400">From analytics · updated on ETL run</span>
+        <div>
+          <h2 className="text-base font-semibold text-slate-700">30-Day Trends</h2>
+          <p className="text-xs text-slate-400">From analytics · updated on ETL run</p>
+        </div>
+        <ExportMenu report="transactions" companyId={companyId} label="Export All" size="sm" />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <TrendCard
@@ -180,6 +189,8 @@ export default function TrendCharts({ companyId }) {
           valueLabel="Total people"
           isLoading={loadingPeople}
           note="Headcount over 30 days"
+          report="people"
+          companyId={companyId}
         />
         <TrendCard
           title="Revenue"
@@ -189,6 +200,8 @@ export default function TrendCharts({ companyId }) {
           valueLabel="Revenue"
           isLoading={loadingTx}
           note="Posted transactions over 30 days"
+          report="transactions"
+          companyId={companyId}
         />
         <TrendCard
           title="Task Completions"
@@ -198,6 +211,8 @@ export default function TrendCharts({ companyId }) {
           valueLabel="Completed"
           isLoading={loadingTasks}
           note="Tasks completed over 30 days"
+          report="tasks"
+          companyId={companyId}
         />
       </div>
     </div>

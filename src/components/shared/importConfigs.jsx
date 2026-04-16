@@ -918,7 +918,7 @@ export const TASK_TEMPLATE_EXAMPLE = {
 };
 
 export const TASK_TEMPLATE_INSTRUCTIONS = [
-  ["task_type","Yes","Task type","clock_in, clock_out, stock_counting, maintenance, medication_admin, other, etc."],
+  ["task_type","Yes","Task type","Any value from your task taxonomy (e.g. appointment, class_session, field_visit, delivery, other)"],
   ["title","Yes","Short description of the task","Follow up with client"],
   ["status","No","Status","open, in_progress, completed, cancelled"],
   ["priority","No","Priority","low, normal, high, urgent"],
@@ -958,11 +958,10 @@ export function transformTask(row, currentUser) {
   // Merge enterprise_name → enterprise if not already set
   const enterprise = row.enterprise || row.enterprise_name || undefined;
 
-  const VALID_TYPES = ["clock_in","clock_out","stock_counting","maintenance",
-                       "medication_admin","other","care_visit","assessment",
-                       "wound_care","therapy_session","supervision",
-                       "documentation","medication_management"];
-  const taskType = VALID_TYPES.includes(row.task_type) ? row.task_type : "other";
+  // task_type is operator-defined taxonomy — accept any non-empty string.
+  // Never coerce to "other": an operator importing "class_session" or "field_visit"
+  // must get exactly those values, not "other".
+  const taskType = row.task_type || "other";
 
   const existing = row.internal_notes ? [row.internal_notes] : [];
   return {

@@ -83,11 +83,11 @@ function WeatherWidget({ isLight, onRemove, onDragStart }) {
   const [error, setError]     = useState(null);
 
   useEffect(() => {
-    // Use Open-Meteo (free, no key)
+    const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
     navigator.geolocation?.getCurrentPosition(async (pos) => {
       try {
         const { latitude: lat, longitude: lon } = pos.coords;
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=temperature_2m,precipitation_probability&forecast_days=1&wind_speed_unit=mph`;
+        const url = `${RAILWAY_URL}/open-data/weather?lat=${lat}&lon=${lon}`;
         const res = await fetch(url);
         const data = await res.json();
         const cw = data.current_weather;
