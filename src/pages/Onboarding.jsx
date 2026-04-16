@@ -85,7 +85,7 @@ export default function Onboarding() {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const { data: currentUser = null } = useQuery({
+  const { data: currentUser = null, isLoading: userLoading } = useQuery({
     queryKey: ["currentUser"],
     queryFn: () => base44.auth.me(),
     staleTime: 0,
@@ -104,6 +104,14 @@ export default function Onboarding() {
   const [createdEnterprise, setCreatedEnterprise] = useState(null);
   const [provisionResult, setProvisionResult]     = useState(null);
   const [provisioning, setProvisioning]           = useState(false);
+
+  // Auth guard — redirect unauthenticated users to login, then return here
+  React.useEffect(() => {
+    if (userLoading) return; // wait for query to resolve
+    if (currentUser === null) {
+      base44.auth.redirectToLogin(window.location.origin + "/onboarding");
+    }
+  }, [currentUser, userLoading]);
 
   React.useEffect(() => {
     if (!currentUser) return;
@@ -454,7 +462,7 @@ export default function Onboarding() {
 
       <p className="text-center text-xs text-slate-400 pb-6">
         Already have an account?{" "}
-        <button onClick={() => base44.auth.redirectToLogin()} className="text-emerald-600 hover:underline font-medium">Sign in</button>
+        <button onClick={() => base44.auth.redirectToLogin(window.location.origin + "/onboarding")} className="text-emerald-600 hover:underline font-medium">Sign in</button>
       </p>
     </div>
   );

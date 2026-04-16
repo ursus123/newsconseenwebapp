@@ -158,8 +158,6 @@ export default function Enterprises() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  useEffect(() => { base44.auth.me().then(setCurrentUser).catch(() => {}); }, []);
-
   useEffect(() => {
     const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["enterprises"] }); };
     document.addEventListener("visibilitychange", fn);
