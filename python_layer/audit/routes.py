@@ -85,7 +85,7 @@ _ensure_audit_table = ensure_audit_table
 def _pg_insert(entry: dict) -> None:
     """Write an audit entry to PostgreSQL (best-effort, non-blocking)."""
     try:
-        from database import get_engine_safe
+        from database import get_engine_safe, _clean_df
         engine = get_engine_safe()
         if not engine:
             return
@@ -126,7 +126,7 @@ def _pg_query(
 ) -> Optional[list[dict]]:
     """Read from PostgreSQL audit.change_log. Returns None if unavailable."""
     try:
-        from database import get_engine_safe
+        from database import get_engine_safe, _clean_df
         import pandas as pd
         engine = get_engine_safe()
         if not engine:
@@ -163,7 +163,7 @@ def _pg_query(
         df = pd.read_sql(sql, engine, params=params)
         if df.empty:
             return []
-        records = df.to_dict(orient="records")
+        records = df.pipe(_clean_df).to_dict(orient="records")
         for r in records:
             if hasattr(r.get("timestamp"), "isoformat"):
                 r["timestamp"] = r["timestamp"].isoformat()
@@ -312,7 +312,7 @@ def audit_summary(company_id: str = Query(...)):
     """
     # Try PostgreSQL — has full durable history
     try:
-        from database import get_engine_safe
+        from database import get_engine_safe, _clean_df
         import pandas as pd
         engine = get_engine_safe()
         if engine:

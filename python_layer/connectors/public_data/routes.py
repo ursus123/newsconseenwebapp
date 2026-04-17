@@ -19,6 +19,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Query, HTTPException
+from database import _clean_df
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ def cms_pharmacies(
         from connectors.public_data.cms_medicare import CMSMedicareConnector
         conn = CMSMedicareConnector()
         df = conn.get_pharmacy_providers(state=state, city=city, limit=limit)
-        records = df.to_dict(orient="records") if not df.empty else []
+        records = df.pipe(_clean_df).to_dict(orient="records") if not df.empty else []
         return {
             "state":   state,
             "count":   len(records),
@@ -66,7 +67,7 @@ def cms_partd_spending(
         from connectors.public_data.cms_medicare import CMSMedicareConnector
         conn = CMSMedicareConnector()
         df = conn.get_partd_drug_spending(drug_name=drug_name, limit=limit)
-        records = df.to_dict(orient="records") if not df.empty else []
+        records = df.pipe(_clean_df).to_dict(orient="records") if not df.empty else []
         return {
             "drug_filter": drug_name,
             "count":       len(records),
@@ -92,7 +93,7 @@ def cms_prescribers(
         from connectors.public_data.cms_medicare import CMSMedicareConnector
         conn = CMSMedicareConnector()
         df = conn.get_prescriber_patterns(state=state, drug_name=drug_name, limit=limit)
-        records = df.to_dict(orient="records") if not df.empty else []
+        records = df.pipe(_clean_df).to_dict(orient="records") if not df.empty else []
         return {
             "state":      state,
             "drug_filter": drug_name,
@@ -121,7 +122,7 @@ def dea_pharmacies(
         from connectors.public_data.dea_registrant import DEARegistrantConnector
         conn = DEARegistrantConnector()
         df = conn.get_pharmacies_by_state(state=state, city=city, limit=limit)
-        records = df.to_dict(orient="records") if not df.empty else []
+        records = df.pipe(_clean_df).to_dict(orient="records") if not df.empty else []
         return {
             "state":  state,
             "count":  len(records),
@@ -147,7 +148,7 @@ def dea_opioid_dispensing(
         from connectors.public_data.dea_registrant import DEARegistrantConnector
         conn = DEARegistrantConnector()
         df = conn.get_opioid_dispensing_by_county(state=state, year=year)
-        records = df.to_dict(orient="records") if not df.empty else []
+        records = df.pipe(_clean_df).to_dict(orient="records") if not df.empty else []
         return {
             "state":  state,
             "year":   year,
@@ -172,7 +173,7 @@ def dea_pharmacy_count(
         from connectors.public_data.dea_registrant import DEARegistrantConnector
         conn = DEARegistrantConnector()
         df = conn.get_pharmacy_count_by_city(state=state)
-        records = df.to_dict(orient="records") if not df.empty else []
+        records = df.pipe(_clean_df).to_dict(orient="records") if not df.empty else []
         return {
             "state":  state,
             "count":  len(records),
@@ -202,7 +203,7 @@ def state_pharmacies(
         from connectors.public_data.state_pharmacy import StatePharmacyConnector
         conn = StatePharmacyConnector()
         df = conn.get_licensed_pharmacies(state=state, city=city, active_only=active_only, limit=limit)
-        records = df.to_dict(orient="records") if not df.empty else []
+        records = df.pipe(_clean_df).to_dict(orient="records") if not df.empty else []
         return {
             "state":  state,
             "count":  len(records),

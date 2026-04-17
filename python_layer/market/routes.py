@@ -33,6 +33,7 @@ from typing import Any, Dict, List, Optional
 import requests
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
+from database import _clean_df
 
 logger = logging.getLogger(__name__)
 
@@ -486,7 +487,7 @@ def get_my_enterprises(
     # Convert numpy types for JSON serialisation
     result_df = result_df.where(result_df.notna(), other=None)
 
-    records = result_df.to_dict(orient="records")
+    records = result_df.pipe(_clean_df).to_dict(orient="records")
     geocoded_count = sum(1 for r in records if r.get("latitude") is not None)
 
     return {
@@ -559,11 +560,11 @@ def ml_market_segment(req: MLRequest):
         prod_df["segment"] = prod_df["cluster"].map(PROD_LABELS)
 
         out_cols = [c for c in ["id","name","item_type","item_subtype","unit_price","cost_price","stock_quantity","segment"] if c in prod_df.columns]
-        result["segments"] = prod_df[out_cols].to_dict(orient="records")
+        result["segments"] = prod_df[out_cols].pipe(_clean_df).to_dict(orient="records")
         result["summary"]  = prod_df.groupby("segment").agg(
             count=("segment","count"),
             avg_price=("unit_price","mean") if "unit_price" in prod_df.columns else ("segment","count"),
-        ).round(2).reset_index().to_dict(orient="records")
+        ).round(2).reset_index().pipe(_clean_df).to_dict(orient="records")
         result["features_used"] = feat_cols
 
     elif object_type == "Geography":
@@ -584,7 +585,7 @@ def ml_market_segment(req: MLRequest):
         df["segment"] = df["cluster"].apply(lambda c: f"zone_{c+1}")
 
         out_cols = [c for c in ["id","enterprise_name","enterprise_type","latitude","longitude","cluster","segment"] if c in df.columns]
-        result["segments"] = df[out_cols].to_dict(orient="records")
+        result["segments"] = df[out_cols].pipe(_clean_df).to_dict(orient="records")
         result["cluster_centers"] = [
             {"cluster": i, "lat": float(c[0]), "lng": float(c[1])}
             for i, c in enumerate(km.cluster_centers_)
@@ -657,8 +658,8 @@ def ml_staffing_gap(req: MLRequest):
         "median_tasks_per_staff": round(float(merged["tasks_per_staff"].median()), 2),
         "p25": round(p25, 2),
         "p75": round(p75, 2),
-        "gaps": merged.to_dict(orient="records"),
-        "summary": merged.groupby("staffing_status").size().reset_index(name="count").to_dict(orient="records"),
+        "gaps": merged.pipe(_clean_df).to_dict(orient="records"),
+        "summary": merged.groupby("staffing_status").size().reset_index(name="count").pipe(_clean_df).to_dict(orient="records"),
     }
 
 
@@ -707,8 +708,8 @@ def ml_price_position(req: MLRequest):
         "price_field": price_col,
         "market_avg": round(float(df[price_col].mean()), 2),
         "market_median": round(float(df[price_col].median()), 2),
-        "products":  df[out_cols].to_dict(orient="records"),
-        "distribution": df.groupby("price_position").size().reset_index(name="count").to_dict(orient="records"),
+        "products":  df[out_cols].pipe(_clean_df).to_dict(orient="records"),
+        "distribution": df.groupby("price_position").size().reset_index(name="count").pipe(_clean_df).to_dict(orient="records"),
     }
 
 
@@ -887,7 +888,7 @@ def ml_demand_forecast(req: MLRequest):
         pred   = float(model.predict([[t_next]])[0])
         forecast.append({"period_offset": i, "predicted_amount": round(max(pred, 0), 2)})
 
-    historical = df[[period_col, amount_col, "t"]].to_dict(orient="records")
+    historical = df[[period_col, amount_col, "t"]].pipe(_clean_df).to_dict(orient="records")
     trend = "growing" if model.coef_[0] > 0 else "declining"
 
     return {
@@ -961,8 +962,8 @@ def ml_service_gap(req: MLRequest):
         "clustered":    len(clustered),
         "isolated":     len(isolated),
         "n_clusters":   int(labels.max()) + 1 if labels.max() >= 0 else 0,
-        "enterprises":  df[out_cols].to_dict(orient="records"),
-        "gap_locations": isolated[out_cols].to_dict(orient="records"),
+        "enterprises":  df[out_cols].pipe(_clean_df).to_dict(orient="records"),
+        "gap_locations": isolated[out_cols].pipe(_clean_df).to_dict(orient="records"),
         "interpretation": f"{len(isolated)} of your enterprises are geographically isolated — potential underserved zones or expansion opportunities.",
     }
 
@@ -1052,7 +1053,7 @@ def ml_churn_risk(req: MLRequest):
         "high_risk":    int((df["churn_risk"] == "high").sum()),
         "medium_risk":  int((df["churn_risk"] == "medium").sum()),
         "low_risk":     int((df["churn_risk"] == "low").sum()),
-        "at_risk":      at_risk[out_cols].head(50).to_dict(orient="records"),
+        "at_risk":      at_risk[out_cols].head(50).pipe(_clean_df).to_dict(orient="records"),
         "features_used": available,
     }
 

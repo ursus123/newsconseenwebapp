@@ -14,7 +14,7 @@ import urllib.parse
 import urllib.request
 from typing import Optional
 from sqlalchemy import text
-from database import get_engine_safe
+from database import get_engine_safe, _clean_df
 
 logger = logging.getLogger(__name__)
 
@@ -406,7 +406,7 @@ def get_people_summary(company_id: str, person_type: Optional[str] = None) -> di
                 if col not in df.columns:
                     df[col] = "unknown"
             grouped = df.groupby(["person_type", "status"]).size().reset_index(name="count")
-            rows = grouped.to_dict(orient="records")
+            rows = grouped.pipe(_clean_df).to_dict(orient="records")
             for r in rows:
                 r["active_count"]   = r["count"] if r.get("status") == "active" else 0
                 r["inactive_count"] = r["count"] if r.get("status") != "active" else 0
@@ -463,7 +463,7 @@ def get_person_churn_risk(company_id: str, top_n: int = 10) -> dict:
             inactive = df[df["status"] == "inactive"]
             if "person_type" in inactive.columns:
                 grouped = inactive.groupby("person_type").size().reset_index(name="count")
-                rows = grouped.nlargest(top_n, "count").to_dict(orient="records")
+                rows = grouped.nlargest(top_n, "count").pipe(_clean_df).to_dict(orient="records")
                 for r in rows:
                     r["inactive_count"] = r["count"]
             logger.info("get_person_churn_risk: using Base44 fallback (%d inactive)", len(inactive))
@@ -590,7 +590,7 @@ def get_transaction_summary(
                 count=("id", "count"),
                 total_amount=("amount", "sum"),
             ).reset_index()
-            rows = grouped.to_dict(orient="records")
+            rows = grouped.pipe(_clean_df).to_dict(orient="records")
             for r in rows:
                 tt = (r.get("transaction_type") or "").lower()
                 r["is_revenue"]       = tt in revenue_types
@@ -741,7 +741,7 @@ def get_task_summary(
                 lambda r: r["total_tasks"] if r["status"] == "completed" else 0, axis=1)
             grouped["completion_rate_pct"] = grouped.apply(
                 lambda r: 100.0 if r["status"] == "completed" else 0.0, axis=1)
-            rows = grouped.to_dict(orient="records")
+            rows = grouped.pipe(_clean_df).to_dict(orient="records")
             logger.info("get_task_summary: using Base44 fallback (%d rows)", len(df))
 
     total     = sum(r.get("total_tasks")     or 0 for r in rows)
@@ -815,7 +815,7 @@ def get_task_outcomes(
             grouped["overdue"]           = 0
             grouped["completion_rate_pct"] = grouped.apply(lambda r: 100.0 if r["status"] == "completed" else 0.0, axis=1)
             grouped["pct_of_total"]      = grouped["count"].apply(lambda c: round(c / total_all * 100, 1) if total_all else 0)
-            rows = grouped.to_dict(orient="records")
+            rows = grouped.pipe(_clean_df).to_dict(orient="records")
             logger.info("get_task_outcomes: using Base44 fallback (%d rows)", len(df))
 
     completed = sum(r.get("completed", 0) or 0 for r in rows)
@@ -911,7 +911,7 @@ def get_product_summary(
                 expiring_7d_count=("_exp7", "sum"),
                 expiring_30d_count=("_exp30", "sum"),
             ).reset_index()
-            rows = grouped.to_dict(orient="records")
+            rows = grouped.pipe(_clean_df).to_dict(orient="records")
             logger.info("get_product_summary: using Base44 fallback (%d products)", len(df))
 
     total_low_stock    = sum(r.get("low_stock_count",    0) or 0 for r in rows)
@@ -988,7 +988,7 @@ def get_enterprise_overview(company_id: str) -> dict:
                 "id", "enterprise_name", "enterprise_type", "operating_status",
                 "status", "is_active", "is_root", "parent_id",
                 "naics_code", "naics_title", "sic_code", "sic_description",
-            ) if c in df.columns]].rename(columns={"enterprise_name": "name"}).to_dict(orient="records")
+            ) if c in df.columns]].rename(columns={"enterprise_name": "name"}).pipe(_clean_df).to_dict(orient="records")
             logger.info("get_enterprise_overview: using Base44 fallback (%d enterprises)", len(df))
 
     active_count = sum(1 for r in rows if r.get("is_active"))
@@ -1053,7 +1053,7 @@ def get_network_overview(company_id: str) -> dict:
             df_ent["is_active"] = df_ent["status"].eq("active") if "status" in df_ent.columns else True
             enterprises = df_ent[[c for c in (
                 "enterprise_name", "enterprise_type", "operating_status", "is_active", "is_root",
-            ) if c in df_ent.columns]].rename(columns={"enterprise_name": "name"}).to_dict(orient="records")
+            ) if c in df_ent.columns]].rename(columns={"enterprise_name": "name"}).pipe(_clean_df).to_dict(orient="records")
             logger.info("get_network_overview: enterprises from Base44 fallback (%d)", len(enterprises))
 
     # People totals
@@ -1079,7 +1079,7 @@ def get_network_overview(company_id: str) -> dict:
                 total=("id", "count"),
                 active=("status", lambda s: (s == "active").sum()),
             ).reset_index()
-            people = grp.to_dict(orient="records")
+            people = grp.pipe(_clean_df).to_dict(orient="records")
             logger.info("get_network_overview: people from Base44 fallback (%d groups)", len(people))
 
     # Task totals
@@ -1210,7 +1210,7 @@ def get_monthly_kpis(company_id: str, months: int = 12) -> dict:
 
             kpi_df = transform_monthly_kpis(ppl, txs, tsk, lookback_months=months)
             kpi_df = _filter_by_company(kpi_df, company_id)
-            rows = kpi_df.to_dict(orient="records") if not kpi_df.empty else []
+            rows = kpi_df.pipe(_clean_df).to_dict(orient="records") if not kpi_df.empty else []
             logger.info("get_monthly_kpis: using live fallback (%d months)", len(rows))
         except Exception as e:
             logger.warning("get_monthly_kpis live fallback failed: %s", e)
@@ -1292,7 +1292,7 @@ def get_entity_list(
             if status and "status" in idx_df.columns:
                 idx_df = idx_df[idx_df["status"] == status.lower()]
             idx_df = idx_df.sort_values("tenure_days", ascending=False).head(top_n)
-            rows = idx_df.to_dict(orient="records") if not idx_df.empty else []
+            rows = idx_df.pipe(_clean_df).to_dict(orient="records") if not idx_df.empty else []
             logger.info("get_entity_list: using live fallback (%d entities)", len(rows))
         except Exception as e:
             logger.warning("get_entity_list live fallback failed: %s", e)
@@ -1363,7 +1363,7 @@ def get_company_scorecard(company_id: str) -> dict:
                 _fetch_filtered("products",     extract_products),
             )
             sc_df = _filter_by_company(sc_df, company_id)
-            rows = sc_df.to_dict(orient="records") if not sc_df.empty else []
+            rows = sc_df.pipe(_clean_df).to_dict(orient="records") if not sc_df.empty else []
             logger.info("get_company_scorecard: using live fallback")
         except Exception as e:
             logger.warning("get_company_scorecard live fallback failed: %s", e)
@@ -1528,7 +1528,7 @@ def get_relationship_summary(
                 df = df[df["relationship_type"] == relationship_type]
             if not df.empty:
                 grp = df.groupby(["relationship_type", "status"]).size().reset_index(name="count")
-                rows = grp.to_dict(orient="records")
+                rows = grp.pipe(_clean_df).to_dict(orient="records")
                 logger.info("get_relationship_summary: live fallback — %d relationship records", len(df))
         except Exception as e:
             logger.warning("get_relationship_summary fallback failed: %s", e)
@@ -1586,7 +1586,7 @@ def get_address_overview(company_id: str) -> dict:
                 grp_cols = [c for c in ["address_type", "city", "state_province", "country"] if c in df.columns]
                 if grp_cols:
                     grp = df.groupby(grp_cols).size().reset_index(name="count")
-                    rows = grp.sort_values("count", ascending=False).head(50).to_dict(orient="records")
+                    rows = grp.sort_values("count", ascending=False).head(50).pipe(_clean_df).to_dict(orient="records")
                 else:
                     rows = [{"count": len(df), "note": "address fields not available"}]
                 logger.info("get_address_overview: Base44 fallback — %d addresses", len(df))
@@ -1643,7 +1643,7 @@ def get_service_overview(company_id: str) -> dict:
                     agg["price"] = "mean"
                 grp = df.groupby(grp_cols).agg(agg).reset_index()
                 grp.rename(columns={"id": "count", "price": "avg_price"}, inplace=True)
-                rows = grp.sort_values("count", ascending=False).to_dict(orient="records")
+                rows = grp.sort_values("count", ascending=False).pipe(_clean_df).to_dict(orient="records")
                 logger.info("get_service_overview: Base44 fallback — %d services", len(df))
         except Exception as e:
             logger.warning("get_service_overview fallback failed: %s", e)
@@ -1761,7 +1761,7 @@ def get_product_at_risk(
                 rows = at_risk[
                     ["name", "item_type", "status", "stock_quantity", "reorder_level",
                      "unit_of_measure", "expiry_date", "unit_price"]
-                ].head(top_n).to_dict(orient="records")
+                ].head(top_n).pipe(_clean_df).to_dict(orient="records")
             _dao, _src = None, "base44_live"
             logger.info("get_product_at_risk: Base44 fallback — %d at-risk items", len(rows))
 
@@ -1987,7 +1987,7 @@ def get_top_debtors(
                     .sort_values("total_outstanding", ascending=False)
                     .head(top_n)
                 )
-                rows = grp.to_dict(orient="records")
+                rows = grp.pipe(_clean_df).to_dict(orient="records")
             _dao, _src = None, "base44_live"
             logger.info("get_top_debtors: Base44 fallback — %d debtors", len(rows))
 
@@ -2084,7 +2084,7 @@ def _b44_people_records(company_id: str, name_fragment: str = None,
         keep = [c for c in ("id", "full_name", "name", "person_type", "person_subtype",
                              "status", "phone", "email", "enterprise_name",
                              "engagement_model", "created_date", "end_date") if c in df.columns]
-        return df[keep].head(limit).to_dict(orient="records")
+        return df[keep].head(limit).pipe(_clean_df).to_dict(orient="records")
     except Exception as e:
         logger.warning("_b44_people_records fallback: %s", e)
         return []
@@ -2232,7 +2232,7 @@ def find_task_records(
                                      "assignee_name", "due_date", "created_date",
                                      "completed_date", "outcome", "priority",
                                      "enterprise_name", "notes") if c in df.columns]
-                rows = df[keep].head(limit).to_dict(orient="records")
+                rows = df[keep].head(limit).pipe(_clean_df).to_dict(orient="records")
         except Exception as e:
             logger.warning("find_task_records Base44 fallback: %s", e)
         source = "base44_live"
@@ -2319,7 +2319,7 @@ def find_transaction_records(
                                      "amount", "currency", "transaction_date", "due_date",
                                      "counterparty_name", "description", "reference_number",
                                      "enterprise_name", "created_date") if c in df.columns]
-                rows = df[keep].head(limit).to_dict(orient="records")
+                rows = df[keep].head(limit).pipe(_clean_df).to_dict(orient="records")
         except Exception as e:
             logger.warning("find_transaction_records Base44 fallback: %s", e)
         source = "base44_live"
@@ -2385,7 +2385,7 @@ def inspect_raw_record(
                         "found":       True,
                         "entity":      entity,
                         "record_id":   record_id,
-                        "record":      match.iloc[0].to_dict(),
+                        "record":      _clean_df(match.iloc[0]).to_dict(),
                         "data_source": "base44_live",
                     }
         except Exception as e:
@@ -2467,7 +2467,7 @@ def find_relationship_records(
                                      "person_id", "enterprise_name", "enterprise_id",
                                      "item_name", "item_id", "role",
                                      "start_date", "end_date", "notes") if c in df.columns]
-                rows = df[keep].head(limit).to_dict(orient="records")
+                rows = df[keep].head(limit).pipe(_clean_df).to_dict(orient="records")
         except Exception as e:
             logger.warning("find_relationship_records Base44 fallback: %s", e)
         source = "base44_live"
@@ -2554,7 +2554,7 @@ def find_product_records(
                                      "status", "stock_quantity", "reorder_level",
                                      "unit_of_measure", "unit_price", "expiry_date",
                                      "batch_number", "enterprise_name") if c in df.columns]
-                rows = df[keep].head(limit).to_dict(orient="records")
+                rows = df[keep].head(limit).pipe(_clean_df).to_dict(orient="records")
         except Exception as e:
             logger.warning("find_product_records Base44 fallback: %s", e)
         source = "base44_live"
@@ -2629,7 +2629,7 @@ def find_address_records(
                                      "city", "state_province", "country", "postal_code",
                                      "latitude", "longitude", "enterprise_name",
                                      "person_name", "is_primary") if c in df.columns]
-                rows = df[keep].head(limit).to_dict(orient="records")
+                rows = df[keep].head(limit).pipe(_clean_df).to_dict(orient="records")
         except Exception as e:
             logger.warning("find_address_records Base44 fallback: %s", e)
         source = "base44_live"
@@ -2777,7 +2777,7 @@ def get_entity_join(
                     name_col = "full_name" if "full_name" in df.columns else "name"
                     if name_col in df.columns:
                         df = df[df[name_col].str.lower().str.contains(primary_filter.lower(), na=False)]
-                primary_rows = df.to_dict(orient="records")
+                primary_rows = df.pipe(_clean_df).to_dict(orient="records")
         except Exception as e:
             logger.warning("get_entity_join primary fallback: %s", e)
 
@@ -2813,7 +2813,7 @@ def get_entity_join(
                 if not df.empty:
                     if secondary_status_filter and "status" in df.columns:
                         df = df[df["status"].str.lower() == secondary_status_filter.lower()]
-                    secondary_rows = df.to_dict(orient="records")
+                    secondary_rows = df.pipe(_clean_df).to_dict(orient="records")
         except Exception as e:
             logger.warning("get_entity_join secondary fallback: %s", e)
 
@@ -2852,7 +2852,7 @@ def get_entity_join(
         suffixes=("", f"_{secondary_entity[:-1]}")
     ).drop(columns=["_jk"])
 
-    records = merged.head(limit).to_dict(orient="records")
+    records = merged.head(limit).pipe(_clean_df).to_dict(orient="records")
 
     logger.info(
         "get_entity_join: %s+%s → %d merged records",
@@ -2892,7 +2892,7 @@ def request_action(
 
     Returns the status (executed/pending/notify) and an approval_id if queued.
     """
-    from database import get_engine_safe as _get_engine
+    from database import get_engine_safe, _clean_df as _get_engine
 
     VALID_ACTIONS = {
         "create_task", "create_follow_up", "update_task_status",
@@ -3500,7 +3500,7 @@ def search_public_data(dataset: str, query: str, company_id: str, location: str 
                 "dataset": "cms_pharmacy",
                 "state":   state,
                 "count":   len(df),
-                "data":    df.head(20).to_dict(orient="records"),
+                "data":    df.head(20).pipe(_clean_df).to_dict(orient="records"),
                 "note":    "Source: CMS Provider of Services — certified pharmacy locations",
             }
         except Exception as e:
@@ -3535,7 +3535,7 @@ def search_public_data(dataset: str, query: str, company_id: str, location: str 
                 "dataset": "dea_pharmacy",
                 "state":   state,
                 "count":   len(df),
-                "data":    df.head(20).to_dict(orient="records"),
+                "data":    df.head(20).pipe(_clean_df).to_dict(orient="records"),
                 "note":    "Source: DEA/NPPES NPI Registry — pharmacy count by city",
             }
         except Exception as e:
@@ -4799,7 +4799,7 @@ def _find_nearby_locations(
     Returns results in the same structure as other copilot tools.
     """
     try:
-        from database import get_engine_safe
+        from database import get_engine_safe, _clean_df
         engine = get_engine_safe()
         if not engine:
             return {"error": "No database connection — PostGIS unavailable"}
@@ -5576,7 +5576,7 @@ def get_top_clients(company_id: str, top_n: int = 10, segment: str = None) -> di
         df = transform_client_value(_b44_people(company_id), _b44_transactions(company_id), _pd.DataFrame())
         if not df.empty:
             df = df[df["company_id"] == company_id].sort_values("total_revenue", ascending=False).head(top_n)
-            return {"clients": df.where(df.notna(), None).to_dict(orient="records"),
+            return {"clients": df.where(df.notna(), None).pipe(_clean_df).to_dict(orient="records"),
                     "count": len(df), "data_as_of": "Base44 live", "source": "base44_live"}
     except Exception as e:
         logger.warning("get_top_clients fallback: %s", e)
@@ -5621,7 +5621,7 @@ def get_staff_leaderboard(company_id: str, metric: str = "completion_rate_pct", 
         df = transform_staff_performance(_b44_people(company_id), _b44_tasks(company_id), _pd.DataFrame())
         if not df.empty:
             df = df[df["company_id"] == company_id].sort_values(metric, ascending=asc).head(top_n)
-            return {"staff": df.where(df.notna(), None).to_dict(orient="records"),
+            return {"staff": df.where(df.notna(), None).pipe(_clean_df).to_dict(orient="records"),
                     "count": len(df), "ranked_by": metric,
                     "data_as_of": "Base44 live", "source": "base44_live"}
     except Exception as e:
@@ -5667,13 +5667,13 @@ def get_ar_report(company_id: str, bucket: str = None) -> dict:
     try:
         from etl.ar_aging import transform_ar_aging
         detail_df, sum_df = transform_ar_aging(_b44_transactions(company_id))
-        summary = sum_df[sum_df["company_id"] == company_id].to_dict(orient="records")
+        summary = sum_df[sum_df["company_id"] == company_id].pipe(_clean_df).to_dict(orient="records")
         detail  = detail_df[detail_df["company_id"] == company_id]
         if bucket:
             detail = detail[detail["aging_bucket"] == bucket]
         return {
             "summary":  summary[0] if summary else {},
-            "detail":   detail.head(100).where(detail.notna(), None).to_dict(orient="records"),
+            "detail":   detail.head(100).where(detail.notna(), None).pipe(_clean_df).to_dict(orient="records"),
             "bucket_filter": bucket,
             "data_as_of": "Base44 live", "source": "base44_live",
         }
@@ -5723,7 +5723,7 @@ def get_inventory_health(company_id: str, urgency: str = None) -> dict:
             if urgency:
                 df = df[df["reorder_urgency"] == urgency]
             return {
-                "products": df.head(100).where(df.notna(), None).to_dict(orient="records"),
+                "products": df.head(100).where(df.notna(), None).pipe(_clean_df).to_dict(orient="records"),
                 "count": len(df),
                 "critical_count": int((df["reorder_urgency"] == "critical").sum()),
                 "out_of_stock_count": int(df["out_of_stock"].sum()),
@@ -5778,7 +5778,7 @@ def get_network_kpis(company_id: str, tier: str = None) -> dict:
             if tier:
                 df = df[df["performance_tier"] == tier]
             return {
-                "branches": df.head(50).where(df.notna(), None).to_dict(orient="records"),
+                "branches": df.head(50).where(df.notna(), None).pipe(_clean_df).to_dict(orient="records"),
                 "count": len(df), "tier_filter": tier,
                 "data_as_of": "Base44 live", "source": "base44_live",
             }

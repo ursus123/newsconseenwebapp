@@ -1,6 +1,30 @@
+import math
+import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from config import settings
+
+
+def _clean_df(df):
+    """
+    Replace every NaN / NaT in a DataFrame or Series with Python None so that
+    FastAPI / Pydantic can serialise the result without a ValidationError.
+
+    Root cause: pandas represents missing values in ALL column types (including
+    TEXT columns) as float NaN. When a record has no enterprise_id, pandas stores
+    NaN (a float), not None. Pydantic then rejects it because it expects str | None.
+
+    Usage — call this once before any .to_dict() call:
+        rows = _clean_df(df).to_dict(orient="records")
+        row  = _clean_df(df.iloc[0]).to_dict()
+
+    Also exported from database.py so every module can import it from one place.
+    """
+    if isinstance(df, pd.DataFrame):
+        return df.where(pd.notnull(df), None)
+    if isinstance(df, pd.Series):
+        return df.where(pd.notnull(df), None)
+    return df
 
 
 def get_engine() -> Engine:
