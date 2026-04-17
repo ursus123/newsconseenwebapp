@@ -181,7 +181,7 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
     ].filter(Boolean);
     let result = null, usedStrategy = 0;
     for (let i = 0; i < strategies.length; i++) {
-      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(strategies[i])}&limit=1`);
+      const resp = await fetch(`${RAILWAY_URL}/proxy/nominatim/search?format=json&q=${encodeURIComponent(strategies[i])}&limit=1`);
       const data = await resp.json();
       if (data && data.length > 0) { result = data[0]; usedStrategy = i; break; }
     }

@@ -70,18 +70,18 @@ export default function AddressForm({ open, onClose, onSubmit, onArchive, initia
       let result = null;
       let usedStrategy = 0;
 
+      const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
       for (let i = 0; i < strategies.length; i++) {
-        const query = encodeURIComponent(strategies[i]);
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`);
+        const response = await fetch(`${RAILWAY_URL}/geo/geocode?address=${encodeURIComponent(strategies[i])}`);
         const data = await response.json();
-        
-        if (data && data.length > 0) {
-          result = data[0];
+
+        if (data && data.found && data.lat) {
+          result = data;
           usedStrategy = i;
           break;
         }
       }
-      
+
       if (result) {
         const { lat, lon, display_name } = result;
         setForm((f) => ({ ...f, latitude: parseFloat(lat), longitude: parseFloat(lon) }));

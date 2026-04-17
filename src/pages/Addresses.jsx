@@ -55,9 +55,9 @@ const statusColor = (s) => ({
 
 async function geocodeAddress(address) {
   const query = [address.address_line1, address.city, address.state_region, address.postal_code, address.country].filter(Boolean).join(", ");
-  const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen-app/1.0" } });
+  const res = await fetch(`${RAILWAY_URL}/geo/geocode?address=${encodeURIComponent(query)}`);
   const data = await res.json();
-  if (data.length > 0) return { latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon) };
+  if (data.found && data.lat && data.lon) return { latitude: data.lat, longitude: data.lon };
   return null;
 }
 

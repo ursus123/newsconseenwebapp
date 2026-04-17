@@ -8,6 +8,7 @@ from open_data.agriculture_routes  import router as agriculture_router
 from open_data.nonprofits_routes    import router as nonprofit_router
 from open_data.market_routes       import router as market_router
 from open_data.weather_routes      import router as weather_router
+from open_data.proxy_routes        import router as proxy_router
 
 ALL_ROUTERS = [
     medication_router,
@@ -20,6 +21,7 @@ ALL_ROUTERS = [
     nonprofit_router,
     market_router,
     weather_router,
+    proxy_router,
 ]
 
 __all__ = ["ALL_ROUTERS"]

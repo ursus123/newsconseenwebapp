@@ -521,7 +521,7 @@ async function executeVirtualTable(table, sql) {
       const q = [w.query, w.city, w.country].filter(Boolean).join(" ");
       if (!q) return { type: "select", rows: [], message: "Usage: WHERE query = 'hospital' AND city = 'Portland'" };
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=20`,
+        `${RAILWAY_BASE}/proxy/nominatim/search?q=${encodeURIComponent(q)}&format=json&limit=20`,
         { headers: { "User-Agent": "newsconseen/1.0" } }
       );
       const data = await res.json();
@@ -540,7 +540,7 @@ async function executeVirtualTable(table, sql) {
       const radius = parseInt(w.radius_km || w.radius || "5") * 1000;
       const query = `[out:json];node["amenity"="${type}"](around:${radius},${lat},${lon});out body;`;
       const res = await fetch(
-        `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`
+        `${RAILWAY_BASE}/proxy/overpass?data=${encodeURIComponent(query)}`
       );
       const text = await res.text();
       if (!text.trim().startsWith("{")) return { type: "select", rows: [], message: `Overpass API returned non-JSON. The service may be temporarily unavailable.` };
@@ -557,7 +557,7 @@ async function executeVirtualTable(table, sql) {
       let lat = w.lat, lon = w.lon, cityName = city;
       if (!lat && city) {
         const geo = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`,
+          `${RAILWAY_BASE}/proxy/nominatim/search?q=${encodeURIComponent(city)}&format=json&limit=1`,
           { headers: { "User-Agent": "newsconseen/1.0" } }
         );
         const gd = await geo.json();
@@ -567,7 +567,7 @@ async function executeVirtualTable(table, sql) {
       }
       if (!lat) return { type: "select", rows: [], message: "Usage: WHERE city = 'Portland'" };
       const res = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+        `${RAILWAY_BASE}/proxy/openmeteo/forecast?latitude=${lat}&longitude=${lon}` +
         `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code,precipitation,apparent_temperature&timezone=auto`
       );
       const d = await res.json(); const c = d.current;
@@ -580,11 +580,11 @@ async function executeVirtualTable(table, sql) {
       const city = w.city || "";
       const days = parseInt(w.days) || 7;
       if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Portland' AND days = 7" };
-      const geo = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geo = await fetch(`${RAILWAY_BASE}/proxy/nominatim/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
       const gd = await geo.json();
       if (!gd.length) return { type: "select", rows: [], message: `City not found: ${city}` };
       const res = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${gd[0].lat}&longitude=${gd[0].lon}` +
+        `${RAILWAY_BASE}/proxy/openmeteo/forecast?latitude=${gd[0].lat}&longitude=${gd[0].lon}` +
         `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code&forecast_days=${days}&timezone=auto`
       );
       const d = await res.json();
@@ -596,7 +596,7 @@ async function executeVirtualTable(table, sql) {
     else if (table === "worldbank_indicators") {
       const country = w.country || "US", indicator = w.indicator || "SP.POP.TOTL";
       const yearFrom = w.year_from || "2018", yearTo = w.year_to || "2023";
-      const res = await fetch(`https://api.worldbank.org/v2/country/${country}/indicator/${indicator}?format=json&date=${yearFrom}:${yearTo}&per_page=100`);
+      const res = await fetch(`${RAILWAY_BASE}/proxy/worldbank/${country}/indicator/${indicator}?format=json&date=${yearFrom}:${yearTo}&per_page=100`);
       const data = await res.json();
       rows = (data[1] || []).filter(r => r.value !== null).map(r => ({ country_name: r.country?.value, country_code: r.countryiso3code, indicator_name: r.indicator?.value, indicator_code: r.indicator?.id, year: parseInt(r.date), value: r.value }));
       message = `${rows.length} data points for ${indicator} in ${country}`;
@@ -604,7 +604,7 @@ async function executeVirtualTable(table, sql) {
 
     else if (table === "exchange_rates") {
       const base = w.base || "USD", currency = w.currency || null;
-      const res = await fetch(`https://open.er-api.com/v6/latest/${base}`);
+      const res = await fetch(`${RAILWAY_BASE}/proxy/exchange-rates?base=${base}`);
       const data = await res.json();
       if (currency) {
         rows = [{ base_currency: base, currency: currency.toUpperCase(), rate: data.rates[currency.toUpperCase()], last_updated: data.time_last_update_utc }];
@@ -616,7 +616,7 @@ async function executeVirtualTable(table, sql) {
 
     else if (table === "countries") {
       const name = w.name, region = w.region, subregion = w.subregion;
-      let url = "https://restcountries.com/v3.1/";
+      let url = `${RAILWAY_BASE}/proxy/restcountries/`;
       if (name) url += `name/${encodeURIComponent(name)}`;
       else if (region) url += `region/${encodeURIComponent(region)}`;
       else url += "all";
@@ -632,7 +632,7 @@ async function executeVirtualTable(table, sql) {
     else if (table === "fda_devices") {
       const product = w.product || w.manufacturer || "";
       if (!product) return { type: "select", rows: [], message: "Usage: WHERE product = 'wheelchair'" };
-      const res = await fetch(`https://api.fda.gov/device/recall.json?search=product_description:${encodeURIComponent(product)}&limit=10`);
+      const res = await fetch(`${RAILWAY_BASE}/proxy/fda/device/recall?search=product_description:${encodeURIComponent(product)}&limit=10`);
       const data = await res.json();
       rows = (data.results || []).map(r => ({ product_description: r.product_description, reason_for_recall: r.reason_for_recall, recall_initiation_date: r.recall_initiation_date, recalling_firm: r.recalling_firm, classification: r.classification, status: r.status }));
       message = `${rows.length} device recalls found`;
@@ -641,7 +641,7 @@ async function executeVirtualTable(table, sql) {
     else if (table === "fda_food_recalls") {
       const product = w.product || "";
       if (!product) return { type: "select", rows: [], message: "Usage: WHERE product = 'peanut butter'" };
-      const res = await fetch(`https://api.fda.gov/food/enforcement.json?search=product_description:${encodeURIComponent(product)}&limit=10`);
+      const res = await fetch(`${RAILWAY_BASE}/proxy/fda/food/enforcement?search=product_description:${encodeURIComponent(product)}&limit=10`);
       const data = await res.json();
       rows = (data.results || []).map(r => ({ product_description: r.product_description, reason_for_recall: r.reason_for_recall, recall_initiation_date: r.recall_initiation_date, recalling_firm: r.recalling_firm, status: r.status }));
       message = `${rows.length} food recalls found`;
@@ -659,7 +659,7 @@ async function executeVirtualTable(table, sql) {
     else if (table === "medications_label") {
       const name = w.name || "";
       if (!name) return { type: "select", rows: [], message: "Usage: WHERE name = 'metformin'" };
-      const res = await fetch(`https://api.fda.gov/drug/label.json?search=openfda.generic_name:${encodeURIComponent(name)}&limit=5`);
+      const res = await fetch(`${RAILWAY_BASE}/proxy/fda/drug/label?search=openfda.generic_name:${encodeURIComponent(name)}&limit=5`);
       const data = await res.json();
       rows = (data.results || []).map(r => ({ brand_name: r.openfda?.brand_name?.[0] || "", generic_name: r.openfda?.generic_name?.[0] || "", manufacturer: r.openfda?.manufacturer_name?.[0] || "", purpose: r.purpose?.[0] || "", warnings: r.warnings?.[0]?.slice(0, 200) || "", dosage: r.dosage_and_administration?.[0]?.slice(0, 200) || "" }));
       message = `${rows.length} label results for ${name}`;
@@ -669,7 +669,7 @@ async function executeVirtualTable(table, sql) {
     else if (table === "geo_overview") {
       const place = w.place || w.city || w.country || "";
       if (!place) return { type: "select", rows: [], message: "Usage: WHERE place = 'Lagos Nigeria'" };
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(place)}&format=json&limit=1&addressdetails=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoRes = await fetch(`${RAILWAY_BASE}/proxy/nominatim/search?q=${encodeURIComponent(place)}&format=json&limit=1&addressdetails=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
       const geoData = await geoRes.json();
       if (!geoData.length) return { type: "select", rows: [], message: `Location not found: ${place}` };
       const geo = geoData[0];
@@ -681,7 +681,7 @@ async function executeVirtualTable(table, sql) {
       let countryData = null;
       if (countryCode) {
         try {
-          const cRes = await fetch(`https://restcountries.com/v3.1/alpha/${countryCode}`);
+          const cRes = await fetch(`${RAILWAY_BASE}/proxy/restcountries/alpha/${countryCode}`);
           const cData = await cRes.json();
           countryData = Array.isArray(cData) ? cData[0] : cData;
         } catch {}
@@ -690,8 +690,8 @@ async function executeVirtualTable(table, sql) {
       if (countryCode) {
         try {
           const [wbGdp, wbPop] = await Promise.all([
-            fetch(`https://api.worldbank.org/v2/country/${countryCode}/indicator/NY.GDP.PCAP.CD?format=json&mrv=1`).then(r => r.json()),
-            fetch(`https://api.worldbank.org/v2/country/${countryCode}/indicator/SP.POP.TOTL?format=json&mrv=1`).then(r => r.json()),
+            fetch(`${RAILWAY_BASE}/proxy/worldbank/${countryCode}/indicator/NY.GDP.PCAP.CD?format=json&mrv=1`).then(r => r.json()),
+            fetch(`${RAILWAY_BASE}/proxy/worldbank/${countryCode}/indicator/SP.POP.TOTL?format=json&mrv=1`).then(r => r.json()),
           ]);
           gdpPerCapita = wbGdp[1]?.[0]?.value || null;
           population = wbPop[1]?.[0]?.value || null;
@@ -701,7 +701,7 @@ async function executeVirtualTable(table, sql) {
       let timezone = countryData?.timezones?.[0] || "";
       let cityPop = null;
       try {
-        const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`);
+        const wRes = await fetch(`${RAILWAY_BASE}/proxy/openmeteo/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`);
         const wData = await wRes.json();
         weather = wData.current?.temperature_2m;
         // Use Open-Meteo timezone — accurate to the specific city
@@ -711,7 +711,7 @@ async function executeVirtualTable(table, sql) {
       try {
         const osmType = geo.osm_type === "node" ? "N" : geo.osm_type === "way" ? "W" : "R";
         const detailRes = await fetch(
-          `https://nominatim.openstreetmap.org/details?osmtype=${osmType}&osmid=${geo.osm_id}&addressdetails=1&format=json`,
+          `${RAILWAY_BASE}/proxy/nominatim/details?osmtype=${osmType}&osmid=${geo.osm_id}&addressdetails=1&format=json`,
           { headers: { "User-Agent": "newsconseen/1.0" } }
         );
         const detail = await detailRes.json();
@@ -726,7 +726,7 @@ async function executeVirtualTable(table, sql) {
       const country = w.country || "";
       const yearFrom = w.year_from || "2018", yearTo = w.year_to || "2023";
       if (!country) return { type: "select", rows: [], message: "Usage: WHERE country = 'Nigeria'" };
-      const cRes = await fetch(`https://restcountries.com/v3.1/name/${encodeURIComponent(country)}?fields=cca2,name`);
+      const cRes = await fetch(`${RAILWAY_BASE}/proxy/restcountries/name/${encodeURIComponent(country)}?fields=cca2,name`);
       const cData = await cRes.json();
       const iso2 = cData[0]?.cca2;
       if (!iso2) return { type: "select", rows: [], message: `Country not found: ${country}` };
@@ -734,7 +734,7 @@ async function executeVirtualTable(table, sql) {
       const results = {};
       await Promise.all(Object.entries(INDICATORS).map(async ([key, code]) => {
         try {
-          const r = await fetch(`https://api.worldbank.org/v2/country/${iso2}/indicator/${code}?format=json&date=${yearFrom}:${yearTo}&per_page=10&mrv=5`);
+          const r = await fetch(`${RAILWAY_BASE}/proxy/worldbank/${iso2}/indicator/${code}?format=json&date=${yearFrom}:${yearTo}&per_page=10&mrv=5`);
           const d = await r.json();
           results[key] = (d[1] || []).filter(x => x.value !== null).map(x => ({ year: parseInt(x.date), value: x.value }));
         } catch { results[key] = []; }
@@ -750,7 +750,7 @@ async function executeVirtualTable(table, sql) {
       const country = w.country || "";
       const yearFrom = w.year_from || "2010", yearTo = w.year_to || "2023";
       if (!country) return { type: "select", rows: [], message: "Usage: WHERE country = 'Kenya'" };
-      const cRes = await fetch(`https://restcountries.com/v3.1/name/${encodeURIComponent(country)}?fields=cca2,name`);
+      const cRes = await fetch(`${RAILWAY_BASE}/proxy/restcountries/name/${encodeURIComponent(country)}?fields=cca2,name`);
       const cData = await cRes.json();
       const iso2 = cData[0]?.cca2;
       if (!iso2) return { type: "select", rows: [], message: `Country not found: ${country}` };
@@ -758,7 +758,7 @@ async function executeVirtualTable(table, sql) {
       const results = {};
       await Promise.all(Object.entries(POP_INDICATORS).map(async ([key, code]) => {
         try {
-          const r = await fetch(`https://api.worldbank.org/v2/country/${iso2}/indicator/${code}?format=json&date=${yearFrom}:${yearTo}&per_page=20`);
+          const r = await fetch(`${RAILWAY_BASE}/proxy/worldbank/${iso2}/indicator/${code}?format=json&date=${yearFrom}:${yearTo}&per_page=20`);
           const d = await r.json();
           results[key] = (d[1] || []).filter(x => x.value !== null).map(x => ({ year: parseInt(x.date), value: x.value }));
         } catch { results[key] = []; }
@@ -775,7 +775,7 @@ async function executeVirtualTable(table, sql) {
       const businessType = w.business_type || w.type || "pharmacy";
       const radiusKm = parseInt(w.radius_km || "10");
       if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Lagos Nigeria' AND business_type = 'pharmacy' AND radius_km = 10" };
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoRes = await fetch(`${RAILWAY_BASE}/proxy/nominatim/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
       const geoData = await geoRes.json();
       if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
       const lat = geoData[0].lat, lon = geoData[0].lon;
@@ -783,7 +783,7 @@ async function executeVirtualTable(table, sql) {
       const TYPE_MAP = { pharmacy: "pharmacy", hospital: "hospital", clinic: "clinic", school: "school", university: "university", restaurant: "restaurant", cafe: "cafe", hotel: "hotel", bank: "bank", supermarket: "supermarket", gym: "gym", nursing_home: "nursing_home", childcare: "kindergarten", veterinary: "veterinary", dentist: "dentist", physiotherapy: "physiotherapist", coworking: "coworking", fuel: "fuel", atm: "atm" };
       const amenity = TYPE_MAP[businessType.toLowerCase()] || businessType;
       const query = `[out:json][timeout:25];node["amenity"="${amenity}"](around:${radiusM},${lat},${lon});out body;`;
-      const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+      const res = await fetch(`${RAILWAY_BASE}/proxy/overpass?data=${encodeURIComponent(query)}`);
       const resText = await res.text();
       if (!resText.trim().startsWith("{")) return { type: "select", rows: [], message: `Overpass API temporarily unavailable. Try again in a moment.` };
       const data = JSON.parse(resText);
@@ -798,14 +798,14 @@ async function executeVirtualTable(table, sql) {
       const city = w.city || w.place || "";
       const radiusKm = parseInt(w.radius_km || "15");
       if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Kigali Rwanda' AND radius_km = 15" };
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoRes = await fetch(`${RAILWAY_BASE}/proxy/nominatim/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
       const geoData = await geoRes.json();
       if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
       const lat = geoData[0].lat, lon = geoData[0].lon;
       const radiusM = radiusKm * 1000;
       const SCAN_TYPES = ["hospital", "clinic", "pharmacy", "school", "university", "kindergarten", "supermarket", "restaurant", "bank", "hotel", "fuel", "atm", "nursing_home", "veterinary", "gym", "library", "post_office", "police", "fire_station"];
       const query = `[out:json][timeout:30];(${SCAN_TYPES.map(t => `node["amenity"="${t}"](around:${radiusM},${lat},${lon});`).join("")});out body;`;
-      const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+      const res = await fetch(`${RAILWAY_BASE}/proxy/overpass?data=${encodeURIComponent(query)}`);
       const infraText = await res.text();
       if (!infraText.trim().startsWith("{")) return { type: "select", rows: [], message: `Overpass API temporarily unavailable. Infrastructure data could not be loaded.` };
       const data = JSON.parse(infraText);
@@ -822,11 +822,11 @@ async function executeVirtualTable(table, sql) {
     else if (table === "geo_weather_profile") {
       const city = w.city || w.place || "";
       if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Nairobi Kenya'" };
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoRes = await fetch(`${RAILWAY_BASE}/proxy/nominatim/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
       const geoData = await geoRes.json();
       if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
       const lat = geoData[0].lat, lon = geoData[0].lon;
-      const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,weather_code&forecast_days=16&timezone=auto`);
+      const res = await fetch(`${RAILWAY_BASE}/proxy/openmeteo/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,weather_code&forecast_days=16&timezone=auto`);
       const data = await res.json();
       const daily = data.daily;
       rows = daily.time.map((date, i) => ({ city, lat: parseFloat(lat), lon: parseFloat(lon), date, temp_max_c: daily.temperature_2m_max[i], temp_min_c: daily.temperature_2m_min[i], temp_avg_c: +((daily.temperature_2m_max[i] + daily.temperature_2m_min[i]) / 2).toFixed(1), precipitation_mm: daily.precipitation_sum[i], wind_max_kmh: daily.wind_speed_10m_max[i], weather_code: daily.weather_code[i], season_suitability: daily.precipitation_sum[i] > 20 ? "Heavy rain — logistics challenge" : daily.temperature_2m_max[i] > 35 ? "Very hot — cooling costs high" : daily.temperature_2m_min[i] < -10 ? "Very cold — heating costs high" : "Suitable conditions" }));
@@ -837,14 +837,14 @@ async function executeVirtualTable(table, sql) {
     else if (table === "geo_cost_of_living") {
       const country = w.country || "";
       if (!country) return { type: "select", rows: [], message: "Usage: WHERE country = 'Rwanda'" };
-      const cRes = await fetch(`https://restcountries.com/v3.1/name/${encodeURIComponent(country)}?fields=cca2,name`);
+      const cRes = await fetch(`${RAILWAY_BASE}/proxy/restcountries/name/${encodeURIComponent(country)}?fields=cca2,name`);
       const cData = await cRes.json();
       const iso2 = cData[0]?.cca2;
       if (!iso2) return { type: "select", rows: [], message: `Country not found: ${country}` };
       const [gdpRes, wageRes, inflRes] = await Promise.all([
-        fetch(`https://api.worldbank.org/v2/country/${iso2}/indicator/NY.GDP.PCAP.CD?format=json&mrv=1`).then(r => r.json()),
-        fetch(`https://api.worldbank.org/v2/country/${iso2}/indicator/SL.GDP.PCAP.EM.KD?format=json&mrv=1`).then(r => r.json()),
-        fetch(`https://api.worldbank.org/v2/country/${iso2}/indicator/FP.CPI.TOTL.ZG?format=json&mrv=3`).then(r => r.json()),
+        fetch(`${RAILWAY_BASE}/proxy/worldbank/${iso2}/indicator/NY.GDP.PCAP.CD?format=json&mrv=1`).then(r => r.json()),
+        fetch(`${RAILWAY_BASE}/proxy/worldbank/${iso2}/indicator/SL.GDP.PCAP.EM.KD?format=json&mrv=1`).then(r => r.json()),
+        fetch(`${RAILWAY_BASE}/proxy/worldbank/${iso2}/indicator/FP.CPI.TOTL.ZG?format=json&mrv=3`).then(r => r.json()),
       ]);
       const gdp = gdpRes[1]?.[0]?.value || null;
       const inflation = inflRes[1]?.[0]?.value || null;
@@ -859,14 +859,14 @@ async function executeVirtualTable(table, sql) {
       const businessType = w.business_type || "pharmacy";
       const radiusKm = parseInt(w.radius_km || "15");
       if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Kigali Rwanda' AND business_type = 'pharmacy'" };
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1&addressdetails=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoRes = await fetch(`${RAILWAY_BASE}/proxy/nominatim/search?q=${encodeURIComponent(city)}&format=json&limit=1&addressdetails=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
       const geoData = await geoRes.json();
       if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
       const lat = geoData[0].lat, lon = geoData[0].lon;
       const countryCode = geoData[0].address?.country_code?.toUpperCase();
       let gdpPerCapita = 5000;
       try {
-        const wbRes = await fetch(`https://api.worldbank.org/v2/country/${countryCode}/indicator/NY.GDP.PCAP.CD?format=json&mrv=1`);
+        const wbRes = await fetch(`${RAILWAY_BASE}/proxy/worldbank/${countryCode}/indicator/NY.GDP.PCAP.CD?format=json&mrv=1`);
         const wbData = await wbRes.json();
         gdpPerCapita = wbData[1]?.[0]?.value || 5000;
       } catch {}
@@ -876,7 +876,7 @@ async function executeVirtualTable(table, sql) {
       const query = `[out:json][timeout:20];node["amenity"="${amenity}"](around:${radiusM},${lat},${lon});out body;`;
       let competitorCount = 0;
       try {
-        const compRes = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+        const compRes = await fetch(`${RAILWAY_BASE}/proxy/overpass?data=${encodeURIComponent(query)}`);
         const compText = await compRes.text();
         if (compText.trim().startsWith("{")) {
           const compData = JSON.parse(compText);
@@ -904,7 +904,7 @@ async function executeVirtualTable(table, sql) {
       const fips = STATE_FIPS[stateName];
       if (!fips) return { type: "select", rows: [], message: `State not found: ${w.state}. Use full name like 'Iowa', 'New York', 'California'` };
       const vars = "B01003_001E,B19013_001E,B25077_001E,B01002_001E,B23025_005E,B23025_003E,B15003_022E,B15003_023E,B15003_025E,B01003_001E";
-      const res = await fetch(`https://api.census.gov/data/2022/acs/acs5?get=NAME,${vars}&for=state:${fips}`);
+      const res = await fetch(`${RAILWAY_BASE}/proxy/census/acs5?get=NAME,${vars}&for=state:${fips}`);
       const data = await res.json();
       const [headers, ...dataRows] = data;
       rows = dataRows.map(row => {
@@ -952,7 +952,7 @@ async function executeVirtualTable(table, sql) {
       const renters = parseInt(obj["B25003_003E"]) || 0;
       let lat = null, lon = null;
       try {
-        const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${zipcode}&country=US&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+        const geoRes = await fetch(`${RAILWAY_BASE}/proxy/nominatim/search?postalcode=${zipcode}&country=US&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
         const geoData = await geoRes.json();
         if (geoData.length) { lat = parseFloat(geoData[0].lat); lon = parseFloat(geoData[0].lon); }
       } catch {}
@@ -1006,7 +1006,7 @@ async function executeVirtualTable(table, sql) {
       const state = w.state || "Iowa";
       const county = w.county || "";
       const radiusM = county ? 30000 : 50000;
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(county ? `${county} County, ${state}` : state)}&format=json&limit=1&addressdetails=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoRes = await fetch(`${RAILWAY_BASE}/proxy/nominatim/search?q=${encodeURIComponent(county ? `${county} County, ${state}` : state)}&format=json&limit=1&addressdetails=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
       const geoData = await geoRes.json();
       if (!geoData.length) return { type: "select", rows: [], message: `Location not found: ${county ? county + ", " : ""}${state}` };
       const lat = parseFloat(geoData[0].lat), lon = parseFloat(geoData[0].lon);
@@ -1014,7 +1014,7 @@ async function executeVirtualTable(table, sql) {
       const query = `[out:json][timeout:25];(${foodTypes.map(t => `node["shop"="${t}"](around:${radiusM},${lat},${lon});node["amenity"="${t}"](around:${radiusM},${lat},${lon});`).join("")}node["amenity"="fast_food"](around:${radiusM},${lat},${lon});node["shop"="supermarket"](around:${radiusM},${lat},${lon});node["shop"="grocery"](around:${radiusM},${lat},${lon}););out body;`;
       let elements = [];
       try {
-        const foodRes = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+        const foodRes = await fetch(`${RAILWAY_BASE}/proxy/overpass?data=${encodeURIComponent(query)}`);
         const foodData = await foodRes.json();
         elements = foodData.elements || [];
       } catch {}
@@ -1039,7 +1039,7 @@ async function executeVirtualTable(table, sql) {
       const fips = STATE_FIPS[stateName];
       if (!fips) return { type: "select", rows: [], message: `State not found: ${w.state}` };
       const vars = "NAME,B01003_001E,B19013_001E,B25077_001E,B01002_001E,B23025_005E,B23025_003E";
-      const res = await fetch(`https://api.census.gov/data/2022/acs/acs5?get=${vars}&for=county:*&in=state:${fips}`);
+      const res = await fetch(`${RAILWAY_BASE}/proxy/census/acs5?get=${vars}&for=county:*&in=state:${fips}`);
       const data = await res.json();
       const [headers, ...dataRows] = data;
       rows = dataRows.map(row => {
@@ -1134,7 +1134,7 @@ async function executeVirtualTable(table, sql) {
     // ── commodity_price ──────────────────────────────────────────────────────
     else if (table === "commodity_price") {
       const commodity = (w.commodity || "all").toLowerCase();
-      const res = await fetch("https://open.er-api.com/v6/latest/USD");
+      const res = await fetch("${RAILWAY_BASE}/proxy/exchange-rates?base=USD");
       const fxData = await res.json();
       const rates = fxData.rates || {};
       const COMMODITIES = { gold: { code: "XAU", unit: "per troy oz", category: "precious_metal" }, silver: { code: "XAG", unit: "per troy oz", category: "precious_metal" }, platinum: { code: "XPT", unit: "per troy oz", category: "precious_metal" }, palladium: { code: "XPD", unit: "per troy oz", category: "precious_metal" } };
@@ -1228,12 +1228,12 @@ async function executeVirtualTable(table, sql) {
     else if (table === "air_quality") {
       const city = w.city || w.place || "";
       if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Des Moines Iowa'" };
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1&addressdetails=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoRes = await fetch(`${RAILWAY_BASE}/proxy/nominatim/search?q=${encodeURIComponent(city)}&format=json&limit=1&addressdetails=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
       const geoData = await geoRes.json();
       if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
       const lat = parseFloat(geoData[0].lat), lon = parseFloat(geoData[0].lon);
       try {
-        const aqRes = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,ozone,european_aqi,us_aqi`);
+        const aqRes = await fetch(`${RAILWAY_BASE}/proxy/openmeteo/air-quality?latitude=${lat}&longitude=${lon}&current=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,ozone,european_aqi,us_aqi`);
         const aqData = await aqRes.json();
         const c = aqData.current;
         if (c) {
@@ -1250,11 +1250,11 @@ async function executeVirtualTable(table, sql) {
     else if (table === "flood_risk") {
       const city = w.city || w.place || "";
       if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'New Orleans Louisiana'" };
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoRes = await fetch(`${RAILWAY_BASE}/proxy/nominatim/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
       const geoData = await geoRes.json();
       if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
       const lat = parseFloat(geoData[0].lat), lon = parseFloat(geoData[0].lon);
-      const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=precipitation_sum,precipitation_hours,river_discharge_max&forecast_days=16&timezone=auto`);
+      const res = await fetch(`${RAILWAY_BASE}/proxy/openmeteo/forecast?latitude=${lat}&longitude=${lon}&daily=precipitation_sum,precipitation_hours,river_discharge_max&forecast_days=16&timezone=auto`);
       const data = await res.json();
       const daily = data.daily || {};
       const precip = daily.precipitation_sum || [];
@@ -1273,7 +1273,7 @@ async function executeVirtualTable(table, sql) {
       const minMagnitude = parseFloat(w.min_magnitude || "2.5");
       const radiusKm = parseInt(w.radius_km || "200");
       if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'San Francisco California' AND days_back = 30 AND min_magnitude = 3" };
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoRes = await fetch(`${RAILWAY_BASE}/proxy/nominatim/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
       const geoData = await geoRes.json();
       if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
       const lat = parseFloat(geoData[0].lat), lon = parseFloat(geoData[0].lon);
@@ -1294,11 +1294,11 @@ async function executeVirtualTable(table, sql) {
     else if (table === "climate_risk") {
       const city = w.city || w.place || "";
       if (!city) return { type: "select", rows: [], message: "Usage: WHERE city = 'Miami Florida'" };
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
+      const geoRes = await fetch(`${RAILWAY_BASE}/proxy/nominatim/search?q=${encodeURIComponent(city)}&format=json&limit=1`, { headers: { "User-Agent": "newsconseen/1.0" } });
       const geoData = await geoRes.json();
       if (!geoData.length) return { type: "select", rows: [], message: `City not found: ${city}` };
       const lat = parseFloat(geoData[0].lat), lon = parseFloat(geoData[0].lon);
-      const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,precipitation_hours&timezone=auto&forecast_days=16`);
+      const weatherRes = await fetch(`${RAILWAY_BASE}/proxy/openmeteo/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,precipitation_hours&timezone=auto&forecast_days=16`);
       const weatherData = await weatherRes.json();
       const daily = weatherData.daily || {};
       const temps = daily.temperature_2m_max || []; const tempsMin = daily.temperature_2m_min || []; const precip = daily.precipitation_sum || []; const wind = daily.wind_speed_10m_max || [];

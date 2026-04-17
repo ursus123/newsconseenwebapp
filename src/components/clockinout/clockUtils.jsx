@@ -19,10 +19,12 @@ export async function getLocationCoords() {
   });
 }
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+
 export async function getLocationString(coords) {
   if (!coords) return null;
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${coords.lat}&lon=${coords.lon}&format=json`);
+    const res = await fetch(`${RAILWAY_URL}/geo/reverse?lat=${coords.lat}&lon=${coords.lon}`);
     const data = await res.json();
     return data.display_name || `${coords.lat.toFixed(5)}, ${coords.lon.toFixed(5)}`;
   } catch {
