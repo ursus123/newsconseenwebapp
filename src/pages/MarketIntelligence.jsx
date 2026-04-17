@@ -432,20 +432,29 @@ export default function MarketIntelligence() {
 
   // Auto-geocode enterprises that have no coords (direct, join, or cached)
   // Uses Nominatim — same source as Address geocoding — rate-limited to 1 req/sec
+  // Helper: true only when a coordinate value is a valid finite number
+  /** @param {any} v */
+  const isValidCoord = (v) => v != null && v !== "" && !isNaN(parseFloat(v)) && isFinite(parseFloat(v));
+
   useEffect(() => {
     if (!myEnterprises.length) return;
     const missing = myEnterprises.filter(e => {
-      const hasDirect = e.latitude != null && e.longitude != null;
+      // Check direct coords — must be valid finite numbers, not NaN/empty strings
+      const hasDirect = isValidCoord(e.latitude) && isValidCoord(e.longitude);
       const hasJoin   = !!enterpriseCoords[e.enterprise_name];
       const hasCached = !!nominatimCoords[e.enterprise_name];
-      return !hasDirect && !hasJoin && !hasCached && (e.city || e.country || e.region);
+      // Attempt geocode if no valid coords AND has any location hint at all
+      const hasLocationHint = e.city || e.country || e.region || e.address || e.enterprise_name;
+      return !hasDirect && !hasJoin && !hasCached && hasLocationHint;
     });
     if (!missing.length) return;
     let cancelled = false;
     (async () => {
       for (const e of missing) {
         if (cancelled) break;
-        const q = [e.enterprise_name, e.city, e.region, e.country].filter(Boolean).join(", ");
+        // Build the best possible query: address fields first, fallback to name only
+        const q = [e.address, e.city, e.region, e.country, e.enterprise_name]
+          .filter(Boolean).join(", ");
         try {
           const res = await fetch(
             `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
@@ -647,7 +656,7 @@ export default function MarketIntelligence() {
   // city/region/country string match so we never show nothing unnecessarily.
   // Three-tier coord resolver: direct fields → relationship→address join → Nominatim cache
   const resolveCoords = (e) => {
-    if (e.latitude != null && e.longitude != null)
+    if (isValidCoord(e.latitude) && isValidCoord(e.longitude))
       return { latitude: parseFloat(e.latitude), longitude: parseFloat(e.longitude) };
     if (enterpriseCoords[e.enterprise_name])
       return enterpriseCoords[e.enterprise_name];
@@ -965,7 +974,7 @@ export default function MarketIntelligence() {
                   </h3>
                   <div className="flex flex-col gap-3">
                     {nearbyEnterprises.length > 0 && nearbyEnterprises.map(e => {
-                      const hasDirect  = e.latitude != null && e.longitude != null;
+                      const hasDirect  = isValidCoord(e.latitude) && isValidCoord(e.longitude);
                       const hasJoin    = !!enterpriseCoords[e.enterprise_name];
                       const hasNominatim = !!nominatimCoords[e.enterprise_name];
                       const coordSource = hasDirect ? null : hasJoin ? "via linked address" : hasNominatim ? "geocoded automatically" : null;

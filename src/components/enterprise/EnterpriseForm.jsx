@@ -166,16 +166,21 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
     const parts = [form.primary_address, form.city, form.region, form.country].filter(Boolean);
     if (parts.length === 0) return;
     setGeocoding(true);
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `Given this address: "${parts.join(", ")}", return the latitude and longitude as numbers.`,
-      response_json_schema: {
-        type: "object",
-        properties: { latitude: { type: "number" }, longitude: { type: "number" } }
+    try {
+      const q = parts.join(", ");
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
+        { headers: { "User-Agent": "newsconseen-app/1.0" } }
+      );
+      const data = await res.json();
+      if (data[0]) {
+        const lat = parseFloat(data[0].lat);
+        const lng = parseFloat(data[0].lon);
+        if (isFinite(lat) && isFinite(lng)) {
+          setForm(f => ({ ...f, latitude: lat, longitude: lng }));
+        }
       }
-    });
-    if (result?.latitude && result?.longitude) {
-      setForm(f => ({ ...f, latitude: result.latitude, longitude: result.longitude }));
-    }
+    } catch (_) {}
     setGeocoding(false);
   };
 
@@ -478,11 +483,11 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
                   </Field>
                 </div>
                 <Field label="Latitude">
-                  <Input value={form.latitude || ""} onChange={(e) => set("latitude", parseFloat(e.target.value) || "")} className="rounded-xl" placeholder="Auto-fill" type="number" step="any" />
+                  <Input value={form.latitude ?? ""} onChange={(e) => { const v = parseFloat(e.target.value); set("latitude", isFinite(v) ? v : null); }} className="rounded-xl" placeholder="Auto-fill via 📍" type="number" step="any" />
                 </Field>
                 <Field label="Longitude">
                   <div className="flex gap-2">
-                    <Input value={form.longitude || ""} onChange={(e) => set("longitude", parseFloat(e.target.value) || "")} className="rounded-xl flex-1" placeholder="Auto-fill" type="number" step="any" />
+                    <Input value={form.longitude ?? ""} onChange={(e) => { const v = parseFloat(e.target.value); set("longitude", isFinite(v) ? v : null); }} className="rounded-xl flex-1" placeholder="Auto-fill via 📍" type="number" step="any" />
                     <Button type="button" variant="outline" size="sm" className="rounded-xl shrink-0 h-9" onClick={geocodeAddress} disabled={geocoding}>
                       {geocoding ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
                     </Button>
