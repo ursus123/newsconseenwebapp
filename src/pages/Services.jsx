@@ -100,7 +100,7 @@ export default function Services() {
   const listFn = useEntityListFn(currentUser);
   const withScope = useWithScope(currentUser);
 
-  const { data: services = [], isLoading } = useQuery({
+  const { data: services = [], isLoading, isError } = useQuery({
     queryKey: ["services", currentUser?.company_id, currentUser?.email],
     queryFn: () => listFn(base44.entities.Service),
     enabled: currentUser !== null,
@@ -108,9 +108,21 @@ export default function Services() {
     refetchOnMount: "always",
   });
 
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Service.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); triggerETL("service"); setFormOpen(false); } });
-  const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Service.update(id, withScope(data)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); triggerETL("service"); setFormOpen(false); setEditing(null); } });
-  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Service.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); triggerETL("service"); setDeleting(null); } });
+  const createMut = useMutation({
+    mutationFn: (d) => base44.entities.Service.create(withScope(d)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); triggerETL("service"); setFormOpen(false); toast({ title: "Service saved" }); },
+    onError: (err) => toast({ title: "Failed to save service", description: err?.message || String(err), variant: "destructive" }),
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Service.update(id, withScope(data)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); triggerETL("service"); setFormOpen(false); setEditing(null); toast({ title: "Service updated" }); },
+    onError: (err) => toast({ title: "Failed to update service", description: err?.message || String(err), variant: "destructive" }),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id) => base44.entities.Service.delete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); triggerETL("service"); setDeleting(null); },
+    onError: (err) => toast({ title: "Failed to delete service", description: err?.message || String(err), variant: "destructive" }),
+  });
 
   const handleSubmit = (data, saveAndNew = false) => {
     if (editing) { updateMut.mutate({ id: editing.id, data }); }
@@ -202,7 +214,17 @@ export default function Services() {
 
       <BulkActionBar selectedIds={selectedIds} onClear={() => setSelectedIds([])} onDeleteSelected={handleBulkDelete} canDelete />
 
-      {!isLoading && services.length === 0 ? (
+      {isError && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-sm text-rose-700">
+          Failed to load services — check your connection and refresh.
+        </div>
+      )}
+      {currentUser && !currentUser.company_id && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
+          Your account is not linked to a company yet. Services will appear once your company is set up.
+        </div>
+      )}
+      {!isLoading && services.length === 0 && !isError ? (
         <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
           <Settings className="w-10 h-10 text-slate-200 mb-3" />
           <p className="text-slate-400 font-medium mb-1">No services yet</p>
