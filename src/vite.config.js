@@ -80,7 +80,7 @@ const viteFixPlugin = {
   },
 }
 
-// Cache bust: 2026-04-06T02
+// Cache bust: 2026-04-17T01
 export default defineConfig({
   plugins: [
     viteFixPlugin,
@@ -95,7 +95,6 @@ export default defineConfig({
       'react/jsx-dev-runtime',
       'react-dom/client',
       '@tanstack/react-query',
-      '@base44/sdk',
     ],
     // Sub-paths only — no base 'react' or 'react-dom' alias here, which
     // prevents prefix-matching from mangling 'react/jsx-dev-runtime'.
@@ -117,9 +116,8 @@ export default defineConfig({
       'react/jsx-runtime',
       'react/jsx-dev-runtime',
       'react-dom/client',
-      '@base44/sdk',
     ],
-    exclude: [],
+    exclude: ['@base44/sdk'],
   },
   build: {
     rollupOptions: {
