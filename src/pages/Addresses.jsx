@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
+import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
+import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import AddressAnalytics from "@/components/addresses/AddressAnalytics";
 import {
   ADDRESS_FIELDS, ADDRESS_MAPPING_RULES, ADDRESS_TEMPLATE_EXAMPLE,
@@ -270,6 +272,8 @@ export default function Addresses() {
     },
   ];
 
+  const ss = useSpreadsheet(processedAddresses, columns);
+
   return (
     <div>
       <PageHeader title="Addresses" subtitle="Master address records linked to people, enterprises & transactions" onAdd={() => { setEditing(null); setFormOpen(true); }} addLabel="New Address">
@@ -346,15 +350,35 @@ export default function Addresses() {
             canDelete
           />
 
+          <SpreadsheetToolbar
+            {...ss.toolbarProps}
+            numericFields={[]}
+            selectedIds={selectedIds}
+            onSelectAll={() => setSelectedIds(ss.processedData.map((r) => r.id))}
+            onClearSelect={() => setSelectedIds([])}
+            onWriteBack={async (updates) => {
+              for (const { id, field, value } of updates) {
+                await base44.entities.Address.update(id, { [field]: value });
+              }
+              triggerETL("address");
+              qc.invalidateQueries({ queryKey: ["addresses"] });
+              toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
+            }}
+          />
+
           <DataTable
-            columns={columns}
-            data={processedAddresses}
+            {...ss.tableProps}
             onRowClick={(row) => setDetailAddress(row)}
             onEdit={(row) => { setEditing(row); setFormOpen(true); }}
             onDelete={(row) => setDeleting(row)}
             bulkMode
             selectedIds={selectedIds}
             onSelectionChange={setSelectedIds}
+            onCellEdit={async (id, field, value) => {
+              await base44.entities.Address.update(id, { [field]: value });
+              triggerETL("address");
+              qc.invalidateQueries({ queryKey: ["addresses"] });
+            }}
           />
         </>
       )}

@@ -26,6 +26,7 @@ import { Upload, Package, AlertTriangle, DollarSign, Clock, Wrench, BarChart2, X
 import { differenceInDays, parseISO, isValid } from "date-fns";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
+import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import ProductsAnalytics from "@/components/products/ProductsAnalytics";
 
@@ -306,6 +307,7 @@ export default function Products() {
   };
 
   const columns = buildColumns(recalls);
+  const ss = useSpreadsheet(processedProducts, columns);
 
   return (
     <div className="space-y-5">
@@ -386,19 +388,27 @@ export default function Products() {
       <BulkActionBar selectedIds={selectedIds} onClear={() => setSelectedIds([])} onDeleteSelected={perms.can_delete ? handleBulkDelete : undefined} canDelete={perms.can_delete} />
 
       <SpreadsheetToolbar
-        data={processedProducts}
+        {...ss.toolbarProps}
         numericFields={[
-          { key: "stock_quantity", label: "Stock Qty" },
-          { key: "unit_price",     label: "Unit Price" },
-          { key: "cost_price",     label: "Cost Price" },
+          { key: "stock_quantity",  label: "Stock Qty" },
+          { key: "unit_price",      label: "Unit Price" },
+          { key: "cost_price",      label: "Cost Price" },
           { key: "min_stock_level", label: "Min Stock" },
         ]}
         heatmapField="stock_quantity"
         heatmapOn={heatmapOn}
         onHeatmapToggle={() => setHeatmapOn((h) => !h)}
         selectedIds={selectedIds}
-        onSelectAll={() => setSelectedIds(processedProducts.map((r) => r.id))}
+        onSelectAll={() => setSelectedIds(ss.processedData.map((r) => r.id))}
         onClearSelect={() => setSelectedIds([])}
+        onWriteBack={perms.can_edit ? async (updates) => {
+          for (const { id, field, value } of updates) {
+            await base44.entities.Product.update(id, { [field]: value });
+          }
+          triggerETL("product");
+          qc.invalidateQueries({ queryKey: ["products"] });
+          toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
+        } : undefined}
       />
 
       {!isLoading && products.length === 0 ? (
@@ -412,10 +422,16 @@ export default function Products() {
           </div>
         </div>
       ) : (
-        <DataTable columns={columns} data={processedProducts}
+        <DataTable
+          {...ss.tableProps}
           onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
           onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
           bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
+          onCellEdit={perms.can_edit ? async (id, field, value) => {
+            await base44.entities.Product.update(id, { [field]: value });
+            triggerETL("product");
+            qc.invalidateQueries({ queryKey: ["products"] });
+          } : undefined}
         />
       )}
 

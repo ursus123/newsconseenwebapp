@@ -28,6 +28,8 @@ import RelationshipDetailPanel from "../components/relationships/RelationshipDet
 import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
+import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
@@ -240,6 +242,8 @@ export default function Relationships() {
     return list;
   }, [tabFiltered, search, filters]);
 
+  const ss = useSpreadsheet(processedRelationships, columns);
+
   return (
     <div>
       <PageHeader title="Relationships" subtitle="Assign people, items and enterprises — preserve history">
@@ -331,6 +335,22 @@ export default function Relationships() {
         canDelete={perms.l2_unassign}
       />
 
+      <SpreadsheetToolbar
+        {...ss.toolbarProps}
+        numericFields={[]}
+        selectedIds={selectedIds}
+        onSelectAll={() => setSelectedIds(ss.processedData.map((r) => r.id))}
+        onClearSelect={() => setSelectedIds([])}
+        onWriteBack={perms.l2_assign ? async (updates) => {
+          for (const { id, field, value } of updates) {
+            await base44.entities.Relationship.update(id, { [field]: value });
+          }
+          triggerETL("relationship");
+          qc.invalidateQueries({ queryKey: ["relationships"] });
+          toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
+        } : undefined}
+      />
+
       {viewMode === "graph" ? (
         <CytoscapeRelationshipGraph
           relationships={relationships}
@@ -342,12 +362,16 @@ export default function Relationships() {
         />
       ) : (
         <DataTable
-          columns={columns}
-          data={processedRelationships}
+          {...ss.tableProps}
           onRowClick={(row) => setDetailRel(row)}
           onEdit={perms.l2_assign ? (row) => { setEditing(row); setFormType(row.relationship_type); setFormOpen(true); } : undefined}
           onDelete={perms.l2_unassign ? (row) => setDeleting(row) : undefined}
           bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
+          onCellEdit={perms.l2_assign ? async (id, field, value) => {
+            await base44.entities.Relationship.update(id, { [field]: value });
+            triggerETL("relationship");
+            qc.invalidateQueries({ queryKey: ["relationships"] });
+          } : undefined}
         />
       )}
 

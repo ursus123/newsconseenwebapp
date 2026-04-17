@@ -1,14 +1,93 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { Column, Table2, Cell, ColumnHeaderCell, SelectionModes, RenderMode } from "@blueprintjs/table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronLeft, ChevronRight, AlertTriangle, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const PAGE_SIZE = 15;
 const VIRTUALIZE_THRESHOLD = 200;
+
+// ── Inline-edit cell ──────────────────────────────────────────────────────────
+
+function EditableCell({ value, onSave, children }) {
+  const [editing, setEditing] = useState(false);
+  const [draft,   setDraft]   = useState("");
+  const inputRef = useRef(null);
+
+  const startEdit = (e) => {
+    e.stopPropagation();
+    setDraft(value != null ? String(value) : "");
+    setEditing(true);
+  };
+
+  useEffect(() => {
+    if (editing && inputRef.current) inputRef.current.focus();
+  }, [editing]);
+
+  const commit = () => {
+    setEditing(false);
+    if (draft !== String(value ?? "")) onSave(draft);
+  };
+
+  const cancel = () => setEditing(false);
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); commit(); }
+          if (e.key === "Escape") cancel();
+        }}
+        className="w-full text-sm text-slate-800 bg-emerald-50 border border-emerald-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+        onClick={(e) => e.stopPropagation()}
+      />
+    );
+  }
+
+  return (
+    <div
+      onDoubleClick={startEdit}
+      className="cursor-text group relative"
+      title="Double-click to edit"
+    >
+      {children}
+      <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded border border-emerald-200" />
+    </div>
+  );
+}
+
+// ── Sort header ───────────────────────────────────────────────────────────────
+
+function SortableHeader({ col, sortKey, sortDir, onSort }) {
+  const active = sortKey === col.key;
+  return (
+    <button
+      onClick={() => onSort && onSort(col.key)}
+      className={`flex items-center gap-1 group text-xs font-semibold uppercase tracking-wider whitespace-nowrap transition-colors ${
+        active ? "text-emerald-600" : "text-slate-500 hover:text-slate-700"
+      }`}
+    >
+      {col.label}
+      {active ? (
+        sortDir === "asc"
+          ? <ArrowUp className="w-3 h-3 text-emerald-500" />
+          : <ArrowDown className="w-3 h-3 text-emerald-500" />
+      ) : (
+        <ArrowUpDown className="w-3 h-3 opacity-0 group-hover:opacity-40 transition-opacity" />
+      )}
+      {col.computed && <span className="text-[9px] text-emerald-500 font-mono ml-0.5">fx</span>}
+    </button>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function DataTable({
   columns,
@@ -19,21 +98,33 @@ export default function DataTable({
   isLoading,
   error,
   onRetry,
-  selectedIds = [],
+  selectedIds    = [],
   onSelectionChange,
-  bulkMode = false,
+  bulkMode       = false,
+  // Spreadsheet extensions
+  sortKey        = null,
+  sortDir        = "asc",
+  onSort,
+  onCellEdit,    // fn(rowId, fieldKey, newValue) — enables inline editing
 }) {
   const [page, setPage] = useState(0);
 
-  const safeData = data || [];
-  const totalPages = Math.ceil(safeData.length / PAGE_SIZE);
-  const paginated = safeData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  // Reset to page 0 when data changes (e.g. after sort/filter)
+  const prevDataLen = useRef(data?.length);
+  if (data?.length !== prevDataLen.current) {
+    prevDataLen.current = data?.length;
+    if (page !== 0) setPage(0);
+  }
 
-  const showCheckboxes = bulkMode && !!onSelectionChange;
-  const allOnPageSelected = paginated.length > 0 && paginated.every((r) => selectedIds.includes(r.id));
-  const someSelected = paginated.some((r) => selectedIds.includes(r.id));
-  const allSelected = safeData.length > 0 && safeData.every((r) => selectedIds.includes(r.id));
-  const someNotOnPage = showCheckboxes && allOnPageSelected && !allSelected && safeData.length > PAGE_SIZE;
+  const safeData    = data || [];
+  const totalPages  = Math.ceil(safeData.length / PAGE_SIZE);
+  const paginated   = safeData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const showCheckboxes     = bulkMode && !!onSelectionChange;
+  const allOnPageSelected  = paginated.length > 0 && paginated.every((r) => selectedIds.includes(r.id));
+  const someSelected       = paginated.some((r) => selectedIds.includes(r.id));
+  const allSelected        = safeData.length > 0 && safeData.every((r) => selectedIds.includes(r.id));
+  const someNotOnPage      = showCheckboxes && allOnPageSelected && !allSelected && safeData.length > PAGE_SIZE;
 
   const toggleRow = (id) => {
     if (!onSelectionChange) return;
@@ -60,6 +151,7 @@ export default function DataTable({
     onSelectionChange(safeData.map((r) => r.id));
   };
 
+  // Blueprint virtualized renderer (large datasets, no inline edit)
   const cellRenderer = useCallback((col) => (rowIndex) => {
     const row = safeData[rowIndex];
     if (!row) return <Cell />;
@@ -77,36 +169,39 @@ export default function DataTable({
     return <Cell>{val != null && val !== "" ? String(val) : "—"}</Cell>;
   }, [safeData]);
 
+  // ── Virtualized view (Blueprint) ─────────────────────────────────────────
   if (safeData.length >= VIRTUALIZE_THRESHOLD && !bulkMode) {
     return (
-      <div>
-        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-          <div className="px-4 py-2 border-b border-slate-100 text-xs text-slate-400">
-            {safeData.length} records — virtualized view
-          </div>
-          <Table2
-            numRows={safeData.length}
-            selectionModes={SelectionModes.ROWS_AND_CELLS}
-            renderMode={RenderMode.BATCH_ON_UPDATE}
-            defaultRowHeight={36}
-            className="w-full"
-          >
-            {columns.map((col) => (
-              <Column
-                key={col.key}
-                name={col.label}
-                nameRenderer={() => (
-                  <ColumnHeaderCell name={col.label} style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }} />
-                )}
-                cellRenderer={cellRenderer(col)}
-              />
-            ))}
-          </Table2>
+      <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+        <div className="px-4 py-2 border-b border-slate-100 text-xs text-slate-400">
+          {safeData.length} records — virtualized view · double-click a row to edit
         </div>
+        <Table2
+          numRows={safeData.length}
+          selectionModes={SelectionModes.ROWS_AND_CELLS}
+          renderMode={RenderMode.BATCH_ON_UPDATE}
+          defaultRowHeight={36}
+          className="w-full"
+        >
+          {columns.map((col) => (
+            <Column
+              key={col.key}
+              name={col.label}
+              nameRenderer={() => (
+                <ColumnHeaderCell
+                  name={col.label}
+                  style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}
+                />
+              )}
+              cellRenderer={cellRenderer(col)}
+            />
+          ))}
+        </Table2>
       </div>
     );
   }
 
+  // ── Loading skeleton ─────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
@@ -123,6 +218,7 @@ export default function DataTable({
     );
   }
 
+  // ── Error state ──────────────────────────────────────────────────────────
   if (error) {
     return (
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
@@ -142,6 +238,7 @@ export default function DataTable({
     );
   }
 
+  // ── Normal paginated table ───────────────────────────────────────────────
   return (
     <div>
       {someNotOnPage && (
@@ -160,6 +257,14 @@ export default function DataTable({
           </button>
         </div>
       )}
+
+      {onCellEdit && (
+        <div className="flex items-center gap-1.5 mb-1.5 text-[11px] text-slate-400">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+          Double-click any cell to edit inline · Enter to save · Escape to cancel
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -175,8 +280,15 @@ export default function DataTable({
                   </TableHead>
                 )}
                 {columns.map((col) => (
-                  <TableHead key={col.key} className="text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    {col.label}
+                  <TableHead key={col.key} className="whitespace-nowrap">
+                    {onSort ? (
+                      <SortableHeader col={col} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    ) : (
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        {col.label}
+                        {col.computed && <span className="text-[9px] text-emerald-500 font-mono ml-1">fx</span>}
+                      </span>
+                    )}
                   </TableHead>
                 ))}
                 {(onEdit || onDelete) && <TableHead className="w-20" />}
@@ -186,7 +298,10 @@ export default function DataTable({
               <AnimatePresence>
                 {paginated.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={columns.length + (showCheckboxes ? 2 : 1)} className="text-center py-12 text-slate-400">
+                    <TableCell
+                      colSpan={columns.length + (showCheckboxes ? 2 : 1)}
+                      className="text-center py-12 text-slate-400"
+                    >
                       No records found
                     </TableCell>
                   </TableRow>
@@ -209,30 +324,66 @@ export default function DataTable({
                             <Checkbox checked={isSelected} onCheckedChange={() => toggleRow(row.id)} />
                           </TableCell>
                         )}
-                        {columns.map((col) => (
-                          <TableCell key={col.key} className="text-sm text-slate-700">
-                            {col.render ? col.render(row[col.key], row) : (
-                              col.badge ? (
-                                <Badge variant="secondary" className={col.badgeColor?.(row[col.key]) || "bg-slate-100 text-slate-600"}>
-                                  {(row[col.key] || "—").toString().replace(/_/g, " ")}
+                        {columns.map((col) => {
+                          const rawVal = row[col.key];
+                          // Computed columns are display-only — no inline edit
+                          const editable = onCellEdit && !col.computed && !col.render;
+
+                          const cellContent = col.render
+                            ? col.render(rawVal, row)
+                            : col.badge
+                              ? (
+                                <Badge
+                                  variant="secondary"
+                                  className={col.badgeColor?.(rawVal) || "bg-slate-100 text-slate-600"}
+                                >
+                                  {(rawVal || "—").toString().replace(/_/g, " ")}
                                 </Badge>
-                              ) : (
-                                row[col.key] || "—"
                               )
-                            )}
-                          </TableCell>
-                        ))}
+                              : (rawVal != null && rawVal !== "" ? String(rawVal) : "—");
+
+                          return (
+                            <TableCell key={col.key} className="text-sm text-slate-700">
+                              {editable ? (
+                                <EditableCell
+                                  value={rawVal}
+                                  onSave={(val) => onCellEdit(row.id, col.key, val)}
+                                >
+                                  {cellContent}
+                                </EditableCell>
+                              ) : (
+                                cellContent
+                              )}
+                            </TableCell>
+                          );
+                        })}
                         {(onEdit || onDelete) && (
                           <TableCell onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1">
                               {onEdit && (
-                                <Button variant="ghost" size="icon" onClick={() => onEdit(row)} className="h-7 w-7 text-slate-400 hover:text-emerald-600">
-                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                <Button
+                                  variant="ghost" size="icon"
+                                  onClick={() => onEdit(row)}
+                                  className="h-7 w-7 text-slate-400 hover:text-emerald-600"
+                                >
+                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                  </svg>
                                 </Button>
                               )}
                               {onDelete && (
-                                <Button variant="ghost" size="icon" onClick={() => onDelete(row)} className="h-7 w-7 text-slate-400 hover:text-rose-600">
-                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                                <Button
+                                  variant="ghost" size="icon"
+                                  onClick={() => onDelete(row)}
+                                  className="h-7 w-7 text-slate-400 hover:text-rose-600"
+                                >
+                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <polyline points="3 6 5 6 21 6"/>
+                                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                    <path d="M10 11v6"/><path d="M14 11v6"/>
+                                    <path d="M9 6V4h6v2"/>
+                                  </svg>
                                 </Button>
                               )}
                             </div>

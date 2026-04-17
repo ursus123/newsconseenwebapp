@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Upload, Building2, CheckCircle, Clock, Globe } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
+import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { BarChart2, X } from "lucide-react";
@@ -224,6 +225,8 @@ export default function Enterprises() {
     return list;
   }, [enterprises, search, sortBy, filters]);
 
+  const ss = useSpreadsheet(processedEnterprises, columns);
+
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Enterprise.delete(id);
     qc.invalidateQueries({ queryKey: ["enterprises"] });
@@ -310,12 +313,19 @@ export default function Enterprises() {
       <BulkActionBar selectedIds={selectedIds} onClear={() => setSelectedIds([])} onDeleteSelected={perms.can_delete ? handleBulkDelete : undefined} canDelete={perms.can_delete} />
 
       <SpreadsheetToolbar
-        data={processedEnterprises}
+        {...ss.toolbarProps}
         numericFields={[]}
-        heatmapField={null}
         selectedIds={selectedIds}
-        onSelectAll={() => setSelectedIds(processedEnterprises.map((r) => r.id))}
+        onSelectAll={() => setSelectedIds(ss.processedData.map((r) => r.id))}
         onClearSelect={() => setSelectedIds([])}
+        onWriteBack={perms.can_edit ? async (updates) => {
+          for (const { id, field, value } of updates) {
+            await base44.entities.Enterprise.update(id, { [field]: value });
+          }
+          triggerETL("enterprise");
+          qc.invalidateQueries({ queryKey: ["enterprises"] });
+          toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
+        } : undefined}
       />
 
       {/* Toolbar + view toggle */}
@@ -374,11 +384,15 @@ export default function Enterprises() {
         </div>
       ) : (
         <DataTable
-          columns={columns}
-          data={processedEnterprises}
+          {...ss.tableProps}
           onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
           onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
           bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
+          onCellEdit={perms.can_edit ? async (id, field, value) => {
+            await base44.entities.Enterprise.update(id, { [field]: value });
+            triggerETL("enterprise");
+            qc.invalidateQueries({ queryKey: ["enterprises"] });
+          } : undefined}
         />
       )}
 

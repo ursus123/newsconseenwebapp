@@ -17,6 +17,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Upload, Settings, CheckCircle, Clock, DollarSign, BarChart2, X } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
+import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import ServicesAnalytics from "@/components/services/ServicesAnalytics";
 import {
@@ -249,6 +250,8 @@ export default function Services() {
     return list;
   }, [tabFiltered, search, filters]);
 
+  const ss = useSpreadsheet(processedServices, columns);
+
   const avgPrice = services.length > 0
     ? "$" + (services.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0) / services.length).toFixed(0)
     : "$0";
@@ -326,14 +329,22 @@ export default function Services() {
       />
 
       <SpreadsheetToolbar
-        data={processedServices}
+        {...ss.toolbarProps}
         numericFields={[
           { key: "price",              label: "Price" },
           { key: "estimated_duration", label: "Duration" },
         ]}
         selectedIds={selectedIds}
-        onSelectAll={() => setSelectedIds(processedServices.map((r) => r.id))}
+        onSelectAll={() => setSelectedIds(ss.processedData.map((r) => r.id))}
         onClearSelect={() => setSelectedIds([])}
+        onWriteBack={perms.can_edit ? async (updates) => {
+          for (const { id, field, value } of updates) {
+            await base44.entities.Service.update(id, { [field]: value });
+          }
+          triggerETL("service");
+          qc.invalidateQueries({ queryKey: ["services"] });
+          toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
+        } : undefined}
       />
 
       {isError && (
@@ -354,13 +365,17 @@ export default function Services() {
         </div>
       ) : (
         <DataTable
-          columns={columns}
-          data={processedServices}
+          {...ss.tableProps}
           onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
           onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
           bulkMode
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
+          onCellEdit={perms.can_edit ? async (id, field, value) => {
+            await base44.entities.Service.update(id, { [field]: value });
+            triggerETL("service");
+            qc.invalidateQueries({ queryKey: ["services"] });
+          } : undefined}
         />
       )}
 

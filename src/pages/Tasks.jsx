@@ -30,6 +30,7 @@ import TasksAnalytics from "@/components/tasks/TasksAnalytics";
 import { tagColor } from "@/components/shared/TagInput";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
+import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { format, isToday, isPast, parseISO } from "date-fns";
@@ -302,7 +303,18 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
     return list;
   })();
 
-  const grouped = KANBAN_COLUMNS.map((s) => ({ ...s, items: filtered.filter((t) => t.status === s.key) }));
+  const TASK_COLS = [
+    { key: "title",            label: "Title" },
+    { key: "status",           label: "Status" },
+    { key: "due_date",         label: "Due Date" },
+    { key: "assigned_to_name", label: "Assigned To" },
+    { key: "enterprise",       label: "Enterprise" },
+    { key: "task_type",        label: "Type" },
+    { key: "outcome_notes",    label: "Outcome" },
+  ];
+  const ss = useSpreadsheet(filtered, TASK_COLS);
+
+  const grouped = KANBAN_COLUMNS.map((s) => ({ ...s, items: ss.processedData.filter((t) => t.status === s.key) }));
   const overdueCount = tasks.filter(isDuePast).length;
 
   const onDragOver = (e) => e.preventDefault();
@@ -437,11 +449,19 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
       <TaskPerformanceMetrics tasks={tasks} />
 
       <SpreadsheetToolbar
-        data={filtered}
+        {...ss.toolbarProps}
         numericFields={[]}
         selectedIds={selectedIds}
-        onSelectAll={() => setSelectedIds(filtered.map((t) => t.id))}
+        onSelectAll={() => setSelectedIds(ss.processedData.map((t) => t.id))}
         onClearSelect={clearSelection}
+        onWriteBack={perms.can_edit ? async (updates) => {
+          for (const { id, field, value } of updates) {
+            await base44.entities.Task.update(id, { [field]: value });
+          }
+          triggerETL("task");
+          invalidate();
+          toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
+        } : undefined}
       />
 
       <div className="flex flex-wrap gap-2 mb-3">
@@ -544,17 +564,17 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
 
       {viewMode === "list" && (
         <div className="space-y-3">
-          {filtered.length === 0 ? (
+          {ss.processedData.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
               <Clock className="w-8 h-8 text-slate-200 mb-2" />
               <p className="text-sm text-slate-300">No tasks match this filter</p>
             </div>
-          ) : filtered.map((task) => renderCard(task, true))}
+          ) : ss.processedData.map((task) => renderCard(task, true))}
         </div>
       )}
 
       {viewMode === "timeline" && (
-        <TaskTimelineView tasks={filtered} renderCard={(task) => renderCard(task, true)} />
+        <TaskTimelineView tasks={ss.processedData} renderCard={(task) => renderCard(task, true)} />
       )}
 
       {viewMode === "calendar" && (

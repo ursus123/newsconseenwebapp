@@ -15,6 +15,7 @@ import { tagColor } from "@/components/shared/TagInput";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
+import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import TransactionsAnalytics from "@/components/transactions/TransactionsAnalytics";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -593,6 +594,18 @@ export default function Transactions() {
   const searchFiltered = search ? fuzzyFilter(filtered, search, ["description", "enterprise", "primary_person", "invoice_number", "counterparty", "service_name"]) : filtered;
   const tabTransactions = searchFiltered.filter(activeTabConfig?.filter || (() => true));
 
+  const TX_COLS = [
+    { key: "date",             label: "Date" },
+    { key: "transaction_type", label: "Type" },
+    { key: "description",      label: "Description" },
+    { key: "enterprise",       label: "Enterprise" },
+    { key: "amount",           label: "Amount" },
+    { key: "net_amount",       label: "Net Amount" },
+    { key: "tax_amount",       label: "Tax" },
+    { key: "status",           label: "Status" },
+  ];
+  const ss = useSpreadsheet(tabTransactions, TX_COLS);
+
   if (currentUser && !perms.l4_view && !isAdmin) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-400">
@@ -826,16 +839,24 @@ export default function Transactions() {
       </div>
 
       <SpreadsheetToolbar
-        data={tabTransactions}
+        {...ss.toolbarProps}
         numericFields={[
-          { key: "amount",     label: "Amount" },
-          { key: "net_amount", label: "Net Amount" },
-          { key: "tax_amount", label: "Tax" },
+          { key: "amount",          label: "Amount" },
+          { key: "net_amount",      label: "Net Amount" },
+          { key: "tax_amount",      label: "Tax" },
           { key: "discount_amount", label: "Discount" },
         ]}
         selectedIds={selectedIds}
-        onSelectAll={() => setSelectedIds(tabTransactions.map((t) => t.id))}
+        onSelectAll={() => setSelectedIds(ss.processedData.map((t) => t.id))}
         onClearSelect={() => setSelectedIds([])}
+        onWriteBack={perms.l4_create_draft ? async (updates) => {
+          for (const { id, field, value } of updates) {
+            await base44.entities.Transaction.update(id, { [field]: value });
+          }
+          triggerETL("transaction");
+          qc.invalidateQueries({ queryKey: ["transactions"] });
+          toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
+        } : undefined}
       />
 
       <BulkActionBar

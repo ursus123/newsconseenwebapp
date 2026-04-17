@@ -21,6 +21,7 @@ import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
+import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import PeopleAnalytics from "@/components/people/PeopleAnalytics";
 import { Button } from "@/components/ui/button";
@@ -353,6 +354,8 @@ export default function People() {
     return list;
   }, [typeFiltered, search, sortBy, filters]);
 
+  const ss = useSpreadsheet(processedPeople, columns);
+
   // Visible tabs (only where data exists)
   const visibleTabs = TYPE_TABS.filter(
     t => t.id === "all" || people.some(p => (TYPE_ALIASES[t.id] || [t.id]).includes(p.person_type))
@@ -452,7 +455,7 @@ export default function People() {
       />
 
       <SpreadsheetToolbar
-        data={processedPeople}
+        {...ss.toolbarProps}
         numericFields={[
           { key: "cost_rate", label: "Cost Rate" },
           { key: "height_cm", label: "Height (cm)" },
@@ -462,8 +465,16 @@ export default function People() {
         heatmapOn={heatmapOn}
         onHeatmapToggle={() => setHeatmapOn((h) => !h)}
         selectedIds={selectedIds}
-        onSelectAll={() => setSelectedIds(processedPeople.map((r) => r.id))}
+        onSelectAll={() => setSelectedIds(ss.processedData.map((r) => r.id))}
         onClearSelect={() => setSelectedIds([])}
+        onWriteBack={perms.can_edit ? async (updates) => {
+          for (const { id, field, value } of updates) {
+            await base44.entities.Person.update(id, { [field]: value });
+          }
+          triggerETL("people");
+          qc.invalidateQueries({ queryKey: ["people"] });
+          toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
+        } : undefined}
       />
 
       {/* Empty state */}
@@ -490,11 +501,15 @@ export default function People() {
         />
       ) : (
         <DataTable
-          columns={columns}
-          data={processedPeople}
+          {...ss.tableProps}
           onEdit={perms.l1_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
           onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
           bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
+          onCellEdit={perms.l1_edit ? async (id, field, value) => {
+            await base44.entities.Person.update(id, { [field]: value });
+            triggerETL("people");
+            qc.invalidateQueries({ queryKey: ["people"] });
+          } : undefined}
         />
       )}
 
