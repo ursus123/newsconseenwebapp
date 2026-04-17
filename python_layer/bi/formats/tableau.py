@@ -73,11 +73,14 @@ def _worksheet_xml(sheet_name: str, df: pd.DataFrame, ds_name: str) -> str:
 
     # Show first 10 columns in the default view
     view_cols = cols[:10]
-    rows_xml = "\n".join(
-        f"        <column-instance column='{xml_escape(f\"[{c}]\")}' "
-        f"derivation='None' name='{xml_escape(f\"[{c}]\")}' pivot='key' type='quantitative' />"
-        for c in view_cols
-    )
+    rows_xml_parts = []
+    for c in view_cols:
+        col_ref = xml_escape("[" + c + "]")
+        rows_xml_parts.append(
+            f"        <column-instance column='{col_ref}' "
+            f"derivation='None' name='{col_ref}' pivot='key' type='quantitative' />"
+        )
+    rows_xml = "\n".join(rows_xml_parts)
 
     return f"""
   <worksheet name='{safe_name}'>
