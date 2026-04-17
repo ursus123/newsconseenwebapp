@@ -691,6 +691,7 @@ answers about Newsconseen's own features — the most visible form of product re
 - Keep DataModels.jsx and ObjectExplorer.jsx as accurate technical/imagery references (see rule below)
 - Declare `backend` + `APP_ONTOLOGY` for every app added to APP_REGISTRY (see Applications rule below)
 - Add every new PostgreSQL table to etl/setup.py or enrichment/setup.py so it pre-exists from startup (see Datamart DDL rule below)
+- Add every new column on an existing table as `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in the same setup.py file — a CREATE TABLE change alone is not enough and will crash live deployments
 
 ### Applications — ontology and datamart as backend (RULE)
 
@@ -726,7 +727,7 @@ external API, or bespoke backend:
 3. If ontology-backed: implement company_id scoping and ETL trigger after mutations
 4. If datamart-backed: implement three-tier fallback
 
-### Datamart DDL — pre-create all tables at startup (RULE)
+### Datamart DDL — pre-create all tables AND evolve columns at startup (RULE)
 
 Every PostgreSQL table in the datamart must be declared in a startup DDL file and
 pre-created when the python_layer boots — not created lazily on the first ETL write.
@@ -744,35 +745,89 @@ Pre-creating tables with full column schemas at startup gives the copilot and qu
 complete schema awareness from the first deploy, even before any operator has loaded data.
 The agent can reason about what *could* be in the datamart, not just what currently is.
 
-**Two DDL files — keep them in sync with any new table:**
+**Two DDL files — both require a `_DDL` list AND a `_MIGRATIONS` list:**
 
-| File | Covers |
-|------|--------|
-| `python_layer/etl/setup.py` → `ensure_all_analytics_tables(engine)` | All `raw.*` and `analytics.*` tables: 9 raw, 9 core analytics, 11 enhanced analytics, `copilot_memory` |
-| `python_layer/enrichment/setup.py` → `ensure_enrichment_tables(engine)` | All 5 `analytics.*_enrichment` tables with Phase A + Phase B columns |
+| File | Covers | Both lists required |
+|------|--------|-------------------|
+| `python_layer/etl/setup.py` → `ensure_all_analytics_tables(engine)` | All `raw.*` and `analytics.*` tables: 9 raw, 9 core analytics, 11 enhanced analytics, `copilot_memory` | ✅ |
+| `python_layer/enrichment/setup.py` → `ensure_enrichment_tables(engine)` | All 5 `analytics.*_enrichment` tables | ✅ |
 
-Both are called in `app.py` lifespan on every startup. Both use `CREATE TABLE IF NOT EXISTS` — safe on every redeploy.
+Both files are called in `app.py` lifespan on every startup. Both must run `_DDL` first, then `_MIGRATIONS`.
 
-**Pattern for every new table:**
+**Critical distinction — two different startup operations, both required:**
+
+| Operation | SQL | What it handles |
+|-----------|-----|-----------------|
+| Table creation | `CREATE TABLE IF NOT EXISTS` | New deployments where the table doesn't exist yet |
+| Column evolution | `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` | Existing deployments where the table exists but is missing new columns |
+
+`CREATE TABLE IF NOT EXISTS` is a **no-op on existing tables**. If a column is added to the
+DDL definition but the table already exists in the live database, the column is never added.
+The ETL writer then crashes with "column does not exist" — blocking health checks and all
+downstream features. This is the schema mismatch failure mode (encountered with `product_enrichment.domain_data`).
+
+**Checklist when adding a new column to any existing table:**
+```
+□ Add column inside the CREATE TABLE IF NOT EXISTS block          (covers new deployments)
+□ Add ALTER TABLE ... ADD COLUMN IF NOT EXISTS to _MIGRATIONS     (covers live deployments)
+□ Both changes go in the same setup.py file, same commit
+□ Update DataModels.jsx to reflect the new column
+```
+
+**Checklist when adding a brand-new table:**
+```
+□ Add CREATE TABLE IF NOT EXISTS to the _DDL list                 (covers all deployments)
+□ No ALTER needed — the table doesn't exist on any deployment yet
+□ Update DataModels.jsx to reflect the new table
+```
+
+**Pattern — new column on existing table:**
 ```python
-# python_layer/etl/setup.py  (or enrichment/setup.py for enrichment tables)
-_NEW_TABLE_DDL = """
-CREATE TABLE IF NOT EXISTS analytics.my_new_table (
-    company_id      TEXT,
-    snapshot_date   DATE,
-    -- ... all columns, all nullable
-    loaded_at       TIMESTAMP
+# etl/setup.py or enrichment/setup.py
+
+# Step 1: add to CREATE TABLE (new deployments)
+_MY_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS analytics.my_table (
+    company_id   TEXT,
+    new_column   TEXT,   -- ← add here
+    loaded_at    TIMESTAMP
 )
 """
-# Add to the relevant _DDL list so ensure_*() picks it up automatically
+
+# Step 2: add to _MIGRATIONS (live deployments — always required for existing tables)
+_MIGRATIONS = [
+    # ... existing migrations ...
+    "ALTER TABLE analytics.my_table ADD COLUMN IF NOT EXISTS new_column TEXT",
+]
+```
+
+**Pattern — brand-new table:**
+```python
+# Step 1 only: add to _DDL list (no ALTER needed)
+_DDL = [
+    """
+    CREATE TABLE IF NOT EXISTS analytics.my_new_table (
+        company_id    TEXT,
+        snapshot_date DATE,
+        loaded_at     TIMESTAMP
+    )
+    """,
+]
 ```
 
 **Rules:**
 - Every `CREATE TABLE IF NOT EXISTS` added to any python_layer file must also be added to
   `etl/setup.py` or `enrichment/setup.py` so it pre-exists from startup
+- Every new column on an existing table requires a matching
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in `_MIGRATIONS` — without it, live deployments
+  crash on the next ETL run with "column does not exist"
+- Both `_DDL` and `_MIGRATIONS` must be run in `ensure_*()` on every startup
 - All columns must be nullable — startup DDL creates empty shells, not schema-enforced tables
-- After adding a new table to a DDL file, update DataModels.jsx to match (see rule below)
+- After adding a new table or column, update DataModels.jsx to match (see rule below)
 - Never rely on `to_sql()` as the sole mechanism for table creation
+- **When a deployment fails with "column does not exist"**: immediate unblock is
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...` in the Railway Postgres console,
+  then add it to `_MIGRATIONS` in setup.py so it never recurs
 
 ### DataModels and ObjectExplorer — living technical references (RULE)
 
