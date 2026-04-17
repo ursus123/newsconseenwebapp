@@ -808,11 +808,7 @@ function MessageBubble({ message, onFeedback, companyId, currentUser, onOpenQuer
         {/* Bubble */}
         <div className={`px-4 py-3 rounded-2xl text-sm ${
           isUser
-            ? `bg-gradient-to-br ${
-                modeColor === "blue"   ? "from-blue-500 to-indigo-600"   :
-                modeColor === "violet" ? "from-violet-500 to-purple-600" :
-                                         "from-emerald-500 to-teal-600"
-              } text-white rounded-tr-md shadow-sm`
+            ? "bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-tr-md shadow-sm"
             : "bg-white border border-slate-200 text-slate-800 rounded-tl-md shadow-sm"
         }`}>
           {isUser ? (
