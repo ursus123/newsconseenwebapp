@@ -1330,3 +1330,134 @@ def get_industry_news(
         "count":   len(results),
         "results": results,
     }
+
+
+# ── MI Write-back ─────────────────────────────────────────────────────────────
+
+class SaveCompetitorRequest(BaseModel):
+    company_id:              str
+    linked_enterprise_id:    str
+    linked_enterprise_name:  str
+    competitor_name:         str
+    competitor_type:         Optional[str] = None
+    distance_km:             Optional[float] = None
+    address:                 Optional[str] = None
+    phone:                   Optional[str] = None
+    website:                 Optional[str] = None
+    rating:                  Optional[float] = None
+    lat:                     Optional[float] = None
+    lon:                     Optional[float] = None
+    source_location:         Optional[str] = None
+    business_type:           Optional[str] = None
+
+
+@router.post("/save-competitor")
+def save_competitor(req: SaveCompetitorRequest):
+    """
+    Write-back: save an MI-discovered competitor to the datamart and
+    create a Relationship record in Base44 linking the external entity
+    to an existing operator Enterprise.
+
+    Two writes:
+    1. INSERT into analytics.mi_competitors (persistent record for dashboards/queries)
+    2. POST to Base44 /relationships (creates Relationship entity so the link is
+       visible in the Relationships page and queryable via the ontology)
+    """
+    from database import get_engine_safe
+    from config.settings import settings, HEADERS
+
+    relationship_id: Optional[str] = None
+    relationship_error: Optional[str] = None
+
+    # ── 1. Create Relationship record in Base44 ───────────────────────────────
+    if settings.base44_relationships_url:
+        try:
+            rel_payload = {
+                "company_id":          req.company_id,
+                "relationship_type":   "competitor",
+                "enterprise_name":     req.linked_enterprise_name,
+                "contact_name":        req.competitor_name,
+                "location":            req.address or req.source_location or "",
+                "status":              "active",
+                "notes": (
+                    f"Competitor discovered via Market Intelligence. "
+                    f"Distance: {req.distance_km} km. "
+                    f"Type: {req.competitor_type or req.business_type or 'unknown'}. "
+                    f"Source: {req.source_location or 'MI scan'}."
+                ),
+            }
+            resp = requests.post(
+                settings.base44_relationships_url,
+                json=rel_payload,
+                headers=HEADERS,
+                timeout=10,
+            )
+            if resp.ok:
+                relationship_id = resp.json().get("id")
+            else:
+                relationship_error = f"Base44 {resp.status_code}: {resp.text[:200]}"
+                logger.warning("save-competitor: Base44 relationship POST failed — %s", relationship_error)
+        except Exception as exc:
+            relationship_error = str(exc)
+            logger.warning("save-competitor: Base44 relationship POST error — %s", exc)
+
+    # ── 2. INSERT into analytics.mi_competitors ───────────────────────────────
+    engine = get_engine_safe()
+    if engine:
+        try:
+            from sqlalchemy import text as sa_text
+            row = {
+                "company_id":              req.company_id,
+                "linked_enterprise_id":    req.linked_enterprise_id,
+                "linked_enterprise_name":  req.linked_enterprise_name,
+                "competitor_name":         req.competitor_name,
+                "competitor_type":         req.competitor_type,
+                "distance_km":             req.distance_km,
+                "address":                 req.address,
+                "phone":                   req.phone,
+                "website":                 req.website,
+                "rating":                  req.rating,
+                "lat":                     req.lat,
+                "lon":                     req.lon,
+                "source_location":         req.source_location,
+                "business_type":           req.business_type,
+                "relationship_id":         relationship_id,
+            }
+            cols = ", ".join(row.keys())
+            placeholders = ", ".join(f":{k}" for k in row.keys())
+            with engine.begin() as conn:
+                conn.execute(
+                    sa_text(f"INSERT INTO analytics.mi_competitors ({cols}) VALUES ({placeholders})"),
+                    row,
+                )
+        except Exception as exc:
+            logger.warning("save-competitor: analytics insert failed — %s", exc)
+
+    return {
+        "status":           "saved",
+        "relationship_id":  relationship_id,
+        "relationship_error": relationship_error,
+        "competitor_name":  req.competitor_name,
+        "linked_to":        req.linked_enterprise_name,
+    }
+
+
+@router.get("/saved-competitors")
+def get_saved_competitors(company_id: str):
+    """Return all competitors saved to the datamart for this company."""
+    from database import get_engine_safe
+    from sqlalchemy import text as sa_text
+
+    engine = get_engine_safe()
+    if not engine:
+        return {"competitors": []}
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                sa_text("SELECT * FROM analytics.mi_competitors WHERE company_id = :cid ORDER BY saved_at DESC"),
+                {"cid": company_id},
+            ).mappings().all()
+        return {"competitors": [dict(r) for r in rows]}
+    except Exception as exc:
+        logger.warning("saved-competitors: %s", exc)
+        return {"competitors": []}

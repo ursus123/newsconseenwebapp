@@ -8,6 +8,9 @@ import {
 } from "recharts";
 import ClusterAnalysisView from "./ClusterAnalysisView";
 import PlottableCompetitorScatter from "./PlottableCompetitorScatter";
+import { PlusCircle, CheckCircle2, Loader2, X } from "lucide-react";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -62,8 +65,95 @@ const DISTANCE_BUCKETS = [
 
 const BUCKET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#84cc16", "#22c55e"];
 
-export default function CompetitorSection({ data, businessType, location, radiusKm, loading }) {
+// ── AddToBase44 button — inline enterprise picker ────────────────────────────
+function AddToBase44Button({ competitor, myEnterprises, companyId, businessType, location }) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [selectedId, setSelectedId] = useState("");
+
+  if (saved) {
+    return (
+      <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-semibold">
+        <CheckCircle2 className="w-3 h-3" /> Saved
+      </span>
+    );
+  }
+
+  const handleSave = async () => {
+    const ent = myEnterprises.find(e => e.id === selectedId);
+    if (!ent) return;
+    setSaving(true);
+    try {
+      const resp = await fetch(`${RAILWAY_URL}/market/save-competitor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company_id:             companyId,
+          linked_enterprise_id:   ent.id,
+          linked_enterprise_name: ent.enterprise_name || ent.name || "",
+          competitor_name:        competitor.name || "Unknown",
+          competitor_type:        competitor.type || "",
+          distance_km:            competitor.distance_km || null,
+          address:                competitor.address || "",
+          phone:                  competitor.phone || "",
+          website:                competitor.website || "",
+          rating:                 competitor.rating || null,
+          lat:                    competitor.lat || null,
+          lon:                    competitor.lon || null,
+          source_location:        location || "",
+          business_type:          businessType || "",
+        }),
+      });
+      if (resp.ok) setSaved(true);
+    } catch (_) {}
+    setSaving(false);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-1 text-[10px] text-violet-600 hover:text-violet-800 font-semibold whitespace-nowrap"
+          title="Add to Base44"
+        >
+          <PlusCircle className="w-3 h-3" /> Add
+        </button>
+      ) : (
+        <div className="absolute right-0 top-0 z-20 bg-white border border-slate-200 rounded-xl shadow-lg p-3 w-52">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Link to enterprise</p>
+            <button onClick={() => setOpen(false)}><X className="w-3 h-3 text-slate-400" /></button>
+          </div>
+          <select
+            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 mb-2 bg-white"
+            value={selectedId}
+            onChange={e => setSelectedId(e.target.value)}
+          >
+            <option value="">Select enterprise…</option>
+            {myEnterprises.map(e => (
+              <option key={e.id} value={e.id}>{e.enterprise_name || e.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleSave}
+            disabled={!selectedId || saving}
+            className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold bg-violet-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-50 hover:bg-violet-700"
+          >
+            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+            {saving ? "Saving…" : "Save & Link"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function CompetitorSection({ data, businessType, location, radiusKm, loading, myEnterprises, currentUser }) {
   const [view, setView] = useState("chart"); // "chart" | "cluster" | "map" | "table"
+  const companyId = currentUser?.company_id;
 
   const summary = data ? data.find(r => r.name?.startsWith("SUMMARY:") || r.distance_km === 0) : null;
   const competitors = data ? data.filter(r => r.distance_km > 0).slice(0, 20) : [];
@@ -158,10 +248,21 @@ export default function CompetitorSection({ data, businessType, location, radius
 
               <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {competitors.slice(0, 6).map((c, i) => (
-                  <div key={i} className="bg-slate-50 rounded-xl px-3 py-2 border border-slate-100">
-                    <p className="text-xs font-semibold text-slate-800 truncate">{c.name}</p>
+                  <div key={i} className="relative bg-slate-50 rounded-xl px-3 py-2 border border-slate-100">
+                    <p className="text-xs font-semibold text-slate-800 truncate pr-8">{c.name}</p>
                     <p className="text-[10px] text-slate-400 mt-0.5">{c.distance_km} km away</p>
                     {c.address && <p className="text-[10px] text-slate-400 truncate">{c.address}</p>}
+                    {myEnterprises?.length > 0 && companyId && (
+                      <div className="absolute top-2 right-2">
+                        <AddToBase44Button
+                          competitor={c}
+                          myEnterprises={myEnterprises}
+                          companyId={companyId}
+                          businessType={businessType}
+                          location={location}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -192,6 +293,9 @@ export default function CompetitorSection({ data, businessType, location, radius
                     <th className="text-left text-xs text-slate-400 pb-2 font-medium">#</th>
                     <th className="text-left text-xs text-slate-400 pb-2 font-medium">Name</th>
                     <th className="text-left text-xs text-slate-400 pb-2 font-medium">Distance</th>
+                    {myEnterprises?.length > 0 && companyId && (
+                      <th className="text-left text-xs text-slate-400 pb-2 font-medium">Add</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -203,6 +307,17 @@ export default function CompetitorSection({ data, businessType, location, radius
                         {c.address && <p className="text-xs text-slate-400 truncate">{c.address}</p>}
                       </td>
                       <td className="py-1.5 text-slate-500 text-xs whitespace-nowrap">{c.distance_km} km</td>
+                      {myEnterprises?.length > 0 && companyId && (
+                        <td className="py-1.5 relative">
+                          <AddToBase44Button
+                            competitor={c}
+                            myEnterprises={myEnterprises}
+                            companyId={companyId}
+                            businessType={businessType}
+                            location={location}
+                          />
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

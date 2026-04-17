@@ -301,6 +301,95 @@ ORDER BY total_revenue DESC`,
       { label: "Check recalls (Railway)", sql: "SELECT * FROM medications_recalls WHERE name = 'metformin'" },
     ],
   },
+  {
+    category: "Data Entry — INSERT",
+    items: [
+      {
+        label: "Add a new person (staff)",
+        sql: `INSERT INTO people (first_name, last_name, person_type, status, email, phone)
+VALUES ('Jane', 'Smith', 'staff', 'active', 'jane@example.com', '+1-555-0001')`,
+      },
+      {
+        label: "Add a new person (client)",
+        sql: `INSERT INTO people (first_name, last_name, person_type, status, email, phone)
+VALUES ('John', 'Doe', 'client', 'active', 'john@example.com', '+1-555-0002')`,
+      },
+      {
+        label: "Add a new enterprise",
+        sql: `INSERT INTO enterprises (enterprise_name, enterprise_type, status, city, country, phone, email)
+VALUES ('Acme Clinic', 'commercial', 'active', 'Nairobi', 'Kenya', '+254-700-000000', 'info@acme.com')`,
+      },
+      {
+        label: "Add a new product / inventory item",
+        sql: `INSERT INTO products (name, item_type, status, stock_quantity, unit_price, min_stock_level)
+VALUES ('Paracetamol 500mg', 'physical', 'active', 200, 0.50, 50)`,
+      },
+      {
+        label: "Add a new task",
+        sql: `INSERT INTO tasks (title, task_type, status, priority, due_date)
+VALUES ('Follow-up visit', 'visit', 'open', 'high', '2026-05-01')`,
+      },
+      {
+        label: "Add a transaction / invoice",
+        sql: `INSERT INTO transactions (transaction_type, status, amount, payment_status, description, date)
+VALUES ('service_fee', 'posted', 150.00, 'unpaid', 'Monthly consultation', '2026-04-17')`,
+      },
+      {
+        label: "Add a relationship (person ↔ enterprise)",
+        sql: `INSERT INTO relationships (relationship_type, person_name, enterprise_name, role, status, start_date)
+VALUES ('employment', 'Jane Smith', 'Acme Clinic', 'Nurse', 'active', '2026-01-01')`,
+      },
+      {
+        label: "Bulk insert from query result (INSERT…SELECT)",
+        sql: `-- Copy active clients into people where none exist in target enterprise
+INSERT INTO people (first_name, last_name, person_type, status)
+SELECT first_name, last_name, 'client', 'active'
+FROM raw_people
+WHERE status = 'active' AND person_type = 'client'`,
+      },
+    ],
+  },
+  {
+    category: "Data Update — UPDATE",
+    items: [
+      {
+        label: "Mark a transaction as paid",
+        sql: `UPDATE transactions
+SET payment_status = 'paid'
+WHERE description = 'Monthly consultation' AND payment_status = 'unpaid'`,
+      },
+      {
+        label: "Set person status to inactive",
+        sql: `UPDATE people
+SET status = 'inactive'
+WHERE email = 'jane@example.com'`,
+      },
+      {
+        label: "Update product stock level",
+        sql: `UPDATE products
+SET stock_quantity = 150
+WHERE name = 'Paracetamol 500mg'`,
+      },
+      {
+        label: "Mark task as completed",
+        sql: `UPDATE tasks
+SET status = 'completed', outcome = 'successful'
+WHERE title = 'Follow-up visit' AND status = 'open'`,
+      },
+      {
+        label: "Update enterprise contact info",
+        sql: `UPDATE enterprises
+SET phone = '+254-700-999999', email = 'new@acme.com'
+WHERE enterprise_name = 'Acme Clinic'`,
+      },
+      {
+        label: "Close a relationship",
+        sql: `UPDATE relationships
+SET status = 'inactive'
+WHERE person_name = 'Jane Smith' AND enterprise_name = 'Acme Clinic'`,
+      },
+    ],
+  },
 ];
 
 function TemplateGroup({ category, items, onLoad }) {

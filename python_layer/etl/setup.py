@@ -638,6 +638,31 @@ _OTHER_DDL = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_2fa_company ON analytics.user_2fa_secrets (company_id)",
+
+    # ── Market Intelligence write-back ───────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.mi_competitors (
+        id                  SERIAL PRIMARY KEY,
+        company_id          TEXT,
+        linked_enterprise_id TEXT,
+        linked_enterprise_name TEXT,
+        competitor_name     TEXT,
+        competitor_type     TEXT,
+        distance_km         DOUBLE PRECISION,
+        address             TEXT,
+        phone               TEXT,
+        website             TEXT,
+        rating              DOUBLE PRECISION,
+        lat                 DOUBLE PRECISION,
+        lon                 DOUBLE PRECISION,
+        source_location     TEXT,
+        business_type       TEXT,
+        relationship_id     TEXT,
+        saved_at            TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_mi_competitors_company ON analytics.mi_competitors (company_id)",
+    "CREATE INDEX IF NOT EXISTS idx_mi_competitors_enterprise ON analytics.mi_competitors (linked_enterprise_id)",
 ]
 
 

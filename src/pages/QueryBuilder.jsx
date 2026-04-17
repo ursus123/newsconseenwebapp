@@ -5,6 +5,7 @@ import {
   Hash, Type, Calendar, ToggleLeft, Layers, Wand2, Code2,
   AlignLeft, GitBranch, AlertCircle, XCircle, Plus, X,
   Save, FolderOpen, BarChart2, Pin, Keyboard, FileText,
+  PenLine, PlusCircle, ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -128,11 +129,138 @@ function ValidationErrors({ errors, onDismiss }) {
   );
 }
 
+// ── CRUD Helper Panel ─────────────────────────────────────────────────────
+// Generates INSERT and UPDATE templates for Base44 entities from MASTER_SCHEMA.
+// DELETE is always blocked — directs user to the entity pages instead.
+function CrudHelperPanel({ onLoad }) {
+  const [entity, setEntity] = useState("people");
+  const [mode, setMode] = useState("insert"); // "insert" | "update"
+
+  const schema = MASTER_SCHEMA[entity] || [];
+  const writableCols = schema.filter(f => f.col !== "id" && f.col !== "created_date");
+
+  function buildInsertSQL() {
+    const cols = writableCols.map(f => f.col).join(", ");
+    const placeholder = (f) => {
+      if (f.type === "INT") return "0";
+      if (f.type === "FLOAT") return "0.00";
+      if (f.type === "DATE") return `'${new Date().toISOString().slice(0,10)}'`;
+      return `'value'`;
+    };
+    const vals = writableCols.map(f => placeholder(f)).join(", ");
+    return `INSERT INTO ${entity} (${cols})\nVALUES (${vals})`;
+  }
+
+  function buildUpdateSQL() {
+    const setClauses = writableCols.slice(0, 3).map(f => `${f.col} = 'new_value'`).join(",\n  ");
+    const firstTextCol = writableCols.find(f => f.type === "VARCHAR");
+    const whereClause = firstTextCol ? `${firstTextCol.col} = 'existing_value'` : "id = 'record_id'";
+    return `UPDATE ${entity}\nSET ${setClauses}\nWHERE ${whereClause}`;
+  }
+
+  const sql = mode === "insert" ? buildInsertSQL() : buildUpdateSQL();
+
+  return (
+    <div className="flex-1 overflow-y-auto py-3 px-2 space-y-3">
+      {/* Entity selector */}
+      <div>
+        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 px-1">Entity</p>
+        <select
+          value={entity}
+          onChange={e => setEntity(e.target.value)}
+          className="w-full bg-slate-800 border border-white/10 text-slate-300 text-xs rounded-lg px-2 py-1.5 outline-none"
+        >
+          {Object.entries(MASTER_TABLES).map(([key, { label }]) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Mode selector */}
+      <div className="flex gap-1">
+        {[
+          { key: "insert", label: "INSERT", icon: PlusCircle, color: "text-emerald-400" },
+          { key: "update", label: "UPDATE", icon: PenLine, color: "text-amber-400" },
+        ].map(({ key, label, icon: Icon, color }) => (
+          <button
+            key={key}
+            onClick={() => setMode(key)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-semibold transition-colors border ${
+              mode === key
+                ? key === "insert"
+                  ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                  : "bg-amber-500/15 border-amber-500/30 text-amber-400"
+                : "border-white/10 text-slate-500 hover:text-slate-300"
+            }`}
+          >
+            <Icon className="w-3 h-3" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Schema reference */}
+      <div>
+        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 px-1">Fields</p>
+        <div className="bg-slate-800/60 rounded-xl border border-white/5 divide-y divide-white/5 overflow-hidden">
+          {schema.map(({ col, type }) => (
+            <div key={col} className="flex items-center gap-2 px-3 py-1.5 text-[10px]">
+              <span className={`font-mono flex-1 ${col === "id" || col === "created_date" ? "text-slate-600" : "text-slate-300"}`}>{col}</span>
+              <span className={`font-mono text-[9px] font-bold ${
+                type === "INT" || type === "FLOAT" ? "text-blue-400"
+                : type === "DATE" || type === "DATETIME" ? "text-amber-400"
+                : type === "ENUM" ? "text-violet-400"
+                : "text-slate-500"
+              }`}>{type}</span>
+              {(col === "id" || col === "created_date") && (
+                <span className="text-[8px] text-slate-600">auto</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Generated SQL */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5 px-1">
+          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Generated SQL</p>
+          <button
+            onClick={() => onLoad(sql)}
+            className={`text-[9px] font-bold px-2 py-0.5 rounded-full transition-colors ${
+              mode === "insert"
+                ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
+                : "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25"
+            }`}
+          >
+            load →
+          </button>
+        </div>
+        <pre className="bg-slate-800 rounded-xl px-3 py-2.5 font-mono text-[10px] text-emerald-300 whitespace-pre-wrap break-all border border-white/5">
+          {sql}
+        </pre>
+      </div>
+
+      {/* DELETE notice */}
+      <div className="flex items-start gap-2 bg-rose-500/5 border border-rose-500/20 rounded-xl px-3 py-2.5">
+        <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-[10px] font-semibold text-rose-400 mb-0.5">DELETE is manual-only</p>
+          <p className="text-[10px] text-slate-400 leading-relaxed">
+            DELETE queries are blocked in Query Builder. To remove a record, open the entity
+            page (e.g. People, Enterprises) and delete it there — this preserves the audit trail
+            and prevents accidental bulk deletes.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Left panel tabs ───────────────────────────────────────────────────────
 const LEFT_TABS = [
   { key: "tables",    label: "Tables",    icon: Database },
   { key: "analytics", label: "Analytics", icon: BarChart2 },
   { key: "templates", label: "Templates", icon: FileText },
+  { key: "crud",      label: "CRUD",      icon: PenLine },
   { key: "saved",     label: "Saved",     icon: FolderOpen },
 ];
 
@@ -499,6 +627,10 @@ export default function QueryBuilder() {
 
         {leftTab === "templates" && (
           <TemplatesPanel onLoad={(tmplSql) => loadSql(tmplSql)} />
+        )}
+
+        {leftTab === "crud" && (
+          <CrudHelperPanel onLoad={(crudSql) => { loadSql(crudSql); setMidTab("script"); }} />
         )}
 
         {leftTab === "saved" && (

@@ -6,8 +6,9 @@ import {
   ExternalLink, Save, CheckCircle, RefreshCw, TrendingUp,
   PieChart as PieIcon, Activity, Copy, Check, Clock,
   MessageSquare, X, History, Download, ChevronRight,
-  Search, ArrowUpRight, Database,
+  Search, ArrowUpRight, Database, Pin, Code2,
 } from "lucide-react";
+import { base44 } from "@/api/base44Client";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   PieChart, Pie, Cell,
@@ -121,10 +122,72 @@ function renderInline(text) {
   return out;
 }
 
-function MarkdownContent({ content }) {
+function PinnableTable({ headers, rows, companyId, toolsDetail, tableIndex }) {
+  const [pinned, setPinned] = useState(false);
+  const [pinning, setPinning] = useState(false);
+
+  const handlePin = async () => {
+    if (pinning || pinned || !companyId) return;
+    setPinning(true);
+    const title = headers.join(" / ").slice(0, 60) || `Copilot Table ${tableIndex + 1}`;
+    const toolName  = toolsDetail?.[0]?.tool || "";
+    const toolParams = toolsDetail?.[0]?.params || {};
+    try {
+      await base44.entities.ReportChart.create({
+        title,
+        sql_query:   "",
+        tool_name:   toolName,
+        tool_params: JSON.stringify(toolParams),
+        chart_type:  "table",
+        status:      "active",
+        company_id:  companyId,
+        description: `Copilot table · ${headers.length} cols · ${rows.length} rows · tool: ${toolName}`,
+        table_snapshot: JSON.stringify({ headers, rows }),
+        shared_with_roles: ["admin","analyst","executive"],
+        source: "copilot",
+      });
+      setPinned(true);
+      setTimeout(() => setPinned(false), 3000);
+    } catch (_) {}
+    setPinning(false);
+  };
+
+  return (
+    <div className="my-3 rounded-xl border border-slate-200 overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-200">
+        <span className="text-[10px] text-slate-400 font-medium">{rows.length} rows · {headers.length} cols</span>
+        {companyId && (
+          <button
+            onClick={handlePin}
+            disabled={pinning}
+            title={pinned ? "Pinned!" : "Pin table to Reports"}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${
+              pinned ? "text-emerald-600 bg-emerald-100" : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+            }`}
+          >
+            {pinning ? <Loader2 className="w-3 h-3 animate-spin" /> :
+             pinned  ? <><Check className="w-3 h-3" /> Pinned</> :
+                        <><Pin className="w-3 h-3" /> Pin</>}
+          </button>
+        )}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr>{headers.map((h, hi) => <th key={hi} className="px-3 py-2 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wide whitespace-nowrap">{h}</th>)}</tr>
+          </thead>
+          <tbody>{rows.map((r, ri) => <tr key={ri} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">{r.map((c, ci) => <td key={ci} className="px-3 py-2 text-slate-700 whitespace-nowrap">{c}</td>)}</tr>)}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function MarkdownContent({ content, companyId, toolsDetail }) {
   const lines = (content || "").split("\n");
   const elements = [];
   let i = 0;
+  let tableIndex = 0;
   while (i < lines.length) {
     const line = lines[i];
     // Fenced code block
@@ -147,15 +210,10 @@ function MarkdownContent({ content }) {
         rows.push(lines[i].split("|").map(s => s.trim()).filter(Boolean));
         i++;
       }
+      const ti = tableIndex++;
       elements.push(
-        <div key={i} className="my-3 overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full text-xs border-collapse">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>{headers.map((h, hi) => <th key={hi} className="px-3 py-2 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wide whitespace-nowrap">{h}</th>)}</tr>
-            </thead>
-            <tbody>{rows.map((r, ri) => <tr key={ri} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">{r.map((c, ci) => <td key={ci} className="px-3 py-2 text-slate-700 whitespace-nowrap">{c}</td>)}</tr>)}</tbody>
-          </table>
-        </div>
+        <PinnableTable key={`tbl${i}`} headers={headers} rows={rows}
+          companyId={companyId} toolsDetail={toolsDetail} tableIndex={ti} />
       );
       continue;
     // Headings
@@ -202,11 +260,21 @@ function MarkdownContent({ content }) {
 }
 
 // ── Inline chart renderer ────────────────────────────────────────────────────
-function ChartCard({ config, onSave, companyId }) {
-  const [saved, setSaved] = useState(false);
+function ChartCard({ config, companyId, currentUser, toolName, toolParams }) {
+  const [pinned, setPinned]       = useState(false);
+  const [pinning, setPinning]     = useState(false);
+  const [showQuery, setShowQuery] = useState(false);
+
   if (!config || !config.data || config.data.length === 0) return null;
 
-  const { type, title, data, keys = [], unit = "" } = config;
+  const { type, title, data, keys = [], unit = "", sql } = config;
+
+  // Build query label from tool info or embedded sql
+  const queryLabel = sql
+    ? sql
+    : toolName
+    ? `-- Tool: ${toolName}\n-- Params: ${JSON.stringify(toolParams || {}, null, 2)}\n-- Re-runs live on open`
+    : null;
 
   const fmtTick = (v) => {
     if (typeof v !== "number") return v;
@@ -222,24 +290,26 @@ function ChartCard({ config, onSave, companyId }) {
     return [fv, name];
   };
 
-  const handleSaveChart = async () => {
-    if (saved || !companyId) return;
+  const handlePin = async () => {
+    if (pinning || pinned || !companyId) return;
+    setPinning(true);
     try {
-      await fetch(`${RAILWAY_URL}/reports/save-chat`, {
-        method: "POST",
-        headers: API_HEADERS,
-        body: JSON.stringify({
-          company_id: companyId,
-          title:      title || "Chart",
-          content:    `Chart: ${title}`,
-          charts:     [config],
-          citations:  [],
-          saved_at:   new Date().toISOString(),
-        }),
+      await base44.entities.ReportChart.create({
+        title:           title || "Copilot Chart",
+        sql_query:       sql || "",
+        tool_name:       toolName || "",
+        tool_params:     toolParams ? JSON.stringify(toolParams) : "",
+        chart_type:      type || "bar",
+        status:          "active",
+        company_id:      companyId,
+        description:     `Pinned from Copilot · tool: ${toolName || "chart"}${toolParams ? " · " + Object.entries(toolParams).map(([k,v]) => `${k}:${v}`).join(", ") : ""}`,
+        shared_with_roles: ["admin","analyst","executive"],
+        source:          "copilot",
       });
-    } catch { /* non-critical */ }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+      setPinned(true);
+      setTimeout(() => setPinned(false), 3000);
+    } catch (_) {}
+    setPinning(false);
   };
 
   const chartEl = (() => {
@@ -353,20 +423,44 @@ function ChartCard({ config, onSave, companyId }) {
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
         <BarChart2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
         <span className="text-xs font-semibold text-slate-700 flex-1 truncate">{title}</span>
-        {companyId && (
-          <button
-            onClick={handleSaveChart}
-            title="Save chart to Reports"
-            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${
-              saved
-                ? "text-emerald-600 bg-emerald-50"
-                : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
-            }`}
-          >
-            {saved ? <><Check className="w-3 h-3" /> Saved</> : <><Download className="w-3 h-3" /> Save</>}
-          </button>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Query label toggle */}
+          {queryLabel && (
+            <button
+              onClick={() => setShowQuery(q => !q)}
+              title="Show query"
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${
+                showQuery ? "bg-slate-800 text-emerald-400" : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <Code2 className="w-3 h-3" /> Query
+            </button>
+          )}
+          {/* Pin to Reports */}
+          {companyId && (
+            <button
+              onClick={handlePin}
+              disabled={pinning}
+              title={pinned ? "Pinned to Reports!" : "Pin to Reports → Charts"}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-colors ${
+                pinned
+                  ? "text-emerald-600 bg-emerald-50"
+                  : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+              }`}
+            >
+              {pinning ? <Loader2 className="w-3 h-3 animate-spin" /> :
+               pinned  ? <><Check className="w-3 h-3" /> Pinned</> :
+                          <><Pin className="w-3 h-3" /> Pin</>}
+            </button>
+          )}
+        </div>
       </div>
+      {/* Query label panel */}
+      {showQuery && queryLabel && (
+        <div className="border-b border-slate-100 bg-slate-950 px-4 py-3">
+          <pre className="text-[10px] text-emerald-400 font-mono whitespace-pre-wrap leading-relaxed">{queryLabel}</pre>
+        </div>
+      )}
       <div className="p-4" style={{ height: 240 }}>
         <ResponsiveContainer width="100%" height="100%">
           {chartEl}
@@ -713,7 +807,7 @@ function SaveButton({ message, companyId }) {
 }
 
 // ── Message bubble ───────────────────────────────────────────────────────────
-function MessageBubble({ message, onFeedback, companyId, mode, onOpenQueryBuilder }) {
+function MessageBubble({ message, onFeedback, companyId, currentUser, mode, onOpenQueryBuilder }) {
   const isUser     = message.role === "user";
   const isThinking = message.type === "thinking";
   const [copied, doCopy] = useCopy(message.content || "");
@@ -767,7 +861,7 @@ function MessageBubble({ message, onFeedback, companyId, mode, onOpenQueryBuilde
             <p className="leading-relaxed whitespace-pre-wrap">{message.content}</p>
           ) : (
             <div className="min-w-0">
-              <MarkdownContent content={message.content} />
+              <MarkdownContent content={message.content} companyId={companyId} toolsDetail={message.tools_detail} />
             </div>
           )}
         </div>
@@ -776,7 +870,9 @@ function MessageBubble({ message, onFeedback, companyId, mode, onOpenQueryBuilde
         {!isUser && message.charts?.length > 0 && (
           <div className="w-full space-y-2">
             {message.charts.map((cfg, i) => (
-              <ChartCard key={i} config={cfg} companyId={companyId} />
+              <ChartCard key={i} config={cfg} companyId={companyId} currentUser={currentUser}
+                toolName={message.tools_detail?.[0]?.tool}
+                toolParams={message.tools_detail?.[0]?.params} />
             ))}
           </div>
         )}
@@ -1286,6 +1382,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
             message={msg}
             onFeedback={handleFeedback}
             companyId={companyId}
+            currentUser={currentUser}
             mode={mode}
             onOpenQueryBuilder={openQueryBuilder}
           />

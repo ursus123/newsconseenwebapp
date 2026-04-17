@@ -1962,17 +1962,17 @@ export async function executeSQL(sql, uploadedTables, companyId, masterDataSnaps
     if (!m) throw new Error("Invalid DELETE syntax.");
     const [, tableName, whereStr] = m;
     const tbl = tableName.toLowerCase();
-    if (PROTECTED_TABLES.has(tbl)) throw new Error(`❌ DELETE blocked on protected table "${tbl}".`);
+    // DELETE on any Base44 entity is always blocked in Query Builder.
+    // Records must be deleted manually via the entity pages (People, Enterprises, etc.)
+    // to preserve audit trail and prevent accidental bulk deletes.
     if (MASTER_TABLES[tbl]) {
-      const entity = base44.entities[MASTER_TABLES[tbl].entity];
-      // Scope fetch to this tenant — never delete other companies' records
-      const filter = companyId ? { company_id: companyId } : {};
-      const allRows = await entity.filter(filter);
-      const matched = whereStr ? applyWhere(allRows, `SELECT * FROM x WHERE ${whereStr}`) : allRows;
-      for (const row of matched) await entity.delete(row.id);
-      _triggerETL(tbl);
-      return { type: "mutation", rows: [], message: `✓ Deleted ${matched.length} row(s) from ${tbl}.` };
-    } else if (uploadedTables[tbl]) {
+      throw new Error(
+        `❌ DELETE on "${tbl}" is not allowed in Query Builder.\n\n` +
+        `To delete records, open the ${MASTER_TABLES[tbl].label} page and delete them individually.\n\n` +
+        `This protects your data from accidental bulk deletions.`
+      );
+    }
+    if (uploadedTables[tbl]) {
       if (whereStr) {
         const rows = uploadedTables[tbl].rows;
         const matched = applyWhere(rows.map((r, i) => ({ ...r, _idx: i })), `SELECT * FROM x WHERE ${whereStr}`);
@@ -2035,8 +2035,8 @@ export function validateMutation(sql, uploadedTables) {
       }
     });
   }
-  if (type === "DELETE" && PROTECTED_TABLES.has(tableName)) {
-    errors.push(`DELETE is blocked on protected table "${tableName}".`);
+  if (type === "DELETE" && MASTER_TABLES[tableName]) {
+    errors.push(`DELETE on "${tableName}" is not allowed in Query Builder. Delete records manually via the ${MASTER_TABLES[tableName]?.label || tableName} page.`);
   }
   return errors;
 }

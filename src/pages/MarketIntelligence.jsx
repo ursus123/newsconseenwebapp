@@ -919,6 +919,7 @@ export default function MarketIntelligence() {
                 <CompetitorSection
                   data={results?.competitors} businessType={results?.businessType}
                   location={results?.location} radiusKm={results?.radiusKm} loading={false}
+                  myEnterprises={myEnterprises} currentUser={currentUser}
                 />
               )}
 
