@@ -4607,8 +4607,10 @@ TOOL_DEFINITIONS = [
     {
         "name": "get_staff_leaderboard",
         "description": (
-            "Returns staff ranked by a performance metric. "
+            "Returns people/staff ranked by a performance metric. "
             "Use for questions like: 'Who are my top performers?', 'Which staff complete the most tasks?', "
+            "'People with the most tasks', 'Who has the most tasks assigned?', 'Who is busiest?', "
+            "'Task workload by person', 'Most active people', "
             "'SLA performance', 'Staff efficiency', 'Team performance report', 'Workload distribution'."
         ),
         "input_schema": {
@@ -4616,11 +4618,15 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "metric": {
                     "type": "string",
-                    "enum": ["completion_rate_pct", "tasks_completed_30d", "on_time_rate_pct",
-                             "workload_score", "sla_breach_rate_pct"],
-                    "description": "Metric to rank by. Default: completion_rate_pct.",
+                    "enum": ["tasks_assigned_total", "completion_rate_pct", "tasks_completed_30d",
+                             "on_time_rate_pct", "workload_score", "sla_breach_rate_pct"],
+                    "description": (
+                        "Metric to rank by. "
+                        "Use 'tasks_assigned_total' for 'most tasks' or 'busiest person' questions. "
+                        "Default: completion_rate_pct."
+                    ),
                 },
-                "top_n": {"type": "integer", "description": "Number of staff to return. Default 10."},
+                "top_n": {"type": "integer", "description": "Number of people to return. Default 10."},
             },
         },
     },
