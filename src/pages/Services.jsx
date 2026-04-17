@@ -8,13 +8,15 @@ import ServiceForm from "../components/services/ServiceForm";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Badge } from "@/components/ui/badge";
-import { useWithScope } from "@/components/shared/useDataQuery";
+import { usePermissions } from "@/components/shared/usePermissions";
+import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Upload, Settings, CheckCircle, Clock, DollarSign, BarChart2, X } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
+import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import ServicesAnalytics from "@/components/services/ServicesAnalytics";
 import {
@@ -23,39 +25,90 @@ import {
 } from "@/components/shared/importConfigs";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
+
 const triggerETL = (entity) =>
   fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
     method: "POST",
-    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+    headers: { "x-api-key": RAILWAY_API_KEY },
   }).catch(() => {});
 
-const statusColor = (s) => ({ active: "bg-emerald-50 text-emerald-700", inactive: "bg-amber-50 text-amber-700", archived: "bg-slate-100 text-slate-400" }[s] || "bg-slate-100 text-slate-600");
-const catColor = (c) => ({ non_medical: "bg-cyan-50 text-cyan-700", personal_care: "bg-blue-50 text-blue-700", skilled_nursing: "bg-purple-50 text-purple-700", medication: "bg-rose-50 text-rose-600", transitional: "bg-orange-50 text-orange-700", specialty: "bg-violet-50 text-violet-700", respite: "bg-green-50 text-green-700", therapy: "bg-indigo-50 text-indigo-700", residential: "bg-amber-50 text-amber-700" }[c] || "bg-slate-100 text-slate-600");
-const typeColor = (t) => ({ recurring: "bg-emerald-50 text-emerald-700", on_demand: "bg-blue-50 text-blue-700", one_time: "bg-slate-100 text-slate-600" }[t] || "bg-slate-100 text-slate-600");
+function triggerWorkflows(companyId, triggerType, entityData) {
+  fetch(`${RAILWAY_URL}/workflows/trigger`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "service", entity_data: entityData }),
+  }).catch(() => {});
+}
+
+function logAudit(companyId, action, record, userEmail) {
+  fetch(`${RAILWAY_URL}/audit/log`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+    body: JSON.stringify({ company_id: companyId, entity_type: "service", entity_id: record?.id, entity_name: record?.name || record?.id, action, changed_by: userEmail }),
+  }).catch(() => {});
+}
+
+const statusColor = (s) => ({
+  active:   "bg-emerald-50 text-emerald-700",
+  inactive: "bg-amber-50 text-amber-700",
+  archived: "bg-slate-100 text-slate-400",
+}[s] || "bg-slate-100 text-slate-600");
+
+const typeColor = (t) => ({
+  recurring: "bg-emerald-50 text-emerald-700",
+  on_demand: "bg-blue-50 text-blue-700",
+  one_time:  "bg-slate-100 text-slate-600",
+}[t] || "bg-slate-100 text-slate-600");
 
 const columns = [
-  { key: "name", label: "Service", render: (val, row) => (<div><p className="font-medium text-slate-800">{val}</p><div className="flex items-center gap-1.5 mt-0.5">{row.short_code && <span className="text-[10px] font-mono text-slate-400">{row.short_code}</span>}{row.estimated_duration && row.duration_unit && <span className="text-[10px] text-slate-400">· {row.estimated_duration} {row.duration_unit}</span>}</div></div>) },
-  { key: "category", label: "Category", render: (val) => val ? <Badge className={catColor(val)}>{val.replace(/_/g, " ")}</Badge> : "—" },
-  { key: "service_type", label: "Type", render: (val) => val ? <Badge className={typeColor(val)}>{val.replace(/_/g, " ")}</Badge> : "—" },
-  { key: "pricing_model", label: "Pricing", render: (val, row) => (<div><span className="text-xs text-slate-600 capitalize">{val?.replace(/_/g, " ") || "—"}</span>{row.billing_unit && <span className="text-[10px] text-slate-400 ml-1">/ {row.billing_unit}</span>}</div>) },
-  { key: "price", label: "Price", render: (v) => v != null ? <span className="font-semibold text-slate-800">${parseFloat(v).toLocaleString()}</span> : "—" },
+  {
+    key: "name", label: "Service",
+    render: (val, row) => (
+      <div>
+        <p className="font-medium text-slate-800">{val}</p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          {row.short_code && <span className="text-[10px] font-mono text-slate-400">{row.short_code}</span>}
+          {row.estimated_duration && row.duration_unit && (
+            <span className="text-[10px] text-slate-400">· {row.estimated_duration} {row.duration_unit}</span>
+          )}
+        </div>
+      </div>
+    ),
+  },
+  { key: "category",     label: "Category", render: (val) => val ? <Badge className="bg-blue-50 text-blue-700">{val.replace(/_/g, " ")}</Badge> : "—" },
+  { key: "service_type", label: "Type",     render: (val) => val ? <Badge className={typeColor(val)}>{val.replace(/_/g, " ")}</Badge> : "—" },
+  {
+    key: "pricing_model", label: "Pricing",
+    render: (val, row) => (
+      <div>
+        <span className="text-xs text-slate-600 capitalize">{val?.replace(/_/g, " ") || "—"}</span>
+        {row.billing_unit && <span className="text-[10px] text-slate-400 ml-1">/ {row.billing_unit}</span>}
+      </div>
+    ),
+  },
+  { key: "price",  label: "Price",  render: (v) => v != null ? <span className="font-semibold text-slate-800">${parseFloat(v).toLocaleString()}</span> : "—" },
   { key: "status", label: "Status", render: (val) => <Badge className={statusColor(val)}>{val || "active"}</Badge> },
 ];
 
 const CATEGORY_TABS = [
-  { id: "all", label: "All" }, { id: "non_medical", label: "Non-Medical" }, { id: "personal_care", label: "Personal Care" },
-  { id: "skilled_nursing", label: "Skilled Nursing" }, { id: "medication", label: "Medication" },
-  { id: "therapy", label: "Therapy" }, { id: "residential", label: "Residential" },
-  { id: "specialty", label: "Specialty" }, { id: "respite", label: "Respite" }, { id: "transitional", label: "Transitional" },
+  { id: "all",          label: "All" },
+  { id: "consulting",   label: "Consulting" },
+  { id: "maintenance",  label: "Maintenance" },
+  { id: "installation", label: "Installation" },
+  { id: "delivery",     label: "Delivery" },
+  { id: "training",     label: "Training" },
+  { id: "design",       label: "Design" },
+  { id: "it_support",   label: "IT Support" },
+  { id: "other",        label: "Other" },
 ];
 
 const SVC_PREVIEW_COLS = [
-  { label: "Name", render: (r) => r.name || <span className="text-rose-500">MISSING</span> },
+  { label: "Name",     render: (r) => r.name || <span className="text-rose-500">MISSING</span> },
   { label: "Category", render: (r) => r.category || "—" },
-  { label: "Type", render: (r) => r.service_type || "—" },
-  { label: "Price", render: (r) => r.price ? `$${r.price}` : "—" },
-  { label: "Status", render: (r) => r.status || "active" },
+  { label: "Type",     render: (r) => r.service_type || "—" },
+  { label: "Price",    render: (r) => r.price ? `$${r.price}` : "—" },
+  { label: "Status",   render: (r) => r.status || "active" },
 ];
 
 function StatCard({ icon: Icon, iconClass, label, value }) {
@@ -68,8 +121,8 @@ function StatCard({ icon: Icon, iconClass, label, value }) {
 }
 
 const FILTER_DEFS = [
-  { key: "status", label: "All Status", options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }, { value: "archived", label: "Archived" }] },
-  { key: "service_type", label: "All Types", options: [{ value: "recurring", label: "Recurring" }, { value: "on_demand", label: "On Demand" }, { value: "one_time", label: "One Time" }] },
+  { key: "status",        label: "All Status",  options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }, { value: "archived", label: "Archived" }] },
+  { key: "service_type",  label: "All Types",   options: [{ value: "recurring", label: "Recurring" }, { value: "on_demand", label: "On Demand" }, { value: "one_time", label: "One Time" }] },
   { key: "pricing_model", label: "All Pricing", options: [{ value: "fixed", label: "Fixed" }, { value: "hourly", label: "Hourly" }, { value: "per_unit", label: "Per Unit" }, { value: "subscription", label: "Subscription" }] },
 ];
 
@@ -99,21 +152,13 @@ export default function Services() {
     return () => document.removeEventListener("visibilitychange", fn);
   }, [qc]);
 
+  const perms = usePermissions(currentUser);
+  const listFn = useEntityListFn(currentUser);
   const withScope = useWithScope(currentUser);
 
   const { data: services = [], isLoading, isError } = useQuery({
     queryKey: ["services", currentUser?.company_id, currentUser?.email],
-    queryFn: async () => {
-      // Use list() + client-side filter — more reliable than filter() on entities
-      // where company_id/created_by may not be indexed in Base44
-      const all = await base44.entities.Service.list("-created_date");
-      if (!currentUser) return [];
-      if (currentUser.role === "super_admin") return all;
-      return all.filter(r =>
-        r.company_id === currentUser.company_id ||
-        r.created_by === currentUser.email
-      );
-    },
+    queryFn: () => listFn(base44.entities.Service),
     enabled: currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -121,41 +166,76 @@ export default function Services() {
 
   const createMut = useMutation({
     mutationFn: (d) => base44.entities.Service.create(withScope(d)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); triggerETL("service"); setFormOpen(false); toast({ title: "Service saved" }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["services"] });
+      qc.refetchQueries({ queryKey: ["services"] });
+      triggerETL("service");
+      logAudit(currentUser?.company_id, "created", editing, currentUser?.email);
+      triggerWorkflows(currentUser?.company_id, "entity_created", editing);
+      setFormOpen(false);
+      toast({ title: "Service saved" });
+    },
     onError: (err) => toast({ title: "Failed to save service", description: err?.message || String(err), variant: "destructive" }),
   });
+
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Service.update(id, withScope(data)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); triggerETL("service"); setFormOpen(false); setEditing(null); toast({ title: "Service updated" }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["services"] });
+      qc.refetchQueries({ queryKey: ["services"] });
+      triggerETL("service");
+      logAudit(currentUser?.company_id, "updated", editing, currentUser?.email);
+      triggerWorkflows(currentUser?.company_id, "entity_updated", editing);
+      setFormOpen(false);
+      setEditing(null);
+      toast({ title: "Service updated" });
+    },
     onError: (err) => toast({ title: "Failed to update service", description: err?.message || String(err), variant: "destructive" }),
   });
+
   const deleteMut = useMutation({
     mutationFn: (id) => base44.entities.Service.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); triggerETL("service"); setDeleting(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["services"] });
+      qc.refetchQueries({ queryKey: ["services"] });
+      triggerETL("service");
+      logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email);
+      setDeleting(null);
+      toast({ title: "Service deleted" });
+    },
     onError: (err) => toast({ title: "Failed to delete service", description: err?.message || String(err), variant: "destructive" }),
   });
 
   const handleSubmit = (data, saveAndNew = false) => {
-    if (editing) { updateMut.mutate({ id: editing.id, data }); }
-    else { createMut.mutate(data); if (saveAndNew) { setEditing(null); setFormOpen(true); } }
+    if (editing) {
+      updateMut.mutate({ id: editing.id, data });
+    } else {
+      createMut.mutate(data);
+      if (saveAndNew) { setEditing(null); setFormOpen(true); }
+    }
   };
 
-  const handleArchive = (item) => { updateMut.mutate({ id: item.id, data: { ...item, status: "archived" } }); setFormOpen(false); setEditing(null); };
-
-  const handleDeleteAll = async () => {
-    for (const s of services) { try { await base44.entities.Service.delete(s.id); } catch (e) { /* 404 = already gone */ } }
-    qc.invalidateQueries({ queryKey: ["services"] });
-    qc.refetchQueries({ queryKey: ["services"] });
-    triggerETL("service");
-    toast({ title: `All ${services.length} services deleted` });
+  const handleArchive = (item) => {
+    updateMut.mutate({ id: item.id, data: { ...item, status: "archived" } });
+    setFormOpen(false);
+    setEditing(null);
   };
 
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Service.delete(id);
     qc.invalidateQueries({ queryKey: ["services"] });
     qc.refetchQueries({ queryKey: ["services"] });
+    triggerETL("service");
     toast({ title: `${selectedIds.length} services deleted` });
     setSelectedIds([]);
+  };
+
+  const handleDeleteAll = async () => {
+    for (const s of services) { try { await base44.entities.Service.delete(s.id); } catch (_) {} }
+    qc.invalidateQueries({ queryKey: ["services"] });
+    qc.refetchQueries({ queryKey: ["services"] });
+    triggerETL("service");
+    toast({ title: `All ${services.length} services deleted` });
   };
 
   const tabFiltered = activeTab === "all" ? services : services.filter((s) => s.category === activeTab);
@@ -163,28 +243,37 @@ export default function Services() {
   const processedServices = useMemo(() => {
     let list = [...tabFiltered];
     if (search) list = fuzzyFilter(list, search, ["name", "short_code", "description", "category", "sub_category"]);
-    if (filters.status) list = list.filter((s) => s.status === filters.status);
-    if (filters.service_type) list = list.filter((s) => s.service_type === filters.service_type);
+    if (filters.status)        list = list.filter((s) => s.status === filters.status);
+    if (filters.service_type)  list = list.filter((s) => s.service_type === filters.service_type);
     if (filters.pricing_model) list = list.filter((s) => s.pricing_model === filters.pricing_model);
     return list;
   }, [tabFiltered, search, filters]);
 
-  const avgPrice = services.length > 0 ? "$" + (services.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0) / services.length).toFixed(0) : "$0";
+  const avgPrice = services.length > 0
+    ? "$" + (services.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0) / services.length).toFixed(0)
+    : "$0";
 
   const visibleTabs = CATEGORY_TABS.filter((t) => t.id === "all" || services.some((s) => s.category === t.id));
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Services" subtitle="Define reusable service offerings and pricing" onAdd={() => { setEditing(null); setFormOpen(true); }} addLabel="New Service">
-        <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
-          <Upload className="w-4 h-4 mr-2" /> Import
-        </Button>
+      <PageHeader
+        title="Services"
+        subtitle="Define reusable service offerings and pricing"
+        onAdd={perms.can_create ? () => { setEditing(null); setFormOpen(true); } : undefined}
+        addLabel="New Service"
+      >
+        {perms.can_create && (
+          <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setImportOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" /> Import
+          </Button>
+        )}
         <ExportCSVButton
           data={processedServices}
           fields={["name","short_code","category","service_type","pricing_model","price","billing_unit","status"]}
           filename="services_export"
         />
-        {services.length > 0 && (
+        {perms.can_delete && services.length > 0 && (
           <Button variant="outline" size="sm" className="rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => setDeleteAllOpen(true)}>
             🗑️ Delete All
           </Button>
@@ -198,10 +287,10 @@ export default function Services() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={Settings} iconClass="bg-slate-100 text-slate-500" label="Total Services" value={services.length} />
-        <StatCard icon={CheckCircle} iconClass="bg-emerald-50 text-emerald-600" label="Active" value={services.filter((s) => s.status === "active").length} />
-        <StatCard icon={Clock} iconClass="bg-blue-50 text-blue-600" label="Recurring" value={services.filter((s) => s.service_type === "recurring").length} />
-        <StatCard icon={DollarSign} iconClass="bg-purple-50 text-purple-600" label="Average Price" value={avgPrice} />
+        <StatCard icon={Settings}     iconClass="bg-slate-100 text-slate-500"   label="Total Services" value={services.length} />
+        <StatCard icon={CheckCircle}  iconClass="bg-emerald-50 text-emerald-600" label="Active"         value={services.filter((s) => s.status === "active").length} />
+        <StatCard icon={Clock}        iconClass="bg-blue-50 text-blue-600"       label="Recurring"      value={services.filter((s) => s.service_type === "recurring").length} />
+        <StatCard icon={DollarSign}   iconClass="bg-purple-50 text-purple-600"   label="Average Price"  value={avgPrice} />
       </div>
 
       {visibleTabs.length > 1 && (
@@ -229,18 +318,30 @@ export default function Services() {
         totalCount={tabFiltered.length}
       />
 
-      <BulkActionBar selectedIds={selectedIds} onClear={() => setSelectedIds([])} onDeleteSelected={handleBulkDelete} canDelete />
+      <BulkActionBar
+        selectedIds={selectedIds}
+        onClear={() => setSelectedIds([])}
+        onDeleteSelected={perms.can_delete ? handleBulkDelete : undefined}
+        canDelete={perms.can_delete}
+      />
+
+      <SpreadsheetToolbar
+        data={processedServices}
+        numericFields={[
+          { key: "price",              label: "Price" },
+          { key: "estimated_duration", label: "Duration" },
+        ]}
+        selectedIds={selectedIds}
+        onSelectAll={() => setSelectedIds(processedServices.map((r) => r.id))}
+        onClearSelect={() => setSelectedIds([])}
+      />
 
       {isError && (
         <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-sm text-rose-700">
           Failed to load services — check your connection and refresh.
         </div>
       )}
-      {currentUser && !currentUser.company_id && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
-          Your account is not linked to a company yet. Services will appear once your company is set up.
-        </div>
-      )}
+
       {!isLoading && services.length === 0 && !isError ? (
         <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
           <Settings className="w-10 h-10 text-slate-200 mb-3" />
@@ -252,16 +353,26 @@ export default function Services() {
           </div>
         </div>
       ) : (
-        <DataTable columns={columns} data={processedServices}
-          onEdit={(row) => { setEditing(row); setFormOpen(true); }}
-          onDelete={(row) => setDeleting(row)}
-          bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
+        <DataTable
+          columns={columns}
+          data={processedServices}
+          onEdit={perms.can_edit ? (row) => { setEditing(row); setFormOpen(true); } : undefined}
+          onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
+          bulkMode
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
         />
       )}
 
       <DeleteAllDialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} onConfirm={handleDeleteAll} entityLabel="Services" count={services.length} />
-      <ServiceForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }} onSubmit={handleSubmit} onArchive={handleArchive} initialData={editing} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name} />
+      <ServiceForm
+        open={formOpen}
+        onClose={() => { setFormOpen(false); setEditing(null); }}
+        onSubmit={handleSubmit}
+        onArchive={handleArchive}
+        initialData={editing}
+      />
 
       {analyticsOpen && (
         <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
@@ -278,14 +389,21 @@ export default function Services() {
       )}
 
       <BulkImportDialog
-        open={importOpen} onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); }}
-        entityName="Services" fields={SERVICE_FIELDS} mappingRules={SERVICE_MAPPING_RULES}
+        open={importOpen}
+        onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); }}
+        entityName="Services"
+        fields={SERVICE_FIELDS}
+        mappingRules={SERVICE_MAPPING_RULES}
         templateFileName="newsconseen_services_import_template.xlsx"
-        templateExample={SERVICE_TEMPLATE_EXAMPLE} templateInstructions={SERVICE_TEMPLATE_INSTRUCTIONS}
-        validateRow={validateService} transformRow={transformService}
-        entityFetchFn={() => base44.entities.Service.list("-created_date")}
+        templateExample={SERVICE_TEMPLATE_EXAMPLE}
+        templateInstructions={SERVICE_TEMPLATE_INSTRUCTIONS}
+        validateRow={validateService}
+        transformRow={transformService}
+        entityFetchFn={() => listFn(base44.entities.Service)}
         onImport={async (row) => { const s = await base44.entities.Service.create(withScope(row)); triggerETL("service"); return s; }}
-        currentUser={currentUser} previewColumns={SVC_PREVIEW_COLS} requiredField="name"
+        currentUser={currentUser}
+        previewColumns={SVC_PREVIEW_COLS}
+        requiredField="name"
       />
     </div>
   );
