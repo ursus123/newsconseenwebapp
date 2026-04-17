@@ -8,7 +8,7 @@ import ServiceForm from "../components/services/ServiceForm";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Badge } from "@/components/ui/badge";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { useWithScope } from "@/components/shared/useDataQuery";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
@@ -99,12 +99,21 @@ export default function Services() {
     return () => document.removeEventListener("visibilitychange", fn);
   }, [qc]);
 
-  const listFn = useEntityListFn(currentUser);
   const withScope = useWithScope(currentUser);
 
   const { data: services = [], isLoading, isError } = useQuery({
     queryKey: ["services", currentUser?.company_id, currentUser?.email],
-    queryFn: () => listFn(base44.entities.Service),
+    queryFn: async () => {
+      // Use list() + client-side filter — more reliable than filter() on entities
+      // where company_id/created_by may not be indexed in Base44
+      const all = await base44.entities.Service.list("-created_date");
+      if (!currentUser) return [];
+      if (currentUser.role === "super_admin") return all;
+      return all.filter(r =>
+        r.company_id === currentUser.company_id ||
+        r.created_by === currentUser.email
+      );
+    },
     enabled: currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -274,7 +283,7 @@ export default function Services() {
         templateFileName="newsconseen_services_import_template.xlsx"
         templateExample={SERVICE_TEMPLATE_EXAMPLE} templateInstructions={SERVICE_TEMPLATE_INSTRUCTIONS}
         validateRow={validateService} transformRow={transformService}
-        entityFetchFn={() => listFn(base44.entities.Service)}
+        entityFetchFn={() => base44.entities.Service.list("-created_date")}
         onImport={async (row) => { const s = await base44.entities.Service.create(withScope(row)); triggerETL("service"); return s; }}
         currentUser={currentUser} previewColumns={SVC_PREVIEW_COLS} requiredField="name"
       />
