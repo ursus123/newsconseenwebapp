@@ -57,11 +57,11 @@ export async function queryPeople({ enterpriseName = null, personType = null, ti
 }
 
 /**
- * Query active patients specifically (for MedAdmin).
- * Falls back to all active people if no patients exist.
+ * Query active clients (for MedAdmin and similar apps).
+ * Falls back to all active people if no clients exist.
  */
 export async function queryPatients(companyId = null) {
-  const baseFilters = { status: "active", person_type: "patient" };
+  const baseFilters = { status: "active", person_type: "client" };
   if (companyId) baseFilters.company_id = companyId;
   const patients = await base44.entities.Person.filter(baseFilters, "first_name");
   if (patients.length > 0) return patients.map((p) => stripPersonFields(p, 2)); // Tier 2 for med app

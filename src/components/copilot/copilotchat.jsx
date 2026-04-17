@@ -28,54 +28,18 @@ const PALETTE = [
   "#06b6d4","#f97316","#84cc16","#ec4899","#14b8a6",
 ];
 
-// ── Mode definitions ─────────────────────────────────────────────────────────
-const MODES = {
-  operations: {
-    key:   "operations",
-    label: "Operations",
-    icon:  Activity,
-    color: "emerald",
-    placeholder: "Ask about your people, tasks, inventory, finances…",
-    questions: [
-      "Give me an overview of how we are doing today",
-      "Which items expire in the next 7 days?",
-      "How many active staff do we have?",
-      "What was our revenue this month?",
-      "Which tasks are overdue?",
-      "Show me everything running low on stock",
-    ],
-  },
-  market: {
-    key:   "market",
-    label: "Market Intelligence",
-    icon:  Globe,
-    color: "blue",
-    placeholder: "Ask about industry trends, competitors, regulations…",
-    questions: [
-      "What are the latest trends in our industry?",
-      "Who are our main competitors and how are they performing?",
-      "What regulations should our business be aware of?",
-      "Analyse global economic indicators relevant to our sector",
-      "What are best practices for customer retention in our industry?",
-      "What is the market size and growth rate for our sector?",
-    ],
-  },
-  ml: {
-    key:   "ml",
-    label: "ML Insights",
-    icon:  Brain,
-    color: "violet",
-    placeholder: "Ask for ML predictions, forecasts, and risk analysis…",
-    questions: [
-      "What is our client retention risk?",
-      "Show me customer segmentation and lifetime value",
-      "Forecast demand for the next quarter",
-      "Which clients are most at risk of churning?",
-      "Run a full ML analysis on our operational data",
-      "What does our revenue forecast look like?",
-    ],
-  },
-};
+// ── Unified copilot — sample questions shown on empty state ─────────────────
+const SAMPLE_QUESTIONS = [
+  "Give me an overview of how we are doing today",
+  "Which clients are most at risk of churning?",
+  "What are the latest trends in our industry?",
+  "Which items expire in the next 7 days?",
+  "Show me customer segmentation and lifetime value",
+  "What regulations should our business be aware of?",
+  "Which tasks are overdue?",
+  "Forecast demand for the next quarter",
+  "What is Newsconseen and what can it do?",
+];
 
 // ── Utility: format timestamp ────────────────────────────────────────────────
 function fmtTime(ts) {
@@ -807,7 +771,7 @@ function SaveButton({ message, companyId }) {
 }
 
 // ── Message bubble ───────────────────────────────────────────────────────────
-function MessageBubble({ message, onFeedback, companyId, currentUser, mode, onOpenQueryBuilder }) {
+function MessageBubble({ message, onFeedback, companyId, currentUser, onOpenQueryBuilder }) {
   const isUser     = message.role === "user";
   const isThinking = message.type === "thinking";
   const [copied, doCopy] = useCopy(message.content || "");
@@ -822,8 +786,6 @@ function MessageBubble({ message, onFeedback, companyId, currentUser, mode, onOp
     );
   }
 
-  const modeColor = MODES[mode]?.color || "emerald";
-
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4`}>
       <div className={`max-w-[90%] flex flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
@@ -831,11 +793,7 @@ function MessageBubble({ message, onFeedback, companyId, currentUser, mode, onOp
         {/* Sender label */}
         {!isUser && (
           <div className="flex items-center gap-1.5 mb-0.5">
-            <div className={`w-5 h-5 rounded-full bg-gradient-to-br flex items-center justify-center ${
-              modeColor === "blue"   ? "from-blue-400 to-indigo-600"   :
-              modeColor === "violet" ? "from-violet-400 to-purple-600" :
-                                       "from-emerald-400 to-teal-600"
-            }`}>
+            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center">
               <Sparkles className="w-2.5 h-2.5 text-white" />
             </div>
             <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
@@ -1080,7 +1038,6 @@ function HistoryPanel({ companyId, onRestore, onClose }) {
 // ── Main CopilotChat component ───────────────────────────────────────────────
 export default function CopilotChat({ currentUser, className = "", initialMessage = "" }) {
   const navigate = useNavigate();
-  const [mode, setMode]           = useState("operations");
   const [messages, setMessages]   = useState([]);
   const [input, setInput]         = useState(initialMessage || "");
   const [loading, setLoading]     = useState(false);
@@ -1092,8 +1049,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
 
   const openQueryBuilder = useCallback(() => navigate("/QueryBuilder"), [navigate]);
 
-  const companyId  = currentUser?.company_id;
-  const modeConfig = MODES[mode];
+  const companyId = currentUser?.company_id;
 
   // Load context
   useEffect(() => {
@@ -1110,12 +1066,6 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  const switchMode = (m) => {
-    setMode(m);
-    setMessages([]);
-    setError(null);
-  };
 
   // Restore a saved chat into the messages list
   const restoreChat = (report) => {
@@ -1163,18 +1113,11 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
         .filter(m => m.type !== "thinking")
         .map(m => ({ role: m.role, content: m.content }));
 
-      let fullQuestion = question;
-      if (mode === "market") {
-        fullQuestion = `[Mode: Market Intelligence — use web_search and search_public_data tools]\n\n${question}`;
-      } else if (mode === "ml") {
-        fullQuestion = `[Mode: ML Insights — prioritise get_ml_predictions and ML analysis]\n\n${question}`;
-      }
-
       const resp = await fetch(`${RAILWAY_URL}/copilot/ask`, {
         method:  "POST",
         headers: API_HEADERS,
         body: JSON.stringify({
-          question:        fullQuestion,
+          question:        question,
           company_id:      companyId,
           enterprise_name: currentUser?.enterprise_name || "",
           history,
@@ -1222,7 +1165,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       setLoading(false);
       inputRef.current?.focus();
     }
-  }, [input, loading, companyId, messages, mode, currentUser]);
+  }, [input, loading, companyId, messages, currentUser]);
 
   const handleFeedback = async (messageId, rating) => {
     setMessages(prev =>
@@ -1310,28 +1253,20 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           </div>
         </div>
 
-        {/* Mode tabs */}
-        <div className="flex border-t border-slate-100">
-          {Object.values(MODES).map(m => {
-            const Icon   = m.icon;
-            const active = mode === m.key;
-            return (
-              <button
-                key={m.key}
-                onClick={() => switchMode(m.key)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors border-b-2 ${
-                  active
-                    ? m.color === "blue"   ? "border-blue-500 text-blue-600 bg-blue-50/50"
-                    : m.color === "violet" ? "border-violet-500 text-violet-600 bg-violet-50/50"
-                    :                        "border-emerald-500 text-emerald-600 bg-emerald-50/50"
-                    : "border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{m.label}</span>
-              </button>
-            );
-          })}
+        {/* Capability badges */}
+        <div className="flex items-center gap-1.5 px-4 py-2 border-t border-slate-100">
+          <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+            <Activity className="w-2.5 h-2.5" /> Operations
+          </span>
+          <span className="flex items-center gap-1 text-[10px] font-medium text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
+            <Brain className="w-2.5 h-2.5" /> ML &amp; Predictions
+          </span>
+          <span className="flex items-center gap-1 text-[10px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+            <Globe className="w-2.5 h-2.5" /> Market Research
+          </span>
+          <span className="flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+            <BookOpen className="w-2.5 h-2.5" /> Product Docs
+          </span>
         </div>
       </div>
 
@@ -1339,35 +1274,24 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {!hasMessages && (
           <div className="flex flex-col items-center justify-center h-full gap-4 py-6">
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br ${
-              modeConfig.color === "blue"   ? "from-blue-400 to-indigo-600"   :
-              modeConfig.color === "violet" ? "from-violet-400 to-purple-600" :
-                                              "from-emerald-400 to-teal-600"
-            }`}>
-              {React.createElement(modeConfig.icon, { className: "w-7 h-7 text-white" })}
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br from-emerald-400 to-teal-600">
+              <Sparkles className="w-7 h-7 text-white" />
             </div>
             <div className="text-center">
               <p className="text-sm font-semibold text-slate-700 mb-1">
-                {mode === "operations"  && "Ask me anything about your operations"}
-                {mode === "market"      && "Deep market intelligence at your fingertips"}
-                {mode === "ml"          && "ML-powered predictions and insights"}
+                Ask me anything
               </p>
               <p className="text-xs text-slate-400 max-w-xs">
-                {mode === "operations"  && "People, inventory, finances, and tasks — all grounded in real data. Answers include charts and tables."}
-                {mode === "market"      && "Search the web, analyse industry data, and benchmark against public sources."}
-                {mode === "ml"          && "Churn prediction, segmentation, demand forecasting, and more."}
+                Operations, ML predictions, market research, and questions about
+                Newsconseen — all in one conversation, grounded in real data.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-2 w-full max-w-sm">
-              {modeConfig.questions.map((q, i) => (
+              {SAMPLE_QUESTIONS.map((q, i) => (
                 <button
                   key={i}
                   onClick={() => sendMessage(q)}
-                  className={`text-left px-3 py-2 rounded-xl bg-white border text-xs transition-all hover:shadow-sm ${
-                    modeConfig.color === "blue"   ? "border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-700"   :
-                    modeConfig.color === "violet" ? "border-slate-200 text-slate-600 hover:border-violet-300 hover:text-violet-700" :
-                                                    "border-slate-200 text-slate-600 hover:border-emerald-300 hover:text-emerald-700"
-                  }`}
+                  className="text-left px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-600 transition-all hover:shadow-sm hover:border-emerald-300 hover:text-emerald-700"
                 >
                   {q}
                 </button>
@@ -1383,7 +1307,6 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
             onFeedback={handleFeedback}
             companyId={companyId}
             currentUser={currentUser}
-            mode={mode}
             onOpenQueryBuilder={openQueryBuilder}
           />
         ))}
@@ -1403,27 +1326,6 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
 
       {/* Input */}
       <div className="px-4 py-3 bg-white border-t border-slate-100">
-        <div className="flex items-center gap-1.5 mb-2">
-          {React.createElement(modeConfig.icon, {
-            className: `w-3 h-3 ${
-              modeConfig.color === "blue"   ? "text-blue-500"   :
-              modeConfig.color === "violet" ? "text-violet-500" : "text-emerald-500"
-            }`,
-          })}
-          <span className={`text-[10px] font-semibold ${
-            modeConfig.color === "blue"   ? "text-blue-500"   :
-            modeConfig.color === "violet" ? "text-violet-500" : "text-emerald-500"
-          }`}>
-            {modeConfig.label}
-          </span>
-          {mode === "market" && (
-            <span className="text-[9px] text-slate-400 ml-1">· Web search enabled</span>
-          )}
-          {mode === "ml" && (
-            <span className="text-[9px] text-slate-400 ml-1">· ML models active</span>
-          )}
-        </div>
-
         <div className="flex items-end gap-2">
           <div className="flex-1">
             <textarea
@@ -1436,7 +1338,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
                   sendMessage();
                 }
               }}
-              placeholder={modeConfig.placeholder}
+              placeholder="Ask anything — operations, ML predictions, market research, or how Newsconseen works…"
               disabled={loading}
               rows={1}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm resize-none focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all disabled:opacity-50 bg-slate-50"
@@ -1446,11 +1348,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           <button
             onClick={() => sendMessage()}
             disabled={!input.trim() || loading}
-            className={`p-2.5 rounded-xl text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm shrink-0 ${
-              modeConfig.color === "blue"   ? "bg-blue-600 hover:bg-blue-700 shadow-blue-500/20"   :
-              modeConfig.color === "violet" ? "bg-violet-600 hover:bg-violet-700 shadow-violet-500/20" :
-                                              "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20"
-            }`}
+            className="p-2.5 rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all shrink-0"
           >
             {loading
               ? <Loader2 className="w-4 h-4 animate-spin" />

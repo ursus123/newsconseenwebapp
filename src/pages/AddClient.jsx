@@ -570,8 +570,8 @@ export default function AddClient() {
                     <Field label="Phone"><Input value={personData.phone} onChange={(e) => setPersonData({ ...personData, phone: e.target.value })} placeholder="+1 555 000 0000" /></Field>
                     <Field label="Person Type">
                       <Select value={personData.person_type} onChange={(e) => setPersonData({ ...personData, person_type: e.target.value })}>
-                        {["employee","contractor","freelancer","vendor","client","patient","external_partner"].map((t) => (
-                          <option key={t} value={t}>{t.replace(/_/g, " ")}</option>
+                        {["staff","client","contact","volunteer"].map((t) => (
+                          <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
                         ))}
                       </Select>
                     </Field>

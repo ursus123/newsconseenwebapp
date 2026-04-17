@@ -178,17 +178,17 @@ export const PEOPLE_TEMPLATE_INSTRUCTIONS = [
 ];
 
 const PERSON_TYPE_KEYWORDS = [
-  [/nurse|doctor|pharmacist|caregiver|therapist|clinician/i, "employee"],
-  [/driver|cleaner|technician|mechanic|operator|guard/i, "employee"],
-  [/consultant|contractor|freelancer/i, "contractor"],
-  [/supplier|vendor/i, "vendor"],
+  [/nurse|doctor|pharmacist|caregiver|therapist|clinician/i, "staff"],
+  [/driver|cleaner|technician|mechanic|operator|guard/i, "staff"],
+  [/consultant|contractor|freelancer/i, "staff"],
+  [/supplier|vendor/i, "contact"],
 ];
 
 export function detectPersonType(role = "") {
   for (const [regex, type] of PERSON_TYPE_KEYWORDS) {
     if (regex.test(role)) return type;
   }
-  return "employee";
+  return "staff";
 }
 
 export function transformPerson(row, currentUser) {

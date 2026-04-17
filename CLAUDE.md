@@ -662,6 +662,23 @@ const { data } = useQuery({ queryFn: () => fetch(`${RAILWAY_URL}/open-data/excha
 - Suggest any Railway variable or config that assumes a single client
 - Add an app to APP_REGISTRY without declaring its `backend` and `APP_ONTOLOGY` entry
 
+### Copilot documentation sync rule (ALWAYS)
+
+**`python_layer/copilot/docs/newsconseen_docs.md` is the single source of truth for the
+copilot's product knowledge.** The file is loaded fresh on every copilot request — no
+redeploy, no cache flush required.
+
+**Rule: whenever any of the following change, update `newsconseen_docs.md` to match:**
+- CLAUDE.md (architecture, entities, phases, rules)
+- ARCHITECTURE.md (schema, entity fields, ontology)
+- A new phase is completed (add it to the phase table)
+- A new API endpoint is added (add it to the Key API Endpoints section)
+- A new agent, connector, alert type, or ML model is added
+- Any troubleshooting knowledge is learned (add to Common Troubleshooting table)
+
+Failure to keep `newsconseen_docs.md` in sync means the copilot gives stale or wrong
+answers about Newsconseen's own features — the most visible form of product regression.
+
 ### Always
 - Trigger ETL after every entity mutation
 - Use ^...$ anchors in mapping rules, specific before general
