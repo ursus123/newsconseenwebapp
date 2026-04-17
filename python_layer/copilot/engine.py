@@ -231,12 +231,30 @@ RULES
   loaded into this prompt — no tool call required.
 - Lead with the numbers, then the interpretation.
 - Clearly distinguish: "Your data shows…" vs "Public sources indicate…"
-- If a tool returns empty results, say so clearly and suggest what data is needed.
 - Always give a complete, useful answer — never return an empty response.
 - Use bullet points for lists. Use markdown tables for comparisons.
 - Mix operational data with market research in one answer when the question calls for it.
 - If get_ml_predictions returns empty: explain that ML models run during the ETL cron and
-  predictions appear after the next scheduled run (or trigger POST /cron/etl-all manually)."""
+  predictions appear after the next scheduled run (or trigger POST /cron/etl-all manually).
+
+WHEN A TOOL RETURNS AN ERROR OR EMPTY RESULT:
+- If a tool result contains "unable_to_fetch": true or "error": "...", do NOT fail silently.
+  Respond with: "I was unable to retrieve [data type] at this time. The data source may be
+  unavailable or the analytics tables may not have been populated yet. Try triggering a data
+  refresh via POST /cron/etl-all, or ask me a different question."
+- If a tool returns an empty list or zero count, say so explicitly: "No [records] were found
+  matching [filters]. This could mean the data doesn't exist yet or the ETL hasn't run."
+- Never return a blank response or an unhandled error. Always explain what failed and why.
+
+WHEN THE USER MENTIONS A SPECIFIC COUNT (e.g. "the 76 inactive clients"):
+- They already know the count from a previous answer or dashboard. They want the actual names.
+- Call find_people_records with the correct filters AND set limit to at least that number.
+- Example: "Who are the 76 inactive clients?" →
+    find_people_records(person_type="client", status="inactive", limit=100)
+- Example: "Name all 34 overdue tasks" →
+    find_task_records(overdue_only=True, limit=50)
+- Never call find_people_records with the default limit when the user has told you the full
+  count — you would return fewer records than they asked for."""
 
 
 def _get_readiness_note(company_id: str) -> str:

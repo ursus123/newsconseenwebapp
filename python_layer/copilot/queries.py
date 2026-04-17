@@ -2053,7 +2053,7 @@ def _raw_query(
 def _b44_people_records(company_id: str, name_fragment: str = None,
                          person_type: str = None, status: str = None,
                          enterprise_name: str = None, at_risk_only: bool = False,
-                         limit: int = 20) -> list:
+                         limit: int = 100) -> list:
     """Base44 live fallback for find_people_records."""
     try:
         from datetime import date, timedelta
@@ -2097,7 +2097,7 @@ def find_people_records(
     status: Optional[str] = None,
     enterprise_name: Optional[str] = None,
     at_risk_only: bool = False,
-    limit: int = 20,
+    limit: int = 100,
 ) -> dict:
     """
     Search for individual people records by name, type, status, or enterprise.
@@ -4374,25 +4374,29 @@ TOOL_DEFINITIONS = [
             "Use this for questions like: "
             "'Find John Doe', 'Is Mary still active?', 'Show me all active nurses', "
             "'Which students are inactive?', 'Staff at Branch X', "
-            "'List all volunteers', 'Who are our contractors?'. "
-            "Use get_people_summary for aggregate counts; use this tool for actual names and records."
+            "'List all volunteers', 'Who are our contractors?', "
+            "'Who are the 76 inactive clients?', 'Name all inactive staff'. "
+            "Use get_people_summary for aggregate counts; use this tool for actual names and records. "
+            "IMPORTANT: when the user mentions a specific count (e.g. 'the 76 inactive clients'), "
+            "always set limit to at least that number so all records are returned. "
+            "Default limit is 100. Set limit=500 for large lists."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "name": {
                     "type": "string",
-                    "description": "Partial or full name to search (case-insensitive). Leave blank to return all.",
+                    "description": "Partial or full name to search (case-insensitive). Leave blank to return all matching the other filters.",
                 },
                 "person_type": {
                     "type": "string",
                     "enum": ["staff", "client", "contact", "volunteer"],
-                    "description": "Filter by person type.",
+                    "description": "Filter by canonical person type.",
                 },
                 "status": {
                     "type": "string",
                     "enum": ["active", "inactive", "on_leave"],
-                    "description": "Filter by status.",
+                    "description": "Filter by status. Use 'inactive' to list inactive people by name.",
                 },
                 "enterprise_name": {
                     "type": "string",
@@ -4404,7 +4408,7 @@ TOOL_DEFINITIONS = [
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Max records to return. Default 20.",
+                    "description": "Max records to return. Default 100. Set higher when the user asks for a specific large count.",
                 },
             },
         },
@@ -5964,13 +5968,32 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
 
     fn = dispatch.get(tool_name)
     if not fn:
-        return {"error": f"Unknown tool: {tool_name}"}
+        return {
+            "error": f"Unknown tool: {tool_name}",
+            "unable_to_fetch": True,
+            "message": f"The tool '{tool_name}' is not available. I cannot retrieve this data.",
+        }
 
     try:
-        return fn(**kwargs)
+        result = fn(**kwargs)
+        # Normalise: if the function returned None, give Claude an explicit empty result
+        if result is None:
+            return {"records": [], "count": 0, "unable_to_fetch": False}
+        return result
     except TypeError as e:
         logger.warning("Tool %s called with bad args %s: %s", tool_name, kwargs, e)
-        return {"error": str(e)}
+        return {
+            "error": str(e),
+            "unable_to_fetch": True,
+            "message": "I was unable to query this data due to a parameter mismatch.",
+        }
+    except Exception as e:
+        logger.warning("Tool %s raised unexpected error: %s", tool_name, e)
+        return {
+            "error": str(e),
+            "unable_to_fetch": True,
+            "message": "I was unable to fetch this data. The data source may be unavailable.",
+        }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
