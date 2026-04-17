@@ -3943,6 +3943,57 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "find_nearby_competitors",
+        "description": (
+            "Find external competitors or similar businesses near a location using OpenStreetMap. "
+            "Works globally, no API key needed. Returns names, distances, addresses, phone numbers. "
+            "Use for questions like: "
+            "'What are the nearest competitors within 4km?', "
+            "'How many pharmacies are within 2km of us?', "
+            "'Show me schools near our branch', "
+            "'Who are our closest competitors?', "
+            "'Nearest restaurants to our address', "
+            "'Competitor analysis within 5km', "
+            "'What businesses are nearby?'. "
+            "If no lat/lng given, geocodes the address automatically. "
+            "If no address given, uses the operator's own registered address."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["business_type"],
+            "properties": {
+                "business_type": {
+                    "type": "string",
+                    "description": (
+                        "Type of business to search for in plain English. "
+                        "E.g. 'pharmacy', 'school', 'restaurant', 'clinic', 'supermarket', "
+                        "'bank', 'gym', 'hotel', 'salon', 'hardware store'."
+                    ),
+                },
+                "lat": {
+                    "type": "number",
+                    "description": "Latitude of reference point. Optional — if omitted, address is geocoded.",
+                },
+                "lng": {
+                    "type": "number",
+                    "description": "Longitude of reference point. Optional — if omitted, address is geocoded.",
+                },
+                "address": {
+                    "type": "string",
+                    "description": "Address or place name to search near. Optional if lat/lng provided.",
+                },
+                "radius_meters": {
+                    "type": "number",
+                    "description": "Search radius in metres. Default 4000 (4km). Use 1000 for 1km, 10000 for 10km.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results to return. Default 20.",
+                },
+            },
+        },
+    },
+    {
         "name": "search_public_data",
         "description": (
             "Query structured public datasets for market research. Datasets available:\n"
@@ -4799,6 +4850,205 @@ def _find_nearby_locations(
             "error": f"Spatial search unavailable: {e}",
             "note":  "PostGIS may not be set up. Run POST /postgis/setup.",
         }
+
+
+# ── External competitor search via OpenStreetMap Overpass ────────────────────
+
+# Maps common business descriptions → OSM tags so the model can use plain English
+_OSM_TAG_MAP = [
+    # amenity tags
+    (["pharmacy","chemist","drugstore"],           "amenity", "pharmacy"),
+    (["hospital","clinic","medical centre","health centre","healthcare"], "amenity", "clinic"),
+    (["school","primary school","secondary school","college"], "amenity", "school"),
+    (["bank","banking"],                           "amenity", "bank"),
+    (["restaurant","food","cafe","coffee","takeaway","fast food"], "amenity", "restaurant"),
+    (["fuel","petrol","gas station","filling station"], "amenity", "fuel"),
+    (["supermarket","grocery","convenience","shop","store","retail"], "shop", "supermarket"),
+    (["hotel","lodge","accommodation","guesthouse"], "tourism", "hotel"),
+    (["gym","fitness","sports centre"],            "leisure", "fitness_centre"),
+    (["salon","barbershop","hair"],                "shop", "hairdresser"),
+    (["laundry","laundromat"],                     "shop", "laundry"),
+    (["bakery","bread","pastry"],                  "shop", "bakery"),
+    (["butcher","meat"],                           "shop", "butcher"),
+    (["hardware","building materials"],            "shop", "hardware"),
+    (["printing","copy","stationery"],             "shop", "copyshop"),
+    (["veterinary","vet","animal clinic"],         "amenity", "veterinary"),
+    (["dentist","dental"],                         "amenity", "dentist"),
+    (["optician","optical","eyewear"],             "shop", "optician"),
+    (["library"],                                  "amenity", "library"),
+    (["church","mosque","temple","synagogue","place of worship"], "amenity", "place_of_worship"),
+]
+
+def _resolve_osm_tag(business_type: str):
+    """Return (osm_key, osm_value) for a plain-English business type."""
+    bt = business_type.lower()
+    for keywords, key, value in _OSM_TAG_MAP:
+        if any(k in bt for k in keywords):
+            return key, value
+    # Generic fallback — search shop or amenity by name substring
+    return "amenity", bt.split()[0]
+
+
+def _haversine_m(lat1, lng1, lat2, lng2):
+    """Return distance in metres between two lat/lng points."""
+    import math
+    R = 6_371_000
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlam = math.radians(lng2 - lng1)
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlam/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+
+def find_nearby_competitors(
+    company_id: str,
+    business_type: str,
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    address: Optional[str] = None,
+    radius_meters: float = 4000,
+    limit: int = 20,
+) -> dict:
+    """
+    Finds external competitors / similar businesses within a radius using
+    OpenStreetMap Overpass API. No API key required — works globally.
+
+    Resolution order:
+      1. lat/lng provided directly
+      2. address geocoded via Nominatim
+      3. operator's primary enterprise address geocoded
+    """
+    import math
+
+    # ── 1. Resolve reference point ────────────────────────────────────────────
+    ref_lat, ref_lng, ref_label = lat, lng, None
+
+    if ref_lat is None or ref_lng is None:
+        lookup = address
+        if not lookup:
+            # Fall back to operator's own address from enterprise record
+            try:
+                ctx = get_operator_context(company_id)
+                lookup = ctx.get("address") or ctx.get("city") or ctx.get("name")
+            except Exception:
+                pass
+
+        if not lookup:
+            return {"error": "Provide lat/lng or address so I know where to search."}
+
+        try:
+            nom_url = (
+                "https://nominatim.openstreetmap.org/search"
+                f"?q={urllib.parse.quote(lookup)}&format=json&limit=1"
+            )
+            req = urllib.request.Request(nom_url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+            with urllib.request.urlopen(req, timeout=6) as r:
+                hits = _json.loads(r.read().decode())
+            if not hits:
+                return {"error": f"Could not geocode '{lookup}'. Try providing lat/lng directly."}
+            ref_lat  = float(hits[0]["lat"])
+            ref_lng  = float(hits[0]["lon"])
+            ref_label = hits[0].get("display_name", lookup)
+        except Exception as e:
+            return {"error": f"Geocoding failed: {e}"}
+
+    # ── 2. Resolve OSM tag ────────────────────────────────────────────────────
+    osm_key, osm_value = _resolve_osm_tag(business_type)
+
+    # ── 3. Query Overpass for nodes + ways within radius ─────────────────────
+    try:
+        overpass_q = (
+            f'[out:json][timeout:15];'
+            f'('
+            f'  node["{osm_key}"="{osm_value}"](around:{int(radius_meters)},{ref_lat},{ref_lng});'
+            f'  way["{osm_key}"="{osm_value}"](around:{int(radius_meters)},{ref_lat},{ref_lng});'
+            f');'
+            f'out center {limit * 2};'   # fetch extra, we'll trim + sort by distance
+        )
+        overpass_url = (
+            "https://overpass-api.de/api/interpreter"
+            f"?data={urllib.parse.quote(overpass_q)}"
+        )
+        req2 = urllib.request.Request(overpass_url, headers={"User-Agent": "newsconseen-copilot/1.0"})
+        with urllib.request.urlopen(req2, timeout=15) as r2:
+            raw = _json.loads(r2.read().decode())
+    except Exception as e:
+        return {"error": f"OpenStreetMap query failed: {e}. Try again in a moment."}
+
+    # ── 4. Parse + enrich results ─────────────────────────────────────────────
+    results = []
+    for el in raw.get("elements", []):
+        tags = el.get("tags", {})
+        # Resolve lat/lng for ways (use centre)
+        if el.get("type") == "way":
+            clat = el.get("center", {}).get("lat")
+            clng = el.get("center", {}).get("lon")
+        else:
+            clat = el.get("lat")
+            clng = el.get("lon")
+
+        if clat is None or clng is None:
+            continue
+
+        dist_m = _haversine_m(ref_lat, ref_lng, clat, clng)
+        name = (
+            tags.get("name")
+            or tags.get("brand")
+            or tags.get("operator")
+            or f"Unnamed {business_type}"
+        )
+
+        # Build address string from available tags
+        addr_parts = [
+            tags.get("addr:housenumber", ""),
+            tags.get("addr:street", ""),
+            tags.get("addr:suburb", ""),
+            tags.get("addr:city", ""),
+        ]
+        addr_str = ", ".join(p for p in addr_parts if p) or None
+
+        results.append({
+            "name":         name,
+            "distance_m":   round(dist_m),
+            "distance_km":  round(dist_m / 1000, 2),
+            "lat":          clat,
+            "lng":          clng,
+            "address":      addr_str,
+            "phone":        tags.get("phone") or tags.get("contact:phone"),
+            "website":      tags.get("website") or tags.get("contact:website"),
+            "opening_hours": tags.get("opening_hours"),
+            "osm_id":       el.get("id"),
+        })
+
+    # Sort by distance, trim to limit
+    results.sort(key=lambda x: x["distance_m"])
+    results = results[:limit]
+
+    if not results:
+        return {
+            "reference_point": ref_label or f"{ref_lat},{ref_lng}",
+            "business_type":   business_type,
+            "radius_km":       round(radius_meters / 1000, 1),
+            "count":           0,
+            "competitors":     [],
+            "note": (
+                f"No '{business_type}' found within {round(radius_meters/1000,1)}km. "
+                f"OSM may not have complete coverage for this area, "
+                f"or try a broader radius or different business type."
+            ),
+        }
+
+    return {
+        "reference_point": ref_label or f"{ref_lat},{ref_lng}",
+        "business_type":   business_type,
+        "osm_tag":         f"{osm_key}={osm_value}",
+        "radius_km":       round(radius_meters / 1000, 1),
+        "count":           len(results),
+        "nearest":         results[0]["name"] if results else None,
+        "nearest_distance_m": results[0]["distance_m"] if results else None,
+        "competitors":     results,
+        "source":          "OpenStreetMap via Overpass API",
+    }
 
 
 # ── pgvector semantic search tool ────────────────────────────────────────────
@@ -5664,8 +5914,9 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "get_service_overview":      get_service_overview,
         # Semantic search — pgvector powered
         "search_records_semantically": _search_records_semantically,
-        # Spatial search — PostGIS powered
+        # Spatial search — PostGIS powered (internal) + OSM external
         "find_nearby_locations":       _find_nearby_locations,
+        "find_nearby_competitors":     find_nearby_competitors,
         # Web-grounded tools — company_id injected but not used (public data)
         "web_search":              web_search,
         "search_public_data":      search_public_data,
