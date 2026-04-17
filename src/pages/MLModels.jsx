@@ -685,6 +685,7 @@ export default function MLModels() {
     try {
       const params = new URLSearchParams({ company_id: cid });
       const res = await fetch(`${RAILWAY_URL}/ml/${model.endpoint}?${params}`, {
+        method: "POST",
         headers: API_HEADERS,
       });
       const data = await res.json();
