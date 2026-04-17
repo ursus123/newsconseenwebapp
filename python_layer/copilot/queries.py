@@ -8,7 +8,10 @@ and returns structured data the LLM can reason over.
 Every function signature matches the tool definition in engine.py.
 """
 
+import json as _json
 import logging
+import urllib.parse
+import urllib.request
 from typing import Optional
 from sqlalchemy import text
 from database import get_engine_safe

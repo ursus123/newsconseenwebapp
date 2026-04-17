@@ -3,6 +3,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+import pandas as pd
+
 from fastapi import APIRouter, HTTPException, Query
 
 from etl import people, tasks, transactions
