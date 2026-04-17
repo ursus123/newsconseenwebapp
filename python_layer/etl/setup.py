@@ -639,6 +639,31 @@ _OTHER_DDL = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_2fa_company ON analytics.user_2fa_secrets (company_id)",
 
+    # ── Time / Attendance analytics ───────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.time_summary (
+        company_id          TEXT,
+        person_id           TEXT,
+        person_name         TEXT,
+        enterprise_id       TEXT,
+        enterprise_name     TEXT,
+        work_date           DATE,
+        week_start          DATE,
+        clock_in_time       TEXT,
+        clock_out_time      TEXT,
+        total_hours         DOUBLE PRECISION,
+        break_hours         DOUBLE PRECISION,
+        net_hours           DOUBLE PRECISION,
+        is_overtime         BOOLEAN,
+        scheduled_hours     DOUBLE PRECISION,
+        utilisation_pct     DOUBLE PRECISION,
+        snapshot_date       DATE,
+        loaded_at           TIMESTAMP
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_time_summary_company ON analytics.time_summary (company_id, work_date DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_time_summary_person  ON analytics.time_summary (company_id, person_id)",
+
     # ── Market Intelligence write-back ───────────────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS analytics.mi_competitors (

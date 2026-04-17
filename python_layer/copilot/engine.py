@@ -166,6 +166,11 @@ Gap / monitoring tools:
 - get_anomaly_report      — z-score outliers + metric drift since last ETL
 - get_alert_history       — alerts and notifications sent by the system in last N days
 
+Time / Attendance tools (clock-in/out data from Tasks):
+- get_attendance_report   — daily clock-in/out records per person (actual time entries)
+- get_time_summary        — total hours per person aggregated by week or month
+- get_utilisation_report  — staff utilisation % vs scheduled hours; classifies as overloaded/under-utilised
+
 Raw record tools (use when operator asks for names, not counts):
 - find_people_records      — search people by name/type/status/enterprise; returns actual rows
 - find_task_records        — search tasks by assignee/type/status/overdue; returns titles, due dates
@@ -219,6 +224,10 @@ WHEN TO USE WHICH TOOL
 - "What is GDP in our country?"            → search_public_data dataset=world_bank
 - "Create a follow-up task for John"       → request_action (write-back)
 - "Remember that we call clients patients" → save_copilot_memory
+- "Who clocked in today?"                  → get_attendance_report days_back=1
+- "Hours worked this week?"                → get_time_summary period=week
+- "Who is underutilised?"                  → get_utilisation_report max_utilisation=70
+- "Who is overloaded?"                     → get_utilisation_report min_utilisation=110
 - "What is Newsconseen?"                   → answer from product documentation (no tool needed)
 - "How does the ETL work?"                 → answer from product documentation (no tool needed)
 - "What agents do you have?"               → answer from product documentation (no tool needed)

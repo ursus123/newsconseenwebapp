@@ -179,6 +179,7 @@ experience grounded in real data.
 - KPI goals with progress tracking (on track / at risk / behind / exceeded)
 - Anomaly detection — statistical z-score outliers across all metrics
 - Alert history — what notifications the system has sent
+- **Time & Attendance** — clock-in/out analysis, hours per person, utilisation vs scheduled hours
 
 **ML-Powered Predictions**:
 - Client retention/churn risk (Cox Proportional Hazard survival model)
@@ -254,6 +255,25 @@ experience grounded in real data.
 | `search_public_data` | World Bank, Census, FDA, OSM, FX rates, UN data |
 | `request_action` | Write-back: create tasks, update records, flag items |
 | `save_copilot_memory` | Persist preferences/instructions for future sessions |
+| `get_attendance_report` | Daily clock-in/out records per person (time entries) |
+| `get_time_summary` | Total hours per person aggregated by week or month |
+| `get_utilisation_report` | Staff utilisation % vs scheduled hours (over/under) |
+
+---
+
+### Time & Attendance Analytics
+
+Clock-in/out data is stored as Tasks with `task_type` set to `clock_in`, `clock_out`,
+`break_start`, or `break_end`. The ETL transforms these into `analytics.time_summary`:
+one row per person per working day.
+
+Copilot questions you can ask:
+- "Who clocked in today?"
+- "Attendance report for last week"
+- "How many hours did staff work this month?"
+- "Who is overloaded?" / "Who has spare capacity?"
+- "Show me the timesheet for Mary"
+- "Utilisation report for the last 30 days"
 
 ---
 
@@ -482,6 +502,7 @@ to Railway, or make the fields `Optional[str] = None` in `settings.py`.
 ```
 GET  /health                        System health + ETL timestamps
 POST /cron/etl-all                  Trigger full ETL pipeline
+POST /load/time-summary             ETL: clock-in/out tasks → analytics.time_summary
 GET  /copilot/status                Copilot health check
 POST /copilot/ask                   Ask a question (returns JSON)
 POST /copilot/ask/stream            Ask a question (SSE streaming)

@@ -25,6 +25,7 @@ from etl import (
     relationships,
     services,
     tasks,
+    time as time_etl,
     transactions,
 )
 from etl.load import load_dataframe, load_dataframe_replace, load_raw
@@ -1101,6 +1102,20 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
             enhanced_result["concentration_risk"] = {"status": "error", "detail": str(_e)}
             logger.warning("cron: concentration_risk failed — %s", _e)
 
+        # time_summary — daily attendance from clock-in/out tasks
+        try:
+            _clock_df = raw_data.get("tasks", pd.DataFrame())
+            if not _clock_df.empty and "task_type" in _clock_df.columns:
+                _clock_df = _clock_df[_clock_df["task_type"].str.lower().isin(
+                    {"clock_in", "clock_out", "break_start", "break_end"}
+                )]
+            _tm_df = time_etl.transform_time_summary(_clock_df)
+            enhanced_result["time_summary"] = load_dataframe_replace(_tm_df, "time_summary")
+            logger.info("cron: time_summary — %d day-person rows", len(_tm_df))
+        except Exception as _e:
+            enhanced_result["time_summary"] = {"status": "error", "detail": str(_e)}
+            logger.warning("cron: time_summary failed — %s", _e)
+
     except Exception as _enh_err:
         logger.warning("cron: enhanced analytics step failed — %s", _enh_err)
         enhanced_result = {"status": "error", "detail": str(_enh_err)}
@@ -1653,6 +1668,22 @@ def load_task_summary(
     _check_cron_secret(x_cron_secret)
     df = filter_by_company(tasks.extract_tasks(), company_id)
     return load_dataframe(tasks.transform_tasks(df), "task_summary", company_id=company_id)
+
+
+# ── Time / Attendance ─────────────────────────────────────
+
+@app.post("/load/time-summary", tags=["ETL"])
+def load_time_summary(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    """
+    ETL: clock-in/out task rows → analytics.time_summary
+    One row per person per working day.
+    """
+    _check_cron_secret(x_cron_secret)
+    df = filter_by_company(time_etl.extract_time_tasks(), company_id)
+    return load_dataframe(time_etl.transform_time_summary(df), "time_summary", company_id=company_id)
 
 
 # ── Services ──────────────────────────────────────────────

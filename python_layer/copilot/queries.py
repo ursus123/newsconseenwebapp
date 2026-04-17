@@ -3652,6 +3652,289 @@ def search_public_data(dataset: str, query: str, company_id: str, location: str 
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# TIME / ATTENDANCE TOOLS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_attendance_report(
+    company_id: str,
+    days_back: int = 30,
+    person_name: Optional[str] = None,
+    enterprise_name: Optional[str] = None,
+) -> dict:
+    """
+    Returns daily clock-in/out records for the given period.
+    One row per person per working day — clock-in time, clock-out time, net hours.
+    Used for: "who clocked in today?", "attendance report", "who was late?",
+              "show me clock-ins for last week", "daily attendance", "timesheet".
+
+    Reads analytics.time_summary; falls back to raw.tasks (clock events).
+    """
+    sql_filters = ["company_id = :cid",
+                   "work_date >= CURRENT_DATE - INTERVAL '1 day' * :days"]
+    params: dict = {"cid": company_id, "days": days_back}
+
+    if person_name:
+        sql_filters.append("person_name ILIKE :pname")
+        params["pname"] = f"%{person_name}%"
+    if enterprise_name:
+        sql_filters.append("enterprise_name ILIKE :ename")
+        params["ename"] = f"%{enterprise_name}%"
+
+    where = " AND ".join(sql_filters)
+    sql = f"""
+        SELECT person_name, enterprise_name, work_date, week_start,
+               clock_in_time, clock_out_time,
+               total_hours, break_hours, net_hours, is_overtime,
+               scheduled_hours, utilisation_pct
+        FROM analytics.time_summary
+        WHERE {where}
+        ORDER BY work_date DESC, person_name
+        LIMIT 500
+    """
+    rows, _dao, _src = _query_analytics("time_summary", sql, params, company_id)
+
+    if not rows:
+        # Tier 2: raw.tasks clock events
+        try:
+            raw_tasks = _read_raw_table("tasks", company_id)
+            if not raw_tasks.empty and "task_type" in raw_tasks.columns:
+                from etl.time import transform_time_summary
+                clock_df = raw_tasks[raw_tasks["task_type"].str.lower().isin(
+                    {"clock_in", "clock_out", "break_start", "break_end"}
+                )]
+                summary = transform_time_summary(clock_df)
+                if not summary.empty:
+                    from datetime import date, timedelta
+                    cutoff = date.today() - timedelta(days=days_back)
+                    if "work_date" in summary.columns:
+                        summary["work_date"] = _pd.to_datetime(summary["work_date"]).dt.date
+                        summary = summary[summary["work_date"] >= cutoff]
+                    if person_name and "person_name" in summary.columns:
+                        summary = summary[summary["person_name"].str.lower().str.contains(person_name.lower(), na=False)]
+                    if enterprise_name and "enterprise_name" in summary.columns:
+                        summary = summary[summary["enterprise_name"].str.lower().str.contains(enterprise_name.lower(), na=False)]
+                    rows = summary.pipe(_clean_df).to_dict(orient="records")
+                    _dao, _src = None, "raw_tasks"
+                    logger.info("get_attendance_report: raw.tasks fallback — %d rows", len(rows))
+        except Exception as e:
+            logger.warning("get_attendance_report fallback: %s", e)
+
+    # Coerce dates to strings for JSON
+    for r in rows:
+        for k in ("work_date", "week_start"):
+            if r.get(k) is not None:
+                r[k] = str(r[k])
+        for k in ("is_overtime",):
+            if r.get(k) is not None:
+                r[k] = bool(r[k])
+
+    total_net = sum(float(r.get("net_hours") or 0) for r in rows)
+    overtime_days = sum(1 for r in rows if r.get("is_overtime"))
+    people_present = len({r.get("person_name") for r in rows if r.get("person_name")})
+
+    return {
+        "period_days":      days_back,
+        "records_count":    len(rows),
+        "people_present":   people_present,
+        "total_net_hours":  round(total_net, 1),
+        "overtime_days":    overtime_days,
+        "records":          rows[:200],
+        "data_as_of":       _dao,
+        "data_source":      _src,
+    }
+
+
+def get_time_summary(
+    company_id: str,
+    period: str = "week",
+    person_name: Optional[str] = None,
+) -> dict:
+    """
+    Returns aggregated hours per person over a period (week or month).
+    Used for: "how many hours did staff work this week?", "total hours per person",
+              "who worked the most hours?", "weekly hours summary", "monthly timesheet".
+
+    Reads analytics.time_summary; falls back to raw.tasks.
+    """
+    if period.lower() in ("month", "monthly"):
+        days_back = 30
+    else:
+        days_back = 7
+
+    sql_filters = ["company_id = :cid",
+                   "work_date >= CURRENT_DATE - INTERVAL '1 day' * :days"]
+    params: dict = {"cid": company_id, "days": days_back}
+
+    if person_name:
+        sql_filters.append("person_name ILIKE :pname")
+        params["pname"] = f"%{person_name}%"
+
+    where = " AND ".join(sql_filters)
+    sql = f"""
+        SELECT
+            person_name,
+            enterprise_name,
+            COUNT(DISTINCT work_date)        AS days_worked,
+            SUM(net_hours)                   AS total_net_hours,
+            SUM(break_hours)                 AS total_break_hours,
+            SUM(total_hours)                 AS total_gross_hours,
+            ROUND(AVG(net_hours)::numeric, 2)          AS avg_daily_hours,
+            ROUND(AVG(utilisation_pct)::numeric, 1)    AS avg_utilisation_pct,
+            SUM(CASE WHEN is_overtime THEN 1 ELSE 0 END) AS overtime_days
+        FROM analytics.time_summary
+        WHERE {where}
+        GROUP BY person_name, enterprise_name
+        ORDER BY total_net_hours DESC
+        LIMIT 100
+    """
+    rows, _dao, _src = _query_analytics("time_summary", sql, params, company_id)
+
+    if not rows:
+        # Tier 2: reuse get_attendance_report data and aggregate
+        try:
+            detail = get_attendance_report(company_id, days_back=days_back, person_name=person_name)
+            detail_rows = detail.get("records", [])
+            if detail_rows:
+                import pandas as _pd2
+                df = _pd2.DataFrame(detail_rows)
+                if not df.empty and "person_name" in df.columns:
+                    df["net_hours"]       = _pd2.to_numeric(df.get("net_hours",       0), errors="coerce").fillna(0)
+                    df["break_hours"]     = _pd2.to_numeric(df.get("break_hours",     0), errors="coerce").fillna(0)
+                    df["total_hours"]     = _pd2.to_numeric(df.get("total_hours",     0), errors="coerce").fillna(0)
+                    df["utilisation_pct"] = _pd2.to_numeric(df.get("utilisation_pct", 0), errors="coerce").fillna(0)
+                    df["is_overtime"]     = df.get("is_overtime", False).apply(lambda x: bool(x))
+                    grp = df.groupby(["person_name", "enterprise_name"]).agg(
+                        days_worked      =("net_hours", "count"),
+                        total_net_hours  =("net_hours", "sum"),
+                        total_break_hours=("break_hours", "sum"),
+                        total_gross_hours=("total_hours", "sum"),
+                        avg_daily_hours  =("net_hours", "mean"),
+                        avg_utilisation_pct=("utilisation_pct", "mean"),
+                        overtime_days    =("is_overtime", "sum"),
+                    ).reset_index()
+                    grp["avg_daily_hours"]    = grp["avg_daily_hours"].round(2)
+                    grp["avg_utilisation_pct"] = grp["avg_utilisation_pct"].round(1)
+                    rows = grp.sort_values("total_net_hours", ascending=False).pipe(_clean_df).to_dict(orient="records")
+                    _dao, _src = None, "raw_tasks"
+                    logger.info("get_time_summary: aggregated from attendance detail — %d people", len(rows))
+        except Exception as e:
+            logger.warning("get_time_summary fallback: %s", e)
+
+    total_hours_all = sum(float(r.get("total_net_hours") or 0) for r in rows)
+
+    return {
+        "period":                period,
+        "days_back":             days_back,
+        "people_count":          len(rows),
+        "total_net_hours_all":   round(total_hours_all, 1),
+        "by_person":             rows,
+        "data_as_of":            _dao,
+        "data_source":           _src,
+    }
+
+
+def get_utilisation_report(
+    company_id: str,
+    days_back: int = 30,
+    min_utilisation: Optional[float] = None,
+    max_utilisation: Optional[float] = None,
+) -> dict:
+    """
+    Returns staff utilisation vs scheduled hours — who is over/under-utilised.
+    Used for: "who is underutilised?", "staff capacity", "overtime analysis",
+              "utilisation report", "who has spare capacity?", "workload balance",
+              "who is working the most overtime?", "utilisation rate".
+
+    Reads analytics.time_summary; falls back to raw.tasks.
+    """
+    sql_filters = ["company_id = :cid",
+                   "work_date >= CURRENT_DATE - INTERVAL '1 day' * :days",
+                   "scheduled_hours > 0"]
+    params: dict = {"cid": company_id, "days": days_back}
+
+    if min_utilisation is not None:
+        sql_filters.append("utilisation_pct >= :min_u")
+        params["min_u"] = min_utilisation
+    if max_utilisation is not None:
+        sql_filters.append("utilisation_pct <= :max_u")
+        params["max_u"] = max_utilisation
+
+    where = " AND ".join(sql_filters)
+    sql = f"""
+        SELECT
+            person_name,
+            enterprise_name,
+            COUNT(DISTINCT work_date)               AS days_tracked,
+            ROUND(AVG(utilisation_pct)::numeric, 1) AS avg_utilisation_pct,
+            SUM(CASE WHEN is_overtime THEN 1 ELSE 0 END) AS overtime_days,
+            SUM(net_hours)                          AS total_net_hours,
+            SUM(scheduled_hours)                    AS total_scheduled_hours
+        FROM analytics.time_summary
+        WHERE {where}
+        GROUP BY person_name, enterprise_name
+        ORDER BY avg_utilisation_pct DESC
+        LIMIT 100
+    """
+    rows, _dao, _src = _query_analytics("time_summary", sql, params, company_id)
+
+    if not rows:
+        # Tier 2: derive from get_time_summary
+        try:
+            summary = get_time_summary(company_id, days_back=days_back)
+            derived = summary.get("by_person", [])
+            if derived:
+                rows = []
+                for r in derived:
+                    u = float(r.get("avg_utilisation_pct") or 0)
+                    if min_utilisation is not None and u < min_utilisation:
+                        continue
+                    if max_utilisation is not None and u > max_utilisation:
+                        continue
+                    rows.append({
+                        "person_name":           r.get("person_name"),
+                        "enterprise_name":       r.get("enterprise_name"),
+                        "days_tracked":          r.get("days_worked"),
+                        "avg_utilisation_pct":   u,
+                        "overtime_days":         r.get("overtime_days"),
+                        "total_net_hours":       r.get("total_net_hours"),
+                        "total_scheduled_hours": None,
+                    })
+                _dao, _src = None, "derived"
+                logger.info("get_utilisation_report: derived from time_summary — %d people", len(rows))
+        except Exception as e:
+            logger.warning("get_utilisation_report fallback: %s", e)
+
+    # Classify each person
+    for r in rows:
+        u = float(r.get("avg_utilisation_pct") or 0)
+        if u >= 110:
+            r["classification"] = "overloaded"
+        elif u >= 90:
+            r["classification"] = "fully_utilised"
+        elif u >= 70:
+            r["classification"] = "well_utilised"
+        elif u >= 50:
+            r["classification"] = "under_utilised"
+        else:
+            r["classification"] = "very_under_utilised"
+
+    overloaded      = [r for r in rows if r.get("classification") == "overloaded"]
+    fully_utilised  = [r for r in rows if r.get("classification") == "fully_utilised"]
+    under_utilised  = [r for r in rows if r.get("classification") in ("under_utilised", "very_under_utilised")]
+
+    return {
+        "period_days":          days_back,
+        "people_count":         len(rows),
+        "overloaded_count":     len(overloaded),
+        "fully_utilised_count": len(fully_utilised),
+        "under_utilised_count": len(under_utilised),
+        "by_person":            rows,
+        "data_as_of":           _dao,
+        "data_source":          _src,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # TOOL DEFINITIONS — registered with Anthropic API
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -4626,6 +4909,95 @@ TOOL_DEFINITIONS = [
                 "top_n": {
                     "type": "integer",
                     "description": "How many debtors to return, ranked by outstanding amount. Default 10.",
+                },
+            },
+        },
+    },
+    # ── Time / Attendance tools ───────────────────────────────────────────────
+    {
+        "name": "get_attendance_report",
+        "description": (
+            "Returns daily clock-in/out records for the given period — one row per person per day. "
+            "Shows clock-in time, clock-out time, net hours worked, breaks, and overtime flag. "
+            "Use this for questions like: "
+            "'Who clocked in today?', 'Attendance report for last week', "
+            "'Who was late this week?', 'Show me timesheets for Mary', "
+            "'Daily attendance', 'Who worked on Monday?', "
+            "'Show clock-in times for the branch'. "
+            "Use get_time_summary for aggregated totals per person; use this for individual day records."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days_back": {
+                    "type": "integer",
+                    "description": "How many days back to return records. Default 30.",
+                },
+                "person_name": {
+                    "type": "string",
+                    "description": "Filter to a specific person by name (partial match).",
+                },
+                "enterprise_name": {
+                    "type": "string",
+                    "description": "Filter to a specific branch or enterprise (partial match).",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_time_summary",
+        "description": (
+            "Returns total hours worked per person aggregated over a week or month. "
+            "Shows days worked, total net hours, average daily hours, utilisation %, overtime days. "
+            "Use this for questions like: "
+            "'How many hours did each person work this week?', "
+            "'Who worked the most hours this month?', "
+            "'Weekly hours summary', 'Monthly timesheet totals', "
+            "'Total staff hours', 'Hours worked per employee'. "
+            "Use get_attendance_report for individual daily records."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "period": {
+                    "type": "string",
+                    "enum": ["week", "month"],
+                    "description": "Aggregation period. Default 'week'.",
+                },
+                "person_name": {
+                    "type": "string",
+                    "description": "Filter to a specific person (partial match).",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_utilisation_report",
+        "description": (
+            "Returns staff utilisation vs scheduled hours — who is over or under-utilised. "
+            "Classifies each person as: overloaded (>110%), fully_utilised (90–110%), "
+            "well_utilised (70–90%), under_utilised (50–70%), very_under_utilised (<50%). "
+            "Use this for questions like: "
+            "'Who is underutilised?', 'Staff capacity report', "
+            "'Who has spare capacity?', 'Overtime analysis', "
+            "'Who is overloaded?', 'Workload balance', "
+            "'Utilisation rate', 'Who is working overtime?'. "
+            "Reads from analytics.time_summary."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days_back": {
+                    "type": "integer",
+                    "description": "How many days of data to analyse. Default 30.",
+                },
+                "min_utilisation": {
+                    "type": "number",
+                    "description": "Only return people with avg utilisation >= this %. E.g. 110 to find only overloaded.",
+                },
+                "max_utilisation": {
+                    "type": "number",
+                    "description": "Only return people with avg utilisation <= this %. E.g. 70 to find underutilised.",
                 },
             },
         },
@@ -5951,6 +6323,10 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "save_copilot_memory":          save_copilot_memory,
         "list_copilot_memory":          list_copilot_memory,
         "delete_copilot_memory":        delete_copilot_memory,
+        # Time / Attendance tools
+        "get_attendance_report":        get_attendance_report,
+        "get_time_summary":             get_time_summary,
+        "get_utilisation_report":       get_utilisation_report,
         # Gap tools
         "get_kpi_goals":                get_kpi_goals,
         "get_anomaly_report":           get_anomaly_report,
