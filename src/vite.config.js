@@ -95,6 +95,7 @@ export default defineConfig({
       'react/jsx-dev-runtime',
       'react-dom/client',
       '@tanstack/react-query',
+      '@base44/sdk',
     ],
     // Sub-paths only — no base 'react' or 'react-dom' alias here, which
     // prevents prefix-matching from mangling 'react/jsx-dev-runtime'.
@@ -116,6 +117,7 @@ export default defineConfig({
       'react/jsx-runtime',
       'react/jsx-dev-runtime',
       'react-dom/client',
+      '@base44/sdk',
     ],
     exclude: [],
   },
