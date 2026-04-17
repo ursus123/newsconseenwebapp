@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { X, MapPin, Building2, User, Navigation, ExternalLink, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
+import { X, Building2, User, Navigation, ExternalLink, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";

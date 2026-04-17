@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Bell, BellOff, Rocket } from "lucide-react";
+import { Bell, Rocket } from "lucide-react";
 
 export default function ComingSoonModal({ app, userEmail, onClose }) {
   const storageKey = `notify_me_apps_${userEmail}`;

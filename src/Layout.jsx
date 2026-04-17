@@ -42,7 +42,6 @@ import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
 import UndoImportButton from "@/components/layout/UndoImportButton";
 import SmartImportButton from "@/components/layout/SmartImportButton";
 import EmptyDatamartButton from "@/components/layout/EmptyDatamartButton";
-import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import TenantGuard from "@/components/shared/TenantGuard";
 import NetworkBanner from "@/components/shared/NetworkBanner";

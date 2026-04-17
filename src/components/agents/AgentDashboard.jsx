@@ -8,7 +8,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Bot, Play, Loader2, CheckCircle2, AlertCircle, Clock,
+  Play, Loader2, CheckCircle2, AlertCircle, Clock,
   RefreshCw, Activity, Brain, TrendingUp, Users, Package,
   UserPlus, Shield, Globe, Network, ChevronRight, Zap,
 } from "lucide-react";

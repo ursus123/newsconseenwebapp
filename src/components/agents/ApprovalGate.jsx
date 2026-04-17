@@ -9,8 +9,8 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle, CheckCircle2, XCircle, Loader2, RefreshCw,
-  Bot, ChevronDown, ChevronUp, Clock, Shield, Zap, ExternalLink,
-  FileText, Tag,
+  ChevronDown, ChevronUp, Clock, Shield, Zap,
+  FileText,
 } from "lucide-react";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
