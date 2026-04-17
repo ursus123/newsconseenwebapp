@@ -83,7 +83,7 @@ def enrich_people_enterprise(
     ].copy()
 
     if pe_rels.empty:
-        logger.info("enrich_people_enterprise: no active person_enterprise relationships found")
+        logger.warning("enrich_people_enterprise: no active person_enterprise relationships found")
         return people_df
 
     # Normalise key columns
@@ -125,7 +125,7 @@ def enrich_people_enterprise(
                 people_df.at[idx, "primary_role"]            = match[1]
                 enriched += 1
 
-        logger.info(
+        logger.debug(
             "enrich_people_enterprise: enriched %d individual person rows with enterprise/role",
             enriched,
         )
@@ -185,19 +185,10 @@ def transform_people(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     # ----------------------------------------------------------
-    # Debug: log column names so we can verify company_id and
-    # enterprise_id are present in the Base44 response
+    # Verify key columns are present — warn only when missing so
+    # operators are alerted without flooding logs on every request.
     # ----------------------------------------------------------
-    logger.info(
-        "transform_people: raw columns from Base44: %s",
-        sorted(df.columns.tolist()),
-    )
-    if "company_id" in df.columns:
-        logger.info(
-            "transform_people: company_id present — %d non-null values",
-            df["company_id"].notna().sum(),
-        )
-    else:
+    if "company_id" not in df.columns:
         logger.warning("transform_people: company_id NOT in Base44 response")
 
     if "enterprise_id" not in df.columns:
@@ -273,7 +264,7 @@ def transform_people(df: pd.DataFrame) -> pd.DataFrame:
     )
     if unclassified.any():
         unknown_types = person_type[unclassified].value_counts().to_dict()
-        logger.info(
+        logger.warning(
             "transform_people: %d unclassified people with types: %s — "
             "add to STAFF_TYPES, PARTICIPANT_TYPES, or CONTACT_TYPES if needed",
             unclassified.sum(),
@@ -328,10 +319,15 @@ def transform_people(df: pd.DataFrame) -> pd.DataFrame:
                 "new_last_7d", "new_last_30d"]:
         summary[col] = summary[col].fillna(0).astype(int)
 
-    logger.info(
-        "transform_people: produced %d summary rows from %d raw records",
-        len(summary), len(df),
-    )
+    # ----------------------------------------------------------
+    # Coerce NaN group-key columns to None so Pydantic serialises
+    # them as null rather than raising a string_type validation error.
+    # groupby(dropna=False) preserves NaN keys as float NaN; convert
+    # them here at the source so every consumer gets clean data.
+    # ----------------------------------------------------------
+    for col in ["enterprise_id", "company_id", "person_type", "status"]:
+        if col in summary.columns:
+            summary[col] = summary[col].where(summary[col].notna(), other=None)
 
     return summary
 
