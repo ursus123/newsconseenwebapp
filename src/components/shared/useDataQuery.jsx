@@ -30,10 +30,27 @@ export function useEntityListFn(currentUser) {
 
     // Primary: filter by company_id
     // Fallback: also fetch records created by this user that may have null company_id (pre-fix records)
-    return Promise.all([
+    // allSettled so a failing filter on one leg doesn't kill the whole fetch
+    return Promise.allSettled([
       entity.filter({ company_id: currentUser.company_id }, sort),
       entity.filter({ created_by: currentUser.email }, sort),
-    ]).then(([byCompany, byCreator]) => {
+    ]).then(async ([byCompanyResult, byCreatorResult]) => {
+      const byCompany = byCompanyResult.status === "fulfilled" ? byCompanyResult.value : [];
+      const byCreator = byCreatorResult.status === "fulfilled" ? byCreatorResult.value : [];
+
+      // If both filters failed (entity may not support filtering), fall back to list + client-side filter
+      if (byCompanyResult.status === "rejected" && byCreatorResult.status === "rejected") {
+        try {
+          const all = await entity.list(sort);
+          return all.filter(r =>
+            r.company_id === currentUser.company_id ||
+            r.created_by === currentUser.email
+          );
+        } catch (_) {
+          return [];
+        }
+      }
+
       // Merge and deduplicate
       const seen = new Set();
       const merged = [...byCompany, ...byCreator].filter(r => {

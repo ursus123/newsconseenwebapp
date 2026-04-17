@@ -13,9 +13,10 @@ import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { Upload, Settings, CheckCircle, Clock, DollarSign } from "lucide-react";
+import { Upload, Settings, CheckCircle, Clock, DollarSign, BarChart2, X } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
+import ServicesAnalytics from "@/components/services/ServicesAnalytics";
 import {
   SERVICE_FIELDS, SERVICE_MAPPING_RULES, SERVICE_TEMPLATE_EXAMPLE,
   SERVICE_TEMPLATE_INSTRUCTIONS, validateService, transformService,
@@ -75,6 +76,7 @@ const FILTER_DEFS = [
 export default function Services() {
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const { data: currentUser = null } = useQuery({
@@ -180,6 +182,12 @@ export default function Services() {
         )}
       </PageHeader>
 
+      <div className="flex justify-end -mt-1 mb-2">
+        <button onClick={() => setAnalyticsOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-700 transition-all shadow-sm">
+          <BarChart2 className="w-3.5 h-3.5" /> Analytics
+        </button>
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={Settings} iconClass="bg-slate-100 text-slate-500" label="Total Services" value={services.length} />
         <StatCard icon={CheckCircle} iconClass="bg-emerald-50 text-emerald-600" label="Active" value={services.filter((s) => s.status === "active").length} />
@@ -245,6 +253,21 @@ export default function Services() {
       <DeleteAllDialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} onConfirm={handleDeleteAll} entityLabel="Services" count={services.length} />
       <ServiceForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }} onSubmit={handleSubmit} onArchive={handleArchive} initialData={editing} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name} />
+
+      {analyticsOpen && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white shadow-sm">
+            <p className="font-bold text-slate-800">Services Analytics</p>
+            <button onClick={() => setAnalyticsOpen(false)} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
+              <X className="w-5 h-5 text-slate-500" />
+            </button>
+          </div>
+          <div className="p-6">
+            <ServicesAnalytics services={services} currentUser={currentUser} />
+          </div>
+        </div>
+      )}
+
       <BulkImportDialog
         open={importOpen} onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["services"] }); qc.refetchQueries({ queryKey: ["services"] }); }}
         entityName="Services" fields={SERVICE_FIELDS} mappingRules={SERVICE_MAPPING_RULES}
