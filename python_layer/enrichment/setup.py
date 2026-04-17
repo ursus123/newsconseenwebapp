@@ -2,8 +2,12 @@
 enrichment/setup.py
 ---------------------
 DDL for the analytics enrichment tables.
-Called at startup — creates tables if they don't exist.
-All columns are nullable so partial enrichment rows load cleanly.
+Called at startup — creates tables if they don't exist, then runs column migrations
+to add any columns that were added after the initial deployment.
+
+Rule: every new column needs TWO entries here:
+  1. Inside the CREATE TABLE IF NOT EXISTS block (for brand-new deployments)
+  2. Inside _MIGRATIONS as ALTER TABLE ... ADD COLUMN IF NOT EXISTS (for live deployments)
 
 Phases covered per table:
   person_enrichment      Phase A (phone/email) + B (NPI) + C (sanctions/PEP)
@@ -359,16 +363,88 @@ _DDL = [
 ]
 
 
+# ── Column migrations ────────────────────────────────────────────────────────
+# Run after every CREATE TABLE IF NOT EXISTS.
+# Required for live deployments where the table already exists but is missing
+# columns added in later phases. Add one entry here for every new column added
+# to any table in _DDL above — otherwise live deployments crash with
+# "column does not exist" on the next ETL run.
+_MIGRATIONS = [
+    # Phase B domain_data columns (added after initial table creation)
+    "ALTER TABLE analytics.person_enrichment      ADD COLUMN IF NOT EXISTS domain_data        TEXT",
+    "ALTER TABLE analytics.person_enrichment      ADD COLUMN IF NOT EXISTS domain_enriched_by TEXT",
+    "ALTER TABLE analytics.enterprise_enrichment  ADD COLUMN IF NOT EXISTS domain_data        TEXT",
+    "ALTER TABLE analytics.enterprise_enrichment  ADD COLUMN IF NOT EXISTS domain_enriched_by TEXT",
+    "ALTER TABLE analytics.product_enrichment     ADD COLUMN IF NOT EXISTS domain_data        TEXT",
+    "ALTER TABLE analytics.product_enrichment     ADD COLUMN IF NOT EXISTS domain_enriched_by TEXT",
+
+    # Phase E columns — person
+    "ALTER TABLE analytics.person_enrichment ADD COLUMN IF NOT EXISTS spend_trend                 TEXT",
+    "ALTER TABLE analytics.person_enrichment ADD COLUMN IF NOT EXISTS days_since_last_transaction INTEGER",
+    "ALTER TABLE analytics.person_enrichment ADD COLUMN IF NOT EXISTS transaction_count_30d       INTEGER",
+    "ALTER TABLE analytics.person_enrichment ADD COLUMN IF NOT EXISTS transaction_volume_30d_usd  DOUBLE PRECISION",
+    "ALTER TABLE analytics.person_enrichment ADD COLUMN IF NOT EXISTS churn_probability           DOUBLE PRECISION",
+    "ALTER TABLE analytics.person_enrichment ADD COLUMN IF NOT EXISTS clv_segment                 TEXT",
+
+    # Phase E columns — enterprise
+    "ALTER TABLE analytics.enterprise_enrichment ADD COLUMN IF NOT EXISTS revenue_trend       TEXT",
+    "ALTER TABLE analytics.enterprise_enrichment ADD COLUMN IF NOT EXISTS payment_behavior    TEXT",
+    "ALTER TABLE analytics.enterprise_enrichment ADD COLUMN IF NOT EXISTS avg_days_to_pay     DOUBLE PRECISION",
+    "ALTER TABLE analytics.enterprise_enrichment ADD COLUMN IF NOT EXISTS relationship_count  INTEGER",
+
+    # Phase E columns — product
+    "ALTER TABLE analytics.product_enrichment ADD COLUMN IF NOT EXISTS demand_trend        TEXT",
+    "ALTER TABLE analytics.product_enrichment ADD COLUMN IF NOT EXISTS velocity_change_pct DOUBLE PRECISION",
+    "ALTER TABLE analytics.product_enrichment ADD COLUMN IF NOT EXISTS days_of_stock       INTEGER",
+    "ALTER TABLE analytics.product_enrichment ADD COLUMN IF NOT EXISTS stockout_risk       TEXT",
+    "ALTER TABLE analytics.product_enrichment ADD COLUMN IF NOT EXISTS demand_forecast_30d DOUBLE PRECISION",
+    "ALTER TABLE analytics.product_enrichment ADD COLUMN IF NOT EXISTS last_sold_days      INTEGER",
+
+    # Phase E columns — transaction
+    "ALTER TABLE analytics.transaction_enrichment ADD COLUMN IF NOT EXISTS is_recurring        BOOLEAN",
+    "ALTER TABLE analytics.transaction_enrichment ADD COLUMN IF NOT EXISTS recurrence_count    INTEGER",
+    "ALTER TABLE analytics.transaction_enrichment ADD COLUMN IF NOT EXISTS seasonal_flag       TEXT",
+    "ALTER TABLE analytics.transaction_enrichment ADD COLUMN IF NOT EXISTS days_since_prior_tx INTEGER",
+
+    # Phase C columns — enterprise
+    "ALTER TABLE analytics.enterprise_enrichment ADD COLUMN IF NOT EXISTS news_mention_count    INTEGER",
+    "ALTER TABLE analytics.enterprise_enrichment ADD COLUMN IF NOT EXISTS news_sentiment        TEXT",
+    "ALTER TABLE analytics.enterprise_enrichment ADD COLUMN IF NOT EXISTS news_avg_tone         DOUBLE PRECISION",
+    "ALTER TABLE analytics.enterprise_enrichment ADD COLUMN IF NOT EXISTS country_risk_score    DOUBLE PRECISION",
+    "ALTER TABLE analytics.enterprise_enrichment ADD COLUMN IF NOT EXISTS country_risk_label    TEXT",
+    "ALTER TABLE analytics.enterprise_enrichment ADD COLUMN IF NOT EXISTS country_governance_index DOUBLE PRECISION",
+
+    # Phase C columns — person
+    "ALTER TABLE analytics.person_enrichment ADD COLUMN IF NOT EXISTS sanctions_hit        BOOLEAN",
+    "ALTER TABLE analytics.person_enrichment ADD COLUMN IF NOT EXISTS sanctions_list       TEXT",
+    "ALTER TABLE analytics.person_enrichment ADD COLUMN IF NOT EXISTS sanctions_score      DOUBLE PRECISION",
+    "ALTER TABLE analytics.person_enrichment ADD COLUMN IF NOT EXISTS pep_flag             BOOLEAN",
+    "ALTER TABLE analytics.person_enrichment ADD COLUMN IF NOT EXISTS sanctions_checked_at TEXT",
+
+    # Phase C columns — address
+    "ALTER TABLE analytics.address_enrichment ADD COLUMN IF NOT EXISTS country_risk_score DOUBLE PRECISION",
+    "ALTER TABLE analytics.address_enrichment ADD COLUMN IF NOT EXISTS country_risk_label TEXT",
+
+    # Phase C columns — transaction (AML)
+    "ALTER TABLE analytics.transaction_enrichment ADD COLUMN IF NOT EXISTS aml_risk_score  DOUBLE PRECISION",
+    "ALTER TABLE analytics.transaction_enrichment ADD COLUMN IF NOT EXISTS aml_flags       TEXT",
+    "ALTER TABLE analytics.transaction_enrichment ADD COLUMN IF NOT EXISTS anomaly_score   DOUBLE PRECISION",
+    "ALTER TABLE analytics.transaction_enrichment ADD COLUMN IF NOT EXISTS anomaly_flag    BOOLEAN",
+]
+
+
 def ensure_enrichment_tables(engine) -> None:
     """
-    Create all 8 analytics enrichment tables if they don't exist
-    (5 Phase A/B/C + 3 Phase D: entity_scores, relationship, task).
-    Safe to call on every startup — uses CREATE TABLE IF NOT EXISTS.
+    Create all 8 analytics enrichment tables if they don't exist, then run
+    column migrations to add any columns missing from older deployments.
+    Safe to call on every startup — all operations are idempotent.
     """
     try:
         with engine.begin() as conn:
             for ddl in _DDL:
                 conn.execute(text(ddl))
-        logger.info("Startup: enrichment tables ready (analytics.*_enrichment)")
+            for migration in _MIGRATIONS:
+                conn.execute(text(migration))
+        logger.info("Startup: enrichment tables ready (analytics.*_enrichment, %d migrations applied)", len(_MIGRATIONS))
     except Exception as exc:
         logger.warning("Startup: enrichment table setup failed — %s", exc)
