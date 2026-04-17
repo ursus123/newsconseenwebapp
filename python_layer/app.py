@@ -2,6 +2,23 @@ import logging
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
+# ----------------------------------------------------------
+# Logging configuration — keep Railway log volume under control.
+# Third-party libraries (uvicorn access, sqlalchemy, apscheduler)
+# are noisy at INFO; cap them at WARNING so only actionable
+# messages reach the log stream (Railway limit: 500 logs/sec).
+# ----------------------------------------------------------
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+# Keep the application's own loggers at INFO so startup/ETL events are visible.
+logging.getLogger("app").setLevel(logging.INFO)
+logging.getLogger("etl").setLevel(logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 import pandas as pd
@@ -1555,7 +1572,19 @@ def get_people_summary(company_id: Optional[str] = Query(None)):
     summary = people.transform_people(df)
     rel_df  = relationships.extract_relationships()
     summary = people.enrich_people_enterprise(summary, rel_df)
-    return summary.where(summary.notna(), None).to_dict(orient="records")
+    # Convert all NaN/NA/NaT values to None so Pydantic can serialize the
+    # response without raising "Input should be a valid string" errors on
+    # fields like enterprise_id that arrive as float NaN from groupby.
+    import math
+    records = summary.where(summary.notna(), other=None).to_dict(orient="records")
+    cleaned = [
+        {
+            k: (None if (v is not None and isinstance(v, float) and math.isnan(v)) else v)
+            for k, v in row.items()
+        }
+        for row in records
+    ]
+    return cleaned
 
 
 @app.post("/load/people-summary", tags=["ETL"])
