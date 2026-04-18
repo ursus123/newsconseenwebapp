@@ -221,6 +221,7 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
   const [scoredCompetitors, setScoredCompetitors] = useState([]);
   const [demoData, setDemoData]                   = useState(null);
   const [demoLoading, setDemoLoading]             = useState(false);
+  const [localNewsQuery, setLocalNewsQuery]       = useState("");
 
   const companyId = currentUser?.company_id;
   const listFn = useEntityListFn(currentUser);
@@ -1128,6 +1129,18 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
         badge="World Bank"
       />
 
+      {/* Source attribution banner — always visible */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 flex items-center gap-3 text-xs">
+        <Globe className="w-4 h-4 text-blue-500 shrink-0" />
+        <div className="flex-1">
+          <span className="font-semibold text-blue-800">Data sources: </span>
+          <span className="text-blue-700">World Bank Open Data (GDP, inflation, population, trade) · ILO/World Bank (labour market indicators)</span>
+        </div>
+        <span className="text-[10px] text-blue-500 shrink-0 font-mono">
+          Country: {currentUser?.country_code || "ZA"}
+        </span>
+      </div>
+
       {!economic && (
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <Loader2 className="w-4 h-4 animate-spin" /> Loading World Bank data…
@@ -1185,23 +1198,24 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
   );
 
   // ── Tab: News ─────────────────────────────────────────────────────────────
-  const NewsTab = () => {
-    const [localQuery, setLocalQuery] = useState(newsQuery || "");
-    return (
+  // NOTE: localNewsQuery lives in parent state (not here) to avoid React hook
+  // violations — this component is defined inside the render body, so any
+  // useState call here causes React error #310 on every parent re-render.
+  const NewsTab = () => (
       <div className="space-y-4">
         <SectionHeader icon={Newspaper} title="Industry News" sub="Hacker News Algolia (free) or NewsAPI with key — filtered by your industry" />
         <div className="flex gap-2">
           <input
-            value={localQuery}
-            onChange={e => setLocalQuery(e.target.value)}
+            value={localNewsQuery}
+            onChange={e => setLocalNewsQuery(e.target.value)}
             placeholder="e.g. healthcare SME Africa"
             className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
           />
           <button
             onClick={() => {
-              setNewsQuery(localQuery);
+              setNewsQuery(localNewsQuery);
               setNews(null);
-              apiFetch(`/market/industry-news?query=${encodeURIComponent(localQuery)}&company_id=${companyId}`)
+              apiFetch(`/market/industry-news?query=${encodeURIComponent(localNewsQuery)}&company_id=${companyId}`)
                 .then(setNews).catch(() => {});
             }}
             className="flex items-center gap-1.5 bg-slate-800 text-white text-xs font-semibold px-3 py-2 rounded-xl"
@@ -1226,8 +1240,7 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
           </div>
         )}
       </div>
-    );
-  };
+  );
 
   // ── Tab: APIs Catalog ─────────────────────────────────────────────────────
   const APIsTab = () => {
@@ -1293,8 +1306,20 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
       </div>
     );
     if (!demoData) return (
-      <div className="text-xs text-slate-400 py-8 text-center">No data available.</div>
+      <div className="py-8 text-center space-y-3">
+        <p className="text-xs text-slate-400">No demographic data found.</p>
+        <p className="text-[10px] text-slate-300">Ensure People and Enterprise records exist in your organisation.</p>
+        <button
+          onClick={() => { setDemoData(null); setDemoLoading(false); }}
+          className="text-xs text-slate-600 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50"
+        >
+          Retry
+        </button>
+      </div>
     );
+
+    // Empty data guard — data loaded but nothing to show
+    const hasAnyData = demoData.totalPeople > 0 || demoData.totalEnterprises > 0;
 
     const toChartData = (obj) =>
       Object.entries(obj)
@@ -1318,6 +1343,14 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
           sub="People and Enterprise breakdown from your own data — Person + Enterprise ontology"
           badge={tierLabel}
         />
+
+        {/* Empty-data notice */}
+        {!hasAnyData && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 flex items-center justify-between gap-3">
+            <span>No people or enterprise records found via {demoData.dataSource || "any tier"}. Add records to see demographic breakdowns.</span>
+            <button onClick={() => setDemoData(null)} className="text-xs font-semibold underline shrink-0">Refresh</button>
+          </div>
+        )}
 
         {/* Summary metrics */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
