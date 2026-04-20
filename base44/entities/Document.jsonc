@@ -1,0 +1,84 @@
+{
+  "name": "Document",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Document title"
+    },
+    "document_type": {
+      "type": "string",
+      "enum": [
+        "contract",
+        "invoice",
+        "report",
+        "policy",
+        "form",
+        "permit",
+        "certificate",
+        "proposal",
+        "receipt",
+        "other"
+      ],
+      "description": "Document type"
+    },
+    "document_subtype": {
+      "type": "string",
+      "description": "Document subtype"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "active",
+        "archived",
+        "expired"
+      ],
+      "default": "draft",
+      "description": "Document status"
+    },
+    "description": {
+      "type": "string",
+      "description": "Document description"
+    },
+    "file_url": {
+      "type": "string",
+      "description": "File URL"
+    },
+    "file_type": {
+      "type": "string",
+      "description": "File type (e.g. pdf, docx)"
+    },
+    "created_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the document was created"
+    },
+    "expiry_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the document expires"
+    },
+    "enterprise_id": {
+      "type": "string",
+      "description": "ID of the related enterprise"
+    },
+    "is_signed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the document has been signed"
+    },
+    "is_confidential": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the document is confidential"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Tenant scoping"
+    }
+  },
+  "required": [
+    "title"
+  ]
+}

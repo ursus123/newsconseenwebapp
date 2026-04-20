@@ -1,0 +1,84 @@
+{
+  "name": "Channel",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Channel name"
+    },
+    "channel_type": {
+      "type": "string",
+      "enum": [
+        "whatsapp",
+        "email",
+        "sms",
+        "phone",
+        "in_person",
+        "letter",
+        "portal"
+      ],
+      "description": "Channel type"
+    },
+    "channel_subtype": {
+      "type": "string",
+      "description": "Channel subtype"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive",
+        "blocked"
+      ],
+      "default": "active",
+      "description": "Channel status"
+    },
+    "purpose": {
+      "type": "string",
+      "enum": [
+        "support",
+        "sales",
+        "operations",
+        "onboarding",
+        "feedback",
+        "other"
+      ],
+      "description": "Channel purpose"
+    },
+    "sentiment": {
+      "type": "string",
+      "enum": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral",
+      "description": "Channel sentiment"
+    },
+    "message_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Total message count"
+    },
+    "last_message_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of the last message"
+    },
+    "description": {
+      "type": "string",
+      "description": "Channel description"
+    },
+    "enterprise_id": {
+      "type": "string",
+      "description": "ID of the related enterprise"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Tenant scoping"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

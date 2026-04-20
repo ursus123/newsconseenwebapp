@@ -1,0 +1,81 @@
+{
+  "name": "Schedule",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Schedule title"
+    },
+    "schedule_type": {
+      "type": "string",
+      "enum": [
+        "recurring",
+        "one_time",
+        "seasonal",
+        "on_demand"
+      ],
+      "description": "Schedule type"
+    },
+    "schedule_subtype": {
+      "type": "string",
+      "description": "Schedule subtype"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "paused",
+        "ended"
+      ],
+      "default": "active",
+      "description": "Schedule status"
+    },
+    "frequency": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "weekly",
+        "biweekly",
+        "monthly",
+        "quarterly",
+        "annual",
+        "custom"
+      ],
+      "default": "weekly",
+      "description": "Recurrence frequency"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Schedule start date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Schedule end date"
+    },
+    "time_of_day": {
+      "type": "string",
+      "description": "Time of day (HH:MM)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Schedule description"
+    },
+    "enterprise_id": {
+      "type": "string",
+      "description": "ID of the related enterprise"
+    },
+    "assigned_person_id": {
+      "type": "string",
+      "description": "ID of the assigned person"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Tenant scoping"
+    }
+  },
+  "required": [
+    "title"
+  ]
+}

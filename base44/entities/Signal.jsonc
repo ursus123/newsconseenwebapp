@@ -1,0 +1,72 @@
+{
+  "name": "Signal",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Signal name"
+    },
+    "signal_type": {
+      "type": "string",
+      "enum": [
+        "sensor",
+        "manual",
+        "automated",
+        "survey",
+        "observation"
+      ],
+      "description": "Signal type"
+    },
+    "signal_subtype": {
+      "type": "string",
+      "description": "Signal subtype"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive",
+        "error"
+      ],
+      "default": "active",
+      "description": "Signal status"
+    },
+    "value": {
+      "type": "string",
+      "description": "Signal value"
+    },
+    "unit_of_measure": {
+      "type": "string",
+      "description": "Unit of measure for the signal value"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the signal was recorded"
+    },
+    "source": {
+      "type": "string",
+      "description": "Source of the signal"
+    },
+    "description": {
+      "type": "string",
+      "description": "Signal description"
+    },
+    "enterprise_id": {
+      "type": "string",
+      "description": "ID of the related enterprise"
+    },
+    "is_anomaly": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this signal is flagged as an anomaly"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Tenant scoping"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

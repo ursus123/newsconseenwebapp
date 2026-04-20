@@ -1,0 +1,70 @@
+{
+  "name": "Territory",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Territory name"
+    },
+    "territory_type": {
+      "type": "string",
+      "enum": [
+        "sales_zone",
+        "delivery_zone",
+        "service_area",
+        "catchment",
+        "district",
+        "region"
+      ],
+      "description": "Territory type"
+    },
+    "territory_subtype": {
+      "type": "string",
+      "description": "Territory subtype"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive"
+      ],
+      "default": "active",
+      "description": "Territory status"
+    },
+    "country": {
+      "type": "string",
+      "description": "Country"
+    },
+    "region": {
+      "type": "string",
+      "description": "Region / State"
+    },
+    "area_km2": {
+      "type": "number",
+      "description": "Area in square kilometers"
+    },
+    "population_estimate": {
+      "type": "number",
+      "description": "Estimated population"
+    },
+    "description": {
+      "type": "string",
+      "description": "Territory description"
+    },
+    "enterprise_id": {
+      "type": "string",
+      "description": "ID of the related enterprise"
+    },
+    "assigned_person_id": {
+      "type": "string",
+      "description": "ID of the assigned person"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Tenant scoping"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}
