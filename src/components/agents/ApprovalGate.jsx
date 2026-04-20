@@ -10,7 +10,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle, CheckCircle2, XCircle, Loader2, RefreshCw,
   ChevronDown, ChevronUp, Clock, Shield, Zap,
-  FileText,
+  FileText, Bot,
 } from "lucide-react";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
