@@ -35,6 +35,11 @@ import {
   Zap,
   Layers,
   Tags,
+  FileText,
+  CalendarClock,
+  Radio,
+  MessageSquare,
+  Map,
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import SetupWizard from "@/components/shared/SetupWizard";
@@ -64,6 +69,16 @@ const NAV_CONFIG = {
         { name: "Services",      icon: Wrench },
         { name: "Addresses",     icon: MapPin },
         { name: "Relationships", icon: Link2 },
+      ],
+    },
+    {
+      section: "Extended Data",
+      items: [
+        { name: "Documents",   label: "Documents",   icon: FileText },
+        { name: "Schedules",   label: "Schedules",   icon: CalendarClock },
+        { name: "Signals",     label: "Signals",     icon: Radio },
+        { name: "Channels",    label: "Channels",    icon: MessageSquare },
+        { name: "Territories", label: "Territories", icon: Map },
       ],
     },
     {
@@ -130,6 +145,16 @@ const NAV_CONFIG = {
         { name: "Services",      icon: Wrench },
         { name: "Addresses",     icon: MapPin },
         { name: "Relationships", icon: Link2 },
+      ],
+    },
+    {
+      section: "Extended Data",
+      items: [
+        { name: "Documents",   label: "Documents",   icon: FileText },
+        { name: "Schedules",   label: "Schedules",   icon: CalendarClock },
+        { name: "Signals",     label: "Signals",     icon: Radio },
+        { name: "Channels",    label: "Channels",    icon: MessageSquare },
+        { name: "Territories", label: "Territories", icon: Map },
       ],
     },
     {
