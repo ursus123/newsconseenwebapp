@@ -39,6 +39,8 @@ import {
   fetchTasksFallback,
   fetchProductsFallback,
   fetchTransactionsFallback,
+  fetchEnterprisesFallback,
+  fetchServicesFallback,
   fetchKpiSnapshot,
   fetchArAgingSummary,
   fetchConcentrationRisk,
@@ -846,6 +848,22 @@ function AdminDashboard({ user }) {
     staleTime: 0,
     refetchOnMount: "always",
   });
+  const { data: enterpriseAnalytics  = _empty }                              = useQuery({
+    queryKey: ["analytics-enterprises", companyId],
+    queryFn:  () => fetchEnterprisesFallback(companyId,
+      () => listFn(base44.entities.Enterprise)),
+    enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+  const { data: serviceAnalytics     = _empty }                              = useQuery({
+    queryKey: ["analytics-services", companyId],
+    queryFn:  () => fetchServicesFallback(companyId,
+      () => listFn(base44.entities.Service)),
+    enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
   const handleRefreshAnalytics = useCallback(() => {
     analyticsRefetchKeys.forEach(key => qc.invalidateQueries({ queryKey: [key, companyId] }));
@@ -950,6 +968,28 @@ function AdminDashboard({ user }) {
         t.due_date && new Date(t.due_date) < new Date()
       ).length;
 
+  // Enterprises
+  const isEnterpriseAnalytics = enterpriseAnalytics.source === "analytics";
+  const enterpriseSummary     = isEnterpriseAnalytics ? enterpriseAnalytics.data : [];
+  const enterpriseRecords     = !isEnterpriseAnalytics ? enterpriseAnalytics.data : enterprises;
+  const totalEnterprises   = isEnterpriseAnalytics
+    ? enterpriseSummary.reduce((s, r) => s + (r.total_enterprises || 0), 0)
+    : enterpriseRecords.length;
+  const activeEnterprises  = isEnterpriseAnalytics
+    ? enterpriseSummary.reduce((s, r) => s + (r.active_count      || 0), 0)
+    : enterpriseRecords.filter(e => e.status === "active").length;
+
+  // Services
+  const isServiceAnalytics = serviceAnalytics.source === "analytics";
+  const serviceSummary     = isServiceAnalytics ? serviceAnalytics.data : [];
+  const serviceRecords     = !isServiceAnalytics ? serviceAnalytics.data : services;
+  const totalServices   = isServiceAnalytics
+    ? serviceSummary.reduce((s, r) => s + (r.service_count       || 0), 0)
+    : serviceRecords.length;
+  const activeServices  = isServiceAnalytics
+    ? serviceSummary.reduce((s, r) => s + (r.active_service_count || 0), 0)
+    : serviceRecords.filter(s => s.status === "active").length;
+
   // ── Trend calculations (30-day vs previous 30-day from Base44 entities) ─────
   const trends = useMemo(() => {
     const isRevenue = t => REVENUE_TYPES.includes(t.transaction_type);
@@ -972,10 +1012,10 @@ function AdminDashboard({ user }) {
 
   // ── Onboarding state ────────────────────────────────────────────────────────
   const onboardingDone = {
-    enterprise:  enterprises.length > 0,
+    enterprise:  totalEnterprises > 0,
     person:      people.length > 0,
     product:     totalProducts > 0,
-    service:     services.length > 0,
+    service:     totalServices > 0,
     task:        totalTasks > 0,
     transaction: totalTransactions > 0,
     report:      false,
@@ -1085,10 +1125,10 @@ function AdminDashboard({ user }) {
         {visibleCards.has("enterprises") && (
           <StatCard
             title="Enterprises"
-            value={enterprises.length}
+            value={totalEnterprises}
             icon={Building2}
             color="purple"
-            subtitle={`${enterprises.filter(e => e.status === "active").length} active`}
+            subtitle={`${activeEnterprises} active`}
             to={createPageUrl("Enterprises")}
           />
         )}
@@ -1109,10 +1149,10 @@ function AdminDashboard({ user }) {
         {visibleCards.has("services") && (
           <StatCard
             title={t("service_plural")}
-            value={services.length}
+            value={totalServices}
             icon={Wrench}
             color="teal"
-            subtitle={`${services.filter(s => s.status === "active").length} active`}
+            subtitle={`${activeServices} active`}
             to={createPageUrl("Services")}
           />
         )}

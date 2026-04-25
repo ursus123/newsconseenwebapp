@@ -616,22 +616,22 @@ export const SERVICE_FIELDS = [
 ];
 
 export const SERVICE_MAPPING_RULES = [
-  [/service.?name|^name$|^title$/i, "name"],
-  [/^code$|short.?code|sku/i, "short_code"],
-  [/description/i, "description"],
-  [/^category$|^type$|group/i, "category"],
-  [/sub.?category/i, "sub_category"],
-  [/service.?type/i, "service_type"],
-  [/pricing.?model/i, "pricing_model"],
-  [/^price$|^rate$|^cost$/i, "price"],
-  [/billing.?unit/i, "billing_unit"],
-  [/tax/i, "tax_applicable"],
-  [/duration|time/i, "estimated_duration"],
-  [/duration.?unit/i, "duration_unit"],
-  [/sla|response.?time/i, "response_sla_hours"],
-  [/completion.?sla/i, "completion_sla_hours"],
-  [/^status$/i, "status"],
-  [/notes/i, "internal_notes"],
+  [/^service[._-]?name$|^name$|^title$/i,              "name"],
+  [/^short[._-]?code$|^code$|^sku$/i,                  "short_code"],
+  [/^description$|^summary$|^details$/i,               "description"],
+  [/^category$|^type$|^group$|^service[._-]?category$/i, "category"],
+  [/^sub[._-]?category$/i,                             "sub_category"],
+  [/^service[._-]?type$/i,                             "service_type"],
+  [/^pricing[._-]?model$/i,                            "pricing_model"],
+  [/^price$|^rate$|^cost$/i,                           "price"],
+  [/^billing[._-]?unit$/i,                             "billing_unit"],
+  [/^tax$|^tax[._-]?applicable$/i,                     "tax_applicable"],
+  [/^estimated[._-]?duration$|^duration$|^hours$/i,    "estimated_duration"],
+  [/^duration[._-]?unit$/i,                            "duration_unit"],
+  [/^response[._-]?sla[._-]?hours$|^response[._-]?sla$|^sla[._-]?hours$/i, "response_sla_hours"],
+  [/^completion[._-]?sla[._-]?hours$|^completion[._-]?sla$/i, "completion_sla_hours"],
+  [/^status$/i,                                        "status"],
+  [/^notes$|^internal[._-]?notes$|^comments$/i,        "internal_notes"],
 ];
 
 export const SERVICE_TEMPLATE_EXAMPLE = {
