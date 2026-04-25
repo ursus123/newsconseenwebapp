@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import {
   Send, Loader2, Sparkles, ThumbsUp, ThumbsDown, AlertTriangle,
   ChevronDown, ChevronUp, BarChart2, Globe, Brain, BookOpen,
@@ -504,7 +505,16 @@ const SOURCE_ICONS = {
 
 function SourcesPanel({ toolsDetail, onOpenQueryBuilder }) {
   const [open, setOpen] = useState(false);
+  const [expandedSql, setExpandedSql] = useState(null);
+  const navigate = useNavigate();
   if (!toolsDetail || toolsDetail.length === 0) return null;
+
+  const openInQueryBuilder = (sql) => {
+    if (sql) {
+      sessionStorage.setItem("qb_preload_sql", sql);
+    }
+    navigate(createPageUrl("QueryBuilder"));
+  };
 
   return (
     <div className="mt-1.5 border border-slate-100 rounded-xl overflow-hidden">
@@ -517,15 +527,15 @@ function SourcesPanel({ toolsDetail, onOpenQueryBuilder }) {
           {toolsDetail.length} data source{toolsDetail.length !== 1 ? "s" : ""} queried
         </span>
         <span className="flex items-center gap-2">
-          {open && onOpenQueryBuilder && (
+          {open && (
             <span
               role="button"
               tabIndex={0}
-              onClick={e => { e.stopPropagation(); onOpenQueryBuilder(); }}
-              onKeyDown={e => e.key === "Enter" && (e.stopPropagation(), onOpenQueryBuilder())}
+              onClick={e => { e.stopPropagation(); openInQueryBuilder(); }}
+              onKeyDown={e => e.key === "Enter" && (e.stopPropagation(), openInQueryBuilder())}
               className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-700 font-semibold"
             >
-              Verify in Query Builder <ArrowUpRight className="w-2.5 h-2.5" />
+              Query Builder <ArrowUpRight className="w-2.5 h-2.5" />
             </span>
           )}
           {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -535,69 +545,100 @@ function SourcesPanel({ toolsDetail, onOpenQueryBuilder }) {
       {open && (
         <div className="bg-white divide-y divide-slate-50">
           {toolsDetail.map((t, i) => (
-            <div key={i} className="px-3 py-2 flex items-center gap-3">
-              {/* Source indicator dot */}
-              <span className={`w-2 h-2 rounded-full shrink-0 ${
-                t.data_source === "base44_live" ? "bg-blue-400" : "bg-emerald-400"
-              }`} />
+            <div key={i} className="px-3 py-2">
+              <div className="flex items-center gap-3">
+                {/* Source indicator dot */}
+                <span className={`w-2 h-2 rounded-full shrink-0 ${
+                  t.data_source === "base44_live" ? "bg-blue-400" : "bg-emerald-400"
+                }`} />
 
-              {/* Emoji icon */}
-              <span className="text-sm shrink-0" aria-hidden="true">
-                {SOURCE_ICONS[t.tool] || "📋"}
-              </span>
+                {/* Emoji icon */}
+                <span className="text-sm shrink-0" aria-hidden="true">
+                  {SOURCE_ICONS[t.tool] || "📋"}
+                </span>
 
-              {/* Label + params */}
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-semibold text-slate-700 truncate">
-                  {TOOL_LABELS[t.tool] || t.tool?.replace(/_/g, " ")}
-                </p>
-                {t.params && Object.keys(t.params).length > 0 && (
-                  <p className="text-[9px] text-slate-400 truncate">
-                    {Object.entries(t.params).map(([k, v]) => `${k}: ${v}`).join(" · ")}
+                {/* Label + params */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold text-slate-700 truncate">
+                    {TOOL_LABELS[t.tool] || t.tool?.replace(/_/g, " ")}
                   </p>
+                  {t.params && Object.keys(t.params).length > 0 && (
+                    <p className="text-[9px] text-slate-400 truncate">
+                      {Object.entries(t.params).map(([k, v]) => `${k}: ${v}`).join(" · ")}
+                    </p>
+                  )}
+                </div>
+
+                {/* Row count */}
+                {t.row_count != null && (
+                  <span className="text-[9px] text-slate-400 shrink-0 flex items-center gap-0.5">
+                    <Database className="w-2.5 h-2.5" />
+                    {t.row_count.toLocaleString()}
+                  </span>
+                )}
+
+                {/* Source badge */}
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
+                  t.data_source === "base44_live"
+                    ? "bg-blue-50 text-blue-600"
+                    : "bg-emerald-50 text-emerald-700"
+                }`}>
+                  {t.data_source === "base44_live" ? "live" : "analytics"}
+                </span>
+
+                {/* Data age */}
+                {t.data_as_of && t.data_source !== "base44_live" && (
+                  <span className="text-[9px] text-slate-400 shrink-0 whitespace-nowrap">
+                    {t.data_as_of}
+                  </span>
+                )}
+
+                {/* View SQL toggle */}
+                {t.sql && (
+                  <button
+                    onClick={() => setExpandedSql(expandedSql === i ? null : i)}
+                    className="flex items-center gap-0.5 text-[9px] text-slate-400 hover:text-emerald-600 transition-colors shrink-0 font-medium"
+                  >
+                    <Code2 className="w-2.5 h-2.5" />
+                    SQL
+                  </button>
                 )}
               </div>
 
-              {/* Row count */}
-              {t.row_count != null && (
-                <span className="text-[9px] text-slate-400 shrink-0 flex items-center gap-0.5">
-                  <Database className="w-2.5 h-2.5" />
-                  {t.row_count.toLocaleString()}
-                </span>
-              )}
-
-              {/* Source badge */}
-              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
-                t.data_source === "base44_live"
-                  ? "bg-blue-50 text-blue-600"
-                  : "bg-emerald-50 text-emerald-700"
-              }`}>
-                {t.data_source === "base44_live" ? "live" : "analytics"}
-              </span>
-
-              {/* Data age */}
-              {t.data_as_of && t.data_source !== "base44_live" && (
-                <span className="text-[9px] text-slate-400 shrink-0 whitespace-nowrap">
-                  {t.data_as_of}
-                </span>
+              {/* Expanded SQL block */}
+              {expandedSql === i && t.sql && (
+                <div className="mt-2 ml-7">
+                  <div className="relative rounded-lg bg-slate-900 border border-slate-700 overflow-hidden">
+                    <pre className="text-[10px] text-emerald-300 font-mono px-3 py-2.5 overflow-x-auto leading-relaxed whitespace-pre">
+                      {t.sql}
+                    </pre>
+                    <div className="flex items-center justify-end gap-2 px-3 py-1.5 border-t border-slate-700 bg-slate-800/50">
+                      <span className="text-[9px] text-slate-500">Replace [company_id] with your company ID</span>
+                      <button
+                        onClick={() => openInQueryBuilder(t.sql)}
+                        className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+                      >
+                        Run in Query Builder <ArrowUpRight className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           ))}
 
           {/* Footer shortcut */}
-          {onOpenQueryBuilder && (
-            <div className="px-3 py-2 bg-slate-50 flex items-center justify-between">
-              <span className="text-[10px] text-slate-400">
-                Want to run your own query against this data?
-              </span>
-              <button
-                onClick={onOpenQueryBuilder}
-                className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors"
-              >
-                Open Query Builder <ArrowUpRight className="w-2.5 h-2.5" />
-              </button>
-            </div>
-          )}
+          <div className="px-3 py-2 bg-slate-50 flex items-center justify-between">
+            <span className="text-[10px] text-slate-400">
+              Click SQL on any source to verify the query
+            </span>
+            <button
+              onClick={() => openInQueryBuilder()}
+              className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors"
+            >
+              Open Query Builder <ArrowUpRight className="w-2.5 h-2.5" />
+            </button>
+          </div>
         </div>
       )}
     </div>

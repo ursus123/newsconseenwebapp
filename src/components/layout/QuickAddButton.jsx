@@ -62,10 +62,20 @@ export default function QuickAddButton({ currentUser }) {
   useEffect(() => {
     if (open) {
       setAnswer(null); setStatus(null); setApprovalId(null);
-      setError(null); setInput("");
+      setError(null);
       setTimeout(() => inputRef.current?.focus(), 80);
     }
   }, [open]);
+
+  // Global opener — other components call window.__openQuickAdd(prefillText)
+  useEffect(() => {
+    window.__openQuickAdd = (text = "") => {
+      setInput(text);
+      setAnswer(null); setStatus(null); setApprovalId(null); setError(null);
+      setOpen(true);
+    };
+    return () => { delete window.__openQuickAdd; };
+  }, []);
 
   const handleSend = async () => {
     const question = input.trim();

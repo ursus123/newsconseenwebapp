@@ -604,11 +604,118 @@ def _count_rows(result: dict) -> int | None:
     return None
 
 
+def _generate_display_sql(tool: str, params: dict, company_id: str) -> str | None:
+    """
+    Generate a representative, runnable SQL for each tool so operators can
+    paste it into Query Builder and verify the answer themselves.
+    Uses placeholder [company_id] so the string is safe to display.
+    """
+    cid = "[company_id]"
+    p = params  # shorthand
+
+    templates = {
+        "find_people_records": (
+            "SELECT id, first_name, last_name, person_type, status, email, phone\n"
+            f"FROM raw.people\nWHERE company_id = '{cid}'"
+            + (f"\n  AND (first_name ILIKE '%{p.get('name','%')}%' OR last_name ILIKE '%{p.get('name','%')}%')" if p.get("name") else "")
+            + (f"\n  AND person_type = '{p['person_type']}'" if p.get("person_type") else "")
+            + (f"\n  AND status = '{p['status']}'" if p.get("status") else "")
+            + f"\nLIMIT {p.get('limit', 100)}"
+        ),
+        "find_task_records": (
+            "SELECT id, title, task_type, status, assigned_to, due_date, outcome\n"
+            f"FROM raw.tasks\nWHERE company_id = '{cid}'"
+            + (f"\n  AND (assigned_to ILIKE '%{p.get('assignee_name','%')}%')" if p.get("assignee_name") else "")
+            + (f"\n  AND status = '{p['status']}'" if p.get("status") else "")
+            + ("\n  AND due_date < CURRENT_DATE\n  AND status NOT IN ('completed','done','closed','cancelled')" if p.get("overdue_only") else "")
+            + f"\nORDER BY due_date NULLS LAST\nLIMIT {p.get('limit', 20)}"
+        ),
+        "find_transaction_records": (
+            "SELECT id, description, transaction_type, amount, currency, status, transaction_date\n"
+            f"FROM raw.transactions\nWHERE company_id = '{cid}'"
+            + (f"\n  AND transaction_type = '{p['transaction_type']}'" if p.get("transaction_type") else "")
+            + (f"\n  AND status = '{p['status']}'" if p.get("status") else "")
+            + f"\nORDER BY transaction_date DESC\nLIMIT {p.get('limit', 20)}"
+        ),
+        "find_product_records": (
+            "SELECT id, name, sku, item_type, status, unit_price, currency\n"
+            f"FROM raw.products\nWHERE company_id = '{cid}'"
+            + (f"\n  AND name ILIKE '%{p.get('name','%')}%'" if p.get("name") else "")
+            + f"\nLIMIT {p.get('limit', 20)}"
+        ),
+        "find_relationship_records": (
+            "SELECT id, relationship_type, from_name, to_name, status, role\n"
+            f"FROM raw.relationships\nWHERE company_id = '{cid}'\nLIMIT 50"
+        ),
+        "find_address_records": (
+            "SELECT id, label, street, city, region, country, postal_code\n"
+            f"FROM raw.addresses\nWHERE company_id = '{cid}'\nLIMIT 50"
+        ),
+        "get_people_summary": (
+            "SELECT person_type, status, COUNT(*) AS count\n"
+            f"FROM raw.people\nWHERE company_id = '{cid}'\n"
+            "GROUP BY person_type, status\nORDER BY count DESC"
+        ),
+        "get_task_summary": (
+            "SELECT task_type, status, COUNT(*) AS count\n"
+            f"FROM raw.tasks\nWHERE company_id = '{cid}'\n"
+            "GROUP BY task_type, status\nORDER BY count DESC"
+        ),
+        "get_transaction_summary": (
+            "SELECT transaction_type,\n"
+            "  COUNT(*) AS count,\n"
+            "  SUM(amount) AS total_amount,\n"
+            "  SUM(CASE WHEN status='paid' THEN amount ELSE 0 END) AS paid_amount\n"
+            f"FROM raw.transactions\nWHERE company_id = '{cid}'\n"
+            "GROUP BY transaction_type\nORDER BY total_amount DESC"
+        ),
+        "get_overdue_invoices": (
+            "SELECT id, description, amount, currency, transaction_date, counterparty_name\n"
+            f"FROM raw.transactions\nWHERE company_id = '{cid}'\n"
+            "  AND status NOT IN ('paid','cancelled')\n"
+            "  AND transaction_date < CURRENT_DATE\nORDER BY transaction_date ASC\nLIMIT 50"
+        ),
+        "get_staff_leaderboard": (
+            "SELECT\n"
+            "  COALESCE(NULLIF(TRIM(assigned_to),''), NULLIF(TRIM(assignee_name),'')) AS person_name,\n"
+            "  COUNT(*) AS tasks_assigned_total,\n"
+            "  COUNT(CASE WHEN LOWER(status) IN ('completed','done','closed') THEN 1 END) AS tasks_completed,\n"
+            "  COUNT(CASE WHEN LOWER(status) NOT IN ('completed','done','closed','cancelled') THEN 1 END) AS tasks_open\n"
+            f"FROM raw.tasks\nWHERE company_id = '{cid}'\n"
+            "  AND (assigned_to IS NOT NULL OR assignee_name IS NOT NULL)\n"
+            f"GROUP BY 1\nORDER BY {p.get('metric','tasks_assigned_total')} DESC\nLIMIT {p.get('top_n',10)}"
+        ),
+        "get_enterprise_overview": (
+            "SELECT enterprise_name, enterprise_type, status, city, country\n"
+            f"FROM raw.enterprises\nWHERE company_id = '{cid}'\nORDER BY enterprise_name\nLIMIT 50"
+        ),
+        "get_product_summary": (
+            "SELECT item_type, status, COUNT(*) AS count, AVG(unit_price) AS avg_price\n"
+            f"FROM raw.products\nWHERE company_id = '{cid}'\n"
+            "GROUP BY item_type, status\nORDER BY count DESC"
+        ),
+        "get_top_clients": (
+            "SELECT first_name, last_name, status, person_type\n"
+            f"FROM raw.people\nWHERE company_id = '{cid}'\n"
+            "  AND person_type = 'client'\nORDER BY created_date DESC\n"
+            f"LIMIT {p.get('top_n',10)}"
+        ),
+        "get_top_debtors": (
+            "SELECT counterparty_name, SUM(amount) AS total_owed\n"
+            f"FROM raw.transactions\nWHERE company_id = '{cid}'\n"
+            "  AND status NOT IN ('paid','cancelled')\n"
+            "GROUP BY counterparty_name\nORDER BY total_owed DESC\nLIMIT 10"
+        ),
+    }
+    return templates.get(tool)
+
+
 def _build_tools_detail(collected: list) -> list:
     """
     Build a rich metadata list per tool call for the transparency panel.
     Excludes web_search and search_public_data (those are handled by citations).
     Strips company_id from visible params — it's never useful to show the operator.
+    Includes a display SQL that operators can paste into Query Builder to verify.
     """
     detail = []
     for c in collected:
@@ -616,6 +723,7 @@ def _build_tools_detail(collected: list) -> list:
         if tool in ("web_search", "search_public_data"):
             continue
         params = {k: v for k, v in c.get("input", {}).items() if k != "company_id"}
+        company_id = c.get("input", {}).get("company_id", "")
         result = c.get("result", {})
         detail.append({
             "tool":        tool,
@@ -623,6 +731,7 @@ def _build_tools_detail(collected: list) -> list:
             "data_as_of":  result.get("data_as_of"),
             "data_source": result.get("data_source"),
             "row_count":   _count_rows(result),
+            "sql":         _generate_display_sql(tool, params, company_id),
         })
     return detail
 

@@ -117,7 +117,7 @@ function SectionHeader({ icon: Icon, title, sub, badge }) {
 }
 
 // ── ML Run button + result panel ─────────────────────────────────────────────
-function MLPanel({ title, description, endpoint, body, onResult, resultRenderer }) {
+function MLPanel({ title, description, endpoint, body, onResult, resultRenderer, actionPrompt }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult]   = useState(null);
   const [error, setError]     = useState(null);
@@ -139,6 +139,15 @@ function MLPanel({ title, description, endpoint, body, onResult, resultRenderer 
     }
   }
 
+  const handleAct = () => {
+    const prompt = actionPrompt
+      ? (typeof actionPrompt === "function" ? actionPrompt(result) : actionPrompt)
+      : `Based on the ${title} analysis, I want to take action on these findings.`;
+    if (typeof window.__openQuickAdd === "function") {
+      window.__openQuickAdd(prompt);
+    }
+  };
+
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4">
       <div className="flex items-start justify-between mb-3">
@@ -146,14 +155,25 @@ function MLPanel({ title, description, endpoint, body, onResult, resultRenderer 
           <p className="text-sm font-bold text-slate-800">{title}</p>
           <p className="text-xs text-slate-500 mt-0.5">{description}</p>
         </div>
-        <button
-          onClick={run}
-          disabled={loading}
-          className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 ml-3 disabled:opacity-50"
-        >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-          Run
-        </button>
+        <div className="flex items-center gap-2 ml-3">
+          {result && (
+            <button
+              onClick={handleAct}
+              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 transition-colors"
+              title="Act on this insight via AI"
+            >
+              <Zap className="w-3.5 h-3.5" /> Act
+            </button>
+          )}
+          <button
+            onClick={run}
+            disabled={loading}
+            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 disabled:opacity-50 transition-colors"
+          >
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+            Run
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -814,6 +834,12 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
           description="KMeans clustering of your clients by tenure, revenue, and activity (Person ontology)"
           endpoint="/market/ml/segment"
           body={{ company_id: companyId, options: { object_type: "Person", n_clusters: 3, research_mode: researchMode } }}
+          actionPrompt={r => {
+            const seg = r?.segment_summary?.[0];
+            return seg
+              ? `Create a follow-up task for the ${seg.segment} client segment (${seg.group_count} groups, LTV: ${seg.estimated_ltv || "unknown"}). Focus on retention and upsell opportunities.`
+              : "Create follow-up tasks for each client segment identified in the customer segmentation analysis.";
+          }}
           resultRenderer={r => r.segments?.length ? (
             <div className="mt-3 space-y-2">
               <p className="text-[10px] font-bold text-slate-500 uppercase">Segment Summary</p>
@@ -879,6 +905,13 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
           description="Linear regression forecast of next 3 months' revenue (Transaction ontology)"
           endpoint="/market/ml/demand-forecast"
           body={{ company_id: companyId, options: {} }}
+          actionPrompt={r => {
+            const months = r?.forecast || [];
+            const next = months[0];
+            return next
+              ? `Revenue forecast shows ${r?.trend || "unknown"} trend. Next month predicted: $${next.predicted_amount?.toLocaleString() || "—"}. Create a sales target task to hit this forecast.`
+              : "Create a revenue target task based on the demand forecast analysis.";
+          }}
           resultRenderer={r => r.forecast?.length ? (
             <div className="mt-3 space-y-2">
               <div className="flex items-center gap-2">
@@ -905,6 +938,9 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
           description="Heuristic from enterprise presence, client engagement, and OSM visibility"
           endpoint="/market/ml/brand-awareness"
           body={{ company_id: companyId, options: { enterprise_name: myEnterprises[0]?.enterprise_name || "" } }}
+          actionPrompt={r => r?.recommendation
+            ? `Brand awareness score is ${r.brand_score}/100 (${r.level}). ${r.recommendation} Create a task to act on this recommendation.`
+            : "Create a brand improvement task based on the brand awareness analysis."}
           resultRenderer={r => r.brand_score != null ? (
             <div className="mt-3 space-y-2">
               <div className="flex items-center gap-3">
@@ -961,6 +997,12 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
           description="Compare staff headcount (Person) vs task load (Task) per enterprise"
           endpoint="/market/ml/staffing-gap"
           body={{ company_id: companyId, options: {} }}
+          actionPrompt={r => {
+            const understaffed = (r?.gaps || []).filter(g => g.staffing_status === "understaffed");
+            return understaffed.length > 0
+              ? `Staffing gap found: ${understaffed.length} understaffed enterprise(s). Create a hiring task or reassign staff to address the shortfall.`
+              : "Review staffing levels and create tasks to address any gaps identified.";
+          }}
           resultRenderer={r => r.gaps?.length ? (
             <div className="mt-3 space-y-2">
               <div className="grid grid-cols-4 gap-2 text-xs text-center">

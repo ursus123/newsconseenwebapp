@@ -465,7 +465,16 @@ export default function QueryBuilder() {
   }, []);
 
   // Load SQL from Reports page "Edit in QueryBuilder" action
+  // or from Copilot "Run in Query Builder" (qb_preload_sql)
   useEffect(() => {
+    const preloadSql = sessionStorage.getItem("qb_preload_sql");
+    if (preloadSql) {
+      setSql(preloadSql);
+      setMidTab("script");
+      setMessage("✅ Copilot query loaded — replace [company_id] before running");
+      sessionStorage.removeItem("qb_preload_sql");
+      return;
+    }
     const savedSql = sessionStorage.getItem("qb_load_sql");
     const savedTitle = sessionStorage.getItem("qb_load_title");
     if (savedSql) {
