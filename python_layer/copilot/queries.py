@@ -5374,11 +5374,15 @@ TOOL_DEFINITIONS = [
     {
         "name": "get_staff_leaderboard",
         "description": (
-            "Returns people/staff ranked by a performance metric. "
-            "Use for questions like: 'Who are my top performers?', 'Which staff complete the most tasks?', "
-            "'People with the most tasks', 'Who has the most tasks assigned?', 'Who is busiest?', "
-            "'Task workload by person', 'Most active people', "
-            "'SLA performance', 'Staff efficiency', 'Team performance report', 'Workload distribution'."
+            "Returns people ranked by task workload or performance. "
+            "ALWAYS use this tool for any question asking who has the most tasks, who is busiest, "
+            "or who is assigned the most work — set metric='tasks_assigned_total'. "
+            "Also use for: 'Who are my top performers?', 'Name the person with the most tasks', "
+            "'Which person has the highest workload?', 'Who has the most overdue tasks?', "
+            "'Task workload by person', 'Staff efficiency', 'Team performance report', "
+            "'Completion rates by person', 'Who completes the most tasks?', 'Workload distribution'. "
+            "Has three-tier fallback: analytics table → raw tasks GROUP BY → Base44 live groupby. "
+            "Always returns actual names, never just counts without names."
         ),
         "input_schema": {
             "type": "object",
@@ -5389,8 +5393,10 @@ TOOL_DEFINITIONS = [
                              "on_time_rate_pct", "workload_score", "sla_breach_rate_pct"],
                     "description": (
                         "Metric to rank by. "
-                        "Use 'tasks_assigned_total' for 'most tasks' or 'busiest person' questions. "
-                        "Default: completion_rate_pct."
+                        "ALWAYS use 'tasks_assigned_total' when the question is about who has the most tasks, "
+                        "who is busiest, or who has the highest workload. "
+                        "Use 'completion_rate_pct' for top performers. "
+                        "Use 'tasks_overdue' or 'sla_breach_rate_pct' for worst performers / most overdue."
                     ),
                 },
                 "top_n": {"type": "integer", "description": "Number of people to return. Default 10."},
@@ -6298,10 +6304,11 @@ def get_top_clients(company_id: str, top_n: int = 10, segment: str = None) -> di
 
 def get_staff_leaderboard(company_id: str, metric: str = "completion_rate_pct", top_n: int = 10) -> dict:
     """
-    Returns staff ranked by a performance metric.
-    Available metrics: completion_rate_pct, tasks_completed_30d, on_time_rate_pct,
-                       workload_score, sla_breach_rate_pct.
-    Used for: "who are my top performers?", "which staff complete the most tasks?",
+    Returns staff/people ranked by a task performance metric.
+    Available metrics: tasks_assigned_total, completion_rate_pct, tasks_completed_30d,
+                       on_time_rate_pct, workload_score, sla_breach_rate_pct.
+    Used for: "who has the most tasks?", "who is the busiest?", "name the person with the most tasks",
+              "who are my top performers?", "which staff complete the most?",
               "SLA performance", "staff efficiency", "team performance report",
               "who has the most overdue tasks?", "workload distribution".
     """
@@ -6310,11 +6317,12 @@ def get_staff_leaderboard(company_id: str, metric: str = "completion_rate_pct", 
         "workload_score", "sla_breach_rate_pct", "tasks_assigned_total",
     }
     if metric not in valid_metrics:
-        metric = "completion_rate_pct"
+        metric = "tasks_assigned_total"
 
-    asc = metric == "sla_breach_rate_pct"  # lower is better for SLA breaches
+    asc = metric == "sla_breach_rate_pct"
     order = "ASC" if asc else "DESC"
 
+    # Tier 1 — analytics.staff_performance (pre-aggregated)
     sql = f"""
         SELECT person_name, person_type, enterprise,
                tasks_assigned_total, tasks_completed_total, tasks_open, tasks_overdue,
@@ -6329,17 +6337,72 @@ def get_staff_leaderboard(company_id: str, metric: str = "completion_rate_pct", 
     if rows:
         return {"staff": rows, "count": len(rows), "ranked_by": metric,
                 "data_as_of": data_as_of, "source": source}
+
+    # Tier 2 — raw.tasks GROUP BY assigned_to (works even without ETL)
     try:
-        from etl.staff_performance import transform_staff_performance
-        df = transform_staff_performance(_b44_people(company_id), _b44_tasks(company_id), _pd.DataFrame())
-        if not df.empty:
-            df = df[df["company_id"] == company_id].sort_values(metric, ascending=asc).head(top_n)
-            return {"staff": df.where(df.notna(), None).pipe(_clean_df).to_dict(orient="records"),
-                    "count": len(df), "ranked_by": metric,
-                    "data_as_of": "Base44 live", "source": "base44_live"}
+        engine = get_engine_safe()
+        if engine:
+            from sqlalchemy import text as _text2
+            raw_sql = """
+                SELECT
+                    COALESCE(NULLIF(TRIM(assigned_to), ''), NULLIF(TRIM(assignee_name), ''), 'Unassigned') AS person_name,
+                    COUNT(*)                                                                     AS tasks_assigned_total,
+                    COUNT(CASE WHEN LOWER(status) IN ('completed','done','closed') THEN 1 END)  AS tasks_completed_total,
+                    COUNT(CASE WHEN LOWER(status) NOT IN ('completed','done','closed','cancelled') THEN 1 END) AS tasks_open,
+                    COUNT(CASE WHEN due_date < CURRENT_DATE
+                                AND LOWER(status) NOT IN ('completed','done','closed','cancelled')
+                               THEN 1 END)                                                      AS tasks_overdue,
+                    ROUND(
+                        100.0 * COUNT(CASE WHEN LOWER(status) IN ('completed','done','closed') THEN 1 END)
+                        / NULLIF(COUNT(*), 0), 1
+                    )                                                                            AS completion_rate_pct
+                FROM raw.tasks
+                WHERE company_id = :cid
+                  AND (assigned_to IS NOT NULL OR assignee_name IS NOT NULL)
+                GROUP BY 1
+                ORDER BY tasks_assigned_total DESC
+                LIMIT :n
+            """
+            with engine.connect() as conn:
+                result = conn.execute(_text2(raw_sql), {"cid": company_id, "n": top_n})
+                keys = list(result.keys())
+                rows = [dict(zip(keys, r)) for r in result.fetchall()]
+            if rows:
+                # re-sort by requested metric if present
+                if metric in rows[0]:
+                    rows.sort(key=lambda r: (r.get(metric) or 0), reverse=not asc)
+                return {"staff": rows, "count": len(rows), "ranked_by": metric,
+                        "data_as_of": "raw tasks", "source": "raw"}
     except Exception as e:
-        logger.warning("get_staff_leaderboard fallback: %s", e)
-    return {"staff": [], "count": 0, "note": "Run POST /load/staff-performance to populate this table."}
+        logger.warning("get_staff_leaderboard raw fallback: %s", e)
+
+    # Tier 3 — Base44 live tasks, pandas groupby
+    try:
+        df = _b44_tasks(company_id)
+        if not df.empty:
+            name_col = next((c for c in ("assigned_to", "assignee_name") if c in df.columns), None)
+            if name_col:
+                grp = df[df[name_col].notna() & (df[name_col].str.strip() != "")].copy()
+                grp["_name"] = grp[name_col].str.strip()
+                agg = grp.groupby("_name").agg(
+                    tasks_assigned_total=("_name", "count"),
+                    tasks_completed_total=("status", lambda s: s.str.lower().isin(["completed", "done", "closed"]).sum()),
+                    tasks_open=("status", lambda s: (~s.str.lower().isin(["completed", "done", "closed", "cancelled"])).sum()),
+                ).reset_index().rename(columns={"_name": "person_name"})
+                agg["completion_rate_pct"] = (
+                    agg["tasks_completed_total"] / agg["tasks_assigned_total"].replace(0, _pd.NA) * 100
+                ).round(1)
+                sort_col = "tasks_assigned_total" if metric not in agg.columns else metric
+                agg = agg.sort_values(sort_col, ascending=asc).head(top_n)
+                rows = agg.where(agg.notna(), None).to_dict(orient="records")
+                if rows:
+                    return {"staff": rows, "count": len(rows), "ranked_by": metric,
+                            "data_as_of": "Base44 live", "source": "base44_live"}
+    except Exception as e:
+        logger.warning("get_staff_leaderboard Base44 fallback: %s", e)
+
+    return {"staff": [], "count": 0, "ranked_by": metric,
+            "note": "No task assignment data found."}
 
 
 def get_ar_report(company_id: str, bucket: str = None) -> dict:
