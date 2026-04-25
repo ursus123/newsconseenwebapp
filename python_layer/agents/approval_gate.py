@@ -125,6 +125,9 @@ ACTION_RISK_MAP = {
     "create_signal":        RiskLevel.NOTIFY,
     "create_channel":       RiskLevel.NOTIFY,
 
+    # Copilot → Agent invocation — requires operator confirmation before agent runs
+    "invoke_agent":         RiskLevel.APPROVE,
+
     # Critical — always requires explicit approval, never auto
     "delete_record":        RiskLevel.CRITICAL,
     "bulk_delete":          RiskLevel.CRITICAL,

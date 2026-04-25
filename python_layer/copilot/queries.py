@@ -2941,6 +2941,156 @@ def request_action(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# AGENT INVOCATION — copilot triggers an agent through the Orchestrator
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_VALID_AGENTS = {
+    "operations", "revenue", "retention", "inventory",
+    "onboarding", "compliance", "market_research", "network",
+}
+
+_RECENT_RUN_WINDOW_SECONDS = 300  # deduplicate: don't re-run agent within 5 minutes
+
+
+def invoke_agent(
+    company_id: str,
+    agent_name: str,
+    intent: str,
+    trigger: str = "copilot",
+) -> dict:
+    """
+    Ask an autonomous agent to run on behalf of this operator.
+    Routes through the Approval Gate — the invocation itself is queued as
+    a pending action so the operator must confirm before the agent executes.
+
+    Returns the approval status and approval_id if queued, or
+    the agent result if it was auto-approved (not expected for invoke_agent).
+    """
+    if agent_name not in _VALID_AGENTS:
+        return {
+            "error": f"Unknown agent '{agent_name}'.",
+            "valid_agents": sorted(_VALID_AGENTS),
+        }
+
+    from database import get_engine_safe
+    from sqlalchemy import text as _text
+
+    engine = get_engine_safe()
+    if not engine:
+        return {
+            "status":  "unavailable",
+            "message": "Database unavailable — agent cannot be queued.",
+        }
+
+    # Deduplicate: don't trigger the same agent within the recent-run window
+    try:
+        with engine.connect() as conn:
+            recent = conn.execute(_text("""
+                SELECT id FROM analytics.agent_runs
+                WHERE company_id = :cid
+                  AND agent_name  = :agent
+                  AND started_at  >= NOW() - INTERVAL '5 minutes'
+                  AND status IN ('running', 'complete')
+                LIMIT 1
+            """), {"cid": company_id, "agent": agent_name}).fetchone()
+        if recent:
+            return {
+                "status":  "skipped",
+                "message": f"The {agent_name} agent ran very recently (within 5 minutes). "
+                           f"Its latest results are already reflected in the data. "
+                           f"Use get_agent_status to see what it found.",
+            }
+    except Exception:
+        pass  # if dedup check fails, proceed anyway
+
+    try:
+        from agents.approval_gate import submit_action
+        result = submit_action(
+            engine=engine,
+            company_id=company_id,
+            agent_name="copilot",
+            action_type="invoke_agent",
+            action_label=f"Run {agent_name} agent: {intent[:120]}",
+            action_payload={
+                "agent_name": agent_name,
+                "intent":     intent,
+                "trigger":    trigger,
+                "source":     "copilot",
+            },
+            reasoning=intent,
+        )
+
+        status = result.get("status")
+        approval_id = result.get("approval_id")
+
+        if status == "pending":
+            msg = (
+                f"I've requested that the **{agent_name}** agent run for your organisation. "
+                f"This is a high-risk action and requires your approval before it executes. "
+                f"Please go to the **Agents panel → Pending Approvals** to approve it."
+            )
+        elif status == "executed":
+            msg = f"The {agent_name} agent has been triggered and is running."
+        else:
+            msg = f"Request submitted with status: {status}."
+
+        return {
+            "status":      status,
+            "approval_id": approval_id,
+            "agent_name":  agent_name,
+            "message":     msg,
+        }
+    except Exception as e:
+        logger.warning("invoke_agent failed: %s", e)
+        return {"status": "error", "error": str(e)}
+
+
+def get_agent_status(company_id: str, agent_name: Optional[str] = None) -> dict:
+    """
+    Show the operator what autonomous agents have done recently and what's
+    pending their approval.  Reads analytics.agent_runs and analytics.agent_approvals.
+    """
+    from database import get_engine_safe
+    from agents.approval_gate import get_recent_runs, get_pending, get_actions_this_week
+
+    engine = get_engine_safe()
+    if not engine:
+        return {
+            "recent_runs":       [],
+            "pending_approvals": [],
+            "actions_this_week": {"total": 0, "by_agent": {}},
+            "message":           "Database unavailable — agent status cannot be retrieved.",
+        }
+
+    try:
+        runs    = get_recent_runs(engine, company_id, limit=10)
+        pending = get_pending(engine, company_id)
+        week    = get_actions_this_week(engine, company_id)
+
+        if agent_name:
+            runs    = [r for r in runs    if r.get("agent_name") == agent_name]
+            pending = [p for p in pending if p.get("agent_name") == agent_name]
+
+        # Serialise datetimes
+        for r in runs:
+            for k in ("started_at", "finished_at"):
+                if r.get(k):
+                    r[k] = str(r[k])
+        for p in pending:
+            if p.get("created_at"):
+                p["created_at"] = str(p["created_at"])
+
+        return {
+            "recent_runs":       runs,
+            "pending_approvals": pending,
+            "actions_this_week": week,
+        }
+    except Exception as e:
+        logger.warning("get_agent_status failed: %s", e)
+        return {"error": str(e), "recent_runs": [], "pending_approvals": []}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # COPILOT PERSISTENT MEMORY — per-company key-value store (analytics.copilot_memory)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -4703,6 +4853,65 @@ TOOL_DEFINITIONS = [
                 "reasoning": {
                     "type": "string",
                     "description": "Why this action is being requested — shown to operator in the approval panel.",
+                },
+            },
+        },
+    },
+    {
+        "name": "invoke_agent",
+        "description": (
+            "Ask an autonomous agent to run for this operator. "
+            "Agents analyse data and take actions automatically (with approval for high-risk steps). "
+            "Use this when the operator says things like: "
+            "'Run the operations agent', 'Ask the revenue agent to check our pipeline', "
+            "'Get the retention agent to look at churn', 'Trigger market research', "
+            "'Analyse our inventory', 'Check compliance'. "
+            "Available agents: operations (task/workflow health), revenue (pipeline, invoices), "
+            "retention (churn, at-risk people), inventory (stock levels, shortages), "
+            "onboarding (new record setup), compliance (policy flags), "
+            "market_research (sector intelligence), network (cross-branch performance). "
+            "The invocation goes to the Approval Gate — the operator must confirm in the Agents panel "
+            "before the agent actually runs. Always tell the operator this."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["agent_name", "intent"],
+            "properties": {
+                "agent_name": {
+                    "type": "string",
+                    "enum": [
+                        "operations", "revenue", "retention", "inventory",
+                        "onboarding", "compliance", "market_research", "network",
+                    ],
+                    "description": "Which autonomous agent to invoke.",
+                },
+                "intent": {
+                    "type": "string",
+                    "description": "Why you are triggering this agent — shown to operator in the approval panel. E.g. 'Operator asked for a revenue pipeline review'.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_agent_status",
+        "description": (
+            "Check what the autonomous agents have done recently and what actions are pending approval. "
+            "Use this when the operator asks: "
+            "'What have the agents been doing?', 'Any pending approvals?', "
+            "'Did the revenue agent run?', 'Show me agent activity', "
+            "'What actions need my approval?', 'What did the agents find?'. "
+            "Returns recent runs (summary, status, actions taken) and pending approval requests."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "agent_name": {
+                    "type": "string",
+                    "enum": [
+                        "operations", "revenue", "retention", "inventory",
+                        "onboarding", "compliance", "market_research", "network",
+                    ],
+                    "description": "Filter to a specific agent. Leave null to see all agents.",
                 },
             },
         },
@@ -6785,6 +6994,9 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         # Copilot write-back — single record + bulk import
         "create_record":                create_record,
         "import_records":               import_records,
+        # Agent invocation — triggers an autonomous agent through the Orchestrator
+        "invoke_agent":                 invoke_agent,
+        "get_agent_status":             get_agent_status,
     }
 
     fn = dispatch.get(tool_name)

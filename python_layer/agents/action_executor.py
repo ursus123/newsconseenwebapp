@@ -235,6 +235,30 @@ def _exec_trigger_etl(company_id: str, inputs: dict) -> dict:
     return {"entity_type": None, "entity_id": None, "triggered": True, "entity": entity}
 
 
+def _exec_invoke_agent(company_id: str, inputs: dict) -> dict:
+    """Execute an approved copilot → agent invocation via the Orchestrator."""
+    agent_name = inputs.get("agent_name", "")
+    trigger    = inputs.get("trigger", "copilot")
+    intent     = inputs.get("intent", "")
+
+    if not agent_name:
+        return {"error": "agent_name not provided in payload", "executed": False}
+
+    try:
+        from agents.orchestrator import run_agent
+        from database import get_engine_safe
+        engine = get_engine_safe()
+        result = run_agent(agent_name, company_id, trigger, engine)
+        return {
+            "entity_type": "agent",
+            "entity_id":   agent_name,
+            "agent_result": result,
+        }
+    except Exception as e:
+        logger.warning("_exec_invoke_agent(%s): %s", agent_name, e)
+        return {"error": str(e), "agent_name": agent_name}
+
+
 def _exec_create_person(company_id: str, inputs: dict) -> dict:
     url = getattr(settings, "base44_people_url", None)
     if not url:
@@ -515,6 +539,8 @@ _HANDLERS = {
     "send_email":            lambda cid, inp: _exec_send_message(cid, inp, "email"),
     "internal_alert":        lambda cid, inp: _exec_send_message(cid, inp, "internal_alert"),
     "trigger_etl":           _exec_trigger_etl,
+    # Copilot → Orchestrator invocation (approved by operator)
+    "invoke_agent":          _exec_invoke_agent,
 }
 
 
