@@ -186,42 +186,28 @@ def _filter_by_company(df: "_pd.DataFrame", company_id: str) -> "_pd.DataFrame":
     """
     Filter a DataFrame to rows matching company_id.
 
-    Handles two common situations in new deployments:
-      1. Records created before onboarding completed → company_id is null/empty.
-         These are included alongside exact matches so the operator can see
-         their data immediately without needing an ETL run.
-      2. company_id is falsy (unauthenticated/test) → return all rows.
+    Strict tenant isolation — only returns rows whose company_id matches
+    exactly. No fallback to unassigned/null records; those belong to no
+    verified tenant and must never be shown to another operator.
 
-    For true multi-tenant isolation, ETL should be run so queries hit
-    analytics tables instead of this fallback.
+    Normalises both sides to stripped strings before comparison so that
+    int/str type mismatches and trailing whitespace from Base44 do not
+    cause silent empty results that previously triggered tenant bleed.
     """
     if not company_id or "company_id" not in df.columns:
-        return df.copy()
+        return _pd.DataFrame(columns=df.columns)
 
-    exact = df[df["company_id"] == company_id]
+    cid = str(company_id).strip()
+    normalised = df["company_id"].astype(str).str.strip()
+    exact = df[normalised == cid]
 
     if not exact.empty:
         return exact.copy()
 
-    # No exact matches — include records with null/empty company_id.
-    # These are "unclaimed" records created before company_id was assigned
-    # (e.g. records added before onboarding was completed).
-    unassigned = df[df["company_id"].isna() | (df["company_id"] == "")]
-    if not unassigned.empty:
-        logger.warning(
-            "_filter_by_company: 0 rows matched company_id=%s; "
-            "returning %d unassigned records (company_id is null). "
-            "Run POST /cron/etl-all and ensure records are saved with company_id set.",
-            company_id, len(unassigned),
-        )
-        return unassigned.copy()
-
-    # No records at all for this company
     logger.warning(
-        "_filter_by_company: 0 rows matched company_id=%s and no unassigned rows either. "
-        "Total rows in fetched df: %d. "
-        "Ensure BASE44_API_KEY is valid and records are saved with company_id=%s.",
-        company_id, len(df), company_id,
+        "_filter_by_company: 0 rows matched company_id=%s (total rows in extract: %d). "
+        "Ensure records are saved with company_id set and run POST /cron/etl-all.",
+        company_id, len(df),
     )
     return _pd.DataFrame(columns=df.columns)
 
@@ -4229,6 +4215,148 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "create_record",
+        "description": (
+            "Create a single record in the system from a conversational request. "
+            "Use when the user says 'add a person called X', 'create a document called Y', "
+            "'add a new schedule for weekly meetings', 'record a signal reading of 22.5°C'. "
+            "Low-risk entities (document, schedule, territory, signal, channel) execute immediately. "
+            "High-risk entities (person, enterprise, product, transaction) go to the approval queue "
+            "in the Agents panel for operator review. Tasks are always auto-created. "
+            "Always confirm back to the user what was submitted and whether it needs approval."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["entity_type", "fields"],
+            "properties": {
+                "entity_type": {
+                    "type": "string",
+                    "enum": ["person", "enterprise", "product", "task", "transaction",
+                             "document", "schedule", "territory", "signal", "channel"],
+                    "description": "The type of entity to create.",
+                },
+                "fields": {
+                    "type": "object",
+                    "description": (
+                        "All field values for the new record. Required fields per entity: "
+                        "person→full_name, person_type; enterprise→name, enterprise_type; "
+                        "product→name, item_type; task→title; transaction→transaction_type, amount; "
+                        "document→title, document_type; schedule→title, schedule_type; "
+                        "territory→name, territory_type; signal→name, signal_type, value; "
+                        "channel→name, channel_type."
+                    ),
+                },
+                "reasoning": {
+                    "type": "string",
+                    "description": "Why this record is being created. Shown to operator in approval panel.",
+                },
+            },
+        },
+    },
+    {
+        "name": "import_records",
+        "description": (
+            "Bulk import multiple records of any entity type. "
+            "Use when the user provides a list of items to add: "
+            "'add these 5 staff members: John, Jane, Bob…', "
+            "'import these territories from my spreadsheet', "
+            "'create documents for all these contracts'. "
+            "Always goes through the approval queue — operator reviews the full list "
+            "before anything is written. Max 200 records per call. "
+            "After submitting, tell the user to check the Agents panel to approve."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["entity_type", "records"],
+            "properties": {
+                "entity_type": {
+                    "type": "string",
+                    "enum": ["person", "enterprise", "product", "task", "transaction",
+                             "document", "schedule", "territory", "signal", "channel"],
+                    "description": "The entity type for all records in this batch.",
+                },
+                "records": {
+                    "type": "array",
+                    "description": "List of record objects. Each object must have the required fields for the entity_type.",
+                    "items": {"type": "object"},
+                },
+                "reasoning": {
+                    "type": "string",
+                    "description": "Why these records are being imported. Shown in the approval panel.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_document_summary",
+        "description": "Get a breakdown of Document records — counts by type (contract, invoice, policy, report, permit), status (active, draft, expired), and how many are signed. Use for 'how many contracts', 'document library', 'expired documents', 'unsigned agreements'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "document_type": {
+                    "type": "string",
+                    "description": "Filter by document type e.g. 'contract', 'invoice', 'policy'. Leave null for all types.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_schedule_summary",
+        "description": "Get a breakdown of Schedule records — recurring patterns that generate Tasks. Shows counts by frequency (daily, weekly, monthly), type, and status. Use for 'how many schedules', 'active recurring tasks', 'paused schedules', 'schedule coverage'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "frequency": {
+                    "type": "string",
+                    "enum": ["daily", "weekly", "biweekly", "monthly", "quarterly", "annual"],
+                    "description": "Filter by recurrence frequency. Leave null for all.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_signal_summary",
+        "description": "Get a breakdown of Signal records — sensor readings, observations, and manual measurements. Shows counts, anomaly rates, and average values by signal type and unit. Use for 'sensor readings', 'anomalies detected', 'telemetry', 'measurement trends'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "signal_type": {
+                    "type": "string",
+                    "enum": ["sensor", "manual", "automated", "survey", "observation"],
+                    "description": "Filter by signal type. Leave null for all.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_channel_summary",
+        "description": "Get a breakdown of communication Channel records — WhatsApp threads, email conversations, support tickets. Shows sentiment distribution, message volume, and active channels. Use for 'communication channels', 'customer sentiment', 'message volume', 'channel health'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "channel_type": {
+                    "type": "string",
+                    "enum": ["whatsapp", "email", "sms", "phone", "in_person", "letter", "portal"],
+                    "description": "Filter by channel type. Leave null for all.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_territory_summary",
+        "description": "Get a breakdown of Territory records — geographic zones, sales regions, delivery areas, catchment areas. Shows territory count, total area km², population covered. Use for 'sales territories', 'coverage area', 'delivery zones', 'geographic reach'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "territory_type": {
+                    "type": "string",
+                    "enum": ["sales_zone", "delivery_zone", "service_area", "catchment", "district", "region"],
+                    "description": "Filter by territory type. Leave null for all.",
+                },
+            },
+        },
+    },
+    {
         "name": "find_nearby_competitors",
         "description": (
             "Find external competitors or similar businesses near a location using OpenStreetMap. "
@@ -6261,6 +6389,314 @@ def get_entity_risk_report(
         return {"entities": [], "total": 0, "high_risk_count": 0, "error": str(e)}
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# COPILOT IMPORT TOOLS — create_record + import_records
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Entity type → action type mapping
+_ENTITY_ACTION_MAP = {
+    # Low-risk: notify, execute immediately
+    "document":    ("create_document",  "notify"),
+    "schedule":    ("create_schedule",  "notify"),
+    "territory":   ("create_territory", "notify"),
+    "signal":      ("create_signal",    "notify"),
+    "channel":     ("create_channel",   "notify"),
+    # High-risk: approval-gated
+    "person":      ("create_person",    "approve"),
+    "enterprise":  ("create_enterprise","approve"),
+    "product":     ("create_product",   "approve"),
+    "task":        ("create_task",      "auto"),
+    "transaction": ("create_transaction","approve"),
+}
+
+_ENTITY_LABELS = {
+    "person":      "full_name",
+    "enterprise":  "name",
+    "product":     "name",
+    "task":        "title",
+    "transaction": "description",
+    "document":    "title",
+    "schedule":    "title",
+    "territory":   "name",
+    "signal":      "name",
+    "channel":     "name",
+}
+
+
+def create_record(
+    company_id: str,
+    entity_type: str,
+    fields: dict,
+    reasoning: Optional[str] = None,
+) -> dict:
+    """
+    Create a single record of any entity type via the approval gate.
+    Low-risk entities (document, schedule, territory, signal, channel) execute immediately.
+    High-risk entities (person, enterprise, product, transaction) go to approval queue.
+    task is always auto-executed.
+    """
+    if entity_type not in _ENTITY_ACTION_MAP:
+        return {
+            "error": f"entity_type '{entity_type}' not supported.",
+            "valid": list(_ENTITY_ACTION_MAP.keys()),
+        }
+
+    action_type, _risk = _ENTITY_ACTION_MAP[entity_type]
+    label_field = _ENTITY_LABELS.get(entity_type, "name")
+    label = fields.get(label_field) or fields.get("name") or fields.get("title") or entity_type
+
+    return request_action(
+        company_id=company_id,
+        action_type=action_type,
+        entity=entity_type,
+        label=f"Create {entity_type}: {label}",
+        changes=fields,
+        reasoning=reasoning or f"Copilot created {entity_type} record: {label}",
+    )
+
+
+def import_records(
+    company_id: str,
+    entity_type: str,
+    records: list,
+    reasoning: Optional[str] = None,
+) -> dict:
+    """
+    Bulk import multiple records of any entity type.
+    Always goes through the approval gate regardless of entity type.
+    Operator reviews the full record list before anything is written to Base44.
+    """
+    if entity_type not in _ENTITY_ACTION_MAP:
+        return {
+            "error": f"entity_type '{entity_type}' not supported.",
+            "valid": list(_ENTITY_ACTION_MAP.keys()),
+        }
+    if not records:
+        return {"error": "records list is empty — nothing to import"}
+    if len(records) > 200:
+        return {"error": f"Max 200 records per import call. Got {len(records)}. Split into batches."}
+
+    label_field = _ENTITY_LABELS.get(entity_type, "name")
+    sample_labels = [
+        r.get(label_field) or r.get("name") or r.get("title") or f"record {i+1}"
+        for i, r in enumerate(records[:3])
+    ]
+    preview = ", ".join(str(l) for l in sample_labels)
+    if len(records) > 3:
+        preview += f" … (+{len(records) - 3} more)"
+
+    return request_action(
+        company_id=company_id,
+        action_type="import_records",
+        entity=entity_type,
+        label=f"Import {len(records)} {entity_type}(s): {preview}",
+        changes={"entity_type": entity_type, "records": records},
+        reasoning=reasoning or f"Copilot bulk import of {len(records)} {entity_type} records",
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEW CANONICAL ENTITY TOOLS — Document, Schedule, Signal, Channel, Territory
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_document_summary(company_id: str, document_type: str = None) -> dict:
+    """
+    Return document counts by type and status.
+    Falls back to Base44 live data if analytics table is stale.
+    """
+    sql = """
+        SELECT document_type, status,
+               SUM(document_count) AS document_count,
+               SUM(active_count)   AS active_count,
+               SUM(expired_count)  AS expired_count,
+               SUM(signed_count)   AS signed_count,
+               MAX(snapshot_date)  AS data_as_of
+        FROM analytics.document_summary
+        WHERE company_id = :cid
+        {where}
+        GROUP BY document_type, status
+        ORDER BY document_count DESC
+    """
+    where = "AND document_type = :dtype" if document_type else ""
+    params = {"cid": company_id, "dtype": document_type} if document_type else {"cid": company_id}
+
+    rows, data_as_of, source = _query_analytics(
+        "document_summary", sql.format(where=where), params, company_id
+    )
+    if rows:
+        return {"documents": rows, "data_as_of": data_as_of, "source": source}
+
+    # Base44 fallback
+    raw = _read_raw_table("documents", company_id)
+    if not raw.empty:
+        return {
+            "documents": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
+            "data_as_of": "Base44 live", "source": "raw",
+        }
+    try:
+        from etl.document import extract_documents
+        df = extract_documents()
+        df = _filter_by_company(df, company_id)
+        if document_type and "document_type" in df.columns:
+            df = df[df["document_type"] == document_type]
+        return {"documents": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "base44_live"}
+    except Exception as e:
+        return {"documents": [], "error": str(e)}
+
+
+def get_schedule_summary(company_id: str, frequency: str = None) -> dict:
+    """Return schedule counts by type and frequency."""
+    sql = """
+        SELECT schedule_type, frequency, status,
+               SUM(schedule_count) AS schedule_count,
+               SUM(active_count)   AS active_count,
+               SUM(paused_count)   AS paused_count,
+               MAX(snapshot_date)  AS data_as_of
+        FROM analytics.schedule_summary
+        WHERE company_id = :cid
+        {where}
+        GROUP BY schedule_type, frequency, status
+        ORDER BY schedule_count DESC
+    """
+    where = "AND frequency = :freq" if frequency else ""
+    params = {"cid": company_id, "freq": frequency} if frequency else {"cid": company_id}
+
+    rows, data_as_of, source = _query_analytics(
+        "schedule_summary", sql.format(where=where), params, company_id
+    )
+    if rows:
+        return {"schedules": rows, "data_as_of": data_as_of, "source": source}
+
+    raw = _read_raw_table("schedules", company_id)
+    if not raw.empty:
+        return {"schedules": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "raw"}
+    try:
+        from etl.schedule import extract_schedules
+        df = extract_schedules()
+        df = _filter_by_company(df, company_id)
+        return {"schedules": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "base44_live"}
+    except Exception as e:
+        return {"schedules": [], "error": str(e)}
+
+
+def get_signal_summary(company_id: str, signal_type: str = None) -> dict:
+    """Return signal/sensor readings summary — counts, anomaly rates, average values."""
+    sql = """
+        SELECT signal_type, unit_of_measure, status,
+               SUM(signal_count)   AS signal_count,
+               SUM(active_count)   AS active_count,
+               SUM(anomaly_count)  AS anomaly_count,
+               AVG(avg_value)      AS avg_value,
+               MAX(snapshot_date)  AS data_as_of
+        FROM analytics.signal_summary
+        WHERE company_id = :cid
+        {where}
+        GROUP BY signal_type, unit_of_measure, status
+        ORDER BY signal_count DESC
+    """
+    where = "AND signal_type = :stype" if signal_type else ""
+    params = {"cid": company_id, "stype": signal_type} if signal_type else {"cid": company_id}
+
+    rows, data_as_of, source = _query_analytics(
+        "signal_summary", sql.format(where=where), params, company_id
+    )
+    if rows:
+        return {"signals": rows, "data_as_of": data_as_of, "source": source}
+
+    raw = _read_raw_table("signals", company_id)
+    if not raw.empty:
+        return {"signals": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "raw"}
+    try:
+        from etl.signal import extract_signals
+        df = extract_signals()
+        df = _filter_by_company(df, company_id)
+        return {"signals": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "base44_live"}
+    except Exception as e:
+        return {"signals": [], "error": str(e)}
+
+
+def get_channel_summary(company_id: str, channel_type: str = None) -> dict:
+    """Return communication channel breakdown — sentiment, message volume, active channels."""
+    sql = """
+        SELECT channel_type, purpose, status,
+               SUM(channel_count)   AS channel_count,
+               SUM(active_count)    AS active_count,
+               SUM(positive_count)  AS positive_count,
+               SUM(negative_count)  AS negative_count,
+               SUM(total_messages)  AS total_messages,
+               MAX(snapshot_date)   AS data_as_of
+        FROM analytics.channel_summary
+        WHERE company_id = :cid
+        {where}
+        GROUP BY channel_type, purpose, status
+        ORDER BY channel_count DESC
+    """
+    where = "AND channel_type = :ctype" if channel_type else ""
+    params = {"cid": company_id, "ctype": channel_type} if channel_type else {"cid": company_id}
+
+    rows, data_as_of, source = _query_analytics(
+        "channel_summary", sql.format(where=where), params, company_id
+    )
+    if rows:
+        return {"channels": rows, "data_as_of": data_as_of, "source": source}
+
+    raw = _read_raw_table("channels", company_id)
+    if not raw.empty:
+        return {"channels": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "raw"}
+    try:
+        from etl.channel import extract_channels
+        df = extract_channels()
+        df = _filter_by_company(df, company_id)
+        return {"channels": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "base44_live"}
+    except Exception as e:
+        return {"channels": [], "error": str(e)}
+
+
+def get_territory_summary(company_id: str, territory_type: str = None) -> dict:
+    """Return territory breakdown — counts, area coverage, population, type."""
+    sql = """
+        SELECT territory_type, country, status,
+               SUM(territory_count)   AS territory_count,
+               SUM(active_count)      AS active_count,
+               SUM(total_area_km2)    AS total_area_km2,
+               SUM(total_population)  AS total_population,
+               MAX(snapshot_date)     AS data_as_of
+        FROM analytics.territory_summary
+        WHERE company_id = :cid
+        {where}
+        GROUP BY territory_type, country, status
+        ORDER BY territory_count DESC
+    """
+    where = "AND territory_type = :ttype" if territory_type else ""
+    params = {"cid": company_id, "ttype": territory_type} if territory_type else {"cid": company_id}
+
+    rows, data_as_of, source = _query_analytics(
+        "territory_summary", sql.format(where=where), params, company_id
+    )
+    if rows:
+        return {"territories": rows, "data_as_of": data_as_of, "source": source}
+
+    raw = _read_raw_table("territories", company_id)
+    if not raw.empty:
+        return {"territories": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "raw"}
+    try:
+        from etl.territory import extract_territories
+        df = extract_territories()
+        df = _filter_by_company(df, company_id)
+        return {"territories": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "base44_live"}
+    except Exception as e:
+        return {"territories": [], "error": str(e)}
+
+
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
 
 def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
@@ -6340,6 +6776,15 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "get_network_kpis":             get_network_kpis,
         "get_concentration_risk":       get_concentration_risk,
         "get_entity_risk_report":       get_entity_risk_report,
+        # New canonical entity tools
+        "get_document_summary":         get_document_summary,
+        "get_schedule_summary":         get_schedule_summary,
+        "get_signal_summary":           get_signal_summary,
+        "get_channel_summary":          get_channel_summary,
+        "get_territory_summary":        get_territory_summary,
+        # Copilot write-back — single record + bulk import
+        "create_record":                create_record,
+        "import_records":               import_records,
     }
 
     fn = dispatch.get(tool_name)
