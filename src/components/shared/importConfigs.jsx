@@ -1459,3 +1459,274 @@ export function validateRelationship(row) {
     errors.push("end_date must be after start_date");
   return { errors, warnings };
 }
+
+// ── Document ──────────────────────────────────────────────────────────────────
+
+export const DOCUMENT_FIELDS = [
+  { key: "id",               label: "ID (External)" },
+  { key: "document_type",    label: "Document Type *", required: true },
+  { key: "document_subtype", label: "Document Subtype" },
+  { key: "status",           label: "Status" },
+  { key: "title",            label: "Title *", required: true },
+  { key: "description",      label: "Description" },
+  { key: "file_url",         label: "File URL" },
+  { key: "file_type",        label: "File Type" },
+  { key: "created_date",     label: "Created Date" },
+  { key: "expiry_date",      label: "Expiry Date" },
+  { key: "enterprise_id",    label: "Enterprise ID" },
+  { key: "is_signed",        label: "Is Signed" },
+  { key: "is_confidential",  label: "Is Confidential" },
+];
+
+export const DOCUMENT_MAPPING_RULES = [
+  [/^document[._-]?id$|^doc[._-]?id$/i,        "id"],
+  [/^document[._-]?type$/i,                     "document_type"],
+  [/^document[._-]?subtype$/i,                  "document_subtype"],
+  [/^status$/i,                                 "status"],
+  [/^title$|^name$|^document[._-]?name$/i,      "title"],
+  [/^description$|^notes$/i,                    "description"],
+  [/^file[._-]?url$|^url$|^link$/i,             "file_url"],
+  [/^file[._-]?type$|^format$/i,                "file_type"],
+  [/^created[._-]?date$|^date[._-]?created$/i,  "created_date"],
+  [/^expiry[._-]?date$|^expiry$|^expires$/i,    "expiry_date"],
+  [/^enterprise[._-]?id$|^org[._-]?id$/i,       "enterprise_id"],
+  [/^signed$|^is[._-]?signed$/i,                "is_signed"],
+];
+
+export const DOCUMENT_TEMPLATE_EXAMPLE = [
+  { document_type: "contract", title: "Service Agreement 2026", status: "active", created_date: "2026-01-15", expiry_date: "2027-01-15" },
+];
+
+export const DOCUMENT_TEMPLATE_INSTRUCTIONS = "Import Documents in bulk. Required fields: document_type, title.";
+
+export function transformDocument(row, currentUser) {
+  return {
+    ...row,
+    status:         row.status || "draft",
+    company_id:     row.company_id || currentUser?.company_id,
+    is_signed:      row.is_signed === true || row.is_signed === "true" || row.is_signed === "1",
+    is_confidential: row.is_confidential === true || row.is_confidential === "true",
+  };
+}
+
+export function validateDocument(row) {
+  const errors = [], warnings = [];
+  if (!row.title)         errors.push("title is required");
+  if (!row.document_type) errors.push("document_type is required");
+  if (row.expiry_date && isNaN(Date.parse(row.expiry_date)))
+    warnings.push("expiry_date format unclear — use YYYY-MM-DD");
+  return { errors, warnings };
+}
+
+// ── Schedule ──────────────────────────────────────────────────────────────────
+
+export const SCHEDULE_FIELDS = [
+  { key: "id",                 label: "ID (External)" },
+  { key: "schedule_type",      label: "Schedule Type *", required: true },
+  { key: "schedule_subtype",   label: "Schedule Subtype" },
+  { key: "status",             label: "Status" },
+  { key: "title",              label: "Title *", required: true },
+  { key: "description",        label: "Description" },
+  { key: "frequency",          label: "Frequency" },
+  { key: "start_date",         label: "Start Date" },
+  { key: "end_date",           label: "End Date" },
+  { key: "time_of_day",        label: "Time of Day" },
+  { key: "enterprise_id",      label: "Enterprise ID" },
+  { key: "assigned_person_id", label: "Assigned Person ID" },
+];
+
+export const SCHEDULE_MAPPING_RULES = [
+  [/^schedule[._-]?id$/i,                     "id"],
+  [/^schedule[._-]?type$/i,                   "schedule_type"],
+  [/^schedule[._-]?subtype$/i,                "schedule_subtype"],
+  [/^status$/i,                               "status"],
+  [/^title$|^name$|^schedule[._-]?name$/i,    "title"],
+  [/^description$|^notes$/i,                  "description"],
+  [/^frequency$|^recurrence$|^repeat$/i,      "frequency"],
+  [/^start[._-]?date$/i,                      "start_date"],
+  [/^end[._-]?date$/i,                        "end_date"],
+  [/^time[._-]?of[._-]?day$|^time$/i,         "time_of_day"],
+  [/^enterprise[._-]?id$|^org[._-]?id$/i,     "enterprise_id"],
+  [/^assigned[._-]?person[._-]?id$/i,         "assigned_person_id"],
+];
+
+export const SCHEDULE_TEMPLATE_EXAMPLE = [
+  { schedule_type: "recurring", title: "Weekly Team Meeting", frequency: "weekly", status: "active", time_of_day: "09:00" },
+];
+
+export const SCHEDULE_TEMPLATE_INSTRUCTIONS = "Import Schedules in bulk. Required: schedule_type, title.";
+
+export function transformSchedule(row, currentUser) {
+  return {
+    ...row,
+    status:     row.status || "active",
+    frequency:  row.frequency || "weekly",
+    company_id: row.company_id || currentUser?.company_id,
+  };
+}
+
+export function validateSchedule(row) {
+  const errors = [], warnings = [];
+  if (!row.title)         errors.push("title is required");
+  if (!row.schedule_type) errors.push("schedule_type is required");
+  return { errors, warnings };
+}
+
+// ── Signal ────────────────────────────────────────────────────────────────────
+
+export const SIGNAL_FIELDS = [
+  { key: "id",              label: "ID (External)" },
+  { key: "signal_type",     label: "Signal Type *", required: true },
+  { key: "signal_subtype",  label: "Signal Subtype" },
+  { key: "status",          label: "Status" },
+  { key: "name",            label: "Name *", required: true },
+  { key: "description",     label: "Description" },
+  { key: "value",           label: "Value" },
+  { key: "unit_of_measure", label: "Unit of Measure" },
+  { key: "recorded_at",     label: "Recorded At" },
+  { key: "enterprise_id",   label: "Enterprise ID" },
+  { key: "source",          label: "Source / Device" },
+  { key: "is_anomaly",      label: "Is Anomaly" },
+];
+
+export const SIGNAL_MAPPING_RULES = [
+  [/^signal[._-]?id$/i,                          "id"],
+  [/^signal[._-]?type$/i,                        "signal_type"],
+  [/^signal[._-]?subtype$/i,                     "signal_subtype"],
+  [/^status$/i,                                  "status"],
+  [/^name$|^signal[._-]?name$|^metric$/i,        "name"],
+  [/^description$|^notes$/i,                     "description"],
+  [/^value$|^reading$|^measurement$/i,           "value"],
+  [/^unit[._-]?of[._-]?measure$|^unit$/i,        "unit_of_measure"],
+  [/^recorded[._-]?at$|^timestamp$|^datetime$/i, "recorded_at"],
+  [/^enterprise[._-]?id$|^org[._-]?id$/i,        "enterprise_id"],
+  [/^source$|^device$/i,                         "source"],
+];
+
+export const SIGNAL_TEMPLATE_EXAMPLE = [
+  { signal_type: "sensor", name: "Room Temperature", value: "22.5", unit_of_measure: "celsius", recorded_at: "2026-04-20T09:00:00Z" },
+];
+
+export const SIGNAL_TEMPLATE_INSTRUCTIONS = "Import Signals in bulk. Required: signal_type, name.";
+
+export function transformSignal(row, currentUser) {
+  return {
+    ...row,
+    status:     row.status || "active",
+    company_id: row.company_id || currentUser?.company_id,
+    is_anomaly: row.is_anomaly === true || row.is_anomaly === "true",
+  };
+}
+
+export function validateSignal(row) {
+  const errors = [], warnings = [];
+  if (!row.name)        errors.push("name is required");
+  if (!row.signal_type) errors.push("signal_type is required");
+  return { errors, warnings };
+}
+
+// ── Channel ───────────────────────────────────────────────────────────────────
+
+export const CHANNEL_FIELDS = [
+  { key: "id",              label: "ID (External)" },
+  { key: "channel_type",    label: "Channel Type *", required: true },
+  { key: "channel_subtype", label: "Channel Subtype" },
+  { key: "status",          label: "Status" },
+  { key: "name",            label: "Name *", required: true },
+  { key: "description",     label: "Description" },
+  { key: "purpose",         label: "Purpose" },
+  { key: "sentiment",       label: "Sentiment" },
+  { key: "message_count",   label: "Message Count" },
+  { key: "enterprise_id",   label: "Enterprise ID" },
+  { key: "last_message_at", label: "Last Message At" },
+];
+
+export const CHANNEL_MAPPING_RULES = [
+  [/^channel[._-]?id$/i,                      "id"],
+  [/^channel[._-]?type$/i,                    "channel_type"],
+  [/^channel[._-]?subtype$/i,                 "channel_subtype"],
+  [/^status$/i,                               "status"],
+  [/^name$|^channel[._-]?name$|^thread$/i,    "name"],
+  [/^description$|^notes$/i,                  "description"],
+  [/^purpose$/i,                              "purpose"],
+  [/^sentiment$/i,                            "sentiment"],
+  [/^message[._-]?count$|^messages$/i,        "message_count"],
+  [/^enterprise[._-]?id$|^org[._-]?id$/i,     "enterprise_id"],
+];
+
+export const CHANNEL_TEMPLATE_EXAMPLE = [
+  { channel_type: "whatsapp", name: "Support Group", purpose: "support", status: "active", sentiment: "positive" },
+];
+
+export const CHANNEL_TEMPLATE_INSTRUCTIONS = "Import Channels in bulk. Required: channel_type, name.";
+
+export function transformChannel(row, currentUser) {
+  return {
+    ...row,
+    status:       row.status || "active",
+    company_id:   row.company_id || currentUser?.company_id,
+    message_count: parseInt(row.message_count, 10) || 0,
+  };
+}
+
+export function validateChannel(row) {
+  const errors = [], warnings = [];
+  if (!row.name)         errors.push("name is required");
+  if (!row.channel_type) errors.push("channel_type is required");
+  return { errors, warnings };
+}
+
+// ── Territory ─────────────────────────────────────────────────────────────────
+
+export const TERRITORY_FIELDS = [
+  { key: "id",                  label: "ID (External)" },
+  { key: "territory_type",      label: "Territory Type *", required: true },
+  { key: "territory_subtype",   label: "Territory Subtype" },
+  { key: "status",              label: "Status" },
+  { key: "name",                label: "Name *", required: true },
+  { key: "description",         label: "Description" },
+  { key: "country",             label: "Country" },
+  { key: "region",              label: "Region" },
+  { key: "area_km2",            label: "Area (km²)" },
+  { key: "population_estimate", label: "Population Estimate" },
+  { key: "enterprise_id",       label: "Enterprise ID" },
+  { key: "assigned_person_id",  label: "Assigned Person ID" },
+];
+
+export const TERRITORY_MAPPING_RULES = [
+  [/^territory[._-]?id$/i,                     "id"],
+  [/^territory[._-]?type$/i,                   "territory_type"],
+  [/^territory[._-]?subtype$/i,                "territory_subtype"],
+  [/^status$/i,                                "status"],
+  [/^name$|^territory[._-]?name$|^zone$/i,     "name"],
+  [/^description$|^notes$/i,                   "description"],
+  [/^country$/i,                               "country"],
+  [/^region$|^state$|^province$/i,             "region"],
+  [/^area[._-]?km2$|^area$/i,                  "area_km2"],
+  [/^population[._-]?estimate$|^population$/i, "population_estimate"],
+  [/^enterprise[._-]?id$|^org[._-]?id$/i,      "enterprise_id"],
+  [/^assigned[._-]?person[._-]?id$/i,          "assigned_person_id"],
+];
+
+export const TERRITORY_TEMPLATE_EXAMPLE = [
+  { territory_type: "sales_zone", name: "Northern Region", country: "Kenya", area_km2: "12500", status: "active" },
+];
+
+export const TERRITORY_TEMPLATE_INSTRUCTIONS = "Import Territories in bulk. Required: territory_type, name.";
+
+export function transformTerritory(row, currentUser) {
+  return {
+    ...row,
+    status:              row.status || "active",
+    company_id:          row.company_id || currentUser?.company_id,
+    area_km2:            parseFloat(row.area_km2) || undefined,
+    population_estimate: parseInt(row.population_estimate, 10) || undefined,
+  };
+}
+
+export function validateTerritory(row) {
+  const errors = [], warnings = [];
+  if (!row.name)           errors.push("name is required");
+  if (!row.territory_type) errors.push("territory_type is required");
+  return { errors, warnings };
+}

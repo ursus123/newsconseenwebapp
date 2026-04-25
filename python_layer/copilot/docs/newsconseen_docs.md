@@ -52,9 +52,9 @@ Layer 3 — Foundry Intelligence (Copilot, Agents, Alerts, Network Intelligence)
 
 ---
 
-## The Universal Ontology — 7 Canonical Entities
+## The Universal Ontology — 12 Canonical Entities
 
-Every industry maps to these seven entities. No exceptions.
+Every industry maps to these twelve entities. The first 7 are the original core; the 5 new entities (Document, Schedule, Signal, Channel, Territory) extend coverage to document management, recurring patterns, telemetry, communications, and geography.
 
 ### 1. Person
 Any human in any role.
@@ -113,6 +113,33 @@ Fields: date, transaction_type, amount, net_amount, tax_amount, status, counterp
 Any physical or postal location linked to a person, enterprise, or other entity.
 Fields: street, city, state, country, zip_code, latitude, longitude.
 
+### 8. Document
+Any file, record, or formal document attached to an entity.
+Fields: document_type, title, status, file_url, enterprise_id, signed_at, expires_at, is_contract, is_invoice, is_policy.
+ETL: `analytics.document_summary` — counts, active/expired/signed flags, new in last 7/30 days.
+
+### 9. Schedule
+Any recurring pattern, shift, or calendar rule.
+Fields: schedule_type, title, frequency, day_of_week, time_of_day, status, starts_on, ends_on, enterprise_id, assigned_to.
+Frequency values: `daily` · `weekly` · `fortnightly` · `monthly` · `custom`.
+ETL: `analytics.schedule_summary` — active, paused counts; is_daily, is_weekly, is_monthly flags.
+
+### 10. Signal
+Any sensor reading, survey response, or telemetry data point.
+Fields: signal_type, source_entity_type, source_entity_id, value, unit_of_measure, recorded_at, is_anomaly, notes, enterprise_id.
+ETL: `analytics.signal_summary` — counts, anomaly count, avg_value, is_sensor, is_survey flags.
+
+### 11. Channel
+Any communication channel and its interactions (WhatsApp, email, call log, social).
+Fields: channel_type, name, purpose, status, last_message_at, message_count, sentiment, enterprise_id, person_id.
+ETL: `analytics.channel_summary` — active count, positive/negative sentiment counts, total_messages.
+
+### 12. Territory
+Any geographic coverage area: sales zones, delivery zones, catchments, districts.
+Fields: territory_type, name, status, country, region, area_km2, population_estimate, description.
+Territory types: `sales_zone` · `delivery_zone` · `service_area` · `catchment` · `district` · `region`.
+ETL: `analytics.territory_summary` — active count, total_area_km2, total_population, type flags.
+
 ---
 
 ## MasterDataOption — Operator-Defined Taxonomy
@@ -134,7 +161,7 @@ The same platform serves all three without a single line of code change.
 After every mutation in Layer 1, an ETL is triggered to sync Layer 2:
 
 ```
-POST /cron/etl-all              Full pipeline — all 9 entity ETLs
+POST /cron/etl-all              Full pipeline — all entity ETLs
 POST /load/people-summary       Targeted: people only
 POST /load/enterprise-summary
 POST /load/product-summary
@@ -144,6 +171,11 @@ POST /load/address-summary
 POST /load/relationship-summary
 POST /load/service-summary
 POST /load/geospatial-summary
+POST /load/document-summary     New entities (Entities 8–12)
+POST /load/schedule-summary
+POST /load/signal-summary
+POST /load/channel-summary
+POST /load/territory-summary
 GET  /health                    Status + last run timestamps + row counts
 ```
 
@@ -198,6 +230,8 @@ experience grounded in real data.
 
 **Write-Back Actions** (via approval gate):
 - Create tasks, update records, flag items, send messages
+- **Create single records** for any entity (`create_record` tool) — low-risk entities (Document, Schedule, Territory, Signal, Channel, Task) execute immediately; high-risk entities (Person, Enterprise, Product, Transaction) queue for operator approval
+- **Bulk import** any entity type (`import_records` tool, max 200 records) — always queues for operator approval before executing
 - Low-risk actions execute immediately; higher-risk actions queue for operator review
 
 **Persistent Memory**:
@@ -254,10 +288,17 @@ experience grounded in real data.
 | `web_search` | Multi-tier web search |
 | `search_public_data` | World Bank, Census, FDA, OSM, FX rates, UN data |
 | `request_action` | Write-back: create tasks, update records, flag items |
+| `create_record` | Create a single record for any entity (approval gate: auto/notify/approve) |
+| `import_records` | Bulk import up to 200 records of any entity (always requires approval) |
 | `save_copilot_memory` | Persist preferences/instructions for future sessions |
 | `get_attendance_report` | Daily clock-in/out records per person (time entries) |
 | `get_time_summary` | Total hours per person aggregated by week or month |
 | `get_utilisation_report` | Staff utilisation % vs scheduled hours (over/under) |
+| `get_document_summary` | Document counts, expiry alerts, signed/active breakdown |
+| `get_schedule_summary` | Schedule counts by frequency and status |
+| `get_signal_summary` | Signal/telemetry counts, anomaly count, average values |
+| `get_channel_summary` | Channel counts, sentiment breakdown, message volumes |
+| `get_territory_summary` | Territory counts, total area km², population coverage |
 
 ---
 
@@ -494,6 +535,8 @@ to Railway, or make the fields `Optional[str] = None` in `settings.py`.
 | — | Multi-tenant Admin UI — tenant management, ETL trigger, suspend | ✅ |
 | — | BI Export — Power BI, Tableau, CSV, Looker Studio from all charts | ✅ |
 | — | Security hardening — 2FA, OAuth2, rate limit, headers, SOC 2 | ✅ |
+| 9 | Ontology Expansion — 5 new canonical entities (Document, Schedule, Signal, Channel, Territory) + ETL + enrichment + copilot tools + frontend pages | ✅ |
+| 9+ | Copilot Write-Back — `create_record` + `import_records` tools with approval gate routing | ✅ |
 
 ---
 
@@ -533,5 +576,5 @@ Examples:
 - "What can the copilot do?" → Describe the full capabilities from this documentation
 - "How does the ETL work?" → Explain the three-tier fallback and the ETL trigger pattern
 - "What agents do you have?" → List all 8 agents with their purpose
-- "How many entities does Newsconseen have?" → Answer: 7 canonical entities, describe them
+- "How many entities does Newsconseen have?" → Answer: 12 canonical entities (7 original + 5 new: Document, Schedule, Signal, Channel, Territory), describe them
 - "What is our revenue this month?" → Call get_transaction_summary, return real numbers

@@ -360,6 +360,142 @@ _DDL = [
         enriched_at             TEXT
     )
     """,
+
+    # ── Document enrichment ────────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.document_enrichment (
+        company_id              TEXT,
+        document_id             TEXT,
+        document_title          TEXT,
+        document_type           TEXT,
+        -- Phase A: classification
+        inferred_category       TEXT,
+        language_detected       TEXT,
+        word_count              INTEGER,
+        -- Phase C: compliance / PII
+        pii_detected            BOOLEAN,
+        pii_types               TEXT,
+        compliance_flag         BOOLEAN,
+        retention_policy        TEXT,
+        -- Phase D: risk score
+        entity_risk_score       DOUBLE PRECISION,
+        risk_label              TEXT,
+        -- Phase E: predictive
+        days_since_created      INTEGER,
+        days_to_expiry          INTEGER,
+        expiry_risk             TEXT,
+        -- Meta
+        enrichment_status       TEXT,
+        enriched_at             TEXT
+    )
+    """,
+
+    # ── Schedule enrichment ────────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.schedule_enrichment (
+        company_id              TEXT,
+        schedule_id             TEXT,
+        schedule_title          TEXT,
+        schedule_type           TEXT,
+        -- Phase A: validation
+        frequency_valid         BOOLEAN,
+        next_run_estimated      TEXT,
+        -- Phase D: operational intelligence
+        adherence_rate          DOUBLE PRECISION,
+        conflict_count          INTEGER,
+        conflict_risk           TEXT,
+        -- Phase E: predictive
+        forecast_utilisation    DOUBLE PRECISION,
+        missed_runs_30d         INTEGER,
+        drift_days              DOUBLE PRECISION,
+        -- Meta
+        enrichment_status       TEXT,
+        enriched_at             TEXT
+    )
+    """,
+
+    # ── Signal enrichment ──────────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.signal_enrichment (
+        company_id              TEXT,
+        signal_id               TEXT,
+        signal_name             TEXT,
+        signal_type             TEXT,
+        unit_of_measure         TEXT,
+        -- Phase A: normalisation
+        normalised_value        DOUBLE PRECISION,
+        z_score                 DOUBLE PRECISION,
+        -- Phase C: anomaly / risk
+        is_anomaly              BOOLEAN,
+        anomaly_score           DOUBLE PRECISION,
+        threshold_breached      BOOLEAN,
+        breach_direction        TEXT,
+        -- Phase E: predictive
+        trend_direction         TEXT,
+        trend_slope             DOUBLE PRECISION,
+        days_since_baseline     INTEGER,
+        forecast_next_value     DOUBLE PRECISION,
+        -- Meta
+        enrichment_status       TEXT,
+        enriched_at             TEXT
+    )
+    """,
+
+    # ── Channel enrichment ─────────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.channel_enrichment (
+        company_id              TEXT,
+        channel_id              TEXT,
+        channel_name            TEXT,
+        channel_type            TEXT,
+        -- Phase C: sentiment / toxicity
+        sentiment_score         DOUBLE PRECISION,
+        sentiment_label         TEXT,
+        toxicity_score          DOUBLE PRECISION,
+        aml_flag                BOOLEAN,
+        -- Phase D: relationship health
+        relationship_health     DOUBLE PRECISION,
+        response_time_avg_hrs   DOUBLE PRECISION,
+        message_velocity_7d     INTEGER,
+        -- Phase E: predictive
+        churn_risk              TEXT,
+        engagement_score        DOUBLE PRECISION,
+        days_since_last_message INTEGER,
+        -- Meta
+        enrichment_status       TEXT,
+        enriched_at             TEXT
+    )
+    """,
+
+    # ── Territory enrichment ───────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.territory_enrichment (
+        company_id              TEXT,
+        territory_id            TEXT,
+        territory_name          TEXT,
+        territory_type          TEXT,
+        -- Phase A: geocoding
+        centroid_lat            DOUBLE PRECISION,
+        centroid_lng            DOUBLE PRECISION,
+        area_km2_verified       DOUBLE PRECISION,
+        timezone                TEXT,
+        -- Phase B: regulatory
+        regulatory_jurisdiction TEXT,
+        license_required        BOOLEAN,
+        -- Phase C: risk
+        country_risk_score      DOUBLE PRECISION,
+        conflict_proximity_km   DOUBLE PRECISION,
+        wgi_governance_index    DOUBLE PRECISION,
+        gdelt_news_count        INTEGER,
+        -- Phase E: performance
+        revenue_per_km2         DOUBLE PRECISION,
+        clients_per_km2         DOUBLE PRECISION,
+        coverage_pct            DOUBLE PRECISION,
+        -- Meta
+        enrichment_status       TEXT,
+        enriched_at             TEXT
+    )
+    """,
 ]
 
 

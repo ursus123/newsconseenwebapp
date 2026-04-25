@@ -1,7 +1,7 @@
 /**
  * Object Explorer
  *
- * Sprint 1: Schema mode — 7-node ontology graph, live counts, node detail panel.
+ * Sprint 1: Schema mode — 12-node ontology graph, live counts, node detail panel.
  * Sprint 2: Live mode — click entity to expand top-15 record nodes radially;
  *            click record → full detail panel + "Ask Copilot about this" deep-link.
  * Sprint 3: 3D toggle (pending).
@@ -19,6 +19,7 @@ import {
   Link2, MapPin, X, ExternalLink, Loader2,
   ChevronRight, Layers, GitBranch, Maximize2, Sparkles,
   Activity, Box, ShieldCheck, AlertTriangle,
+  FileText, Calendar, Zap, MessageSquare, Map,
 } from "lucide-react";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 
@@ -37,6 +38,11 @@ const DQ_KEY_MAP = {
   Transaction:  "transactions",
   Address:      "addresses",
   Relationship: "relationships",
+  Document:     "documents",
+  Schedule:     "schedules",
+  Signal:       "signals",
+  Channel:      "channels",
+  Territory:    "territories",
 };
 
 function healthColor(score) {
@@ -126,6 +132,62 @@ const OBJECT_TYPES = [
     properties: ["label", "address_line1", "city", "state_region", "country", "postal_code"],
     description: "Any physical or postal location.",
   },
+  // ── 5 New Canonical Entities (Phase 9) ──────────────────────────────────────
+  {
+    key: "Document", label: "Documents", icon: FileText,
+    color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-200",
+    badgeBg: "bg-orange-100", badgeText: "text-orange-700",
+    entity: "Document",
+    searchFields: ["title", "document_type", "status", "enterprise_id"],
+    primaryField: "title", secondaryField: "document_type",
+    routePage: "Documents",
+    properties: ["document_type", "status", "expires_at", "signed_at", "is_contract", "is_invoice"],
+    description: "Any file, record, or formal document — contracts, invoices, policies.",
+  },
+  {
+    key: "Schedule", label: "Schedules", icon: Calendar,
+    color: "text-sky-600", bg: "bg-sky-50", border: "border-sky-200",
+    badgeBg: "bg-sky-100", badgeText: "text-sky-700",
+    entity: "Schedule",
+    searchFields: ["title", "schedule_type", "frequency", "status", "assigned_to"],
+    primaryField: "title", secondaryField: "frequency",
+    routePage: "Schedules",
+    properties: ["schedule_type", "frequency", "status", "time_of_day", "starts_on", "ends_on"],
+    description: "Any recurring pattern, shift, or calendar rule.",
+  },
+  {
+    key: "Signal", label: "Signals", icon: Zap,
+    color: "text-yellow-600", bg: "bg-yellow-50", border: "border-yellow-200",
+    badgeBg: "bg-yellow-100", badgeText: "text-yellow-700",
+    entity: "Signal",
+    searchFields: ["signal_type", "source_entity_type", "unit_of_measure", "is_anomaly"],
+    primaryField: "signal_type", secondaryField: "unit_of_measure",
+    routePage: "Signals",
+    properties: ["signal_type", "value", "unit_of_measure", "is_anomaly", "recorded_at"],
+    description: "Any sensor reading, survey response, or telemetry data point.",
+  },
+  {
+    key: "Channel", label: "Channels", icon: MessageSquare,
+    color: "text-pink-600", bg: "bg-pink-50", border: "border-pink-200",
+    badgeBg: "bg-pink-100", badgeText: "text-pink-700",
+    entity: "Channel",
+    searchFields: ["name", "channel_type", "purpose", "status", "sentiment"],
+    primaryField: "name", secondaryField: "channel_type",
+    routePage: "Channels",
+    properties: ["channel_type", "purpose", "status", "sentiment", "message_count", "last_message_at"],
+    description: "Any communication channel — WhatsApp, email, call log, social.",
+  },
+  {
+    key: "Territory", label: "Territories", icon: Map,
+    color: "text-lime-600", bg: "bg-lime-50", border: "border-lime-200",
+    badgeBg: "bg-lime-100", badgeText: "text-lime-700",
+    entity: "Territory",
+    searchFields: ["name", "territory_type", "country", "region", "status"],
+    primaryField: "name", secondaryField: "territory_type",
+    routePage: "Territories",
+    properties: ["territory_type", "status", "country", "region", "area_km2", "population_estimate"],
+    description: "Any geographic coverage area — sales zones, delivery zones, catchments.",
+  },
 ];
 
 const TYPE_MAP = Object.fromEntries(OBJECT_TYPES.map(t => [t.key, t]));
@@ -139,6 +201,11 @@ const NODE_COLORS = {
   Transaction:  "#10b981",
   Relationship: "#6366f1",
   Address:      "#14b8a6",
+  Document:     "#ea580c",
+  Schedule:     "#0284c7",
+  Signal:       "#ca8a04",
+  Channel:      "#db2777",
+  Territory:    "#65a30d",
 };
 
 const PRESET_POSITIONS = {
@@ -149,6 +216,12 @@ const PRESET_POSITIONS = {
   Product:      { x: 820,  y: 145 },
   Transaction:  { x: 420,  y: 470 },
   Address:      { x: 710,  y: 455 },
+  // Phase 9 — new canonical entities (lower row)
+  Document:     { x: 110,  y: 560 },
+  Schedule:     { x: 310,  y: 620 },
+  Signal:       { x: 560,  y: 580 },
+  Channel:      { x: 780,  y: 560 },
+  Territory:    { x: 970,  y: 350 },
 };
 
 const ONTOLOGY_EDGES = [
@@ -162,6 +235,13 @@ const ONTOLOGY_EDGES = [
   { id: "e-prod-txn",    source: "Product",       target: "Transaction",  label: "item_name"        },
   { id: "e-person-addr", source: "Person",        target: "Address",      label: "person_name"      },
   { id: "e-ent-addr",    source: "Enterprise",    target: "Address",      label: "enterprise_name"  },
+  // Phase 9 — new entity edges
+  { id: "e-doc-ent",     source: "Document",      target: "Enterprise",   label: "enterprise_id"    },
+  { id: "e-sched-person",source: "Schedule",      target: "Person",       label: "assigned_to"      },
+  { id: "e-sched-ent",   source: "Schedule",      target: "Enterprise",   label: "enterprise_id"    },
+  { id: "e-sig-ent",     source: "Signal",        target: "Enterprise",   label: "enterprise_id"    },
+  { id: "e-chan-ent",    source: "Channel",        target: "Enterprise",   label: "enterprise_id"    },
+  { id: "e-chan-person", source: "Channel",        target: "Person",       label: "person_id"        },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

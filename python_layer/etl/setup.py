@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 _RAW_TABLES = [
     "people", "enterprises", "products", "transactions",
     "tasks", "addresses", "relationships", "services", "geospatial",
+    # New canonical entities
+    "documents", "schedules", "signals", "channels", "territories",
 ]
 
 _RAW_DDL_TEMPLATE = """
@@ -259,6 +261,110 @@ _CORE_ANALYTICS_DDL = [
         geocoded_at             TEXT,
         geocode_source          TEXT,
         cluster_id              TEXT,
+        snapshot_date           DATE,
+        loaded_at               TIMESTAMP
+    )
+    """,
+
+    # ── New canonical entities ─────────────────────────────────────────────────
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.document_summary (
+        enterprise_id           TEXT,
+        company_id              TEXT,
+        document_type           TEXT,
+        status                  TEXT,
+        document_count          BIGINT,
+        active_count            BIGINT,
+        expired_count           BIGINT,
+        signed_count            BIGINT,
+        is_contract             BOOLEAN,
+        is_invoice              BOOLEAN,
+        is_policy               BOOLEAN,
+        new_last_7d             BIGINT,
+        new_last_30d            BIGINT,
+        snapshot_date           DATE,
+        loaded_at               TIMESTAMP
+    )
+    """,
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.schedule_summary (
+        enterprise_id           TEXT,
+        company_id              TEXT,
+        schedule_type           TEXT,
+        frequency               TEXT,
+        status                  TEXT,
+        schedule_count          BIGINT,
+        active_count            BIGINT,
+        paused_count            BIGINT,
+        is_daily                BOOLEAN,
+        is_weekly               BOOLEAN,
+        is_monthly              BOOLEAN,
+        new_last_7d             BIGINT,
+        new_last_30d            BIGINT,
+        snapshot_date           DATE,
+        loaded_at               TIMESTAMP
+    )
+    """,
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.signal_summary (
+        enterprise_id           TEXT,
+        company_id              TEXT,
+        signal_type             TEXT,
+        unit_of_measure         TEXT,
+        status                  TEXT,
+        signal_count            BIGINT,
+        active_count            BIGINT,
+        anomaly_count           BIGINT,
+        avg_value               DOUBLE PRECISION,
+        is_sensor               BOOLEAN,
+        is_survey               BOOLEAN,
+        new_last_7d             BIGINT,
+        new_last_30d            BIGINT,
+        snapshot_date           DATE,
+        loaded_at               TIMESTAMP
+    )
+    """,
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.channel_summary (
+        enterprise_id           TEXT,
+        company_id              TEXT,
+        channel_type            TEXT,
+        purpose                 TEXT,
+        status                  TEXT,
+        channel_count           BIGINT,
+        active_count            BIGINT,
+        positive_count          BIGINT,
+        negative_count          BIGINT,
+        total_messages          BIGINT,
+        is_whatsapp             BOOLEAN,
+        is_email                BOOLEAN,
+        new_last_7d             BIGINT,
+        new_last_30d            BIGINT,
+        snapshot_date           DATE,
+        loaded_at               TIMESTAMP
+    )
+    """,
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.territory_summary (
+        enterprise_id           TEXT,
+        company_id              TEXT,
+        territory_type          TEXT,
+        country                 TEXT,
+        status                  TEXT,
+        territory_count         BIGINT,
+        active_count            BIGINT,
+        total_area_km2          DOUBLE PRECISION,
+        total_population        DOUBLE PRECISION,
+        is_sales_zone           BOOLEAN,
+        is_delivery_zone        BOOLEAN,
+        is_catchment            BOOLEAN,
+        new_last_7d             BIGINT,
+        new_last_30d            BIGINT,
         snapshot_date           DATE,
         loaded_at               TIMESTAMP
     )

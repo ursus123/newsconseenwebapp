@@ -109,6 +109,22 @@ ACTION_RISK_MAP = {
     "create_person":        RiskLevel.APPROVE,
     "create_product":       RiskLevel.APPROVE,
 
+    # Copilot import — single record creates
+    # Low-risk entities: Document, Schedule, Territory execute immediately (notify)
+    "create_document":      RiskLevel.NOTIFY,
+    "create_schedule":      RiskLevel.NOTIFY,
+    "create_territory":     RiskLevel.NOTIFY,
+    # High-risk entity creates go through approval
+    "create_enterprise":    RiskLevel.APPROVE,
+    "create_task":          RiskLevel.AUTO,    # override: tasks are always auto
+
+    # Copilot bulk import — always requires approval regardless of entity
+    "import_records":       RiskLevel.APPROVE,
+
+    # Signal and Channel are system-generated — no direct copilot create
+    "create_signal":        RiskLevel.NOTIFY,
+    "create_channel":       RiskLevel.NOTIFY,
+
     # Critical — always requires explicit approval, never auto
     "delete_record":        RiskLevel.CRITICAL,
     "bulk_delete":          RiskLevel.CRITICAL,

@@ -123,10 +123,15 @@ def _exec_flag_record(company_id: str, inputs: dict) -> dict:
     entity_type = inputs.get("entity_type", "person")
     record_id   = inputs.get("record_id")
     _url_map = {
-        "person":      getattr(settings, "base44_people_url",       None),
-        "enterprise":  getattr(settings, "base44_enterprises_url",  None),
-        "product":     getattr(settings, "base44_products_url",     None),
-        "task":        getattr(settings, "base44_tasks_url",        None),
+        "person":      getattr(settings, "base44_people_url",        None),
+        "enterprise":  getattr(settings, "base44_enterprises_url",   None),
+        "product":     getattr(settings, "base44_products_url",      None),
+        "task":        getattr(settings, "base44_tasks_url",         None),
+        "document":    getattr(settings, "base44_documents_url",     None),
+        "schedule":    getattr(settings, "base44_schedules_url",     None),
+        "territory":   getattr(settings, "base44_territories_url",   None),
+        "signal":      getattr(settings, "base44_signals_url",       None),
+        "channel":     getattr(settings, "base44_channels_url",      None),
     }
     url = _url_map.get(entity_type)
     if not url:
@@ -152,6 +157,11 @@ def _exec_update_record(company_id: str, inputs: dict) -> dict:
         "product":     getattr(settings, "base44_products_url",      None),
         "task":        getattr(settings, "base44_tasks_url",         None),
         "transaction": getattr(settings, "base44_transactions_url",  None),
+        "document":    getattr(settings, "base44_documents_url",     None),
+        "schedule":    getattr(settings, "base44_schedules_url",     None),
+        "territory":   getattr(settings, "base44_territories_url",   None),
+        "signal":      getattr(settings, "base44_signals_url",       None),
+        "channel":     getattr(settings, "base44_channels_url",      None),
     }
     url = _url_map.get(entity_type)
     if not url:
@@ -248,6 +258,209 @@ def _exec_create_person(company_id: str, inputs: dict) -> dict:
     return {"entity_type": "person", "entity_id": result.get("id")}
 
 
+def _exec_create_enterprise(company_id: str, inputs: dict) -> dict:
+    url = getattr(settings, "base44_enterprises_url", None)
+    if not url:
+        return {"error": "BASE44_ENTERPRISES_URL not configured"}
+    rec = {k: v for k, v in {
+        "company_id":      company_id,
+        "name":            inputs.get("name", ""),
+        "enterprise_type": inputs.get("enterprise_type", "commercial"),
+        "enterprise_subtype": inputs.get("enterprise_subtype", ""),
+        "status":          inputs.get("status", "active"),
+        "operating_status": inputs.get("operating_status", "open"),
+        "phone":           inputs.get("phone", ""),
+        "email":           inputs.get("email", ""),
+        "website":         inputs.get("website", ""),
+        "notes":           inputs.get("notes", f"Created by agent at {_now_iso()[:10]}"),
+    }.items() if v not in ("", None)}
+    if not rec.get("name"):
+        return {"error": "name is required for create_enterprise"}
+    result = _post_base44(url, rec)
+    _fire_etl("enterprise")
+    return {"entity_type": "enterprise", "entity_id": result.get("id")}
+
+
+def _exec_create_document(company_id: str, inputs: dict) -> dict:
+    url = getattr(settings, "base44_documents_url", None)
+    if not url:
+        return {"error": "BASE44_DOCUMENTS_URL not configured"}
+    rec = {k: v for k, v in {
+        "company_id":    company_id,
+        "title":         inputs.get("title", ""),
+        "document_type": inputs.get("document_type", "other"),
+        "document_subtype": inputs.get("document_subtype", ""),
+        "status":        inputs.get("status", "draft"),
+        "description":   inputs.get("description", ""),
+        "file_url":      inputs.get("file_url", ""),
+        "file_type":     inputs.get("file_type", ""),
+        "created_date":  inputs.get("created_date", _now_iso()[:10]),
+        "expiry_date":   inputs.get("expiry_date", ""),
+        "enterprise_id": inputs.get("enterprise_id", ""),
+        "is_signed":     inputs.get("is_signed", False),
+        "is_confidential": inputs.get("is_confidential", False),
+    }.items() if v not in ("", None)}
+    if not rec.get("title"):
+        return {"error": "title is required for create_document"}
+    result = _post_base44(url, rec)
+    _fire_etl("document")
+    return {"entity_type": "document", "entity_id": result.get("id")}
+
+
+def _exec_create_schedule(company_id: str, inputs: dict) -> dict:
+    url = getattr(settings, "base44_schedules_url", None)
+    if not url:
+        return {"error": "BASE44_SCHEDULES_URL not configured"}
+    rec = {k: v for k, v in {
+        "company_id":       company_id,
+        "title":            inputs.get("title", ""),
+        "schedule_type":    inputs.get("schedule_type", "recurring"),
+        "schedule_subtype": inputs.get("schedule_subtype", ""),
+        "status":           inputs.get("status", "active"),
+        "frequency":        inputs.get("frequency", "weekly"),
+        "start_date":       inputs.get("start_date", ""),
+        "end_date":         inputs.get("end_date", ""),
+        "time_of_day":      inputs.get("time_of_day", ""),
+        "description":      inputs.get("description", ""),
+        "enterprise_id":    inputs.get("enterprise_id", ""),
+        "assigned_person_id": inputs.get("assigned_person_id", ""),
+    }.items() if v not in ("", None)}
+    if not rec.get("title"):
+        return {"error": "title is required for create_schedule"}
+    result = _post_base44(url, rec)
+    _fire_etl("schedule")
+    return {"entity_type": "schedule", "entity_id": result.get("id")}
+
+
+def _exec_create_territory(company_id: str, inputs: dict) -> dict:
+    url = getattr(settings, "base44_territories_url", None)
+    if not url:
+        return {"error": "BASE44_TERRITORIES_URL not configured"}
+    rec = {k: v for k, v in {
+        "company_id":          company_id,
+        "name":                inputs.get("name", ""),
+        "territory_type":      inputs.get("territory_type", "service_area"),
+        "territory_subtype":   inputs.get("territory_subtype", ""),
+        "status":              inputs.get("status", "active"),
+        "country":             inputs.get("country", ""),
+        "region":              inputs.get("region", ""),
+        "area_km2":            inputs.get("area_km2"),
+        "population_estimate": inputs.get("population_estimate"),
+        "description":         inputs.get("description", ""),
+        "enterprise_id":       inputs.get("enterprise_id", ""),
+        "assigned_person_id":  inputs.get("assigned_person_id", ""),
+    }.items() if v not in ("", None)}
+    if not rec.get("name"):
+        return {"error": "name is required for create_territory"}
+    result = _post_base44(url, rec)
+    _fire_etl("territory")
+    return {"entity_type": "territory", "entity_id": result.get("id")}
+
+
+def _exec_create_signal(company_id: str, inputs: dict) -> dict:
+    url = getattr(settings, "base44_signals_url", None)
+    if not url:
+        return {"error": "BASE44_SIGNALS_URL not configured"}
+    rec = {k: v for k, v in {
+        "company_id":     company_id,
+        "name":           inputs.get("name", ""),
+        "signal_type":    inputs.get("signal_type", "manual"),
+        "signal_subtype": inputs.get("signal_subtype", ""),
+        "status":         inputs.get("status", "active"),
+        "value":          inputs.get("value"),
+        "unit_of_measure": inputs.get("unit_of_measure", "unit"),
+        "recorded_at":    inputs.get("recorded_at", _now_iso()),
+        "source":         inputs.get("source", "copilot"),
+        "description":    inputs.get("description", ""),
+        "enterprise_id":  inputs.get("enterprise_id", ""),
+        "is_anomaly":     inputs.get("is_anomaly", False),
+    }.items() if v not in ("", None)}
+    if not rec.get("name"):
+        return {"error": "name is required for create_signal"}
+    result = _post_base44(url, rec)
+    _fire_etl("signal")
+    return {"entity_type": "signal", "entity_id": result.get("id")}
+
+
+def _exec_create_channel(company_id: str, inputs: dict) -> dict:
+    url = getattr(settings, "base44_channels_url", None)
+    if not url:
+        return {"error": "BASE44_CHANNELS_URL not configured"}
+    rec = {k: v for k, v in {
+        "company_id":     company_id,
+        "name":           inputs.get("name", ""),
+        "channel_type":   inputs.get("channel_type", "email"),
+        "channel_subtype": inputs.get("channel_subtype", ""),
+        "status":         inputs.get("status", "active"),
+        "purpose":        inputs.get("purpose", "operations"),
+        "sentiment":      inputs.get("sentiment", "neutral"),
+        "description":    inputs.get("description", ""),
+        "enterprise_id":  inputs.get("enterprise_id", ""),
+    }.items() if v not in ("", None)}
+    if not rec.get("name"):
+        return {"error": "name is required for create_channel"}
+    result = _post_base44(url, rec)
+    _fire_etl("channel")
+    return {"entity_type": "channel", "entity_id": result.get("id")}
+
+
+def _exec_import_records(company_id: str, inputs: dict) -> dict:
+    """
+    Bulk import: create multiple records of any entity type.
+    Each record is created individually so partial success is possible.
+    """
+    entity_type = inputs.get("entity_type", "")
+    records     = inputs.get("records", [])
+
+    if not records:
+        return {"error": "records list is empty"}
+
+    # Delegate each record to the appropriate single-create handler
+    _single_handlers = {
+        "person":      _exec_create_person,
+        "enterprise":  _exec_create_enterprise,
+        "product":     _exec_create_product,
+        "task":        _exec_create_task,
+        "transaction": _exec_create_transaction,
+        "document":    _exec_create_document,
+        "schedule":    _exec_create_schedule,
+        "territory":   _exec_create_territory,
+        "signal":      _exec_create_signal,
+        "channel":     _exec_create_channel,
+    }
+    handler = _single_handlers.get(entity_type)
+    if not handler:
+        return {"error": f"entity_type '{entity_type}' not supported for import"}
+
+    created, failed = [], []
+    for i, record in enumerate(records):
+        try:
+            result = handler(company_id, record)
+            if "error" in result:
+                failed.append({"index": i, "record": record, "error": result["error"]})
+            else:
+                created.append(result)
+        except Exception as e:
+            failed.append({"index": i, "record": record, "error": str(e)})
+
+    # Fire ETL once at the end
+    _etl_map = {
+        "person": "people", "enterprise": "enterprise", "product": "product",
+        "task": "task", "transaction": "transaction", "document": "document",
+        "schedule": "schedule", "territory": "territory",
+        "signal": "signal", "channel": "channel",
+    }
+    _fire_etl(_etl_map.get(entity_type, entity_type))
+
+    return {
+        "entity_type": entity_type,
+        "created_count": len(created),
+        "failed_count":  len(failed),
+        "created": created,
+        "failed":  failed,
+    }
+
+
 def _exec_create_product(company_id: str, inputs: dict) -> dict:
     url = getattr(settings, "base44_products_url", None)
     if not url:
@@ -275,16 +488,28 @@ def _exec_create_product(company_id: str, inputs: dict) -> dict:
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 _HANDLERS = {
+    # Existing entity creates
     "create_task":           _exec_create_task,
     "create_follow_up":      _exec_create_task,
     "create_purchase_order": _exec_create_task,
     "create_person":         _exec_create_person,
     "create_product":        _exec_create_product,
+    "create_transaction":    _exec_create_transaction,
+    "create_enterprise":     _exec_create_enterprise,
+    # New canonical entity creates
+    "create_document":       _exec_create_document,
+    "create_schedule":       _exec_create_schedule,
+    "create_territory":      _exec_create_territory,
+    "create_signal":         _exec_create_signal,
+    "create_channel":        _exec_create_channel,
+    # Bulk import (any entity, always approval-gated)
+    "import_records":        _exec_import_records,
+    # Record mutations
     "flag_record":           _exec_flag_record,
     "update_record":         _exec_update_record,
     "update_task_status":    _exec_update_task_status,
     "reassign_task":         _exec_reassign_task,
-    "create_transaction":    _exec_create_transaction,
+    # Messaging
     "send_client_message":   lambda cid, inp: _exec_send_message(cid, inp, "whatsapp"),
     "send_whatsapp":         lambda cid, inp: _exec_send_message(cid, inp, "whatsapp"),
     "send_email":            lambda cid, inp: _exec_send_message(cid, inp, "email"),

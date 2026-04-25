@@ -28,6 +28,18 @@ from etl import (
     time as time_etl,
     transactions,
 )
+# New canonical entity ETL modules
+try:
+    from etl import document as document_etl
+    from etl import schedule as schedule_etl
+    from etl import signal as signal_etl
+    from etl import channel as channel_etl
+    from etl import territory as territory_etl
+    _new_entities_ok = True
+except Exception as _ne_err:
+    _new_entities_ok = False
+    document_etl = schedule_etl = signal_etl = channel_etl = territory_etl = None
+    logger.warning("New canonical entity ETL modules failed to load — %s", _ne_err)
 from etl.load import load_dataframe, load_dataframe_replace, load_raw
 
 # Schemas
@@ -67,6 +79,9 @@ from n8n.emitter import emit_etl_complete
 
 # Airbyte data integration
 from airbyte.routes import router as airbyte_router
+
+# Unified entity search
+from search.routes import router as search_router
 
 # pgvector semantic search
 from pgvector_ext.routes import router as pgvector_router
@@ -340,6 +355,9 @@ app.include_router(n8n_router)
 
 # Airbyte data integration
 app.include_router(airbyte_router)
+
+# Unified entity search
+app.include_router(search_router)
 
 # pgvector semantic search
 app.include_router(pgvector_router)
@@ -1783,6 +1801,118 @@ def load_geospatial_summary(
             result["postgis_geom_updated"] = f"skipped ({_e})"
 
     return result
+
+
+# ── New canonical entities — Document, Schedule, Signal, Channel, Territory ────
+
+@app.get("/document-summary", tags=["ETL"])
+def get_document_summary_endpoint(company_id: Optional[str] = Query(None)):
+    if not _new_entities_ok:
+        return []
+    df = filter_by_company(document_etl.extract_documents(), company_id)
+    return document_etl.transform_documents(df).where(
+        document_etl.transform_documents(df).notna(), None
+    ).to_dict(orient="records")
+
+
+@app.post("/load/document-summary", tags=["ETL"])
+def load_document_summary(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    if not _new_entities_ok:
+        return {"status": "skipped", "reason": "document ETL not loaded"}
+    df = filter_by_company(document_etl.extract_documents(), company_id)
+    return load_dataframe(document_etl.transform_documents(df), "document_summary", company_id=company_id)
+
+
+@app.get("/schedule-summary", tags=["ETL"])
+def get_schedule_summary_endpoint(company_id: Optional[str] = Query(None)):
+    if not _new_entities_ok:
+        return []
+    df = filter_by_company(schedule_etl.extract_schedules(), company_id)
+    return schedule_etl.transform_schedules(df).where(
+        schedule_etl.transform_schedules(df).notna(), None
+    ).to_dict(orient="records")
+
+
+@app.post("/load/schedule-summary", tags=["ETL"])
+def load_schedule_summary(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    if not _new_entities_ok:
+        return {"status": "skipped", "reason": "schedule ETL not loaded"}
+    df = filter_by_company(schedule_etl.extract_schedules(), company_id)
+    return load_dataframe(schedule_etl.transform_schedules(df), "schedule_summary", company_id=company_id)
+
+
+@app.get("/signal-summary", tags=["ETL"])
+def get_signal_summary_endpoint(company_id: Optional[str] = Query(None)):
+    if not _new_entities_ok:
+        return []
+    df = filter_by_company(signal_etl.extract_signals(), company_id)
+    return signal_etl.transform_signals(df).where(
+        signal_etl.transform_signals(df).notna(), None
+    ).to_dict(orient="records")
+
+
+@app.post("/load/signal-summary", tags=["ETL"])
+def load_signal_summary(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    if not _new_entities_ok:
+        return {"status": "skipped", "reason": "signal ETL not loaded"}
+    df = filter_by_company(signal_etl.extract_signals(), company_id)
+    return load_dataframe(signal_etl.transform_signals(df), "signal_summary", company_id=company_id)
+
+
+@app.get("/channel-summary", tags=["ETL"])
+def get_channel_summary_endpoint(company_id: Optional[str] = Query(None)):
+    if not _new_entities_ok:
+        return []
+    df = filter_by_company(channel_etl.extract_channels(), company_id)
+    return channel_etl.transform_channels(df).where(
+        channel_etl.transform_channels(df).notna(), None
+    ).to_dict(orient="records")
+
+
+@app.post("/load/channel-summary", tags=["ETL"])
+def load_channel_summary(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    if not _new_entities_ok:
+        return {"status": "skipped", "reason": "channel ETL not loaded"}
+    df = filter_by_company(channel_etl.extract_channels(), company_id)
+    return load_dataframe(channel_etl.transform_channels(df), "channel_summary", company_id=company_id)
+
+
+@app.get("/territory-summary", tags=["ETL"])
+def get_territory_summary_endpoint(company_id: Optional[str] = Query(None)):
+    if not _new_entities_ok:
+        return []
+    df = filter_by_company(territory_etl.extract_territories(), company_id)
+    return territory_etl.transform_territories(df).where(
+        territory_etl.transform_territories(df).notna(), None
+    ).to_dict(orient="records")
+
+
+@app.post("/load/territory-summary", tags=["ETL"])
+def load_territory_summary(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    if not _new_entities_ok:
+        return {"status": "skipped", "reason": "territory ETL not loaded"}
+    df = filter_by_company(territory_etl.extract_territories(), company_id)
+    return load_dataframe(territory_etl.transform_territories(df), "territory_summary", company_id=company_id)
 
 
 # ── Intelligence analytics — GET + POST load endpoints ────────────────────────

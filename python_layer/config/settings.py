@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     base44_products_url:       str
     base44_relationships_url:  Optional[str] = None
     base44_addresses_url:      Optional[str] = None
+    # New canonical entities
+    base44_documents_url:      Optional[str] = None
+    base44_schedules_url:      Optional[str] = None
+    base44_signals_url:        Optional[str] = None
+    base44_channels_url:       Optional[str] = None
+    base44_territories_url:    Optional[str] = None
 
     # ----------------------------------------------------------
     # Base44 authentication

@@ -4,11 +4,12 @@ import { ZoomIn, ZoomOut, Maximize2, GitBranch, Database, ArrowRight, Download, 
 import { NotebookStore } from "@/components/querybuilder/NotebookStore";
 import html2canvas from "html2canvas";
 
-// ─── Schema: 7 canonical entities + MasterDataOption taxonomy ────────────────
+// ─── Schema: 12 canonical entities + MasterDataOption taxonomy ───────────────
 //
 // Source of truth: ARCHITECTURE.md + CLAUDE.md
 //   Three master entities:   Person · Enterprise · Product
 //   Four supporting:         Task · Transaction · Relationship · Address
+//   Five extended (Phase 9): Document · Schedule · Signal · Channel · Territory
 //   Universal taxonomy:      MasterDataOption
 //
 // Removed from previous version (violated CLAUDE.md):
@@ -127,6 +128,91 @@ const TABLES = [
       { name: "city / state_region / country", type: "string" },
       { name: "postal_code", type: "string" },
       { name: "latitude / longitude", type: "number (geocoded)" },
+      { name: "company_id", type: "tenant scope" },
+    ],
+  },
+  // ── Phase 9: Five Extended Canonical Entities ─────────────────────────────
+  {
+    id: "Document", label: "Document", color: "#ea580c", bg: "#fff7ed", border: "#fed7aa",
+    icon: "📄", layer: "Extended Entities",
+    description: "Any file, record, or formal document — contracts, invoices, policies, compliance records. Linked to an Enterprise.",
+    fields: [
+      { name: "id", type: "PK", pk: true },
+      { name: "title", type: "string" },
+      { name: "document_type", type: "FK → MasterDataOption", fk: true },
+      { name: "status", type: "enum: draft|active|expired|archived" },
+      { name: "file_url", type: "string" },
+      { name: "enterprise_id", type: "FK → Enterprise", fk: true },
+      { name: "signed_at / expires_at", type: "date" },
+      { name: "is_contract / is_invoice / is_policy", type: "boolean" },
+      { name: "company_id", type: "tenant scope" },
+    ],
+  },
+  {
+    id: "Schedule", label: "Schedule", color: "#0284c7", bg: "#f0f9ff", border: "#bae6fd",
+    icon: "📅", layer: "Extended Entities",
+    description: "Any recurring pattern, shift template, or calendar rule. Drives scheduling intelligence and adherence tracking.",
+    fields: [
+      { name: "id", type: "PK", pk: true },
+      { name: "title", type: "string" },
+      { name: "schedule_type", type: "FK → MasterDataOption", fk: true },
+      { name: "frequency", type: "enum: daily|weekly|fortnightly|monthly|custom" },
+      { name: "day_of_week / time_of_day", type: "string" },
+      { name: "status", type: "enum: active|paused|completed" },
+      { name: "starts_on / ends_on", type: "date" },
+      { name: "enterprise_id", type: "FK → Enterprise", fk: true },
+      { name: "assigned_to", type: "FK → Person", fk: true },
+      { name: "company_id", type: "tenant scope" },
+    ],
+  },
+  {
+    id: "Signal", label: "Signal", color: "#ca8a04", bg: "#fefce8", border: "#fef08a",
+    icon: "📡", layer: "Extended Entities",
+    description: "Any sensor reading, survey response, or telemetry data point. is_anomaly flags statistical outliers.",
+    fields: [
+      { name: "id", type: "PK", pk: true },
+      { name: "signal_type", type: "FK → MasterDataOption", fk: true },
+      { name: "source_entity_type / source_entity_id", type: "string" },
+      { name: "value", type: "number" },
+      { name: "unit_of_measure", type: "string" },
+      { name: "recorded_at", type: "datetime" },
+      { name: "is_anomaly", type: "boolean" },
+      { name: "notes", type: "string" },
+      { name: "enterprise_id", type: "FK → Enterprise", fk: true },
+      { name: "company_id", type: "tenant scope" },
+    ],
+  },
+  {
+    id: "Channel", label: "Channel", color: "#db2777", bg: "#fdf2f8", border: "#f9a8d4",
+    icon: "💬", layer: "Extended Entities",
+    description: "Any communication channel and its interactions — WhatsApp, email, call log, social. Sentiment-tagged at the channel level.",
+    fields: [
+      { name: "id", type: "PK", pk: true },
+      { name: "name", type: "string" },
+      { name: "channel_type", type: "enum: whatsapp|email|sms|call|social|in_person" },
+      { name: "purpose", type: "FK → MasterDataOption", fk: true },
+      { name: "status", type: "enum: active|inactive|archived" },
+      { name: "last_message_at", type: "datetime" },
+      { name: "message_count", type: "number" },
+      { name: "sentiment", type: "enum: positive|neutral|negative" },
+      { name: "enterprise_id", type: "FK → Enterprise", fk: true },
+      { name: "person_id", type: "FK → Person", fk: true },
+      { name: "company_id", type: "tenant scope" },
+    ],
+  },
+  {
+    id: "Territory", label: "Territory", color: "#65a30d", bg: "#f7fee7", border: "#d9f99d",
+    icon: "🗺️", layer: "Extended Entities",
+    description: "Any geographic coverage area — sales zones, delivery zones, service areas, catchments, districts, regions.",
+    fields: [
+      { name: "id", type: "PK", pk: true },
+      { name: "name", type: "string" },
+      { name: "territory_type", type: "enum: sales_zone|delivery_zone|service_area|catchment|district|region" },
+      { name: "status", type: "enum: active|inactive" },
+      { name: "country / region", type: "string" },
+      { name: "area_km2", type: "number" },
+      { name: "population_estimate", type: "number" },
+      { name: "description", type: "string" },
       { name: "company_id", type: "tenant scope" },
     ],
   },
@@ -451,6 +537,86 @@ const PG_RAW_TABLES = [
       { name: "loaded_at", type: "TIMESTAMPTZ" },
     ],
   },
+  // ── Phase 9: Five Extended Entity raw.* tables ────────────────────────────
+  {
+    id: "raw_documents", label: "raw.documents", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Document records from Base44. enterprise_id is a string name-join.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "title / document_type", type: "TEXT" },
+      { name: "status", type: "TEXT: draft|active|expired|archived" },
+      { name: "file_url", type: "TEXT" },
+      { name: "enterprise_id", type: "TEXT (name-join → raw.enterprises)" },
+      { name: "signed_at / expires_at", type: "DATE" },
+      { name: "is_contract / is_invoice / is_policy", type: "BOOL" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_schedules", label: "raw.schedules", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Schedule records. assigned_to and enterprise_id are name-joins.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "title / schedule_type", type: "TEXT" },
+      { name: "frequency", type: "TEXT: daily|weekly|fortnightly|monthly|custom" },
+      { name: "day_of_week / time_of_day", type: "TEXT" },
+      { name: "status", type: "TEXT: active|paused|completed" },
+      { name: "starts_on / ends_on", type: "DATE" },
+      { name: "enterprise_id / assigned_to", type: "TEXT (name-join)" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_signals", label: "raw.signals", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Signal / telemetry records. source_entity_type + id link to any entity.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "signal_type", type: "TEXT (name-join)" },
+      { name: "source_entity_type / source_entity_id", type: "TEXT" },
+      { name: "value", type: "FLOAT" },
+      { name: "unit_of_measure", type: "TEXT" },
+      { name: "recorded_at", type: "TIMESTAMPTZ" },
+      { name: "is_anomaly", type: "BOOL" },
+      { name: "enterprise_id", type: "TEXT (name-join)" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_channels", label: "raw.channels", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Channel records. Sentiment-tagged at channel level. enterprise_id and person_id are name-joins.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "name / channel_type", type: "TEXT" },
+      { name: "purpose / status", type: "TEXT" },
+      { name: "last_message_at", type: "TIMESTAMPTZ" },
+      { name: "message_count", type: "INT" },
+      { name: "sentiment", type: "TEXT: positive|neutral|negative" },
+      { name: "enterprise_id / person_id", type: "TEXT (name-join)" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_territories", label: "raw.territories", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Territory records. Geographic coverage areas — sales zones, delivery zones, catchments.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "name / territory_type", type: "TEXT" },
+      { name: "status / country / region", type: "TEXT" },
+      { name: "area_km2 / population_estimate", type: "FLOAT" },
+      { name: "description", type: "TEXT" },
+      { name: "company_id", type: "TEXT (all tenants)" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
 ];
 
 // ── analytics.* — ETL aggregation tables ─────────────────────────────────────
@@ -568,6 +734,76 @@ const PG_ANALYTICS_TABLES = [
       { name: "lat_center / lon_center", type: "FLOAT" },
       { name: "record_count", type: "INT" },
       { name: "snapshot_date", type: "DATE" },
+    ],
+  },
+  // ── Phase 9: Five Extended Entity analytics.* summary tables ────────────────
+  {
+    id: "an_documents", label: "analytics.document_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Document counts by type × status. Expiry and signing metrics. ETL-written from raw.documents.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "document_type / status", type: "TEXT" },
+      { name: "document_count / active_count / expired_count / signed_count", type: "INT" },
+      { name: "new_last_7d / new_last_30d", type: "INT" },
+      { name: "is_contract / is_invoice / is_policy", type: "BOOL" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_schedules", label: "analytics.schedule_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Schedule counts by frequency × status. Drives scheduling intelligence.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "schedule_type / frequency / status", type: "TEXT" },
+      { name: "schedule_count / active_count / paused_count", type: "INT" },
+      { name: "is_daily / is_weekly / is_monthly", type: "BOOL" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_signals", label: "analytics.signal_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Signal/telemetry counts by type × unit. Anomaly counts and average values.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "signal_type / unit_of_measure", type: "TEXT" },
+      { name: "signal_count / active_count / anomaly_count", type: "INT" },
+      { name: "avg_value", type: "FLOAT" },
+      { name: "is_sensor / is_survey", type: "BOOL" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_channels", label: "analytics.channel_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Channel counts by type × purpose. Sentiment breakdown and message volume totals.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "channel_type / purpose", type: "TEXT" },
+      { name: "channel_count / active_count / positive_count / negative_count", type: "INT" },
+      { name: "total_messages", type: "INT" },
+      { name: "is_whatsapp / is_email", type: "BOOL" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_territories", label: "analytics.territory_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Territory counts by type × country. Total area km² and population coverage.",
+    fields: [
+      { name: "company_id", type: "TEXT" },
+      { name: "territory_type / country", type: "TEXT" },
+      { name: "territory_count / active_count", type: "INT" },
+      { name: "total_area_km2 / total_population", type: "FLOAT" },
+      { name: "is_sales_zone / is_delivery_zone / is_catchment", type: "BOOL" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
     ],
   },
   // ── Deep intelligence analytics tables (ETL-written) ──────────────────────
@@ -803,6 +1039,78 @@ const PG_ANALYTICS_TABLES = [
       { name: "country_risk_score", type: "FLOAT 0–100 (Phase C — World Bank WGI; higher=safer)" },
       { name: "country_risk_label", type: "TEXT (Phase C — very_low_risk|low_risk|medium_risk|high_risk|very_high_risk)" },
       { name: "enrichment_status", type: "TEXT: enriched|skipped|geocode_failed|error" },
+      { name: "enriched_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  // ── Phase 9: Five Extended Entity enrichment tables ──────────────────────
+  {
+    id: "an_document_enrichment", label: "analytics.document_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
+    icon: "🔍", layer: "analytics.enrichment",
+    description: "Phase 9 document enrichment. Infers category from document_type. PII detection, compliance flags, and expiry risk scoring.",
+    fields: [
+      { name: "company_id / document_id / document_type / status", type: "TEXT" },
+      { name: "inferred_category", type: "TEXT: legal|financial|hr|operational|compliance|other" },
+      { name: "pii_detected", type: "BOOL (inferred from document_type)" },
+      { name: "compliance_flag", type: "TEXT: high|medium|low|none" },
+      { name: "expiry_risk", type: "TEXT: expired|due_30d|due_90d|ok|none" },
+      { name: "enrichment_status", type: "TEXT: enriched|skipped" },
+      { name: "enriched_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_schedule_enrichment", label: "analytics.schedule_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
+    icon: "🔍", layer: "analytics.enrichment",
+    description: "Phase 9 schedule enrichment. Adherence rate from completed tasks, conflict risk, forecast utilisation, missed runs in last 30 days.",
+    fields: [
+      { name: "company_id / schedule_id / schedule_type / frequency", type: "TEXT" },
+      { name: "adherence_rate", type: "FLOAT 0–1 (tasks completed / scheduled)" },
+      { name: "conflict_risk", type: "TEXT: high|medium|low|none" },
+      { name: "forecast_utilisation", type: "FLOAT 0–1 (predicted usage next period)" },
+      { name: "missed_runs_30d", type: "INT (missed occurrences in last 30 days)" },
+      { name: "enrichment_status", type: "TEXT: enriched|skipped" },
+      { name: "enriched_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_signal_enrichment", label: "analytics.signal_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
+    icon: "🔍", layer: "analytics.enrichment",
+    description: "Phase 9 signal enrichment. Z-score normalisation, anomaly scoring, trend direction, and 1-step-ahead forecast.",
+    fields: [
+      { name: "company_id / signal_id / signal_type / unit_of_measure", type: "TEXT" },
+      { name: "normalised_value", type: "FLOAT (min-max scaled 0–1)" },
+      { name: "z_score", type: "FLOAT (standard deviations from peer mean)" },
+      { name: "anomaly_score", type: "FLOAT 0–100 (composite outlier score)" },
+      { name: "trend_direction", type: "TEXT: rising|stable|falling" },
+      { name: "forecast_next_value", type: "FLOAT (simple linear forecast)" },
+      { name: "enrichment_status", type: "TEXT: enriched|insufficient_data|skipped" },
+      { name: "enriched_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_channel_enrichment", label: "analytics.channel_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
+    icon: "🔍", layer: "analytics.enrichment",
+    description: "Phase 9 channel enrichment. Sentiment scoring, toxicity detection, relationship health label, churn risk inferred from communication gap.",
+    fields: [
+      { name: "company_id / channel_id / channel_type / purpose", type: "TEXT" },
+      { name: "sentiment_score", type: "FLOAT -1 to +1 (negative → positive)" },
+      { name: "toxicity_score", type: "FLOAT 0–1 (high = harmful content detected)" },
+      { name: "relationship_health", type: "TEXT: green|amber|red" },
+      { name: "churn_risk", type: "TEXT: high|medium|low|none (inferred from silence gap)" },
+      { name: "enrichment_status", type: "TEXT: enriched|insufficient_data|skipped" },
+      { name: "enriched_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_territory_enrichment", label: "analytics.territory_enrichment", color: "#059669", bg: "#ecfdf5", border: "#6ee7b7",
+    icon: "🔍", layer: "analytics.enrichment",
+    description: "Phase 9 territory enrichment. Geocoded centroid, regulatory jurisdiction lookup, World Bank country risk score, revenue per km².",
+    fields: [
+      { name: "company_id / territory_id / territory_type / country", type: "TEXT" },
+      { name: "centroid_lat / centroid_lng", type: "FLOAT (OSM-derived centroid)" },
+      { name: "regulatory_jurisdiction", type: "TEXT (admin-level1 from OSM)" },
+      { name: "country_risk_score", type: "FLOAT 0–100 (World Bank WGI; higher=safer)" },
+      { name: "revenue_per_km2", type: "FLOAT (transaction revenue / area_km2)" },
+      { name: "enrichment_status", type: "TEXT: enriched|no_geocode|skipped" },
       { name: "enriched_at", type: "TIMESTAMPTZ" },
     ],
   },
@@ -1068,6 +1376,18 @@ const PG_EDGES = [
   { from: "raw_tasks",         to: "an_task_enrichment",         label: "Phase D enrich", style: "etl" },
   // Phase D: entity_scores → relationship contagion
   { from: "an_entity_scores",  to: "an_relationship_enrichment", label: "risk contagion", style: "api_orange" },
+  // Phase 9: raw.* → analytics.* (5 new ETL flows)
+  { from: "raw_documents",   to: "an_documents",   label: "ETL aggregate", style: "etl" },
+  { from: "raw_schedules",   to: "an_schedules",   label: "ETL aggregate", style: "etl" },
+  { from: "raw_signals",     to: "an_signals",     label: "ETL aggregate", style: "etl" },
+  { from: "raw_channels",    to: "an_channels",    label: "ETL aggregate", style: "etl" },
+  { from: "raw_territories", to: "an_territories", label: "ETL aggregate", style: "etl" },
+  // Phase 9: raw.* → enrichment
+  { from: "raw_documents",   to: "an_document_enrichment",  label: "Phase 9 enrich", style: "etl" },
+  { from: "raw_schedules",   to: "an_schedule_enrichment",  label: "Phase 9 enrich", style: "etl" },
+  { from: "raw_signals",     to: "an_signal_enrichment",    label: "Phase 9 enrich", style: "etl" },
+  { from: "raw_channels",    to: "an_channel_enrichment",   label: "Phase 9 enrich", style: "etl" },
+  { from: "raw_territories", to: "an_territory_enrichment", label: "Phase 9 enrich", style: "etl" },
 ];
 
 // ── PostgreSQL view default positions ─────────────────────────────────────────
@@ -1102,6 +1422,24 @@ const DEFAULT_PG_POSITIONS = {
   an_entity_scores:          { x: 80,   y: 840 },
   an_relationship_enrichment:{ x: 460,  y: 840 },
   an_task_enrichment:        { x: 840,  y: 840 },
+  // Phase 9: raw.* (y=60, extended right)
+  raw_documents:   { x: 1550, y: 60  },
+  raw_schedules:   { x: 1720, y: 60  },
+  raw_signals:     { x: 1890, y: 60  },
+  raw_channels:    { x: 2060, y: 60  },
+  raw_territories: { x: 2230, y: 60  },
+  // Phase 9: analytics.* (y=460, same x as raw counterparts)
+  an_documents:    { x: 1550, y: 460 },
+  an_schedules:    { x: 1720, y: 460 },
+  an_signals:      { x: 1890, y: 460 },
+  an_channels:     { x: 2060, y: 460 },
+  an_territories:  { x: 2230, y: 460 },
+  // Phase 9: enrichment (y=660, same x-alignment)
+  an_document_enrichment:  { x: 1550, y: 660 },
+  an_schedule_enrichment:  { x: 1720, y: 660 },
+  an_signal_enrichment:    { x: 1890, y: 660 },
+  an_channel_enrichment:   { x: 2060, y: 660 },
+  an_territory_enrichment: { x: 2230, y: 660 },
   // Intelligence (y=1020)
   an_agent_memory:    { x: 80,   y: 860 },
   an_agent_approvals: { x: 450,  y: 860 },
@@ -1118,6 +1456,7 @@ const PG_LAYER_COLORS = {
   "analytics.enrichment": "bg-emerald-50 text-emerald-700 border-emerald-200",
   "analytics.scoring":    "bg-violet-50 text-violet-700 border-violet-200",
   "Intelligence":         "bg-purple-50 text-purple-700 border-purple-200",
+  "Infrastructure":       "bg-slate-50 text-slate-700 border-slate-200",
   "audit.*":              "bg-rose-50 text-rose-700 border-rose-200",
 };
 
@@ -1129,13 +1468,13 @@ const API_CATALOGUE = [
     endpoints: [
       { method: "GET",  path: "/health",                   desc: "Health check + ETL timestamps + table row counts" },
       { method: "POST", path: "/cron/etl-all",             desc: "Full ETL for all entities + all tenants (cron use)" },
-      { method: "POST", path: "/load/{entity}-summary",    desc: "Single-entity ETL: people|enterprise|product|task|transaction|..." },
+      { method: "POST", path: "/load/{entity}-summary",    desc: "Single-entity ETL: people|enterprise|product|task|transaction|document|schedule|signal|channel|territory|..." },
       { method: "GET",  path: "/raw/{entity}",             desc: "Read raw.* table — requires company_id param" },
     ],
   },
   {
     name: "Copilot", prefix: "/copilot", color: "#0891b2", bg: "#ecfeff",
-    desc: "Claude-powered Q&A grounded in operator data. Tool loop with 10+ query tools.",
+    desc: "Claude-powered Q&A grounded in operator data. Tool loop with 40+ query tools + create_record + import_records write-back.",
     endpoints: [
       { method: "POST", path: "/copilot/ask",              desc: "Submit query → tool loop → grounded answer (streaming)" },
       { method: "GET",  path: "/copilot/status",           desc: "Backend availability + ANTHROPIC_API_KEY check" },
@@ -1379,6 +1718,12 @@ const DEFAULT_POSITIONS = {
   Task:                    { x: 60,   y: 560 },
   Transaction:             { x: 340,  y: 560 },
   Relationship:            { x: 620,  y: 560 },
+  // Phase 9 — Five Extended Entities (y=560, right side)
+  Document:                { x: 900,  y: 560 },
+  Schedule:                { x: 1130, y: 560 },
+  Signal:                  { x: 1360, y: 560 },
+  Channel:                 { x: 1590, y: 560 },
+  Territory:               { x: 1820, y: 560 },
   // Layer 2 — Deployable Datamart — analytics.* (y=820)
   analytics_people:        { x: 40,   y: 820 },
   analytics_enterprises:   { x: 250,  y: 820 },
@@ -1395,14 +1740,18 @@ const ONTOLOGY_ROW_CONFIG = {
   "Master Entities":     { y: 300, cols: 3 },
   "Taxonomy":            { y: 300, cols: 2, offset: 3 },
   "Supporting Entities": { y: 560, cols: 3 },
+  "Extended Entities":   { y: 560, cols: 5, offset: 3 },
   "Analytics Layer":     { y: 820, cols: 7 },
 };
 
 const PG_ROW_CONFIG = {
-  "raw.*":        { y: 60,   cols: 9 },
-  "analytics.*":  { y: 460,  cols: 9 },
-  "Intelligence": { y: 860,  cols: 4 },
-  "audit.*":      { y: 1080, cols: 1 },
+  "raw.*":                 { y: 60,   cols: 14 },
+  "analytics.*":           { y: 460,  cols: 14 },
+  "analytics.enrichment":  { y: 660,  cols: 10 },
+  "analytics.intelligence":{ y: 840,  cols: 5  },
+  "analytics.scoring":     { y: 840,  cols: 3, offset: 5 },
+  "Intelligence":          { y: 860,  cols: 4  },
+  "audit.*":               { y: 1080, cols: 1  },
 };
 
 function computeAutoLayout(allTables, rowConfig = ONTOLOGY_ROW_CONFIG) {
@@ -1455,6 +1804,7 @@ function getEdgePoint(fromId, toId, positions, tables) {
 const LAYER_COLORS = {
   "Master Entities":     "bg-blue-50 text-blue-700 border-blue-200",
   "Supporting Entities": "bg-violet-50 text-violet-700 border-violet-200",
+  "Extended Entities":   "bg-orange-50 text-orange-700 border-orange-200",
   "Taxonomy":            "bg-cyan-50 text-cyan-700 border-cyan-200",
   "Analytics Layer":     "bg-indigo-50 text-indigo-700 border-indigo-200",
   "Open Data APIs":      "bg-emerald-50 text-emerald-700 border-emerald-200",

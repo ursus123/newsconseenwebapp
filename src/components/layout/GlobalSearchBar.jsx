@@ -3,201 +3,283 @@ import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import {
   Search, X, Users, Building2, ClipboardList, ArrowLeftRight,
-  FileText, Calendar, Activity, MessageSquare, Map, Package, Wrench, MapPin, Link2
+  FileText, Calendar, Activity, MessageSquare, Map, Package,
+  Wrench, MapPin, Link2, ExternalLink, ChevronRight,
 } from "lucide-react";
 import { createPageUrl } from "@/utils";
 
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
+
+// ── Entity config ─────────────────────────────────────────────────────────────
+// Used for the Base44 fallback path only.
+// The python_layer endpoint handles everything else.
 const ENTITY_CONFIG = [
   {
     key: "person", entity: "Person", page: "People", icon: Users, color: "text-violet-500",
-    fetch: (scope) => base44.entities.Person.filter(scope, undefined, 50),
-    match: (r, q) => r.first_name?.toLowerCase().includes(q) || r.last_name?.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q),
+    fetch: (s) => base44.entities.Person.filter(s, undefined, 100),
+    match: (r, q) => [r.first_name, r.last_name, r.email].some(v => v?.toLowerCase().includes(q)),
     title: (r) => `${r.first_name || ""} ${r.last_name || ""}`.trim() || r.email,
     subtitle: (r) => r.email || r.person_type || "Person",
+    fields: (r) => ({ type: r.person_type, status: r.status, email: r.email, phone: r.phone }),
   },
   {
     key: "enterprise", entity: "Enterprise", page: "Enterprises", icon: Building2, color: "text-blue-500",
-    fetch: (scope) => base44.entities.Enterprise.filter(scope, undefined, 50),
-    match: (r, q) => r.enterprise_name?.toLowerCase().includes(q) || r.short_name?.toLowerCase().includes(q) || r.city?.toLowerCase().includes(q),
+    fetch: (s) => base44.entities.Enterprise.filter(s, undefined, 100),
+    match: (r, q) => [r.enterprise_name, r.short_name, r.city].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.enterprise_name,
     subtitle: (r) => r.short_name || r.city || "Enterprise",
+    fields: (r) => ({ type: r.enterprise_type, status: r.status, city: r.city, email: r.email }),
   },
   {
     key: "product", entity: "Product", page: "Products", icon: Package, color: "text-orange-500",
-    fetch: (scope) => base44.entities.Product.filter(scope, undefined, 50),
-    match: (r, q) => r.name?.toLowerCase().includes(q) || r.sku?.toLowerCase().includes(q),
+    fetch: (s) => base44.entities.Product.filter(s, undefined, 100),
+    match: (r, q) => [r.name, r.sku, r.brand].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.name,
     subtitle: (r) => r.sku ? `SKU: ${r.sku}` : r.item_type || "Product",
+    fields: (r) => ({ type: r.item_type, status: r.status, sku: r.sku, price: r.unit_price }),
   },
   {
     key: "service", entity: "Service", page: "Services", icon: Wrench, color: "text-teal-500",
-    fetch: (scope) => base44.entities.Service.filter(scope, undefined, 50),
-    match: (r, q) => r.name?.toLowerCase().includes(q) || r.description?.toLowerCase().includes(q),
+    fetch: (s) => base44.entities.Service.filter(s, undefined, 100),
+    match: (r, q) => [r.name, r.description].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.name,
     subtitle: (r) => r.service_type || "Service",
+    fields: (r) => ({ type: r.service_type, status: r.status }),
   },
   {
     key: "address", entity: "Address", page: "Addresses", icon: MapPin, color: "text-rose-500",
-    fetch: (scope) => base44.entities.Address.filter(scope, undefined, 50),
-    match: (r, q) => r.label?.toLowerCase().includes(q) || r.street?.toLowerCase().includes(q) || r.city?.toLowerCase().includes(q),
+    fetch: (s) => base44.entities.Address.filter(s, undefined, 100),
+    match: (r, q) => [r.label, r.street, r.city].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.label || r.street || "Address",
     subtitle: (r) => [r.city, r.region, r.country].filter(Boolean).join(", ") || "Address",
+    fields: (r) => ({ street: r.street, city: r.city, country: r.country }),
   },
   {
     key: "task", entity: "Task", page: "Tasks", icon: ClipboardList, color: "text-amber-500",
-    fetch: (scope) => base44.entities.Task.filter(scope, undefined, 50),
-    match: (r, q) => r.title?.toLowerCase().includes(q) || r.task_type?.toLowerCase().includes(q),
+    fetch: (s) => base44.entities.Task.filter(s, undefined, 100),
+    match: (r, q) => [r.title, r.task_type].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.title,
     subtitle: (r) => `${r.task_type?.replace(/_/g, " ") || "Task"} • ${r.status || ""}`,
+    fields: (r) => ({ type: r.task_type, status: r.status, due: r.due_date, assigned: r.assigned_to }),
   },
   {
     key: "transaction", entity: "Transaction", page: "Transactions", icon: ArrowLeftRight, color: "text-green-500",
-    fetch: (scope) => base44.entities.Transaction.filter(scope, undefined, 50),
-    match: (r, q) => r.description?.toLowerCase().includes(q) || r.invoice_number?.toLowerCase().includes(q),
+    fetch: (s) => base44.entities.Transaction.filter(s, undefined, 100),
+    match: (r, q) => [r.description, r.invoice_number].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.description || r.invoice_number || "Transaction",
-    subtitle: (r) => `${r.transaction_type?.replace(/_/g, " ") || ""} • $${(r.net_amount || 0).toFixed(2)}`,
+    subtitle: (r) => `${r.transaction_type?.replace(/_/g, " ") || ""} • ${r.currency || ""}`.trim().replace(/^•|•$/, "").trim(),
+    fields: (r) => ({ type: r.transaction_type, amount: r.amount, currency: r.currency, status: r.status }),
   },
   {
     key: "document", entity: "Document", page: "Documents", icon: FileText, color: "text-indigo-500",
-    fetch: (scope) => base44.entities.Document.filter(scope, undefined, 50),
-    match: (r, q) => r.title?.toLowerCase().includes(q) || r.document_type?.toLowerCase().includes(q),
+    fetch: (s) => base44.entities.Document.filter(s, undefined, 100),
+    match: (r, q) => [r.title, r.document_type].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.title,
     subtitle: (r) => r.document_type || "Document",
+    fields: (r) => ({ type: r.document_type, status: r.status }),
   },
   {
     key: "schedule", entity: "Schedule", page: "Schedules", icon: Calendar, color: "text-cyan-500",
-    fetch: (scope) => base44.entities.Schedule.filter(scope, undefined, 50),
-    match: (r, q) => r.title?.toLowerCase().includes(q) || r.schedule_type?.toLowerCase().includes(q),
+    fetch: (s) => base44.entities.Schedule.filter(s, undefined, 100),
+    match: (r, q) => [r.title, r.schedule_type].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.title,
-    subtitle: (r) => `${r.schedule_type || "Schedule"} • ${r.frequency || ""}`,
+    subtitle: (r) => `${r.schedule_type || "Schedule"} • ${r.frequency || ""}`.trim().replace(/•\s*$/, "").trim(),
+    fields: (r) => ({ type: r.schedule_type, frequency: r.frequency, status: r.status }),
   },
   {
     key: "signal", entity: "Signal", page: "Signals", icon: Activity, color: "text-red-500",
-    fetch: (scope) => base44.entities.Signal.filter(scope, undefined, 50),
-    match: (r, q) => r.name?.toLowerCase().includes(q) || r.signal_type?.toLowerCase().includes(q) || r.source?.toLowerCase().includes(q),
+    fetch: (s) => base44.entities.Signal.filter(s, undefined, 100),
+    match: (r, q) => [r.name, r.signal_type, r.source].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.name,
     subtitle: (r) => r.signal_type || "Signal",
+    fields: (r) => ({ type: r.signal_type, source: r.source, status: r.status }),
   },
   {
     key: "channel", entity: "Channel", page: "Channels", icon: MessageSquare, color: "text-pink-500",
-    fetch: (scope) => base44.entities.Channel.filter(scope, undefined, 50),
-    match: (r, q) => r.name?.toLowerCase().includes(q) || r.channel_type?.toLowerCase().includes(q),
+    fetch: (s) => base44.entities.Channel.filter(s, undefined, 100),
+    match: (r, q) => [r.name, r.channel_type].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.name,
     subtitle: (r) => r.channel_type || "Channel",
+    fields: (r) => ({ type: r.channel_type, status: r.status }),
   },
   {
     key: "territory", entity: "Territory", page: "Territories", icon: Map, color: "text-lime-600",
-    fetch: (scope) => base44.entities.Territory.filter(scope, undefined, 50),
-    match: (r, q) => r.name?.toLowerCase().includes(q) || r.territory_type?.toLowerCase().includes(q) || r.region?.toLowerCase().includes(q),
+    fetch: (s) => base44.entities.Territory.filter(s, undefined, 100),
+    match: (r, q) => [r.name, r.territory_type, r.region].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.name,
     subtitle: (r) => [r.territory_type, r.region, r.country].filter(Boolean).join(" • ") || "Territory",
+    fields: (r) => ({ type: r.territory_type, region: r.region, country: r.country }),
   },
   {
     key: "relationship", entity: "Relationship", page: "Relationships", icon: Link2, color: "text-slate-500",
-    fetch: (scope) => base44.entities.Relationship.filter(scope, undefined, 50),
-    match: (r, q) => r.from_name?.toLowerCase().includes(q) || r.to_name?.toLowerCase().includes(q) || r.relationship_type?.toLowerCase().includes(q),
+    fetch: (s) => base44.entities.Relationship.filter(s, undefined, 100),
+    match: (r, q) => [r.from_name, r.to_name, r.relationship_type].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.from_name && r.to_name ? `${r.from_name} → ${r.to_name}` : r.relationship_type || "Relationship",
     subtitle: (r) => r.relationship_type?.replace(/_/g, " ") || "Relationship",
+    fields: (r) => ({ type: r.relationship_type, status: r.status, role: r.role }),
   },
 ];
 
+const ICON_MAP = Object.fromEntries(ENTITY_CONFIG.map(c => [c.key, { icon: c.icon, color: c.color }]));
+
+// ── Normalise a raw result from either source into a uniform shape ─────────────
+function normalise(raw, cfg) {
+  return {
+    id:          raw.id,
+    type:        cfg.key,
+    page:        cfg.page,
+    entityLabel: cfg.entity,
+    icon:        cfg.icon,
+    color:       cfg.color,
+    title:       cfg.title(raw),
+    subtitle:    cfg.subtitle(raw),
+    fields:      cfg.fields(raw),
+  };
+}
+
+function normaliseEndpoint(r) {
+  const meta = ICON_MAP[r.entity_type] || { icon: Search, color: "text-slate-400" };
+  return {
+    id:          r.id,
+    type:        r.entity_type,
+    page:        r.page,
+    entityLabel: r.page.replace(/s$/, ""),
+    icon:        meta.icon,
+    color:       meta.color,
+    title:       r.title,
+    subtitle:    r.subtitle,
+    fields:      r.fields || {},
+  };
+}
+
+// ── Field display helpers ─────────────────────────────────────────────────────
+const SKIP_FIELD_VALUES = new Set(["", "nan", "None", "none", "null", "undefined"]);
+
+function cleanFields(fields) {
+  return Object.entries(fields || {}).filter(
+    ([, v]) => v != null && !SKIP_FIELD_VALUES.has(String(v).trim())
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export default function GlobalSearchBar({ currentUser }) {
-  const [input, setInput] = useState("");
-  const [results, setResults] = useState([]);
-  const [open, setOpen] = useState(false);
+  const [input,       setInput]       = useState("");
+  const [results,     setResults]     = useState([]);
+  const [open,        setOpen]        = useState(false);
+  const [loading,     setLoading]     = useState(false);
+  const [expandedId,  setExpandedId]  = useState(null);   // id of quick-view open result
   const [selectedIdx, setSelectedIdx] = useState(-1);
-  const [loading, setLoading] = useState(false);
-  const inputRef = useRef(null);
+  const inputRef   = useRef(null);
   const debounceRef = useRef(null);
-  const navigate = useNavigate();
+  const navigate   = useNavigate();
 
   useEffect(() => {
     if (!input.trim()) {
       setResults([]);
       setSelectedIdx(-1);
+      setExpandedId(null);
       setOpen(false);
       return;
     }
-
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      runSearch(input.trim().toLowerCase());
-    }, 250);
-
+    debounceRef.current = setTimeout(() => runSearch(input.trim().toLowerCase()), 250);
     return () => clearTimeout(debounceRef.current);
   }, [input]);
 
+  // ── Search: try python_layer endpoint, fall back to Base44 parallel calls ───
   const runSearch = useCallback(async (query) => {
     setLoading(true);
+    setExpandedId(null);
+
     const companyId = currentUser?.company_id;
-    const scope = companyId ? { company_id: companyId } : {};
+    let hits = [];
 
-    const fetches = ENTITY_CONFIG.map((cfg) =>
-      cfg.fetch(scope).catch(() => [])
-    );
+    // Fix 1 + 3: single server-side query, unlimited by the 50-record cap
+    try {
+      const headers = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
+      const res = await fetch(
+        `${RAILWAY_URL}/search?q=${encodeURIComponent(query)}&company_id=${encodeURIComponent(companyId || "")}&limit=8`,
+        { headers, signal: AbortSignal.timeout(5000) }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.results?.length > 0) {
+          hits = data.results.map(normaliseEndpoint);
+        }
+      }
+    } catch (_) {
+      // endpoint unavailable — fall through to Base44
+    }
 
-    const allResults = await Promise.all(fetches);
-    const matches = [];
+    // Fallback: 12 parallel Base44 calls (raw tables empty or endpoint down)
+    if (hits.length === 0) {
+      const scope = companyId ? { company_id: companyId } : {};
+      const fetches = ENTITY_CONFIG.map(cfg => cfg.fetch(scope).catch(() => []));
+      const allResults = await Promise.all(fetches);
+      ENTITY_CONFIG.forEach((cfg, i) => {
+        allResults[i]
+          .filter(r => cfg.match(r, query))
+          .slice(0, 5)
+          .forEach(r => hits.push(normalise(r, cfg)));
+      });
+    }
 
-    ENTITY_CONFIG.forEach((cfg, i) => {
-      allResults[i]
-        .filter((r) => cfg.match(r, query))
-        .slice(0, 3)
-        .forEach((r) => {
-          matches.push({
-            id: r.id,
-            type: cfg.key,
-            page: cfg.page,
-            icon: cfg.icon,
-            color: cfg.color,
-            title: cfg.title(r),
-            subtitle: cfg.subtitle(r),
-            entityLabel: cfg.entity,
-          });
-        });
-    });
-
-    setResults(matches);
+    setResults(hits);
     setSelectedIdx(-1);
     setLoading(false);
     setOpen(true);
   }, [currentUser]);
 
-  const handleSelect = (result) => {
-    navigate(createPageUrl(result.page));
+  // Fix 2: navigate to entity page with ?id= so the URL is deep-linkable
+  const openRecord = useCallback((result) => {
+    navigate(`${createPageUrl(result.page)}?id=${encodeURIComponent(result.id)}`);
     setInput("");
     setResults([]);
     setOpen(false);
+    setExpandedId(null);
+  }, [navigate]);
+
+  const handleResultClick = (result) => {
+    // First click: expand quick-view. Second click or "Open" button: navigate.
+    if (expandedId === result.id) {
+      openRecord(result);
+    } else {
+      setExpandedId(result.id);
+    }
   };
 
   const handleKeyDown = (e) => {
+    const flat = results;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setSelectedIdx((prev) => Math.min(prev + 1, results.length - 1));
+      setSelectedIdx(prev => Math.min(prev + 1, flat.length - 1));
       setOpen(true);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setSelectedIdx((prev) => Math.max(prev - 1, -1));
-    } else if (e.key === "Enter" && selectedIdx >= 0) {
+      setSelectedIdx(prev => Math.max(prev - 1, -1));
+    } else if (e.key === "Enter") {
       e.preventDefault();
-      handleSelect(results[selectedIdx]);
+      if (selectedIdx >= 0 && flat[selectedIdx]) openRecord(flat[selectedIdx]);
     } else if (e.key === "Escape") {
       setOpen(false);
+      setExpandedId(null);
       setSelectedIdx(-1);
     }
   };
 
-  // Group results by entity type for display
+  // Group results by entity label for display
   const grouped = results.reduce((acc, r) => {
-    if (!acc[r.entityLabel]) acc[r.entityLabel] = [];
-    acc[r.entityLabel].push(r);
+    (acc[r.entityLabel] = acc[r.entityLabel] || []).push(r);
     return acc;
   }, {});
+  const flat = Object.values(grouped).flat();
 
-  const flatResults = Object.values(grouped).flat();
+  const close = () => { setOpen(false); setExpandedId(null); setSelectedIdx(-1); };
 
   return (
     <div className="relative flex-1 max-w-lg">
+      {/* Input */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
         <input
@@ -205,14 +287,14 @@ export default function GlobalSearchBar({ currentUser }) {
           type="text"
           placeholder="Search everything..."
           value={input}
-          onChange={(e) => { setInput(e.target.value); setOpen(true); }}
+          onChange={e => { setInput(e.target.value); setOpen(true); }}
           onFocus={() => input && setOpen(true)}
           onKeyDown={handleKeyDown}
           className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-8 py-2 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
         />
         {input && (
           <button
-            onClick={() => { setInput(""); setResults([]); setOpen(false); inputRef.current?.focus(); }}
+            onClick={() => { setInput(""); setResults([]); setOpen(false); setExpandedId(null); inputRef.current?.focus(); }}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
           >
             <X className="w-4 h-4" />
@@ -223,7 +305,7 @@ export default function GlobalSearchBar({ currentUser }) {
       {/* Loading */}
       {open && input && loading && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-40" onClick={close} />
           <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-4 text-center">
             <div className="w-4 h-4 border-2 border-slate-200 border-t-emerald-500 rounded-full animate-spin mx-auto" />
             <p className="text-xs text-slate-400 mt-2">Searching all entities...</p>
@@ -234,7 +316,7 @@ export default function GlobalSearchBar({ currentUser }) {
       {/* No results */}
       {open && input && !loading && results.length === 0 && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-40" onClick={close} />
           <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-6 text-center">
             <Search className="w-6 h-6 text-slate-300 mx-auto mb-2" />
             <p className="text-sm text-slate-500">No results for "{input}"</p>
@@ -243,45 +325,77 @@ export default function GlobalSearchBar({ currentUser }) {
         </>
       )}
 
-      {/* Results grouped by entity */}
-      {open && !loading && flatResults.length > 0 && (
+      {/* Results */}
+      {open && !loading && flat.length > 0 && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-[480px] overflow-y-auto">
-            <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
+          <div className="fixed inset-0 z-40" onClick={close} />
+          <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-[520px] overflow-y-auto">
+            <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                {flatResults.length} result{flatResults.length !== 1 ? "s" : ""}
+                {flat.length} result{flat.length !== 1 ? "s" : ""}
               </p>
+              <p className="text-[10px] text-slate-300">↑↓ navigate · Enter open · Esc close</p>
             </div>
+
             {Object.entries(grouped).map(([label, items]) => (
               <div key={label}>
                 <p className="px-4 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
                   {label}
                 </p>
                 {items.map((result) => {
-                  const Icon = result.icon;
-                  const globalIdx = flatResults.indexOf(result);
+                  const Icon      = result.icon;
+                  const globalIdx = flat.indexOf(result);
                   const isSelected = globalIdx === selectedIdx;
+                  const isExpanded = expandedId === result.id;
+                  const fieldRows  = cleanFields(result.fields);
+
                   return (
-                    <button
-                      key={`${result.type}-${result.id}`}
-                      onClick={() => handleSelect(result)}
-                      onMouseEnter={() => setSelectedIdx(globalIdx)}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                        isSelected ? "bg-emerald-50" : "hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className={`shrink-0 w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center`}>
-                        <Icon className={`w-3.5 h-3.5 ${result.color}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{result.title}</p>
-                        <p className="text-xs text-slate-400 truncate">{result.subtitle}</p>
-                      </div>
-                      <span className="shrink-0 text-[10px] text-slate-300 font-medium">
-                        {result.entityLabel}
-                      </span>
-                    </button>
+                    <div key={`${result.type}-${result.id}`}>
+                      {/* Result row */}
+                      <button
+                        onClick={() => handleResultClick(result)}
+                        onMouseEnter={() => setSelectedIdx(globalIdx)}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                          isSelected || isExpanded ? "bg-emerald-50" : "hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="shrink-0 w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center">
+                          <Icon className={`w-3.5 h-3.5 ${result.color}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{result.title}</p>
+                          <p className="text-xs text-slate-400 truncate">{result.subtitle}</p>
+                        </div>
+                        <ChevronRight className={`w-3.5 h-3.5 text-slate-300 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                      </button>
+
+                      {/* Quick-view panel — Fix 2: shows record fields inline */}
+                      {isExpanded && (
+                        <div className="mx-4 mb-2 rounded-lg border border-emerald-100 bg-emerald-50/50 p-3">
+                          {fieldRows.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-3">
+                              {fieldRows.slice(0, 6).map(([k, v]) => (
+                                <div key={k} className="min-w-0">
+                                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400 truncate">
+                                    {k.replace(/_/g, " ")}
+                                  </p>
+                                  <p className="text-xs text-slate-700 truncate">{String(v)}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400 mb-3">No additional fields available</p>
+                          )}
+                          <button
+                            onClick={() => openRecord(result)}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 transition-colors"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Open in {result.entityLabel}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
