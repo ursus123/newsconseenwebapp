@@ -840,6 +840,39 @@ def db_list_tables(creds: DbCredentials):
     return list_tables(creds.to_credentials_dict())
 
 
+@router.post("/db/schema")
+def db_full_schema(creds: DbCredentials):
+    """
+    Return the full schema of the connected database — all tables and views with
+    their column names and data types.  Called by the "Explore Full Schema" step
+    in the Connect modal so the operator can see every table before deciding which
+    to mirror or import.
+
+    Returns {"ok", "schema": {table: [{"name", "type"}]}, "table_count"}.
+    """
+    from connectors.database.sql import get_full_schema
+    return get_full_schema(creds.to_credentials_dict())
+
+
+@router.post("/db/mirror")
+def db_mirror_table(
+    creds:      DbCredentials,
+    company_id: str = Query(...),
+    table:      str = Query(...),
+):
+    """
+    Mirror a single external table directly into our raw.* PostgreSQL schema so the
+    AI copilot can query it with query_external_table.
+
+    Writes to raw.ext_{table_name} with company_id stamped on every row.
+    Replaces any previous mirror of the same table.
+
+    Returns {"ok", "table", "rows_mirrored", "columns", "note"}.
+    """
+    from connectors.database.sql import mirror_table
+    return mirror_table(creds.to_credentials_dict(), company_id=company_id, table_name=table)
+
+
 @router.post("/db/preview")
 def db_preview(creds: DbCredentials, limit: int = Query(10, le=100)):
     """

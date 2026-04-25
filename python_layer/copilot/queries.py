@@ -5499,6 +5499,51 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    # ── External database mirror tools ───────────────────────────────────────
+    {
+        "name": "list_external_tables",
+        "description": (
+            "List all external database tables that have been mirrored into Newsconseen "
+            "via the Connectors page (Explore Full Schema → Mirror). "
+            "Call this before query_external_table to discover what data is available. "
+            "Use for questions like: 'What external data do we have?', "
+            "'What databases are connected?', 'Show me mirrored tables', "
+            "'Is our ERP data available?', 'What has been imported from external systems?'."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "query_external_table",
+        "description": (
+            "Query data from an external database table that has been mirrored into "
+            "Newsconseen via the Connectors page. "
+            "Use list_external_tables first to discover what tables are available. "
+            "Use this when the operator asks about data from a connected external system — "
+            "e.g. 'Show me the orders from our ERP', "
+            "'What's in the legacy CRM customers table?', "
+            "'Query the warehouse inventory system', "
+            "'Pull records from the accounting database'. "
+            "Tables must be mirrored first (Connectors → Explore Full Schema → Mirror)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["table_name"],
+            "properties": {
+                "table_name": {
+                    "type": "string",
+                    "description": (
+                        "Name of the mirrored table to query. "
+                        "Use the original table name from the external database "
+                        "(without the 'ext_' prefix that Newsconseen adds internally)."
+                    ),
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max rows to return. Default 20, max 200.",
+                },
+            },
+        },
+    },
 ]
 
 
@@ -6969,6 +7014,124 @@ def get_territory_summary(company_id: str, territory_type: str = None) -> dict:
         return {"territories": [], "error": str(e)}
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# EXTERNAL DATABASE MIRROR TOOLS — query tables mirrored from connected databases
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def list_external_tables(company_id: str) -> dict:
+    """
+    List all external database tables that have been mirrored into Newsconseen via
+    the Connectors page (Explore Full Schema → Mirror).
+    Used for: "what external data do we have?", "what databases are connected?",
+              "show me available mirrored tables", "what's been imported from our ERP?".
+    """
+    engine = get_engine_safe()
+    if not engine:
+        return {"tables": [], "count": 0, "note": "Database unavailable."}
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'raw'
+                  AND table_name LIKE 'ext_%'
+                ORDER BY table_name
+            """)).fetchall()
+        tables = []
+        for (t,) in rows:
+            display_name = t[4:]  # strip "ext_" prefix for display
+            try:
+                with engine.connect() as c2:
+                    cnt = c2.execute(
+                        text(f"SELECT COUNT(*) FROM raw.{t} WHERE company_id = :cid"),
+                        {"cid": company_id},
+                    ).scalar()
+                tables.append({"table": t, "name": display_name, "rows": int(cnt or 0)})
+            except Exception:
+                tables.append({"table": t, "name": display_name, "rows": None})
+        return {
+            "tables": tables,
+            "count":  len(tables),
+            "note": (
+                "No external tables mirrored yet. "
+                "Use Connectors → Explore Full Schema → Mirror to add them."
+            ) if not tables else None,
+        }
+    except Exception as e:
+        logger.warning("list_external_tables: %s", e)
+        return {"tables": [], "count": 0, "error": str(e)[:200]}
+
+
+def query_external_table(
+    company_id: str,
+    table_name: str,
+    limit: int = 20,
+) -> dict:
+    """
+    Query data from an external database table that has been mirrored into
+    Newsconseen's raw.* schema via the Connectors feature.
+
+    Use list_external_tables first to discover what is available.
+    table_name can be given with or without the 'ext_' prefix.
+
+    Used for: "show me the orders from our ERP", "query the customers table from the CRM",
+              "what's in the legacy inventory table?", "show me all mirrored rows for X".
+    """
+    import re
+
+    engine = get_engine_safe()
+    if not engine:
+        return {"error": "Database unavailable.", "records": [], "count": 0}
+
+    # Normalise name — strip 'ext_' prefix if user provided it, then rebuild
+    base = re.sub(r"^ext_", "", table_name.lower())
+    safe = "ext_" + re.sub(r"[^a-z0-9_]", "_", base)[:48]
+
+    try:
+        with engine.connect() as conn:
+            exists = conn.execute(text("""
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'raw' AND table_name = :t LIMIT 1
+            """), {"t": safe}).fetchone()
+
+        if not exists:
+            available = list_external_tables(company_id)
+            return {
+                "error": (
+                    f"Table '{table_name}' has not been mirrored. "
+                    "Mirror it first via Connectors → Explore Full Schema → Mirror."
+                ),
+                "available_tables": available.get("tables", []),
+                "records": [],
+                "count": 0,
+            }
+
+        limit = max(1, min(limit, 200))
+        with engine.connect() as conn:
+            result = conn.execute(
+                text(f"SELECT * FROM raw.{safe} WHERE company_id = :cid LIMIT :lim"),
+                {"cid": company_id, "lim": limit},
+            )
+            cols = list(result.keys())
+            rows = [dict(zip(cols, r)) for r in result.fetchall()]
+
+        logger.info("query_external_table: %d rows from raw.%s", len(rows), safe)
+        return {
+            "table":   safe,
+            "columns": [c for c in cols if c != "company_id"],
+            "count":   len(rows),
+            "records": rows,
+            "note":    (
+                f"Showing up to {limit} rows. "
+                "These are mirrored from your external database — run a fresh mirror to sync latest data."
+            ),
+        }
+
+    except Exception as e:
+        logger.warning("query_external_table(%s): %s", safe, e)
+        return {"error": str(e)[:300], "records": [], "count": 0}
+
+
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
 
 def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
@@ -7060,6 +7223,9 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         # Agent invocation — triggers an autonomous agent through the Orchestrator
         "invoke_agent":                 invoke_agent,
         "get_agent_status":             get_agent_status,
+        # External database mirror tools
+        "list_external_tables":         list_external_tables,
+        "query_external_table":         query_external_table,
     }
 
     fn = dispatch.get(tool_name)

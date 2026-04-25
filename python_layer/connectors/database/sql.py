@@ -177,6 +177,143 @@ def list_tables(credentials: dict) -> dict:
         return {"ok": False, "tables": [], "error": str(e)[:300]}
 
 
+def get_full_schema(credentials: dict) -> dict:
+    """
+    Return all tables (and views) with their column names and data types.
+    Called by the UI "Explore Full Schema" flow to show the operator the
+    complete structure of a connected database before selecting tables to mirror.
+
+    Returns:
+        {"ok": bool, "schema": {table: [{"name": str, "type": str}]}, "table_count": int}
+    """
+    try:
+        from sqlalchemy import create_engine, inspect
+
+        url    = _build_connection_url(credentials)
+        engine = create_engine(url, connect_args=_ssl_args(credentials), pool_timeout=10)
+        insp   = inspect(engine)
+        schema = credentials.get("schema") or None
+
+        result: dict = {}
+        for table in insp.get_table_names(schema=schema):
+            cols = insp.get_columns(table, schema=schema)
+            result[table] = [
+                {"name": c["name"], "type": str(c["type"]).split("(")[0].upper()}
+                for c in cols
+            ]
+        for view in insp.get_view_names(schema=schema):
+            if view not in result:
+                try:
+                    cols = insp.get_columns(view, schema=schema)
+                    result[view] = [
+                        {"name": c["name"], "type": str(c["type"]).split("(")[0].upper()}
+                        for c in cols
+                    ]
+                except Exception:
+                    result[view] = []
+
+        return {"ok": True, "schema": result, "table_count": len(result)}
+
+    except ImportError as e:
+        driver = str(e).split("'")[1] if "'" in str(e) else "driver"
+        return {
+            "ok":      False,
+            "schema":  {},
+            "error":   f"Driver not installed: {driver}.",
+            "table_count": 0,
+        }
+    except Exception as e:
+        return {"ok": False, "schema": {}, "error": str(e)[:300], "table_count": 0}
+
+
+def mirror_table(credentials: dict, company_id: str, table_name: str) -> dict:
+    """
+    Mirror an external table into our PostgreSQL raw schema so the AI copilot
+    can query it directly.  Rows are stamped with company_id and written to
+    raw.ext_{safe_table_name}.
+
+    Returns:
+        {"ok": bool, "table": str, "rows_mirrored": int, "columns": list}
+    """
+    import re
+
+    # Build a safe PostgreSQL identifier: raw.ext_{alphanumeric_underscore}
+    safe_name = "ext_" + re.sub(r"[^a-z0-9_]", "_", table_name.lower())[:48]
+
+    try:
+        import pandas as _pd
+
+        # Extract rows from the external DB (reuse preview_query with a high limit)
+        creds_copy          = dict(credentials)
+        creds_copy["table"] = table_name
+        creds_copy.pop("query", None)
+
+        url = _build_connection_url(credentials)
+        from sqlalchemy import create_engine, text as _sqlt
+
+        ext_engine = create_engine(url, connect_args=_ssl_args(credentials), pool_timeout=30)
+        select_sql = _build_select_sql(creds_copy, limit=10_000)
+
+        with ext_engine.connect() as conn:
+            result  = conn.execute(_sqlt(select_sql))
+            cols    = list(result.keys())
+            rows    = [dict(zip(cols, row)) for row in result.fetchall()]
+
+        if not rows:
+            return {
+                "ok":          True,
+                "table":       f"raw.{safe_name}",
+                "rows_mirrored": 0,
+                "columns":     cols,
+                "note":        "Source table is empty — nothing mirrored.",
+            }
+
+        # Stamp company_id
+        for row in rows:
+            row["company_id"] = company_id
+
+        df = _pd.DataFrame(rows)
+
+        # Write to our raw schema
+        try:
+            from database import get_engine_safe as _get_engine
+        except ImportError:
+            return {"ok": False, "error": "Internal database connection not available."}
+
+        int_engine = _get_engine()
+        if not int_engine:
+            return {"ok": False, "error": "Internal database unavailable — cannot mirror table."}
+
+        df.to_sql(
+            safe_name,
+            int_engine,
+            schema="raw",
+            if_exists="replace",
+            index=False,
+            chunksize=500,
+        )
+
+        logger.info(
+            "mirror_table: %d rows from '%s' → raw.%s (company=%s)",
+            len(rows), table_name, safe_name, company_id,
+        )
+
+        return {
+            "ok":           True,
+            "table":        f"raw.{safe_name}",
+            "rows_mirrored": len(rows),
+            "columns":      cols,
+            "note":         (
+                f"Mirrored to raw.{safe_name}. "
+                "The AI copilot can now query this table with query_external_table."
+            ),
+        }
+
+    except Exception as e:
+        logger.error("mirror_table failed: %s", e)
+        return {"ok": False, "error": str(e)[:300]}
+
+
 def preview_query(credentials: dict, limit: int = 5) -> dict:
     """
     Run the query/table from credentials and return the first `limit` rows.

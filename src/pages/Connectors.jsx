@@ -548,6 +548,13 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
   const [syncing, setSyncing]         = useState(false);
   const [syncResult, setSyncResult]   = useState(null);
 
+  // Schema exploration state
+  const [schema, setSchema]               = useState(null);
+  const [schemaLoading, setSchemaLoading] = useState(false);
+  const [tableMirrorMap, setTableMirrorMap] = useState({});   // {tableName: entityType}
+  const [mirroring, setMirroring]         = useState(false);
+  const [mirrorResults, setMirrorResults] = useState([]);
+
   const isSQLite = engineType === "sqlite";
 
   function buildCreds(extra = {}) {
@@ -606,8 +613,9 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
     }
   }
 
-  async function loadPreview() {
-    if (!useCustomQuery && !selectedTable) {
+  async function loadPreview(tableOverride = null) {
+    const activeTable = tableOverride ?? selectedTable;
+    if (!useCustomQuery && !activeTable) {
       toast({ title: "Select a table or enter a custom query first", variant: "destructive" });
       return;
     }
@@ -617,7 +625,7 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
       const res = await fetch(`${RAILWAY_URL}/connectors/db/preview?limit=10`, {
         method: "POST",
         headers: API_HEADERS,
-        body: JSON.stringify(buildCreds()),
+        body: JSON.stringify(buildCreds({ table: useCustomQuery ? null : activeTable })),
       });
       const data = await res.json();
       if (data.ok) {
@@ -664,6 +672,57 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
     }
   }
 
+  async function loadSchema() {
+    setSchemaLoading(true);
+    setSchema(null);
+    setMirrorResults([]);
+    try {
+      const res = await fetch(`${RAILWAY_URL}/connectors/db/schema`, {
+        method: "POST",
+        headers: API_HEADERS,
+        body: JSON.stringify(buildCreds()),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setSchema(data.schema || {});
+        setStep("schema");
+      } else {
+        toast({ title: "Schema load failed", description: data.error, variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Schema load failed", description: e.message, variant: "destructive" });
+    } finally {
+      setSchemaLoading(false);
+    }
+  }
+
+  async function mirrorSelected() {
+    const toMirror = Object.entries(tableMirrorMap).filter(([, et]) => et);
+    if (!toMirror.length) return;
+    setMirroring(true);
+    setMirrorResults([]);
+    const results = [];
+    for (const [tableName] of toMirror) {
+      try {
+        const res = await fetch(
+          `${RAILWAY_URL}/connectors/db/mirror?company_id=${companyId}&table=${encodeURIComponent(tableName)}`,
+          { method: "POST", headers: API_HEADERS, body: JSON.stringify(buildCreds()) }
+        );
+        const data = await res.json();
+        results.push({ table: tableName, ...data });
+      } catch (e) {
+        results.push({ table: tableName, ok: false, error: e.message });
+      }
+    }
+    setMirrorResults(results);
+    setMirroring(false);
+    const succeeded = results.filter(r => r.ok).length;
+    toast({
+      title: `${succeeded}/${results.length} tables mirrored to AI`,
+      description: "The copilot can now query these tables with query_external_table.",
+    });
+  }
+
   const ENTITY_FIELD_SUGGESTIONS = {
     people:       ["external_id", "full_name", "first_name", "last_name", "email", "phone",
                    "person_type", "person_subtype", "status", "created_date", "enterprise_id"],
@@ -700,18 +759,18 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
 
         {/* Step indicator */}
         <div className="flex items-center gap-1 px-6 pt-4 pb-2">
-          {["credentials", "tables", "preview", "sync"].map((s, i) => (
+          {["credentials", "tables", "schema", "preview", "sync"].map((s, i) => (
             <React.Fragment key={s}>
               <div className={`text-[10px] font-semibold px-2 py-1 rounded-full capitalize ${
                 step === s
                   ? "bg-indigo-100 text-indigo-700"
-                  : ["credentials", "tables", "preview", "sync"].indexOf(step) > i
+                  : ["credentials", "tables", "schema", "preview", "sync"].indexOf(step) > i
                   ? "bg-emerald-100 text-emerald-700"
                   : "bg-slate-100 text-slate-400"
               }`}>
                 {s}
               </div>
-              {i < 3 && <ChevronRight className="w-3 h-3 text-slate-300" />}
+              {i < 4 && <ChevronRight className="w-3 h-3 text-slate-300" />}
             </React.Fragment>
           ))}
         </div>
@@ -929,6 +988,99 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
             </>
           )}
 
+          {/* ── Step: schema exploration ── */}
+          {step === "schema" && (
+            <>
+              {schema && Object.keys(schema).length === 0 && (
+                <p className="text-xs text-slate-400 text-center py-4">No tables found in this database.</p>
+              )}
+
+              {schema && Object.keys(schema).length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-slate-700">
+                      {Object.keys(schema).length} tables · select entity type to mirror to AI
+                    </p>
+                    {mirrorResults.length > 0 && (
+                      <span className="text-[10px] text-emerald-600 font-semibold">
+                        {mirrorResults.filter(r => r.ok).length} mirrored
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 max-h-[380px] overflow-y-auto pr-1">
+                    {Object.entries(schema).map(([tableName, columns]) => {
+                      const mirrorResult = mirrorResults.find(r => r.table === tableName);
+                      return (
+                        <div key={tableName} className={`border rounded-xl overflow-hidden ${
+                          mirrorResult?.ok ? "border-emerald-200" : "border-slate-200"
+                        }`}>
+                          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50">
+                            <Table2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="text-xs font-semibold text-slate-700 flex-1 truncate">{tableName}</span>
+                            <span className="text-[10px] text-slate-400 shrink-0">{columns.length} cols</span>
+
+                            {mirrorResult?.ok ? (
+                              <span className="text-[10px] text-emerald-600 font-semibold shrink-0">
+                                ✓ {mirrorResult.rows_mirrored} rows
+                              </span>
+                            ) : mirrorResult?.error ? (
+                              <span className="text-[10px] text-rose-500 shrink-0">failed</span>
+                            ) : null}
+
+                            <select
+                              value={tableMirrorMap[tableName] || ""}
+                              onChange={e => setTableMirrorMap(prev => ({ ...prev, [tableName]: e.target.value }))}
+                              className="text-[10px] border border-slate-200 rounded-lg px-1.5 py-1 focus:outline-none focus:border-indigo-400 bg-white shrink-0"
+                            >
+                              <option value="">— entity —</option>
+                              <option value="people">People</option>
+                              <option value="enterprises">Enterprises</option>
+                              <option value="products">Products</option>
+                              <option value="tasks">Tasks</option>
+                              <option value="transactions">Transactions</option>
+                              <option value="other">Other (raw only)</option>
+                            </select>
+
+                            <button
+                              onClick={() => {
+                                setSelectedTable(tableName);
+                                setUseCustomQuery(false);
+                                setEntityType(tableMirrorMap[tableName] || "people");
+                                loadPreview(tableName);
+                              }}
+                              className="text-[10px] text-indigo-600 hover:text-indigo-700 font-semibold whitespace-nowrap shrink-0"
+                            >
+                              Import →
+                            </button>
+                          </div>
+
+                          {/* Column type pills */}
+                          <div className="px-3 py-1.5 flex flex-wrap gap-1">
+                            {columns.slice(0, 10).map(col => (
+                              <span key={col.name} className="text-[10px] bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 font-mono">
+                                {col.name}
+                                <span className="text-slate-400 ml-1 not-italic">{col.type}</span>
+                              </span>
+                            ))}
+                            {columns.length > 10 && (
+                              <span className="text-[10px] text-slate-400">+{columns.length - 10} more</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <p className="text-[10px] text-slate-400">
+                    Mirroring copies up to 10,000 rows into Newsconseen&apos;s analytical layer.
+                    The AI copilot can then query these tables directly with <code className="font-mono">query_external_table</code>.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+
           {/* ── Step: preview + column mapping ── */}
           {step === "preview" && preview && (
             <>
@@ -1071,6 +1223,16 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
                   Back
                 </Button>
                 <Button
+                  variant="outline"
+                  onClick={loadSchema}
+                  disabled={schemaLoading}
+                  className="rounded-xl text-xs border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                >
+                  {schemaLoading
+                    ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Loading…</>
+                    : <><Database className="w-3.5 h-3.5 mr-1.5" /> Explore Full Schema</>}
+                </Button>
+                <Button
                   onClick={loadPreview}
                   disabled={previewLoading || (!useCustomQuery && !selectedTable) || (useCustomQuery && !customQuery)}
                   className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs"
@@ -1078,6 +1240,27 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
                   {previewLoading
                     ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Loading…</>
                     : <><Eye className="w-3.5 h-3.5 mr-1.5" /> Preview Data</>}
+                </Button>
+              </>
+            )}
+
+            {step === "schema" && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setStep("tables")}
+                  className="rounded-xl text-xs"
+                >
+                  Back
+                </Button>
+                <Button
+                  onClick={mirrorSelected}
+                  disabled={mirroring || !Object.values(tableMirrorMap).some(Boolean)}
+                  className="bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs"
+                >
+                  {mirroring
+                    ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Mirroring…</>
+                    : <><Database className="w-3.5 h-3.5 mr-1.5" /> Mirror {Object.values(tableMirrorMap).filter(Boolean).length || ""} Tables to AI</>}
                 </Button>
               </>
             )}
