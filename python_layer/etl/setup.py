@@ -770,6 +770,79 @@ _OTHER_DDL = [
     "CREATE INDEX IF NOT EXISTS idx_time_summary_company ON analytics.time_summary (company_id, work_date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_time_summary_person  ON analytics.time_summary (company_id, person_id)",
 
+    # ── Phase 4E Market Research agent tables ────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.competitor_profiles (
+        id              SERIAL PRIMARY KEY,
+        company_id      TEXT NOT NULL,
+        competitor_name TEXT NOT NULL,
+        location_lat    DOUBLE PRECISION,
+        location_lng    DOUBLE PRECISION,
+        address         TEXT,
+        entity_type     TEXT,
+        rating          DOUBLE PRECISION,
+        review_count    INTEGER,
+        signals         TEXT,
+        first_seen      TIMESTAMPTZ DEFAULT NOW(),
+        last_updated    TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_competitor_profiles_company ON analytics.competitor_profiles (company_id)",
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.market_signals (
+        id          SERIAL PRIMARY KEY,
+        company_id  TEXT NOT NULL,
+        signal_type TEXT NOT NULL,
+        source      TEXT NOT NULL,
+        title       TEXT,
+        summary     TEXT,
+        sentiment   TEXT,
+        relevance   DOUBLE PRECISION DEFAULT 0.5,
+        detected_at TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_market_signals_company ON analytics.market_signals (company_id, detected_at DESC)",
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.market_briefings (
+        id          SERIAL PRIMARY KEY,
+        company_id  TEXT NOT NULL,
+        week_of     DATE NOT NULL,
+        briefing    TEXT NOT NULL,
+        findings    TEXT,
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_market_briefings_company ON analytics.market_briefings (company_id, week_of DESC)",
+
+    # ── Kinetic action log ────────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS raw.kinetic_log (
+        id          SERIAL PRIMARY KEY,
+        company_id  TEXT,
+        action_id   TEXT,
+        action_name TEXT,
+        executed_by TEXT,
+        params_json TEXT,
+        result_json TEXT,
+        executed_at TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_kinetic_log_company ON raw.kinetic_log (company_id, executed_at DESC)",
+
+    # ── ML predictions log ────────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS raw.ml_predictions (
+        id          SERIAL PRIMARY KEY,
+        company_id  TEXT,
+        model       TEXT,
+        result_json TEXT,
+        computed_at TIMESTAMPTZ
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ml_predictions_company ON raw.ml_predictions (company_id, computed_at DESC)",
+
     # ── Market Intelligence write-back ───────────────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS analytics.mi_competitors (

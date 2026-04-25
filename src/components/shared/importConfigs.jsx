@@ -355,37 +355,37 @@ export const ENTERPRISE_FIELDS = [
 
 export const ENTERPRISE_MAPPING_RULES = [
   // Most specific first — prevent wrong rule stealing the column
-  [/parent.?enterprise.?id|parent.?id|hq.?id/i,              "parent_enterprise_id"],
-  [/^enterprise.?id$|^external.?id$|^branch.?id$/i,          "enterprise_id"],
-  [/^enterprise.?name$|^company.?name$|^org.?name$/i,        "enterprise_name"],
-  [/^enterprise.?type$|^org.?type$|^business.?type$/i,       "enterprise_type"],
-  [/enterprise.?subtype|^subtype$|^sub.?type$|^industry$/i,  "enterprise_subtype"],
-  [/enterprise.?tier|^tier$|^level$/i,                       "enterprise_tier"],
-  [/^company.?id$|^tenant$|^workspace$/i,                    "company_id"],
+  [/^parent.?enterprise.?id$|^parent.?id$|^hq.?id$/i,              "parent_enterprise_id"],
+  [/^enterprise.?id$|^external.?id$|^branch.?id$/i,                "enterprise_id"],
+  [/^enterprise.?name$|^company.?name$|^org.?name$/i,              "enterprise_name"],
+  [/^enterprise.?type$|^org.?type$|^business.?type$/i,             "enterprise_type"],
+  [/^enterprise.?subtype$|^subtype$|^sub.?type$|^industry$/i,      "enterprise_subtype"],
+  [/^enterprise.?tier$|^tier$|^level$/i,                           "enterprise_tier"],
+  [/^company.?id$|^tenant$|^workspace$/i,                          "company_id"],
 
   // NAICS / SIC — most specific first (6-digit code before sector/division)
   [/^naics.?code$|^naics$/i,                                "naics_code"],
   [/^naics.?title$|^naics.?description$|^naics.?name$/i,    "naics_title"],
   [/^sic.?code$|^sic$/i,                                    "sic_code"],
   [/^sic.?description$|^sic.?desc$|^sic.?name$/i,          "sic_description"],
-  [/sic.?sector.?id|naics.?id|sector.?id/i,                 "sic_sector_id"],
-  [/sic.?sector.?name|sector.?name/i,                       "sic_sector_name"],
-  [/sic.?division|^division$/i,                             "sic_division"],
+  [/^sic.?sector.?id$|^naics.?id$|^sector.?id$/i,          "sic_sector_id"],
+  [/^sic.?sector.?name$|^sector.?name$/i,                   "sic_sector_name"],
+  [/^sic.?division$|^division$/i,                           "sic_division"],
 
   // Status fields
   [/^status$/i,                                              "status"],
-  [/operating.?status|ops.?status|open.?status/i,           "operating_status"],
+  [/^operating.?status$|^ops.?status$|^open.?status$/i,     "operating_status"],
 
   // Contact
-  [/^phone$|^mobile$|^telephone$|contact.?phone|^tel$/i,    "phone"],
-  [/^email$|contact.?email/i,                               "email"],
+  [/^phone$|^mobile$|^telephone$|^contact.?phone$|^tel$/i,  "phone"],
+  [/^email$|^contact.?email$/i,                             "email"],
   [/^website$|^url$|^web$/i,                                "website"],
 
   // Address — zip_code must come before short_name (which also matches "code")
-  [/zip.?code|^zip$|postal.?code|^postcode$/i,              "zip_code"],
-  [/^address$|^street$|address.?line|primary.?address/i,    "primary_address"],
+  [/^zip.?code$|^zip$|^postal.?code$|^postcode$/i,          "zip_code"],
+  [/^address$|^street$|^address.?line$|^primary.?address$/i,"primary_address"],
   [/^city$|^town$|^location$/i,                             "city"],
-  [/^region$|^state$|state.?region|^province$/i,            "region"],
+  [/^region$|^state$|^state.?region$|^province$/i,          "region"],
   [/^country$|^nation$/i,                                   "country"],
   [/^lat$|^latitude$/i,                                     "latitude"],
   [/^lon$|^lng$|^longitude$/i,                              "longitude"],
