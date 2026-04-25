@@ -43,6 +43,7 @@ No competitor can replicate this without the history.
 │  System of record. Master data. Forms create reality.   │
 │  Entities: Person, Enterprise, Product,                 │
 │            Relationship, Task, Transaction, Address     │
+│  Phase 9: Document, Schedule, Signal, Channel, Territory│
 └──────────────────────┬──────────────────────────────────┘
                        │ ETL trigger after every mutation
 ┌──────────────────────▼──────────────────────────────────┐
@@ -891,17 +892,23 @@ Phase B  Enrichment       ✅ Domain-specific enrichment — medications, food, 
 Phase C  Enrichment       ✅ Compliance & risk — OFAC SDN sanctions, World Bank WGI, GDELT news, AML flags
 Phase D  Enrichment       ✅ Scoring & synthesis — entity_scores, relationship/task enrichment (7/7 entities), get_entity_risk_report copilot tool
 Phase E  Enrichment       ✅ Predictive & temporal — spend_trend, churn_probability, CLV segment (person); revenue_trend, payment_behavior, avg_days_to_pay (enterprise); demand_trend, stockout_risk, days_of_stock, demand_forecast_30d (product); is_recurring, recurrence_count, seasonal_flag, days_since_prior_tx (transaction)
+Phase 9  Ontology Expand  ✅ 5 new canonical entities (Document, Schedule, Signal, Channel, Territory) + ETL + enrichment + copilot tools + frontend pages
+Phase 9+ Copilot Write-Back ✅ create_record + import_records tools with approval gate routing (auto/notify/approve by entity risk level)
 ```
 
 ---
 
-## Current state (as of 2026-04-15)
+## Current state (as of 2026-04-25)
 
-All Phases 1–8, Enrichment Phases A–E, Production Infra, Onboarding flow, BI Export, Multi-tenant Admin UI, and Security hardening are implemented and deployed.
+All Phases 1–9+, Enrichment Phases A–E, Production Infra, Onboarding flow, BI Export, Multi-tenant Admin UI, and Security hardening are implemented and deployed.
 
 ```
 COMPLETED
   ✅ All 7 core entities with forms, lists, bulk import, taxonomy
+  ✅ Phase 9 — 5 extended entities (Document, Schedule, Signal, Channel, Territory) with
+     frontend pages, ETL, enrichment, and copilot tools
+  ✅ Phase 9+ — Copilot Write-Back: create_record + import_records tools with approval
+     gate routing (auto-execute low-risk, notify medium-risk, approve high-risk entities)
   ✅ ETL pipeline — all 9 entities, multi-tenant, three-tier fallback
   ✅ Copilot — claude-sonnet-4-6, tool loop, 7 query tools, session memory
   ✅ Alerts engine — 10 alert types, WhatsApp/Email/SMS, per-company config

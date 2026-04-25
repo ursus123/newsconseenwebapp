@@ -355,37 +355,37 @@ export const ENTERPRISE_FIELDS = [
 
 export const ENTERPRISE_MAPPING_RULES = [
   // Most specific first — prevent wrong rule stealing the column
-  [/parent.?enterprise.?id|parent.?id|hq.?id/i,              "parent_enterprise_id"],
-  [/^enterprise.?id$|^external.?id$|^branch.?id$/i,          "enterprise_id"],
-  [/^enterprise.?name$|^company.?name$|^org.?name$/i,        "enterprise_name"],
-  [/^enterprise.?type$|^org.?type$|^business.?type$/i,       "enterprise_type"],
-  [/enterprise.?subtype|^subtype$|^sub.?type$|^industry$/i,  "enterprise_subtype"],
-  [/enterprise.?tier|^tier$|^level$/i,                       "enterprise_tier"],
-  [/^company.?id$|^tenant$|^workspace$/i,                    "company_id"],
+  [/^parent.?enterprise.?id$|^parent.?id$|^hq.?id$/i,              "parent_enterprise_id"],
+  [/^enterprise.?id$|^external.?id$|^branch.?id$/i,                "enterprise_id"],
+  [/^enterprise.?name$|^company.?name$|^org.?name$/i,              "enterprise_name"],
+  [/^enterprise.?type$|^org.?type$|^business.?type$/i,             "enterprise_type"],
+  [/^enterprise.?subtype$|^subtype$|^sub.?type$|^industry$/i,      "enterprise_subtype"],
+  [/^enterprise.?tier$|^tier$|^level$/i,                           "enterprise_tier"],
+  [/^company.?id$|^tenant$|^workspace$/i,                          "company_id"],
 
   // NAICS / SIC — most specific first (6-digit code before sector/division)
   [/^naics.?code$|^naics$/i,                                "naics_code"],
   [/^naics.?title$|^naics.?description$|^naics.?name$/i,    "naics_title"],
   [/^sic.?code$|^sic$/i,                                    "sic_code"],
   [/^sic.?description$|^sic.?desc$|^sic.?name$/i,          "sic_description"],
-  [/sic.?sector.?id|naics.?id|sector.?id/i,                 "sic_sector_id"],
-  [/sic.?sector.?name|sector.?name/i,                       "sic_sector_name"],
-  [/sic.?division|^division$/i,                             "sic_division"],
+  [/^sic.?sector.?id$|^naics.?id$|^sector.?id$/i,          "sic_sector_id"],
+  [/^sic.?sector.?name$|^sector.?name$/i,                   "sic_sector_name"],
+  [/^sic.?division$|^division$/i,                           "sic_division"],
 
   // Status fields
   [/^status$/i,                                              "status"],
-  [/operating.?status|ops.?status|open.?status/i,           "operating_status"],
+  [/^operating.?status$|^ops.?status$|^open.?status$/i,     "operating_status"],
 
   // Contact
-  [/^phone$|^mobile$|^telephone$|contact.?phone|^tel$/i,    "phone"],
-  [/^email$|contact.?email/i,                               "email"],
+  [/^phone$|^mobile$|^telephone$|^contact.?phone$|^tel$/i,  "phone"],
+  [/^email$|^contact.?email$/i,                             "email"],
   [/^website$|^url$|^web$/i,                                "website"],
 
   // Address — zip_code must come before short_name (which also matches "code")
-  [/zip.?code|^zip$|postal.?code|^postcode$/i,              "zip_code"],
-  [/^address$|^street$|address.?line|primary.?address/i,    "primary_address"],
+  [/^zip.?code$|^zip$|^postal.?code$|^postcode$/i,          "zip_code"],
+  [/^address$|^street$|^address.?line$|^primary.?address$/i,"primary_address"],
   [/^city$|^town$|^location$/i,                             "city"],
-  [/^region$|^state$|state.?region|^province$/i,            "region"],
+  [/^region$|^state$|^state.?region$|^province$/i,          "region"],
   [/^country$|^nation$/i,                                   "country"],
   [/^lat$|^latitude$/i,                                     "latitude"],
   [/^lon$|^lng$|^longitude$/i,                              "longitude"],
@@ -616,22 +616,22 @@ export const SERVICE_FIELDS = [
 ];
 
 export const SERVICE_MAPPING_RULES = [
-  [/service.?name|^name$|^title$/i, "name"],
-  [/^code$|short.?code|sku/i, "short_code"],
-  [/description/i, "description"],
-  [/^category$|^type$|group/i, "category"],
-  [/sub.?category/i, "sub_category"],
-  [/service.?type/i, "service_type"],
-  [/pricing.?model/i, "pricing_model"],
-  [/^price$|^rate$|^cost$/i, "price"],
-  [/billing.?unit/i, "billing_unit"],
-  [/tax/i, "tax_applicable"],
-  [/duration|time/i, "estimated_duration"],
-  [/duration.?unit/i, "duration_unit"],
-  [/sla|response.?time/i, "response_sla_hours"],
-  [/completion.?sla/i, "completion_sla_hours"],
-  [/^status$/i, "status"],
-  [/notes/i, "internal_notes"],
+  [/^service[._-]?name$|^name$|^title$/i,              "name"],
+  [/^short[._-]?code$|^code$|^sku$/i,                  "short_code"],
+  [/^description$|^summary$|^details$/i,               "description"],
+  [/^category$|^type$|^group$|^service[._-]?category$/i, "category"],
+  [/^sub[._-]?category$/i,                             "sub_category"],
+  [/^service[._-]?type$/i,                             "service_type"],
+  [/^pricing[._-]?model$/i,                            "pricing_model"],
+  [/^price$|^rate$|^cost$/i,                           "price"],
+  [/^billing[._-]?unit$/i,                             "billing_unit"],
+  [/^tax$|^tax[._-]?applicable$/i,                     "tax_applicable"],
+  [/^estimated[._-]?duration$|^duration$|^hours$/i,    "estimated_duration"],
+  [/^duration[._-]?unit$/i,                            "duration_unit"],
+  [/^response[._-]?sla[._-]?hours$|^response[._-]?sla$|^sla[._-]?hours$/i, "response_sla_hours"],
+  [/^completion[._-]?sla[._-]?hours$|^completion[._-]?sla$/i, "completion_sla_hours"],
+  [/^status$/i,                                        "status"],
+  [/^notes$|^internal[._-]?notes$|^comments$/i,        "internal_notes"],
 ];
 
 export const SERVICE_TEMPLATE_EXAMPLE = {

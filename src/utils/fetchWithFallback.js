@@ -154,6 +154,9 @@ export const fetchTransactionsFallback = (companyId, base44Fn, opts = {}) =>
 export const fetchEnterprisesFallback = (companyId, base44Fn, opts = {}) =>
   fetchWithFallback({ analyticsEndpoint: "/enterprise-summary",   rawEntity: "enterprises",  base44Fn, companyId, ...opts });
 
+export const fetchServicesFallback = (companyId, base44Fn, opts = {}) =>
+  fetchWithFallback({ analyticsEndpoint: "/service-summary",      rawEntity: "services",     base44Fn, companyId, ...opts });
+
 // ── Intelligence analytics (analytics-only, no raw fallback entity) ───────────
 // These tables have no equivalent raw.* entity — they are derived aggregates.
 // The fallback is the GET endpoint itself which recomputes live from Base44.

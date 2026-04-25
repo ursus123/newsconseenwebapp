@@ -770,6 +770,79 @@ _OTHER_DDL = [
     "CREATE INDEX IF NOT EXISTS idx_time_summary_company ON analytics.time_summary (company_id, work_date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_time_summary_person  ON analytics.time_summary (company_id, person_id)",
 
+    # ── Phase 4E Market Research agent tables ────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.competitor_profiles (
+        id              SERIAL PRIMARY KEY,
+        company_id      TEXT NOT NULL,
+        competitor_name TEXT NOT NULL,
+        location_lat    DOUBLE PRECISION,
+        location_lng    DOUBLE PRECISION,
+        address         TEXT,
+        entity_type     TEXT,
+        rating          DOUBLE PRECISION,
+        review_count    INTEGER,
+        signals         TEXT,
+        first_seen      TIMESTAMPTZ DEFAULT NOW(),
+        last_updated    TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_competitor_profiles_company ON analytics.competitor_profiles (company_id)",
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.market_signals (
+        id          SERIAL PRIMARY KEY,
+        company_id  TEXT NOT NULL,
+        signal_type TEXT NOT NULL,
+        source      TEXT NOT NULL,
+        title       TEXT,
+        summary     TEXT,
+        sentiment   TEXT,
+        relevance   DOUBLE PRECISION DEFAULT 0.5,
+        detected_at TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_market_signals_company ON analytics.market_signals (company_id, detected_at DESC)",
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.market_briefings (
+        id          SERIAL PRIMARY KEY,
+        company_id  TEXT NOT NULL,
+        week_of     DATE NOT NULL,
+        briefing    TEXT NOT NULL,
+        findings    TEXT,
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_market_briefings_company ON analytics.market_briefings (company_id, week_of DESC)",
+
+    # ── Kinetic action log ────────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS raw.kinetic_log (
+        id          SERIAL PRIMARY KEY,
+        company_id  TEXT,
+        action_id   TEXT,
+        action_name TEXT,
+        executed_by TEXT,
+        params_json TEXT,
+        result_json TEXT,
+        executed_at TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_kinetic_log_company ON raw.kinetic_log (company_id, executed_at DESC)",
+
+    # ── ML predictions log ────────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS raw.ml_predictions (
+        id          SERIAL PRIMARY KEY,
+        company_id  TEXT,
+        model       TEXT,
+        result_json TEXT,
+        computed_at TIMESTAMPTZ
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ml_predictions_company ON raw.ml_predictions (company_id, computed_at DESC)",
+
     # ── Market Intelligence write-back ───────────────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS analytics.mi_competitors (
@@ -797,10 +870,44 @@ _OTHER_DDL = [
 ]
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Column migrations — run after DDL on every startup.
+# Required for live deployments where tables already exist but are missing
+# columns added in later phases. Add one ALTER here for every new column
+# added to any table in the DDL lists above — without it live deployments
+# crash on next ETL run with "column does not exist".
+# ─────────────────────────────────────────────────────────────────────────────
+_MIGRATIONS = [
+    # time_summary (Phase 7 / Connector Sync — added after initial deployment)
+    "ALTER TABLE analytics.time_summary ADD COLUMN IF NOT EXISTS break_hours      DOUBLE PRECISION",
+    "ALTER TABLE analytics.time_summary ADD COLUMN IF NOT EXISTS scheduled_hours  DOUBLE PRECISION",
+    "ALTER TABLE analytics.time_summary ADD COLUMN IF NOT EXISTS utilisation_pct  DOUBLE PRECISION",
+
+    # mi_competitors — relationship_id added in Phase 4E
+    "ALTER TABLE analytics.mi_competitors ADD COLUMN IF NOT EXISTS relationship_id TEXT",
+
+    # monthly_kpis — task columns added post-initial
+    "ALTER TABLE analytics.monthly_kpis ADD COLUMN IF NOT EXISTS tasks_created        BIGINT",
+    "ALTER TABLE analytics.monthly_kpis ADD COLUMN IF NOT EXISTS tasks_completed      BIGINT",
+    "ALTER TABLE analytics.monthly_kpis ADD COLUMN IF NOT EXISTS task_completion_rate_pct DOUBLE PRECISION",
+
+    # company_scorecard — added overdue_tasks post-initial
+    "ALTER TABLE analytics.company_scorecard ADD COLUMN IF NOT EXISTS overdue_tasks BIGINT",
+
+    # kpi_summary — added dead_stock_count + avg columns post-initial
+    "ALTER TABLE analytics.kpi_summary ADD COLUMN IF NOT EXISTS dead_stock_count       BIGINT",
+    "ALTER TABLE analytics.kpi_summary ADD COLUMN IF NOT EXISTS avg_task_completion_days DOUBLE PRECISION",
+    "ALTER TABLE analytics.kpi_summary ADD COLUMN IF NOT EXISTS total_relationships    BIGINT",
+    "ALTER TABLE analytics.kpi_summary ADD COLUMN IF NOT EXISTS churn_risk_count       BIGINT",
+]
+
+
 def ensure_all_analytics_tables(engine) -> None:
     """
-    Pre-create all analytics.* and raw.* tables using CREATE TABLE IF NOT EXISTS.
-    Safe to call on every startup — idempotent.
+    Pre-create all analytics.* and raw.* tables using CREATE TABLE IF NOT EXISTS,
+    then run column migrations for live deployments where tables already exist.
+    Safe to call on every startup — all operations are idempotent.
 
     Prevents "table does not exist" errors on GET endpoints before the first
     ETL run. Tables will be empty until ETL populates them.
@@ -844,6 +951,15 @@ def ensure_all_analytics_tables(engine) -> None:
                     created += 1
                 except Exception as exc:
                     logger.warning("setup: other DDL failed — %s", exc)
+                    errors += 1
+
+            # Column migrations — add new columns to existing tables
+            for migration in _MIGRATIONS:
+                try:
+                    conn.execute(text(migration))
+                    created += 1
+                except Exception as exc:
+                    logger.warning("setup: migration failed — %s", exc)
                     errors += 1
 
         logger.info(
