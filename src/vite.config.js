@@ -80,7 +80,7 @@ const viteFixPlugin = {
   },
 }
 
-// Cache bust: 2026-04-17T02
+// Cache bust: 2026-04-25T19
 export default defineConfig({
   plugins: [
     viteFixPlugin,
