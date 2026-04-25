@@ -38,6 +38,11 @@ import Agents from './pages/Agents';
 import Workflows from './pages/Workflows';
 import TenantAdmin from './pages/TenantAdmin';
 import Mobile from './pages/Mobile';
+import Documents from './pages/Documents';
+import Schedules from './pages/Schedules';
+import Signals from './pages/Signals';
+import Channels from './pages/Channels';
+import Territories from './pages/Territories';
 import Layout from './Layout.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
@@ -132,6 +137,11 @@ const AuthenticatedApp = () => {
       <Route path="/Workflows" element={<LayoutWrapper currentPageName="Workflows"><Workflows /></LayoutWrapper>} />
       <Route path="/ObjectViews" element={<LayoutWrapper currentPageName="Object Views"><ObjectViews /></LayoutWrapper>} />
       <Route path="/TenantAdmin" element={<LayoutWrapper currentPageName="Tenant Admin"><TenantAdmin /></LayoutWrapper>} />
+      <Route path="/Documents" element={<LayoutWrapper currentPageName="Documents"><Documents /></LayoutWrapper>} />
+      <Route path="/Schedules" element={<LayoutWrapper currentPageName="Schedules"><Schedules /></LayoutWrapper>} />
+      <Route path="/Signals" element={<LayoutWrapper currentPageName="Signals"><Signals /></LayoutWrapper>} />
+      <Route path="/Channels" element={<LayoutWrapper currentPageName="Channels"><Channels /></LayoutWrapper>} />
+      <Route path="/Territories" element={<LayoutWrapper currentPageName="Territories"><Territories /></LayoutWrapper>} />
       {/* Desktop Shell — NO layout wrapper, full screen */}
       <Route path="/Desktop" element={<Desktop />} />
       <Route path="/DesktopSettings" element={<DesktopSettings />} />
