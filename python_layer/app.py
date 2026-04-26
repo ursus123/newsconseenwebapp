@@ -555,6 +555,86 @@ def idjwi_demo_ask(req: _DemoAskRequest, request: _Request):
         }
 
 
+@app.post("/copilot/demo-stream", tags=["idjwi"])
+async def idjwi_demo_stream(req: _DemoAskRequest, request: _Request):
+    """
+    Streaming SSE endpoint for the Idjwi demo.
+    Emits newline-delimited JSON events: tool_start, tool_done, text_delta, chart, done, error.
+    No auth required — IP rate-limited.
+    """
+    import time as _time
+    import json as _json
+    from fastapi.responses import StreamingResponse as _SR
+
+    ip = request.client.host if request.client else "unknown"
+    t0 = _time.time()
+
+    try:
+        from copilot.demo_engine import ask_idjwi_stream, _check_rate_limit
+
+        if not _check_rate_limit(ip):
+            async def _rl():
+                yield f"data: {_json.dumps({'type': 'rate_limited'})}\n\n"
+            logger.info("Idjwi stream rate-limited ip=%s", ip)
+            return _SR(_rl(), media_type="text/event-stream")
+
+        tools_used: list = []
+        error_count = 0
+
+        async def generate():
+            nonlocal tools_used, error_count
+            try:
+                async for event in ask_idjwi_stream(
+                    question=req.question,
+                    history=req.history,
+                ):
+                    t = event.get("type", "")
+                    if t in ("tool_start", "tool_done"):
+                        tools_used.append(event.get("tool", ""))
+                    if t == "error":
+                        error_count += 1
+                    yield f"data: {_json.dumps(event, default=str)}\n\n"
+            except Exception as exc:
+                logger.error("Idjwi stream error: %s", exc)
+                yield f"data: {_json.dumps({'type': 'error', 'message': 'Stream interrupted.'})}\n\n"
+            finally:
+                elapsed = round(_time.time() - t0, 2)
+                logger.info(
+                    "Idjwi stream done ip=%s elapsed=%.2fs tools=%s errors=%d",
+                    ip, elapsed, list(dict.fromkeys(tools_used)), error_count,
+                )
+
+        return _SR(
+            generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
+        )
+
+    except Exception as e:
+        logger.error("Idjwi demo-stream setup failed: %s", e)
+        async def _err():
+            yield f"data: {_json.dumps({'type': 'error', 'message': 'Service unavailable.'})}\n\n"
+        from fastapi.responses import StreamingResponse as _SR2
+        return _SR2(_err(), media_type="text/event-stream")
+
+
+class _TelemetryEvent(_BaseModel):
+    event: str
+    properties: dict = {}
+
+
+@app.post("/telemetry/demo-event", tags=["idjwi"])
+async def record_demo_event(payload: _TelemetryEvent, request: _Request):
+    """Lightweight funnel event sink for Landing page analytics."""
+    ip = request.client.host if request.client else "unknown"
+    logger.info("FUNNEL ip=%s event=%s props=%s", ip, payload.event, payload.properties)
+    return {"ok": True}
+
+
 # ----------------------------------------------------------
 # Helper Functions
 # ----------------------------------------------------------

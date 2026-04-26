@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Send, Loader2, ArrowRight, Globe, Cpu, Users, BarChart2,
@@ -11,19 +11,53 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+// ── Config ────────────────────────────────────────────────────────────────────
+const RAILWAY_URL = import.meta.env.VITE_RAILWAY_URL
+  || "https://newsconseenwebapp-production.up.railway.app";
 
 const PALETTE = [
   "#10b981","#3b82f6","#f59e0b","#ef4444","#8b5cf6",
   "#06b6d4","#f97316","#84cc16","#ec4899","#14b8a6",
 ];
 
+// ── Funnel telemetry ──────────────────────────────────────────────────────────
+function trackEvent(event, properties = {}) {
+  try {
+    fetch(`${RAILWAY_URL}/telemetry/demo-event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event, properties }),
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+// ── Tool progress labels ──────────────────────────────────────────────────────
+const TOOL_LABELS = {
+  web_search:              "Searching the web",
+  search_public_data:      "Fetching market data",
+  get_people_summary:      "Checking people data",
+  get_transaction_summary: "Checking transactions",
+  get_task_summary:        "Checking tasks",
+  get_overdue_invoices:    "Checking invoices",
+  get_ml_predictions:      "Running ML models",
+  get_entity_risk_report:  "Analysing risk",
+  get_enterprise_overview: "Checking enterprise data",
+  get_network_overview:    "Checking network data",
+  find_people_records:     "Searching people",
+  find_task_records:       "Searching tasks",
+};
+const toolLabel = name =>
+  TOOL_LABELS[name] || name.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+// ── Content ───────────────────────────────────────────────────────────────────
 const GREETING = {
+  _id: "greeting",
   role: "assistant",
   content: "Hi, I'm **Idjwi** — the intelligence layer of Newsconseen.\n\nI can pull **live market data**, walk you through how Newsconseen works for your industry, explain what the autonomous agents do, or answer any question about the platform.\n\nWhat would you like to explore?",
   charts: [],
   citations: [],
   toolsCalled: [],
+  streaming: false,
 };
 
 const STARTERS = [
@@ -40,21 +74,15 @@ const STARTERS = [
 const TESTIMONIALS = [
   {
     quote: "Before Newsconseen, our field coordinator tracked 340 patients across four spreadsheets. Now Idjwi sends a daily briefing automatically.",
-    role: "Operations Director",
-    org: "Private Clinic Network",
-    initials: "OD",
+    role: "Operations Director", org: "Private Clinic Network", initials: "OD",
   },
   {
     quote: "We manage 12 school campuses. This is the first platform where I can see all 12 in one view, compare them, and get alerts when something's off.",
-    role: "Chief Administrator",
-    org: "Multi-Campus School Group",
-    initials: "CA",
+    role: "Chief Administrator", org: "Multi-Campus School Group", initials: "CA",
   },
   {
     quote: "The autonomous agents caught a supplier payment anomaly we would have missed for months. It flagged it, created a task, and notified the right person.",
-    role: "Finance Manager",
-    org: "Agricultural Cooperative",
-    initials: "FM",
+    role: "Finance Manager", org: "Agricultural Cooperative", initials: "FM",
   },
 ];
 
@@ -93,38 +121,23 @@ const LAYERS = [
 
 const PRICING_TIERS = [
   {
-    name: "Starter",
-    price: "Free",
-    sub: "Forever free to start",
-    color: "slate",
+    name: "Starter", price: "Free", sub: "Forever free to start", highlighted: false,
     features: ["1 user", "All 7 core entities", "Idjwi copilot", "Basic dashboards", "Community support"],
-    cta: "Start free",
-    href: "/onboarding",
-    highlighted: false,
+    cta: "Start free", href: "/onboarding",
   },
   {
-    name: "Growth",
-    price: "Contact us",
-    sub: "Full platform access",
-    color: "emerald",
+    name: "Growth", price: "Contact us", sub: "Full platform access", highlighted: true,
     features: ["Unlimited users", "All 8 autonomous agents", "35 connectors", "ML predictions", "Enrichment engine", "WhatsApp / Email alerts", "Priority support"],
-    cta: "Get pricing",
-    href: "/onboarding",
-    highlighted: true,
+    cta: "Get pricing", href: "/onboarding",
   },
   {
-    name: "Enterprise",
-    price: "Custom",
-    sub: "White-label & multi-tenant",
-    color: "violet",
+    name: "Enterprise", price: "Custom", sub: "White-label & multi-tenant", highlighted: false,
     features: ["White-label branding", "Custom domain", "Network intelligence", "SOC 2 compliance", "Audit trail", "Dedicated support & SLA"],
-    cta: "Talk to us",
-    href: "/onboarding",
-    highlighted: false,
+    cta: "Talk to us", href: "/onboarding",
   },
 ];
 
-// ── Markdown renderer (dark theme) ────────────────────────────────────────────
+// ── Markdown renderer ─────────────────────────────────────────────────────────
 function renderInline(text) {
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
   return parts.map((p, i) => {
@@ -138,7 +151,7 @@ function renderInline(text) {
   });
 }
 
-function MarkdownContent({ content }) {
+function MarkdownContent({ content, streaming }) {
   const lines = (content || "").split("\n");
   const elements = [];
   let i = 0;
@@ -203,13 +216,30 @@ function MarkdownContent({ content }) {
       elements.push(<p key={i} className="text-sm leading-relaxed text-slate-300 mb-1.5">{renderInline(line)}</p>);
     i++;
   }
-  return <div className="space-y-0.5">{elements}</div>;
+  return (
+    <div className="space-y-0.5">
+      {elements}
+      {streaming && content && (
+        <span className="inline-block w-0.5 h-3.5 bg-emerald-400 animate-pulse ml-0.5 align-middle" />
+      )}
+    </div>
+  );
 }
 
-// ── Inline chart renderer ─────────────────────────────────────────────────────
+// ── Chart card ────────────────────────────────────────────────────────────────
 function DemoChartCard({ config }) {
-  if (!config || !config.data || config.data.length === 0) return null;
+  if (!config) return null;
   const { type, title, data, keys = [], unit = "" } = config;
+
+  // Graceful fallback: no chart data → render as table
+  if (!data || data.length === 0) {
+    return (
+      <div className="mt-3 bg-slate-900 border border-slate-700 rounded-2xl p-4">
+        <p className="text-xs text-slate-500">{title || "Chart"} — no data returned in demo mode.</p>
+      </div>
+    );
+  }
+
   const fmtTick = v => typeof v !== "number" ? v : v >= 1e9 ? `${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v;
   const fmtTip  = (v, n) => [unit === "$" ? `$${Number(v).toLocaleString()}` : Number(v).toLocaleString(), n];
   const resolvedKeys = keys.length
@@ -266,21 +296,32 @@ function DemoChartCard({ config }) {
 // ── Tool badges ───────────────────────────────────────────────────────────────
 function ToolBadges({ toolsCalled }) {
   if (!toolsCalled || toolsCalled.length === 0) return null;
-  const label = t => t.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   return (
     <div className="flex flex-wrap gap-1.5 mt-2.5">
       {[...new Set(toolsCalled)].map(t => (
         <span key={t} className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-800 border border-slate-700 rounded-full px-2 py-0.5">
-          <Code2 className="w-2.5 h-2.5" /> {label(t)}
+          <Code2 className="w-2.5 h-2.5" /> {toolLabel(t)}
         </span>
       ))}
     </div>
   );
 }
 
+// ── Progress indicator ────────────────────────────────────────────────────────
+function ProgressLabel({ label }) {
+  return (
+    <div className="flex items-center gap-2 text-xs text-slate-500 pl-11 py-1">
+      <Loader2 className="w-3 h-3 animate-spin text-emerald-500 shrink-0" />
+      <span>{label}</span>
+    </div>
+  );
+}
+
 // ── Message ───────────────────────────────────────────────────────────────────
-function Message({ role, content, charts, citations, toolsCalled }) {
+function Message({ role, content, charts, citations, toolsCalled, streaming }) {
   const isUser = role === "user";
+  const showDots = !isUser && streaming && !content;
+
   return (
     <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
       <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold
@@ -299,18 +340,25 @@ function Message({ role, content, charts, citations, toolsCalled }) {
             ? "bg-slate-700 text-slate-100 rounded-tr-sm"
             : "bg-slate-800/80 border border-slate-700/50 rounded-tl-sm w-full"
           }`}>
-          {isUser
-            ? <p className="text-sm leading-relaxed">{content}</p>
-            : <MarkdownContent content={content} />
-          }
+          {isUser ? (
+            <p className="text-sm leading-relaxed">{content}</p>
+          ) : showDots ? (
+            <div className="flex gap-1.5 items-center py-0.5">
+              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+          ) : (
+            <MarkdownContent content={content} streaming={streaming && !!content} />
+          )}
         </div>
         {!isUser && charts && charts.length > 0 && (
           <div className="w-full space-y-2 mt-1">
             {charts.map((cfg, i) => <DemoChartCard key={i} config={cfg} />)}
           </div>
         )}
-        {!isUser && <ToolBadges toolsCalled={toolsCalled} />}
-        {!isUser && citations && citations.length > 0 && (
+        {!isUser && !streaming && <ToolBadges toolsCalled={toolsCalled} />}
+        {!isUser && !streaming && citations && citations.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2 px-1">
             {citations.map((c, i) => (
               <a key={i} href={c.url} target="_blank" rel="noopener noreferrer"
@@ -325,22 +373,6 @@ function Message({ role, content, charts, citations, toolsCalled }) {
   );
 }
 
-function TypingIndicator() {
-  return (
-    <div className="flex gap-3">
-      <div className="shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-emerald-500/30">I</div>
-      <div className="flex flex-col items-start">
-        <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest px-1 mb-1">Idjwi</span>
-        <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1.5 items-center">
-          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Idjwi chat widget ─────────────────────────────────────────────────────────
 function IdjwiChat() {
   const [messages, setMessages]       = useState([GREETING]);
@@ -348,57 +380,127 @@ function IdjwiChat() {
   const [loading, setLoading]         = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
   const [started, setStarted]         = useState(false);
+  const [progressLabel, setProgressLabel] = useState(null);
+
   const inputRef   = useRef(null);
   const bottomRef  = useRef(null);
   const historyRef = useRef([]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, loading, progressLabel]);
+
+  const updateMsg = useCallback((id, patch) => {
+    setMessages(prev => prev.map(m => m._id === id ? { ...m, ...patch } : m));
+  }, []);
 
   const send = async (text) => {
     const q = (text || input).trim();
     if (!q || loading || rateLimited) return;
     setInput("");
     setStarted(true);
+    trackEvent("prompt_sent", { is_starter: !!text, length: q.length });
 
-    setMessages(prev => [...prev, { role: "user", content: q }]);
+    const msgId = `msg-${Date.now()}`;
+    const userHistory = historyRef.current.map(m => ({ role: m.role, content: m.content }));
+
+    setMessages(prev => [
+      ...prev,
+      { _id: `u-${msgId}`, role: "user", content: q },
+      { _id: msgId, role: "assistant", content: "", charts: [], citations: [], toolsCalled: [], streaming: true },
+    ]);
     setLoading(true);
+    setProgressLabel(null);
 
-    const apiHistory = historyRef.current.map(m => ({ role: m.role, content: m.content }));
+    let finalContent = "";
+    let finalCharts  = [];
+    let finalTools   = [];
 
     try {
-      const resp = await fetch(`${RAILWAY_URL}/copilot/demo-ask`, {
+      const resp = await fetch(`${RAILWAY_URL}/copilot/demo-stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q, history: apiHistory }),
-        signal: AbortSignal.timeout(55_000),
+        body: JSON.stringify({ question: q, history: userHistory }),
       });
+
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
 
-      if (data.rate_limited) setRateLimited(true);
+      const reader  = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-      const assistantMsg = {
-        role: "assistant",
-        content: data.answer || "I couldn't generate a response. Please try again.",
-        charts: data.charts || [],
-        citations: data.citations || [],
-        toolsCalled: data.tools_called || [],
-      };
-      setMessages(prev => [...prev, assistantMsg]);
-      historyRef.current = [
-        ...historyRef.current,
-        { role: "user", content: q },
-        { role: "assistant", content: assistantMsg.content },
-      ].slice(-16);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          let event;
+          try { event = JSON.parse(line.slice(6)); } catch { continue; }
+
+          if (event.type === "tool_start") {
+            const lbl = `${toolLabel(event.tool)}…`;
+            setProgressLabel(lbl);
+            if (!finalTools.includes(event.tool)) finalTools.push(event.tool);
+
+          } else if (event.type === "tool_done") {
+            setProgressLabel("Processing results…");
+
+          } else if (event.type === "text_delta") {
+            finalContent += event.text;
+            setProgressLabel(null);
+            updateMsg(msgId, { content: finalContent });
+
+          } else if (event.type === "chart") {
+            finalCharts = [...finalCharts, event.config];
+            updateMsg(msgId, { charts: finalCharts });
+            trackEvent("chart_rendered", { type: event.config?.type });
+
+          } else if (event.type === "done") {
+            updateMsg(msgId, {
+              content:     finalContent || "Done.",
+              citations:   event.citations || [],
+              toolsCalled: finalTools,
+              streaming:   false,
+            });
+            if (event.rate_limited) setRateLimited(true);
+            trackEvent("response_success", { tools: finalTools.length, has_chart: finalCharts.length > 0 });
+            historyRef.current = [
+              ...historyRef.current,
+              { role: "user",      content: q },
+              { role: "assistant", content: finalContent },
+            ].slice(-16);
+
+          } else if (event.type === "rate_limited") {
+            setRateLimited(true);
+            updateMsg(msgId, { content: "Demo limit reached.", streaming: false });
+
+          } else if (event.type === "error") {
+            updateMsg(msgId, {
+              content:  finalContent || "Something went wrong. Please try again.",
+              streaming: false,
+            });
+            trackEvent("response_error", { has_partial: finalContent.length > 0 });
+          }
+        }
+      }
+
+      // Ensure streaming flag is always cleared
+      updateMsg(msgId, { streaming: false });
+
     } catch (e) {
-      const errMsg = e.name === "TimeoutError"
-        ? "The request timed out. Idjwi is thinking hard — please try again."
-        : "I encountered an error. Please try again.";
-      setMessages(prev => [...prev, { role: "assistant", content: errMsg, charts: [], citations: [], toolsCalled: [] }]);
+      updateMsg(msgId, {
+        content:  finalContent || "Connection interrupted. Please try again.",
+        streaming: false,
+      });
+      trackEvent("response_error", { error: e.message });
     } finally {
       setLoading(false);
+      setProgressLabel(null);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   };
@@ -433,17 +535,19 @@ function IdjwiChat() {
         </div>
 
         {/* Messages */}
-        <div className="h-[55vh] min-h-[380px] md:h-[520px] overflow-y-auto px-5 py-5 space-y-6 scroll-smooth">
-          {messages.map((m, i) => (
-            <Message key={i} role={m.role} content={m.content}
-              charts={m.charts} citations={m.citations} toolsCalled={m.toolsCalled} />
+        <div className="h-[55vh] min-h-[380px] md:h-[520px] overflow-y-auto px-5 py-5 space-y-5 scroll-smooth">
+          {messages.map((m) => (
+            <Message key={m._id} role={m.role} content={m.content}
+              charts={m.charts} citations={m.citations}
+              toolsCalled={m.toolsCalled} streaming={m.streaming} />
           ))}
 
-          {/* Starter chips — visible before first user message */}
+          {/* Starter chips — before user has typed */}
           {!started && (
             <div className="flex flex-wrap gap-2 pt-1">
               {STARTERS.slice(0, 6).map((s, i) => (
-                <button key={i} onClick={() => send(s.q)} disabled={loading}
+                <button key={i} onClick={() => { trackEvent("starter_clicked", { label: s.label }); send(s.q); }}
+                  disabled={loading}
                   className="text-xs text-slate-400 border border-slate-700 hover:border-emerald-500/50 hover:text-emerald-400 rounded-full px-3 py-1.5 transition-all hover:bg-emerald-500/5 disabled:opacity-40">
                   {s.label}
                 </button>
@@ -451,12 +555,13 @@ function IdjwiChat() {
             </div>
           )}
 
-          {loading && <TypingIndicator />}
+          {/* Progress label when tool is running */}
+          {loading && progressLabel && <ProgressLabel label={progressLabel} />}
 
           {rateLimited && (
             <div className="flex items-start gap-2 text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-xs">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>Demo limit reached. <a href="/onboarding" className="underline font-medium">Sign up free</a> for unlimited Idjwi access with your own data.</span>
+              <span>Demo limit reached. <a href="/onboarding" className="underline font-medium" onClick={() => trackEvent("signup_clicked", { source: "rate_limit" })}>Sign up free</a> for unlimited Idjwi access with your own data.</span>
             </div>
           )}
           <div ref={bottomRef} />
@@ -499,15 +604,15 @@ function IdjwiChat() {
   );
 }
 
-// ── App mockup (interactive screenshot proxy) ─────────────────────────────────
+// ── App mockup ────────────────────────────────────────────────────────────────
 function DashboardTab() {
   return (
     <div>
       <div className="grid grid-cols-2 gap-2 mb-3">
         {[
-          { label: "Active Clients",  val: "1,247", trend: "+12%",         ok: true },
-          { label: "Revenue (MTD)",   val: "$84,320", trend: "+8%",        ok: true },
-          { label: "Tasks Due Today", val: "23",    trend: "6 overdue",    ok: false },
+          { label: "Active Clients",  val: "1,247", trend: "+12%",          ok: true },
+          { label: "Revenue (MTD)",   val: "$84,320", trend: "+8%",         ok: true },
+          { label: "Tasks Due Today", val: "23",    trend: "6 overdue",     ok: false },
           { label: "Churn Risk",      val: "7",     trend: "Action needed", ok: false },
         ].map(s => (
           <div key={s.label} className="bg-slate-800/60 border border-slate-700/40 rounded-xl p-3">
@@ -517,7 +622,7 @@ function DashboardTab() {
           </div>
         ))}
       </div>
-      <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-3 flex items-center justify-center h-20">
+      <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl flex items-center justify-center h-20">
         <BarChart2 className="w-4 h-4 text-slate-600 mr-2" />
         <span className="text-xs text-slate-600">Revenue · 6-month trend chart</span>
       </div>
@@ -551,10 +656,10 @@ function AgentsTab() {
   return (
     <div className="space-y-2">
       {[
-        { agent: "Revenue Agent",    action: "3 overdue invoices — WhatsApp reminders sent",     time: "2m ago",  status: "done" },
-        { agent: "Retention Agent",  action: "7 clients declining engagement — tasks created",   time: "14m ago", status: "done" },
-        { agent: "Inventory Agent",  action: "Stock below threshold — reorder task created",     time: "1h ago",  status: "pending" },
-        { agent: "Compliance Agent", action: "Running OFAC screen on 12 new entities",          time: "now",     status: "running" },
+        { agent: "Revenue Agent",    action: "3 overdue invoices — WhatsApp reminders sent",    time: "2m ago",  status: "done" },
+        { agent: "Retention Agent",  action: "7 clients declining engagement — tasks created",  time: "14m ago", status: "done" },
+        { agent: "Inventory Agent",  action: "Stock below threshold — reorder task created",    time: "1h ago",  status: "pending" },
+        { agent: "Compliance Agent", action: "Running OFAC screen on 12 new entities",         time: "now",     status: "running" },
       ].map((a, i) => (
         <div key={i} className="flex items-start gap-2 bg-slate-800/40 border border-slate-700/40 rounded-xl p-2.5">
           <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
@@ -576,13 +681,12 @@ function AppMockup() {
   const TABS = [
     { id: "dashboard", label: "Dashboard", Icon: BarChart2 },
     { id: "copilot",   label: "Copilot",   Icon: Brain },
-    { id: "agents",    label: "Agents",     Icon: Zap },
+    { id: "agents",    label: "Agents",    Icon: Zap },
   ];
   const SIDEBAR = [BarChart2, Users, Package, CheckSquare, Database, Brain];
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl shadow-black/60">
-      {/* Browser chrome */}
       <div className="bg-slate-950 flex items-center gap-3 px-4 py-3 border-b border-slate-800">
         <div className="flex gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
@@ -593,9 +697,7 @@ function AppMockup() {
           app.newsconseen.com
         </div>
       </div>
-
       <div className="flex h-[300px]">
-        {/* Sidebar */}
         <div className="w-12 bg-slate-950/80 border-r border-slate-800 flex flex-col items-center py-3 gap-2.5">
           {SIDEBAR.map((Icon, i) => (
             <div key={i} className={`w-8 h-8 rounded-lg flex items-center justify-center ${i === 0 ? "bg-emerald-500/20" : ""}`}>
@@ -603,10 +705,8 @@ function AppMockup() {
             </div>
           ))}
         </div>
-
-        {/* Main */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex items-center gap-0 px-4 border-b border-slate-800 bg-slate-950/40">
+          <div className="flex items-center px-4 border-b border-slate-800 bg-slate-950/40">
             {TABS.map(({ id, label, Icon }) => (
               <button key={id} onClick={() => setTab(id)}
                 className={`flex items-center gap-1.5 text-xs px-3 py-2.5 font-medium transition-colors border-b-2 ${
@@ -633,6 +733,7 @@ export default function Landing() {
   const [email, setEmail] = useState("");
 
   const handleGetStarted = () => {
+    trackEvent("signup_clicked", { source: "cta" });
     if (email) navigate(`/onboarding?email=${encodeURIComponent(email)}`);
     else navigate("/onboarding");
   };
@@ -659,7 +760,7 @@ export default function Landing() {
             className="text-sm text-slate-400 hover:text-white transition-colors px-3 py-1.5">
             Sign in
           </button>
-          <button onClick={() => navigate("/onboarding")}
+          <button onClick={() => { trackEvent("signup_clicked", { source: "nav" }); navigate("/onboarding"); }}
             className="text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl transition-colors shadow-lg shadow-emerald-500/20">
             Get started
           </button>
@@ -672,31 +773,26 @@ export default function Landing() {
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-emerald-500/4 rounded-full blur-3xl" />
           <div className="absolute top-24 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-teal-500/6 rounded-full blur-2xl" />
         </div>
-
         <div className="relative max-w-5xl mx-auto">
           <div className="text-center mb-10">
             <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-4 py-1.5 mb-6">
               <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
               <span className="text-xs font-semibold text-emerald-400 tracking-wider uppercase">Autonomous SME Operating System</span>
             </div>
-
             <h1 className="text-5xl md:text-7xl font-black leading-none tracking-tight mb-5">
               Your team runs on{" "}
               <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 bg-clip-text text-transparent">
                 spreadsheets.
               </span>
             </h1>
-
             <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mb-3 leading-relaxed">
-              Scattered data, manual admin, zero visibility across your organisation.
-              Newsconseen replaces all three with one autonomous operating system — and Idjwi runs it.
+              Scattered data, manual admin, zero visibility. Newsconseen replaces all three
+              with one autonomous operating system — and Idjwi runs it.
             </p>
-
             <p className="text-sm text-slate-500 mb-10">
               Talk to Idjwi below. No signup required. All tools active.
             </p>
           </div>
-
           <IdjwiChat />
         </div>
       </section>
@@ -754,9 +850,7 @@ export default function Landing() {
           <div className="text-center mb-14">
             <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">Full operational intelligence</p>
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">What Idjwi does for your organisation every day</h2>
-            <p className="text-slate-400 max-w-xl mx-auto">
-              Connected to your data, Idjwi runs continuously — not just when you ask.
-            </p>
+            <p className="text-slate-400 max-w-xl mx-auto">Connected to your data, Idjwi runs continuously — not just when you ask.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {CAPABILITIES.map(cap => {
@@ -837,8 +931,7 @@ export default function Landing() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {INDUSTRIES.map(ind => (
               <div key={ind.name}
-                className="bg-slate-900/50 border border-slate-800/60 rounded-2xl p-5 hover:border-slate-700 transition-colors group cursor-pointer"
-                onClick={() => document.getElementById("idjwi-input")?.focus()}>
+                className="bg-slate-900/50 border border-slate-800/60 rounded-2xl p-5 hover:border-slate-700 transition-colors group">
                 <span className="text-3xl mb-3 block">{ind.emoji}</span>
                 <h3 className="text-sm font-semibold text-white mb-1.5 group-hover:text-emerald-400 transition-colors">{ind.name}</h3>
                 <p className="text-xs text-slate-500">{ind.example}</p>
@@ -850,35 +943,33 @@ export default function Landing() {
 
       {/* AGENTS + CONNECTORS */}
       <section className="py-24 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-gradient-to-br from-violet-500/10 to-violet-900/10 border border-violet-500/20 rounded-3xl p-8">
-              <div className="w-12 h-12 bg-violet-500/10 border border-violet-500/20 rounded-2xl flex items-center justify-center mb-5">
-                <Brain className="w-6 h-6 text-violet-400" />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-3">8 Autonomous Agents</h3>
-              <p className="text-slate-400 text-sm leading-relaxed mb-5">
-                Operations, Revenue, Retention, Inventory, Onboarding, Compliance, Network, and Market Research agents run continuously — surfacing insights and taking actions without being asked.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {["Operations", "Revenue", "Retention", "Inventory", "Market Research"].map(a => (
-                  <span key={a} className="text-[11px] bg-violet-500/10 border border-violet-500/20 text-violet-300 rounded-full px-3 py-1">{a}</span>
-                ))}
-              </div>
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-gradient-to-br from-violet-500/10 to-violet-900/10 border border-violet-500/20 rounded-3xl p-8">
+            <div className="w-12 h-12 bg-violet-500/10 border border-violet-500/20 rounded-2xl flex items-center justify-center mb-5">
+              <Brain className="w-6 h-6 text-violet-400" />
             </div>
-            <div className="bg-gradient-to-br from-blue-500/10 to-blue-900/10 border border-blue-500/20 rounded-3xl p-8">
-              <div className="w-12 h-12 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center justify-center mb-5">
-                <Wifi className="w-6 h-6 text-blue-400" />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-3">35 Connectors</h3>
-              <p className="text-slate-400 text-sm leading-relaxed mb-5">
-                Connect your existing tools — accounting, CRM, EHR, HRIS, eCommerce, payment gateways, and more. Newsconseen pulls them into one operating picture.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {["QuickBooks", "Shopify", "Salesforce", "M-Pesa", "WhatsApp"].map(a => (
-                  <span key={a} className="text-[11px] bg-blue-500/10 border border-blue-500/20 text-blue-300 rounded-full px-3 py-1">{a}</span>
-                ))}
-              </div>
+            <h3 className="text-xl font-bold text-white mb-3">8 Autonomous Agents</h3>
+            <p className="text-slate-400 text-sm leading-relaxed mb-5">
+              Operations, Revenue, Retention, Inventory, Onboarding, Compliance, Network, and Market Research agents run continuously — surfacing insights and taking actions without being asked.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {["Operations", "Revenue", "Retention", "Inventory", "Market Research"].map(a => (
+                <span key={a} className="text-[11px] bg-violet-500/10 border border-violet-500/20 text-violet-300 rounded-full px-3 py-1">{a}</span>
+              ))}
+            </div>
+          </div>
+          <div className="bg-gradient-to-br from-blue-500/10 to-blue-900/10 border border-blue-500/20 rounded-3xl p-8">
+            <div className="w-12 h-12 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center justify-center mb-5">
+              <Wifi className="w-6 h-6 text-blue-400" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-3">35 Connectors</h3>
+            <p className="text-slate-400 text-sm leading-relaxed mb-5">
+              Connect your existing tools — accounting, CRM, EHR, HRIS, eCommerce, payment gateways, and more. Newsconseen pulls them into one operating picture.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {["QuickBooks", "Shopify", "Salesforce", "M-Pesa", "WhatsApp"].map(a => (
+                <span key={a} className="text-[11px] bg-blue-500/10 border border-blue-500/20 text-blue-300 rounded-full px-3 py-1">{a}</span>
+              ))}
             </div>
           </div>
         </div>
@@ -894,14 +985,14 @@ export default function Landing() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { icon: Shield,     label: "OFAC Sanctions",    sub: "SDN screening on every entity" },
-              { icon: Globe,      label: "Geocoding",          sub: "Coordinates from any address" },
-              { icon: Package,    label: "Drug data",          sub: "RxNorm, FDA, dosage, interactions" },
-              { icon: TrendingUp, label: "Churn prediction",   sub: "ML-predicted risk on every person" },
-              { icon: BarChart2,  label: "Revenue trend",      sub: "Growth trajectory per enterprise" },
+              { icon: Shield,      label: "OFAC Sanctions",   sub: "SDN screening on every entity" },
+              { icon: Globe,       label: "Geocoding",         sub: "Coordinates from any address" },
+              { icon: Package,     label: "Drug data",         sub: "RxNorm, FDA, dosage, interactions" },
+              { icon: TrendingUp,  label: "Churn prediction",  sub: "ML-predicted risk on every person" },
+              { icon: BarChart2,   label: "Revenue trend",     sub: "Growth trajectory per enterprise" },
               { icon: AlertCircle, label: "AML flags",         sub: "Anti-money laundering signals" },
-              { icon: Database,   label: "Company registry",   sub: "OpenCorporates enrichment" },
-              { icon: RefreshCw,  label: "FX rates",           sub: "Live exchange rates on every tx" },
+              { icon: Database,    label: "Company registry",  sub: "OpenCorporates enrichment" },
+              { icon: RefreshCw,   label: "FX rates",          sub: "Live exchange rates on every tx" },
             ].map(({ icon: Icon, label, sub }) => (
               <div key={label} className="bg-slate-900/50 border border-slate-800/60 rounded-xl p-4 text-center">
                 <Icon className="w-5 h-5 text-emerald-400 mx-auto mb-2" />
@@ -924,9 +1015,7 @@ export default function Landing() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {PRICING_TIERS.map(tier => (
               <div key={tier.name} className={`relative bg-slate-900/60 border rounded-2xl p-6 flex flex-col ${
-                tier.highlighted
-                  ? "border-emerald-500/40 shadow-xl shadow-emerald-500/10"
-                  : "border-slate-800"
+                tier.highlighted ? "border-emerald-500/40 shadow-xl shadow-emerald-500/10" : "border-slate-800"
               }`}>
                 {tier.highlighted && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -941,12 +1030,11 @@ export default function Landing() {
                 <ul className="space-y-2.5 flex-1 mb-6">
                   {tier.features.map(f => (
                     <li key={f} className="flex items-start gap-2 text-xs text-slate-300">
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                      {f}
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />{f}
                     </li>
                   ))}
                 </ul>
-                <a href={tier.href}
+                <a href={tier.href} onClick={() => trackEvent("signup_clicked", { source: "pricing", tier: tier.name })}
                   className={`w-full py-2.5 rounded-xl text-sm font-semibold text-center transition-colors block ${
                     tier.highlighted
                       ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
