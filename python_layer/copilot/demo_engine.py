@@ -3,12 +3,12 @@ python_layer/copilot/demo_engine.py
 =====================================
 Idjwi — the Newsconseen public demo intelligence.
 
-Runs on the landing page for unauthenticated visitors. Has full product
-knowledge and access to public data APIs. Never queries company data.
+Runs on the landing page for unauthenticated visitors.
+Has ALL production copilot capabilities — same tools, same chart extraction,
+same response richness. The only difference: no company data (company_id="demo"
+returns empty results, which Idjwi acknowledges gracefully).
 
-Identity: Idjwi (ee-JEE-wee) — named after Idjwi Island in Lake Kivu,
-DRC/Rwanda. The island governs itself with remarkable self-sufficiency;
-so does any organisation powered by this system.
+Identity: Idjwi (ee-JEE-wee) — the intelligence layer of Newsconseen.
 """
 
 import json
@@ -33,14 +33,13 @@ def _load_docs() -> str:
 
 
 # ── Simple in-memory IP rate limiter ─────────────────────────────────────────
-# 20 requests per IP per hour. Resets on the hour boundary.
+# 20 requests per IP per hour.
 
 _rate_store: dict = defaultdict(lambda: {"count": 0, "window": 0})
 _RATE_LIMIT = 20
 
 
 def _check_rate_limit(ip: str) -> bool:
-    """Returns True if the request is allowed, False if rate-limited."""
     window = int(time.time()) // 3600
     rec = _rate_store[ip]
     if rec["window"] != window:
@@ -60,79 +59,75 @@ YOUR IDENTITY — READ THIS FIRST
 You are Idjwi (pronounced ee-JEE-wee), the intelligence layer of Newsconseen —
 the Autonomous SME Operating System.
 
-YOUR NAME AND ORIGIN
-Idjwi is named after Idjwi Island — the largest island in Lake Kivu, on the border
-of the Democratic Republic of Congo and Rwanda. The island is remarkable: it has
-governed itself with extraordinary self-sufficiency for centuries, operating as its
-own economy, its own community, its own system — even as the mainland around it
-has undergone upheaval and transformation.
-
-That is what you give every organisation. The intelligence to run its own operations
-autonomously — without needing armies of analysts, disconnected spreadsheets, or 12
-different software tools that don't talk to each other. Like the island, your operators
-become self-sufficient.
-
 YOUR PERSONALITY
 - Calm, grounded, and confident. You don't oversell yourself — you demonstrate.
 - Direct and operational. You give complete, useful answers — not hedges and filler.
 - Honest. You tell users what you can and cannot do, clearly and without apology.
 - You speak like a knowledgeable colleague, not a generic AI assistant.
 - You never say "As an AI language model..." or similar distancing phrases.
-- When asked what you are, you answer as Idjwi — not as Claude, not as "an AI".
+- When asked what you are, you answer as Idjwi — not as "Claude", not as "an AI".
 
 WHAT MODEL POWERS YOU
 You are powered by Claude (by Anthropic) in this demo. In production, Newsconseen
-operators can choose their preferred model. If asked, you can say: "In this demo,
-I run on Claude by Anthropic. Once you sign up, you and your organisation can choose
-the model that best fits your needs and budget."
+operators can choose their preferred model. If asked, say: "In this demo I run on
+Claude by Anthropic. Once you sign up, you can choose the model that best fits your
+organisation's needs and budget."
 
 CURRENT MODE: PUBLIC DEMO
-You are running on the Newsconseen landing page for prospective clients.
-You do NOT have access to any company's private data. You have:
-  ✓ Full knowledge of Newsconseen — every feature, phase, entity, agent, and capability
-  ✓ Live public data — exchange rates, World Bank, economic indicators, OSM, web search
-  ✓ Market analysis capability using public APIs
-  ✓ App navigation guidance — you can explain exactly how to use any Newsconseen feature
-  ✗ No access to any company's People, Transactions, Tasks, Products, or other records
+You are running on the Newsconseen landing page. You have access to ALL the same
+tools as the production copilot — the only difference is that you have no company's
+private records loaded. When a tool returns empty data, you explain what it would show
+with real data and invite the visitor to sign up.
 
-When someone asks about their specific business data ("how many clients do we have?",
-"what's our revenue last month?"), acknowledge the question, explain it requires
-connecting their organisation's data, and invite them to sign up to unlock that.
+YOUR FULL CAPABILITIES
+  ✓ Live public data — exchange rates, World Bank, economic indicators, OSM, FDA data
+  ✓ Web research — market news, industry trends, competitor analysis, regulations
+  ✓ Full product knowledge — every feature, phase, entity, agent, and capability
+  ✓ App navigation — how to use any Newsconseen feature
+  ✓ Market analysis — using public APIs and web search
+  ✓ All production copilot tools — you just won't have company records to query
+  ✗ Company records — People, Transactions, Tasks, Products (requires sign up + data entry)
+
+HOW TO HANDLE EMPTY TOOL RESULTS
+When a tool returns empty data (because no company "demo" exists):
+- Acknowledge that this tool works with connected company data
+- Explain concretely what it would show (e.g. "This would show your top 10 clients
+  by revenue with their churn risk score and payment behaviour")
+- Invite them to sign up to see it with their real data
+- Then pivot to what you CAN demonstrate right now
 
 HOW TO HANDLE "WHAT CAN YOU DO FOR MY [INDUSTRY]?"
-Be specific and concrete. Walk them through what Newsconseen would actually track,
-what Idjwi would answer, what agents would run. Use real examples. Make it vivid.
+Be specific and vivid. Walk them through what Newsconseen would track, what Idjwi
+would answer day-to-day, what agents would fire automatically.
 """
 
-_IDJWI_CAPABILITIES = """\
-YOUR TOOL USAGE RULES
-======================
-You have access to two tools:
+_IDJWI_TOOL_INSTRUCTIONS = """\
+TOOL USAGE IN DEMO MODE
+========================
+You have ALL production copilot tools available. Use them as you normally would.
 
-1. web_search — use for: industry news, competitor analysis, regulations, best practices,
-   market trends, any current events or information that benefits from live web data.
+INTERNAL DATA TOOLS — use freely, they will return empty but demonstrate capability:
+- get_operator_context, get_people_summary, get_transaction_summary, get_task_summary
+- get_overdue_invoices, get_product_summary, get_enterprise_overview, get_network_overview
+- find_people_records, find_task_records, find_transaction_records, find_product_records
+- get_kpi_snapshot, get_top_clients, get_staff_leaderboard, get_ar_report
+- get_ml_predictions, get_inventory_health, get_entity_risk_report, etc.
+When these return empty: explain what they would show with real data.
 
-2. search_public_data — use for structured datasets:
-   - dataset=world_bank: GDP, health, education, population data by country
-   - dataset=fx_rates: live currency exchange rates
-   - dataset=osm_count: business/facility counts by location and category
-   - dataset=open_fda: drug, device, and food safety data
-   - dataset=un_data: UN development indicators
+PUBLIC DATA TOOLS — use aggressively, these work fully in demo mode:
+- web_search — market news, industry trends, competitor info, regulations
+- search_public_data — world_bank (GDP/health/population), fx_rates (live exchange rates),
+  osm_count (business counts), open_fda (drug/device data), un_data (UN indicators)
 
-WHEN TO USE TOOLS
-- Exchange rate question → search_public_data dataset=fx_rates
-- Economic data for a country → search_public_data dataset=world_bank
-- Business counts in a city → search_public_data dataset=osm_count
-- Drug/medication info → search_public_data dataset=open_fda
-- Market news, trends → web_search
-- "What is Newsconseen / Idjwi / how does X work?" → answer directly, no tool needed
+CHARTS: Call tools that produce chart data when the question benefits from visualisation.
+The frontend will render charts automatically from your tool results.
 
-RESPONSE STYLE
-- Lead with the direct answer. Then supporting detail.
-- Use markdown: headers, bullet points, tables when comparing.
-- Keep it focused and useful. Not exhaustive.
-- When demonstrating what Newsconseen can do for an industry, be specific and vivid.
-- Always give a complete answer. Never return empty or "I'll look into that."
+RULES
+- Always call at least one tool before answering operational or market questions.
+- For product/architecture questions about Newsconseen, answer directly — no tool needed.
+- Lead with the numbers or data, then interpretation.
+- Use markdown: bullet points for lists, tables for comparisons.
+- Never return an empty response.
 """
 
 
@@ -147,160 +142,92 @@ def _build_idjwi_system_prompt() -> str:
     ]
     if docs:
         parts.append("NEWSCONSEEN PRODUCT KNOWLEDGE\n" + "=" * 40 + "\n" + docs)
-    parts.append(_IDJWI_CAPABILITIES)
+    parts.append(_IDJWI_TOOL_INSTRUCTIONS)
     return "\n\n".join(parts)
 
 
-# ── Demo tool definitions (public only) ──────────────────────────────────────
+# ── Chart extraction for public data results ──────────────────────────────────
 
-_DEMO_TOOL_DEFINITIONS = [
-    {
-        "name": "web_search",
-        "description": (
-            "Search the web for current information: market news, industry trends, "
-            "competitor data, regulations, best practices. "
-            "Use Brave Search → DuckDuckGo → Wikipedia fallback chain."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Search query"},
-                "max_results": {"type": "integer", "default": 5},
-            },
-            "required": ["query"],
-        },
-    },
-    {
-        "name": "search_public_data",
-        "description": (
-            "Query structured public datasets. "
-            "dataset options: world_bank (GDP/health/population), "
-            "fx_rates (live currency exchange rates), "
-            "osm_count (business counts by location), "
-            "open_fda (drug/device/food safety), "
-            "un_data (UN development indicators)."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "dataset": {
-                    "type": "string",
-                    "enum": ["world_bank", "fx_rates", "osm_count", "open_fda", "un_data"],
-                },
-                "query": {"type": "string"},
-                "location": {"type": "string", "default": ""},
-            },
-            "required": ["dataset", "query"],
-        },
-    },
-]
-
-
-def _execute_demo_tool(tool_name: str, tool_input: dict) -> dict:
-    """Execute a demo tool — only public data tools allowed."""
+def _make_demo_chart_config(tool_name: str, result: dict):
+    """
+    Generate chart configs from demo tool results.
+    Covers both public data tools and (empty) internal data tools.
+    """
     try:
-        from copilot.queries import web_search, search_public_data
-        if tool_name == "web_search":
-            return web_search(
-                query=tool_input.get("query", ""),
-                company_id="demo",
-                max_results=tool_input.get("max_results", 5),
-            )
+        # FX rates → bar chart
         if tool_name == "search_public_data":
-            return search_public_data(
-                dataset=tool_input.get("dataset", "world_bank"),
-                query=tool_input.get("query", ""),
-                company_id="demo",
-                location=tool_input.get("location", ""),
-            )
+            rates = result.get("rates") or result.get("data", {}).get("rates")
+            if rates and isinstance(rates, dict):
+                top = sorted(rates.items(), key=lambda x: x[1])[:12]
+                data = [{"name": k, "Rate": round(v, 4)} for k, v in top]
+                if data:
+                    return {
+                        "type": "bar",
+                        "title": f"Exchange Rates vs {result.get('base', 'USD')}",
+                        "data": data,
+                        "keys": [{"key": "Rate", "color": "#10b981"}],
+                    }
+
+            # World Bank / UN data → bar chart of countries
+            wbdata = result.get("data") or result.get("results") or []
+            if isinstance(wbdata, list) and len(wbdata) >= 2:
+                chart_data = []
+                for r in wbdata[:10]:
+                    name = r.get("country") or r.get("name") or r.get("label", "")
+                    val = r.get("value") or r.get("latest_value") or r.get("gdp") or 0
+                    try:
+                        val = float(val)
+                    except (TypeError, ValueError):
+                        continue
+                    if name and val:
+                        chart_data.append({"name": str(name)[:14], "Value": round(val, 2)})
+                if len(chart_data) >= 2:
+                    indicator = (
+                        result.get("indicator_name")
+                        or result.get("indicator")
+                        or result.get("dataset", "indicator")
+                        or "Value"
+                    )
+                    return {
+                        "type": "bar",
+                        "title": str(indicator)[:60],
+                        "data": chart_data,
+                        "keys": [{"key": "Value", "color": "#3b82f6"}],
+                    }
+
+            # OSM counts → bar chart
+            counts = result.get("counts") or result.get("results")
+            if isinstance(counts, list) and counts:
+                data = [
+                    {"name": str(c.get("category") or c.get("type") or c.get("name", ""))[:18],
+                     "Count": int(c.get("count") or c.get("total") or 0)}
+                    for c in counts[:10]
+                    if c.get("count") or c.get("total")
+                ]
+                if len(data) >= 2:
+                    return {
+                        "type": "bar",
+                        "title": "Facility / Business Counts",
+                        "data": data,
+                        "keys": [{"key": "Count", "color": "#8b5cf6"}],
+                    }
+
+        # Internal data tools — delegate to production chart builder
+        from copilot.engine import _make_chart_config
+        return _make_chart_config(tool_name, result)
+
     except Exception as e:
-        logger.warning("demo tool %s failed: %s", tool_name, e)
-    return {"error": f"Tool {tool_name} unavailable in demo mode."}
+        logger.debug("_make_demo_chart_config(%s): %s", tool_name, e)
+    return None
 
 
-# ── Core ask function ─────────────────────────────────────────────────────────
-
-def _get_client():
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY not set")
-    import anthropic
-    return anthropic.Anthropic(api_key=api_key)
-
-
-def ask_idjwi(question: str, history: list = None) -> dict:
-    """
-    Ask Idjwi a question in demo mode.
-    Returns {"answer": str, "citations": list, "tools_called": list}.
-    No company_id required — public endpoint.
-    """
-    client = _get_client()
-    system = _build_idjwi_system_prompt()
-
-    messages = list(history or [])
-    messages.append({"role": "user", "content": question})
-
-    collected = []
-
-    for _ in range(5):
-        try:
-            response = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=4096,
-                system=system,
-                tools=_DEMO_TOOL_DEFINITIONS,
-                messages=messages,
-            )
-        except Exception as e:
-            logger.error("Idjwi API call failed: %s", e)
-            return {
-                "answer": (
-                    "I'm having trouble reaching the AI service right now. "
-                    "Please try again in a moment."
-                ),
-                "citations": [],
-                "tools_called": [],
-            }
-
-        if response.stop_reason == "end_turn":
-            text_blocks = [b.text for b in response.content if hasattr(b, "text")]
-            answer = "\n".join(text_blocks).strip()
-            return {
-                "answer":      answer or "I couldn't generate a response. Please rephrase.",
-                "citations":   _extract_citations(collected),
-                "tools_called": [c["tool"] for c in collected],
-            }
-
-        if response.stop_reason == "tool_use":
-            messages.append({"role": "assistant", "content": response.content})
-            tool_blocks = [b for b in response.content if b.type == "tool_use"]
-            tool_results = []
-            for block in tool_blocks:
-                logger.info("Idjwi demo tool: %s", block.name)
-                result = _execute_demo_tool(block.name, block.input)
-                collected.append({"tool": block.name, "result": result})
-                tool_results.append({
-                    "type":        "tool_result",
-                    "tool_use_id": block.id,
-                    "content":     json.dumps(result, default=str),
-                })
-            messages.append({"role": "user", "content": tool_results})
-            continue
-
-        # Unexpected stop
-        text_blocks = [b.text for b in response.content if hasattr(b, "text")]
-        answer = "\n".join(text_blocks).strip()
-        return {
-            "answer":      answer or "Unexpected response. Please try again.",
-            "citations":   _extract_citations(collected),
-            "tools_called": [c["tool"] for c in collected],
-        }
-
-    return {
-        "answer":      "I reached the analysis limit for this question. Please try a more focused question.",
-        "citations":   _extract_citations(collected),
-        "tools_called": [c["tool"] for c in collected],
-    }
+def _extract_charts(collected: list) -> list:
+    charts = []
+    for item in collected:
+        cfg = _make_demo_chart_config(item["tool"], item["result"])
+        if cfg:
+            charts.append(cfg)
+    return charts
 
 
 def _extract_citations(collected: list) -> list:
@@ -317,3 +244,124 @@ def _extract_citations(collected: list) -> list:
                         "snippet": r.get("snippet", ""),
                     })
     return citations[:6]
+
+
+def _build_tools_detail(collected: list) -> list:
+    """Minimal tools detail for the demo transparency panel."""
+    detail = []
+    for c in collected:
+        tool = c["tool"]
+        if tool in ("web_search", "search_public_data"):
+            continue
+        params = {k: v for k, v in c.get("input", {}).items() if k != "company_id"}
+        detail.append({
+            "tool":        tool,
+            "params":      params,
+            "data_source": c.get("result", {}).get("data_source", "demo"),
+        })
+    return detail
+
+
+# ── Core ask function ─────────────────────────────────────────────────────────
+
+def _get_client():
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+    import anthropic
+    return anthropic.Anthropic(api_key=api_key)
+
+
+def ask_idjwi(question: str, history: list = None) -> dict:
+    """
+    Ask Idjwi a question in demo mode.
+    Uses ALL production tool definitions. Returns full richness:
+    answer, charts, citations, tools_called, tools_detail.
+    """
+    from copilot.queries import TOOL_DEFINITIONS, execute_tool
+
+    client = _get_client()
+    system = _build_idjwi_system_prompt()
+
+    messages = list(history or [])
+    messages.append({"role": "user", "content": question})
+
+    collected = []
+
+    for _ in range(6):
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=6144,
+                system=system,
+                tools=TOOL_DEFINITIONS,
+                messages=messages,
+            )
+        except Exception as e:
+            logger.error("Idjwi API call failed: %s", e)
+            return {
+                "answer": "I'm having trouble reaching the AI service right now. Please try again.",
+                "charts": [], "citations": [], "tools_called": [], "tools_detail": [],
+            }
+
+        if response.stop_reason == "end_turn":
+            text_blocks = [b.text for b in response.content if hasattr(b, "text")]
+            answer = "\n".join(text_blocks).strip()
+            return {
+                "answer":       answer or "I couldn't generate a response. Please rephrase.",
+                "charts":       _extract_charts(collected),
+                "citations":    _extract_citations(collected),
+                "tools_called": [c["tool"] for c in collected],
+                "tools_detail": _build_tools_detail(collected),
+            }
+
+        if response.stop_reason == "tool_use":
+            messages.append({"role": "assistant", "content": response.content})
+            tool_blocks = [b for b in response.content if b.type == "tool_use"]
+            tool_results = []
+
+            for block in tool_blocks:
+                logger.info("Idjwi demo tool: %s", block.name)
+                try:
+                    # All tools run with company_id="demo" — data tools return empty,
+                    # public data tools return live results.
+                    result = execute_tool(
+                        tool_name=block.name,
+                        tool_input=block.input,
+                        company_id="demo",
+                    )
+                except Exception as e:
+                    logger.warning("Idjwi tool %s failed: %s", block.name, e)
+                    result = {"error": str(e), "note": "Tool unavailable in demo mode."}
+
+                collected.append({
+                    "tool":   block.name,
+                    "input":  dict(block.input) if hasattr(block.input, "items") else {},
+                    "result": result,
+                })
+                tool_results.append({
+                    "type":        "tool_result",
+                    "tool_use_id": block.id,
+                    "content":     json.dumps(result, default=str),
+                })
+
+            messages.append({"role": "user", "content": tool_results})
+            continue
+
+        text_blocks = [b.text for b in response.content if hasattr(b, "text")]
+        answer = "\n".join(text_blocks).strip()
+        return {
+            "answer":       answer or "Unexpected response. Please try again.",
+            "charts":       _extract_charts(collected),
+            "citations":    _extract_citations(collected),
+            "tools_called": [c["tool"] for c in collected],
+            "tools_detail": _build_tools_detail(collected),
+        }
+
+    return {
+        "answer":       "I reached the analysis limit. Please ask a more focused question.",
+        "charts":       _extract_charts(collected),
+        "citations":    _extract_citations(collected),
+        "tools_called": [c["tool"] for c in collected],
+        "tools_detail": _build_tools_detail(collected),
+    }
