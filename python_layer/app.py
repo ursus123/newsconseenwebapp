@@ -499,6 +499,63 @@ except Exception as _sec_err:
 
 
 # ----------------------------------------------------------
+# Idjwi — Public Demo Copilot (landing page, no auth required)
+# ----------------------------------------------------------
+from pydantic import BaseModel as _BaseModel
+from typing import List as _List, Dict as _Dict, Any as _Any
+from fastapi import Request as _Request
+
+
+class _DemoMessage(_BaseModel):
+    role: str
+    content: str
+
+
+class _DemoAskRequest(_BaseModel):
+    question: str
+    history:  _List[_Dict[str, _Any]] = []
+
+
+@app.post("/copilot/demo-ask", tags=["idjwi"])
+def idjwi_demo_ask(req: _DemoAskRequest, request: _Request):
+    """
+    Public endpoint — no API key required.
+    Runs Idjwi with product knowledge + public data tools only.
+    Rate-limited to 20 requests per IP per hour.
+    """
+    ip = request.client.host if request.client else "unknown"
+    try:
+        from copilot.demo_engine import ask_idjwi, _check_rate_limit
+        if not _check_rate_limit(ip):
+            return {
+                "answer": (
+                    "You've reached the demo limit for this hour. "
+                    "Sign up to get unlimited access to Idjwi with your own data."
+                ),
+                "rate_limited": True,
+                "citations": [],
+                "tools_called": [],
+            }
+        result = ask_idjwi(
+            question=req.question,
+            history=req.history,
+        )
+        result["rate_limited"] = False
+        return result
+    except Exception as e:
+        logger.error("Idjwi demo-ask failed: %s", e)
+        return {
+            "answer": (
+                "I'm having trouble processing your request right now. "
+                "Please try again in a moment."
+            ),
+            "rate_limited": False,
+            "citations": [],
+            "tools_called": [],
+        }
+
+
+# ----------------------------------------------------------
 # Helper Functions
 # ----------------------------------------------------------
 def filter_by_company(df: pd.DataFrame, company_id: Optional[str]) -> pd.DataFrame:

@@ -1,784 +1,670 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
-import { Check, ChevronRight, Monitor, Layers, Zap, Grid3x3, Bell, Settings, Users, BarChart2, CheckSquare, Receipt, GitBranch, Code2, ArrowRight, Star, Globe, Shield, Cpu, Wifi, Package, Lock, Eye, EyeOff, Download } from "lucide-react";
-import { usePWA } from "@/hooks/usePWA";
-import TrendChartsSection from "@/components/landing/TrendChartsSection";
-import RoleDashboardPreview from "@/components/landing/RoleDashboardPreview";
+import {
+  Send, Loader2, ChevronRight, ArrowRight, Globe, Cpu, Users, BarChart2,
+  Zap, Shield, GitBranch, Package, CheckSquare, Bell, Wifi, Database,
+  Brain, TrendingUp, Map, RefreshCw, AlertCircle, ExternalLink,
+} from "lucide-react";
 
-// ── Data ──────────────────────────────────────────────────────────────────────
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 
-const OS_COMPONENTS = [
-  { icon: Monitor, title: "Desktop Shell", desc: "A workspace that adapts to every role.", color: "text-emerald-400", bg: "bg-emerald-500/10" },
-  { icon: Layers, title: "Window Manager", desc: "Run multiple apps like a real OS.", color: "text-blue-400", bg: "bg-blue-500/10" },
-  { icon: Grid3x3, title: "App Launcher", desc: "Every workflow, one click away.", color: "text-violet-400", bg: "bg-violet-500/10" },
-  { icon: Bell, title: "Notification Center", desc: "Stay aware without being overwhelmed.", color: "text-amber-400", bg: "bg-amber-500/10" },
-  { icon: Settings, title: "Settings & Permissions", desc: "Profiles, permissions, and org-level control.", color: "text-rose-400", bg: "bg-rose-500/10" },
+// ── Idjwi starter prompts ─────────────────────────────────────────────────────
+const STARTERS = [
+  { label: "What is Idjwi?", q: "What is Idjwi and what can it do for my organisation?" },
+  { label: "USD/KES rate today", q: "What is the current USD to KES exchange rate?" },
+  { label: "Newsconseen for a clinic", q: "How would Newsconseen work for a healthcare clinic? Walk me through what Idjwi would track and answer." },
+  { label: "East Africa market data", q: "Give me key economic indicators for East Africa — GDP, growth, population." },
+  { label: "Clinic count in Nairobi", q: "How many clinics and health facilities are in Nairobi, Kenya?" },
+  { label: "Newsconseen for a school", q: "How would Newsconseen work for a school? What would I track and what would Idjwi answer?" },
+  { label: "What agents does it run?", q: "What autonomous agents does Newsconseen run and what do they do?" },
+  { label: "How does the copilot work?", q: "How does the Newsconseen copilot work technically?" },
 ];
 
-const PAINS = [
-  "Your workflows live in 12 different tools.",
-  "Your data is scattered across spreadsheets, apps, and inboxes.",
-  "Your team wastes hours switching contexts.",
-  "Your systems don't talk to each other.",
+// ── Capability cards ──────────────────────────────────────────────────────────
+const CAPABILITIES = [
+  { icon: Globe, color: "emerald", title: "Live Public Intelligence", desc: "Exchange rates, World Bank data, economic indicators, business counts — all live." },
+  { icon: Brain, color: "violet", title: "Market Analysis", desc: "Industry trends, competitor data, regulatory context — sourced from the live web." },
+  { icon: Map, color: "blue", title: "Geospatial Insights", desc: "Facility counts, competitor proximity, demographic context by location." },
+  { icon: Cpu, color: "amber", title: "App Navigator", desc: "Guides you through every Newsconseen feature in plain language." },
+  { icon: TrendingUp, color: "rose", title: "Economic Research", desc: "UN data, World Bank indicators, country risk — contextualised for your sector." },
+  { icon: Database, color: "cyan", title: "Drug & Regulatory Data", desc: "FDA drug data, medical device records, safety alerts — for regulated industries." },
 ];
 
-const APP_CATEGORIES = [
+const COLOUR = {
+  emerald: { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-emerald-500/20" },
+  violet:  { bg: "bg-violet-500/10",  text: "text-violet-400",  border: "border-violet-500/20" },
+  blue:    { bg: "bg-blue-500/10",    text: "text-blue-400",    border: "border-blue-500/20" },
+  amber:   { bg: "bg-amber-500/10",   text: "text-amber-400",   border: "border-amber-500/20" },
+  rose:    { bg: "bg-rose-500/10",    text: "text-rose-400",    border: "border-rose-500/20" },
+  cyan:    { bg: "bg-cyan-500/10",    text: "text-cyan-400",    border: "border-cyan-500/20" },
+};
+
+// ── Industry verticals ────────────────────────────────────────────────────────
+const INDUSTRIES = [
+  { emoji: "🏥", name: "Clinics & Hospitals", example: "Track patients, medications, staff shifts, billing." },
+  { emoji: "🎓", name: "Schools & Colleges", example: "Enrolment, attendance, fees, staff timetables." },
+  { emoji: "🌾", name: "Farms & Cooperatives", example: "Livestock rounds, harvests, input tracking, sales." },
+  { emoji: "🏢", name: "NGOs & Charities", example: "Beneficiary management, donor tracking, field tasks." },
+  { emoji: "🚛", name: "Logistics & Delivery", example: "Fleet routing, delivery tasks, driver management." },
+  { emoji: "🏪", name: "Retail & Franchises", example: "Multi-branch stock, sales, staff, customer records." },
+];
+
+// ── Three-layer cards ─────────────────────────────────────────────────────────
+const LAYERS = [
   {
-    label: "People & Operations",
-    color: "text-blue-400",
-    apps: [
-      { icon: Users, name: "People & Clients", desc: "Staff, clients, contacts — unified." },
-      { icon: CheckSquare, name: "Staff Scheduler", desc: "Shifts, rosters, and publish in one tap." },
-      { icon: CheckSquare, name: "Clock In / Out", desc: "GPS-stamped time tracking for any team." },
-      { icon: CheckSquare, name: "Attendance", desc: "Class registers and attendance history." },
-      { icon: Users, name: "Add Client", desc: "5-step guided client onboarding wizard." },
-      { icon: CheckSquare, name: "Med Administration", desc: "MAR, PRN flows, and controlled drug logs." },
-    ],
+    number: "01", color: "emerald",
+    title: "Enterprise OS",
+    subtitle: "The system of record",
+    desc: "People, enterprises, products, tasks, transactions, relationships, addresses. Every entity your organisation deals with — captured, structured, searchable.",
   },
   {
-    label: "Inventory & Finance",
-    color: "text-emerald-400",
-    apps: [
-      { icon: Package, name: "Products & Stock", desc: "Inventory, assets, and expiry tracking." },
-      { icon: Receipt, name: "Transactions", desc: "Revenue, expenses, invoices, payroll." },
-      { icon: CheckSquare, name: "Barcode Scanner", desc: "Scan and reconcile stock in real time." },
-      { icon: CheckSquare, name: "Stock Counter", desc: "Physical count with variance reports." },
-      { icon: CheckSquare, name: "Purchase Orders", desc: "Raise, track, and receive POs end-to-end." },
-      { icon: CheckSquare, name: "Services Catalog", desc: "Define reusable offerings with pricing." },
-    ],
+    number: "02", color: "blue",
+    title: "Deployable Datamart",
+    subtitle: "The analytical engine",
+    desc: "Pre-aggregated analytics, ETL pipeline, PostgreSQL. Every stat card, chart, and ML model reads from here. Fast, clean, multi-tenant.",
   },
   {
-    label: "Intelligence & Analytics",
-    color: "text-violet-400",
-    apps: [
-      { icon: BarChart2, name: "Dashboards", desc: "Live stat cards, charts, and pinnable widgets." },
-      { icon: Code2, name: "Query Builder", desc: "SQL against your live ontology data." },
-      { icon: GitBranch, name: "Entity Graph", desc: "11 views — org structure to anomaly detection." },
-      { icon: BarChart2, name: "Reports", desc: "Scheduled, exportable, shareable reports." },
-      { icon: Globe, name: "Market Intelligence", desc: "Open data APIs fused with your operations." },
-      { icon: Cpu, name: "ML Models", desc: "Churn, survival, clustering — no-code." },
-    ],
-  },
-  {
-    label: "AI Agents & Copilot",
-    color: "text-amber-400",
-    apps: [
-      { icon: Zap, name: "Operational Copilot", desc: "Ask anything. Grounded in your live data." },
-      { icon: Bell, name: "Alert Engine", desc: "WhatsApp, email, SMS — operational triggers." },
-      { icon: Cpu, name: "Agents (Phase 4)", desc: "Autonomous agents that run ops 24/7." },
-      { icon: GitBranch, name: "Network Intelligence", desc: "Cross-branch comparison and insights." },
-      { icon: Zap, name: "Kinetic Layer", desc: "Action governance — who can do what." },
-      { icon: BarChart2, name: "Pipelines", desc: "ETL control — trigger, monitor, repair." },
-    ],
+    number: "03", color: "violet",
+    title: "Foundry Intelligence",
+    subtitle: "Idjwi + autonomous agents",
+    desc: "The copilot, 8 autonomous agents, alerts, enrichment, connectors, ML models. The layer that makes your data act — not just sit.",
   },
 ];
 
-// Legacy flat list for sections that need it
-const APPS = [
-  { icon: CheckSquare, name: "Tasks", desc: "Track every workflow across your org.", color: "bg-emerald-500" },
-  { icon: Receipt, name: "Ledger", desc: "Revenue, expenses, and full audit trails.", color: "bg-blue-500" },
-  { icon: GitBranch, name: "Entity Graph", desc: "Visualize your org's relationships and structure.", color: "bg-violet-500" },
-  { icon: Code2, name: "Query Builder", desc: "Ask questions of your data instantly.", color: "bg-amber-500" },
-  { icon: Users, name: "People & Relationships", desc: "Staff, clients, contacts — unified.", color: "bg-rose-500" },
-  { icon: BarChart2, name: "Dashboards", desc: "Live analytics, pinnable widgets, reports.", color: "bg-cyan-500" },
-  { icon: Bell, name: "Notifications", desc: "Alerts, operational triggers, escalations.", color: "bg-orange-500" },
-  { icon: Settings, name: "Settings", desc: "Branding, permissions, and custom domains.", color: "bg-slate-500" },
-];
-
-const WORKFLOW_STEPS = [
-  { label: "Entity", sublabel: "Person / Enterprise / Item", color: "bg-emerald-500", glow: "shadow-emerald-500/40" },
-  { label: "Task", sublabel: "Assign & track work", color: "bg-blue-500", glow: "shadow-blue-500/40" },
-  { label: "Transaction", sublabel: "Capture the outcome", color: "bg-violet-500", glow: "shadow-violet-500/40" },
-  { label: "Report", sublabel: "Visualize the result", color: "bg-amber-500", glow: "shadow-amber-500/40" },
-  { label: "Insight", sublabel: "Act on intelligence", color: "bg-rose-500", glow: "shadow-rose-500/40" },
-];
-
-const ARCH_FEATURES = [
-  { icon: Globe, title: "Multi-tenant", desc: "Every org is completely isolated and secure." },
-  { icon: Cpu, title: "Modular", desc: "Install only the apps your org needs." },
-  { icon: Wifi, title: "Browser-native", desc: "No install required. Works on any device." },
-  { icon: Shield, title: "Role-aware", desc: "Fine-grained permissions per user and page." },
-  { icon: Package, title: "Extensible", desc: "Build and publish custom apps on the platform." },
-  { icon: Zap, title: "Offline-capable", desc: "Desktop shell works even without connectivity." },
-];
-
-const PERSONAS = [
-  {
-    emoji: "🏥",
-    title: "Healthcare & Care",
-    tagline: "End-to-end care operations",
-    points: ["Medication admin (MAR + PRN + controlled)", "Staff rostering and clock-in/out", "Client relationships and care task tracking"],
-    color: "border-rose-500/30 bg-rose-500/5",
-    badge: "bg-rose-500/20 text-rose-300",
-  },
-  {
-    emoji: "🏫",
-    title: "Education",
-    tagline: "Schools, colleges, training orgs",
-    points: ["Student enrollment and fee collection", "Attendance registers and class schedules", "Staff management and leave requests"],
-    color: "border-blue-500/30 bg-blue-500/5",
-    badge: "bg-blue-500/20 text-blue-300",
-  },
-  {
-    emoji: "🌾",
-    title: "Agriculture & Cooperatives",
-    tagline: "Farms, co-ops, and supply chains",
-    points: ["Livestock, flock, and crop product tracking", "Seasonal task planning and field visit logs", "Cooperative member and transaction management"],
-    color: "border-amber-500/30 bg-amber-500/5",
-    badge: "bg-amber-500/20 text-amber-300",
-  },
-  {
-    emoji: "🏢",
-    title: "SME Operations",
-    tagline: "Run the entire business",
-    points: ["People, inventory, finance — unified", "Barcode scanning and stock counters", "Dashboards, reports, and query builder"],
-    color: "border-violet-500/30 bg-violet-500/5",
-    badge: "bg-violet-500/20 text-violet-300",
-  },
-  {
-    emoji: "🤝",
-    title: "NGO & Nonprofits",
-    tagline: "Impact tracking and donor management",
-    points: ["Beneficiary enrollment and program tracking", "Volunteer management and field visit reports", "Donation tracking and grant reporting"],
-    color: "border-cyan-500/30 bg-cyan-500/5",
-    badge: "bg-cyan-500/20 text-cyan-300",
-  },
-  {
-    emoji: "💼",
-    title: "Consultants",
-    tagline: "Deploy for clients, not just yourself",
-    points: ["White-label with your own domain and logo", "Deliver dashboards and reports instantly", "Multi-enterprise management from one account"],
-    color: "border-emerald-500/30 bg-emerald-500/5",
-    badge: "bg-emerald-500/20 text-emerald-300",
-  },
-];
-
-const TESTIMONIALS = [
-  { name: "Dr. Sarah O.", role: "Healthcare Director", quote: "Finally, one system that handles our clients, staff, meds, and reporting — without 8 different tools.", avatar: "S" },
-  { name: "James K.", role: "Operations Consultant", quote: "I deploy this for clients in hours. The adaptive terminology alone saves days of customization.", avatar: "J" },
-  { name: "Amara L.", role: "BI Analyst", quote: "The Query Builder with open data integration is genuinely the best thing I've used in years.", avatar: "A" },
-];
-
-const PLANS = [
-  { name: "Starter", price: "$49", period: "/month", tagline: "For individuals & small teams", features: ["1 enterprise", "Up to 5 users", "Tasks, People, Transactions", "Basic dashboards"], popular: false, cta: "Start Free Trial", ctaStyle: "bg-white/10 hover:bg-white/20 text-white border border-white/20" },
-  { name: "Professional", price: "$149", period: "/month", tagline: "For growing organizations", features: ["Up to 5 enterprises", "Up to 20 users", "Full analytics & reports", "QueryBuilder + open data", "Market Intelligence"], popular: true, cta: "Start Free Trial", ctaStyle: "bg-emerald-500 hover:bg-emerald-400 text-white" },
-  { name: "Consultant", price: "$299", period: "/month", tagline: "For consultants & agencies", features: ["Unlimited enterprises", "Unlimited users", "White-label options", "API access", "Custom domain"], popular: false, cta: "Contact Sales", ctaStyle: "bg-white/10 hover:bg-white/20 text-white border border-white/20" },
-];
-
-// ── Animated workflow node ────────────────────────────────────────────────────
-function WorkflowNode({ step, index, total }) {
+// ── Message component ─────────────────────────────────────────────────────────
+function Message({ role, content, citations }) {
+  const isUser = role === "user";
   return (
-    <div className="flex items-center">
-      <div className="flex flex-col items-center gap-2">
-        <div className={`w-14 h-14 rounded-2xl ${step.color} shadow-lg ${step.glow} flex items-center justify-center font-bold text-white text-sm`}>
-          {index + 1}
-        </div>
-        <span className="font-bold text-white text-sm text-center">{step.label}</span>
-        <span className="text-slate-500 text-[10px] text-center max-w-[80px] leading-tight">{step.sublabel}</span>
+    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+      {/* Avatar */}
+      <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold
+        ${isUser
+          ? "bg-slate-700 text-slate-300"
+          : "bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30"
+        }`}>
+        {isUser ? "You" : "I"}
       </div>
-      {index < total - 1 && (
-        <div className="flex items-center mx-2 mt-[-20px]">
-          <div className="w-8 h-[2px] bg-gradient-to-r from-slate-600 to-slate-500" />
-          <ChevronRight className="w-4 h-4 text-slate-500 -ml-1" />
-        </div>
-      )}
-    </div>
-  );
-}
 
-// ── Desktop Mockup ────────────────────────────────────────────────────────────
-function DesktopMockup() {
-  return (
-    <div className="relative w-full max-w-2xl mx-auto">
-      {/* Glow */}
-      <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-3xl scale-90" />
-      
-      {/* Screen */}
-      <div className="relative bg-slate-900 rounded-2xl border border-white/10 shadow-2xl overflow-hidden">
-        {/* Titlebar */}
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-950/80 border-b border-white/5">
-          <div className="flex gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-500/70" />
-            <div className="w-3 h-3 rounded-full bg-yellow-500/70" />
-            <div className="w-3 h-3 rounded-full bg-emerald-500/70" />
-          </div>
-          <div className="flex-1 flex items-center justify-center">
-            <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-1">
-              <div className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="text-[10px] text-slate-400 font-medium">Newsconseen OS</span>
-            </div>
-          </div>
+      <div className={`flex flex-col gap-1.5 max-w-[82%] ${isUser ? "items-end" : "items-start"}`}>
+        {!isUser && (
+          <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest px-1">
+            Idjwi
+          </span>
+        )}
+        <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed
+          ${isUser
+            ? "bg-slate-700 text-slate-100 rounded-tr-sm"
+            : "bg-slate-800/80 border border-slate-700/50 text-slate-200 rounded-tl-sm"
+          }`}
+          style={{ whiteSpace: "pre-wrap" }}
+        >
+          {content}
         </div>
-
-        {/* Desktop content */}
-        <div className="bg-gradient-to-br from-slate-950 to-slate-900 p-4 min-h-[300px] relative">
-          {/* Taskbar */}
-          <div className="absolute bottom-0 left-0 right-0 h-10 bg-slate-950/90 border-t border-white/5 flex items-center px-3 gap-2">
-            <div className="w-6 h-6 rounded-lg bg-emerald-500 flex items-center justify-center">
-              <span className="text-white font-bold text-[8px]">N</span>
-            </div>
-            {["Tasks", "People", "Ledger", "Reports"].map(app => (
-              <div key={app} className="px-2 py-1 bg-white/5 rounded text-[9px] text-slate-400 hover:bg-white/10 cursor-pointer">{app}</div>
+        {citations && citations.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-1 px-1">
+            {citations.map((c, i) => (
+              <a key={i} href={c.url} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[10px] text-slate-400 hover:text-emerald-400 transition-colors">
+                <ExternalLink className="w-2.5 h-2.5" />{c.title?.slice(0, 40) || "Source"}
+              </a>
             ))}
-            <div className="flex-1" />
-            <div className="text-[9px] text-slate-500">09:41 AM</div>
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-          {/* App windows */}
-          <div className="absolute top-4 left-4 w-44 bg-slate-800/90 rounded-xl border border-white/10 shadow-xl overflow-hidden">
-            <div className="bg-slate-900/80 px-3 py-1.5 flex items-center gap-1.5">
-              <div className="flex gap-1"><div className="w-2 h-2 rounded-full bg-red-400/60"/><div className="w-2 h-2 rounded-full bg-yellow-400/60"/><div className="w-2 h-2 rounded-full bg-green-400/60"/></div>
-              <span className="text-[9px] text-slate-400 ml-1">Tasks</span>
-            </div>
-            <div className="p-2 space-y-1.5">
-              {["Follow up with client", "Review medication MAR", "Staff roster — Thu"].map((t, i) => (
-                <div key={i} className="flex items-center gap-1.5 text-[8px] text-slate-300">
-                  <div className={`w-1.5 h-1.5 rounded-full ${i === 0 ? "bg-emerald-400" : i === 1 ? "bg-amber-400" : "bg-slate-500"}`} />
-                  {t}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="absolute top-4 right-4 w-40 bg-slate-800/90 rounded-xl border border-white/10 shadow-xl overflow-hidden">
-            <div className="bg-slate-900/80 px-3 py-1.5 flex items-center gap-1.5">
-              <div className="flex gap-1"><div className="w-2 h-2 rounded-full bg-red-400/60"/><div className="w-2 h-2 rounded-full bg-yellow-400/60"/><div className="w-2 h-2 rounded-full bg-green-400/60"/></div>
-              <span className="text-[9px] text-slate-400 ml-1">Dashboard</span>
-            </div>
-            <div className="p-2">
-              <div className="text-[8px] text-slate-400 mb-1.5">Revenue (7d)</div>
-              <div className="flex items-end gap-1 h-8">
-                {[3, 5, 4, 7, 6, 8, 9].map((h, i) => (
-                  <div key={i} style={{ height: `${h * 4}px` }} className="flex-1 bg-emerald-500/40 rounded-sm" />
-                ))}
-              </div>
-              <div className="mt-1.5 text-[9px] text-emerald-400 font-bold">↑ 18% this week</div>
-            </div>
-          </div>
-
-          {/* App launcher icons in center */}
-          <div className="absolute bottom-12 left-1/2 -translate-x-1/2">
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { color: "bg-emerald-500", label: "Tasks" },
-                { color: "bg-blue-500", label: "People" },
-                { color: "bg-violet-500", label: "Ledger" },
-                { color: "bg-amber-500", label: "Reports" },
-              ].map(a => (
-                <div key={a.label} className="flex flex-col items-center gap-1">
-                  <div className={`w-9 h-9 rounded-xl ${a.color} shadow-md flex items-center justify-center`}>
-                    <span className="text-white text-[8px] font-bold">{a.label[0]}</span>
-                  </div>
-                  <span className="text-[7px] text-slate-400">{a.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+function TypingIndicator() {
+  return (
+    <div className="flex gap-3">
+      <div className="shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-emerald-500/30">
+        I
+      </div>
+      <div className="flex flex-col gap-1.5 items-start">
+        <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest px-1">Idjwi</span>
+        <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1.5 items-center">
+          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
         </div>
       </div>
     </div>
   );
 }
 
-// ── Scrolling grid background ─────────────────────────────────────────────────
-function GridBackground() {
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      <svg className="absolute inset-0 w-full h-full opacity-[0.04]" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="1"/>
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#grid)" />
-      </svg>
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
-    </div>
-  );
-}
-
-// ── Main Component ────────────────────────────────────────────────────────────
-export default function Landing() {
-  const navigate = useNavigate();
-  const { canInstall, promptInstall, isInstalled } = usePWA();
-  const [activeWorkflow, setActiveWorkflow] = useState(0);
+// ── Idjwi chat widget ─────────────────────────────────────────────────────────
+function IdjwiChat() {
+  const [messages, setMessages]   = useState([]);
+  const [input, setInput]         = useState("");
+  const [loading, setLoading]     = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
+  const [started, setStarted]     = useState(false);
+  const inputRef   = useRef(null);
+  const bottomRef  = useRef(null);
+  const historyRef = useRef([]);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setActiveWorkflow(prev => (prev + 1) % WORKFLOW_STEPS.length);
-    }, 1400);
-    return () => clearInterval(timer);
-  }, []);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
+
+  const send = async (text) => {
+    const q = (text || input).trim();
+    if (!q || loading || rateLimited) return;
+    setInput("");
+    setStarted(true);
+
+    const userMsg = { role: "user", content: q };
+    setMessages(prev => [...prev, userMsg]);
+    setLoading(true);
+
+    const apiHistory = historyRef.current.map(m => ({ role: m.role, content: m.content }));
+
+    try {
+      const resp = await fetch(`${RAILWAY_URL}/copilot/demo-ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: q, history: apiHistory }),
+        signal: AbortSignal.timeout(45_000),
+      });
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+
+      if (data.rate_limited) {
+        setRateLimited(true);
+      }
+
+      const assistantMsg = {
+        role: "assistant",
+        content: data.answer || "I couldn't generate a response. Please try again.",
+        citations: data.citations || [],
+      };
+      setMessages(prev => [...prev, assistantMsg]);
+      historyRef.current = [
+        ...historyRef.current,
+        { role: "user", content: q },
+        { role: "assistant", content: assistantMsg.content },
+      ].slice(-16);
+
+    } catch (e) {
+      const errMsg = e.name === "TimeoutError"
+        ? "The request timed out. Please try again."
+        : "I encountered an error. Please try again.";
+      setMessages(prev => [...prev, { role: "assistant", content: errMsg, citations: [] }]);
+    } finally {
+      setLoading(false);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  };
+
+  const handleKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="relative w-full max-w-3xl mx-auto">
+      {/* Glow effect */}
+      <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/20 via-teal-500/10 to-emerald-500/20 rounded-3xl blur-xl" />
 
-      {/* ── NAV ─────────────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur-md border-b border-white/5">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-emerald-500 rounded-xl w-9 h-9 flex items-center justify-center shadow-md shadow-emerald-500/30">
-              <span className="text-white font-bold text-base">N</span>
+      <div className="relative bg-slate-900/90 backdrop-blur border border-slate-700/60 rounded-3xl overflow-hidden shadow-2xl shadow-black/40">
+
+        {/* Chat header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800/80 bg-slate-950/40">
+          <div className="relative">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+              <span className="text-white font-black text-base">I</span>
             </div>
-            <span className="text-lg font-bold text-white">Newsconseen</span>
+            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-slate-900 animate-pulse" />
           </div>
-          <div className="hidden md:flex items-center gap-6 text-sm text-slate-400">
-            <a href="#components" className="hover:text-white transition-colors">Platform</a>
-            <a href="#apps" className="hover:text-white transition-colors">Apps</a>
-            <a href="#personas" className="hover:text-white transition-colors">Use Cases</a>
-            <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+          <div>
+            <p className="text-sm font-semibold text-white">Idjwi</p>
+            <p className="text-[11px] text-emerald-400">Newsconseen Intelligence · Demo Mode</p>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => base44.auth.redirectToLogin(window.location.origin + "/Dashboard")} className="text-sm text-slate-400 hover:text-white transition-colors">Sign in</button>
-            {isInstalled ? (
-              <button onClick={() => navigate("/Desktop")} className="flex items-center gap-1.5 text-sm text-emerald-400 hover:text-emerald-300 font-semibold transition-colors">
-                <Monitor className="w-4 h-4" /> Open Desktop
+          <div className="ml-auto flex items-center gap-1.5 text-[10px] text-slate-500 bg-slate-800/60 rounded-full px-2.5 py-1">
+            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+            Live public data
+          </div>
+        </div>
+
+        {/* Messages area */}
+        <div className="h-80 overflow-y-auto px-5 py-5 space-y-5 scroll-smooth">
+          {!started && messages.length === 0 && (
+            <div className="h-full flex flex-col items-center justify-center text-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center">
+                <Brain className="w-6 h-6 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-slate-300 font-medium text-sm">Ask Idjwi anything</p>
+                <p className="text-slate-500 text-xs mt-1">Market data · Product questions · App navigation · Economic research</p>
+              </div>
+            </div>
+          )}
+
+          {messages.map((m, i) => (
+            <Message key={i} role={m.role} content={m.content} citations={m.citations} />
+          ))}
+          {loading && <TypingIndicator />}
+          {rateLimited && (
+            <div className="flex items-start gap-2 text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-xs">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>Demo limit reached. <a href="/onboarding" className="underline font-medium">Sign up free</a> to get unlimited Idjwi access with your own data.</span>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Starter prompts */}
+        {!started && (
+          <div className="px-5 pb-3 flex flex-wrap gap-2">
+            {STARTERS.slice(0, 5).map((s, i) => (
+              <button
+                key={i}
+                onClick={() => send(s.q)}
+                disabled={loading}
+                className="text-xs text-slate-400 border border-slate-700 hover:border-emerald-500/50 hover:text-emerald-400 rounded-full px-3 py-1.5 transition-all hover:bg-emerald-500/5 disabled:opacity-40"
+              >
+                {s.label}
               </button>
-            ) : canInstall ? (
-              <button onClick={promptInstall} className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-white/10 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
-                <Download className="w-4 h-4" /> Install App
-              </button>
-            ) : null}
-            <button onClick={() => navigate("/onboarding")} className="bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors shadow-md shadow-emerald-500/20">
-              Sign Up
+            ))}
+          </div>
+        )}
+
+        {/* Input */}
+        <div className="px-4 pb-4 pt-2 border-t border-slate-800/60">
+          <div className="flex gap-2 items-end bg-slate-800/60 rounded-2xl border border-slate-700/60 focus-within:border-emerald-500/40 transition-colors px-4 py-3">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKey}
+              rows={1}
+              disabled={loading || rateLimited}
+              placeholder="Ask Idjwi about your market, industry, or how Newsconseen works…"
+              className="flex-1 bg-transparent text-sm text-slate-200 placeholder-slate-500 resize-none outline-none leading-relaxed disabled:opacity-40 max-h-28 overflow-y-auto"
+              style={{ minHeight: "24px" }}
+            />
+            <button
+              onClick={() => send()}
+              disabled={loading || !input.trim() || rateLimited}
+              className="shrink-0 w-8 h-8 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+            >
+              {loading
+                ? <Loader2 className="w-4 h-4 text-white animate-spin" />
+                : <Send className="w-3.5 h-3.5 text-white" />
+              }
             </button>
           </div>
+          <p className="text-[10px] text-slate-600 mt-2 text-center">
+            Idjwi · Powered by Claude · Public demo — no company data
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main landing page ─────────────────────────────────────────────────────────
+export default function Landing() {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+
+  const handleGetStarted = () => {
+    if (email) navigate(`/onboarding?email=${encodeURIComponent(email)}`);
+    else navigate("/onboarding");
+  };
+
+  return (
+    <div className="min-h-screen bg-[#050b18] text-white overflow-x-hidden">
+
+      {/* ── NAV ──────────────────────────────────────────────────────────────── */}
+      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 md:px-12 py-4
+                      bg-[#050b18]/80 backdrop-blur-xl border-b border-slate-800/50">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+            <span className="text-white font-black text-sm">N</span>
+          </div>
+          <span className="font-bold text-white text-sm tracking-tight">Newsconseen</span>
+        </div>
+
+        <div className="hidden md:flex items-center gap-8 text-sm text-slate-400">
+          <a href="#how-it-works" className="hover:text-white transition-colors">How it works</a>
+          <a href="#industries" className="hover:text-white transition-colors">Industries</a>
+          <a href="#features" className="hover:text-white transition-colors">Features</a>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate("/app")}
+            className="text-sm text-slate-400 hover:text-white transition-colors px-3 py-1.5"
+          >
+            Sign in
+          </button>
+          <button
+            onClick={() => navigate("/onboarding")}
+            className="text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl transition-colors shadow-lg shadow-emerald-500/20"
+          >
+            Get started
+          </button>
         </div>
       </nav>
 
-      {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden pt-20 pb-24">
-        <GridBackground />
-        <div className="relative max-w-7xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-4 py-1.5 mb-6">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-emerald-400 text-xs font-semibold tracking-wide">The Autonomous SME Operating System</span>
-            </div>
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white mb-6 leading-[1.05]">
-              Your operations.<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Running themselves.</span>
-            </h1>
-            <p className="text-xl text-slate-400 max-w-2xl mx-auto mb-4 leading-relaxed">
-              Newsconseen is the Autonomous SME Operating System — one universal ontology, 30+ specialist apps, and AI agents that run your operations 24/7.
-            </p>
-            <p className="text-slate-500 text-sm max-w-lg mx-auto mb-10">
-              Schools, clinics, farms, cooperatives, NGOs, franchises. One universal ontology. Every industry.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button
-                onClick={() => navigate("/onboarding")}
-                className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white font-bold px-8 py-4 rounded-2xl text-base transition-all shadow-xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-105"
-              >
-                <Monitor className="w-5 h-5" /> Get Started Free
-              </button>
-              <button
-                onClick={() => base44.auth.redirectToLogin(window.location.origin + "/Dashboard")}
-                className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold px-6 py-4 rounded-2xl text-base transition-all"
-              >
-                Sign In <ArrowRight className="w-4 h-4" />
-              </button>
-              {isInstalled ? (
-                <button
-                  onClick={() => navigate("/Desktop")}
-                  className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-emerald-500/30 text-emerald-400 font-semibold px-6 py-4 rounded-2xl text-base transition-all"
-                >
-                  <Monitor className="w-5 h-5" /> Open Desktop
-                </button>
-              ) : canInstall ? (
-                <button
-                  onClick={promptInstall}
-                  className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold px-6 py-4 rounded-2xl text-base transition-all"
-                >
-                  <Download className="w-5 h-5" /> Install Desktop App
-                </button>
-              ) : null}
-            </div>
-            <p className="text-slate-600 text-xs mt-4">14-day free trial · No credit card required</p>
-          </div>
-
-          <DesktopMockup />
+      {/* ── HERO ─────────────────────────────────────────────────────────────── */}
+      <section className="relative pt-36 pb-24 px-6">
+        {/* Background radial glow */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-emerald-500/5 rounded-full blur-3xl" />
+          <div className="absolute top-32 left-1/2 -translate-x-1/2 w-[400px] h-[300px] bg-teal-500/8 rounded-full blur-2xl" />
         </div>
-      </section>
 
-      {/* ── OS COMPONENTS ────────────────────────────────────────────────── */}
-      <section id="components" className="py-24 bg-slate-900/50">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-emerald-400 text-xs font-bold tracking-widest uppercase mb-3">System Architecture</p>
-            <h2 className="text-4xl font-black text-white mb-4">The OS Components</h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto">Not just an app. A full operating environment built for organizational work.</p>
+        <div className="relative max-w-4xl mx-auto text-center">
+          {/* Tag */}
+          <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-4 py-1.5 mb-6">
+            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+            <span className="text-xs font-semibold text-emerald-400 tracking-wider uppercase">
+              Autonomous SME Operating System
+            </span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-            {OS_COMPONENTS.map((comp) => (
-              <div key={comp.title} className="bg-slate-900 border border-white/5 rounded-2xl p-6 hover:border-white/15 transition-all hover:-translate-y-1 group">
-                <div className={`w-12 h-12 rounded-xl ${comp.bg} flex items-center justify-center mb-4`}>
-                  <comp.icon className={`w-6 h-6 ${comp.color}`} />
-                </div>
-                <h3 className="font-bold text-white text-sm mb-2">{comp.title}</h3>
-                <p className="text-slate-500 text-xs leading-relaxed">{comp.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* ── PAIN SECTION ─────────────────────────────────────────────────── */}
-      <section className="py-24">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-rose-400 text-xs font-bold tracking-widest uppercase mb-3">Why Newsconseen Exists</p>
-            <h2 className="text-4xl font-black text-white mb-4">You know this feeling.</h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-14">
-            {PAINS.map((pain, i) => (
-              <div key={i} className="flex items-start gap-4 bg-rose-500/5 border border-rose-500/15 rounded-2xl p-5">
-                <div className="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-rose-400 text-sm font-bold">✕</span>
-                </div>
-                <p className="text-slate-300 text-sm leading-relaxed">{pain}</p>
-              </div>
-            ))}
-          </div>
-          <div className="bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border border-emerald-500/30 rounded-2xl p-8 text-center">
-            <div className="text-4xl mb-4">⚡</div>
-            <h3 className="text-2xl font-black text-white mb-3">Newsconseen replaces the chaos.</h3>
-            <p className="text-slate-300 text-lg max-w-xl mx-auto">One unified operating system. Every workflow. Every person. Every insight — in one place.</p>
-          </div>
-        </div>
-      </section>
+          {/* Headline */}
+          <h1 className="text-5xl md:text-7xl font-black leading-none tracking-tight mb-4">
+            Meet{" "}
+            <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 bg-clip-text text-transparent">
+              Idjwi.
+            </span>
+          </h1>
 
-      {/* ── THREE-LAYER ARCHITECTURE ─────────────────────────────────────── */}
-      <section className="py-24 bg-slate-900/50">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-indigo-400 text-xs font-bold tracking-widest uppercase mb-3">How It Works</p>
-            <h2 className="text-4xl font-black text-white mb-4">Three layers. One coherent system.</h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto">
-              Most tools give you one layer. Newsconseen gives you all three — and the ontology that ties them together.
-            </p>
-          </div>
-          <div className="flex flex-col gap-4">
-            {[
-              {
-                num: "01",
-                label: "Enterprise OS",
-                sublabel: "System of record — forms create reality",
-                desc: "Every entity your organisation works with lives here: Person, Enterprise, Product, Task, Transaction, Address, Relationship. Forms create the data. The ontology gives it structure. Every mutation triggers the analytics engine.",
-                color: "border-emerald-500/30 bg-emerald-500/5",
-                badge: "bg-emerald-500/20 text-emerald-300",
-                icon: "🏢",
-              },
-              {
-                num: "02",
-                label: "Deployable Datamart",
-                sublabel: "Analytics engine — databases store reality",
-                desc: "A PostgreSQL analytics layer on Railway. ETL pipelines extract, transform, and load every mutation into analytics tables. Every dashboard stat card, chart, and ML model reads from here — never from Layer 1 directly.",
-                color: "border-blue-500/30 bg-blue-500/5",
-                badge: "bg-blue-500/20 text-blue-300",
-                icon: "📊",
-              },
-              {
-                num: "03",
-                label: "Autonomous Intelligence",
-                sublabel: "Agents + copilot — intelligence explains reality",
-                desc: "The Copilot is grounded in your live data. Agents monitor, alert, and act on your behalf — 24/7. The longer you use Newsconseen, the smarter your agents become about your specific business. No competitor can replicate this without your history.",
-                color: "border-violet-500/30 bg-violet-500/5",
-                badge: "bg-violet-500/20 text-violet-300",
-                icon: "🤖",
-              },
-            ].map((layer) => (
-              <div key={layer.num} className={`flex items-start gap-5 rounded-2xl border p-6 ${layer.color}`}>
-                <div className="text-3xl shrink-0">{layer.icon}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${layer.badge}`}>LAYER {layer.num}</span>
-                    <h3 className="text-base font-black text-white">{layer.label}</h3>
-                    <span className="text-xs text-slate-500">— {layer.sublabel}</span>
-                  </div>
-                  <p className="text-sm text-slate-400 leading-relaxed">{layer.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-8 bg-gradient-to-r from-indigo-500/10 to-violet-500/10 border border-indigo-500/20 rounded-2xl p-6 text-center">
-            <p className="text-sm font-semibold text-slate-300 mb-1">The Moat</p>
-            <p className="text-slate-400 text-sm max-w-2xl mx-auto">
-              Agent memory + operator data grows over time. The longer an operator uses Newsconseen, the smarter their agents become about their specific business.
-              No competitor can replicate this without the history.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ── APPS ─────────────────────────────────────────────────────────── */}
-      <section id="apps" className="py-24 bg-slate-900/50">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-violet-400 text-xs font-bold tracking-widest uppercase mb-3">App Catalog</p>
-            <h2 className="text-4xl font-black text-white mb-4">30+ apps. One launcher.</h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto">Modular specialist apps organized across four operational domains. Use what you need, hide what you don't.</p>
-          </div>
-          <div className="space-y-8">
-            {APP_CATEGORIES.map((cat) => (
-              <div key={cat.label}>
-                <p className={`text-xs font-bold tracking-widest uppercase mb-4 ${cat.color}`}>{cat.label}</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                  {cat.apps.map((app) => (
-                    <div key={app.name} className="bg-slate-900 border border-white/5 rounded-xl p-4 hover:border-white/15 transition-all hover:-translate-y-0.5 cursor-pointer">
-                      <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center mb-3">
-                        <app.icon className={`w-4 h-4 ${cat.color}`} />
-                      </div>
-                      <h3 className="font-bold text-white text-xs mb-1 leading-tight">{app.name}</h3>
-                      <p className="text-slate-500 text-[10px] leading-relaxed">{app.desc}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── THE ONTOLOGY LOOP ────────────────────────────────────────────── */}
-      <section className="py-24">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-amber-400 text-xs font-bold tracking-widest uppercase mb-3">The Ontology Loop</p>
-            <h2 className="text-4xl font-black text-white mb-4">Structure → Action → Intelligence</h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto">Every organization follows the same operational logic. Newsconseen maps it to a universal data model.</p>
-          </div>
-          <div className="flex flex-wrap items-start justify-center gap-2">
-            {WORKFLOW_STEPS.map((step, i) => (
-              <div key={i} className={`flex items-center transition-all duration-500 ${activeWorkflow === i ? "scale-105" : "scale-100 opacity-70"}`}>
-                <div className="flex flex-col items-center gap-2">
-                  <div className={`w-16 h-16 rounded-2xl ${step.color} shadow-xl flex items-center justify-center font-black text-white text-lg transition-all ${activeWorkflow === i ? `shadow-lg ${step.glow}` : ""}`}>
-                    {i + 1}
-                  </div>
-                  <span className="font-bold text-white text-sm text-center">{step.label}</span>
-                  <span className="text-slate-500 text-[10px] text-center max-w-[80px] leading-tight">{step.sublabel}</span>
-                </div>
-                {i < WORKFLOW_STEPS.length - 1 && (
-                  <div className="flex items-center mx-3 mb-8">
-                    <div className="w-6 h-[2px] bg-slate-700" />
-                    <ChevronRight className="w-4 h-4 text-slate-600 -ml-1" />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="mt-10 text-center">
-            <p className="text-slate-500 text-sm italic">"Oh, this is not a toy — this is an OS."</p>
-          </div>
-        </div>
-      </section>
-
-      {/* ── ARCHITECTURE ─────────────────────────────────────────────────── */}
-      <section className="py-24 bg-slate-900/50">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-cyan-400 text-xs font-bold tracking-widest uppercase mb-3">Architecture</p>
-            <h2 className="text-4xl font-black text-white mb-4">Built for real organizations.</h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto">Engineered for production. Designed for simplicity.</p>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
-            {ARCH_FEATURES.map((f) => (
-              <div key={f.title} className="bg-slate-900 border border-white/5 rounded-2xl p-6 hover:border-white/15 transition-all">
-                <div className="w-10 h-10 bg-cyan-500/10 rounded-xl flex items-center justify-center mb-4">
-                  <f.icon className="w-5 h-5 text-cyan-400" />
-                </div>
-                <h3 className="font-bold text-white text-sm mb-1.5">{f.title}</h3>
-                <p className="text-slate-500 text-xs leading-relaxed">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── AUTONOMOUS AGENTS ────────────────────────────────────────────── */}
-      <section className="py-24 bg-slate-900/50">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-violet-400 text-xs font-bold tracking-widest uppercase mb-3">Autonomous AI</p>
-            <h2 className="text-4xl font-black text-white mb-4">Agents that run your operations. 24/7.</h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto">
-              Not a chatbot. Not a dashboard. Agents grounded in your data that monitor, alert, and act on your behalf.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
-            {[
-              { emoji: "🤖", title: "Operational Copilot", desc: "Ask any question about your org — staff availability, revenue trends, task backlogs — and get answers grounded in your live data.", badge: "Live", badgeColor: "bg-emerald-500/20 text-emerald-300" },
-              { emoji: "🔔", title: "Alert Engine", desc: "Define rules — low stock, overdue invoices, missed visits, churn risk — and receive instant alerts via WhatsApp, email, or SMS.", badge: "Active", badgeColor: "bg-blue-500/20 text-blue-300" },
-              { emoji: "⚡", title: "Action Agents (Phase 4)", desc: "Autonomous agents that detect patterns, suggest actions, and execute workflows — with a human-in-the-loop approval gate for high-risk operations.", badge: "Coming", badgeColor: "bg-amber-500/20 text-amber-300" },
-            ].map((a) => (
-              <div key={a.title} className="bg-slate-900 border border-violet-500/20 rounded-2xl p-6 hover:border-violet-500/40 transition-all">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-3xl">{a.emoji}</span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${a.badgeColor}`}>{a.badge}</span>
-                </div>
-                <h3 className="font-bold text-white text-sm mb-2">{a.title}</h3>
-                <p className="text-slate-500 text-xs leading-relaxed">{a.desc}</p>
-              </div>
-            ))}
-          </div>
-          <div className="bg-gradient-to-r from-violet-500/10 to-indigo-500/10 border border-violet-500/20 rounded-2xl p-6 text-center">
-            <p className="text-sm font-bold text-slate-200 mb-1">🧠 The Compounding Moat</p>
-            <p className="text-slate-400 text-sm max-w-2xl mx-auto">Agent memory + operator history grows over time. The longer you use Newsconseen, the smarter your agents become about your specific business. No competitor can replicate this without your data.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* ── PERSONAS ─────────────────────────────────────────────────────── */}
-      <section id="personas" className="py-24">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-emerald-400 text-xs font-bold tracking-widest uppercase mb-3">Use Cases</p>
-            <h2 className="text-4xl font-black text-white mb-4">Who uses Newsconseen?</h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto">Every type of organized enterprise — one OS, one ontology.</p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {PERSONAS.map((p) => (
-              <div key={p.title} className={`border rounded-2xl p-6 ${p.color} transition-all hover:-translate-y-1`}>
-                <div className="text-4xl mb-4">{p.emoji}</div>
-                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${p.badge} uppercase tracking-wide`}>{p.title}</span>
-                <p className="text-white font-bold mt-3 mb-3 text-sm">{p.tagline}</p>
-                <ul className="space-y-2">
-                  {p.points.map((pt, i) => (
-                    <li key={i} className="flex items-start gap-2 text-xs text-slate-300">
-                      <Check className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
-                      {pt}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── TESTIMONIALS ─────────────────────────────────────────────────── */}
-      <section className="py-24 bg-slate-900/50">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-amber-400 text-xs font-bold tracking-widest uppercase mb-3">Social Proof</p>
-            <h2 className="text-4xl font-black text-white mb-4">What people are saying</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {TESTIMONIALS.map((t) => (
-              <div key={t.name} className="bg-slate-900 border border-white/5 rounded-2xl p-6">
-                <div className="flex items-center gap-1 mb-4">
-                  {[1,2,3,4,5].map(s => <Star key={s} className="w-4 h-4 fill-amber-400 text-amber-400" />)}
-                </div>
-                <p className="text-slate-300 text-sm leading-relaxed mb-5 italic">"{t.quote}"</p>
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-emerald-700 flex items-center justify-center text-white text-sm font-bold">
-                    {t.avatar}
-                  </div>
-                  <div>
-                    <p className="text-white text-sm font-semibold">{t.name}</p>
-                    <p className="text-slate-500 text-xs">{t.role}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── PRICING ──────────────────────────────────────────────────────── */}
-      <section id="pricing" className="py-24">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-emerald-400 text-xs font-bold tracking-widest uppercase mb-3">Pricing</p>
-            <h2 className="text-4xl font-black text-white mb-4">Simple, transparent pricing</h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto">Start free. Scale as you grow. Cancel anytime.</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {PLANS.map((plan) => (
-              <div key={plan.name} className={`relative rounded-2xl border p-8 flex flex-col transition-all ${plan.popular ? "border-emerald-500/50 bg-emerald-500/5 shadow-xl shadow-emerald-500/10" : "border-white/10 bg-slate-900 hover:border-white/20"}`}>
-                {plan.popular && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                    <span className="bg-emerald-500 text-white text-[10px] font-bold px-4 py-1 rounded-full shadow-md">Most Popular</span>
-                  </div>
-                )}
-                <div className="mb-6">
-                  <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-                  <p className="text-slate-500 text-xs mt-1">{plan.tagline}</p>
-                  <div className="mt-4 flex items-end gap-1">
-                    <span className="text-4xl font-black text-white">{plan.price}</span>
-                    <span className="text-slate-400 text-sm mb-1">{plan.period}</span>
-                  </div>
-                </div>
-                <ul className="space-y-2.5 flex-1 mb-6">
-                  {plan.features.map((f, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm text-slate-300">
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => navigate(plan.name === "Consultant" ? "/pricing" : "/Dashboard")}
-                  className={`w-full py-3 rounded-xl text-sm font-bold transition-all ${plan.ctaStyle}`}
-                >
-                  {plan.cta}
-                </button>
-              </div>
-            ))}
-          </div>
-          <p className="text-center text-slate-600 text-xs mt-6">All plans include 14-day free trial · No credit card required · Cancel anytime</p>
-        </div>
-      </section>
-
-      {/* ── TREND CHARTS ─────────────────────────────────────────────────── */}
-      <TrendChartsSection />
-
-      {/* ── ROLE DASHBOARD PREVIEW ───────────────────────────────────────── */}
-      <RoleDashboardPreview />
-
-      {/* ── CLOSING CTA ──────────────────────────────────────────────────── */}
-      <section className="py-28 relative overflow-hidden">
-        <GridBackground />
-        <div className="relative max-w-3xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-4 py-1.5 mb-8">
-            <Zap className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-emerald-400 text-xs font-semibold">Built for clarity. Designed for action.</span>
-          </div>
-          <h2 className="text-5xl sm:text-6xl font-black text-white mb-6 leading-tight">
-            The OS for every<br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">organization.</span>
-          </h2>
-          <p className="text-slate-400 text-xl mb-10 max-w-lg mx-auto">
-            Stop managing tools. Start running your organization from one unified OS.
+          <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mb-3 leading-relaxed">
+            The intelligence layer for your organisation. Named after Idjwi Island — Africa's
+            most self-sufficient island. Your business, just as autonomous.
           </p>
-          <button
-            onClick={() => navigate("/onboarding")}
-            className="inline-flex items-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-white font-black px-10 py-5 rounded-2xl text-lg transition-all shadow-2xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-105"
-          >
-            <Monitor className="w-6 h-6" /> Start Free — No Credit Card
-          </button>
-          <p className="text-slate-600 text-xs mt-4">Free for 14 days · No credit card required</p>
+
+          <p className="text-sm text-slate-500 mb-12">
+            Live public data · Web research · App navigation · Market analysis — try it now, no signup needed.
+          </p>
+
+          {/* Idjwi chat — the hero */}
+          <IdjwiChat />
+
+          {/* More starters below the widget */}
+          <div className="mt-8 flex flex-wrap justify-center gap-2">
+            {STARTERS.slice(5).map((s, i) => (
+              <button key={i}
+                onClick={() => {
+                  document.querySelector("textarea")?.focus();
+                  document.querySelector("textarea") &&
+                    (document.querySelector("textarea").value = s.q);
+                }}
+                className="text-xs text-slate-500 border border-slate-800 hover:border-slate-600 hover:text-slate-300 rounded-full px-3 py-1.5 transition-all"
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* ── FOOTER ───────────────────────────────────────────────────────── */}
-      <footer className="border-t border-white/5 py-10">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-emerald-500 rounded-xl w-8 h-8 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">N</span>
+      {/* ── TRUST BAR ────────────────────────────────────────────────────────── */}
+      <section className="border-y border-slate-800/60 py-6 px-6 bg-slate-900/30">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-center gap-8">
+          {[
+            { icon: Brain, label: "8 Autonomous Agents" },
+            { icon: Wifi, label: "35 Connectors" },
+            { icon: Cpu, label: "ML Models built-in" },
+            { icon: Globe, label: "Live public data APIs" },
+            { icon: Shield, label: "OFAC · AML · SOC 2" },
+            { icon: GitBranch, label: "Multi-tenant network" },
+          ].map(({ icon: Icon, label }) => (
+            <div key={label} className="flex items-center gap-2 text-slate-400">
+              <Icon className="w-4 h-4 text-emerald-500" />
+              <span className="text-xs font-medium">{label}</span>
             </div>
-            <span className="text-white font-bold">Newsconseen</span>
-            <span className="text-slate-600 text-xs">The universal enterprise operating system</span>
+          ))}
+        </div>
+      </section>
+
+      {/* ── IDJWI CAPABILITIES ───────────────────────────────────────────────── */}
+      <section className="py-24 px-6" id="features">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">What Idjwi can do right now</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+              Intelligence without your data
+            </h2>
+            <p className="text-slate-400 max-w-xl mx-auto">
+              Before you connect a single record, Idjwi already has access to a world of public intelligence. This is what it does from day one.
+            </p>
           </div>
-          <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-sm text-slate-500">
-            <a href="mailto:anewsconseen@gmail.com" className="hover:text-slate-400 transition-colors">anewsconseen@gmail.com</a>
-            <button onClick={() => navigate("/pricing")} className="hover:text-slate-400 transition-colors">Pricing</button>
-            <button onClick={() => navigate("/onboarding")} className="hover:text-slate-400 transition-colors">Get Started</button>
-            <span>© {new Date().getFullYear()} Newsconseen</span>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {CAPABILITIES.map((cap) => {
+              const c = COLOUR[cap.color];
+              const Icon = cap.icon;
+              return (
+                <div key={cap.title}
+                  className={`${c.bg} border ${c.border} rounded-2xl p-6 hover:scale-[1.02] transition-transform`}>
+                  <div className={`w-10 h-10 rounded-xl ${c.bg} border ${c.border} flex items-center justify-center mb-4`}>
+                    <Icon className={`w-5 h-5 ${c.text}`} />
+                  </div>
+                  <h3 className="text-sm font-semibold text-white mb-2">{cap.title}</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">{cap.desc}</p>
+                </div>
+              );
+            })}
           </div>
+        </div>
+      </section>
+
+      {/* ── HOW NEWSCONSEEN WORKS ─────────────────────────────────────────────── */}
+      <section className="py-24 px-6 bg-slate-900/20" id="how-it-works">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">Architecture</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+              Three layers. One operating system.
+            </h2>
+            <p className="text-slate-400 max-w-xl mx-auto">
+              Newsconseen is the Palantir Foundry for SMEs. Built on a universal ontology that works for any industry, any scale.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {LAYERS.map((layer) => {
+              const c = COLOUR[layer.color];
+              return (
+                <div key={layer.number} className="relative bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 overflow-hidden">
+                  <div className={`absolute top-0 right-0 text-7xl font-black ${c.text} opacity-5 leading-none pr-2`}>
+                    {layer.number}
+                  </div>
+                  <div className={`inline-flex items-center gap-1.5 ${c.bg} border ${c.border} rounded-full px-3 py-1 mb-4`}>
+                    <span className={`text-[10px] font-bold ${c.text} uppercase tracking-wider`}>Layer {layer.number}</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-white mb-1">{layer.title}</h3>
+                  <p className={`text-xs font-semibold ${c.text} mb-3`}>{layer.subtitle}</p>
+                  <p className="text-sm text-slate-400 leading-relaxed">{layer.desc}</p>
+
+                  {layer.number !== "03" && (
+                    <div className="mt-4 flex items-center gap-1 text-xs text-slate-600">
+                      <ArrowRight className="w-3.5 h-3.5" /> feeds next layer
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ── INDUSTRIES ───────────────────────────────────────────────────────── */}
+      <section className="py-24 px-6" id="industries">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">Universal ontology</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+              Any industry. Same system.
+            </h2>
+            <p className="text-slate-400 max-w-xl mx-auto">
+              Every organisation has people, places, things, tasks, and money. Newsconseen is built around that universal truth — not around your industry's jargon.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {INDUSTRIES.map((ind) => (
+              <div key={ind.name}
+                className="bg-slate-900/50 border border-slate-800/60 rounded-2xl p-5 hover:border-slate-700 transition-colors group">
+                <span className="text-3xl mb-3 block">{ind.emoji}</span>
+                <h3 className="text-sm font-semibold text-white mb-1.5 group-hover:text-emerald-400 transition-colors">
+                  {ind.name}
+                </h3>
+                <p className="text-xs text-slate-500">{ind.example}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── AGENT + CONNECTORS FEATURE ROW ───────────────────────────────────── */}
+      <section className="py-24 px-6 bg-slate-900/20">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+            {/* Agents card */}
+            <div className="bg-gradient-to-br from-violet-500/10 to-violet-900/10 border border-violet-500/20 rounded-3xl p-8">
+              <div className="w-12 h-12 bg-violet-500/10 border border-violet-500/20 rounded-2xl flex items-center justify-center mb-5">
+                <Brain className="w-6 h-6 text-violet-400" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-3">8 Autonomous Agents</h3>
+              <p className="text-slate-400 text-sm leading-relaxed mb-5">
+                Operations, Revenue, Retention, Inventory, Onboarding, Compliance, Network, and Market Research agents run continuously — surfacing insights and taking actions without being asked.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {["Operations", "Revenue", "Retention", "Inventory", "Market Research"].map(a => (
+                  <span key={a} className="text-[11px] bg-violet-500/10 border border-violet-500/20 text-violet-300 rounded-full px-3 py-1">{a}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* Connectors card */}
+            <div className="bg-gradient-to-br from-blue-500/10 to-blue-900/10 border border-blue-500/20 rounded-3xl p-8">
+              <div className="w-12 h-12 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center justify-center mb-5">
+                <Wifi className="w-6 h-6 text-blue-400" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-3">35 Connectors</h3>
+              <p className="text-slate-400 text-sm leading-relaxed mb-5">
+                Connect your existing tools — accounting, CRM, EHR, HRIS, eCommerce, payment gateways, and more. Newsconseen pulls them into one operating picture.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {["QuickBooks", "Shopify", "Salesforce", "M-Pesa", "WhatsApp"].map(a => (
+                  <span key={a} className="text-[11px] bg-blue-500/10 border border-blue-500/20 text-blue-300 rounded-full px-3 py-1">{a}</span>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      {/* ── ENRICHMENT ROW ───────────────────────────────────────────────────── */}
+      <section className="py-24 px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">Enrichment engine</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+              Your data, made richer.
+            </h2>
+            <p className="text-slate-400 max-w-xl mx-auto">
+              Every record in your system is automatically enriched with external intelligence — without you lifting a finger.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { icon: Shield, label: "OFAC Sanctions", sub: "SDN screening on every entity" },
+              { icon: Globe, label: "Geocoding", sub: "Coordinates from any address" },
+              { icon: Package, label: "Drug data", sub: "RxNorm, FDA, dosage, interactions" },
+              { icon: TrendingUp, label: "Churn prediction", sub: "ML-predicted risk on every person" },
+              { icon: BarChart2, label: "Revenue trend", sub: "Growth trajectory per enterprise" },
+              { icon: AlertCircle, label: "AML flags", sub: "Anti-money laundering signals" },
+              { icon: Database, label: "Company registry", sub: "OpenCorporates enrichment" },
+              { icon: RefreshCw, label: "FX rates", sub: "Live exchange rates stamped on tx" },
+            ].map(({ icon: Icon, label, sub }) => (
+              <div key={label} className="bg-slate-900/50 border border-slate-800/60 rounded-xl p-4 text-center">
+                <Icon className="w-5 h-5 text-emerald-400 mx-auto mb-2" />
+                <p className="text-xs font-semibold text-white mb-1">{label}</p>
+                <p className="text-[10px] text-slate-500">{sub}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA ──────────────────────────────────────────────────────────────── */}
+      <section className="py-24 px-6 relative">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-emerald-500/5 rounded-full blur-3xl" />
+        </div>
+
+        <div className="relative max-w-2xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-4 py-1.5 mb-6">
+            <Zap className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-xs font-semibold text-emerald-400">Get started in 5 minutes</span>
+          </div>
+
+          <h2 className="text-4xl md:text-5xl font-black text-white mb-4 leading-tight">
+            Ready to run your organisation{" "}
+            <span className="bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">
+              autonomously?
+            </span>
+          </h2>
+
+          <p className="text-slate-400 mb-10">
+            Set up your first organisation in under 5 minutes. Idjwi starts working the moment you add your first record.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center max-w-md mx-auto">
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleGetStarted()}
+              placeholder="your@email.com"
+              className="flex-1 bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none focus:border-emerald-500/60 transition-colors"
+            />
+            <button
+              onClick={handleGetStarted}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-6 py-3 rounded-xl transition-colors shadow-xl shadow-emerald-500/20 flex items-center gap-2 justify-center whitespace-nowrap"
+            >
+              Get started <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <p className="text-xs text-slate-600 mt-4">No credit card required. Free to start.</p>
+        </div>
+      </section>
+
+      {/* ── FOOTER ───────────────────────────────────────────────────────────── */}
+      <footer className="border-t border-slate-800/60 py-10 px-6">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+              <span className="text-white font-black text-xs">N</span>
+            </div>
+            <span className="text-sm font-bold text-white">Newsconseen</span>
+            <span className="text-slate-600 text-xs">· Autonomous SME Operating System</span>
+          </div>
+
+          <div className="flex items-center gap-6 text-xs text-slate-500">
+            <a href="/pricing" className="hover:text-slate-300 transition-colors">Pricing</a>
+            <a href="/onboarding" className="hover:text-slate-300 transition-colors">Get started</a>
+            <span>Powered by <span className="text-emerald-500">Idjwi</span> (ee-JEE-wee)</span>
+          </div>
+        </div>
+
+        <div className="max-w-6xl mx-auto mt-6 pt-6 border-t border-slate-800/40 text-center">
+          <p className="text-[11px] text-slate-600">
+            Idjwi is named after Idjwi Island, Lake Kivu — DRC/Rwanda. Africa's most self-sufficient island.
+            A fitting name for intelligence that makes your organisation self-sufficient.
+          </p>
         </div>
       </footer>
     </div>
