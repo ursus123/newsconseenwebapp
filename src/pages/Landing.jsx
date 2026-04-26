@@ -2,8 +2,9 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Send, Loader2, ArrowRight, Globe, Cpu, Users, BarChart2,
-  Zap, Shield, GitBranch, Package, CheckSquare, Bell, Wifi, Database,
-  Brain, TrendingUp, Map, RefreshCw, AlertCircle, ExternalLink, Code2,
+  Zap, Shield, GitBranch, Package, CheckSquare, Wifi, Database,
+  Brain, TrendingUp, Map, RefreshCw, AlertCircle, ExternalLink,
+  Code2, CheckCircle, Star,
 } from "lucide-react";
 import {
   BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell,
@@ -17,26 +18,53 @@ const PALETTE = [
   "#06b6d4","#f97316","#84cc16","#ec4899","#14b8a6",
 ];
 
-// ── Starter prompts ───────────────────────────────────────────────────────────
+const GREETING = {
+  role: "assistant",
+  content: "Hi, I'm **Idjwi** — the intelligence layer of Newsconseen.\n\nI can pull **live market data**, walk you through how Newsconseen works for your industry, explain what the autonomous agents do, or answer any question about the platform.\n\nWhat would you like to explore?",
+  charts: [],
+  citations: [],
+  toolsCalled: [],
+};
+
 const STARTERS = [
-  { label: "What is Idjwi?",            q: "What is Idjwi and what can it do for my organisation?" },
-  { label: "USD/KES rate today",         q: "What is the current USD to KES exchange rate and show me rates for major African currencies." },
-  { label: "Newsconseen for a clinic",   q: "How would Newsconseen work for a healthcare clinic? Walk me through what Idjwi would track, what it would answer, and which agents would run." },
-  { label: "East Africa economic data",  q: "Show me key economic indicators for East Africa — GDP, growth rates, population — with a chart." },
-  { label: "Clinic count in Nairobi",    q: "How many clinics and health facilities are in Nairobi, Kenya?" },
-  { label: "Newsconseen for a school",   q: "How would Newsconseen work for a school? What gets tracked and what does Idjwi answer day-to-day?" },
-  { label: "Autonomous agents",          q: "What autonomous agents does Newsconseen run and what do they do automatically?" },
-  { label: "How does the copilot work?", q: "Explain how the Newsconseen copilot works — tools, data sources, architecture." },
+  { label: "Show me a live chart",         q: "Show me GDP growth rates for the top 10 economies as a bar chart." },
+  { label: "Idjwi for a pharmacy",         q: "How would Newsconseen work for a pharmacy? Walk me through what Idjwi tracks, answers, and automates." },
+  { label: "What are autonomous agents?",  q: "What autonomous agents does Newsconseen run and what do they do automatically without being asked?" },
+  { label: "Live exchange rates",          q: "Show me current exchange rates for major currencies against USD as a chart." },
+  { label: "Newsconseen for an NGO",       q: "How would Newsconseen work for an NGO with 50 field staff? What does Idjwi answer day-to-day?" },
+  { label: "How does the copilot work?",   q: "Explain how the Newsconseen copilot works — tools, data sources, and architecture." },
+  { label: "What is Idjwi?",              q: "What is Idjwi, what can it do, and how is it different from a regular AI assistant?" },
+  { label: "Newsconseen for a school",     q: "How would Newsconseen work for a school group with 5 campuses?" },
 ];
 
-// ── Capability cards ──────────────────────────────────────────────────────────
+const TESTIMONIALS = [
+  {
+    quote: "Before Newsconseen, our field coordinator tracked 340 patients across four spreadsheets. Now Idjwi sends a daily briefing automatically.",
+    role: "Operations Director",
+    org: "Private Clinic Network",
+    initials: "OD",
+  },
+  {
+    quote: "We manage 12 school campuses. This is the first platform where I can see all 12 in one view, compare them, and get alerts when something's off.",
+    role: "Chief Administrator",
+    org: "Multi-Campus School Group",
+    initials: "CA",
+  },
+  {
+    quote: "The autonomous agents caught a supplier payment anomaly we would have missed for months. It flagged it, created a task, and notified the right person.",
+    role: "Finance Manager",
+    org: "Agricultural Cooperative",
+    initials: "FM",
+  },
+];
+
 const CAPABILITIES = [
-  { icon: Globe,      color: "emerald", title: "Live Public Intelligence",  desc: "Exchange rates, World Bank data, economic indicators, business counts — all live." },
-  { icon: Brain,      color: "violet",  title: "Market Analysis",           desc: "Industry trends, competitor data, regulatory context — sourced from the live web." },
-  { icon: Map,        color: "blue",    title: "Geospatial Insights",        desc: "Facility counts, competitor proximity, demographic context by location." },
-  { icon: Cpu,        color: "amber",   title: "App Navigator",             desc: "Guides you through every Newsconseen feature in plain language." },
-  { icon: TrendingUp, color: "rose",    title: "Economic Research",         desc: "UN data, World Bank indicators, country risk — contextualised for your sector." },
-  { icon: Database,   color: "cyan",    title: "Drug & Regulatory Data",    desc: "FDA drug data, medical device records, safety alerts — for regulated industries." },
+  { icon: Globe,      color: "emerald", title: "Live Market Intelligence",  desc: "Real-time exchange rates, World Bank indicators, economic data, and industry news — contextualised for your sector." },
+  { icon: Brain,      color: "violet",  title: "8 Autonomous Agents",       desc: "Operations, Revenue, Retention, Inventory, Compliance — agents that surface insights and take actions without being asked." },
+  { icon: TrendingUp, color: "blue",    title: "ML Predictions",            desc: "Churn risk, demand forecasting, revenue trends, stockout probability — computed fresh on every record, every day." },
+  { icon: Map,        color: "amber",   title: "Geospatial + OSM",          desc: "Competitor counts, facility proximity, demographic context — for any location in the world." },
+  { icon: Shield,     color: "rose",    title: "Compliance & Risk",         desc: "OFAC sanctions screening, AML flags, World Bank governance scores — on every entity, automatically." },
+  { icon: Database,   color: "cyan",    title: "35 Connectors",             desc: "QuickBooks, Shopify, Salesforce, M-Pesa, EHR systems, HRIS — pulled into one operating picture." },
 ];
 
 const COLOUR = {
@@ -58,9 +86,42 @@ const INDUSTRIES = [
 ];
 
 const LAYERS = [
-  { number: "01", color: "emerald", title: "Enterprise OS",          subtitle: "The system of record",        desc: "People, enterprises, products, tasks, transactions, relationships, addresses. Every entity your organisation deals with — captured, structured, searchable." },
-  { number: "02", color: "blue",    title: "Deployable Datamart",    subtitle: "The analytical engine",       desc: "Pre-aggregated analytics, ETL pipeline, PostgreSQL. Every stat card, chart, and ML model reads from here. Fast, clean, multi-tenant." },
-  { number: "03", color: "violet",  title: "Foundry Intelligence",   subtitle: "Idjwi + autonomous agents",   desc: "The copilot, 8 autonomous agents, alerts, enrichment, connectors, ML models. The layer that makes your data act — not just sit." },
+  { number: "01", color: "emerald", title: "Enterprise OS",        subtitle: "The system of record",      desc: "People, enterprises, products, tasks, transactions, relationships, addresses. Every entity your organisation deals with — captured, structured, searchable." },
+  { number: "02", color: "blue",    title: "Deployable Datamart",  subtitle: "The analytical engine",     desc: "Pre-aggregated analytics, ETL pipeline, PostgreSQL. Every stat card, chart, and ML model reads from here. Fast, clean, multi-tenant." },
+  { number: "03", color: "violet",  title: "Foundry Intelligence", subtitle: "Idjwi + autonomous agents", desc: "The copilot, 8 autonomous agents, alerts, enrichment, connectors, ML models. The layer that makes your data act — not just sit." },
+];
+
+const PRICING_TIERS = [
+  {
+    name: "Starter",
+    price: "Free",
+    sub: "Forever free to start",
+    color: "slate",
+    features: ["1 user", "All 7 core entities", "Idjwi copilot", "Basic dashboards", "Community support"],
+    cta: "Start free",
+    href: "/onboarding",
+    highlighted: false,
+  },
+  {
+    name: "Growth",
+    price: "Contact us",
+    sub: "Full platform access",
+    color: "emerald",
+    features: ["Unlimited users", "All 8 autonomous agents", "35 connectors", "ML predictions", "Enrichment engine", "WhatsApp / Email alerts", "Priority support"],
+    cta: "Get pricing",
+    href: "/onboarding",
+    highlighted: true,
+  },
+  {
+    name: "Enterprise",
+    price: "Custom",
+    sub: "White-label & multi-tenant",
+    color: "violet",
+    features: ["White-label branding", "Custom domain", "Network intelligence", "SOC 2 compliance", "Audit trail", "Dedicated support & SLA"],
+    cta: "Talk to us",
+    href: "/onboarding",
+    highlighted: false,
+  },
 ];
 
 // ── Markdown renderer (dark theme) ────────────────────────────────────────────
@@ -68,11 +129,11 @@ function renderInline(text) {
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
   return parts.map((p, i) => {
     if (p.startsWith("**") && p.endsWith("**"))
-      return <strong key={i} className="font-semibold text-white">{p.slice(2,-2)}</strong>;
+      return <strong key={i} className="font-semibold text-white">{p.slice(2, -2)}</strong>;
     if (p.startsWith("*") && p.endsWith("*") && p.length > 2)
-      return <em key={i} className="italic text-slate-300">{p.slice(1,-1)}</em>;
+      return <em key={i} className="italic text-slate-300">{p.slice(1, -1)}</em>;
     if (p.startsWith("`") && p.endsWith("`") && p.length > 2)
-      return <code key={i} className="px-1.5 py-0.5 rounded bg-slate-700 text-emerald-300 text-[11px] font-mono">{p.slice(1,-1)}</code>;
+      return <code key={i} className="px-1.5 py-0.5 rounded bg-slate-700 text-emerald-300 text-[11px] font-mono">{p.slice(1, -1)}</code>;
     return p;
   });
 }
@@ -109,7 +170,7 @@ function MarkdownContent({ content }) {
       }
       elements.push(<ol key={`ol${i}`} className="list-decimal list-inside space-y-0.5 my-2 text-sm text-slate-300">{items}</ol>);
       continue;
-    } else if (line.includes("|") && lines[i+1]?.match(/^[\s|:-]+$/)) {
+    } else if (line.includes("|") && lines[i + 1]?.match(/^[\s|:-]+$/)) {
       const headers = line.split("|").map(s => s.trim()).filter(Boolean);
       i += 2;
       const rows = [];
@@ -124,7 +185,13 @@ function MarkdownContent({ content }) {
               <thead className="bg-slate-800 border-b border-slate-700">
                 <tr>{headers.map((h, hi) => <th key={hi} className="px-3 py-2 text-left text-[11px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{h}</th>)}</tr>
               </thead>
-              <tbody>{rows.map((r, ri) => <tr key={ri} className="border-b border-slate-800 last:border-0"><td key={ri}>{r.map((c, ci) => <td key={ci} className="px-3 py-2 text-slate-300 whitespace-nowrap">{c}</td>)}</td></tr>)}</tbody>
+              <tbody>
+                {rows.map((r, ri) => (
+                  <tr key={ri} className="border-b border-slate-800 last:border-0">
+                    {r.map((c, ci) => <td key={ci} className="px-3 py-2 text-slate-300 whitespace-nowrap">{renderInline(c)}</td>)}
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         </div>
@@ -139,11 +206,11 @@ function MarkdownContent({ content }) {
   return <div className="space-y-0.5">{elements}</div>;
 }
 
-// ── Inline chart renderer (dark card) ────────────────────────────────────────
+// ── Inline chart renderer ─────────────────────────────────────────────────────
 function DemoChartCard({ config }) {
   if (!config || !config.data || config.data.length === 0) return null;
   const { type, title, data, keys = [], unit = "" } = config;
-  const fmtTick = v => typeof v !== "number" ? v : v >= 1e9 ? `${(v/1e9).toFixed(1)}B` : v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(1)}k` : v;
+  const fmtTick = v => typeof v !== "number" ? v : v >= 1e9 ? `${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v;
   const fmtTip  = (v, n) => [unit === "$" ? `$${Number(v).toLocaleString()}` : Number(v).toLocaleString(), n];
   const resolvedKeys = keys.length
     ? keys
@@ -151,29 +218,34 @@ function DemoChartCard({ config }) {
 
   const chart = (() => {
     if (type === "pie") return (
-      <PieChart><Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={30} paddingAngle={2} label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
-        {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
-      </Pie><Tooltip formatter={(v,n) => [Number(v).toLocaleString(), n]} contentStyle={{ background:"#1e293b", border:"1px solid #334155", borderRadius:8, fontSize:11 }} /><Legend wrapperStyle={{ fontSize:10, color:"#94a3b8" }} /></PieChart>
+      <PieChart>
+        <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={30} paddingAngle={2}
+          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+          {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+        </Pie>
+        <Tooltip formatter={(v, n) => [Number(v).toLocaleString(), n]} contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} />
+        <Legend wrapperStyle={{ fontSize: 10, color: "#94a3b8" }} />
+      </PieChart>
     );
     if (type === "area") return (
-      <AreaChart data={data} margin={{ top:8, right:12, bottom:4, left:0 }}>
-        <defs>{resolvedKeys.map((k,i) => <linearGradient key={k.key} id={`dg-${k.key}`} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={k.color||PALETTE[i]} stopOpacity={0.35}/><stop offset="95%" stopColor={k.color||PALETTE[i]} stopOpacity={0}/></linearGradient>)}</defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#334155"/>
-        <XAxis dataKey="name" tick={{ fontSize:10, fill:"#94a3b8" }}/>
-        <YAxis tickFormatter={fmtTick} tick={{ fontSize:10, fill:"#94a3b8" }} width={44}/>
-        <Tooltip formatter={fmtTip} contentStyle={{ background:"#1e293b", border:"1px solid #334155", borderRadius:8, fontSize:11 }}/>
-        {resolvedKeys.map((k,i) => <Area key={k.key} type="monotone" dataKey={k.key} stroke={k.color||PALETTE[i]} fill={`url(#dg-${k.key})`} strokeWidth={2}/>)}
-        {resolvedKeys.length > 1 && <Legend wrapperStyle={{ fontSize:10, color:"#94a3b8" }}/>}
+      <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+        <defs>{resolvedKeys.map((k, i) => <linearGradient key={k.key} id={`dg-${k.key}`} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={k.color || PALETTE[i]} stopOpacity={0.35} /><stop offset="95%" stopColor={k.color || PALETTE[i]} stopOpacity={0} /></linearGradient>)}</defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+        <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#94a3b8" }} />
+        <YAxis tickFormatter={fmtTick} tick={{ fontSize: 10, fill: "#94a3b8" }} width={44} />
+        <Tooltip formatter={fmtTip} contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} />
+        {resolvedKeys.map((k, i) => <Area key={k.key} type="monotone" dataKey={k.key} stroke={k.color || PALETTE[i]} fill={`url(#dg-${k.key})`} strokeWidth={2} />)}
+        {resolvedKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 10, color: "#94a3b8" }} />}
       </AreaChart>
     );
     return (
-      <BarChart data={data} margin={{ top:8, right:12, bottom: data.length > 6 ? 24 : 4, left:0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#334155"/>
-        <XAxis dataKey="name" tick={{ fontSize:9, fill:"#94a3b8" }} interval={0} angle={data.length > 6 ? -30 : 0} textAnchor={data.length > 6 ? "end" : "middle"} height={data.length > 6 ? 50 : 20}/>
-        <YAxis tickFormatter={fmtTick} tick={{ fontSize:10, fill:"#94a3b8" }} width={44}/>
-        <Tooltip formatter={fmtTip} contentStyle={{ background:"#1e293b", border:"1px solid #334155", borderRadius:8, fontSize:11 }}/>
-        {resolvedKeys.map((k,i) => <Bar key={k.key} dataKey={k.key} fill={k.color||PALETTE[i]} radius={[4,4,0,0]} maxBarSize={48}/>)}
-        {resolvedKeys.length > 1 && <Legend wrapperStyle={{ fontSize:10, color:"#94a3b8" }}/>}
+      <BarChart data={data} margin={{ top: 8, right: 12, bottom: data.length > 6 ? 24 : 4, left: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+        <XAxis dataKey="name" tick={{ fontSize: 9, fill: "#94a3b8" }} interval={0} angle={data.length > 6 ? -30 : 0} textAnchor={data.length > 6 ? "end" : "middle"} height={data.length > 6 ? 50 : 20} />
+        <YAxis tickFormatter={fmtTick} tick={{ fontSize: 10, fill: "#94a3b8" }} width={44} />
+        <Tooltip formatter={fmtTip} contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} />
+        {resolvedKeys.map((k, i) => <Bar key={k.key} dataKey={k.key} fill={k.color || PALETTE[i]} radius={[4, 4, 0, 0]} maxBarSize={48} />)}
+        {resolvedKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 10, color: "#94a3b8" }} />}
       </BarChart>
     );
   })();
@@ -181,7 +253,7 @@ function DemoChartCard({ config }) {
   return (
     <div className="mt-3 bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-700/60">
-        <BarChart2 className="w-3.5 h-3.5 text-emerald-400 shrink-0"/>
+        <BarChart2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
         <span className="text-xs font-semibold text-slate-300 truncate">{title}</span>
       </div>
       <div className="p-3">
@@ -191,7 +263,7 @@ function DemoChartCard({ config }) {
   );
 }
 
-// ── Tool call badge strip ─────────────────────────────────────────────────────
+// ── Tool badges ───────────────────────────────────────────────────────────────
 function ToolBadges({ toolsCalled }) {
   if (!toolsCalled || toolsCalled.length === 0) return null;
   const label = t => t.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
@@ -199,14 +271,14 @@ function ToolBadges({ toolsCalled }) {
     <div className="flex flex-wrap gap-1.5 mt-2.5">
       {[...new Set(toolsCalled)].map(t => (
         <span key={t} className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-800 border border-slate-700 rounded-full px-2 py-0.5">
-          <Code2 className="w-2.5 h-2.5"/> {label(t)}
+          <Code2 className="w-2.5 h-2.5" /> {label(t)}
         </span>
       ))}
     </div>
   );
 }
 
-// ── Message component ─────────────────────────────────────────────────────────
+// ── Message ───────────────────────────────────────────────────────────────────
 function Message({ role, content, charts, citations, toolsCalled }) {
   const isUser = role === "user";
   return (
@@ -218,7 +290,6 @@ function Message({ role, content, charts, citations, toolsCalled }) {
         }`}>
         {isUser ? "You" : "I"}
       </div>
-
       <div className={`flex flex-col max-w-[85%] ${isUser ? "items-end" : "items-start"}`}>
         {!isUser && (
           <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest px-1 mb-1">Idjwi</span>
@@ -233,24 +304,18 @@ function Message({ role, content, charts, citations, toolsCalled }) {
             : <MarkdownContent content={content} />
           }
         </div>
-
-        {/* Charts */}
         {!isUser && charts && charts.length > 0 && (
           <div className="w-full space-y-2 mt-1">
             {charts.map((cfg, i) => <DemoChartCard key={i} config={cfg} />)}
           </div>
         )}
-
-        {/* Tool badges */}
         {!isUser && <ToolBadges toolsCalled={toolsCalled} />}
-
-        {/* Citations */}
         {!isUser && citations && citations.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2 px-1">
             {citations.map((c, i) => (
               <a key={i} href={c.url} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-emerald-400 transition-colors">
-                <ExternalLink className="w-2.5 h-2.5"/>{(c.title || c.url || "Source").slice(0,36)}
+                <ExternalLink className="w-2.5 h-2.5" />{(c.title || c.url || "Source").slice(0, 36)}
               </a>
             ))}
           </div>
@@ -267,9 +332,9 @@ function TypingIndicator() {
       <div className="flex flex-col items-start">
         <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest px-1 mb-1">Idjwi</span>
         <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1.5 items-center">
-          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay:"0ms" }}/>
-          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay:"150ms" }}/>
-          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay:"300ms" }}/>
+          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
         </div>
       </div>
     </div>
@@ -278,14 +343,14 @@ function TypingIndicator() {
 
 // ── Idjwi chat widget ─────────────────────────────────────────────────────────
 function IdjwiChat() {
-  const [messages, setMessages]       = useState([]);
+  const [messages, setMessages]       = useState([GREETING]);
   const [input, setInput]             = useState("");
   const [loading, setLoading]         = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
   const [started, setStarted]         = useState(false);
-  const inputRef    = useRef(null);
-  const bottomRef   = useRef(null);
-  const historyRef  = useRef([]);
+  const inputRef   = useRef(null);
+  const bottomRef  = useRef(null);
+  const historyRef = useRef([]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -297,8 +362,7 @@ function IdjwiChat() {
     setInput("");
     setStarted(true);
 
-    const userMsg = { role: "user", content: q };
-    setMessages(prev => [...prev, userMsg]);
+    setMessages(prev => [...prev, { role: "user", content: q }]);
     setLoading(true);
 
     const apiHistory = historyRef.current.map(m => ({ role: m.role, content: m.content }));
@@ -345,7 +409,7 @@ function IdjwiChat() {
 
   return (
     <div className="relative w-full max-w-4xl mx-auto">
-      <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/20 via-teal-500/10 to-emerald-500/20 rounded-3xl blur-xl"/>
+      <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/20 via-teal-500/10 to-emerald-500/20 rounded-3xl blur-xl" />
 
       <div className="relative bg-slate-900/95 backdrop-blur border border-slate-700/60 rounded-3xl overflow-hidden shadow-2xl shadow-black/50">
 
@@ -355,67 +419,55 @@ function IdjwiChat() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
               <span className="text-white font-black text-base">I</span>
             </div>
-            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-slate-950 animate-pulse"/>
+            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-slate-950 animate-pulse" />
           </div>
           <div>
             <p className="text-sm font-semibold text-white">Idjwi</p>
-            <p className="text-[11px] text-emerald-400">Newsconseen Intelligence · Full demo — all tools active</p>
+            <p className="text-[11px] text-emerald-400">Newsconseen Intelligence · All tools active</p>
           </div>
-          <div className="ml-auto flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-3 text-[10px] text-slate-500">
-              <span className="flex items-center gap-1"><Globe className="w-3 h-3 text-emerald-500"/> Public data</span>
-              <span className="flex items-center gap-1"><Brain className="w-3 h-3 text-violet-400"/> All tools</span>
-              <span className="flex items-center gap-1"><BarChart2 className="w-3 h-3 text-blue-400"/> Charts</span>
-            </div>
+          <div className="ml-auto hidden sm:flex items-center gap-4 text-[10px] text-slate-500">
+            <span className="flex items-center gap-1"><Globe className="w-3 h-3 text-emerald-500" /> Public data</span>
+            <span className="flex items-center gap-1"><Brain className="w-3 h-3 text-violet-400" /> All tools</span>
+            <span className="flex items-center gap-1"><BarChart2 className="w-3 h-3 text-blue-400" /> Charts</span>
           </div>
         </div>
 
-        {/* Messages area — large */}
-        <div className="h-[520px] overflow-y-auto px-5 py-5 space-y-6 scroll-smooth">
-          {!started && messages.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center text-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center">
-                <Brain className="w-7 h-7 text-emerald-400"/>
-              </div>
-              <div>
-                <p className="text-slate-200 font-semibold text-base">Ask Idjwi anything</p>
-                <p className="text-slate-500 text-sm mt-1.5 max-w-md">
-                  This is a full demo of the Newsconseen copilot. All tools are active.
-                  Try market data, economic research, or ask how Newsconseen works.
-                </p>
-              </div>
-              <div className="flex flex-wrap justify-center gap-2 max-w-lg">
-                {STARTERS.slice(0, 6).map((s, i) => (
-                  <button key={i} onClick={() => send(s.q)} disabled={loading}
-                    className="text-xs text-slate-400 border border-slate-700 hover:border-emerald-500/50 hover:text-emerald-400 rounded-full px-3 py-1.5 transition-all hover:bg-emerald-500/5 disabled:opacity-40">
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
+        {/* Messages */}
+        <div className="h-[55vh] min-h-[380px] md:h-[520px] overflow-y-auto px-5 py-5 space-y-6 scroll-smooth">
           {messages.map((m, i) => (
             <Message key={i} role={m.role} content={m.content}
               charts={m.charts} citations={m.citations} toolsCalled={m.toolsCalled} />
           ))}
-          {loading && <TypingIndicator/>}
+
+          {/* Starter chips — visible before first user message */}
+          {!started && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {STARTERS.slice(0, 6).map((s, i) => (
+                <button key={i} onClick={() => send(s.q)} disabled={loading}
+                  className="text-xs text-slate-400 border border-slate-700 hover:border-emerald-500/50 hover:text-emerald-400 rounded-full px-3 py-1.5 transition-all hover:bg-emerald-500/5 disabled:opacity-40">
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {loading && <TypingIndicator />}
 
           {rateLimited && (
             <div className="flex items-start gap-2 text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-xs">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5"/>
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>Demo limit reached. <a href="/onboarding" className="underline font-medium">Sign up free</a> for unlimited Idjwi access with your own data.</span>
             </div>
           )}
-          <div ref={bottomRef}/>
+          <div ref={bottomRef} />
         </div>
 
-        {/* Starter chips — shown after first message too */}
+        {/* Post-conversation chips */}
         {started && !rateLimited && (
-          <div className="px-5 pt-2 flex flex-wrap gap-1.5 border-t border-slate-800/40">
+          <div className="px-5 pt-2 pb-1 flex gap-1.5 border-t border-slate-800/40 overflow-x-auto">
             {STARTERS.slice(0, 4).map((s, i) => (
               <button key={i} onClick={() => send(s.q)} disabled={loading}
-                className="text-[11px] text-slate-500 border border-slate-800 hover:border-slate-600 hover:text-slate-300 rounded-full px-2.5 py-1 transition-all disabled:opacity-40">
+                className="text-[11px] text-slate-500 border border-slate-800 hover:border-slate-600 hover:text-slate-300 rounded-full px-2.5 py-1 transition-all disabled:opacity-40 whitespace-nowrap shrink-0">
                 {s.label}
               </button>
             ))}
@@ -427,20 +479,148 @@ function IdjwiChat() {
           <div className="flex gap-2 items-end bg-slate-800/60 rounded-2xl border border-slate-700/60 focus-within:border-emerald-500/40 transition-colors px-4 py-3">
             <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
               rows={1} disabled={loading || rateLimited}
-              placeholder="Ask about market data, how Newsconseen works, your industry, exchange rates…"
+              placeholder="Ask about market data, your industry, how Newsconseen works…"
               className="flex-1 bg-transparent text-sm text-slate-200 placeholder-slate-500 resize-none outline-none leading-relaxed disabled:opacity-40 max-h-32 overflow-y-auto"
-              style={{ minHeight: "24px" }}/>
+              style={{ minHeight: "24px" }} />
             <button onClick={() => send()} disabled={loading || !input.trim() || rateLimited}
               className="shrink-0 w-8 h-8 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors">
               {loading
-                ? <Loader2 className="w-4 h-4 text-white animate-spin"/>
-                : <Send className="w-3.5 h-3.5 text-white"/>
+                ? <Loader2 className="w-4 h-4 text-white animate-spin" />
+                : <Send className="w-3.5 h-3.5 text-white" />
               }
             </button>
           </div>
           <p className="text-[10px] text-slate-600 mt-1.5 text-center">
             Idjwi · Powered by Claude · Full capabilities demo · No company data connected
           </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── App mockup (interactive screenshot proxy) ─────────────────────────────────
+function DashboardTab() {
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        {[
+          { label: "Active Clients",  val: "1,247", trend: "+12%",         ok: true },
+          { label: "Revenue (MTD)",   val: "$84,320", trend: "+8%",        ok: true },
+          { label: "Tasks Due Today", val: "23",    trend: "6 overdue",    ok: false },
+          { label: "Churn Risk",      val: "7",     trend: "Action needed", ok: false },
+        ].map(s => (
+          <div key={s.label} className="bg-slate-800/60 border border-slate-700/40 rounded-xl p-3">
+            <p className="text-[9px] text-slate-500 mb-1 uppercase tracking-wide">{s.label}</p>
+            <p className="text-sm font-bold text-white">{s.val}</p>
+            <p className={`text-[10px] ${s.ok ? "text-emerald-400" : "text-amber-400"}`}>{s.trend}</p>
+          </div>
+        ))}
+      </div>
+      <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-3 flex items-center justify-center h-20">
+        <BarChart2 className="w-4 h-4 text-slate-600 mr-2" />
+        <span className="text-xs text-slate-600">Revenue · 6-month trend chart</span>
+      </div>
+    </div>
+  );
+}
+
+function CopilotTab() {
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2 justify-end">
+        <div className="bg-slate-700 rounded-xl rounded-tr-sm px-3 py-2 text-xs text-slate-300 max-w-[80%]">
+          Which clients are at risk of churning?
+        </div>
+        <div className="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center text-[9px] text-slate-400 shrink-0 font-medium">Y</div>
+      </div>
+      <div className="flex gap-2">
+        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-[9px] text-white shrink-0 font-bold">I</div>
+        <div className="bg-slate-800/80 border border-slate-700/50 rounded-xl rounded-tl-sm px-3 py-2 text-xs text-slate-300 space-y-1 max-w-[90%]">
+          <p>Based on your data, <span className="text-white font-semibold">7 clients</span> show high churn signals:</p>
+          <p className="text-slate-400">· Sarah M. — no activity 42 days, outstanding invoice</p>
+          <p className="text-slate-400">· Clinic B — last task completed 3 weeks late</p>
+          <p className="text-emerald-400 text-[10px] mt-1.5">↳ Retention agent created follow-up tasks for all 7</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AgentsTab() {
+  return (
+    <div className="space-y-2">
+      {[
+        { agent: "Revenue Agent",    action: "3 overdue invoices — WhatsApp reminders sent",     time: "2m ago",  status: "done" },
+        { agent: "Retention Agent",  action: "7 clients declining engagement — tasks created",   time: "14m ago", status: "done" },
+        { agent: "Inventory Agent",  action: "Stock below threshold — reorder task created",     time: "1h ago",  status: "pending" },
+        { agent: "Compliance Agent", action: "Running OFAC screen on 12 new entities",          time: "now",     status: "running" },
+      ].map((a, i) => (
+        <div key={i} className="flex items-start gap-2 bg-slate-800/40 border border-slate-700/40 rounded-xl p-2.5">
+          <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
+            a.status === "done" ? "bg-emerald-400" : a.status === "running" ? "bg-blue-400 animate-pulse" : "bg-amber-400"
+          }`} />
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-semibold text-slate-400">{a.agent}</p>
+            <p className="text-[11px] text-slate-300 leading-snug">{a.action}</p>
+          </div>
+          <span className="text-[10px] text-slate-600 shrink-0">{a.time}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AppMockup() {
+  const [tab, setTab] = useState("dashboard");
+  const TABS = [
+    { id: "dashboard", label: "Dashboard", Icon: BarChart2 },
+    { id: "copilot",   label: "Copilot",   Icon: Brain },
+    { id: "agents",    label: "Agents",     Icon: Zap },
+  ];
+  const SIDEBAR = [BarChart2, Users, Package, CheckSquare, Database, Brain];
+
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl shadow-black/60">
+      {/* Browser chrome */}
+      <div className="bg-slate-950 flex items-center gap-3 px-4 py-3 border-b border-slate-800">
+        <div className="flex gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-500/60" />
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/60" />
+        </div>
+        <div className="flex-1 bg-slate-800 rounded-md px-3 py-1 text-[11px] text-slate-500">
+          app.newsconseen.com
+        </div>
+      </div>
+
+      <div className="flex h-[300px]">
+        {/* Sidebar */}
+        <div className="w-12 bg-slate-950/80 border-r border-slate-800 flex flex-col items-center py-3 gap-2.5">
+          {SIDEBAR.map((Icon, i) => (
+            <div key={i} className={`w-8 h-8 rounded-lg flex items-center justify-center ${i === 0 ? "bg-emerald-500/20" : ""}`}>
+              <Icon className={`w-4 h-4 ${i === 0 ? "text-emerald-400" : "text-slate-600"}`} />
+            </div>
+          ))}
+        </div>
+
+        {/* Main */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex items-center gap-0 px-4 border-b border-slate-800 bg-slate-950/40">
+            {TABS.map(({ id, label, Icon }) => (
+              <button key={id} onClick={() => setTab(id)}
+                className={`flex items-center gap-1.5 text-xs px-3 py-2.5 font-medium transition-colors border-b-2 ${
+                  tab === id ? "text-emerald-400 border-emerald-400" : "text-slate-500 border-transparent hover:text-slate-300"
+                }`}>
+                <Icon className="w-3 h-3" /> {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            {tab === "dashboard" && <DashboardTab />}
+            {tab === "copilot"   && <CopilotTab />}
+            {tab === "agents"    && <AgentsTab />}
+          </div>
         </div>
       </div>
     </div>
@@ -471,8 +651,8 @@ export default function Landing() {
         </div>
         <div className="hidden md:flex items-center gap-8 text-sm text-slate-400">
           <a href="#how-it-works" className="hover:text-white transition-colors">How it works</a>
-          <a href="#industries" className="hover:text-white transition-colors">Industries</a>
-          <a href="#features" className="hover:text-white transition-colors">Features</a>
+          <a href="#industries"   className="hover:text-white transition-colors">Industries</a>
+          <a href="#pricing"      className="hover:text-white transition-colors">Pricing</a>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => navigate("/app")}
@@ -487,38 +667,65 @@ export default function Landing() {
       </nav>
 
       {/* HERO */}
-      <section className="relative pt-32 pb-20 px-6">
+      <section className="relative pt-32 pb-16 px-6">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-emerald-500/4 rounded-full blur-3xl"/>
-          <div className="absolute top-24 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-teal-500/6 rounded-full blur-2xl"/>
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-emerald-500/4 rounded-full blur-3xl" />
+          <div className="absolute top-24 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-teal-500/6 rounded-full blur-2xl" />
         </div>
 
         <div className="relative max-w-5xl mx-auto">
           <div className="text-center mb-10">
             <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-4 py-1.5 mb-6">
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"/>
+              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
               <span className="text-xs font-semibold text-emerald-400 tracking-wider uppercase">Autonomous SME Operating System</span>
             </div>
 
-            <h1 className="text-5xl md:text-7xl font-black leading-none tracking-tight mb-4">
-              Meet{" "}
+            <h1 className="text-5xl md:text-7xl font-black leading-none tracking-tight mb-5">
+              Your team runs on{" "}
               <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 bg-clip-text text-transparent">
-                Idjwi.
+                spreadsheets.
               </span>
             </h1>
 
             <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mb-3 leading-relaxed">
-              The intelligence layer of Newsconseen. This is a live demo of the full copilot —
-              all tools active, real public data, charts and everything. Connect your data to unlock it for your organisation.
+              Scattered data, manual admin, zero visibility across your organisation.
+              Newsconseen replaces all three with one autonomous operating system — and Idjwi runs it.
             </p>
 
             <p className="text-sm text-slate-500 mb-10">
-              Live market data · Web research · Charts · ML insights · App navigation — no signup needed to try.
+              Talk to Idjwi below. No signup required. All tools active.
             </p>
           </div>
 
-          {/* Idjwi — full width, large */}
-          <IdjwiChat/>
+          <IdjwiChat />
+        </div>
+      </section>
+
+      {/* SOCIAL PROOF */}
+      <section className="py-16 px-6">
+        <div className="max-w-6xl mx-auto">
+          <p className="text-center text-xs font-semibold text-slate-500 uppercase tracking-widest mb-10">
+            What operators say
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {TESTIMONIALS.map((t, i) => (
+              <div key={i} className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 flex flex-col">
+                <div className="flex gap-0.5 mb-4">
+                  {[...Array(5)].map((_, j) => <Star key={j} className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />)}
+                </div>
+                <p className="text-sm text-slate-300 leading-relaxed flex-1 mb-5">"{t.quote}"</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-xs font-bold text-emerald-400">
+                    {t.initials}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-white">{t.role}</p>
+                    <p className="text-[10px] text-slate-500">{t.org}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -526,29 +733,29 @@ export default function Landing() {
       <section className="border-y border-slate-800/60 py-5 px-6 bg-slate-900/30">
         <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-center gap-8">
           {[
-            { icon: Brain,   label: "8 Autonomous Agents" },
-            { icon: Wifi,    label: "35 Connectors" },
-            { icon: Cpu,     label: "ML Models built-in" },
-            { icon: Globe,   label: "Live public data APIs" },
-            { icon: Shield,  label: "OFAC · AML · SOC 2" },
+            { icon: Brain,     label: "8 Autonomous Agents" },
+            { icon: Wifi,      label: "35 Connectors" },
+            { icon: Cpu,       label: "ML Models built-in" },
+            { icon: Globe,     label: "Live public data APIs" },
+            { icon: Shield,    label: "OFAC · AML · SOC 2" },
             { icon: GitBranch, label: "Multi-tenant network" },
           ].map(({ icon: Icon, label }) => (
             <div key={label} className="flex items-center gap-2 text-slate-400">
-              <Icon className="w-4 h-4 text-emerald-500"/>
+              <Icon className="w-4 h-4 text-emerald-500" />
               <span className="text-xs font-medium">{label}</span>
             </div>
           ))}
         </div>
       </section>
 
-      {/* IDJWI CAPABILITIES */}
+      {/* CAPABILITIES */}
       <section className="py-24 px-6" id="features">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-14">
-            <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">What Idjwi can do in demo mode</p>
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Intelligence before your data connects</h2>
+            <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">Full operational intelligence</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">What Idjwi does for your organisation every day</h2>
             <p className="text-slate-400 max-w-xl mx-auto">
-              Before you add a single record, Idjwi already has access to a world of public intelligence. This is live — try it above.
+              Connected to your data, Idjwi runs continuously — not just when you ask.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -558,7 +765,7 @@ export default function Landing() {
               return (
                 <div key={cap.title} className={`${c.bg} border ${c.border} rounded-2xl p-6 hover:scale-[1.02] transition-transform`}>
                   <div className={`w-10 h-10 rounded-xl ${c.bg} border ${c.border} flex items-center justify-center mb-4`}>
-                    <Icon className={`w-5 h-5 ${c.text}`}/>
+                    <Icon className={`w-5 h-5 ${c.text}`} />
                   </div>
                   <h3 className="text-sm font-semibold text-white mb-2">{cap.title}</h3>
                   <p className="text-xs text-slate-400 leading-relaxed">{cap.desc}</p>
@@ -569,8 +776,22 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* APP MOCKUP */}
+      <section className="py-16 px-6 bg-slate-900/20">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-10">
+            <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">Inside Newsconseen</p>
+            <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">One platform. Three views.</h2>
+            <p className="text-slate-400 text-sm max-w-lg mx-auto">
+              Dashboard for visibility. Copilot for answers. Agents for action. All connected to the same data.
+            </p>
+          </div>
+          <AppMockup />
+        </div>
+      </section>
+
       {/* HOW IT WORKS */}
-      <section className="py-24 px-6 bg-slate-900/20" id="how-it-works">
+      <section className="py-24 px-6" id="how-it-works">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-14">
             <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">Architecture</p>
@@ -593,7 +814,7 @@ export default function Landing() {
                   <p className="text-sm text-slate-400 leading-relaxed">{layer.desc}</p>
                   {layer.number !== "03" && (
                     <div className="mt-4 flex items-center gap-1 text-xs text-slate-600">
-                      <ArrowRight className="w-3.5 h-3.5"/> feeds next layer
+                      <ArrowRight className="w-3.5 h-3.5" /> feeds next layer
                     </div>
                   )}
                 </div>
@@ -604,7 +825,7 @@ export default function Landing() {
       </section>
 
       {/* INDUSTRIES */}
-      <section className="py-24 px-6" id="industries">
+      <section className="py-24 px-6 bg-slate-900/20" id="industries">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-14">
             <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">Universal ontology</p>
@@ -616,7 +837,8 @@ export default function Landing() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {INDUSTRIES.map(ind => (
               <div key={ind.name}
-                className="bg-slate-900/50 border border-slate-800/60 rounded-2xl p-5 hover:border-slate-700 transition-colors group">
+                className="bg-slate-900/50 border border-slate-800/60 rounded-2xl p-5 hover:border-slate-700 transition-colors group cursor-pointer"
+                onClick={() => document.getElementById("idjwi-input")?.focus()}>
                 <span className="text-3xl mb-3 block">{ind.emoji}</span>
                 <h3 className="text-sm font-semibold text-white mb-1.5 group-hover:text-emerald-400 transition-colors">{ind.name}</h3>
                 <p className="text-xs text-slate-500">{ind.example}</p>
@@ -626,13 +848,13 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* AGENT + CONNECTORS */}
-      <section className="py-24 px-6 bg-slate-900/20">
+      {/* AGENTS + CONNECTORS */}
+      <section className="py-24 px-6">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="bg-gradient-to-br from-violet-500/10 to-violet-900/10 border border-violet-500/20 rounded-3xl p-8">
               <div className="w-12 h-12 bg-violet-500/10 border border-violet-500/20 rounded-2xl flex items-center justify-center mb-5">
-                <Brain className="w-6 h-6 text-violet-400"/>
+                <Brain className="w-6 h-6 text-violet-400" />
               </div>
               <h3 className="text-xl font-bold text-white mb-3">8 Autonomous Agents</h3>
               <p className="text-slate-400 text-sm leading-relaxed mb-5">
@@ -646,7 +868,7 @@ export default function Landing() {
             </div>
             <div className="bg-gradient-to-br from-blue-500/10 to-blue-900/10 border border-blue-500/20 rounded-3xl p-8">
               <div className="w-12 h-12 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center justify-center mb-5">
-                <Wifi className="w-6 h-6 text-blue-400"/>
+                <Wifi className="w-6 h-6 text-blue-400" />
               </div>
               <h3 className="text-xl font-bold text-white mb-3">35 Connectors</h3>
               <p className="text-slate-400 text-sm leading-relaxed mb-5">
@@ -663,7 +885,7 @@ export default function Landing() {
       </section>
 
       {/* ENRICHMENT */}
-      <section className="py-24 px-6">
+      <section className="py-24 px-6 bg-slate-900/20">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-14">
             <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">Enrichment engine</p>
@@ -672,17 +894,17 @@ export default function Landing() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { icon: Shield,   label: "OFAC Sanctions",   sub: "SDN screening on every entity" },
-              { icon: Globe,    label: "Geocoding",         sub: "Coordinates from any address" },
-              { icon: Package,  label: "Drug data",         sub: "RxNorm, FDA, dosage, interactions" },
-              { icon: TrendingUp, label: "Churn prediction", sub: "ML-predicted risk on every person" },
-              { icon: BarChart2, label: "Revenue trend",    sub: "Growth trajectory per enterprise" },
-              { icon: AlertCircle, label: "AML flags",      sub: "Anti-money laundering signals" },
-              { icon: Database, label: "Company registry",  sub: "OpenCorporates enrichment" },
-              { icon: RefreshCw, label: "FX rates",         sub: "Live exchange rates on every tx" },
+              { icon: Shield,     label: "OFAC Sanctions",    sub: "SDN screening on every entity" },
+              { icon: Globe,      label: "Geocoding",          sub: "Coordinates from any address" },
+              { icon: Package,    label: "Drug data",          sub: "RxNorm, FDA, dosage, interactions" },
+              { icon: TrendingUp, label: "Churn prediction",   sub: "ML-predicted risk on every person" },
+              { icon: BarChart2,  label: "Revenue trend",      sub: "Growth trajectory per enterprise" },
+              { icon: AlertCircle, label: "AML flags",         sub: "Anti-money laundering signals" },
+              { icon: Database,   label: "Company registry",   sub: "OpenCorporates enrichment" },
+              { icon: RefreshCw,  label: "FX rates",           sub: "Live exchange rates on every tx" },
             ].map(({ icon: Icon, label, sub }) => (
               <div key={label} className="bg-slate-900/50 border border-slate-800/60 rounded-xl p-4 text-center">
-                <Icon className="w-5 h-5 text-emerald-400 mx-auto mb-2"/>
+                <Icon className="w-5 h-5 text-emerald-400 mx-auto mb-2" />
                 <p className="text-xs font-semibold text-white mb-1">{label}</p>
                 <p className="text-[10px] text-slate-500">{sub}</p>
               </div>
@@ -691,31 +913,81 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* PRICING */}
+      <section className="py-24 px-6" id="pricing">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-14">
+            <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">Pricing</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Simple, transparent pricing</h2>
+            <p className="text-slate-400 max-w-md mx-auto">Start free. Scale when you need to. No lock-in.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {PRICING_TIERS.map(tier => (
+              <div key={tier.name} className={`relative bg-slate-900/60 border rounded-2xl p-6 flex flex-col ${
+                tier.highlighted
+                  ? "border-emerald-500/40 shadow-xl shadow-emerald-500/10"
+                  : "border-slate-800"
+              }`}>
+                {tier.highlighted && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="bg-emerald-600 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Most popular</span>
+                  </div>
+                )}
+                <div className="mb-5">
+                  <p className="text-xs font-semibold text-slate-400 mb-1">{tier.name}</p>
+                  <p className={`text-2xl font-black ${tier.highlighted ? "text-emerald-400" : "text-white"}`}>{tier.price}</p>
+                  <p className="text-xs text-slate-500 mt-1">{tier.sub}</p>
+                </div>
+                <ul className="space-y-2.5 flex-1 mb-6">
+                  {tier.features.map(f => (
+                    <li key={f} className="flex items-start gap-2 text-xs text-slate-300">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <a href={tier.href}
+                  className={`w-full py-2.5 rounded-xl text-sm font-semibold text-center transition-colors block ${
+                    tier.highlighted
+                      ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
+                      : "bg-slate-800 hover:bg-slate-700 text-slate-200"
+                  }`}>
+                  {tier.cta}
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
-      <section className="py-24 px-6 relative">
+      <section className="py-24 px-6 relative bg-slate-900/20">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-emerald-500/5 rounded-full blur-3xl"/>
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-emerald-500/5 rounded-full blur-3xl" />
         </div>
         <div className="relative max-w-2xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-4 py-1.5 mb-6">
-            <Zap className="w-3.5 h-3.5 text-emerald-400"/>
-            <span className="text-xs font-semibold text-emerald-400">Get started in 5 minutes</span>
+            <Zap className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-xs font-semibold text-emerald-400">Set up in under 5 minutes</span>
           </div>
           <h2 className="text-4xl md:text-5xl font-black text-white mb-4 leading-tight">
-            Ready to run your organisation{" "}
-            <span className="bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">autonomously?</span>
+            You've seen what Idjwi can do.{" "}
+            <span className="bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">
+              Imagine it on your data.
+            </span>
           </h2>
           <p className="text-slate-400 mb-10">
-            Set up your organisation in under 5 minutes. Idjwi starts working the moment you add your first record.
+            Everything Idjwi just showed you — market analysis, charts, live data — is the demo.
+            Connect your organisation and Idjwi starts answering about your actual clients, revenue, staff, and risk.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center max-w-md mx-auto">
             <input type="email" value={email} onChange={e => setEmail(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleGetStarted()}
               placeholder="your@email.com"
-              className="flex-1 bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none focus:border-emerald-500/60 transition-colors"/>
+              className="flex-1 bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none focus:border-emerald-500/60 transition-colors" />
             <button onClick={handleGetStarted}
               className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-6 py-3 rounded-xl transition-colors shadow-xl shadow-emerald-500/20 flex items-center gap-2 justify-center whitespace-nowrap">
-              Get started <ArrowRight className="w-4 h-4"/>
+              Get started <ArrowRight className="w-4 h-4" />
             </button>
           </div>
           <p className="text-xs text-slate-600 mt-4">No credit card required. Free to start.</p>
@@ -733,9 +1005,10 @@ export default function Landing() {
             <span className="text-slate-600 text-xs">· Autonomous SME Operating System</span>
           </div>
           <div className="flex items-center gap-6 text-xs text-slate-500">
-            <a href="/pricing" className="hover:text-slate-300 transition-colors">Pricing</a>
+            <a href="#pricing"    className="hover:text-slate-300 transition-colors">Pricing</a>
+            <a href="#industries" className="hover:text-slate-300 transition-colors">Industries</a>
             <a href="/onboarding" className="hover:text-slate-300 transition-colors">Get started</a>
-            <span>Powered by <span className="text-emerald-500">Idjwi</span> (ee-JEE-wee)</span>
+            <span>Intelligence by <span className="text-emerald-500">Idjwi</span></span>
           </div>
         </div>
       </footer>
