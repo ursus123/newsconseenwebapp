@@ -417,80 +417,115 @@ function IdjwiChat() {
     let finalTools   = [];
 
     try {
-      const resp = await fetch(`${RAILWAY_URL}/copilot/demo-stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q, history: userHistory }),
-      });
+      // Try SSE streaming first; fall back to the sync endpoint if unavailable
+      let usedStreaming = false;
+      try {
+        const resp = await fetch(`${RAILWAY_URL}/copilot/demo-stream`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: q, history: userHistory }),
+        });
 
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        usedStreaming = true;
 
-      const reader  = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+        const reader  = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
 
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          let event;
-          try { event = JSON.parse(line.slice(6)); } catch { continue; }
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            let event;
+            try { event = JSON.parse(line.slice(6)); } catch { continue; }
 
-          if (event.type === "tool_start") {
-            const lbl = `${toolLabel(event.tool)}…`;
-            setProgressLabel(lbl);
-            if (!finalTools.includes(event.tool)) finalTools.push(event.tool);
+            if (event.type === "tool_start") {
+              const lbl = `${toolLabel(event.tool)}…`;
+              setProgressLabel(lbl);
+              if (!finalTools.includes(event.tool)) finalTools.push(event.tool);
 
-          } else if (event.type === "tool_done") {
-            setProgressLabel("Processing results…");
+            } else if (event.type === "tool_done") {
+              setProgressLabel("Processing results…");
 
-          } else if (event.type === "text_delta") {
-            finalContent += event.text;
-            setProgressLabel(null);
-            updateMsg(msgId, { content: finalContent });
+            } else if (event.type === "text_delta") {
+              finalContent += event.text;
+              setProgressLabel(null);
+              updateMsg(msgId, { content: finalContent });
 
-          } else if (event.type === "chart") {
-            finalCharts = [...finalCharts, event.config];
-            updateMsg(msgId, { charts: finalCharts });
-            trackEvent("chart_rendered", { type: event.config?.type });
+            } else if (event.type === "chart") {
+              finalCharts = [...finalCharts, event.config];
+              updateMsg(msgId, { charts: finalCharts });
+              trackEvent("chart_rendered", { type: event.config?.type });
 
-          } else if (event.type === "done") {
-            updateMsg(msgId, {
-              content:     finalContent || "Done.",
-              citations:   event.citations || [],
-              toolsCalled: finalTools,
-              streaming:   false,
-            });
-            if (event.rate_limited) setRateLimited(true);
-            trackEvent("response_success", { tools: finalTools.length, has_chart: finalCharts.length > 0 });
-            historyRef.current = [
-              ...historyRef.current,
-              { role: "user",      content: q },
-              { role: "assistant", content: finalContent },
-            ].slice(-16);
+            } else if (event.type === "done") {
+              updateMsg(msgId, {
+                content:     finalContent || "Done.",
+                citations:   event.citations || [],
+                toolsCalled: finalTools,
+                streaming:   false,
+              });
+              if (event.rate_limited) setRateLimited(true);
+              trackEvent("response_success", { tools: finalTools.length, has_chart: finalCharts.length > 0 });
+              historyRef.current = [
+                ...historyRef.current,
+                { role: "user",      content: q },
+                { role: "assistant", content: finalContent },
+              ].slice(-16);
 
-          } else if (event.type === "rate_limited") {
-            setRateLimited(true);
-            updateMsg(msgId, { content: "Demo limit reached.", streaming: false });
+            } else if (event.type === "rate_limited") {
+              setRateLimited(true);
+              updateMsg(msgId, { content: "Demo limit reached.", streaming: false });
 
-          } else if (event.type === "error") {
-            updateMsg(msgId, {
-              content:  finalContent || "Something went wrong. Please try again.",
-              streaming: false,
-            });
-            trackEvent("response_error", { has_partial: finalContent.length > 0 });
+            } else if (event.type === "error") {
+              updateMsg(msgId, {
+                content:  finalContent || "Something went wrong. Please try again.",
+                streaming: false,
+              });
+              trackEvent("response_error", { has_partial: finalContent.length > 0 });
+            }
           }
         }
-      }
 
-      // Ensure streaming flag is always cleared
-      updateMsg(msgId, { streaming: false });
+        // Ensure streaming flag is always cleared
+        updateMsg(msgId, { streaming: false });
+
+      } catch (_streamErr) {
+        if (usedStreaming) throw _streamErr; // Re-throw real stream errors
+
+        // Streaming endpoint not available — fall back to sync endpoint
+        setProgressLabel("Thinking…");
+        const resp = await fetch(`${RAILWAY_URL}/copilot/demo-ask`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: q, history: userHistory }),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        finalContent = data.answer || "";
+        finalCharts  = data.charts || [];
+        finalTools   = data.tools_called || [];
+        updateMsg(msgId, {
+          content:     finalContent,
+          charts:      finalCharts,
+          citations:   data.citations || [],
+          toolsCalled: finalTools,
+          streaming:   false,
+        });
+        if (data.rate_limited) setRateLimited(true);
+        historyRef.current = [
+          ...historyRef.current,
+          { role: "user",      content: q },
+          { role: "assistant", content: finalContent },
+        ].slice(-16);
+        trackEvent("response_success", { tools: finalTools.length, has_chart: finalCharts.length > 0, fallback: true });
+      }
 
     } catch (e) {
       updateMsg(msgId, {
