@@ -349,6 +349,20 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, appUser
               </Field>
             </div>
 
+            {form.related_item && (
+              <Field label="Quantity Used / Administered" hint="Units of the linked item consumed or administered during this task">
+                <Input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={form.quantity_used ?? ""}
+                  onChange={(e) => set("quantity_used", e.target.value === "" ? null : parseFloat(e.target.value))}
+                  className="rounded-xl"
+                  placeholder="e.g. 2"
+                />
+              </Field>
+            )}
+
             <Field label="Related Service">
               <Select value={form.related_service || ""} onValueChange={(v) => set("related_service", v)}>
                 <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select service..." /></SelectTrigger>
@@ -380,16 +394,47 @@ export default function TaskForm({ open, onClose, onSubmit, initialData, appUser
 
             <SectionDivider label="Execution Result" />
 
-            <Field label="Outcome">
-              <Select value={form.outcome || "pending"} onValueChange={(v) => set("outcome", v)}>
-                <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Outcome">
+                <Select value={form.outcome || "pending"} onValueChange={(v) => set("outcome", v)}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="partially_done">Partially Done</SelectItem>
+                    <SelectItem value="refused">Refused</SelectItem>
+                    <SelectItem value="missed">Missed</SelectItem>
+                    <SelectItem value="on_hold">On Hold</SelectItem>
+                    <SelectItem value="loa">LOA / Away</SelectItem>
+                    <SelectItem value="not_applicable">Not Applicable</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Actual Completion Time" hint="Time task was actually done">
+                <Input type="time" value={form.actual_completion_time || ""} onChange={(e) => set("actual_completion_time", e.target.value)} className="rounded-xl" />
+              </Field>
+            </div>
+
+            <Field label="Outcome Reason" hint="Operator-defined reason — why this outcome occurred">
+              <TaxonomySelect
+                entityType="task"
+                fieldName="outcome_reason"
+                parentValue={form.outcome || "pending"}
+                companyId={currentUser?.company_id}
+                value={form.outcome_reason || ""}
+                onChange={(v) => set("outcome_reason", v)}
+              />
+            </Field>
+
+            <Field label="Completed By" hint="Person who actually carried out this task">
+              <Select value={form.completed_by || ""} onValueChange={(v) => set("completed_by", v)}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select person..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="partially_done">Partially Done</SelectItem>
-                  <SelectItem value="refused">Refused</SelectItem>
-                  <SelectItem value="missed">Missed</SelectItem>
-                  <SelectItem value="not_applicable">Not Applicable</SelectItem>
+                  <SelectItem value={null}>— Not recorded —</SelectItem>
+                  {(people || []).map((p) => {
+                    const name = p.preferred_name || `${p.first_name} ${p.last_name}`.trim();
+                    return <SelectItem key={p.id} value={name}>{name}</SelectItem>;
+                  })}
                 </SelectContent>
               </Select>
             </Field>

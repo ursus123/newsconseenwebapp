@@ -671,15 +671,20 @@ def get_task_summary(
     Used for: "how are visits going", "completion rate", "what tasks are overdue"
     """
     # task_summary columns: task_type, status, total_tasks, completed_tasks,
-    # completion_rate_pct, overdue_tasks, tasks_last_7d, tasks_last_30d
+    # completion_rate_pct, overdue_tasks, tasks_last_7d, tasks_last_30d,
+    # refused_tasks, missed_tasks, avg_completion_delay_mins, total_quantity_used
     sql = """
         SELECT
             task_type,
             status,
-            SUM(total_tasks)        AS total_tasks,
-            SUM(completed_tasks)    AS completed_tasks,
-            SUM(overdue_tasks)      AS overdue_tasks,
-            ROUND(AVG(completion_rate_pct), 1) AS completion_rate_pct
+            SUM(total_tasks)                    AS total_tasks,
+            SUM(completed_tasks)                AS completed_tasks,
+            SUM(overdue_tasks)                  AS overdue_tasks,
+            SUM(refused_tasks)                  AS refused_tasks,
+            SUM(missed_tasks)                   AS missed_tasks,
+            ROUND(AVG(completion_rate_pct), 1)  AS completion_rate_pct,
+            ROUND(AVG(avg_completion_delay_mins), 1) AS avg_completion_delay_mins,
+            SUM(total_quantity_used)            AS total_quantity_used
         FROM analytics.task_summary
         WHERE company_id = :company_id
           AND (:task_type IS NULL OR task_type = :task_type)
@@ -719,31 +724,43 @@ def get_task_summary(
                         pass
                 return False
             df["_overdue"] = df.apply(_is_overdue, axis=1)
+            df["_refused"] = df.get("outcome", "") == "refused"
+            df["_missed"]  = df.get("outcome", "") == "missed"
             grouped = df.groupby(["task_type", "status"]).agg(
                 total_tasks=("id", "count"),
                 overdue_tasks=("_overdue", "sum"),
+                refused_tasks=("_refused", "sum"),
+                missed_tasks=("_missed", "sum"),
             ).reset_index()
             grouped["completed_tasks"] = grouped.apply(
                 lambda r: r["total_tasks"] if r["status"] == "completed" else 0, axis=1)
             grouped["completion_rate_pct"] = grouped.apply(
                 lambda r: 100.0 if r["status"] == "completed" else 0.0, axis=1)
+            grouped["avg_completion_delay_mins"] = None
+            grouped["total_quantity_used"] = 0.0
             rows = grouped.pipe(_clean_df).to_dict(orient="records")
             logger.info("get_task_summary: using Base44 fallback (%d rows)", len(df))
 
-    total     = sum(r.get("total_tasks")     or 0 for r in rows)
+    total    = sum(r.get("total_tasks")     or 0 for r in rows)
     completed = sum(r.get("completed_tasks") or 0 for r in rows)
-    overdue   = sum(r.get("overdue_tasks")   or 0 for r in rows)
-    rate      = round(completed / total * 100, 1) if total > 0 else 0
+    overdue  = sum(r.get("overdue_tasks")   or 0 for r in rows)
+    refused  = sum(r.get("refused_tasks")   or 0 for r in rows)
+    missed   = sum(r.get("missed_tasks")    or 0 for r in rows)
+    rate     = round(completed / total * 100, 1) if total > 0 else 0
+    qty_used = sum(r.get("total_quantity_used") or 0 for r in rows)
 
     return {
-        "breakdown":       rows,
-        "total_tasks":     total,
-        "completed":       completed,
-        "overdue":         overdue,
-        "completion_rate": rate,
-        "days_analysed":   days_back,
-        "data_as_of":      _dao,
-        "data_source":     _src,
+        "breakdown":                   rows,
+        "total_tasks":                 total,
+        "completed":                   completed,
+        "overdue":                     overdue,
+        "refused":                     refused,
+        "missed":                      missed,
+        "completion_rate":             rate,
+        "total_quantity_used":         round(qty_used, 2),
+        "days_analysed":               days_back,
+        "data_as_of":                  _dao,
+        "data_source":                 _src,
     }
 
 

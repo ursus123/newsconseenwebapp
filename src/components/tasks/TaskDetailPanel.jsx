@@ -86,11 +86,27 @@ export default function TaskDetailPanel({ task, open, onClose, products, service
           </div>
 
           {/* Outcome */}
-          {(task.outcome || task.outcome_notes) && (
+          {(task.outcome || task.outcome_notes || task.outcome_reason) && (
             <div className="bg-slate-50 rounded-xl p-4 space-y-2">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outcome</p>
-              {task.outcome && (
-                <Badge className="bg-emerald-50 text-emerald-700">{task.outcome.replace(/_/g, " ")}</Badge>
+              <div className="flex flex-wrap gap-1.5">
+                {task.outcome && (
+                  <Badge className="bg-emerald-50 text-emerald-700">{task.outcome.replace(/_/g, " ")}</Badge>
+                )}
+                {task.outcome_reason && (
+                  <Badge variant="outline" className="text-xs text-slate-600">{task.outcome_reason.replace(/_/g, " ")}</Badge>
+                )}
+              </div>
+              {task.actual_completion_time && (
+                <p className="text-xs text-slate-500">
+                  Completed at <span className="font-medium text-slate-700">{task.actual_completion_time}</span>
+                  {task.scheduled_time && task.actual_completion_time !== task.scheduled_time && (
+                    <span className="text-slate-400"> (scheduled {task.scheduled_time})</span>
+                  )}
+                </p>
+              )}
+              {task.completed_by && (
+                <p className="text-xs text-slate-500">By <span className="font-medium text-slate-700">{task.completed_by}</span></p>
               )}
               {task.outcome_notes && (
                 <p className="text-sm text-slate-600 italic">{task.outcome_notes}</p>
@@ -107,6 +123,11 @@ export default function TaskDetailPanel({ task, open, onClose, products, service
                 <span className="text-sm font-medium text-slate-700">{linkedProduct.name}</span>
               </div>
               <p className="text-xs text-slate-500 ml-6">Stock: {linkedProduct.stock_quantity ?? "—"} {linkedProduct.unit || ""}</p>
+              {task.quantity_used != null && (
+                <p className="text-xs text-slate-600 ml-6 font-medium">
+                  Qty used: <span className="text-slate-800">{task.quantity_used} {linkedProduct.unit || "units"}</span>
+                </p>
+              )}
             </div>
           )}
 

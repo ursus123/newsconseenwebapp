@@ -41,12 +41,17 @@ def transform_tasks(df: pd.DataFrame) -> pd.DataFrame:
     appending to the Railway analytics.task_summary table.
 
     Produces per-group metrics:
-        total_tasks         — all tasks in this group
-        completed_tasks     — tasks with status = "completed"
-        completion_rate_pct — completed / total * 100, rounded to 1dp
-        overdue_tasks       — past due_date and not completed
-        tasks_last_7d       — created in the last 7 days
-        tasks_last_30d      — created in the last 30 days
+        total_tasks              — all tasks in this group
+        completed_tasks          — tasks with status = "completed"
+        completion_rate_pct      — completed / total * 100, rounded to 1dp
+        overdue_tasks            — past due_date and not completed
+        tasks_last_7d            — created in the last 7 days
+        tasks_last_30d           — created in the last 30 days
+        refused_tasks            — outcome = "refused"
+        missed_tasks             — outcome = "missed"
+        avg_completion_delay_mins — mean delta between scheduled_time and
+                                   actual_completion_time (minutes, completed tasks)
+        total_quantity_used      — sum of quantity_used across completed tasks
 
     Groups by: enterprise_id, company_id, task_type, status
     (any group column missing from df is skipped safely)
@@ -98,6 +103,46 @@ def transform_tasks(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # ----------------------------------------------------------
+    # Gap 1 — outcome reason: refused and missed counts
+    # ----------------------------------------------------------
+    outcome_col = df.get("outcome", pd.Series(dtype="object"))
+    df["is_refused"] = outcome_col == "refused"
+    df["is_missed"]  = outcome_col == "missed"
+
+    # ----------------------------------------------------------
+    # Gap 2 — schedule adherence: scheduled_time vs actual_completion_time
+    # Parse both as today's date + time string → timedelta in minutes.
+    # Only meaningful on completed tasks with both fields present.
+    # ----------------------------------------------------------
+    def _time_to_minutes(series):
+        """Convert 'HH:MM' string series to minutes-since-midnight float."""
+        def _parse(v):
+            try:
+                h, m = str(v).split(":")[:2]
+                return int(h) * 60 + int(m)
+            except Exception:
+                return None
+        return series.apply(_parse)
+
+    if "scheduled_time" in df.columns and "actual_completion_time" in df.columns:
+        sched_mins  = _time_to_minutes(df["scheduled_time"])
+        actual_mins = _time_to_minutes(df["actual_completion_time"])
+        delay = actual_mins - sched_mins
+        # Only count delay on completed tasks where both values are present
+        mask = df["is_completed"] & sched_mins.notna() & actual_mins.notna()
+        df["completion_delay_mins"] = delay.where(mask)
+    else:
+        df["completion_delay_mins"] = None
+
+    # ----------------------------------------------------------
+    # Gap 3 — quantity consumed per task
+    # ----------------------------------------------------------
+    if "quantity_used" in df.columns:
+        df["quantity_used_num"] = pd.to_numeric(df["quantity_used"], errors="coerce")
+    else:
+        df["quantity_used_num"] = 0.0
+
+    # ----------------------------------------------------------
     # Safe groupBy — only use columns that exist in df
     # ----------------------------------------------------------
     group_cols = [c for c in GROUP_COLUMNS if c in df.columns]
@@ -117,6 +162,10 @@ def transform_tasks(df: pd.DataFrame) -> pd.DataFrame:
             overdue_tasks=("is_overdue", "sum"),
             tasks_last_7d=("created_last_7d", "sum"),
             tasks_last_30d=("created_last_30d", "sum"),
+            refused_tasks=("is_refused", "sum"),
+            missed_tasks=("is_missed", "sum"),
+            avg_completion_delay_mins=("completion_delay_mins", "mean"),
+            total_quantity_used=("quantity_used_num", "sum"),
         )
         .reset_index()
     )
@@ -131,8 +180,11 @@ def transform_tasks(df: pd.DataFrame) -> pd.DataFrame:
 
     # Cast integer columns — agg returns float when NaN is present
     for col in ["total_tasks", "completed_tasks", "overdue_tasks",
-                "tasks_last_7d", "tasks_last_30d"]:
+                "tasks_last_7d", "tasks_last_30d", "refused_tasks", "missed_tasks"]:
         summary[col] = summary[col].fillna(0).astype(int)
+
+    summary["avg_completion_delay_mins"] = summary["avg_completion_delay_mins"].round(1)
+    summary["total_quantity_used"] = summary["total_quantity_used"].fillna(0.0).round(2)
 
     logger.info(
         "transform_tasks: produced %d summary rows from %d raw records",
@@ -159,4 +211,8 @@ def _empty_summary() -> pd.DataFrame:
         "overdue_tasks",
         "tasks_last_7d",
         "tasks_last_30d",
+        "refused_tasks",
+        "missed_tasks",
+        "avg_completion_delay_mins",
+        "total_quantity_used",
     ])

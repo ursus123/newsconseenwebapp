@@ -157,18 +157,22 @@ _CORE_ANALYTICS_DDL = [
 
     """
     CREATE TABLE IF NOT EXISTS analytics.task_summary (
-        enterprise_id           TEXT,
-        company_id              TEXT,
-        task_type               TEXT,
-        status                  TEXT,
-        total_tasks             BIGINT,
-        completed_tasks         BIGINT,
-        completion_rate_pct     DOUBLE PRECISION,
-        overdue_tasks           BIGINT,
-        tasks_last_7d           BIGINT,
-        tasks_last_30d          BIGINT,
-        snapshot_date           DATE,
-        loaded_at               TIMESTAMP
+        enterprise_id               TEXT,
+        company_id                  TEXT,
+        task_type                   TEXT,
+        status                      TEXT,
+        total_tasks                 BIGINT,
+        completed_tasks             BIGINT,
+        completion_rate_pct         DOUBLE PRECISION,
+        overdue_tasks               BIGINT,
+        tasks_last_7d               BIGINT,
+        tasks_last_30d              BIGINT,
+        refused_tasks               BIGINT,
+        missed_tasks                BIGINT,
+        avg_completion_delay_mins   DOUBLE PRECISION,
+        total_quantity_used         DOUBLE PRECISION,
+        snapshot_date               DATE,
+        loaded_at                   TIMESTAMP
     )
     """,
 
@@ -797,6 +801,23 @@ _OTHER_DDL = [
 ]
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Column migrations — run after every CREATE TABLE IF NOT EXISTS.
+# Required for live deployments where the table already exists but is missing
+# columns added in later phases. Add one entry per new column on any existing
+# table — otherwise live deployments crash with "column does not exist".
+# ─────────────────────────────────────────────────────────────────────────────
+_MIGRATIONS = [
+    # Gap 1: outcome reason counts
+    "ALTER TABLE analytics.task_summary ADD COLUMN IF NOT EXISTS refused_tasks             BIGINT",
+    "ALTER TABLE analytics.task_summary ADD COLUMN IF NOT EXISTS missed_tasks              BIGINT",
+    # Gap 2: schedule adherence
+    "ALTER TABLE analytics.task_summary ADD COLUMN IF NOT EXISTS avg_completion_delay_mins DOUBLE PRECISION",
+    # Gap 3: quantity consumed
+    "ALTER TABLE analytics.task_summary ADD COLUMN IF NOT EXISTS total_quantity_used       DOUBLE PRECISION",
+]
+
+
 def ensure_all_analytics_tables(engine) -> None:
     """
     Pre-create all analytics.* and raw.* tables using CREATE TABLE IF NOT EXISTS.
@@ -844,6 +865,15 @@ def ensure_all_analytics_tables(engine) -> None:
                     created += 1
                 except Exception as exc:
                     logger.warning("setup: other DDL failed — %s", exc)
+                    errors += 1
+
+            # Column migrations — add new columns to existing tables
+            for migration in _MIGRATIONS:
+                try:
+                    conn.execute(text(migration))
+                    created += 1
+                except Exception as exc:
+                    logger.warning("setup: migration failed — %s", exc)
                     errors += 1
 
         logger.info(

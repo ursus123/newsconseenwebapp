@@ -102,8 +102,22 @@ Links any two entities. Captures org structure, assignments, memberships, partne
 
 ### 5. Task
 Any activity, visit, appointment, shift, or work order.
-Fields: title, task_type, status, due_date, assigned_to, enterprise, outcome_notes.
-`task_type` is operator-defined via MasterDataOption.
+Fields: title, task_type, status, priority, due_date, scheduled_date, scheduled_time,
+actual_completion_time, assigned_to, completed_by, enterprise, related_person, related_item,
+quantity_used, outcome, outcome_reason, outcome_notes.
+
+- `task_type` is operator-defined via MasterDataOption.
+- `outcome` values: pending, completed, partially_done, refused, missed, on_hold, loa, not_applicable.
+- `outcome_reason` is operator-defined via MasterDataOption (e.g. "Patient refused verbally", "Staff absent", "Supply out of stock").
+- `actual_completion_time` records when the task was actually done vs `scheduled_time`.
+- `completed_by` records the person who physically carried out the task (may differ from `assigned_to`).
+- `quantity_used` records units of `related_item` consumed or administered during this task.
+
+**analytics.task_summary new columns** (available to copilot via get_task_summary):
+- `refused_tasks` — count of tasks with outcome = refused
+- `missed_tasks` — count of tasks with outcome = missed
+- `avg_completion_delay_mins` — mean delta (minutes) between scheduled_time and actual_completion_time on completed tasks
+- `total_quantity_used` — total units consumed across completed tasks in this group
 
 ### 6. Transaction
 Any financial record: invoice, payment, expense, payroll.
@@ -254,7 +268,7 @@ experience grounded in real data.
 | `get_staff_availability` | Active staff by branch/role |
 | `get_transaction_summary` | Revenue, expenses, outstanding amounts |
 | `get_overdue_invoices` | Unpaid past due date |
-| `get_task_summary` | Task completion rates by type |
+| `get_task_summary` | Task completion rates by type; also returns refused, missed, avg_completion_delay_mins, total_quantity_used |
 | `get_task_outcomes` | Outcome breakdown (completed, overdue, missed) |
 | `get_product_summary` | Stock levels, expiry alerts |
 | `get_enterprise_overview` | Branch and department structure |
