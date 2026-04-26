@@ -6,19 +6,12 @@ import {
   Brain, TrendingUp, Map, RefreshCw, AlertCircle, ExternalLink,
   Code2, CheckCircle, Star,
 } from "lucide-react";
-import {
-  BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-} from "recharts";
+import DemoShell from "@/components/demo/DemoShell";
+import DemoChartCard from "@/components/demo/DemoChartCard";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const RAILWAY_URL = import.meta.env.VITE_RAILWAY_URL
   || "https://newsconseenwebapp-production.up.railway.app";
-
-const PALETTE = [
-  "#10b981","#3b82f6","#f59e0b","#ef4444","#8b5cf6",
-  "#06b6d4","#f97316","#84cc16","#ec4899","#14b8a6",
-];
 
 // ── Funnel telemetry ──────────────────────────────────────────────────────────
 function trackEvent(event, properties = {}) {
@@ -226,72 +219,7 @@ function MarkdownContent({ content, streaming }) {
   );
 }
 
-// ── Chart card ────────────────────────────────────────────────────────────────
-function DemoChartCard({ config }) {
-  if (!config) return null;
-  const { type, title, data, keys = [], unit = "" } = config;
-
-  // Graceful fallback: no chart data → render as table
-  if (!data || data.length === 0) {
-    return (
-      <div className="mt-3 bg-slate-900 border border-slate-700 rounded-2xl p-4">
-        <p className="text-xs text-slate-500">{title || "Chart"} — no data returned in demo mode.</p>
-      </div>
-    );
-  }
-
-  const fmtTick = v => typeof v !== "number" ? v : v >= 1e9 ? `${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v;
-  const fmtTip  = (v, n) => [unit === "$" ? `$${Number(v).toLocaleString()}` : Number(v).toLocaleString(), n];
-  const resolvedKeys = keys.length
-    ? keys
-    : [{ key: Object.keys(data[0] || {}).find(k => k !== "name") || "value", color: PALETTE[0] }];
-
-  const chart = (() => {
-    if (type === "pie") return (
-      <PieChart>
-        <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={30} paddingAngle={2}
-          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-          {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
-        </Pie>
-        <Tooltip formatter={(v, n) => [Number(v).toLocaleString(), n]} contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} />
-        <Legend wrapperStyle={{ fontSize: 10, color: "#94a3b8" }} />
-      </PieChart>
-    );
-    if (type === "area") return (
-      <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-        <defs>{resolvedKeys.map((k, i) => <linearGradient key={k.key} id={`dg-${k.key}`} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={k.color || PALETTE[i]} stopOpacity={0.35} /><stop offset="95%" stopColor={k.color || PALETTE[i]} stopOpacity={0} /></linearGradient>)}</defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-        <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#94a3b8" }} />
-        <YAxis tickFormatter={fmtTick} tick={{ fontSize: 10, fill: "#94a3b8" }} width={44} />
-        <Tooltip formatter={fmtTip} contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} />
-        {resolvedKeys.map((k, i) => <Area key={k.key} type="monotone" dataKey={k.key} stroke={k.color || PALETTE[i]} fill={`url(#dg-${k.key})`} strokeWidth={2} />)}
-        {resolvedKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 10, color: "#94a3b8" }} />}
-      </AreaChart>
-    );
-    return (
-      <BarChart data={data} margin={{ top: 8, right: 12, bottom: data.length > 6 ? 24 : 4, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-        <XAxis dataKey="name" tick={{ fontSize: 9, fill: "#94a3b8" }} interval={0} angle={data.length > 6 ? -30 : 0} textAnchor={data.length > 6 ? "end" : "middle"} height={data.length > 6 ? 50 : 20} />
-        <YAxis tickFormatter={fmtTick} tick={{ fontSize: 10, fill: "#94a3b8" }} width={44} />
-        <Tooltip formatter={fmtTip} contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} />
-        {resolvedKeys.map((k, i) => <Bar key={k.key} dataKey={k.key} fill={k.color || PALETTE[i]} radius={[4, 4, 0, 0]} maxBarSize={48} />)}
-        {resolvedKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 10, color: "#94a3b8" }} />}
-      </BarChart>
-    );
-  })();
-
-  return (
-    <div className="mt-3 bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-700/60">
-        <BarChart2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-        <span className="text-xs font-semibold text-slate-300 truncate">{title}</span>
-      </div>
-      <div className="p-3">
-        <ResponsiveContainer width="100%" height={200}>{chart}</ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
+// DemoChartCard is imported from @/components/demo/DemoChartCard
 
 // ── Tool badges ───────────────────────────────────────────────────────────────
 function ToolBadges({ toolsCalled }) {
@@ -318,7 +246,7 @@ function ProgressLabel({ label }) {
 }
 
 // ── Message ───────────────────────────────────────────────────────────────────
-function Message({ role, content, charts, citations, toolsCalled, streaming }) {
+function Message({ role, content, charts, citations, toolsCalled, streaming, onAskIdjwi }) {
   const isUser = role === "user";
   const showDots = !isUser && streaming && !content;
 
@@ -354,7 +282,7 @@ function Message({ role, content, charts, citations, toolsCalled, streaming }) {
         </div>
         {!isUser && charts && charts.length > 0 && (
           <div className="w-full space-y-2 mt-1">
-            {charts.map((cfg, i) => <DemoChartCard key={i} config={cfg} />)}
+            {charts.map((cfg, i) => <DemoChartCard key={i} config={cfg} onAskIdjwi={onAskIdjwi} />)}
           </div>
         )}
         {!isUser && !streaming && <ToolBadges toolsCalled={toolsCalled} />}
@@ -574,7 +502,8 @@ function IdjwiChat() {
           {messages.map((m) => (
             <Message key={m._id} role={m.role} content={m.content}
               charts={m.charts} citations={m.citations}
-              toolsCalled={m.toolsCalled} streaming={m.streaming} />
+              toolsCalled={m.toolsCalled} streaming={m.streaming}
+              onAskIdjwi={send} />
           ))}
 
           {/* Starter chips — before user has typed */}
@@ -774,36 +703,10 @@ export default function Landing() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050b18] text-white overflow-x-hidden">
-
-      {/* NAV */}
-      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 md:px-12 py-4
-                      bg-[#050b18]/80 backdrop-blur-xl border-b border-slate-800/50">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-            <span className="text-white font-black text-sm">N</span>
-          </div>
-          <span className="font-bold text-white text-sm tracking-tight">Newsconseen</span>
-        </div>
-        <div className="hidden md:flex items-center gap-8 text-sm text-slate-400">
-          <a href="#how-it-works" className="hover:text-white transition-colors">How it works</a>
-          <a href="#industries"   className="hover:text-white transition-colors">Industries</a>
-          <a href="#pricing"      className="hover:text-white transition-colors">Pricing</a>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/app")}
-            className="text-sm text-slate-400 hover:text-white transition-colors px-3 py-1.5">
-            Sign in
-          </button>
-          <button onClick={() => { trackEvent("signup_clicked", { source: "nav" }); navigate("/onboarding"); }}
-            className="text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl transition-colors shadow-lg shadow-emerald-500/20">
-            Get started
-          </button>
-        </div>
-      </nav>
+    <DemoShell>
 
       {/* HERO */}
-      <section className="relative pt-32 pb-16 px-6">
+      <section className="relative pt-8 pb-16 px-6">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-emerald-500/4 rounded-full blur-3xl" />
           <div className="absolute top-24 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-teal-500/6 rounded-full blur-2xl" />
@@ -1135,6 +1038,6 @@ export default function Landing() {
           </div>
         </div>
       </footer>
-    </div>
+    </DemoShell>
   );
 }

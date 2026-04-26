@@ -136,32 +136,95 @@ def _make_demo_chart_config(tool_name: str, result: dict):
                         "keys": [{"key": "Rate", "color": "#10b981"}],
                     }
 
-            # World Bank / UN data → bar chart of countries
+            # World Bank / UN data — auto-detect chart type from data shape
             wbdata = result.get("data") or result.get("results") or []
             if isinstance(wbdata, list) and len(wbdata) >= 2:
-                chart_data = []
-                for r in wbdata[:10]:
-                    name = r.get("country") or r.get("name") or r.get("label", "")
-                    val = r.get("value") or r.get("latest_value") or r.get("gdp") or 0
+                _PALETTE = [
+                    "#10b981","#3b82f6","#f59e0b","#ef4444","#8b5cf6",
+                    "#06b6d4","#f97316","#84cc16","#ec4899","#14b8a6",
+                ]
+                indicator_id   = result.get("indicator") or ""
+                indicator_name = (
+                    result.get("indicator_name")
+                    or result.get("indicator")
+                    or result.get("dataset", "")
+                    or "Value"
+                ).replace("_", " ").title()
+
+                # Detect time-series: records have a "year" or "date" key
+                has_year     = any(r.get("year") or r.get("date") for r in wbdata[:5])
+                years        = sorted({str(r.get("year") or r.get("date", "")) for r in wbdata if r.get("year") or r.get("date")})
+                countries    = sorted({str(r.get("country") or r.get("name") or "") for r in wbdata if r.get("country") or r.get("name")})
+                is_time_series   = has_year and len(years) > 1
+                is_multi_country = len(countries) > 1
+
+                def _val(r):
                     try:
-                        val = float(val)
+                        return float(r.get("value") or r.get("latest_value") or r.get("gdp") or 0)
                     except (TypeError, ValueError):
-                        continue
-                    if name and val:
-                        chart_data.append({"name": str(name)[:14], "Value": round(val, 2)})
-                if len(chart_data) >= 2:
-                    indicator = (
-                        result.get("indicator_name")
-                        or result.get("indicator")
-                        or result.get("dataset", "indicator")
-                        or "Value"
+                        return 0.0
+
+                if is_time_series and is_multi_country:
+                    # Line chart: X=year, one line per country
+                    chart_data = []
+                    for year in years:
+                        row = {"name": str(year)}
+                        for r in wbdata:
+                            ry = str(r.get("year") or r.get("date") or "")
+                            rc = str(r.get("country") or r.get("name") or "")
+                            if ry == year and rc:
+                                row[rc[:16]] = _val(r)
+                        chart_data.append(row)
+                    keys = [{"key": c[:16], "color": _PALETTE[i % len(_PALETTE)]} for i, c in enumerate(countries[:8])]
+                    if chart_data:
+                        return {
+                            "type": "line",
+                            "title": indicator_name[:60],
+                            "data": chart_data,
+                            "keys": keys,
+                            "_indicator": indicator_id,
+                            "_countries": ",".join(countries[:8]),
+                            "_source": "World Bank",
+                        }
+
+                elif is_time_series and not is_multi_country:
+                    # Area chart: single country over time
+                    country_code = countries[0] if countries else ""
+                    sorted_recs  = sorted(
+                        [r for r in wbdata if _val(r) != 0],
+                        key=lambda r: str(r.get("year") or r.get("date") or "")
                     )
-                    return {
-                        "type": "bar",
-                        "title": str(indicator)[:60],
-                        "data": chart_data,
-                        "keys": [{"key": "Value", "color": "#3b82f6"}],
-                    }
+                    chart_data = [{"name": str(r.get("year") or r.get("date") or ""), "Value": _val(r)} for r in sorted_recs]
+                    if chart_data:
+                        return {
+                            "type": "area",
+                            "title": f"{indicator_name} — {country_code}"[:60],
+                            "data": chart_data,
+                            "keys": [{"key": "Value", "color": _PALETTE[0]}],
+                            "_indicator": indicator_id,
+                            "_countries": country_code,
+                            "_source": "World Bank",
+                        }
+
+                else:
+                    # Bar chart: cross-country comparison (single year or no year)
+                    chart_data = []
+                    for r in wbdata[:12]:
+                        name = str(r.get("country") or r.get("name") or r.get("label", ""))[:16]
+                        v    = _val(r)
+                        if name and v:
+                            chart_data.append({"name": name, "Value": round(v, 2)})
+                    chart_data.sort(key=lambda x: x["Value"], reverse=True)
+                    if len(chart_data) >= 2:
+                        return {
+                            "type": "bar",
+                            "title": indicator_name[:60],
+                            "data": chart_data,
+                            "keys": [{"key": "Value", "color": _PALETTE[0]}],
+                            "_indicator": indicator_id,
+                            "_countries": ",".join(countries[:12]),
+                            "_source": "World Bank",
+                        }
 
             # OSM counts → bar chart
             counts = result.get("counts") or result.get("results")
