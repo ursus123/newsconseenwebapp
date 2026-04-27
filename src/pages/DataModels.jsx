@@ -617,6 +617,49 @@ const PG_RAW_TABLES = [
       { name: "loaded_at", type: "TIMESTAMPTZ" },
     ],
   },
+  // ── Phase 10: Agricultural raw.* tables ──────────────────────────────────────
+  {
+    id: "raw_animals", label: "raw.animals", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Animal records. Livestock, companion animals, aquatic species, lab animals.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "name / animal_type / species", type: "TEXT" },
+      { name: "sex / status", type: "TEXT" },
+      { name: "date_of_birth", type: "DATE" },
+      { name: "weight_kg", type: "FLOAT" },
+      { name: "enterprise_id / company_id", type: "TEXT" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_plots", label: "raw.plots", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Plot records. Agricultural parcels, aquaculture ponds, forestry blocks. Queryable by spatial-pins endpoint.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "name / plot_type / land_use / crop_type", type: "TEXT" },
+      { name: "status", type: "TEXT" },
+      { name: "area_ha", type: "FLOAT" },
+      { name: "latitude / longitude", type: "FLOAT (PostGIS spatial-pins source)" },
+      { name: "enterprise_id / company_id", type: "TEXT" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "raw_observations", label: "raw.observations", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📋", layer: "raw.*",
+    description: "Verbatim Observation records. Field readings, sensor data, vet exam results, water quality measurements.",
+    fields: [
+      { name: "id", type: "TEXT PK", pk: true },
+      { name: "observation_type / subject_type / unit_of_measure", type: "TEXT" },
+      { name: "numeric_value / text_value", type: "FLOAT / TEXT" },
+      { name: "is_anomaly", type: "BOOL" },
+      { name: "observed_at", type: "TIMESTAMPTZ" },
+      { name: "enterprise_id / company_id", type: "TEXT" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
 ];
 
 // ── analytics.* — ETL aggregation tables ─────────────────────────────────────
@@ -804,6 +847,48 @@ const PG_ANALYTICS_TABLES = [
       { name: "is_sales_zone / is_delivery_zone / is_catchment", type: "BOOL" },
       { name: "snapshot_date", type: "DATE" },
       { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  // ── Phase 10: Agricultural entity analytics.* tables ──────────────────────
+  {
+    id: "an_animals", label: "analytics.animal_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Animal counts by type × species × status per enterprise. Age, weight, and intake rate metrics.",
+    fields: [
+      { name: "enterprise_id / company_id", type: "TEXT" },
+      { name: "animal_type / species / status", type: "TEXT" },
+      { name: "animal_count / active_count / inactive_count", type: "BIGINT" },
+      { name: "avg_age_days / avg_weight_kg", type: "FLOAT" },
+      { name: "new_last_30d", type: "BIGINT" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMP" },
+    ],
+  },
+  {
+    id: "an_plots", label: "analytics.plot_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Plot counts by type × land_use × status. Total and average area in hectares. Coordinate coverage.",
+    fields: [
+      { name: "enterprise_id / company_id", type: "TEXT" },
+      { name: "plot_type / land_use / status", type: "TEXT" },
+      { name: "plot_count / active_count / inactive_count", type: "BIGINT" },
+      { name: "total_area_ha / avg_area_ha", type: "FLOAT" },
+      { name: "plots_with_coords / new_last_30d", type: "BIGINT" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMP" },
+    ],
+  },
+  {
+    id: "an_observations", label: "analytics.observation_summary", color: "#4338ca", bg: "#eef2ff", border: "#c7d2fe",
+    icon: "📊", layer: "analytics.*",
+    description: "Observation counts by type × unit × subject. Avg/min/max numeric values, anomaly counts, recency.",
+    fields: [
+      { name: "enterprise_id / company_id", type: "TEXT" },
+      { name: "observation_type / unit_of_measure / subject_type", type: "TEXT" },
+      { name: "observation_count / anomaly_count / new_last_7d / new_last_30d", type: "BIGINT" },
+      { name: "avg_value / min_value / max_value", type: "FLOAT" },
+      { name: "snapshot_date", type: "DATE" },
+      { name: "loaded_at", type: "TIMESTAMP" },
     ],
   },
   // ── Deep intelligence analytics tables (ETL-written) ──────────────────────
@@ -1382,6 +1467,10 @@ const PG_EDGES = [
   { from: "raw_signals",     to: "an_signals",     label: "ETL aggregate", style: "etl" },
   { from: "raw_channels",    to: "an_channels",    label: "ETL aggregate", style: "etl" },
   { from: "raw_territories", to: "an_territories", label: "ETL aggregate", style: "etl" },
+  // Phase 10: Agricultural ETL
+  { from: "raw_animals",     to: "an_animals",     label: "ETL aggregate", style: "etl" },
+  { from: "raw_plots",       to: "an_plots",       label: "ETL aggregate", style: "etl" },
+  { from: "raw_observations",to: "an_observations",label: "ETL aggregate", style: "etl" },
   // Phase 9: raw.* → enrichment
   { from: "raw_documents",   to: "an_document_enrichment",  label: "Phase 9 enrich", style: "etl" },
   { from: "raw_schedules",   to: "an_schedule_enrichment",  label: "Phase 9 enrich", style: "etl" },
@@ -1428,12 +1517,18 @@ const DEFAULT_PG_POSITIONS = {
   raw_signals:     { x: 1890, y: 60  },
   raw_channels:    { x: 2060, y: 60  },
   raw_territories: { x: 2230, y: 60  },
+  raw_animals:     { x: 2400, y: 60  },
+  raw_plots:       { x: 2570, y: 60  },
+  raw_observations:{ x: 2740, y: 60  },
   // Phase 9: analytics.* (y=460, same x as raw counterparts)
   an_documents:    { x: 1550, y: 460 },
   an_schedules:    { x: 1720, y: 460 },
   an_signals:      { x: 1890, y: 460 },
   an_channels:     { x: 2060, y: 460 },
   an_territories:  { x: 2230, y: 460 },
+  an_animals:      { x: 2400, y: 460 },
+  an_plots:        { x: 2570, y: 460 },
+  an_observations: { x: 2740, y: 460 },
   // Phase 9: enrichment (y=660, same x-alignment)
   an_document_enrichment:  { x: 1550, y: 660 },
   an_schedule_enrichment:  { x: 1720, y: 660 },
@@ -1559,6 +1654,34 @@ const API_CATALOGUE = [
       { method: "GET",  path: "/open-data/weather/{city}", desc: "Open-Meteo — current conditions, no API key required" },
       { method: "GET",  path: "/open-data/medications",    desc: "NIH RxNorm drug name + interaction lookup" },
       { method: "GET",  path: "/open-data/worldbank",      desc: "World Bank economic indicators by country + year" },
+    ],
+  },
+  {
+    name: "Agriculture & Ecology", prefix: "/agriculture", color: "#65a30d", bg: "#f7fee7",
+    desc: "Agricultural open data APIs — weather forecasts, soil properties, crop statistics, agro-meteorological data. All free, no API key required.",
+    endpoints: [
+      { method: "GET",  path: "/agriculture/weather",    desc: "7-day forecast via Open-Meteo (lat, lon)" },
+      { method: "GET",  path: "/agriculture/soil",       desc: "Soil pH, SOC, clay, sand via SoilGrids ISRIC (lat, lon)" },
+      { method: "GET",  path: "/agriculture/faostat",    desc: "Crop production by country/year via FAOSTAT FENIX API" },
+      { method: "GET",  path: "/agriculture/nasa-power", desc: "Agro-met daily data (T2M, precip, solar) via NASA POWER" },
+      { method: "GET",  path: "/agriculture/usda",       desc: "USDA crop acreage and production statistics" },
+    ],
+  },
+  {
+    name: "Spatial Intelligence", prefix: "/postgis", color: "#0f766e", bg: "#f0fdfa",
+    desc: "PostGIS spatial query engine — multi-layer pins, density heatmaps, cluster analysis, boundary coverage. Powers Map Explorer.",
+    endpoints: [
+      { method: "POST", path: "/postgis/setup",             desc: "Enable PostGIS extension + spatial indexes (run once on Railway)" },
+      { method: "GET",  path: "/postgis/status",            desc: "Extension status + spatial row counts" },
+      { method: "GET",  path: "/postgis/spatial-pins",      desc: "Unified pin feed: enterprises + addresses + plots (entity_layers param)" },
+      { method: "GET",  path: "/postgis/spatial-density",   desc: "Multi-layer density grid for heatmap (grid_degrees adjustable)" },
+      { method: "GET",  path: "/postgis/coverage-analysis", desc: "Inside/outside counts vs boundary polygon per entity layer" },
+      { method: "GET",  path: "/postgis/nearby",            desc: "Records within radius_meters of a lat/lon point" },
+      { method: "GET",  path: "/postgis/nearest",           desc: "N nearest records to a point (KNN, no radius cap)" },
+      { method: "GET",  path: "/postgis/clusters",          desc: "DBSCAN cluster summaries — centroid + member_count" },
+      { method: "GET",  path: "/postgis/coverage",          desc: "Records inside a stored boundary polygon" },
+      { method: "GET",  path: "/postgis/boundaries",        desc: "List all stored GeoJSON boundary polygons" },
+      { method: "POST", path: "/postgis/boundaries",        desc: "Upload a GeoJSON Polygon or MultiPolygon boundary" },
     ],
   },
   {

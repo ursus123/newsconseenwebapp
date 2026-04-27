@@ -378,6 +378,130 @@ def upload_boundary(request: BoundaryRequest):
     }
 
 
+@router.get("/spatial-pins")
+def spatial_pins(
+    company_id:     str   = Query(...),
+    entity_layers:  str   = Query(
+        "enterprises,addresses",
+        description="Comma-separated layers: enterprises, addresses, plots",
+    ),
+    limit:          int   = Query(1000, le=5000),
+):
+    """
+    Unified pin feed across entity layers.
+
+    Sources:
+      - enterprises → analytics.geospatial_summary
+      - addresses   → analytics.address_summary
+      - plots       → raw.plots (when available)
+
+    Returns a flat list of pins each with:
+      entity_layer, name, entity_type, status, latitude, longitude, cluster_id
+    """
+    from database import get_engine_safe
+    from postgis.queries import get_entity_pins
+
+    engine = get_engine_safe()
+    if not engine:
+        raise HTTPException(status_code=503, detail="No database connection")
+
+    layers = [l.strip() for l in entity_layers.split(",") if l.strip()]
+    pins = get_entity_pins(engine=engine, company_id=company_id, entity_layers=layers, limit=limit)
+
+    layer_counts: dict = {}
+    for p in pins:
+        lyr = p.get("entity_layer", "unknown")
+        layer_counts[lyr] = layer_counts.get(lyr, 0) + 1
+
+    return {
+        "company_id":    company_id,
+        "entity_layers": layers,
+        "total":         len(pins),
+        "by_layer":      layer_counts,
+        "pins":          pins,
+    }
+
+
+@router.get("/spatial-density")
+def spatial_density(
+    company_id:    str   = Query(...),
+    entity_layers: str   = Query(
+        "enterprises,addresses",
+        description="Comma-separated layers: enterprises, addresses, plots",
+    ),
+    grid_degrees:  float = Query(
+        0.1,
+        description="Grid cell size in degrees (0.1≈11km, 0.5≈55km)",
+        ge=0.01, le=5.0,
+    ),
+):
+    """
+    Multi-layer density grid for heatmap rendering.
+
+    Aggregates all entity layers into a unified grid.
+    Each cell includes a dominant_layer and per-layer breakdown.
+
+    Use cases:
+      - Show density of clients + enterprises on a combined heatmap
+      - Identify coverage gaps where plots exist but no enterprises
+    """
+    from database import get_engine_safe
+    from postgis.queries import get_multi_layer_density
+
+    engine = get_engine_safe()
+    if not engine:
+        raise HTTPException(status_code=503, detail="No database connection")
+
+    layers = [l.strip() for l in entity_layers.split(",") if l.strip()]
+    cells = get_multi_layer_density(engine=engine, company_id=company_id, entity_layers=layers, grid_degrees=grid_degrees)
+    total = sum(c["count"] for c in cells)
+
+    return {
+        "company_id":    company_id,
+        "entity_layers": layers,
+        "grid_degrees":  grid_degrees,
+        "grid_cells":    len(cells),
+        "total_records": total,
+        "cells":         cells,
+    }
+
+
+@router.get("/coverage-analysis")
+def coverage_analysis(
+    boundary_id:   int   = Query(..., description="ID from GET /postgis/boundaries"),
+    company_id:    str   = Query(...),
+    entity_layers: str   = Query(
+        "enterprises,addresses",
+        description="Comma-separated layers: enterprises, addresses, plots",
+    ),
+    limit:         int   = Query(500, le=2000),
+):
+    """
+    Multi-layer coverage analysis against a stored boundary polygon.
+
+    Returns inside/outside counts per entity layer and coverage_pct.
+
+    Use cases:
+      - What % of farms are within the irrigation catchment?
+      - How many clients are inside the Northern district?
+    """
+    from database import get_engine_safe
+    from postgis.queries import get_coverage_analysis
+
+    engine = get_engine_safe()
+    if not engine:
+        raise HTTPException(status_code=503, detail="No database connection")
+
+    layers = [l.strip() for l in entity_layers.split(",") if l.strip()]
+    result = get_coverage_analysis(engine=engine, boundary_id=boundary_id, company_id=company_id, entity_layers=layers, limit=limit)
+
+    return {
+        **result,
+        "company_id":    company_id,
+        "entity_layers": layers,
+    }
+
+
 @router.get("/boundaries")
 def list_boundaries(
     company_id: str = Query(...),

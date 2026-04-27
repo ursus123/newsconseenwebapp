@@ -229,11 +229,22 @@ newsconseenwebapp/
     │   ├── addresses.py              → analytics.address_summary
     │   ├── relationships.py          → analytics.relationship_summary
     │   ├── services.py               → analytics.service_summary
-    │   └── geospatial.py             → analytics.geospatial_summary
+    │   ├── geospatial.py             → analytics.geospatial_summary
+    │   ├── document.py               → analytics.document_summary   (Phase 9)
+    │   ├── schedule.py               → analytics.schedule_summary   (Phase 9)
+    │   ├── signal.py                 → analytics.signal_summary     (Phase 9)
+    │   ├── channel.py                → analytics.channel_summary    (Phase 9)
+    │   ├── territory.py              → analytics.territory_summary  (Phase 9)
+    │   ├── animal.py                 → analytics.animal_summary     (Phase 10)
+    │   ├── plot.py                   → analytics.plot_summary       (Phase 10)
+    │   └── observation.py            → analytics.observation_summary(Phase 10)
     ├── connectors/                   Phase 2 — 25 external connectors
+    ├── postgis/                      Phase 11 — spatial intelligence engine
+    │   ├── queries.py                Multi-layer spatial queries
+    │   └── routes.py                 /postgis/* endpoints
     ├── copilot/                      Phase 3A
     │   ├── engine.py                 Tool loop — Anthropic API
-    │   └── queries.py                10 universal query tools
+    │   └── queries.py                Query tools (15+ tools across all entities)
     ├── alerts/                       Phase 3B — WhatsApp/Email/SMS
     ├── network/                      Phase 3C — network intelligence
     └── agent/                        Dev assistant
@@ -244,9 +255,15 @@ newsconseenwebapp/
 
 ---
 
-## Universal ontology — the three master entities
+## Universal ontology — 15 canonical entities
 
-Everything in any industry maps to these three entities. No exceptions.
+The Newsconseen ontology has three tiers:
+
+- **Core (7)** — Person, Enterprise, Product, Task, Transaction, Relationship, Address. Universal across every industry. The original architecture.
+- **Operational extensions (5)** — Document, Schedule, Signal, Channel, Territory. Cross-cutting operational entities added in Phase 9 that any industry may need.
+- **Domain-native (3)** — Animal, Plot, Observation. Agricultural, aquaculture, veterinary, and ecological entities added in Phase 10. These exist as dedicated Base44 entities with their own ETL, analytics tables, copilot tools, and frontend pages.
+
+The rule "use Person/Enterprise/Product before creating a new entity" still holds for general-purpose cases. It does not apply when the entity model is fundamentally different from all 12 existing entities — that is the threshold that justified Animal, Plot, and Observation.
 
 ### Person
 Any human in any role.
@@ -296,6 +313,11 @@ Any item, service, resource, or deliverable.
 item_type (enum):
   physical | living | digital | service_package | financial_instrument
 
+  Note: item_type = 'living' is a valid Base44 schema value and still used for
+  generic living-goods stock management (e.g. seedlings, plants as inventory items).
+  For livestock, poultry, aquatic species, or any animal that needs individual
+  tracking, health records, age, weight, or vet data — use the Animal entity instead.
+
 item_class (enum):
   perishable | non_perishable | hazardous | controlled | regulated |
   unrestricted | serialized | non_serialized | consumable | reusable | returnable
@@ -307,13 +329,44 @@ unit_of_measure (enum):
 item_subtype: operator-defined via MasterDataOption
 ```
 
-### The four supporting entities
+### The four supporting entities (Core tier)
 
 ```
 Relationship  links any two entities (person↔enterprise, person↔item, etc.)
 Task          any activity, visit, appointment, shift, or work order
 Transaction   any financial record (invoice, payment, expense, payroll)
 Address       any physical or postal location
+```
+
+### Operational extension entities (Phase 9)
+
+```
+Document      any managed file — contracts, certificates, policies, invoices (as files)
+Schedule      recurring pattern — daily briefing, weekly inspection, monthly payroll run
+Signal        telemetry reading — IoT sensor value, survey score, KPI measurement
+Channel       communication channel — WhatsApp group, email thread, broadcast list
+Territory     geographic zone — sales territory, delivery zone, catchment area
+```
+
+### Domain-native entities (Phase 10)
+
+```
+Animal        any living creature tracked individually — livestock, poultry,
+              aquatic species, companion animals, lab animals
+              Fields: animal_type, species, sex, date_of_birth, weight_kg, status
+              Dedicated ETL → analytics.animal_summary
+              Copilot tool: get_animal_summary
+
+Plot          any managed land parcel or water body
+              Fields: name, plot_type, land_use, crop_type, area_ha, latitude, longitude, status
+              Dedicated ETL → analytics.plot_summary; queryable via /postgis/spatial-pins
+              Copilot tool: get_plot_overview
+
+Observation   any field reading, measurement, or recorded value
+              Fields: observation_type, subject_type, numeric_value, text_value,
+                      unit_of_measure, is_anomaly, observed_at
+              Dedicated ETL → analytics.observation_summary
+              Copilot tool: get_observation_summary
 ```
 
 ---
@@ -349,7 +402,8 @@ from MasterDataOption at runtime via useTaxonomy.
 POST /cron/etl-all                  Full pipeline — all entities
                                     Header: x-cron-secret
 
-POST /load/people-summary           Targeted per entity
+# Core 7 entities
+POST /load/people-summary
 POST /load/enterprise-summary
 POST /load/product-summary
 POST /load/transaction-summary
@@ -358,6 +412,18 @@ POST /load/address-summary
 POST /load/relationship-summary
 POST /load/service-summary
 POST /load/geospatial-summary
+
+# Phase 9 — operational extension entities
+POST /load/document-summary
+POST /load/schedule-summary
+POST /load/signal-summary
+POST /load/channel-summary
+POST /load/territory-summary
+
+# Phase 10 — domain-native entities
+POST /load/animal-summary
+POST /load/plot-summary
+POST /load/observation-summary
 
 GET  /health                        Status + last run timestamps + counts
 ```
@@ -394,6 +460,7 @@ triggerETL("task");
 
 ### PostgreSQL analytics tables
 ```
+# Core 7 entities
 analytics.people_summary
 analytics.enterprise_summary
 analytics.product_summary
@@ -403,6 +470,18 @@ analytics.address_summary
 analytics.relationship_summary
 analytics.service_summary
 analytics.geospatial_summary
+
+# Phase 9 — operational extension entities
+analytics.document_summary
+analytics.schedule_summary
+analytics.signal_summary
+analytics.channel_summary
+analytics.territory_summary
+
+# Phase 10 — domain-native entities
+analytics.animal_summary
+analytics.plot_summary
+analytics.observation_summary
 ```
 
 ---
@@ -650,7 +729,8 @@ const { data } = useQuery({ queryFn: () => fetch(`${RAILWAY_URL}/open-data/excha
 - Query Base44 entities directly for analytics stat card values when python_layer is available
 - Show 0 or empty on any stat card, chart, or ML feature if Base44 entities have data
 - Build any data-reading feature without a Base44 fallback
-- Create a new entity when Person/Enterprise/Product covers the use case
+- Create a new entity when any of the 15 canonical entities covers the use case
+- Create a new entity solely because the label is different — use MasterDataOption subtypes instead
 - Change entity schema when only the import config needs updating
 - Return a plain array from a validate function
 - Trust company_id from user input in the copilot
@@ -660,7 +740,7 @@ const { data } = useQuery({ queryFn: () => fetch(`${RAILWAY_URL}/open-data/excha
 - Filter ETL by a single company_id — ETL loads ALL tenants, isolation is at READ time
 - Add a COMPANY_ID environment variable to scope ETL to one tenant
 - Suggest any Railway variable or config that assumes a single client
-- Add an app to APP_REGISTRY without declaring its `backend` and `APP_ONTOLOGY` entry
+- Add an app to APP_REGISTRY without declaring its `backend` and `ontologyObjects` array
 
 ### Copilot documentation sync rule (ALWAYS)
 
@@ -689,7 +769,7 @@ answers about Newsconseen's own features — the most visible form of product re
 - Implement three-tier fallback (analytics → raw → Base44 live) in every data-reading feature
 - Use PostgreSQL for analytics acceleration and clean data export — never as the sole data source
 - Keep DataModels.jsx and ObjectExplorer.jsx as accurate technical/imagery references (see rule below)
-- Declare `backend` + `APP_ONTOLOGY` for every app added to APP_REGISTRY (see Applications rule below)
+- Declare `backend` + `ontologyObjects` for every app added to APP_REGISTRY (see Applications rule below)
 - Add every new PostgreSQL table to etl/setup.py or enrichment/setup.py so it pre-exists from startup (see Datamart DDL rule below)
 - Add every new column on an existing table as `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in the same setup.py file — a CREATE TABLE change alone is not enough and will crash live deployments
 
@@ -708,9 +788,10 @@ external API, or bespoke backend:
 
 **Rules:**
 - Every entry in APP_REGISTRY must declare `backend: "ontology"` or `backend: "datamart"`
-- Every entry in APP_REGISTRY must have a corresponding entry in APP_ONTOLOGY listing
-  which of the 7 canonical entities (Person, Enterprise, Product, Task, Transaction,
-  Relationship, Address) the app reads or writes — this is the architectural contract
+- Every entry in APP_REGISTRY must declare an `ontologyObjects` array listing which of the
+  15 canonical entities the app reads or writes — this is the architectural contract.
+  Valid values: Person, Enterprise, Product, Task, Transaction, Relationship, Address,
+  Document, Schedule, Signal, Channel, Territory, Animal, Plot, Observation.
 - Ontology-backed apps must always stamp `company_id: currentUser?.company_id` on every
   created or updated record — never allow tenant bleed
 - Datamart-backed apps must implement three-tier fallback (analytics → raw → Base44 live)
@@ -722,10 +803,9 @@ external API, or bespoke backend:
 - Config-rendered React apps can be either backend — ontology for forms, datamart for views
 
 **When adding a new app:**
-1. Add to APP_REGISTRY with `backend` field
-2. Add to APP_ONTOLOGY with the entities it reads/writes
-3. If ontology-backed: implement company_id scoping and ETL trigger after mutations
-4. If datamart-backed: implement three-tier fallback
+1. Add to APP_REGISTRY with `backend` field and `ontologyObjects` array
+2. If ontology-backed: implement company_id scoping and ETL trigger after mutations
+3. If datamart-backed: implement three-tier fallback
 
 ### Datamart DDL — pre-create all tables AND evolve columns at startup (RULE)
 
@@ -749,7 +829,7 @@ The agent can reason about what *could* be in the datamart, not just what curren
 
 | File | Covers | Both lists required |
 |------|--------|-------------------|
-| `python_layer/etl/setup.py` → `ensure_all_analytics_tables(engine)` | All `raw.*` and `analytics.*` tables: 9 raw, 9 core analytics, 11 enhanced analytics, `copilot_memory` | ✅ |
+| `python_layer/etl/setup.py` → `ensure_all_analytics_tables(engine)` | All `raw.*` and `analytics.*` tables: 17 raw (9 core + 5 Phase 9 + 3 Phase 10), 17 core analytics, 11 enhanced analytics, `copilot_memory` | ✅ |
 | `python_layer/enrichment/setup.py` → `ensure_enrichment_tables(engine)` | All 5 `analytics.*_enrichment` tables | ✅ |
 
 Both files are called in `app.py` lifespan on every startup. Both must run `_DDL` first, then `_MIGRATIONS`.
@@ -833,7 +913,7 @@ _DDL = [
 
 **DataModels.jsx** must always be an accurate, up-to-date technical reference of the actual
 PostgreSQL schema and system architecture as it exists in the codebase:
-- **Ontology view**: 7 canonical entities + MasterDataOption, open data APIs, analytics pipeline.
+- **Ontology view**: all 15 canonical entities + MasterDataOption, open data APIs, analytics pipeline.
   Update this view whenever a new entity, field, or relationship is added to ARCHITECTURE.md.
 - **PostgreSQL view**: actual raw.*, analytics.*, audit.* table schemas sourced from real DDL
   in the python_layer (agent_memory.py, approval_gate.py, copilot/queries.py, audit/routes.py).
@@ -841,19 +921,18 @@ PostgreSQL schema and system architecture as it exists in the codebase:
 - **API Catalogue**: all FastAPI routers and their key endpoints.
   Update this view whenever a new router is mounted in app.py.
 
-**ObjectExplorer.jsx** must always reflect the 7 canonical business entities with live operator
-data from Base44. It is the operational view (runtime records), not the schema view.
-- Schema mode shows nodes for the 7 entities with AI Readiness borders sourced from
-  /dataquality/report.
-- Live mode shows actual record counts from the analytics layer.
-- 3D mode is a Three.js render of the same 7 entities.
+**ObjectExplorer.jsx** shows the 7 core canonical entities (Person, Enterprise, Product, Task,
+Transaction, Relationship, Address) as the primary operational graph. The 8 extension entities
+(Phase 9 + Phase 10) are not shown in ObjectExplorer — they are visible as list pages in the
+sidebar. ObjectExplorer renders the core graph with live record counts; do not add the extension
+entities to the 3D/schema/live graph without explicit confirmation.
 
 Rule: DataModels = "what does the architecture look like technically right now?"
-      ObjectExplorer = "what entities does this operator have data in right now?"
+      ObjectExplorer = "what data does this operator have in the 7 core entities right now?"
 
 When adding a new phase, database table, or API router:
 1. Update DataModels.jsx to include the new table/endpoint
-2. Verify ObjectExplorer still accurately reflects the 7-entity ontology
+2. Only update ObjectExplorer if adding a core-entity (Person/Enterprise/Product/Task/Transaction/Relationship/Address) feature
 
 ### Protected files — ask before modifying
 ```
@@ -870,7 +949,7 @@ python_layer/config/taxonomy.py
 ## Phase roadmap
 
 ```
-Phase 1  Core OS          ✅ All 7 entities, forms, lists, taxonomy
+Phase 1  Core OS          ✅ All 7 core entities, forms, lists, taxonomy
 Phase 2  Connectors       ✅ 35 connectors, 9 categories, full connect flow UI
 Phase 3A Copilot          ✅ Engine + query tools, session memory, grounded answers
 Phase 3B Alerts           ✅ WhatsApp/Email/SMS alert engine, 10 alert types
@@ -885,12 +964,15 @@ Phase 4G LLM Optimise     ✅ Haiku triage, Sonnet execution, Opus strategy rout
 Phase 5  ML Models        ✅ Frontend + backend — survival, segmentation, demand forecast
 Phase 6  Mobile           ✅ PWA offline-first field entry, IndexedDB sync, bottom nav
 Phase 7  Connector Sync   ✅ Scheduled connector runs + sync history dashboard
-Phase 8  Audit Trail      ✅ Immutable change log across all 7 entities
+Phase 8  Audit Trail      ✅ Immutable change log across all 7 core entities
 Phase A  Enrichment       ✅ Universal ontology enrichment — phone/email/geocoding/FX/barcode/company registration
 Phase B  Enrichment       ✅ Domain-specific enrichment — medications, food, vehicles, chemicals, devices, software, NPI
 Phase C  Enrichment       ✅ Compliance & risk — OFAC SDN sanctions, World Bank WGI, GDELT news, AML flags
-Phase D  Enrichment       ✅ Scoring & synthesis — entity_scores, relationship/task enrichment (7/7 entities), get_entity_risk_report copilot tool
+Phase D  Enrichment       ✅ Scoring & synthesis — entity_scores, relationship/task enrichment (7/7 core entities), get_entity_risk_report copilot tool
 Phase E  Enrichment       ✅ Predictive & temporal — spend_trend, churn_probability, CLV segment (person); revenue_trend, payment_behavior, avg_days_to_pay (enterprise); demand_trend, stockout_risk, days_of_stock, demand_forecast_30d (product); is_recurring, recurrence_count, seasonal_flag, days_since_prior_tx (transaction)
+Phase 9  Ontology Expand  ✅ 5 operational extension entities (Document, Schedule, Signal, Channel, Territory) + ETL + analytics tables + copilot tools + frontend pages
+Phase 10 Domain-Native    ✅ 3 domain-native entities (Animal, Plot, Observation) + ETL + analytics tables + agricultural APIs (SoilGrids, FAOSTAT, NASA POWER) + copilot tools + frontend pages
+Phase 11 Spatial Engine   ✅ Map Explorer → Spatial Intelligence: /postgis/spatial-pins (multi-layer unified pin feed), /postgis/spatial-density (heatmap, adjustable grid), /postgis/coverage-analysis (boundary coverage %); MapView rebuilt with Pins/Clusters/Density/Boundaries modes + entity layer toggles
 ```
 
 ---

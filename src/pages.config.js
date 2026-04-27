@@ -68,6 +68,11 @@ import UserManagement from './pages/UserManagement';
 import StaffSchedule from './pages/StaffSchedule';
 import BarcodeScanner from './pages/BarcodeScanner';
 import TaxonomyAdmin from './pages/TaxonomyAdmin';
+import Documents from './pages/Documents';
+import Schedules from './pages/Schedules';
+import Signals from './pages/Signals';
+import Channels from './pages/Channels';
+import Territories from './pages/Territories';
 import Animals from './pages/Animals';
 import Plots from './pages/Plots';
 import Observations from './pages/Observations';
@@ -94,6 +99,11 @@ export const PAGES = {
     "StaffSchedule": StaffSchedule,
     "BarcodeScanner": BarcodeScanner,
     "TaxonomyAdmin": TaxonomyAdmin,
+    "Documents": Documents,
+    "Schedules": Schedules,
+    "Signals": Signals,
+    "Channels": Channels,
+    "Territories": Territories,
     "Animals": Animals,
     "Plots": Plots,
     "Observations": Observations,

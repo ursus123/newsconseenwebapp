@@ -5,9 +5,9 @@ export default function MapExplorer() {
   return (
     <div className="h-full flex flex-col">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold text-slate-800">Map Explorer</h1>
+        <h1 className="text-2xl font-bold text-slate-800">Spatial Intelligence</h1>
         <p className="text-sm text-slate-500 mt-1">
-          View all enterprises and addresses with coordinates on an interactive map
+          Pins · Clusters · Density heatmaps · Territory boundaries — powered by PostGIS
         </p>
       </div>
       <div className="flex-1 min-h-0">

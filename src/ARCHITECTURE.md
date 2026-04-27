@@ -113,7 +113,8 @@ Newsconseen has three distinct product layers. Every component belongs to one of
 
 The system of record. Every operational event — a person joining, a transaction
 posted, stock counted, attendance marked — is captured here as structured master
-data. Base44 is the runtime. The three master entities (Person, Enterprise, Product)
+data. Base44 is the runtime. The canonical entities (Person, Enterprise, Product, Task,
+Transaction, Relationship, Address — plus the Phase 9/10 extension and domain-native entities)
 are the objects. The universal taxonomy classifies every object without constraining it.
 
 This layer answers: *What is happening in this enterprise right now?*
@@ -336,7 +337,7 @@ python_layer opens up to external data sources beyond Base44:
 - **WhatsApp Business** — extract structured operational data from conversational
   interfaces
 
-Each connector maps external data to the three master entities using the taxonomy.
+Each connector maps external data to the canonical entities using the taxonomy.
 The ontology absorbs new data sources without changing.
 
 ### Phase 3 — Real-time operational layer
@@ -903,8 +904,15 @@ WHERE person_type IN ('vendor', 'supplier', 'external_partner');
 UPDATE products SET item_type = 'physical'
 WHERE item_type IN ('product', 'goods', 'medication', 'equipment');
 
+-- NOTE (Phase 10): The Animal entity (base44.entities.Animal) is now the
+-- preferred data path for livestock, poultry, and aquatic species that need
+-- individual tracking (age, weight, health records, vet data).
+-- item_type = 'living' remains valid for non-individually-tracked living goods
+-- (e.g. seedlings as inventory stock). For individual animal records, use Animal.
+-- This migration line is ONLY needed for pre-Phase-10 data still in Products.
 UPDATE products SET item_type = 'living'
-WHERE item_type IN ('livestock', 'crop', 'animal');
+WHERE item_type IN ('livestock', 'crop', 'animal')
+  AND id NOT IN (SELECT DISTINCT product_id FROM animals WHERE product_id IS NOT NULL);
 
 UPDATE products SET item_type = 'digital'
 WHERE item_type IN ('software', 'license');
@@ -954,7 +962,7 @@ Before saving any file, verify every item. If any item cannot be checked — sto
 - [ ] Uses analytics_* table names that map to python_layer endpoints
 
 **Architecture integrity**
-- [ ] No new parallel entity created when Person / Enterprise / Product would serve
+- [ ] No new parallel entity created when any of the 15 canonical entities would serve
 - [ ] No vertical-specific type strings hardcoded in component logic
 - [ ] python_layer config/taxonomy.py used for all type normalization in ETL
 

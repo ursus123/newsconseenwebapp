@@ -596,6 +596,7 @@ to Railway, or make the fields `Optional[str] = None` in `settings.py`.
 | — | Security hardening — 2FA, OAuth2, rate limit, headers, SOC 2 | ✅ |
 | 9 | Ontology Expansion — 5 new canonical entities (Document, Schedule, Signal, Channel, Territory) + ETL + enrichment + copilot tools + frontend pages | ✅ |
 | 10 | Agricultural Ontology — 3 new entities (Animal, Plot, Observation) + ETL + copilot tools (get_animal_summary, get_plot_overview, get_observation_summary) + agricultural APIs (weather, soil, FAOSTAT, NASA POWER) | ✅ |
+| 11 | Spatial Intelligence — Map Explorer converted to PostGIS engine: /postgis/spatial-pins (multi-layer unified pin feed), /postgis/spatial-density (heatmap grid, adjustable cell size), /postgis/coverage-analysis (boundary coverage %). MapView.jsx rebuilt with Pins/Clusters/Density/Boundaries mode tabs + entity layer toggles. | ✅ |
 | 9+ | Copilot Write-Back — `create_record` + `import_records` tools with approval gate routing | ✅ |
 
 ---
@@ -606,6 +607,9 @@ to Railway, or make the fields `Optional[str] = None` in `settings.py`.
 GET  /health                        System health + ETL timestamps
 POST /cron/etl-all                  Trigger full ETL pipeline
 POST /load/time-summary             ETL: clock-in/out tasks → analytics.time_summary
+POST /load/animal-summary           ETL: animals → analytics.animal_summary
+POST /load/plot-summary             ETL: plots → analytics.plot_summary
+POST /load/observation-summary      ETL: observations → analytics.observation_summary
 GET  /copilot/status                Copilot health check
 POST /copilot/ask                   Ask a question (returns JSON)
 POST /copilot/ask/stream            Ask a question (SSE streaming)
@@ -619,6 +623,26 @@ GET  /security/compliance           SOC 2 compliance evidence
 GET  /audit/changes                 Immutable audit trail
 POST /onboarding/provision          Seed taxonomy + defaults for new tenant
 GET  /onboarding/status/{company}   Onboarding completion status
+
+Spatial Intelligence (PostGIS):
+POST /postgis/setup                 Enable PostGIS + spatial indexes (run once)
+GET  /postgis/status                Extension status + row counts
+GET  /postgis/spatial-pins          Unified pin feed: enterprises + addresses + plots
+GET  /postgis/spatial-density       Multi-layer density grid (heatmap cells)
+GET  /postgis/coverage-analysis     Inside/outside counts vs a boundary polygon
+GET  /postgis/nearby                Enterprises within radius of a point (metres)
+GET  /postgis/nearest               N nearest enterprises to a point (KNN)
+GET  /postgis/clusters              DBSCAN cluster summaries (bubble map)
+GET  /postgis/coverage              Records inside a stored boundary
+GET  /postgis/boundaries            List stored boundary polygons
+POST /postgis/boundaries            Upload a GeoJSON boundary polygon
+
+Agricultural Open Data:
+GET  /agriculture/weather           7-day forecast (Open-Meteo, lat/lon)
+GET  /agriculture/soil              Soil properties (SoilGrids ISRIC, lat/lon)
+GET  /agriculture/faostat           Crop production data (FAOSTAT, country/crop)
+GET  /agriculture/nasa-power        Agro-meteorological data (NASA POWER, lat/lon)
+GET  /agriculture/usda              USDA crop data
 ```
 
 ---

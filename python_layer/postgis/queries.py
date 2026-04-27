@@ -323,6 +323,207 @@ def get_cluster_summary(
         return []
 
 
+def get_entity_pins(
+    engine: Engine,
+    company_id: Optional[str],
+    entity_layers: list[str],   # ["enterprises","addresses","plots"]
+    limit: int = 1000,
+) -> list[dict]:
+    """
+    Return lat/lon pins from one or more entity layers.
+
+    Sources:
+      enterprises  → analytics.geospatial_summary   (geocoded + clustered)
+      addresses    → analytics.address_summary       (has lat/lon, address_type)
+      plots        → analytics.plot_summary          (aggregated — use raw.plots instead)
+
+    Returns a unified list of dicts with:
+      id, entity_layer, name, entity_type, status,
+      latitude, longitude, cluster_id (enterprises only)
+    """
+    parts = []
+    params: dict = {}
+
+    if "enterprises" in entity_layers:
+        cond = "g.geom IS NOT NULL"
+        if company_id:
+            cond += " AND g.company_id = :company_id"
+            params["company_id"] = company_id
+        parts.append(f"""
+            SELECT
+                g.enterprise_id          AS id,
+                'enterprise'::text       AS entity_layer,
+                g.name,
+                g.enterprise_type        AS entity_type,
+                g.status,
+                g.primary_address        AS address_label,
+                g.latitude,
+                g.longitude,
+                g.cluster_id
+            FROM analytics.geospatial_summary g
+            WHERE {cond}
+        """)
+
+    if "addresses" in entity_layers:
+        cond = "a.latitude IS NOT NULL AND a.longitude IS NOT NULL"
+        if company_id:
+            cond += " AND a.company_id = :company_id"
+            params["company_id"] = company_id
+        parts.append(f"""
+            SELECT
+                a.id,
+                'address'::text          AS entity_layer,
+                COALESCE(a.label, a.address_line_1, 'Address') AS name,
+                a.address_type           AS entity_type,
+                a.status,
+                a.full_address           AS address_label,
+                a.latitude,
+                a.longitude,
+                NULL::int                AS cluster_id
+            FROM analytics.address_summary a
+            WHERE {cond}
+        """)
+
+    if "plots" in entity_layers:
+        # Plots are aggregated — query raw.plots if it exists
+        try:
+            with engine.connect() as conn:
+                exists = conn.execute(text(
+                    "SELECT 1 FROM information_schema.tables "
+                    "WHERE table_schema='raw' AND table_name='plots' LIMIT 1"
+                )).fetchone()
+            if exists:
+                cond = "p.latitude IS NOT NULL AND p.longitude IS NOT NULL"
+                if company_id:
+                    cond += " AND p.company_id = :company_id"
+                    params["company_id"] = company_id
+                parts.append(f"""
+                    SELECT
+                        p.id,
+                        'plot'::text         AS entity_layer,
+                        COALESCE(p.name, 'Plot') AS name,
+                        p.plot_type          AS entity_type,
+                        p.status,
+                        p.land_use           AS address_label,
+                        p.latitude::double precision,
+                        p.longitude::double precision,
+                        NULL::int            AS cluster_id
+                    FROM raw.plots p
+                    WHERE {cond}
+                """)
+        except Exception as e:
+            logger.debug("get_entity_pins: plots layer skipped — %s", e)
+
+    if not parts:
+        return []
+
+    union_sql = " UNION ALL ".join(parts)
+    sql = text(f"""
+        SELECT * FROM (
+            {union_sql}
+        ) combined
+        LIMIT :lim
+    """)
+    params["lim"] = limit
+
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [dict(r._mapping) for r in rows]
+    except Exception as e:
+        logger.error("get_entity_pins failed: %s", e)
+        return []
+
+
+def get_multi_layer_density(
+    engine: Engine,
+    company_id: Optional[str],
+    entity_layers: list[str],
+    grid_degrees: float = 0.1,
+) -> list[dict]:
+    """
+    Density grid for one or more entity layers combined.
+
+    Sources the same union as get_entity_pins, then bins by grid cell.
+    Returns cells with count, dominant entity_layer, and breakdown.
+    """
+    pins = get_entity_pins(engine, company_id, entity_layers, limit=5000)
+    if not pins:
+        return []
+
+    from collections import defaultdict
+    cells: dict = defaultdict(lambda: {"count": 0, "layers": defaultdict(int)})
+    for pin in pins:
+        lat = pin.get("latitude")
+        lng = pin.get("longitude")
+        layer = pin.get("entity_layer", "unknown")
+        if lat is None or lng is None:
+            continue
+        cell_lat = round((int(lat / grid_degrees) * grid_degrees + grid_degrees / 2), 4)
+        cell_lng = round((int(lng / grid_degrees) * grid_degrees + grid_degrees / 2), 4)
+        key = (cell_lat, cell_lng)
+        cells[key]["count"] += 1
+        cells[key]["layers"][layer] += 1
+
+    result = []
+    for (cell_lat, cell_lng), data in cells.items():
+        dominant = max(data["layers"], key=data["layers"].get)
+        result.append({
+            "grid_lat":   cell_lat,
+            "grid_lng":   cell_lng,
+            "count":      data["count"],
+            "dominant_layer": dominant,
+            "layer_breakdown": dict(data["layers"]),
+        })
+
+    result.sort(key=lambda x: x["count"], reverse=True)
+    return result
+
+
+def get_coverage_analysis(
+    engine: Engine,
+    boundary_id: int,
+    company_id: Optional[str],
+    entity_layers: list[str],
+    limit: int = 500,
+) -> dict:
+    """
+    Coverage analysis: how many records of each entity type are
+    inside vs outside the boundary polygon.
+
+    Returns inside_count, outside_count, and a sample of inside records.
+    """
+    inside = find_within_boundary(engine, boundary_id, company_id, None, limit)
+    all_pins = get_entity_pins(engine, company_id, entity_layers, limit=5000)
+
+    inside_set = {(r.get("latitude"), r.get("longitude")) for r in inside}
+    inside_by_layer: dict = {}
+    for r in inside:
+        lyr = r.get("entity_layer", "enterprise")
+        inside_by_layer[lyr] = inside_by_layer.get(lyr, 0) + 1
+
+    total_by_layer: dict = {}
+    for p in all_pins:
+        lyr = p.get("entity_layer", "enterprise")
+        total_by_layer[lyr] = total_by_layer.get(lyr, 0) + 1
+
+    coverage_pct = {}
+    for lyr in set(list(inside_by_layer.keys()) + list(total_by_layer.keys())):
+        inside_n = inside_by_layer.get(lyr, 0)
+        total_n  = total_by_layer.get(lyr, 0)
+        coverage_pct[lyr] = round(inside_n / total_n * 100, 1) if total_n else 0.0
+
+    return {
+        "boundary_id":    boundary_id,
+        "inside_records": inside,
+        "inside_count":   len(inside),
+        "total_records":  len(all_pins),
+        "coverage_pct_by_layer": coverage_pct,
+        "inside_by_layer":  inside_by_layer,
+        "total_by_layer":   total_by_layer,
+    }
+
+
 def upsert_boundary(
     engine: Engine,
     company_id: str,

@@ -20,6 +20,9 @@ export function isAgricultural(enterprise) {
   return AGRICULTURAL_TYPES.some(t => type.includes(t));
 }
 
+// Legacy: reads livestock from Products (item_type = 'living').
+// Phase 10+: individual animal records live in base44.entities.Animal.
+// This helper is retained for any pre-Phase-10 data still in Products.
 export function getLivestock(products, entName) {
   return products.filter(p =>
     LIVESTOCK_ITEM_TYPES.includes(p.item_type) &&
@@ -70,7 +73,6 @@ export const PARTICIPANT_TYPES = [
   "customer", "attendee", "visitor",
   "learner", "guest", "subscriber",
 ];
-// NOTE: "animal" is NOT in either list — animals belong in Products entity
 
 export function isStaff(person) {
   return STAFF_TYPES.includes(person.person_type);

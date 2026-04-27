@@ -22,6 +22,7 @@ export const ROLE_PERMISSIONS = {
   admin: {
     pages: [
       "Dashboard",
+      // Core entities
       "People",
       "Enterprises",
       "Products",
@@ -30,26 +31,42 @@ export const ROLE_PERMISSIONS = {
       "Relationships",
       "Tasks",
       "Transactions",
+      // Phase 9 — operational extension entities
+      "Documents",
+      "Schedules",
+      "Signals",
+      "Channels",
+      "Territories",
+      // Phase 10 — domain-native entities
+      "Animals",
+      "Plots",
+      "Observations",
+      // Analytics & intelligence
       "Reports",
       "QueryBuilder",
-      "Attendance",
-      "Permissions",
-      "UserManagement",
-      "Billing",
+      "MarketIntelligence",
+      "MLModels",
       "copilot",
       "alerts",
+      "agents",
       "Connectors",
-      "network",
+      "Workflows",
+      // Ontology
       "ObjectExplorer",
       "KineticLayer",
       "ObjectViews",
+      // Applications
       "Applications",
-      "MLModels",
+      // Admin
+      "Attendance",
+      "Permissions",
+      "UserManagement",
+      "TaxonomyAdmin",
       "DataModels",
       "EntityGraph",
       "Pipelines",
-      "TaxonomyAdmin",
-      "MarketIntelligence",
+      "network",
+      "Billing",
       "StockCounter",
       "Settings",
     ],

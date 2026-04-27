@@ -1,14 +1,32 @@
-import { Users, Building2, Package, CheckSquare, Receipt, Link2, MapPin } from "lucide-react";
+import {
+  Users, Building2, Package, CheckSquare, Receipt, Link2, MapPin,
+  FileText, CalendarClock, Radio, MessageSquare, Globe,
+  PawPrint, Tractor, FlaskConical,
+} from "lucide-react";
 
-// Ontology object type metadata — shared across appRegistry, AppCard, Applications
+// Canonical entity metadata — 15 entities across three tiers.
+// Core (7): Person, Enterprise, Product, Task, Transaction, Relationship, Address
+// Operational extensions (5, Phase 9): Document, Schedule, Signal, Channel, Territory
+// Domain-native (3, Phase 10): Animal, Plot, Observation
 export const ONTOLOGY_TYPES = [
-  { key: "Person",       icon: Users,       color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200"   },
-  { key: "Enterprise",   icon: Building2,   color: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-200"  },
-  { key: "Product",      icon: Package,     color: "text-rose-600",    bg: "bg-rose-50",    border: "border-rose-200"   },
-  { key: "Task",         icon: CheckSquare, color: "text-violet-600",  bg: "bg-violet-50",  border: "border-violet-200" },
-  { key: "Transaction",  icon: Receipt,     color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200"},
-  { key: "Relationship", icon: Link2,       color: "text-indigo-600",  bg: "bg-indigo-50",  border: "border-indigo-200" },
-  { key: "Address",      icon: MapPin,      color: "text-teal-600",    bg: "bg-teal-50",    border: "border-teal-200"   },
+  // Core tier
+  { key: "Person",       icon: Users,          color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200"    },
+  { key: "Enterprise",   icon: Building2,      color: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-200"   },
+  { key: "Product",      icon: Package,        color: "text-rose-600",    bg: "bg-rose-50",    border: "border-rose-200"    },
+  { key: "Task",         icon: CheckSquare,    color: "text-violet-600",  bg: "bg-violet-50",  border: "border-violet-200"  },
+  { key: "Transaction",  icon: Receipt,        color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
+  { key: "Relationship", icon: Link2,          color: "text-indigo-600",  bg: "bg-indigo-50",  border: "border-indigo-200"  },
+  { key: "Address",      icon: MapPin,         color: "text-teal-600",    bg: "bg-teal-50",    border: "border-teal-200"    },
+  // Operational extension tier (Phase 9)
+  { key: "Document",     icon: FileText,       color: "text-sky-600",     bg: "bg-sky-50",     border: "border-sky-200"     },
+  { key: "Schedule",     icon: CalendarClock,  color: "text-cyan-600",    bg: "bg-cyan-50",    border: "border-cyan-200"    },
+  { key: "Signal",       icon: Radio,          color: "text-orange-600",  bg: "bg-orange-50",  border: "border-orange-200"  },
+  { key: "Channel",      icon: MessageSquare,  color: "text-pink-600",    bg: "bg-pink-50",    border: "border-pink-200"    },
+  { key: "Territory",    icon: Globe,          color: "text-purple-600",  bg: "bg-purple-50",  border: "border-purple-200"  },
+  // Domain-native tier (Phase 10)
+  { key: "Animal",       icon: PawPrint,       color: "text-lime-600",    bg: "bg-lime-50",    border: "border-lime-200"    },
+  { key: "Plot",         icon: Tractor,        color: "text-yellow-600",  bg: "bg-yellow-50",  border: "border-yellow-200"  },
+  { key: "Observation",  icon: FlaskConical,   color: "text-fuchsia-600", bg: "bg-fuchsia-50", border: "border-fuchsia-200" },
 ];
 export const ONTOLOGY_MAP = Object.fromEntries(ONTOLOGY_TYPES.map(t => [t.key, t]));
 
@@ -68,11 +86,11 @@ export const APP_REGISTRY = [
   { id: "librarylog",        name: "Library Log",                emoji: "📚",  description: "Book borrowing and return tracker with overdue alerts",                            category: "Education",   route: "LibraryLog",          color: "amber",   roles: "all",        plan: "starter",      exists: false, educationOnly: true, backend: "ontology",  ontologyObjects: ["Person", "Product", "Task"] },
 ];
 
-export const CATEGORIES = ["All", "HR", "Inventory", "Healthcare", "Field", "Finance", "Compliance", "Education", "Tools"];
+export const CATEGORIES = ["All", "HR", "Inventory", "Healthcare", "Field", "Finance", "Compliance", "Education", "Agriculture", "Tools"];
 
 export const CATEGORY_EMOJIS = {
   HR: "👥", Inventory: "📦", Healthcare: "🏥", Field: "🚀",
-  Finance: "💼", Compliance: "📋", Education: "🎓", Tools: "🔧",
+  Finance: "💼", Compliance: "📋", Education: "🎓", Agriculture: "🌱", Tools: "🔧",
 };
 
 // Apps recommended by enterprise category
@@ -80,7 +98,7 @@ export const APPS_BY_ENTERPRISE_CATEGORY = {
   healthcare:  ["medadmin", "staffschedule", "clockinout", "barcodescanner", "stockcounter", "incidentreport", "careplan"],
   education:   ["attendanceregister", "feecollection", "staffschedule", "clockinout", "stockcounter", "librarylog"],
   community:   ["attendanceregister", "donationtracker", "staffschedule", "visitorlog", "maintenancerequest"],
-  agriculture: ["stockcounter", "barcodescanner", "inspectionchecklist", "vehiclelog", "maintenancerequest"],
+  agriculture: ["stockcounter", "barcodescanner", "inspectionchecklist", "vehiclelog", "maintenancerequest", "fieldvisitreport"],
   business:    ["clockinout", "staffschedule", "stockcounter", "barcodescanner", "deliverytracker", "receiptscanner"],
   nonprofit:   ["donationtracker", "attendanceregister", "budgettracker", "fieldvisitreport", "staffschedule"],
   government:  ["inspectionchecklist", "licensetracker", "documentexpiry", "staffschedule", "clockinout"],
