@@ -2895,13 +2895,30 @@ def request_action(
 
     Returns the status (executed/pending/notify) and an approval_id if queued.
     """
-    from database import get_engine_safe, _clean_df as _get_engine
+    from database import get_engine_safe
 
     VALID_ACTIONS = {
+        # Task operations (auto-executed)
         "create_task", "create_follow_up", "update_task_status",
+        # Record operations
         "flag_record", "update_record", "reassign_task",
-        "create_transaction", "send_client_message", "send_email",
+        # Communication (approval-gated)
+        "send_client_message", "send_email", "send_whatsapp", "send_bulk_message",
+        # Financial (approval-gated)
+        "create_transaction", "create_purchase_order", "financial_transfer",
+        # Notification
         "internal_alert",
+        # Core entity creates (approval-gated)
+        "create_person", "create_enterprise", "create_product",
+        # Phase 9 entity creates (notify — execute immediately)
+        "create_document", "create_schedule", "create_territory",
+        "create_signal", "create_channel",
+        # Bulk operations (approval-gated)
+        "bulk_update", "bulk_delete", "import_records",
+        # Agent invocation (approval-gated)
+        "invoke_agent",
+        # Destructive (critical)
+        "delete_record",
     }
     if action_type not in VALID_ACTIONS:
         return {
@@ -2917,7 +2934,7 @@ def request_action(
         "source":    "copilot",
     }
 
-    engine = _get_engine()
+    engine = get_engine_safe()
     if not engine:
         return {
             "status":  "unavailable",
