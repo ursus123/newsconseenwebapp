@@ -1730,3 +1730,153 @@ export function validateTerritory(row) {
   if (!row.territory_type) errors.push("territory_type is required");
   return { errors, warnings };
 }
+
+// ── ANIMALS ──────────────────────────────────────────────────────────────────
+export const ANIMAL_FIELDS = [
+  { key: "name",            label: "Name *",           required: true },
+  { key: "animal_type",     label: "Animal Type *",    required: true },
+  { key: "species",         label: "Species" },
+  { key: "breed",           label: "Breed" },
+  { key: "sex",             label: "Sex" },
+  { key: "status",          label: "Status" },
+  { key: "date_of_birth",   label: "Date of Birth" },
+  { key: "acquisition_date",label: "Acquisition Date" },
+  { key: "weight_kg",       label: "Weight (kg)" },
+  { key: "tag_id",          label: "Tag / Ear Tag ID" },
+  { key: "enterprise_id",   label: "Enterprise ID" },
+  { key: "notes",           label: "Notes" },
+];
+
+export const ANIMAL_MAPPING_RULES = [
+  [/^tag[._-]?id$|^ear[._-]?tag$/i,       "tag_id"],
+  [/^animal[._-]?type$|^type$/i,           "animal_type"],
+  [/^date[._-]?of[._-]?birth$|^dob$/i,    "date_of_birth"],
+  [/^acq[._-]?date$|^acquisition[._-]?date$/i, "acquisition_date"],
+  [/^weight[._-]?kg$|^weight$/i,           "weight_kg"],
+  [/^enterprise[._-]?id$|^farm[._-]?id$/i, "enterprise_id"],
+  [/^species$/i,                            "species"],
+  [/^breed$/i,                              "breed"],
+  [/^sex$|^gender$/i,                       "sex"],
+  [/^status$/i,                             "status"],
+  [/^name$|^animal[._-]?name$/i,           "name"],
+];
+
+export const ANIMAL_TEMPLATE_EXAMPLE = [
+  { name: "Bessie", animal_type: "livestock", species: "Cattle", breed: "Friesian", sex: "female", status: "active", weight_kg: "450" },
+];
+
+export function transformAnimal(row, currentUser) {
+  return {
+    ...row,
+    status:     row.status || "active",
+    company_id: row.company_id || currentUser?.company_id,
+    weight_kg:  row.weight_kg ? parseFloat(row.weight_kg) : undefined,
+  };
+}
+
+export function validateAnimal(row) {
+  const errors = [], warnings = [];
+  if (!row.name)        errors.push("name is required");
+  if (!row.animal_type) errors.push("animal_type is required");
+  return { errors, warnings };
+}
+
+// ── PLOTS ────────────────────────────────────────────────────────────────────
+export const PLOT_FIELDS = [
+  { key: "name",           label: "Name *",          required: true },
+  { key: "plot_type",      label: "Plot Type *",     required: true },
+  { key: "land_use",       label: "Land Use" },
+  { key: "crop_type",      label: "Crop Type" },
+  { key: "area_ha",        label: "Area (ha)" },
+  { key: "status",         label: "Status" },
+  { key: "irrigation_type",label: "Irrigation Type" },
+  { key: "soil_type",      label: "Soil Type" },
+  { key: "latitude",       label: "Latitude" },
+  { key: "longitude",      label: "Longitude" },
+  { key: "enterprise_id",  label: "Enterprise ID" },
+  { key: "notes",          label: "Notes" },
+];
+
+export const PLOT_MAPPING_RULES = [
+  [/^plot[._-]?type$|^type$/i,       "plot_type"],
+  [/^land[._-]?use$/i,               "land_use"],
+  [/^crop[._-]?type$|^crop$/i,       "crop_type"],
+  [/^area[._-]?ha$|^area[._-]?hectares$|^size[._-]?ha$/i, "area_ha"],
+  [/^irrigation[._-]?type$/i,        "irrigation_type"],
+  [/^soil[._-]?type$/i,              "soil_type"],
+  [/^lat$|^latitude$/i,              "latitude"],
+  [/^lon$|^lng$|^longitude$/i,       "longitude"],
+  [/^enterprise[._-]?id$|^farm[._-]?id$/i, "enterprise_id"],
+  [/^status$/i,                      "status"],
+  [/^name$|^plot[._-]?name$/i,       "name"],
+];
+
+export const PLOT_TEMPLATE_EXAMPLE = [
+  { name: "Field A", plot_type: "arable", land_use: "crop", crop_type: "Maize", area_ha: "2.5", status: "cultivated", latitude: "-1.2921", longitude: "36.8219" },
+];
+
+export function transformPlot(row, currentUser) {
+  return {
+    ...row,
+    status:     row.status || "active",
+    company_id: row.company_id || currentUser?.company_id,
+    area_ha:    row.area_ha   ? parseFloat(row.area_ha)  : undefined,
+    latitude:   row.latitude  ? parseFloat(row.latitude) : undefined,
+    longitude:  row.longitude ? parseFloat(row.longitude): undefined,
+  };
+}
+
+export function validatePlot(row) {
+  const errors = [], warnings = [];
+  if (!row.name)      errors.push("name is required");
+  if (!row.plot_type) errors.push("plot_type is required");
+  if (row.area_ha && isNaN(parseFloat(row.area_ha))) warnings.push("area_ha should be a number");
+  return { errors, warnings };
+}
+
+// ── OBSERVATIONS ─────────────────────────────────────────────────────────────
+export const OBSERVATION_FIELDS = [
+  { key: "observation_type", label: "Observation Type *", required: true },
+  { key: "subject_type",     label: "Subject Type" },
+  { key: "subject_id",       label: "Subject ID" },
+  { key: "numeric_value",    label: "Numeric Value" },
+  { key: "text_value",       label: "Text Value" },
+  { key: "unit_of_measure",  label: "Unit of Measure" },
+  { key: "is_anomaly",       label: "Is Anomaly (true/false)" },
+  { key: "observed_at",      label: "Observed At (datetime)" },
+  { key: "enterprise_id",    label: "Enterprise ID" },
+  { key: "notes",            label: "Notes" },
+];
+
+export const OBSERVATION_MAPPING_RULES = [
+  [/^observation[._-]?type$|^obs[._-]?type$|^type$/i, "observation_type"],
+  [/^subject[._-]?type$/i,                             "subject_type"],
+  [/^subject[._-]?id$/i,                               "subject_id"],
+  [/^numeric[._-]?value$|^value$|^reading$/i,          "numeric_value"],
+  [/^text[._-]?value$|^label[._-]?value$/i,            "text_value"],
+  [/^unit[._-]?of[._-]?measure$|^unit$|^uom$/i,        "unit_of_measure"],
+  [/^is[._-]?anomaly$|^anomaly$/i,                     "is_anomaly"],
+  [/^observed[._-]?at$|^date[._-]?time$|^recorded[._-]?at$/i, "observed_at"],
+  [/^enterprise[._-]?id$/i,                            "enterprise_id"],
+  [/^notes$|^comment$/i,                               "notes"],
+];
+
+export const OBSERVATION_TEMPLATE_EXAMPLE = [
+  { observation_type: "soil_moisture", subject_type: "plot", numeric_value: "42.5", unit_of_measure: "%", is_anomaly: "false", observed_at: "2026-04-26T08:00:00Z" },
+];
+
+export function transformObservation(row, currentUser) {
+  return {
+    ...row,
+    company_id:    row.company_id || currentUser?.company_id,
+    numeric_value: row.numeric_value ? parseFloat(row.numeric_value) : undefined,
+    is_anomaly:    row.is_anomaly === "true" || row.is_anomaly === true,
+  };
+}
+
+export function validateObservation(row) {
+  const errors = [], warnings = [];
+  if (!row.observation_type) errors.push("observation_type is required");
+  if (!row.numeric_value && !row.text_value) warnings.push("no value recorded — both numeric_value and text_value are empty");
+  return { errors, warnings };
+}

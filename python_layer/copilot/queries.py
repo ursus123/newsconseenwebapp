@@ -3801,7 +3801,150 @@ def search_public_data(dataset: str, query: str, company_id: str, location: str 
                 company_id=company_id, location=location
             )
 
-    return {"error": f"Unknown dataset: {dataset}. Use: us_census, world_bank, open_fda, osm_count, fx_rates, un_data, cms_pharmacy, state_pharmacy, dea_pharmacy"}
+    # ── Agricultural weather ────────────────────────────────────────────────────
+    if dataset == "weather":
+        try:
+            # location = "lat,lon" or geocode from location string
+            lat, lon = None, None
+            if "," in (location or ""):
+                parts = location.split(",")
+                try:
+                    lat, lon = float(parts[0].strip()), float(parts[1].strip())
+                except ValueError:
+                    pass
+            if lat is None:
+                # Geocode using Nominatim
+                loc_q = urllib.parse.quote(location or query)
+                geo_url = f"https://nominatim.openstreetmap.org/search?q={loc_q}&format=json&limit=1"
+                req = urllib.request.Request(geo_url, headers={"User-Agent": "newsconseen/1.0"})
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    geo = _json.loads(r.read())[0]
+                    lat, lon = float(geo["lat"]), float(geo["lon"])
+
+            url = (
+                f"https://api.open-meteo.com/v1/forecast"
+                f"?latitude={lat}&longitude={lon}&forecast_days=7"
+                f"&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,"
+                f"wind_speed_10m_max,et0_fao_evapotranspiration,precipitation_probability_max"
+                f"&timezone=auto"
+            )
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=15) as r:
+                data = _json.loads(r.read())
+            daily = data.get("daily", {})
+            dates = daily.get("time", [])
+            forecast = [
+                {
+                    "date": dates[i],
+                    "temp_max_c": daily.get("temperature_2m_max", [None])[i],
+                    "temp_min_c": daily.get("temperature_2m_min", [None])[i],
+                    "precipitation_mm": daily.get("precipitation_sum", [None])[i],
+                    "wind_speed_kmh": daily.get("wind_speed_10m_max", [None])[i],
+                    "evapotranspiration_mm": daily.get("et0_fao_evapotranspiration", [None])[i],
+                    "precip_probability_pct": daily.get("precipitation_probability_max", [None])[i],
+                }
+                for i in range(len(dates))
+            ]
+            return {
+                "dataset": "weather",
+                "location": location or query,
+                "lat": lat, "lon": lon,
+                "data": forecast,
+                "note": "Source: Open-Meteo (open-meteo.com) — 7-day agricultural forecast",
+            }
+        except Exception as e:
+            logger.warning("search_public_data weather failed: %s", e)
+            return {"dataset": "weather", "error": str(e), "data": []}
+
+    # ── Soil data — SoilGrids ISRIC ────────────────────────────────────────────
+    if dataset == "soil":
+        try:
+            lat, lon = None, None
+            if "," in (location or ""):
+                parts = location.split(",")
+                try:
+                    lat, lon = float(parts[0].strip()), float(parts[1].strip())
+                except ValueError:
+                    pass
+            if lat is None:
+                loc_q = urllib.parse.quote(location or query)
+                geo_url = f"https://nominatim.openstreetmap.org/search?q={loc_q}&format=json&limit=1"
+                req = urllib.request.Request(geo_url, headers={"User-Agent": "newsconseen/1.0"})
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    geo = _json.loads(r.read())[0]
+                    lat, lon = float(geo["lat"]), float(geo["lon"])
+
+            url = (
+                f"https://rest.isric.org/soilgrids/v2.0/properties/query"
+                f"?lon={lon}&lat={lat}"
+                f"&property=phh2o&property=soc&property=clay&property=sand"
+                f"&depth=0-5cm&value=mean"
+            )
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                data = _json.loads(r.read())
+            props = data.get("properties", {}).get("layers", [])
+            soil_data = [
+                {
+                    "property": p.get("name"),
+                    "unit_measure": p.get("unit_measure", {}).get("d_factor", ""),
+                    "depth": "0-5cm",
+                    "mean_value": (p.get("depths", [{}])[0].get("values", {}) or {}).get("mean"),
+                }
+                for p in props
+            ]
+            return {
+                "dataset": "soil",
+                "location": location or query,
+                "lat": lat, "lon": lon,
+                "data": soil_data,
+                "note": "Source: SoilGrids ISRIC (isric.org) — phH2O, SOC, clay, sand at 0-5cm depth",
+            }
+        except Exception as e:
+            logger.warning("search_public_data soil failed: %s", e)
+            return {"dataset": "soil", "error": str(e), "data": []}
+
+    # ── FAOSTAT — crop production by country ──────────────────────────────────
+    if dataset == "faostat":
+        try:
+            country = location or "World"
+            area_code = "1" if country.lower() in ("world", "") else None
+            # FAOSTAT public API — no key required
+            url = (
+                f"https://fenixservices.fao.org/faostat/api/v1/en/data/QCL"
+                f"?area={urllib.parse.quote(country)}"
+                f"&element=Production"
+                f"&year=2022"
+                f"&item={urllib.parse.quote(query or 'Wheat')}"
+                f"&output_type=objects"
+                f"&per_page=20"
+            )
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                data = _json.loads(r.read())
+            rows = data.get("data", [])
+            result = [
+                {
+                    "area": r.get("Area"),
+                    "item": r.get("Item"),
+                    "year": r.get("Year"),
+                    "value": r.get("Value"),
+                    "unit": r.get("Unit"),
+                }
+                for r in rows[:20]
+            ]
+            return {
+                "dataset": "faostat",
+                "query": query,
+                "location": country,
+                "data": result,
+                "note": "Source: FAOSTAT (fao.org) — crop production data",
+            }
+        except Exception as e:
+            logger.warning("search_public_data faostat failed: %s", e)
+            return {"dataset": "faostat", "error": str(e), "data": []}
+
+    return {"error": f"Unknown dataset: {dataset}. Use: us_census, world_bank, open_fda, osm_count, fx_rates, un_data, cms_pharmacy, state_pharmacy, dea_pharmacy, weather, soil, faostat"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -4524,6 +4667,72 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "get_animal_summary",
+        "description": (
+            "Get a summary of Animal records — livestock, aquaculture, veterinary patients, or research subjects. "
+            "Returns counts by type, species, and health status; average age and weight. "
+            "Use for: 'how many cattle do we have?', 'animal health status', 'livestock count', "
+            "'fish stock', 'vet patient summary', 'herd breakdown by species'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "animal_type": {
+                    "type": "string",
+                    "description": "Filter by animal type (e.g. livestock, poultry, aquaculture, pet, wildlife). Leave null for all.",
+                },
+                "species": {
+                    "type": "string",
+                    "description": "Filter by species name (e.g. Cattle, Tilapia, Chicken). Leave null for all.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_plot_overview",
+        "description": (
+            "Get a summary of Plot records — managed land areas, farm plots, aquaculture ponds, grazing areas. "
+            "Returns counts, total hectares, land use type, and geo-coded plots. "
+            "Use for: 'total farm area', 'how many plots do we manage?', 'land use breakdown', "
+            "'cultivated area', 'plot inventory', 'field coverage'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "plot_type": {
+                    "type": "string",
+                    "description": "Filter by plot type (e.g. arable, grazing, orchard, pond, greenhouse). Leave null for all.",
+                },
+                "land_use": {
+                    "type": "string",
+                    "description": "Filter by land use category (e.g. crop, livestock, aquaculture). Leave null for all.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_observation_summary",
+        "description": (
+            "Get a summary of Observation records — field readings, sensor data, agronomic measurements, vet exam results. "
+            "Returns counts, average/min/max values, anomaly flags, and recency. "
+            "Use for: 'sensor readings this week', 'soil moisture observations', 'what anomalies were detected?', "
+            "'field measurement summary', 'weight readings', 'temperature observations', 'crop yield samples'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "observation_type": {
+                    "type": "string",
+                    "description": "Filter by observation type (e.g. soil_moisture, temperature, weight, yield, disease_check). Leave null for all.",
+                },
+                "subject_type": {
+                    "type": "string",
+                    "description": "What the observation is about (e.g. animal, plot, crop, water). Leave null for all.",
+                },
+            },
+        },
+    },
+    {
         "name": "find_nearby_competitors",
         "description": (
             "Find external competitors or similar businesses near a location using OpenStreetMap. "
@@ -4577,7 +4786,7 @@ TOOL_DEFINITIONS = [
     {
         "name": "search_public_data",
         "description": (
-            "Query structured public datasets for market research. Datasets available:\n"
+            "Query structured public datasets for market research and agricultural intelligence. Datasets available:\n"
             "- world_bank: Global economic/health/education indicators (GDP, poverty, literacy, life expectancy, etc.) "
             "  for any country. Use location='Rwanda' or location='RW'. Works for ALL countries.\n"
             "- us_census: US state-level demographics and income data.\n"
@@ -4587,7 +4796,14 @@ TOOL_DEFINITIONS = [
             "  Returns KES, NGN, GHS, RWF, ZAR, EUR, GBP, INR and more.\n"
             "- un_data: UN development indicators (HDI, fertility, infant mortality, education).\n"
             "- cms_pharmacy / state_pharmacy / dea_pharmacy: US pharmacy licensing data.\n"
-            "For global SME market research always try world_bank first."
+            "- weather: 7-day agricultural weather forecast (temperature, rain, evapotranspiration). "
+            "  Use location='lat,lon' or a place name like location='Nairobi'.\n"
+            "- soil: Soil composition at a location (pH, organic carbon, clay, sand). "
+            "  Use location='lat,lon' or place name.\n"
+            "- faostat: FAOSTAT crop production data by country and commodity. "
+            "  Use query='Wheat' and location='Kenya'.\n"
+            "For global SME market research always try world_bank first. "
+            "For agricultural/farm questions use weather, soil, and faostat."
         ),
         "input_schema": {
             "type": "object",
@@ -4595,7 +4811,7 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "dataset": {
                     "type": "string",
-                    "enum": ["us_census", "open_fda", "world_bank", "osm_count", "fx_rates", "un_data", "cms_pharmacy", "state_pharmacy", "dea_pharmacy"],
+                    "enum": ["us_census", "open_fda", "world_bank", "osm_count", "fx_rates", "un_data", "cms_pharmacy", "state_pharmacy", "dea_pharmacy", "weather", "soil", "faostat"],
                     "description": "Which dataset to query.",
                 },
                 "query": {
@@ -7032,6 +7248,144 @@ def get_territory_summary(company_id: str, territory_type: str = None) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# AGRICULTURAL / ECOLOGICAL ENTITY TOOLS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_animal_summary(company_id: str, animal_type: str = None, species: str = None) -> dict:
+    """Return livestock/animal population by type, species, and status."""
+    filters = ["company_id = :cid"]
+    params: dict = {"cid": company_id}
+    if animal_type:
+        filters.append("animal_type = :atype")
+        params["atype"] = animal_type
+    if species:
+        filters.append("species ILIKE :sp")
+        params["sp"] = f"%{species}%"
+    where = " AND ".join(filters)
+    sql = f"""
+        SELECT animal_type, species, status,
+               SUM(animal_count)   AS animal_count,
+               SUM(active_count)   AS active_count,
+               SUM(inactive_count) AS inactive_count,
+               AVG(avg_age_days)   AS avg_age_days,
+               AVG(avg_weight_kg)  AS avg_weight_kg,
+               SUM(new_last_30d)   AS new_last_30d,
+               MAX(snapshot_date)  AS data_as_of
+        FROM analytics.animal_summary
+        WHERE {where}
+        GROUP BY animal_type, species, status
+        ORDER BY animal_count DESC
+    """
+    rows, data_as_of, source = _query_analytics("animal_summary", sql, params, company_id)
+    if rows:
+        return {"animals": rows, "data_as_of": data_as_of, "source": source}
+
+    raw = _read_raw_table("animals", company_id)
+    if not raw.empty:
+        return {"animals": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "raw"}
+    try:
+        from etl.animal import extract_animals
+        df = extract_animals()
+        df = _filter_by_company(df, company_id)
+        return {"animals": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "base44_live"}
+    except Exception as e:
+        return {"animals": [], "error": str(e)}
+
+
+def get_plot_overview(company_id: str, plot_type: str = None, land_use: str = None) -> dict:
+    """Return managed land / plot breakdown — count, area, land use, status."""
+    filters = ["company_id = :cid"]
+    params: dict = {"cid": company_id}
+    if plot_type:
+        filters.append("plot_type = :ptype")
+        params["ptype"] = plot_type
+    if land_use:
+        filters.append("land_use ILIKE :luse")
+        params["luse"] = f"%{land_use}%"
+    where = " AND ".join(filters)
+    sql = f"""
+        SELECT plot_type, land_use, status,
+               SUM(plot_count)         AS plot_count,
+               SUM(active_count)       AS active_count,
+               SUM(total_area_ha)      AS total_area_ha,
+               AVG(avg_area_ha)        AS avg_area_ha,
+               SUM(plots_with_coords)  AS plots_with_coords,
+               SUM(new_last_30d)       AS new_last_30d,
+               MAX(snapshot_date)      AS data_as_of
+        FROM analytics.plot_summary
+        WHERE {where}
+        GROUP BY plot_type, land_use, status
+        ORDER BY plot_count DESC
+    """
+    rows, data_as_of, source = _query_analytics("plot_summary", sql, params, company_id)
+    if rows:
+        return {"plots": rows, "data_as_of": data_as_of, "source": source}
+
+    raw = _read_raw_table("plots", company_id)
+    if not raw.empty:
+        return {"plots": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "raw"}
+    try:
+        from etl.plot import extract_plots
+        df = extract_plots()
+        df = _filter_by_company(df, company_id)
+        return {"plots": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "base44_live"}
+    except Exception as e:
+        return {"plots": [], "error": str(e)}
+
+
+def get_observation_summary(
+    company_id: str,
+    observation_type: str = None,
+    subject_type: str = None,
+) -> dict:
+    """Return field observation and sensor reading summary — counts, avg values, anomaly rate."""
+    filters = ["company_id = :cid"]
+    params: dict = {"cid": company_id}
+    if observation_type:
+        filters.append("observation_type = :otype")
+        params["otype"] = observation_type
+    if subject_type:
+        filters.append("subject_type ILIKE :stype")
+        params["stype"] = f"%{subject_type}%"
+    where = " AND ".join(filters)
+    sql = f"""
+        SELECT observation_type, unit_of_measure, subject_type,
+               SUM(observation_count) AS observation_count,
+               AVG(avg_value)         AS avg_value,
+               MIN(min_value)         AS min_value,
+               MAX(max_value)         AS max_value,
+               SUM(anomaly_count)     AS anomaly_count,
+               SUM(new_last_7d)       AS new_last_7d,
+               SUM(new_last_30d)      AS new_last_30d,
+               MAX(snapshot_date)     AS data_as_of
+        FROM analytics.observation_summary
+        WHERE {where}
+        GROUP BY observation_type, unit_of_measure, subject_type
+        ORDER BY observation_count DESC
+    """
+    rows, data_as_of, source = _query_analytics("observation_summary", sql, params, company_id)
+    if rows:
+        return {"observations": rows, "data_as_of": data_as_of, "source": source}
+
+    raw = _read_raw_table("observations", company_id)
+    if not raw.empty:
+        return {"observations": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "raw"}
+    try:
+        from etl.observation import extract_observations
+        df = extract_observations()
+        df = _filter_by_company(df, company_id)
+        return {"observations": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
+                "data_as_of": "Base44 live", "source": "base44_live"}
+    except Exception as e:
+        return {"observations": [], "error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # EXTERNAL DATABASE MIRROR TOOLS — query tables mirrored from connected databases
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -7234,6 +7588,10 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "get_signal_summary":           get_signal_summary,
         "get_channel_summary":          get_channel_summary,
         "get_territory_summary":        get_territory_summary,
+        # Agricultural / ecological entity tools
+        "get_animal_summary":           get_animal_summary,
+        "get_plot_overview":            get_plot_overview,
+        "get_observation_summary":      get_observation_summary,
         # Copilot write-back — single record + bulk import
         "create_record":                create_record,
         "import_records":               import_records,

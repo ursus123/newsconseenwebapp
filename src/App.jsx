@@ -45,6 +45,9 @@ import Schedules from './pages/Schedules';
 import Signals from './pages/Signals';
 import Channels from './pages/Channels';
 import Territories from './pages/Territories';
+import Animals from './pages/Animals';
+import Plots from './pages/Plots';
+import Observations from './pages/Observations';
 import Layout from './Layout.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
@@ -144,6 +147,9 @@ const AuthenticatedApp = () => {
       <Route path="/Signals" element={<LayoutWrapper currentPageName="Signals"><Signals /></LayoutWrapper>} />
       <Route path="/Channels" element={<LayoutWrapper currentPageName="Channels"><Channels /></LayoutWrapper>} />
       <Route path="/Territories" element={<LayoutWrapper currentPageName="Territories"><Territories /></LayoutWrapper>} />
+      <Route path="/Animals" element={<LayoutWrapper currentPageName="Animals"><Animals /></LayoutWrapper>} />
+      <Route path="/Plots" element={<LayoutWrapper currentPageName="Plots"><Plots /></LayoutWrapper>} />
+      <Route path="/Observations" element={<LayoutWrapper currentPageName="Observations"><Observations /></LayoutWrapper>} />
       {/* Desktop Shell — NO layout wrapper, full screen */}
       <Route path="/Desktop" element={<Desktop />} />
       <Route path="/DesktopSettings" element={<DesktopSettings />} />

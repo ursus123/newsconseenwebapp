@@ -40,6 +40,17 @@ except Exception as _ne_err:
     _new_entities_ok = False
     document_etl = schedule_etl = signal_etl = channel_etl = territory_etl = None
     logger.warning("New canonical entity ETL modules failed to load — %s", _ne_err)
+
+# Agricultural / ecological entity ETL modules
+try:
+    from etl import animal as animal_etl
+    from etl import plot as plot_etl
+    from etl import observation as observation_etl
+    _agri_entities_ok = True
+except Exception as _agri_err:
+    _agri_entities_ok = False
+    animal_etl = plot_etl = observation_etl = None
+    logger.warning("Agricultural entity ETL modules failed to load — %s", _agri_err)
 from etl.load import load_dataframe, load_dataframe_replace, load_raw
 
 # Schemas
@@ -2050,6 +2061,74 @@ def load_territory_summary(
         return {"status": "skipped", "reason": "territory ETL not loaded"}
     df = filter_by_company(territory_etl.extract_territories(), company_id)
     return load_dataframe(territory_etl.transform_territories(df), "territory_summary", company_id=company_id)
+
+
+# ── Agricultural / ecological entities ───────────────────────────────────────
+
+@app.get("/animal-summary", tags=["ETL"])
+def get_animal_summary_endpoint(company_id: Optional[str] = Query(None)):
+    if not _agri_entities_ok:
+        return []
+    df = filter_by_company(animal_etl.extract_animals(), company_id)
+    return animal_etl.transform_animals(df).where(
+        animal_etl.transform_animals(df).notna(), None
+    ).to_dict(orient="records")
+
+
+@app.post("/load/animal-summary", tags=["ETL"])
+def load_animal_summary(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    if not _agri_entities_ok:
+        return {"status": "skipped", "reason": "animal ETL not loaded"}
+    df = filter_by_company(animal_etl.extract_animals(), company_id)
+    return load_dataframe(animal_etl.transform_animals(df), "animal_summary", company_id=company_id)
+
+
+@app.get("/plot-summary", tags=["ETL"])
+def get_plot_summary_endpoint(company_id: Optional[str] = Query(None)):
+    if not _agri_entities_ok:
+        return []
+    df = filter_by_company(plot_etl.extract_plots(), company_id)
+    return plot_etl.transform_plots(df).where(
+        plot_etl.transform_plots(df).notna(), None
+    ).to_dict(orient="records")
+
+
+@app.post("/load/plot-summary", tags=["ETL"])
+def load_plot_summary(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    if not _agri_entities_ok:
+        return {"status": "skipped", "reason": "plot ETL not loaded"}
+    df = filter_by_company(plot_etl.extract_plots(), company_id)
+    return load_dataframe(plot_etl.transform_plots(df), "plot_summary", company_id=company_id)
+
+
+@app.get("/observation-summary", tags=["ETL"])
+def get_observation_summary_endpoint(company_id: Optional[str] = Query(None)):
+    if not _agri_entities_ok:
+        return []
+    df = filter_by_company(observation_etl.extract_observations(), company_id)
+    return observation_etl.transform_observations(df).where(
+        observation_etl.transform_observations(df).notna(), None
+    ).to_dict(orient="records")
+
+
+@app.post("/load/observation-summary", tags=["ETL"])
+def load_observation_summary(
+    company_id:    Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    if not _agri_entities_ok:
+        return {"status": "skipped", "reason": "observation ETL not loaded"}
+    df = filter_by_company(observation_etl.extract_observations(), company_id)
+    return load_dataframe(observation_etl.transform_observations(df), "observation_summary", company_id=company_id)
 
 
 # ── Intelligence analytics — GET + POST load endpoints ────────────────────────

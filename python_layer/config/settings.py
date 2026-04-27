@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     base44_signals_url:        Optional[str] = None
     base44_channels_url:       Optional[str] = None
     base44_territories_url:    Optional[str] = None
+    # Agricultural / ecological entities
+    base44_animals_url:        Optional[str] = None
+    base44_plots_url:          Optional[str] = None
+    base44_observations_url:   Optional[str] = None
 
     # ----------------------------------------------------------
     # Base44 authentication

@@ -40,6 +40,9 @@ import {
   Activity,
   MessageSquare,
   Map,
+  PawPrint,
+  Tractor,
+  FlaskConical,
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import SetupWizard from "@/components/shared/SetupWizard";
@@ -75,6 +78,9 @@ const NAV_CONFIG = {
         { name: "Signals",       icon: Activity },
         { name: "Channels",      icon: MessageSquare },
         { name: "Territories",   icon: Map },
+        { name: "Animals",       icon: PawPrint },
+        { name: "Plots",         icon: Tractor },
+        { name: "Observations",  icon: FlaskConical },
       ],
     },
     {
@@ -146,6 +152,9 @@ const NAV_CONFIG = {
         { name: "Signals",       icon: Activity },
         { name: "Channels",      icon: MessageSquare },
         { name: "Territories",   icon: Map },
+        { name: "Animals",       icon: PawPrint },
+        { name: "Plots",         icon: Tractor },
+        { name: "Observations",  icon: FlaskConical },
       ],
     },
     {

@@ -35,6 +35,8 @@ _RAW_TABLES = [
     "tasks", "addresses", "relationships", "services", "geospatial",
     # New canonical entities
     "documents", "schedules", "signals", "channels", "territories",
+    # Agricultural / ecological entities
+    "animals", "plots", "observations",
 ]
 
 _RAW_DDL_TEMPLATE = """
@@ -367,6 +369,64 @@ _CORE_ANALYTICS_DDL = [
         is_sales_zone           BOOLEAN,
         is_delivery_zone        BOOLEAN,
         is_catchment            BOOLEAN,
+        new_last_7d             BIGINT,
+        new_last_30d            BIGINT,
+        snapshot_date           DATE,
+        loaded_at               TIMESTAMP
+    )
+    """,
+
+    # ── Agricultural / ecological entities ────────────────────────────────────
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.animal_summary (
+        enterprise_id           TEXT,
+        company_id              TEXT,
+        animal_type             TEXT,
+        species                 TEXT,
+        status                  TEXT,
+        animal_count            BIGINT,
+        active_count            BIGINT,
+        inactive_count          BIGINT,
+        avg_age_days            DOUBLE PRECISION,
+        avg_weight_kg           DOUBLE PRECISION,
+        new_last_30d            BIGINT,
+        snapshot_date           DATE,
+        loaded_at               TIMESTAMP
+    )
+    """,
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.plot_summary (
+        enterprise_id           TEXT,
+        company_id              TEXT,
+        plot_type               TEXT,
+        land_use                TEXT,
+        status                  TEXT,
+        plot_count              BIGINT,
+        active_count            BIGINT,
+        inactive_count          BIGINT,
+        total_area_ha           DOUBLE PRECISION,
+        avg_area_ha             DOUBLE PRECISION,
+        plots_with_coords       BIGINT,
+        new_last_30d            BIGINT,
+        snapshot_date           DATE,
+        loaded_at               TIMESTAMP
+    )
+    """,
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.observation_summary (
+        enterprise_id           TEXT,
+        company_id              TEXT,
+        observation_type        TEXT,
+        unit_of_measure         TEXT,
+        subject_type            TEXT,
+        observation_count       BIGINT,
+        avg_value               DOUBLE PRECISION,
+        min_value               DOUBLE PRECISION,
+        max_value               DOUBLE PRECISION,
+        anomaly_count           BIGINT,
         new_last_7d             BIGINT,
         new_last_30d            BIGINT,
         snapshot_date           DATE,

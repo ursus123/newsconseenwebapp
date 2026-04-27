@@ -68,6 +68,9 @@ import UserManagement from './pages/UserManagement';
 import StaffSchedule from './pages/StaffSchedule';
 import BarcodeScanner from './pages/BarcodeScanner';
 import TaxonomyAdmin from './pages/TaxonomyAdmin';
+import Animals from './pages/Animals';
+import Plots from './pages/Plots';
+import Observations from './pages/Observations';
 
 export const PAGES = {
     "AddClient": AddClient,
@@ -91,6 +94,9 @@ export const PAGES = {
     "StaffSchedule": StaffSchedule,
     "BarcodeScanner": BarcodeScanner,
     "TaxonomyAdmin": TaxonomyAdmin,
+    "Animals": Animals,
+    "Plots": Plots,
+    "Observations": Observations,
 }
 
 export const pagesConfig = {

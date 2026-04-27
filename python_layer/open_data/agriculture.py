@@ -264,3 +264,156 @@ def get_agricultural_weather(
         "timezone":     data.get("timezone", ""),
         "forecast":     forecast,
     }
+
+
+# ----------------------------------------------------------
+# soil_data
+# SoilGrids ISRIC — soil composition by lat/lon
+# ----------------------------------------------------------
+SOILGRIDS_API = "https://rest.isric.org/soilgrids/v2.0/properties/query"
+
+def get_soil_data(lat: float, lon: float, properties: list = None) -> dict:
+    """
+    Get soil composition data at a specific location from SoilGrids ISRIC.
+    Free, no API key required.
+
+    Returns: pH, soil organic carbon (SOC), clay %, sand %, silt %
+    at 0-5cm depth.
+    """
+    if not properties:
+        properties = ["phh2o", "soc", "clay", "sand", "silt"]
+
+    params = {"lon": lon, "lat": lat, "depth": "0-5cm", "value": "mean"}
+    for prop in properties:
+        params[f"property"] = prop  # repeated param not supported this way
+
+    # Build URL manually for repeated params
+    prop_str = "&".join(f"property={p}" for p in properties)
+    url = f"{SOILGRIDS_API}?lon={lon}&lat={lat}&{prop_str}&depth=0-5cm&value=mean"
+
+    try:
+        r = requests.get(url, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+        layers = data.get("properties", {}).get("layers", [])
+        result = {}
+        for layer in layers:
+            name = layer.get("name")
+            depths = layer.get("depths", [{}])
+            mean_val = (depths[0].get("values", {}) or {}).get("mean")
+            d_factor = layer.get("unit_measure", {}).get("d_factor", 1)
+            result[name] = {
+                "value": (mean_val / d_factor) if (mean_val is not None and d_factor) else mean_val,
+                "unit":  layer.get("unit_measure", {}).get("mapped_units", ""),
+                "depth": "0-5cm",
+            }
+        logger.info("soil_data: %d properties at (%.4f, %.4f)", len(result), lat, lon)
+        return {"lat": lat, "lon": lon, "soil": result}
+    except Exception as e:
+        logger.warning("get_soil_data failed: %s", e)
+        return {"lat": lat, "lon": lon, "error": str(e)}
+
+
+# ----------------------------------------------------------
+# faostat
+# FAOSTAT — crop production by country and commodity
+# ----------------------------------------------------------
+FAOSTAT_API = "https://fenixservices.fao.org/faostat/api/v1/en/data/QCL"
+
+def get_faostat(
+    item: str = "Wheat",
+    area: str = "World",
+    year: int = 2022,
+    element: str = "Production",
+) -> list[dict]:
+    """
+    Get FAOSTAT crop production data.
+    item:    commodity/crop name (e.g. "Wheat", "Maize", "Cattle")
+    area:    country name (e.g. "Kenya", "Nigeria") or "World"
+    year:    data year (2015–2022)
+    element: "Production", "Area harvested", or "Yield"
+    """
+    try:
+        params = {
+            "area":        area,
+            "item":        item,
+            "element":     element,
+            "year":        year,
+            "output_type": "objects",
+            "per_page":    30,
+        }
+        r = requests.get(FAOSTAT_API, params=params, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+        rows = data.get("data", [])
+        result = [
+            {
+                "area":    row.get("Area"),
+                "item":    row.get("Item"),
+                "element": row.get("Element"),
+                "year":    row.get("Year"),
+                "value":   row.get("Value"),
+                "unit":    row.get("Unit"),
+                "flag":    row.get("Flag"),
+            }
+            for row in rows[:30]
+        ]
+        logger.info("faostat: %d rows for %s / %s / %d", len(result), item, area, year)
+        return result
+    except Exception as e:
+        logger.warning("get_faostat failed: %s", e)
+        return []
+
+
+# ----------------------------------------------------------
+# nasa_power
+# NASA POWER — agro-meteorological data (daily climatology)
+# ----------------------------------------------------------
+NASA_POWER_API = "https://power.larc.nasa.gov/api/temporal/daily/point"
+
+def get_nasa_power(
+    lat: float,
+    lon: float,
+    start: str = "20230101",
+    end: str   = "20231231",
+) -> dict:
+    """
+    Get NASA POWER agro-meteorological data at a location.
+    Returns daily solar radiation, temperature, humidity, wind speed.
+    Free, no API key required.
+
+    start/end: YYYYMMDD format
+    """
+    params = {
+        "parameters": "T2M,T2M_MAX,T2M_MIN,PRECTOTCORR,RH2M,WS2M,ALLSKY_SFC_SW_DWN",
+        "community":  "AG",
+        "longitude":  lon,
+        "latitude":   lat,
+        "start":      start,
+        "end":        end,
+        "format":     "JSON",
+    }
+    try:
+        r = requests.get(NASA_POWER_API, params=params, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+        daily_params = data.get("properties", {}).get("parameter", {})
+        dates = list(next(iter(daily_params.values()), {}).keys()) if daily_params else []
+        records = [
+            {
+                "date": d,
+                "temp_avg_c":          daily_params.get("T2M", {}).get(d),
+                "temp_max_c":          daily_params.get("T2M_MAX", {}).get(d),
+                "temp_min_c":          daily_params.get("T2M_MIN", {}).get(d),
+                "precipitation_mm":    daily_params.get("PRECTOTCORR", {}).get(d),
+                "humidity_pct":        daily_params.get("RH2M", {}).get(d),
+                "wind_speed_ms":       daily_params.get("WS2M", {}).get(d),
+                "solar_radiation_mjm2":daily_params.get("ALLSKY_SFC_SW_DWN", {}).get(d),
+            }
+            for d in dates[:365]
+        ]
+        logger.info("nasa_power: %d daily records for (%.4f, %.4f)", len(records), lat, lon)
+        return {"lat": lat, "lon": lon, "records": records}
+    except Exception as e:
+        logger.warning("get_nasa_power failed: %s", e)
+        return {"lat": lat, "lon": lon, "error": str(e)}

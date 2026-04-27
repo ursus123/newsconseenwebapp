@@ -52,9 +52,9 @@ Layer 3 — Foundry Intelligence (Copilot, Agents, Alerts, Network Intelligence)
 
 ---
 
-## The Universal Ontology — 12 Canonical Entities
+## The Universal Ontology — 15 Canonical Entities
 
-Every industry maps to these twelve entities. The first 7 are the original core; the 5 new entities (Document, Schedule, Signal, Channel, Territory) extend coverage to document management, recurring patterns, telemetry, communications, and geography.
+Every industry maps to these fifteen entities. The first 7 are the original core; the next 5 (Document, Schedule, Signal, Channel, Territory) extend coverage to document management, recurring patterns, telemetry, communications, and geography; the final 3 (Animal, Plot, Observation) extend to agricultural, aquaculture, veterinary, and ecological operations.
 
 ### 1. Person
 Any human in any role.
@@ -153,6 +153,45 @@ Any geographic coverage area: sales zones, delivery zones, catchments, districts
 Fields: territory_type, name, status, country, region, area_km2, population_estimate, description.
 Territory types: `sales_zone` · `delivery_zone` · `service_area` · `catchment` · `district` · `region`.
 ETL: `analytics.territory_summary` — active count, total_area_km2, total_population, type flags.
+
+### 13. Animal
+Any biological subject: livestock, poultry, aquaculture stock, veterinary patients, research animals, pets.
+Fields: name, animal_type, species, breed, sex, status, date_of_birth, weight_kg, tag_id, acquisition_date, enterprise_id.
+Animal types: `livestock` · `poultry` · `aquaculture` · `pet` · `wildlife` · `research`.
+ETL: `analytics.animal_summary` — active count, avg_age_days, avg_weight_kg, by type/species/status.
+Copilot tool: `get_animal_summary(animal_type, species)`.
+
+### 14. Plot
+Any managed land or water area: farm fields, grazing paddocks, aquaculture ponds, orchards, greenhouses.
+Fields: name, plot_type, land_use, crop_type, area_ha, status, irrigation_type, soil_type, latitude, longitude, enterprise_id.
+Plot types: `arable` · `grazing` · `orchard` · `pond` · `greenhouse` · `forest`.
+ETL: `analytics.plot_summary` — plot count, total_area_ha, avg_area_ha, plots_with_coordinates.
+Copilot tool: `get_plot_overview(plot_type, land_use)`.
+
+### 15. Observation
+Any time-series field measurement, sensor reading, agronomic sample, or veterinary exam result.
+Fields: observation_type, subject_type, subject_id, numeric_value, text_value, unit_of_measure, is_anomaly, observed_at, enterprise_id, notes.
+Observation types: `soil_moisture` · `temperature` · `weight` · `yield` · `disease_check` · `water_quality`.
+ETL: `analytics.observation_summary` — count, avg/min/max values, anomaly count, 7d/30d recency.
+Copilot tool: `get_observation_summary(observation_type, subject_type)`.
+
+---
+
+## Agricultural & Ecological Intelligence
+
+Newsconseen includes public agricultural APIs accessible to the copilot via `search_public_data`:
+
+| Dataset | Description | Example query |
+|---------|-------------|---------------|
+| `weather` | 7-day agricultural forecast — temperature, precipitation, evapotranspiration | `location="Nairobi"` |
+| `soil` | SoilGrids ISRIC — pH, SOC, clay, sand at 0-5cm | `location="-1.29,36.82"` |
+| `faostat` | FAO crop production by country and commodity | `query="Maize", location="Kenya"` |
+
+Additional agricultural endpoints in python_layer:
+- `GET /agriculture/weather` — agricultural forecast by lat/lon (Open-Meteo)
+- `GET /agriculture/soil` — soil composition (SoilGrids ISRIC)
+- `GET /agriculture/faostat` — crop production data (FAO)
+- `GET /agriculture/nasa-power` — NASA agro-meteorological data
 
 ---
 
@@ -313,6 +352,12 @@ experience grounded in real data.
 | `get_signal_summary` | Signal/telemetry counts, anomaly count, average values |
 | `get_channel_summary` | Channel counts, sentiment breakdown, message volumes |
 | `get_territory_summary` | Territory counts, total area km², population coverage |
+| `get_animal_summary` | Livestock/animal counts by type, species, status; avg age and weight |
+| `get_plot_overview` | Managed land counts, total hectares, land use breakdown |
+| `get_observation_summary` | Sensor/field readings — avg values, anomaly counts, recency |
+| `search_public_data` (weather) | 7-day agricultural weather forecast (Open-Meteo) |
+| `search_public_data` (soil) | Soil composition at a location (SoilGrids ISRIC) |
+| `search_public_data` (faostat) | FAO crop production data by country and commodity |
 
 ---
 
@@ -550,6 +595,7 @@ to Railway, or make the fields `Optional[str] = None` in `settings.py`.
 | — | BI Export — Power BI, Tableau, CSV, Looker Studio from all charts | ✅ |
 | — | Security hardening — 2FA, OAuth2, rate limit, headers, SOC 2 | ✅ |
 | 9 | Ontology Expansion — 5 new canonical entities (Document, Schedule, Signal, Channel, Territory) + ETL + enrichment + copilot tools + frontend pages | ✅ |
+| 10 | Agricultural Ontology — 3 new entities (Animal, Plot, Observation) + ETL + copilot tools (get_animal_summary, get_plot_overview, get_observation_summary) + agricultural APIs (weather, soil, FAOSTAT, NASA POWER) | ✅ |
 | 9+ | Copilot Write-Back — `create_record` + `import_records` tools with approval gate routing | ✅ |
 
 ---
@@ -590,5 +636,5 @@ Examples:
 - "What can the copilot do?" → Describe the full capabilities from this documentation
 - "How does the ETL work?" → Explain the three-tier fallback and the ETL trigger pattern
 - "What agents do you have?" → List all 8 agents with their purpose
-- "How many entities does Newsconseen have?" → Answer: 12 canonical entities (7 original + 5 new: Document, Schedule, Signal, Channel, Territory), describe them
+- "How many entities does Newsconseen have?" → Answer: 15 canonical entities (7 original + 5 operational: Document, Schedule, Signal, Channel, Territory + 3 agricultural: Animal, Plot, Observation), describe them
 - "What is our revenue this month?" → Call get_transaction_summary, return real numbers
