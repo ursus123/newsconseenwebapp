@@ -4,9 +4,10 @@ import { base44 } from "@/api/base44Client";
 import {
   Search, X, Users, Building2, ClipboardList, ArrowLeftRight,
   FileText, Calendar, Activity, MessageSquare, Map, Package,
-  Wrench, MapPin, Link2, ExternalLink, ChevronRight,
+  Wrench, MapPin, Link2, ChevronRight,
 } from "lucide-react";
 import { createPageUrl } from "@/utils";
+import EntityQuickViewDrawer from "@/components/layout/EntityQuickViewDrawer";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
@@ -164,12 +165,12 @@ function cleanFields(fields) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function GlobalSearchBar({ currentUser }) {
-  const [input,       setInput]       = useState("");
-  const [results,     setResults]     = useState([]);
-  const [open,        setOpen]        = useState(false);
-  const [loading,     setLoading]     = useState(false);
-  const [expandedId,  setExpandedId]  = useState(null);   // id of quick-view open result
-  const [selectedIdx, setSelectedIdx] = useState(-1);
+  const [input,        setInput]        = useState("");
+  const [results,      setResults]      = useState([]);
+  const [open,         setOpen]         = useState(false);
+  const [loading,      setLoading]      = useState(false);
+  const [drawerResult, setDrawerResult] = useState(null);  // result open in side drawer
+  const [selectedIdx,  setSelectedIdx]  = useState(-1);
   const inputRef   = useRef(null);
   const debounceRef = useRef(null);
   const navigate   = useNavigate();
@@ -178,7 +179,6 @@ export default function GlobalSearchBar({ currentUser }) {
     if (!input.trim()) {
       setResults([]);
       setSelectedIdx(-1);
-      setExpandedId(null);
       setOpen(false);
       return;
     }
@@ -190,7 +190,6 @@ export default function GlobalSearchBar({ currentUser }) {
   // ── Search: try python_layer endpoint, fall back to Base44 parallel calls ───
   const runSearch = useCallback(async (query) => {
     setLoading(true);
-    setExpandedId(null);
 
     const companyId = currentUser?.company_id;
     let hits = [];
@@ -231,22 +230,20 @@ export default function GlobalSearchBar({ currentUser }) {
     setOpen(true);
   }, [currentUser]);
 
-  // Fix 2: navigate to entity page with ?id= so the URL is deep-linkable
+  // Navigate directly (keyboard Enter)
   const openRecord = useCallback((result) => {
     navigate(`${createPageUrl(result.page)}?id=${encodeURIComponent(result.id)}`);
     setInput("");
     setResults([]);
     setOpen(false);
-    setExpandedId(null);
   }, [navigate]);
 
+  // Click on a result → open side drawer
   const handleResultClick = (result) => {
-    // First click: expand quick-view. Second click or "Open" button: navigate.
-    if (expandedId === result.id) {
-      openRecord(result);
-    } else {
-      setExpandedId(result.id);
-    }
+    setDrawerResult(result);
+    setOpen(false);
+    setInput("");
+    setResults([]);
   };
 
   const handleKeyDown = (e) => {
@@ -263,7 +260,6 @@ export default function GlobalSearchBar({ currentUser }) {
       if (selectedIdx >= 0 && flat[selectedIdx]) openRecord(flat[selectedIdx]);
     } else if (e.key === "Escape") {
       setOpen(false);
-      setExpandedId(null);
       setSelectedIdx(-1);
     }
   };
@@ -275,7 +271,7 @@ export default function GlobalSearchBar({ currentUser }) {
   }, {});
   const flat = Object.values(grouped).flat();
 
-  const close = () => { setOpen(false); setExpandedId(null); setSelectedIdx(-1); };
+  const close = () => { setOpen(false); setSelectedIdx(-1); };
 
   return (
     <div className="relative flex-1 max-w-lg">
@@ -294,7 +290,7 @@ export default function GlobalSearchBar({ currentUser }) {
         />
         {input && (
           <button
-            onClick={() => { setInput(""); setResults([]); setOpen(false); setExpandedId(null); inputRef.current?.focus(); }}
+            onClick={() => { setInput(""); setResults([]); setOpen(false); inputRef.current?.focus(); }}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
           >
             <X className="w-4 h-4" />
@@ -325,6 +321,13 @@ export default function GlobalSearchBar({ currentUser }) {
         </>
       )}
 
+      {/* Side drawer — renders via portal, outside this dropdown */}
+      <EntityQuickViewDrawer
+        result={drawerResult}
+        onClose={() => setDrawerResult(null)}
+        currentUser={currentUser}
+      />
+
       {/* Results */}
       {open && !loading && flat.length > 0 && (
         <>
@@ -334,7 +337,7 @@ export default function GlobalSearchBar({ currentUser }) {
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
                 {flat.length} result{flat.length !== 1 ? "s" : ""}
               </p>
-              <p className="text-[10px] text-slate-300">↑↓ navigate · Enter open · Esc close</p>
+              <p className="text-[10px] text-slate-300">↑↓ navigate · Enter full page · Click details</p>
             </div>
 
             {Object.entries(grouped).map(([label, items]) => (
@@ -343,59 +346,28 @@ export default function GlobalSearchBar({ currentUser }) {
                   {label}
                 </p>
                 {items.map((result) => {
-                  const Icon      = result.icon;
-                  const globalIdx = flat.indexOf(result);
+                  const Icon       = result.icon;
+                  const globalIdx  = flat.indexOf(result);
                   const isSelected = globalIdx === selectedIdx;
-                  const isExpanded = expandedId === result.id;
-                  const fieldRows  = cleanFields(result.fields);
 
                   return (
-                    <div key={`${result.type}-${result.id}`}>
-                      {/* Result row */}
-                      <button
-                        onClick={() => handleResultClick(result)}
-                        onMouseEnter={() => setSelectedIdx(globalIdx)}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                          isSelected || isExpanded ? "bg-emerald-50" : "hover:bg-slate-50"
-                        }`}
-                      >
-                        <div className="shrink-0 w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center">
-                          <Icon className={`w-3.5 h-3.5 ${result.color}`} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800 truncate">{result.title}</p>
-                          <p className="text-xs text-slate-400 truncate">{result.subtitle}</p>
-                        </div>
-                        <ChevronRight className={`w-3.5 h-3.5 text-slate-300 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
-                      </button>
-
-                      {/* Quick-view panel — Fix 2: shows record fields inline */}
-                      {isExpanded && (
-                        <div className="mx-4 mb-2 rounded-lg border border-emerald-100 bg-emerald-50/50 p-3">
-                          {fieldRows.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-3">
-                              {fieldRows.slice(0, 6).map(([k, v]) => (
-                                <div key={k} className="min-w-0">
-                                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400 truncate">
-                                    {k.replace(/_/g, " ")}
-                                  </p>
-                                  <p className="text-xs text-slate-700 truncate">{String(v)}</p>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-slate-400 mb-3">No additional fields available</p>
-                          )}
-                          <button
-                            onClick={() => openRecord(result)}
-                            className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 transition-colors"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            Open in {result.entityLabel}
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    <button
+                      key={`${result.type}-${result.id}`}
+                      onClick={() => handleResultClick(result)}
+                      onMouseEnter={() => setSelectedIdx(globalIdx)}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                        isSelected ? "bg-emerald-50" : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="shrink-0 w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center">
+                        <Icon className={`w-3.5 h-3.5 ${result.color}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{result.title}</p>
+                        <p className="text-xs text-slate-400 truncate">{result.subtitle}</p>
+                      </div>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                    </button>
                   );
                 })}
               </div>
