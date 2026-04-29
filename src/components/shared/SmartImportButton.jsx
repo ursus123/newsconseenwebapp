@@ -271,12 +271,12 @@ export default function SmartImportButton({
   }, [companyId, entityHint]);
 
   const handleLoad = useCallback(async () => {
-    if (!plan?.plan_id || !heldFile.current || !companyId) return;
+    if (!plan?.plan_id || !companyId) return;
     setPhase("loading");
     setError(null);
 
+    // Rows were cached in analytics.ingestion_plans at upload time — no re-upload needed.
     const fd = new FormData();
-    fd.append("file", heldFile.current);
     fd.append("company_id", companyId);
 
     try {

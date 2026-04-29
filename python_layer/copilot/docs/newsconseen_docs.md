@@ -358,6 +358,7 @@ experience grounded in real data.
 | `search_public_data` (weather) | 7-day agricultural weather forecast (Open-Meteo) |
 | `search_public_data` (soil) | Soil composition at a location (SoilGrids ISRIC) |
 | `search_public_data` (faostat) | FAO crop production data by country and commodity |
+| `execute_ingestion_plan` | Load a previously analysed import plan into Newsconseen using cached rows. Requires the operator to say "yes, load it" or "confirm" with the plan_id. Never call without explicit confirmation. |
 
 ---
 
@@ -598,6 +599,7 @@ to Railway, or make the fields `Optional[str] = None` in `settings.py`.
 | 10 | Agricultural Ontology — 3 new entities (Animal, Plot, Observation) + ETL + copilot tools (get_animal_summary, get_plot_overview, get_observation_summary) + agricultural APIs (weather, soil, FAOSTAT, NASA POWER) | ✅ |
 | 11 | Spatial Intelligence — Map Explorer converted to PostGIS engine: /postgis/spatial-pins (multi-layer unified pin feed), /postgis/spatial-density (heatmap grid, adjustable cell size), /postgis/coverage-analysis (boundary coverage %). MapView.jsx rebuilt with Pins/Clusters/Density/Boundaries mode tabs + entity layer toggles. | ✅ |
 | 9+ | Copilot Write-Back — `create_record` + `import_records` tools with approval gate routing | ✅ |
+| 12 | Ontology Ingestion Agent — universal 7-stage AI import pipeline (Extract → Profile → Fingerprint → Memory recall → LLM Analyse → Deduplicate → Load) supporting CSV, XLSX, JSON, XML. Schema fingerprinting and fuzzy Jaccard memory reuse skip LLM for repeat templates. Row-level relationship materialisation (same-row pairing, FK value lookup, self-referential). Wired into BulkImportDialog, copilot chat (file upload in sidebar), and connectors. Copilot can trigger load via `execute_ingestion_plan` without file re-upload. | ✅ |
 
 ---
 
@@ -643,6 +645,16 @@ GET  /agriculture/soil              Soil properties (SoilGrids ISRIC, lat/lon)
 GET  /agriculture/faostat           Crop production data (FAOSTAT, country/crop)
 GET  /agriculture/nasa-power        Agro-meteorological data (NASA POWER, lat/lon)
 GET  /agriculture/usda              USDA crop data
+
+Ontology Ingestion Agent (Phase 12):
+POST /ingestion/upload              Upload file → analyse → return plan (CSV/XLSX/JSON/XML)
+GET  /ingestion/plan/{id}           Fetch a plan for operator review
+POST /ingestion/approve/{id}        Operator approves a pending_review plan
+POST /ingestion/load/{id}           Execute an approved plan (file optional if rows cached)
+POST /ingestion/from-connector      Accept connector rows, run full pipeline, optional auto_load
+GET  /ingestion/plans               List plans for a company (paginated, filter by status)
+GET  /ingestion/runs                List execution history for a company
+GET  /ingestion/memory              List remembered source schemas for a company
 ```
 
 ---

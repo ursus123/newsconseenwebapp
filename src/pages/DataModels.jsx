@@ -1396,6 +1396,62 @@ const PG_INTELLIGENCE_TABLES = [
       { name: "provisioned_at", type: "TIMESTAMPTZ DEFAULT NOW()" },
     ],
   },
+  {
+    id: "an_ingestion_plans", label: "analytics.ingestion_plans", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "🧠", layer: "Infrastructure",
+    description: "Ingestion Agent: one row per analysed import plan. Stores the LLM field_map, entity_splits, and serialised source rows (rows_json) so /ingestion/load can execute without requiring the original file to be re-uploaded. Status: draft → pending_review → approved → loaded.",
+    fields: [
+      { name: "id", type: "TEXT PK — UUID", pk: true },
+      { name: "company_id", type: "TEXT NOT NULL" },
+      { name: "source_name", type: "TEXT — original file name or connector source label" },
+      { name: "source_fingerprint", type: "TEXT — 16-char SHA-256 of normalised column schema" },
+      { name: "file_type", type: "TEXT — .csv | .xlsx | .json | .xml | connector" },
+      { name: "row_count", type: "BIGINT — number of source rows" },
+      { name: "overall_confidence", type: "NUMERIC — LLM mapping confidence 0.0–1.0" },
+      { name: "plan_json", type: "TEXT — full analysis JSON (entity_splits, field_map, relationships)" },
+      { name: "rows_json", type: "TEXT — serialised source rows; enables file-free load" },
+      { name: "status", type: "TEXT — draft | pending_review | approved | loaded | low_confidence" },
+      { name: "created_at", type: "TIMESTAMPTZ" },
+      { name: "reviewed_at", type: "TIMESTAMPTZ" },
+      { name: "reviewed_by", type: "TEXT" },
+      { name: "loaded_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_ingestion_memory", label: "analytics.ingestion_memory", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "💾", layer: "Infrastructure",
+    description: "Ingestion Agent schema memory. Keyed by (company_id, source_fingerprint). On recall, skips the LLM analysis call and reuses the previously learned field_map. Fuzzy Jaccard recall (≥0.70 column overlap) handles template drift. use_count increments on every recall hit.",
+    fields: [
+      { name: "id", type: "SERIAL PK", pk: true },
+      { name: "company_id", type: "TEXT NOT NULL" },
+      { name: "source_fingerprint", type: "TEXT NOT NULL — UNIQUE with company_id" },
+      { name: "source_name", type: "TEXT — last filename seen for this fingerprint" },
+      { name: "mapping_json", type: "TEXT — full analysis JSON (entity_splits, field_map, etc.)" },
+      { name: "use_count", type: "BIGINT DEFAULT 1 — incremented on every cache hit" },
+      { name: "last_used_at", type: "TIMESTAMPTZ" },
+      { name: "created_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_ingestion_runs", label: "analytics.ingestion_runs", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
+    icon: "📥", layer: "Infrastructure",
+    description: "Ingestion Agent execution history. One row per /ingestion/load call. Tracks entity counts, relationship counts, partial errors, and start/finish timestamps.",
+    fields: [
+      { name: "id", type: "TEXT PK — UUID", pk: true },
+      { name: "company_id", type: "TEXT NOT NULL" },
+      { name: "plan_id", type: "TEXT — FK to analytics.ingestion_plans.id" },
+      { name: "status", type: "TEXT — running | complete | partial" },
+      { name: "rows_total", type: "BIGINT" },
+      { name: "entities_created", type: "BIGINT" },
+      { name: "entities_updated", type: "BIGINT" },
+      { name: "entities_skipped", type: "BIGINT" },
+      { name: "entities_failed", type: "BIGINT" },
+      { name: "relationships_created", type: "BIGINT" },
+      { name: "errors_json", type: "TEXT — first 50 per-row errors as JSON array" },
+      { name: "started_at", type: "TIMESTAMPTZ" },
+      { name: "finished_at", type: "TIMESTAMPTZ" },
+    ],
+  },
 ];
 
 // ── audit.* — Immutable change log ────────────────────────────────────────────
@@ -1535,13 +1591,17 @@ const DEFAULT_PG_POSITIONS = {
   an_signal_enrichment:    { x: 1890, y: 660 },
   an_channel_enrichment:   { x: 2060, y: 660 },
   an_territory_enrichment: { x: 2230, y: 660 },
-  // Intelligence (y=1020)
+  // Intelligence (y=860)
   an_agent_memory:    { x: 80,   y: 860 },
   an_agent_approvals: { x: 450,  y: 860 },
   an_agent_runs:      { x: 820,  y: 860 },
   an_copilot_memory:  { x: 1190, y: 860 },
-  // Audit (y=1080)
-  audit_change_log:   { x: 580,  y: 1080 },
+  // Ingestion Agent (y=1080)
+  an_ingestion_plans:  { x: 80,  y: 1080 },
+  an_ingestion_memory: { x: 450, y: 1080 },
+  an_ingestion_runs:   { x: 820, y: 1080 },
+  // Audit (y=1300)
+  audit_change_log:   { x: 580,  y: 1300 },
 };
 
 const PG_LAYER_COLORS = {
@@ -1665,6 +1725,20 @@ const API_CATALOGUE = [
       { method: "GET",  path: "/agriculture/faostat",    desc: "Crop production by country/year via FAOSTAT FENIX API" },
       { method: "GET",  path: "/agriculture/nasa-power", desc: "Agro-met daily data (T2M, precip, solar) via NASA POWER" },
       { method: "GET",  path: "/agriculture/usda",       desc: "USDA crop acreage and production statistics" },
+    ],
+  },
+  {
+    name: "Ingestion Agent", prefix: "/ingestion", color: "#0f766e", bg: "#f0fdfa",
+    desc: "Phase 12 — Universal AI import pipeline. Analyses any CSV/XLSX/JSON/XML, maps columns to the 15-entity ontology, deduplicates, and loads into Base44. Schema fingerprinting + fuzzy Jaccard memory reuse skip LLM for repeat templates. Row-level relationship materialisation. Copilot can trigger load via execute_ingestion_plan.",
+    endpoints: [
+      { method: "POST", path: "/ingestion/upload",           desc: "Analyse file → return plan with entity_splits + field_map. Caches rows_json so load works without re-upload." },
+      { method: "GET",  path: "/ingestion/plan/{id}",        desc: "Fetch a plan for operator review (returns full JSON incl. analysis)" },
+      { method: "POST", path: "/ingestion/approve/{id}",     desc: "Mark a pending_review plan as approved" },
+      { method: "POST", path: "/ingestion/load/{id}",        desc: "Execute plan: file optional (uses rows_json cache if absent)" },
+      { method: "POST", path: "/ingestion/from-connector",   desc: "Accept flat rows from connector run, run full pipeline, optional auto_load" },
+      { method: "GET",  path: "/ingestion/plans",            desc: "List plans for a company (filter by status)" },
+      { method: "GET",  path: "/ingestion/runs",             desc: "Execution history: created/updated/failed counts per run" },
+      { method: "GET",  path: "/ingestion/memory",           desc: "Remembered source schemas (fingerprint + use_count)" },
     ],
   },
   {
