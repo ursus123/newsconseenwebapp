@@ -7,7 +7,8 @@ import {
   ExternalLink, Save, CheckCircle, RefreshCw, TrendingUp,
   PieChart as PieIcon, Activity, Copy, Check, Clock,
   MessageSquare, X, History, Download, ChevronRight,
-  Search, ArrowUpRight, Database, Pin, Code2,
+  Search, ArrowUpRight, Database, Pin, Code2, Paperclip,
+  FileText, Upload, CheckCircle2, Layers,
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import {
@@ -1072,6 +1073,99 @@ function HistoryPanel({ companyId, onRestore, onClose }) {
   );
 }
 
+// ── Ingestion plan card — rendered inline in chat ────────────────────────────
+function IngestionPlanCard({ plan, companyId, onConfirm, onDismiss }) {
+  const splits   = plan.analysis?.entity_splits   || [];
+  const fieldMap = plan.analysis?.field_map        || [];
+  const conf     = plan.analysis?.overall_confidence ?? 0;
+  const confPct  = Math.round(conf * 100);
+  const confColor = conf >= 0.9 ? "text-green-700 bg-green-50 border-green-200"
+                  : conf >= 0.65 ? "text-amber-700 bg-amber-50 border-amber-200"
+                  : "text-red-700 bg-red-50 border-red-200";
+
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm mt-2 max-w-xl">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
+        <FileText className="w-4 h-4 text-slate-500 shrink-0" />
+        <span className="text-sm font-semibold text-slate-800 truncate">{plan.source_name || "Uploaded file"}</span>
+        <span className="ml-auto text-xs text-slate-500">{plan.row_count?.toLocaleString()} rows</span>
+        {plan.from_memory && (
+          <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-medium">memory</span>
+        )}
+      </div>
+
+      <div className="px-4 py-3 space-y-3">
+        {/* Confidence */}
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium ${confColor}`}>
+          <span>Confidence: {confPct}%</span>
+          {conf >= 0.9 && <span>· Auto-approved</span>}
+          {conf >= 0.65 && conf < 0.9 && <span>· Needs review</span>}
+          {conf < 0.65 && <span>· Low — review carefully</span>}
+        </div>
+
+        {/* Entity splits */}
+        {splits.length > 0 && (
+          <div>
+            <p className="text-xs text-slate-500 mb-1.5 flex items-center gap-1">
+              <Layers className="w-3 h-3" /> Detected entities
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {splits.map((s, i) => (
+                <span key={i} className="text-xs px-2 py-1 bg-blue-50 text-blue-800 border border-blue-200 rounded-full">
+                  {s.entity_type} · {Math.round((s.row_coverage||0)*100)}%
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Field map preview */}
+        {fieldMap.length > 0 && (
+          <div>
+            <p className="text-xs text-slate-500 mb-1.5">{fieldMap.length} columns mapped</p>
+            <div className="space-y-0.5 max-h-28 overflow-y-auto">
+              {fieldMap.slice(0, 8).map((fm, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className="font-mono text-slate-600 truncate max-w-[120px]">{fm.source_column}</span>
+                  <span className="text-slate-300">→</span>
+                  <span className="font-mono text-blue-600 truncate">{fm.target_entity}.{fm.target_field}</span>
+                </div>
+              ))}
+              {fieldMap.length > 8 && (
+                <p className="text-xs text-slate-400 italic">+{fieldMap.length - 8} more columns…</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Analyst notes */}
+        {plan.analysis?.analyst_notes && (
+          <p className="text-xs text-slate-500 italic border-l-2 border-slate-200 pl-2">
+            {plan.analysis.analyst_notes}
+          </p>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-t border-slate-200">
+        <button
+          onClick={() => onConfirm(plan.plan_id)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors"
+        >
+          <Upload className="w-3.5 h-3.5" /> Load into Newsconseen
+        </button>
+        <button
+          onClick={onDismiss}
+          className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main CopilotChat component ───────────────────────────────────────────────
 export default function CopilotChat({ currentUser, className = "", initialMessage = "" }) {
   const navigate = useNavigate();
@@ -1083,6 +1177,8 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
   const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef             = useRef(null);
   const inputRef                   = useRef(null);
+  const fileInputRef               = useRef(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   const openQueryBuilder = useCallback(() => navigate("/QueryBuilder"), [navigate]);
 
@@ -1126,6 +1222,134 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       restored,
     ]);
   };
+
+  // ── File upload → ingestion agent ────────────────────────────────────────
+  const handleFileUpload = useCallback(async (file) => {
+    if (!file || !companyId || uploadingFile) return;
+    const SUPPORTED = [".csv", ".xlsx", ".xls", ".json", ".xml"];
+    const ext = "." + file.name.split(".").pop().toLowerCase();
+    if (!SUPPORTED.includes(ext)) {
+      setError(`Unsupported file type: ${ext}. Supported: ${SUPPORTED.join("  ")}`);
+      return;
+    }
+
+    setUploadingFile(true);
+    setError(null);
+
+    // User bubble
+    const userMsg = {
+      id: Date.now(), role: "user",
+      content: `📎 Attached: **${file.name}** (${(file.size / 1024).toFixed(0)} KB) — analysing…`,
+      timestamp: new Date().toISOString(),
+    };
+    const thinkingMsg = {
+      id: Date.now() + 1, role: "assistant", type: "thinking",
+      content: "Profiling columns and mapping to the Newsconseen ontology…", tools: [],
+    };
+    setMessages(prev => [...prev, userMsg, thinkingMsg]);
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("company_id", companyId);
+      fd.append("source_name", file.name);
+
+      const res = await fetch(`${RAILWAY_URL}/ingestion/upload`, {
+        method: "POST",
+        headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+        body: fd,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Upload failed (${res.status})`);
+      }
+      const plan = await res.json();
+      plan.source_name = file.name;
+
+      const planMsg = {
+        id: Date.now() + 2,
+        role: "assistant",
+        type: "ingestion_plan",
+        plan,
+        content: `I've analysed **${file.name}**. Here's what I found:`,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages(prev => [
+        ...prev.filter(m => m.type !== "thinking"),
+        planMsg,
+      ]);
+    } catch (e) {
+      setMessages(prev => prev.filter(m => m.type !== "thinking"));
+      setError(e.message || "File upload failed");
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [companyId, uploadingFile]);
+
+  const handleIngestionConfirm = useCallback(async (planId) => {
+    if (!planId || !companyId) return;
+
+    // Update the plan card to show "loading"
+    setMessages(prev => prev.map(m =>
+      m.type === "ingestion_plan" && m.plan?.plan_id === planId
+        ? { ...m, confirming: true }
+        : m
+    ));
+
+    // Send confirmation message that the copilot will pick up and call execute_ingestion_plan
+    const confirmMsg = {
+      id: Date.now(), role: "user",
+      content: `Yes, load it. The plan_id is ${planId}. Please execute_ingestion_plan now.`,
+      timestamp: new Date().toISOString(),
+    };
+    const thinkingMsg = {
+      id: Date.now() + 1, role: "assistant", type: "thinking",
+      content: "Loading data into Newsconseen…", tools: [],
+    };
+    setMessages(prev => [...prev, confirmMsg, thinkingMsg]);
+    setLoading(true);
+
+    try {
+      const history = messages
+        .filter(m => m.type !== "thinking" && m.type !== "ingestion_plan")
+        .map(m => ({ role: m.role, content: m.content }));
+
+      const resp = await fetch(`${RAILWAY_URL}/copilot/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+        body: JSON.stringify({
+          question:   confirmMsg.content,
+          company_id: companyId,
+          history,
+        }),
+      });
+      const result = await resp.json();
+      const assistantMsg = {
+        id: Date.now() + 2, role: "assistant",
+        content: result.answer,
+        tools_called: result.tools_called || [],
+        data: result.data || {},
+        charts: [], citations: [],
+        timestamp: new Date().toISOString(),
+      };
+      setMessages(prev => [
+        ...prev.filter(m => m.type !== "thinking"),
+        assistantMsg,
+      ]);
+    } catch (e) {
+      setMessages(prev => prev.filter(m => m.type !== "thinking"));
+      setError("Load failed: " + (e.message || "unknown error"));
+    } finally {
+      setLoading(false);
+    }
+  }, [companyId, messages]);
+
+  const handleIngestionDismiss = useCallback((planId) => {
+    setMessages(prev => prev.filter(m =>
+      !(m.type === "ingestion_plan" && m.plan?.plan_id === planId)
+    ));
+  }, []);
 
   const sendMessage = useCallback(async (questionOverride = null) => {
     const question = (questionOverride || input).trim();
@@ -1338,14 +1562,33 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
         )}
 
         {messages.map(msg => (
-          <MessageBubble
-            key={msg.id}
-            message={msg}
-            onFeedback={handleFeedback}
-            companyId={companyId}
-            currentUser={currentUser}
-            onOpenQueryBuilder={openQueryBuilder}
-          />
+          msg.type === "ingestion_plan" ? (
+            <div key={msg.id} className="mb-4">
+              <div className="flex items-start gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shrink-0 mt-0.5">
+                  <Sparkles className="w-3.5 h-3.5 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-slate-800 mb-1">{msg.content}</p>
+                  <IngestionPlanCard
+                    plan={msg.plan}
+                    companyId={companyId}
+                    onConfirm={handleIngestionConfirm}
+                    onDismiss={() => handleIngestionDismiss(msg.plan?.plan_id)}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              onFeedback={handleFeedback}
+              companyId={companyId}
+              currentUser={currentUser}
+              onOpenQueryBuilder={openQueryBuilder}
+            />
+          )
         ))}
 
         {error && (
@@ -1364,6 +1607,26 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       {/* Input */}
       <div className="px-4 py-3 bg-white border-t border-slate-100">
         <div className="flex items-end gap-2">
+          {/* File attachment */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept=".csv,.xlsx,.xls,.json,.xml"
+            onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading || uploadingFile}
+            title="Attach a file to import (CSV, Excel, JSON, XML)"
+            className="p-2.5 rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all shrink-0"
+          >
+            {uploadingFile
+              ? <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
+              : <Paperclip className="w-4 h-4" />
+            }
+          </button>
+
           <div className="flex-1">
             <textarea
               ref={inputRef}
@@ -1375,8 +1638,8 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
                   sendMessage();
                 }
               }}
-              placeholder="Ask anything — operations, ML predictions, market research, or how Newsconseen works…"
-              disabled={loading}
+              placeholder="Ask anything — or attach a file 📎 to import data…"
+              disabled={loading || uploadingFile}
               rows={1}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm resize-none focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all disabled:opacity-50 bg-slate-50"
               style={{ minHeight: "42px", maxHeight: "120px" }}
@@ -1384,7 +1647,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           </div>
           <button
             onClick={() => sendMessage()}
-            disabled={!input.trim() || loading}
+            disabled={!input.trim() || loading || uploadingFile}
             className="p-2.5 rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all shrink-0"
           >
             {loading
@@ -1394,7 +1657,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           </button>
         </div>
         <p className="text-[10px] text-slate-300 mt-1.5 text-center">
-          Markdown, charts &amp; tables auto-rendered · Shift+Enter for new line
+          Markdown, charts &amp; tables auto-rendered · Shift+Enter for new line · 📎 attach CSV/Excel/JSON to import
         </p>
       </div>
     </div>

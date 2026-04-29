@@ -5794,6 +5794,29 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "name": "execute_ingestion_plan",
+        "description": (
+            "Execute an approved Ontology Ingestion Plan — loads extracted rows into Newsconseen "
+            "entities using the mapping already approved by the operator. "
+            "Use this ONLY after the operator has seen and confirmed the plan. "
+            "The plan must have been created via the Ingestion Agent page or by uploading a file "
+            "in this chat. Never call this without explicit operator confirmation. "
+            "Example triggers: 'yes load it', 'go ahead and import', 'confirm the import', "
+            "'load the data now', 'execute the plan'. "
+            "Returns: entities_created, entities_updated, entities_skipped, entities_failed."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["plan_id"],
+            "properties": {
+                "plan_id": {
+                    "type": "string",
+                    "description": "The plan_id returned when the file was uploaded and analysed.",
+                },
+            },
+        },
+    },
 ]
 
 
@@ -7520,6 +7543,116 @@ def query_external_table(
         return {"error": str(e)[:300], "records": [], "count": 0}
 
 
+# ── Ingestion agent tool ──────────────────────────────────────────────────────
+
+def execute_ingestion_plan(
+    company_id: str,
+    plan_id: str,
+) -> dict:
+    """
+    Execute an approved ingestion plan stored in analytics.ingestion_plans.
+    Reads the cached rows_json from the DB — no file re-upload required.
+    Called by the copilot after operator confirmation.
+    """
+    import json as _json_local
+    engine = get_engine_safe()
+    if not engine:
+        return {"error": "Database unavailable — cannot execute ingestion plan.", "unable_to_fetch": True}
+
+    # Load plan from DB
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT plan_json, rows_json, status, company_id "
+                    "FROM analytics.ingestion_plans WHERE id = :pid LIMIT 1"
+                ),
+                {"pid": plan_id},
+            ).fetchone()
+    except Exception as e:
+        return {"error": f"Could not load plan {plan_id}: {e}", "unable_to_fetch": True}
+
+    if not row:
+        return {"error": f"Plan {plan_id} not found.", "unable_to_fetch": True}
+
+    plan_company = row[3]
+    if plan_company != company_id:
+        return {"error": "Plan does not belong to this company.", "unable_to_fetch": True}
+
+    status = row[2]
+    if status == "loaded":
+        return {"message": f"Plan {plan_id} was already loaded.", "status": "already_loaded"}
+    if status == "low_confidence":
+        return {
+            "message": (
+                "This plan has low confidence (< 65%). "
+                "Please review it on the Ingestion Agent page before loading."
+            ),
+            "status": "blocked",
+        }
+
+    rows_json_raw = row[1]
+    plan_json_raw = row[0]
+
+    if not rows_json_raw:
+        return {
+            "error": (
+                "Rows are not cached for this plan. "
+                "Please re-upload the file via the Ingestion Agent page."
+            ),
+            "unable_to_fetch": True,
+        }
+
+    try:
+        rows = _json_local.loads(rows_json_raw)
+        plan = _json_local.loads(plan_json_raw)
+    except Exception as e:
+        return {"error": f"Could not deserialise plan data: {e}", "unable_to_fetch": True}
+
+    # Import loader inline — avoid circular imports at module level
+    try:
+        from ingestion.loader import execute as _execute_ingestion
+        from config.settings import settings as _settings
+    except ImportError as e:
+        return {"error": f"Ingestion module unavailable: {e}", "unable_to_fetch": True}
+
+    if not _settings.base44_api_url or not _settings.base44_api_key:
+        return {
+            "error": (
+                "BASE44_API_URL or BASE44_API_KEY not configured. "
+                "Set these in Railway environment variables."
+            ),
+            "unable_to_fetch": True,
+        }
+
+    logger.info("Copilot executing ingestion plan %s for company %s (%d rows)", plan_id, company_id, len(rows))
+
+    stats = _execute_ingestion(
+        plan           = plan,
+        rows           = rows,
+        company_id     = company_id,
+        base44_api_url = _settings.base44_api_url,
+        api_key        = _settings.base44_api_key,
+        engine         = engine,
+        plan_id        = plan_id,
+    )
+
+    return {
+        "status":            stats.get("entities_failed", 0) == 0 and "complete" or "partial",
+        "entities_created":  stats.get("entities_created", 0),
+        "entities_updated":  stats.get("entities_updated", 0),
+        "entities_skipped":  stats.get("entities_skipped", 0),
+        "entities_failed":   stats.get("entities_failed", 0),
+        "run_id":            stats.get("run_id"),
+        "message": (
+            f"Import complete: {stats.get('entities_created',0)} created, "
+            f"{stats.get('entities_updated',0)} updated, "
+            f"{stats.get('entities_skipped',0)} skipped (duplicates), "
+            f"{stats.get('entities_failed',0)} failed."
+        ),
+    }
+
+
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
 
 def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
@@ -7618,6 +7751,8 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         # External database mirror tools
         "list_external_tables":         list_external_tables,
         "query_external_table":         query_external_table,
+        # Ontology Ingestion Agent — execute a pre-approved import plan
+        "execute_ingestion_plan":       execute_ingestion_plan,
     }
 
     fn = dispatch.get(tool_name)

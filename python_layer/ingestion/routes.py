@@ -56,17 +56,18 @@ def _get_extractor(filename: str):
     raise HTTPException(400, f"Unsupported file type: {ext}. Supported: {', '.join(_SUPPORTED_EXTENSIONS)}")
 
 
-def _save_plan(engine, plan_dict: dict) -> None:
+def _save_plan(engine, plan_dict: dict, rows: list | None = None) -> None:
     if engine is None:
         return
     try:
         now = datetime.now(timezone.utc)
+        rows_json = json.dumps(rows, default=str) if rows is not None else None
         with engine.begin() as conn:
             conn.execute(
                 f"""INSERT INTO {_PLAN_TABLE}
                     (id, company_id, source_name, source_fingerprint, file_type,
-                     row_count, plan_json, status, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                     row_count, plan_json, rows_json, status, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (
                     plan_dict["id"],
                     plan_dict["company_id"],
@@ -75,6 +76,7 @@ def _save_plan(engine, plan_dict: dict) -> None:
                     plan_dict["file_type"],
                     plan_dict["row_count"],
                     json.dumps(plan_dict["analysis"], default=str),
+                    rows_json,
                     plan_dict["status"],
                     now,
                 ),
@@ -186,11 +188,10 @@ async def upload_file(
         "column_profiles":    profiles,
     }
 
-    _save_plan(engine, plan)
-
-    # Store rows in memory for later loading (in production: use a temp store or presigned S3)
-    # For Railway: store in DB as JSON blob on the plan record (handled by /load/{id} re-upload flow)
-    # Here we return rows in the response for small files; caller should cache or re-upload for large ones.
+    # Persist rows in DB so copilot can trigger load without re-upload.
+    # rows_json is capped at 5000 rows × columns. For very large files this
+    # could be ~10MB of JSON — acceptable on Railway PostgreSQL.
+    _save_plan(engine, plan, rows=rows)
 
     return {
         "plan_id":     plan_id,
