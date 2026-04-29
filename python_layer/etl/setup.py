@@ -877,6 +877,7 @@ _INGESTION_DDL = [
         source_fingerprint  TEXT,
         file_type           TEXT,
         row_count           BIGINT,
+        overall_confidence  NUMERIC,
         plan_json           TEXT,
         rows_json           TEXT,
         status              TEXT DEFAULT 'draft',
@@ -929,6 +930,8 @@ _INGESTION_DDL = [
 _MIGRATIONS = [
     # Ingestion agent — rows cache for copilot-triggered load
     "ALTER TABLE analytics.ingestion_plans ADD COLUMN IF NOT EXISTS rows_json TEXT",
+    # Ingestion agent — overall_confidence for /plans listing endpoint
+    "ALTER TABLE analytics.ingestion_plans ADD COLUMN IF NOT EXISTS overall_confidence NUMERIC",
     # Gap 1: outcome reason counts
     "ALTER TABLE analytics.task_summary ADD COLUMN IF NOT EXISTS refused_tasks             BIGINT",
     "ALTER TABLE analytics.task_summary ADD COLUMN IF NOT EXISTS missed_tasks              BIGINT",

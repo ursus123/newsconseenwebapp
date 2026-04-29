@@ -18,6 +18,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from config.settings import get_settings
 from database import get_engine_safe
@@ -60,26 +61,32 @@ def _save_plan(engine, plan_dict: dict, rows: list | None = None) -> None:
     if engine is None:
         return
     try:
-        now = datetime.now(timezone.utc)
-        rows_json = json.dumps(rows, default=str) if rows is not None else None
+        now           = datetime.now(timezone.utc)
+        rows_json     = json.dumps(rows, default=str) if rows is not None else None
+        overall_conf  = plan_dict["analysis"].get("overall_confidence")
         with engine.begin() as conn:
             conn.execute(
-                f"""INSERT INTO {_PLAN_TABLE}
-                    (id, company_id, source_name, source_fingerprint, file_type,
-                     row_count, plan_json, rows_json, status, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (
-                    plan_dict["id"],
-                    plan_dict["company_id"],
-                    plan_dict["source_name"],
-                    plan_dict["source_fingerprint"],
-                    plan_dict["file_type"],
-                    plan_dict["row_count"],
-                    json.dumps(plan_dict["analysis"], default=str),
-                    rows_json,
-                    plan_dict["status"],
-                    now,
-                ),
+                text(f"""
+                    INSERT INTO {_PLAN_TABLE}
+                        (id, company_id, source_name, source_fingerprint, file_type,
+                         row_count, plan_json, rows_json, status, overall_confidence, created_at)
+                    VALUES
+                        (:id, :company_id, :source_name, :source_fingerprint, :file_type,
+                         :row_count, :plan_json, :rows_json, :status, :overall_confidence, :created_at)
+                """),
+                {
+                    "id":                 plan_dict["id"],
+                    "company_id":         plan_dict["company_id"],
+                    "source_name":        plan_dict["source_name"],
+                    "source_fingerprint": plan_dict["source_fingerprint"],
+                    "file_type":          plan_dict["file_type"],
+                    "row_count":          plan_dict["row_count"],
+                    "plan_json":          json.dumps(plan_dict["analysis"], default=str),
+                    "rows_json":          rows_json,
+                    "status":             plan_dict["status"],
+                    "overall_confidence": overall_conf,
+                    "created_at":         now,
+                },
             )
     except Exception as e:
         logger.warning("Could not save plan to DB: %s", e)
@@ -146,8 +153,8 @@ async def upload_file(
     # Fingerprint
     fingerprint = fp_mod.generate(columns, profiles)
 
-    # Memory recall — skip LLM if we've seen this schema before
-    cached_mapping = mem_mod.recall(engine, company_id, fingerprint)
+    # Memory recall — exact fingerprint first, then fuzzy column overlap
+    cached_mapping = mem_mod.recall_fuzzy(engine, company_id, columns, fingerprint)
     if cached_mapping:
         analysis = cached_mapping
         from_memory = True
@@ -223,9 +230,12 @@ def approve_plan(plan_id: str, company_id: str):
         now = datetime.now(timezone.utc)
         with engine.begin() as conn:
             conn.execute(
-                f"UPDATE {_PLAN_TABLE} SET status = 'approved', reviewed_at = %s, reviewed_by = %s "
-                "WHERE id = %s AND company_id = %s",
-                (now, "operator", plan_id, company_id),
+                text(
+                    f"UPDATE {_PLAN_TABLE} "
+                    "SET status = 'approved', reviewed_at = :reviewed_at, reviewed_by = :reviewed_by "
+                    "WHERE id = :id AND company_id = :company_id"
+                ),
+                {"reviewed_at": now, "reviewed_by": "operator", "id": plan_id, "company_id": company_id},
             )
     except Exception as e:
         raise HTTPException(500, f"Could not approve plan: {e}")
@@ -378,7 +388,7 @@ async def ingest_from_connector(request: dict):
     profiles    = profiler.profile(columns, rows)
     fingerprint = fp_mod.generate(columns, profiles)
 
-    cached_mapping = mem_mod.recall(engine, company_id, fingerprint)
+    cached_mapping = mem_mod.recall_fuzzy(engine, company_id, columns, fingerprint)
     if cached_mapping:
         analysis    = cached_mapping
         from_memory = True

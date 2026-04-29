@@ -63,23 +63,61 @@ _KEY_FIELDS: dict[str, list[tuple[str, float]]] = {
 }
 
 
-def _row_key(row: dict, fields: list[tuple[str, float]]) -> str:
+def _alias(entity_type: str, row: dict) -> dict:
+    """
+    Add computed alias fields to a row before key comparison so that dedup
+    works even when field names differ from the canonical _KEY_FIELDS names.
+
+    Person:      first_name + last_name  → full_name (if absent)
+    Enterprise:  enterprise_name         → name      (if absent)
+    Transaction: reference               → reference_number (if absent)
+                 transaction_date        → date             (if absent)
+    Product:     item_name / product_name → name            (if absent)
+    """
+    r = dict(row)
+    if entity_type == "Person":
+        if not r.get("full_name"):
+            fn = str(r.get("first_name") or "").strip()
+            ln = str(r.get("last_name")  or "").strip()
+            joined = " ".join(p for p in [fn, ln] if p)
+            if joined:
+                r["full_name"] = joined
+    if entity_type == "Enterprise":
+        if not r.get("name"):
+            r["name"] = r.get("enterprise_name") or r.get("company_name") or r.get("org_name") or ""
+    if entity_type == "Transaction":
+        if not r.get("reference_number"):
+            r["reference_number"] = r.get("reference") or r.get("ref") or r.get("invoice_number") or ""
+        if not r.get("date"):
+            r["date"] = r.get("transaction_date") or r.get("tx_date") or r.get("invoice_date") or ""
+    if entity_type == "Product":
+        if not r.get("name"):
+            r["name"] = r.get("item_name") or r.get("product_name") or r.get("product") or ""
+    return r
+
+
+def _row_key(row: dict, entity_type: str, fields: list[tuple[str, float]]) -> str:
+    r = _alias(entity_type, row)
     parts = []
     for field, _ in fields:
-        v = _norm(row.get(field, ""))
+        v = _norm(r.get(field, ""))
         if v:
             parts.append(v)
     return " ".join(parts)
 
 
-def _score_pair(incoming: dict, existing: dict, fields: list[tuple[str, float]]) -> float:
+def _score_pair(
+    incoming: dict, existing: dict, entity_type: str, fields: list[tuple[str, float]]
+) -> float:
+    inc = _alias(entity_type, incoming)
+    ext = _alias(entity_type, existing)
     total_weight = sum(w for _, w in fields)
     if total_weight == 0:
         return 0.0
     score = 0.0
     for field, weight in fields:
-        a = _norm(incoming.get(field, ""))
-        b = _norm(existing.get(field, ""))
+        a = _norm(inc.get(field, ""))
+        b = _norm(ext.get(field, ""))
         score += weight * _match_score(a, b)
     return score / total_weight
 
@@ -121,7 +159,7 @@ def deduplicate(
         best_id    = None
 
         for existing in existing_records:
-            score = _score_pair(row, existing, fields)
+            score = _score_pair(row, existing, entity_type, fields)
             if score > best_score:
                 best_score = score
                 best_id    = existing.get("id")
