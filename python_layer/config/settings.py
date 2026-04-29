@@ -92,6 +92,17 @@ class Settings(BaseSettings):
     airbyte_webhook_secret: Optional[str] = None   # secures /airbyte/webhook endpoint
 
     # ----------------------------------------------------------
+    # Anthropic API key — used by Copilot + Ingestion Agent analyser
+    # ----------------------------------------------------------
+    anthropic_api_key: Optional[str] = None
+
+    # ----------------------------------------------------------
+    # Base44 REST API base URL — used by Ingestion Agent loader
+    # e.g. https://api.base44.com/v1/apps/<app_id>
+    # ----------------------------------------------------------
+    base44_api_url: Optional[str] = None
+
+    # ----------------------------------------------------------
     # Platform admin secret — protects /admin/* endpoints
     # Set ADMIN_SECRET in Railway env vars.
     # ----------------------------------------------------------
@@ -104,6 +115,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def get_settings() -> Settings:
+    return settings
 
 # ----------------------------------------------------------
 # Shared request headers for all Base44 API calls

@@ -508,6 +508,13 @@ try:
 except Exception as _sec_err:
     logger.warning("Security router failed to load — %s", _sec_err)
 
+try:
+    from ingestion.routes import router as ingestion_router
+    app.include_router(ingestion_router)
+    logger.info("Ontology Ingestion Agent router loaded")
+except Exception as _ing_err:
+    logger.warning("Ingestion router failed to load — %s", _ing_err)
+
 
 # ----------------------------------------------------------
 # Idjwi — Public Demo Copilot (landing page, no auth required)

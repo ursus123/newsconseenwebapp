@@ -867,6 +867,64 @@ _OTHER_DDL = [
 # columns added in later phases. Add one entry per new column on any existing
 # table — otherwise live deployments crash with "column does not exist".
 # ─────────────────────────────────────────────────────────────────────────────
+_INGESTION_DDL = [
+    # ── Ingestion plans — pending/approved/loaded mapping plans ───────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.ingestion_plans (
+        id                  TEXT PRIMARY KEY,
+        company_id          TEXT NOT NULL,
+        source_name         TEXT,
+        source_fingerprint  TEXT,
+        file_type           TEXT,
+        row_count           BIGINT,
+        plan_json           TEXT,
+        status              TEXT DEFAULT 'draft',
+        created_at          TIMESTAMPTZ DEFAULT NOW(),
+        reviewed_at         TIMESTAMPTZ,
+        reviewed_by         TEXT,
+        loaded_at           TIMESTAMPTZ
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ingestion_plans_company ON analytics.ingestion_plans (company_id, status)",
+
+    # ── Ingestion memory — learned mappings per company+fingerprint ───────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.ingestion_memory (
+        id                  SERIAL PRIMARY KEY,
+        company_id          TEXT NOT NULL,
+        source_fingerprint  TEXT NOT NULL,
+        source_name         TEXT,
+        mapping_json        TEXT,
+        use_count           BIGINT DEFAULT 1,
+        last_used_at        TIMESTAMPTZ DEFAULT NOW(),
+        created_at          TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (company_id, source_fingerprint)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ingestion_memory_company ON analytics.ingestion_memory (company_id)",
+
+    # ── Ingestion runs — execution history ────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.ingestion_runs (
+        id                      TEXT PRIMARY KEY,
+        company_id              TEXT NOT NULL,
+        plan_id                 TEXT,
+        status                  TEXT DEFAULT 'running',
+        rows_total              BIGINT DEFAULT 0,
+        entities_created        BIGINT DEFAULT 0,
+        entities_updated        BIGINT DEFAULT 0,
+        entities_skipped        BIGINT DEFAULT 0,
+        entities_failed         BIGINT DEFAULT 0,
+        relationships_created   BIGINT DEFAULT 0,
+        errors_json             TEXT,
+        started_at              TIMESTAMPTZ DEFAULT NOW(),
+        finished_at             TIMESTAMPTZ
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ingestion_runs_company ON analytics.ingestion_runs (company_id, started_at DESC)",
+]
+
+
 _MIGRATIONS = [
     # Gap 1: outcome reason counts
     "ALTER TABLE analytics.task_summary ADD COLUMN IF NOT EXISTS refused_tasks             BIGINT",
@@ -916,6 +974,15 @@ def ensure_all_analytics_tables(engine) -> None:
                     created += 1
                 except Exception as exc:
                     logger.warning("setup: enhanced analytics DDL failed — %s", exc)
+                    errors += 1
+
+            # Ingestion agent tables
+            for ddl in _INGESTION_DDL:
+                try:
+                    conn.execute(text(ddl))
+                    created += 1
+                except Exception as exc:
+                    logger.warning("setup: ingestion DDL failed — %s", exc)
                     errors += 1
 
             # Other (copilot_memory, etc.)

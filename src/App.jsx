@@ -48,6 +48,7 @@ import Territories from './pages/Territories';
 import Animals from './pages/Animals';
 import Plots from './pages/Plots';
 import Observations from './pages/Observations';
+import IngestionAgent from './pages/IngestionAgent';
 import Layout from './Layout.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
@@ -150,6 +151,7 @@ const AuthenticatedApp = () => {
       <Route path="/Animals" element={<LayoutWrapper currentPageName="Animals"><Animals /></LayoutWrapper>} />
       <Route path="/Plots" element={<LayoutWrapper currentPageName="Plots"><Plots /></LayoutWrapper>} />
       <Route path="/Observations" element={<LayoutWrapper currentPageName="Observations"><Observations /></LayoutWrapper>} />
+      <Route path="/IngestionAgent" element={<LayoutWrapper currentPageName="Ingestion Agent"><IngestionAgent /></LayoutWrapper>} />
       {/* Desktop Shell — NO layout wrapper, full screen */}
       <Route path="/Desktop" element={<Desktop />} />
       <Route path="/DesktopSettings" element={<DesktopSettings />} />

@@ -43,6 +43,7 @@ import {
   PawPrint,
   Tractor,
   FlaskConical,
+  Upload,
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import SetupWizard from "@/components/shared/SetupWizard";
@@ -101,6 +102,7 @@ const NAV_CONFIG = {
         { name: "agents",              label: "Agents",               icon: Brain },
         { name: "Connectors",          icon: Plug },
         { name: "Workflows",           icon: Zap },
+        { name: "IngestionAgent",      label: "Ingestion Agent",      icon: Upload },
       ],
     },
     {
@@ -175,6 +177,7 @@ const NAV_CONFIG = {
         { name: "agents",             label: "Agents",              icon: Brain },
         { name: "Connectors",         icon: Plug },
         { name: "Workflows",          icon: Zap },
+        { name: "IngestionAgent",     label: "Ingestion Agent",     icon: Upload },
       ],
     },
     {
