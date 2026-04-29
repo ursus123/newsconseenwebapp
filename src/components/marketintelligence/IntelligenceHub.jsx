@@ -118,9 +118,11 @@ function SectionHeader({ icon: Icon, title, sub, badge }) {
 
 // ── ML Run button + result panel ─────────────────────────────────────────────
 function MLPanel({ title, description, endpoint, body, onResult, resultRenderer, actionPrompt }) {
-  const [loading, setLoading] = useState(false);
-  const [result, setResult]   = useState(null);
-  const [error, setError]     = useState(null);
+  const [loading, setLoading]   = useState(false);
+  const [result, setResult]     = useState(null);
+  const [error, setError]       = useState(null);
+  const [acted, setActed]       = useState(false);
+  const [acting, setActing]     = useState(false);
 
   async function run() {
     setLoading(true);
@@ -139,12 +141,28 @@ function MLPanel({ title, description, endpoint, body, onResult, resultRenderer,
     }
   }
 
-  const handleAct = () => {
+  const handleAct = async () => {
+    if (!result || acted) return;
     const prompt = actionPrompt
       ? (typeof actionPrompt === "function" ? actionPrompt(result) : actionPrompt)
       : `Based on the ${title} analysis, I want to take action on these findings.`;
-    if (typeof window.__openQuickAdd === "function") {
-      window.__openQuickAdd(prompt);
+    const companyId = body?.company_id;
+    if (!companyId) return;
+    setActing(true);
+    try {
+      await base44.entities.Task.create({
+        title:       `Action: ${title}`,
+        description: prompt,
+        task_type:   "strategic_review",
+        status:      "open",
+        priority:    "medium",
+        company_id:  companyId,
+      });
+      setActed(true);
+    } catch (_) {
+      // best-effort — don't block the UI
+    } finally {
+      setActing(false);
     }
   };
 
@@ -159,10 +177,19 @@ function MLPanel({ title, description, endpoint, body, onResult, resultRenderer,
           {result && (
             <button
               onClick={handleAct}
-              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 transition-colors"
-              title="Act on this insight via AI"
+              disabled={acting || acted || !body?.company_id}
+              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 transition-colors disabled:cursor-not-allowed
+                ${acted
+                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                  : "bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"}`}
+              title={acted ? "Task created" : "Create a task from this insight"}
             >
-              <Zap className="w-3.5 h-3.5" /> Act
+              {acting
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : acted
+                  ? <CheckCircle2 className="w-3.5 h-3.5" />
+                  : <Zap className="w-3.5 h-3.5" />}
+              {acted ? "Done" : "Act"}
             </button>
           )}
           <button

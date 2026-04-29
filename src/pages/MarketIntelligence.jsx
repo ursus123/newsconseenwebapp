@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import {
   BookmarkPlus, Loader2, Download, Building2, ExternalLink,
   Code2, ChevronDown, X, FileText, CheckCircle2, AlertCircle,
-  TrendingUp, Lightbulb, Search,
+  TrendingUp, Lightbulb, Search, Target, Bell,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Link } from "react-router-dom";
@@ -300,6 +300,234 @@ function KeyInsightsCard({ results, operationalContext }) {
             You currently serve <strong>{operationalContext.total_clients} clients</strong> out of an addressable market of <strong>${(mkt.annual_market_usd / 1000000).toFixed(1)}M/yr</strong> — there may be room to grow.
           </p>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Action button helper ────────────────────────────────────────────────────
+function ActionButton({ label, icon, onClick, loading, done, disabled, title }) {
+  const isDisabled = loading || done || disabled;
+  return (
+    <button
+      onClick={onClick}
+      disabled={isDisabled}
+      title={title}
+      className={`flex items-center gap-2 text-left px-4 py-3 border rounded-xl text-sm font-medium transition-colors disabled:cursor-not-allowed
+        ${done
+          ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+          : disabled
+            ? "bg-slate-50 border-slate-200 text-slate-400 opacity-50"
+            : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 disabled:opacity-50"}`}
+    >
+      {loading
+        ? <Loader2 className="w-4 h-4 animate-spin shrink-0 text-slate-500" />
+        : done
+          ? <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+          : <span className="text-base shrink-0">{icon}</span>}
+      <span className="leading-snug">{done ? "Saved" : label}</span>
+    </button>
+  );
+}
+
+// ─── Market Decision Panel ───────────────────────────────────────────────────
+function MarketDecisionPanel({ results, currentUser, toast, myEnterprises = [] }) {
+  const [done, setDone]         = useState({});
+  const [creating, setCreating] = useState(null);
+
+  const mkt           = results?.market?.[0];
+  const score         = mkt?.opportunity_score;
+  const location      = results?.location || "";
+  const bizType       = (results?.businessType || "").replace(/_/g, " ");
+  const topCompetitor = (results?.competitors || []).filter(c => c.distance_km > 0)[0];
+  const ownEnterprise = myEnterprises[0]; // nearest/first enterprise for competitor link
+
+  if (!mkt || !currentUser) return null;
+
+  const decision = score >= 70 ? "expand" : score >= 45 ? "wait" : "avoid";
+  const decisionConfig = {
+    expand: {
+      label: "Expand", icon: "🚀",
+      textColor: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200", badge: "bg-emerald-600",
+      reason: "Strong opportunity with manageable competition — this market is worth entering.",
+      nextSteps: ["Site visits & feasibility", "Competitor deep-dive", "Staffing plan"],
+    },
+    wait: {
+      label: "Wait & Monitor", icon: "⏳",
+      textColor: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200", badge: "bg-amber-500",
+      reason: "Moderate opportunity — gather more local data before committing capital.",
+      nextSteps: ["Commission local demand study", "Track competitor moves", "Monitor economic indicators"],
+    },
+    avoid: {
+      label: "Avoid / Pivot", icon: "⚠️",
+      textColor: "text-rose-700", bg: "bg-rose-50", border: "border-rose-200", badge: "bg-rose-600",
+      reason: "High competition or weak demand — explore nearby alternatives before investing.",
+      nextSteps: ["Compare 2–3 alternative locations", "Analyse competitor weaknesses", "Reassess in 6 months"],
+    },
+  }[decision];
+
+  const cid = currentUser.company_id;
+
+  // Fire-and-forget ETL after each successful write
+  const triggerETL = (entity) =>
+    fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
+
+  const act = async (key, etlEntity, createFn) => {
+    setCreating(key);
+    try {
+      await createFn();
+      setDone(prev => ({ ...prev, [key]: true }));
+      toast({ title: "Saved", description: "Record added to your workspace." });
+      triggerETL(etlEntity);
+    } catch (e) {
+      toast({ title: "Could not save", description: e.message, variant: "destructive" });
+    } finally {
+      setCreating(null);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-6">
+      <div className="flex items-center gap-3 mb-5">
+        <Target className="w-5 h-5 text-slate-600" />
+        <h3 className="text-base font-bold text-slate-800">Market Decision</h3>
+      </div>
+
+      {/* Decision verdict */}
+      <div className={`rounded-xl p-4 border mb-5 ${decisionConfig.bg} ${decisionConfig.border}`}>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xl">{decisionConfig.icon}</span>
+          <span className={`text-base font-black ${decisionConfig.textColor}`}>{decisionConfig.label}</span>
+          <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full text-white ${decisionConfig.badge}`}>{score}/100</span>
+        </div>
+        <p className={`text-xs ${decisionConfig.textColor} mb-3`}>{decisionConfig.reason}</p>
+        <div className="space-y-1">
+          {decisionConfig.nextSteps.map((s, i) => (
+            <p key={i} className={`text-xs flex items-center gap-1.5 ${decisionConfig.textColor}`}>
+              <span className="w-4 h-4 rounded-full border-2 flex items-center justify-center text-[8px] font-bold shrink-0" style={{ borderColor: "currentColor" }}>{i + 1}</span>
+              {s}
+            </p>
+          ))}
+        </div>
+      </div>
+
+      {/* Actionable buttons */}
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Turn insights into records</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <ActionButton
+          label="Create expansion task"
+          icon="📋"
+          loading={creating === "task"}
+          done={done.task}
+          onClick={() => act("task", "task", () =>
+            base44.entities.Task.create({
+              title: `Evaluate ${bizType} expansion in ${location}`,
+              description: `Market score: ${score}/100. ${decisionConfig.reason} Annual market: $${((mkt.annual_market_usd || 0) / 1e6).toFixed(1)}M/yr. Competitors: ${mkt.existing_competitors ?? "N/A"}.`,
+              task_type: "strategic_review",
+              status: "open",
+              priority: score >= 70 ? "high" : "medium",
+              company_id: cid,
+            })
+          )}
+        />
+
+        {topCompetitor ? (
+          <ActionButton
+            label={`Track competitor: ${(topCompetitor.name || "Top competitor").slice(0, 22)}`}
+            icon="🏢"
+            loading={creating === "competitor"}
+            done={done.competitor}
+            disabled={!ownEnterprise}
+            title={!ownEnterprise ? "Add an enterprise first to link this competitor" : undefined}
+            onClick={() => act("competitor", "relationship", async () => {
+              // Use /market/save-competitor — writes Relationship + analytics.mi_competitors
+              const res = await fetch(`${RAILWAY_URL}/market/save-competitor`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  company_id:             cid,
+                  linked_enterprise_id:   ownEnterprise.id,
+                  linked_enterprise_name: ownEnterprise.enterprise_name,
+                  competitor_name:        topCompetitor.name || "Competitor",
+                  competitor_type:        topCompetitor.type || topCompetitor.enterprise_type || null,
+                  distance_km:            topCompetitor.distance_km || null,
+                  address:                topCompetitor.address || null,
+                  phone:                  topCompetitor.phone || null,
+                  website:                topCompetitor.website || null,
+                  lat:                    topCompetitor.lat || null,
+                  lon:                    topCompetitor.lng || topCompetitor.lon || null,
+                  source_location:        location,
+                  business_type:          results?.businessType || null,
+                }),
+              });
+              if (!res.ok) throw new Error(`Save competitor failed: ${res.status}`);
+            })}
+          />
+        ) : (
+          <ActionButton
+            label="Track staffing plan"
+            icon="👥"
+            loading={creating === "staffing"}
+            done={done.staffing}
+            onClick={() => act("staffing", "task", () =>
+              base44.entities.Task.create({
+                title: `Staffing plan: ${bizType} in ${location}`,
+                description: `Supply gap: ${mkt.supply_gap || "unknown"} providers needed. Market score: ${score}/100.`,
+                task_type: "workforce_planning",
+                status: "open",
+                priority: "medium",
+                company_id: cid,
+              })
+            )}
+          />
+        )}
+
+        <ActionButton
+          label="Add market signal"
+          icon="📡"
+          loading={creating === "signal"}
+          done={done.signal}
+          onClick={() => act("signal", "signal", () =>
+            base44.entities.Signal.create({
+              name:            `Market opportunity: ${bizType} in ${location}`,
+              signal_type:     "automated",
+              signal_subtype:  "market_intelligence",
+              value:           String(score),
+              unit_of_measure: "opportunity_score",
+              description:     `Score ${score}/100 (${mkt.market_status || "analyzed"}). Annual market $${((mkt.annual_market_usd || 0) / 1e6).toFixed(1)}M/yr. ${mkt.existing_competitors ?? 0} competitors.${mkt.supply_gap > 0 ? ` Supply gap: ${mkt.supply_gap} providers needed.` : ""}`,
+              source:          "Market Intelligence",
+              is_anomaly:      score < 40 || score > 85,
+              recorded_at:     new Date().toISOString(),
+              status:          "active",
+              company_id:      cid,
+            })
+          )}
+        />
+
+        <ActionButton
+          label="Set growth goal"
+          icon="🎯"
+          loading={creating === "goal"}
+          done={done.goal}
+          onClick={() => act("goal", "task", () =>
+            base44.entities.Task.create({
+              title: `Growth goal: ${bizType} in ${location}`,
+              description: `Target market: $${((mkt.annual_market_usd || 0) / 1e6).toFixed(1)}M/yr. Opportunity score: ${score}/100.${mkt.supply_gap > 0 ? ` Supply gap: ${mkt.supply_gap} providers needed.` : ""}`,
+              task_type: "goal",
+              status: "open",
+              priority: "high",
+              company_id: cid,
+            })
+          )}
+        />
+      </div>
+
+      {/* Alerts nudge */}
+      <div className="mt-4 flex items-center gap-2 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl">
+        <Bell className="w-4 h-4 text-blue-500 shrink-0" />
+        <p className="text-xs text-blue-700">
+          Save a report above and the Market Research agent will incorporate these findings in future briefings.
+        </p>
       </div>
     </div>
   );
@@ -655,7 +883,7 @@ export default function MarketIntelligence() {
   // Use geocoordinate distance when overview lat/lon available; fall back to
   // city/region/country string match so we never show nothing unnecessarily.
   // Three-tier coord resolver: direct fields → relationship→address join → Nominatim cache
-  const resolveCoords = (e) => {
+  const resolveCoords = useCallback((e) => {
     if (isValidCoord(e.latitude) && isValidCoord(e.longitude))
       return { latitude: parseFloat(e.latitude), longitude: parseFloat(e.longitude) };
     if (enterpriseCoords[e.enterprise_name])
@@ -663,9 +891,9 @@ export default function MarketIntelligence() {
     if (nominatimCoords[e.enterprise_name])
       return nominatimCoords[e.enterprise_name];
     return null;
-  };
+  }, [enterpriseCoords, nominatimCoords]);
 
-  const nearbyEnterprises = (() => {
+  const nearbyEnterprises = useMemo(() => {
     if (myEnterprises.length === 0) return [];
 
     // No location searched yet — show all enterprises so the panel is never empty
@@ -701,14 +929,14 @@ export default function MarketIntelligence() {
     const loc = results.location.toLowerCase();
     const locParts = loc.split(/[,\s]+/).filter(p => p.length > 2);
     return myEnterprises.filter(e => {
-      const city   = e.city?.toLowerCase() || "";
-      const region = e.region?.toLowerCase() || "";
+      const city    = e.city?.toLowerCase() || "";
+      const region  = e.region?.toLowerCase() || "";
       const country = e.country?.toLowerCase() || "";
       return locParts.some(p => city.includes(p) || region.includes(p) || country.includes(p)) ||
              (city && loc.includes(city)) ||
              (region && loc.includes(region));
     });
-  })();
+  }, [myEnterprises, results, resolveCoords]);
 
   // Fetch operational context — three-tier fallback per ARCHITECTURE.md
   useEffect(() => {
@@ -766,7 +994,7 @@ export default function MarketIntelligence() {
           .then(r => r.ok ? r.json() : null).catch(() => null);
 
         setOperationalContext({
-          enterprises:    nearbyEnterprises.length || 1,
+          enterprises:    1,  // updated cheaply by secondary effect when nearbyEnterprises changes
           total_staff,
           total_clients,
           total_revenue,
@@ -780,6 +1008,12 @@ export default function MarketIntelligence() {
       } catch { /* unreachable — show nothing */ }
     })();
   }, [currentUser?.company_id]);
+
+  // Cheap secondary effect: update enterprises count whenever nearbyEnterprises changes
+  // (nearbyEnterprises depends on results + myEnterprises, which change after runAnalysis)
+  useEffect(() => {
+    setOperationalContext(prev => prev ? { ...prev, enterprises: nearbyEnterprises.length || 1 } : null);
+  }, [nearbyEnterprises.length]);
 
   // ── Forecasting data prep ──────────────────────────────────────────────────
   const forecastBlock = results?.market?.[0]?.opportunity_score != null ? (() => {
@@ -930,7 +1164,7 @@ export default function MarketIntelligence() {
 
               {/* 8. News */}
               {sectionLoading("news") ? <SectionSkeleton label="Industry News" /> : (
-                <NewsSection data={results?.news} location={results?.location} businessType={results?.businessType} loading={false} />
+                <NewsSection data={results?.news} location={results?.location} businessType={results?.businessType} loading={false} currentUser={currentUser} />
               )}
 
               {/* 9. Market Opportunity Score */}
@@ -1058,6 +1292,11 @@ export default function MarketIntelligence() {
               {/* 13. Key Insights & Recommendation — shown once analysis complete */}
               {!running && results && !results.loading && results.market && (
                 <KeyInsightsCard results={results} operationalContext={operationalContext} />
+              )}
+
+              {/* 14. Market Decision Panel — actionable next steps */}
+              {!running && results && !results.loading && results.market && (
+                <MarketDecisionPanel results={results} currentUser={currentUser} toast={toast} myEnterprises={myEnterprises} />
               )}
             </>
           )}
