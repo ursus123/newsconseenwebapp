@@ -2,9 +2,25 @@
 ingestion/loader.py
 Executes an approved ingestion plan: writes rows to Base44 and
 records run statistics in analytics.ingestion_runs.
+
+Relationship materialisation uses three strategies in priority order:
+
+  1. Same-row pairing  — when from_entity != to_entity and both appear in the
+     same denormalized row (e.g. employee + company in one spreadsheet row),
+     link row[i].Person to row[i].Enterprise.
+
+  2. FK value lookup   — parse join_hint to find candidate column names; build
+     a value→entity_id lookup from the to_entity's primary-key fields and any
+     fields named in the hint; match from_entity rows by those values.
+     Works for cross-row foreign keys (Transaction.enterprise_name → Enterprise)
+     and for entities not loaded in the current run (fetched from Base44).
+
+  3. Same-entity self-referential — from_entity == to_entity (e.g. Person.manager_email
+     → Person.email); same FK lookup but on the same entity pool; avoids self-loops.
 """
 import json
 import logging
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -51,10 +67,9 @@ def _apply_transform(value: Any, hint: str | None) -> Any:
     """Apply a transform_hint from the LLM field_map to a raw cell value."""
     if not hint or value is None:
         return value
-    h  = hint.lower()
-    s  = str(value).strip()
+    h = hint.lower()
+    s = str(value).strip()
 
-    # Name splitting
     if "split" in h and ("first" in h or "given" in h):
         parts = s.split()
         return parts[0] if parts else s
@@ -62,7 +77,6 @@ def _apply_transform(value: Any, hint: str | None) -> Any:
         parts = s.split()
         return " ".join(parts[1:]) if len(parts) > 1 else ""
 
-    # Date parsing
     if "date" in h or "parse date" in h:
         for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d"):
             try:
@@ -71,7 +85,6 @@ def _apply_transform(value: Any, hint: str | None) -> Any:
             except ValueError:
                 continue
 
-    # Numeric coercion
     if "int" in h or "integer" in h:
         try:
             return int(float(s.replace(",", "")))
@@ -83,19 +96,14 @@ def _apply_transform(value: Any, hint: str | None) -> Any:
         except (ValueError, TypeError):
             return value
 
-    # Case transforms
     if "upper" in h:
         return s.upper()
     if "lower" in h:
         return s.lower()
     if "title" in h or "titlecase" in h:
         return s.title()
-
-    # Strip whitespace / punctuation
     if "strip" in h:
         return s.strip()
-
-    # Split on comma → take first element
     if "comma" in h and "first" in h:
         return s.split(",")[0].strip()
 
@@ -113,7 +121,6 @@ def _make_client(base44_api_url: str, api_key: str) -> httpx.Client:
 
 
 def _fetch_existing(client: httpx.Client, entity_type: str, company_id: str) -> list[dict]:
-    """Pull existing records for dedup comparison (up to 2000)."""
     slug = _BASE44_SLUG.get(entity_type, entity_type)
     try:
         r = client.get(f"/entities/{slug}", params={"company_id": company_id, "limit": 2000})
@@ -166,6 +173,193 @@ def _mark_plan_loaded(engine, plan_id: str) -> None:
             )
     except Exception as e:
         logger.warning("Could not mark plan as loaded: %s", e)
+
+
+# ── Relationship helpers ──────────────────────────────────────────────────────
+
+def _hint_words(join_hint: str) -> set[str]:
+    """Extract candidate field/column names from a join_hint free-text string."""
+    return set(re.findall(r"\b[a-z][a-z0-9_]{1,35}\b", join_hint.lower()))
+
+
+def _build_value_lookup(
+    entity_type: str,
+    row_ids: dict[int, str],
+    entity_rows: list[dict],
+    field_map: list[dict],
+    hint_words_set: set[str],
+) -> dict[str, str]:
+    """
+    Build normalised_value → entity_id lookup for to_entity so FK matching
+    can resolve cross-row or self-referential relationships.
+
+    Indexes by:
+      - all is_primary_key fields for this entity type
+      - all fields whose name appears in join_hint
+    """
+    pk_fields = {
+        fm["target_field"]
+        for fm in field_map
+        if fm.get("target_entity") == entity_type and fm.get("is_primary_key")
+    }
+    lookup: dict[str, str] = {}
+    for row_idx, entity_id in row_ids.items():
+        if row_idx >= len(entity_rows):
+            continue
+        row = entity_rows[row_idx]
+        for fld, val in row.items():
+            if not val:
+                continue
+            if fld in pk_fields or fld in hint_words_set or any(hw in fld for hw in hint_words_set):
+                key = str(val).strip().lower()
+                if len(key) > 1:
+                    lookup[key] = entity_id
+    return lookup
+
+
+def _try_create_rel(
+    client: httpx.Client,
+    stats: dict,
+    company_id: str,
+    from_etype: str,
+    from_id: str,
+    to_etype: str,
+    to_id: str,
+    rel_label: str,
+    seen: set,
+) -> None:
+    pair = (from_etype, from_id, to_etype, to_id, rel_label)
+    if pair in seen:
+        return
+    seen.add(pair)
+    payload = {
+        "company_id":        company_id,
+        "from_entity_type":  from_etype,
+        "from_entity_id":    from_id,
+        "to_entity_type":    to_etype,
+        "to_entity_id":      to_id,
+        "relationship_type": rel_label,
+        "status":            "active",
+    }
+    try:
+        _create(client, "Relationship", payload)
+        stats["relationships_created"] += 1
+    except Exception as e:
+        logger.warning("Relationship create failed [%s→%s]: %s", from_etype, to_etype, e)
+
+
+def _materialise_relationships(
+    client: httpx.Client,
+    relationships: list[dict],
+    field_map: list[dict],
+    row_entity_ids: dict[str, dict[int, str]],
+    entity_rows_cache: dict[str, list[dict]],
+    company_id: str,
+    stats: dict,
+) -> None:
+    """
+    Create Relationship records in Base44.
+
+    Priority order per relationship:
+      1. Same-row pairing (from_etype != to_etype, denormalized file)
+      2. FK value lookup via join_hint columns
+      3. FK fallback: fetch to_entity from Base44 if not loaded in this run
+    """
+    seen: set = set()  # deduplicate (from_etype, from_id, to_etype, to_id, label)
+
+    for rel in relationships:
+        from_etype = rel.get("from_entity")
+        to_etype   = rel.get("to_entity")
+        rel_label  = rel.get("relationship_label", "related_to")
+        join_hint  = rel.get("join_hint", "")
+
+        if not from_etype or not to_etype:
+            continue
+
+        from_ids = row_entity_ids.get(from_etype, {})
+        to_ids   = row_entity_ids.get(to_etype, {})
+
+        if not from_ids:
+            logger.debug("No from_entity IDs for %s — skip %s", from_etype, rel_label)
+            continue
+
+        hw = _hint_words(join_hint)
+
+        # ── Strategy 1: same-row pairing (denormalized, different entity types) ──
+        if from_etype != to_etype and to_ids:
+            common = sorted(set(from_ids) & set(to_ids))
+            if common:
+                for row_idx in common:
+                    _try_create_rel(
+                        client, stats, company_id,
+                        from_etype, from_ids[row_idx],
+                        to_etype, to_ids[row_idx],
+                        rel_label, seen,
+                    )
+                # Row-index pairing was sufficient for this relationship
+                continue
+
+        # ── Strategy 2 & 3: FK value lookup ──────────────────────────────────
+        # Build to_entity value lookup from rows loaded in this run
+        to_entity_rows = entity_rows_cache.get(to_etype, [])
+        to_lookup = _build_value_lookup(to_etype, to_ids, to_entity_rows, field_map, hw)
+
+        # If to_entity wasn't loaded this run (or lookup is empty), fetch from Base44
+        if not to_lookup:
+            logger.debug("to_entity %s has no in-run IDs; fetching from Base44 for FK lookup", to_etype)
+            pk_fields = {
+                fm["target_field"]
+                for fm in field_map
+                if fm.get("target_entity") == to_etype and fm.get("is_primary_key")
+            }
+            for existing in _fetch_existing(client, to_etype, company_id):
+                eid = existing.get("id")
+                if not eid:
+                    continue
+                for fld, val in existing.items():
+                    if not val:
+                        continue
+                    if fld in pk_fields or fld in hw or any(hw_w in fld for hw_w in hw):
+                        key = str(val).strip().lower()
+                        if len(key) > 1:
+                            to_lookup[key] = eid
+
+        from_entity_rows = entity_rows_cache.get(from_etype, [])
+
+        for row_idx, from_id in sorted(from_ids.items()):
+            if row_idx >= len(from_entity_rows):
+                continue
+            from_row = from_entity_rows[row_idx]
+            matched_to_id: str | None = None
+
+            # Hint-guided field check first (most precise)
+            for fld, val in from_row.items():
+                if not val:
+                    continue
+                if fld in hw or any(hw_w in fld for hw_w in hw):
+                    key = str(val).strip().lower()
+                    if key in to_lookup:
+                        matched_to_id = to_lookup[key]
+                        break
+
+            # Fallback: any field value present in lookup (len > 2 avoids false positives)
+            if not matched_to_id:
+                for fld, val in from_row.items():
+                    if not val:
+                        continue
+                    key = str(val).strip().lower()
+                    if len(key) > 2 and key in to_lookup:
+                        matched_to_id = to_lookup[key]
+                        break
+
+            # Avoid self-loops (important for same-entity self-referential)
+            if matched_to_id and matched_to_id != from_id:
+                _try_create_rel(
+                    client, stats, company_id,
+                    from_etype, from_id,
+                    to_etype, matched_to_id,
+                    rel_label, seen,
+                )
 
 
 # ── Main executor ─────────────────────────────────────────────────────────────
@@ -222,16 +416,17 @@ def execute(
     entity_splits = plan.get("entity_splits", [])
     relationships = plan.get("relationships", [])
 
-    # Group field_map entries by target_entity (multiple entries per source_column allowed)
+    # Group field_map by target_entity
     entity_fields: dict[str, list[dict]] = {}
     for fm in field_map:
         et = fm.get("target_entity")
         if et:
             entity_fields.setdefault(et, []).append(fm)
 
-    # row_entity_ids[entity_type][row_index] = Base44 record id
-    # Populated during entity loads; used to materialise row-level relationships.
+    # row_entity_ids[entity_type][row_index] = Base44 entity id
     row_entity_ids: dict[str, dict[int, str]] = {}
+    # entity_rows_cache[entity_type] = transformed rows (same index as source rows)
+    entity_rows_cache: dict[str, list[dict]] = {}
 
     client = _make_client(base44_api_url, api_key)
 
@@ -245,8 +440,8 @@ def execute(
 
             ef = entity_fields[entity_type]
 
-            # Build one record per source row, applying transform_hints
-            entity_rows = []
+            # Build one transformed record per source row
+            entity_rows: list[dict] = []
             for raw_row in rows:
                 record: dict = {"company_id": company_id}
                 for fm in ef:
@@ -259,7 +454,9 @@ def execute(
                         record[tgt_fld] = _apply_transform(raw_val, fm.get("transform_hint"))
                 entity_rows.append(record)
 
-            existing = _fetch_existing(client, entity_type, company_id)
+            entity_rows_cache[entity_type] = entity_rows
+
+            existing  = _fetch_existing(client, entity_type, company_id)
             annotated = deduplicate(entity_type, entity_rows, existing)
 
             row_entity_ids[entity_type] = {}
@@ -272,7 +469,7 @@ def execute(
                 entity_id: str | None = None
                 try:
                     if action == "create":
-                        created = _create(client, entity_type, record)
+                        created   = _create(client, entity_type, record)
                         entity_id = created.get("id")
                         stats["entities_created"] += 1
                     elif action == "update" and match_id:
@@ -280,7 +477,7 @@ def execute(
                         entity_id = match_id
                         stats["entities_updated"] += 1
                     else:
-                        entity_id = match_id  # skipped — still track for relationship wiring
+                        entity_id = match_id  # skipped — track for relationship wiring
                         stats["entities_skipped"] += 1
                 except Exception as e:
                     stats["entities_failed"] += 1
@@ -290,52 +487,16 @@ def execute(
                 if entity_id:
                     row_entity_ids[entity_type][row_idx] = entity_id
 
-                # Rate-limit between chunks
                 if row_idx > 0 and row_idx % _CHUNK == 0:
                     time.sleep(_DELAY)
 
-        # ── Phase 2: materialise row-level relationships ──────────────────────
-        for rel in relationships:
-            from_etype = rel.get("from_entity")
-            to_etype   = rel.get("to_entity")
-            rel_label  = rel.get("relationship_label", "related_to")
-
-            if not from_etype or not to_etype:
-                continue
-            if from_etype == to_etype:
-                # Same-type relationships require a different join strategy; skip for now
-                continue
-
-            from_ids = row_entity_ids.get(from_etype, {})
-            to_ids   = row_entity_ids.get(to_etype, {})
-
-            if not from_ids or not to_ids:
-                logger.debug(
-                    "Relationship %s→%s: no row IDs available for one or both sides",
-                    from_etype, to_etype,
-                )
-                continue
-
-            # Row-level pairing: same row index → link the two entities
-            common_rows = sorted(set(from_ids) & set(to_ids))
-            for row_idx in common_rows:
-                rel_payload = {
-                    "company_id":         company_id,
-                    "from_entity_type":   from_etype,
-                    "from_entity_id":     from_ids[row_idx],
-                    "to_entity_type":     to_etype,
-                    "to_entity_id":       to_ids[row_idx],
-                    "relationship_type":  rel_label,
-                    "status":             "active",
-                }
-                try:
-                    _create(client, "Relationship", rel_payload)
-                    stats["relationships_created"] += 1
-                except Exception as e:
-                    logger.warning(
-                        "Relationship create failed [%s→%s row %d]: %s",
-                        from_etype, to_etype, row_idx, e,
-                    )
+        # ── Phase 2: materialise relationships ────────────────────────────────
+        if relationships:
+            _materialise_relationships(
+                client, relationships, field_map,
+                row_entity_ids, entity_rows_cache,
+                company_id, stats,
+            )
 
     finally:
         client.close()

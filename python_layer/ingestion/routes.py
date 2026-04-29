@@ -57,6 +57,98 @@ def _get_extractor(filename: str):
     raise HTTPException(400, f"Unsupported file type: {ext}. Supported: {', '.join(_SUPPORTED_EXTENSIONS)}")
 
 
+def _reconcile_fuzzy_mapping(
+    cached: dict,
+    columns: list[str],
+    profiles: list[dict],
+    sample_rows: list[dict],
+    row_count: int,
+    source_name: str,
+    api_key: str | None,
+) -> dict:
+    """
+    Reconcile a fuzzy-recalled mapping with the actual incoming columns:
+
+      1. Prune field_map entries whose source_column no longer exists in the file.
+      2. If new columns appear that aren't in the cached mapping AND an api_key is
+         available, call the analyser for just those columns and merge the result.
+         This ensures the returned plan is complete without paying for a full re-analysis.
+
+    Args:
+        cached:      The fuzzy-recalled analysis dict.
+        columns:     Actual column names in the current upload.
+        profiles:    Column profiles for the current upload.
+        sample_rows: Sample rows from the current upload (list of dicts).
+        api_key:     Anthropic API key; if None, new columns are annotated but not mapped.
+    """
+    cached_field_map = cached.get("field_map", [])
+    cached_cols = {fm["source_column"] for fm in cached_field_map}
+    incoming_set = set(columns)
+
+    removed = cached_cols - incoming_set
+    new     = incoming_set - cached_cols
+
+    # Always prune removed columns — they'd silently produce empty field values
+    pruned_map = [fm for fm in cached_field_map if fm["source_column"] not in removed]
+
+    result = dict(cached)
+    result["field_map"] = pruned_map
+
+    # Annotate notes with what changed
+    notes = result.get("analyst_notes", "") or ""
+    if removed:
+        notes += f" [pruned {len(removed)} removed columns: {', '.join(sorted(removed))}]"
+
+    if not new:
+        result["analyst_notes"] = notes.strip()
+        return result
+
+    if not api_key:
+        # Can't analyse without a key — note the gap but return what we have
+        notes += f" [{len(new)} new columns not mapped (no API key): {', '.join(sorted(new))}]"
+        result["analyst_notes"] = notes.strip()
+        return result
+
+    # Run analyser on just the new columns
+    try:
+        delta_profiles = [p for p in profiles if p.get("column") in new]
+        delta_samples  = [
+            {k: v for k, v in row.items() if k in new}
+            for row in sample_rows[:20]
+        ]
+
+        delta = analyser.analyse(
+            source_name  = f"{source_name} [delta: {len(new)} new columns]",
+            columns      = sorted(new),
+            profiles     = delta_profiles,
+            sample_rows  = delta_samples,
+            row_count    = row_count,
+            api_key      = api_key,
+        )
+
+        result["field_map"] = pruned_map + delta.get("field_map", [])
+
+        # Merge any new entity_splits detected in delta (e.g. a new entity type appeared)
+        existing_types = {s["entity_type"] for s in result.get("entity_splits", [])}
+        for ds in delta.get("entity_splits", []):
+            if ds["entity_type"] not in existing_types:
+                result.setdefault("entity_splits", []).append(ds)
+
+        notes += (
+            f" [delta re-analysis: +{len(new)} new columns mapped"
+            + (f", {len(removed)} removed" if removed else "")
+            + f". {delta.get('analyst_notes', '')}]"
+        )
+        result["analyst_notes"] = notes.strip()
+
+    except Exception as e:
+        logger.warning("Delta re-analysis failed for new columns %s: %s", new, e)
+        notes += f" [delta re-analysis failed ({len(new)} new columns unmapped): {e}]"
+        result["analyst_notes"] = notes.strip()
+
+    return result
+
+
 def _save_plan(engine, plan_dict: dict, rows: list | None = None) -> None:
     if engine is None:
         return
@@ -153,10 +245,14 @@ async def upload_file(
     # Fingerprint
     fingerprint = fp_mod.generate(columns, profiles)
 
-    # Memory recall — exact fingerprint first, then fuzzy column overlap
+    # Memory recall — exact fingerprint first, then fuzzy column overlap.
+    # Fuzzy hits are reconciled: removed columns pruned, new columns re-analysed.
     cached_mapping = mem_mod.recall_fuzzy(engine, company_id, columns, fingerprint)
     if cached_mapping:
-        analysis = cached_mapping
+        analysis = _reconcile_fuzzy_mapping(
+            cached_mapping, columns, profiles, sample_rows, row_count,
+            source_name, settings.anthropic_api_key,
+        )
         from_memory = True
     else:
         if not settings.anthropic_api_key:
@@ -246,11 +342,18 @@ def approve_plan(plan_id: str, company_id: str):
 async def load_plan(
     plan_id: str,
     company_id: str = Form(...),
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(None),
 ):
     """
-    Execute an approved plan.  The operator re-uploads the file (or the frontend
-    re-submits cached bytes) so we can reconstruct the rows without a temp store.
+    Execute an approved plan.
+
+    Row resolution order (first wins):
+      1. Fresh file upload — if the caller provides a file, use it (most current data).
+      2. Cached rows_json  — rows stored at upload time; enables copilot-triggered load
+         and approve-then-load-later without requiring the original file bytes.
+
+    The file parameter is therefore optional. Callers that cannot re-supply the file
+    (e.g. the copilot tool loop, approval workflows) may omit it.
     """
     settings = get_settings()
     engine   = get_engine_safe()
@@ -261,20 +364,43 @@ async def load_plan(
     if db_plan.get("status") not in ("approved", "pending_review"):
         raise HTTPException(409, f"Plan status is '{db_plan.get('status')}' — cannot load.")
 
-    file_bytes = await file.read()
-    filename   = file.filename or "upload"
-    extractor  = _get_extractor(filename)
-    try:
-        extracted = extractor.extract(file_bytes, filename)
-    except ValueError as e:
-        raise HTTPException(422, str(e))
+    # ── Resolve rows ──────────────────────────────────────────────────────────
+    rows: list[dict] | None = None
+
+    if file is not None:
+        # Fresh upload takes priority
+        file_bytes = await file.read()
+        filename   = file.filename or "upload"
+        extractor  = _get_extractor(filename)
+        try:
+            extracted = extractor.extract(file_bytes, filename)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        rows = extracted["rows"]
+        logger.info("load_plan %s: using %d rows from uploaded file", plan_id, len(rows))
+    else:
+        # Fall back to cached rows_json written at upload time
+        rows_json_str = db_plan.get("rows_json")
+        if rows_json_str:
+            try:
+                rows = json.loads(rows_json_str)
+                logger.info("load_plan %s: using %d cached rows from DB", plan_id, len(rows))
+            except Exception as e:
+                logger.warning("load_plan: could not parse rows_json: %s", e)
+
+        if rows is None:
+            raise HTTPException(
+                422,
+                "No cached rows found for this plan and no file was uploaded. "
+                "Re-upload the original file or ensure rows were saved at analysis time.",
+            )
 
     if not settings.base44_api_url or not settings.base44_api_key:
         raise HTTPException(503, "BASE44 API not configured.")
 
     run_stats = loader.execute(
         plan           = db_plan["analysis"],
-        rows           = extracted["rows"],
+        rows           = rows,
         company_id     = company_id,
         base44_api_url = settings.base44_api_url,
         api_key        = settings.base44_api_key,
@@ -390,7 +516,10 @@ async def ingest_from_connector(request: dict):
 
     cached_mapping = mem_mod.recall_fuzzy(engine, company_id, columns, fingerprint)
     if cached_mapping:
-        analysis    = cached_mapping
+        analysis = _reconcile_fuzzy_mapping(
+            cached_mapping, columns, profiles, sample_rows[:20], row_count,
+            source_name, settings.anthropic_api_key,
+        )
         from_memory = True
     else:
         if not settings.anthropic_api_key:
