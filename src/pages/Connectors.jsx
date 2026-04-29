@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import SmartImportButton from "@/components/shared/SmartImportButton";
 import {
   Plug, CheckCircle2, AlertCircle, XCircle, Loader2,
   Database, Cloud, HardDrive, X, ChevronRight, ChevronDown,
@@ -243,9 +244,12 @@ function ApiConnectModal({ connector, companyId, onClose }) {
                 {result.failed        != null && <div><span className="text-slate-500">Failed:</span> <strong>{result.failed}</strong></div>}
               </div>
               {result.unmapped?.length > 0 && (
-                <p className="mt-2 text-xs text-amber-700">
-                  {result.unmapped.length} unmapped values — review in the Unmapped Values section.
-                </p>
+                <div className="mt-2 flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <p className="text-xs text-amber-700">
+                    {result.unmapped.length} unmapped values — the AI can re-map them automatically.
+                  </p>
+                  <SmartImportButton variant="link" label="Re-map with AI →" entityHint={connector?.name || ""} onComplete={onClose} />
+                </div>
               )}
               {result.detail && <p className="mt-2 text-xs text-rose-700">{result.detail}</p>}
             </div>
@@ -1179,9 +1183,12 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
                 </div>
               )}
               {syncResult.unmapped?.length > 0 && (
-                <p className="mt-2 text-xs text-amber-700">
-                  {syncResult.unmapped.length} unmapped values — review in the Unmapped Values section below.
-                </p>
+                <div className="mt-2 flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <p className="text-xs text-amber-700">
+                    {syncResult.unmapped.length} unmapped values — the AI can re-map them automatically.
+                  </p>
+                  <SmartImportButton variant="link" label="Re-map with AI →" entityHint={connector?.name || ""} onComplete={onClose} />
+                </div>
               )}
               {syncResult.error && (
                 <p className="mt-2 text-xs text-rose-700">{syncResult.error}</p>

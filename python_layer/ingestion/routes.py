@@ -337,3 +337,109 @@ def list_memory(company_id: str):
     except Exception as e:
         logger.warning("Could not list memory: %s", e)
         return []
+
+
+@router.post("/from-connector")
+async def ingest_from_connector(request: dict):
+    """
+    Accept rows from a connector run and pipe them through the full ingestion
+    pipeline (profile → fingerprint → memory recall / LLM analyse → load).
+
+    Body:
+      company_id   str            — tenant
+      source_name  str            — e.g. "QuickBooks sync — 2026-04-29"
+      rows         list[dict]     — flat row dicts from connector.transform()
+      auto_load    bool = False   — if True and confidence ≥ threshold, load immediately
+
+    Returns the plan JSON (same shape as /upload), plus run stats if auto_load triggered.
+    """
+    from pydantic import BaseModel
+    company_id  = request.get("company_id", "")
+    source_name = request.get("source_name", "connector import")
+    rows        = request.get("rows", [])
+    auto_load   = request.get("auto_load", False)
+
+    settings = get_settings()
+    engine   = get_engine_safe()
+
+    if not rows:
+        raise HTTPException(422, "No rows provided.")
+    if not company_id:
+        raise HTTPException(422, "company_id is required.")
+
+    # Derive columns from first row keys
+    columns = list(rows[0].keys()) if rows else []
+    if not columns:
+        raise HTTPException(422, "Rows have no columns.")
+
+    sample_rows = rows[:20]
+    row_count   = len(rows)
+
+    profiles    = profiler.profile(columns, rows)
+    fingerprint = fp_mod.generate(columns, profiles)
+
+    cached_mapping = mem_mod.recall(engine, company_id, fingerprint)
+    if cached_mapping:
+        analysis    = cached_mapping
+        from_memory = True
+    else:
+        if not settings.anthropic_api_key:
+            raise HTTPException(503, "ANTHROPIC_API_KEY not configured.")
+        analysis = analyser.analyse(
+            source_name  = source_name,
+            columns      = columns,
+            profiles     = profiles,
+            sample_rows  = sample_rows,
+            row_count    = row_count,
+            api_key      = settings.anthropic_api_key,
+        )
+        mem_mod.save(engine, company_id, fingerprint, source_name, analysis)
+        from_memory = False
+
+    overall_conf = analysis.get("overall_confidence", 0.0)
+    if overall_conf >= _CONFIDENCE_AUTO_LOAD:
+        status = "approved"
+    elif overall_conf >= _CONFIDENCE_REVIEW:
+        status = "pending_review"
+    else:
+        status = "low_confidence"
+
+    plan_id = str(uuid.uuid4())
+    plan = {
+        "id":                 plan_id,
+        "company_id":         company_id,
+        "source_name":        source_name,
+        "source_fingerprint": fingerprint,
+        "file_type":          "connector",
+        "row_count":          row_count,
+        "status":             status,
+        "analysis":           analysis,
+        "from_memory":        from_memory,
+    }
+    _save_plan(engine, plan, rows=rows)
+
+    result = {
+        "plan_id":     plan_id,
+        "status":      status,
+        "from_memory": from_memory,
+        "row_count":   row_count,
+        "analysis":    analysis,
+    }
+
+    # Auto-load if confidence is high enough and caller requested it
+    if auto_load and status in ("approved", "pending_review"):
+        if not settings.base44_api_url or not settings.base44_api_key:
+            result["auto_load_skipped"] = "BASE44 API not configured"
+        else:
+            run_stats = loader.execute(
+                plan           = analysis,
+                rows           = rows,
+                company_id     = company_id,
+                base44_api_url = settings.base44_api_url,
+                api_key        = settings.base44_api_key,
+                engine         = engine,
+                plan_id        = plan_id,
+            )
+            result["run_stats"] = run_stats
+
+    return result

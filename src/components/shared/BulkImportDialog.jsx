@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import SmartImportButton from "@/components/shared/SmartImportButton";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -569,6 +570,24 @@ export default function BulkImportDialog({
                 <p className="text-xs text-slate-400">Supports .csv, .xlsx, .xls</p>
                 <input ref={fileInputRef} type="file" className="hidden" accept=".csv,.xlsx,.xls"
                   onChange={(e) => applyFile(e.target.files[0])} />
+              </div>
+              <div className="flex items-center gap-3 text-xs text-slate-400">
+                <hr className="flex-1 border-slate-200" />
+                <span>or use AI</span>
+                <hr className="flex-1 border-slate-200" />
+              </div>
+              <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-blue-800">Smart Import — any format, any columns</p>
+                  <p className="text-xs text-blue-600">Drop any CSV, Excel, JSON or XML. The AI maps columns to the ontology automatically.</p>
+                </div>
+                <SmartImportButton
+                  variant="ghost"
+                  label="Use AI"
+                  entityHint={entityName}
+                  onComplete={() => { onClose?.(); }}
+                  className="shrink-0 text-blue-700 hover:bg-blue-100"
+                />
               </div>
               <div className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3">
                 <div>
