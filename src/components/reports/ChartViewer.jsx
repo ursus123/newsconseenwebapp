@@ -2,9 +2,35 @@ import React, { useState, useEffect } from "react";
 import { ArrowLeft, Edit, Loader2, RefreshCw, Code2 } from "lucide-react";
 import { executeSQL } from "@/components/querybuilder/sqlEngine";
 import ChartRenderer from "./ChartRenderer";
-import { safeChartData } from "./ChartRenderer";
+import { freshnessLabel, rowCountLabel, sourceMeta } from "@/components/shared/chartUtils";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+
+const TONE = {
+  emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  blue:    "bg-blue-50 text-blue-700 border-blue-200",
+  indigo:  "bg-indigo-50 text-indigo-700 border-indigo-200",
+  violet:  "bg-violet-50 text-violet-700 border-violet-200",
+  amber:   "bg-amber-50 text-amber-700 border-amber-200",
+  slate:   "bg-slate-50 text-slate-600 border-slate-200",
+};
+
+function SourceBadge({ chart, data, lastFetched }) {
+  const meta = sourceMeta(chart);
+  const count = rowCountLabel(data);
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[10px] mt-1">
+      <span className={`px-2 py-1 rounded-full border font-bold ${TONE[meta.tone] || TONE.slate}`}>
+        {meta.label}
+      </span>
+      <span className="text-slate-400">{meta.detail}</span>
+      {count && <span className="text-slate-300">·</span>}
+      {count && <span className="text-slate-400">{count}</span>}
+      {lastFetched && <span className="text-slate-300">·</span>}
+      {lastFetched && <span className="text-emerald-500">{freshnessLabel(lastFetched)}</span>}
+    </div>
+  );
+}
 
 export default function ChartViewer({ chart, onClose, onEdit, currentUser }) {
   const [data, setData] = useState([]);
@@ -100,7 +126,7 @@ export default function ChartViewer({ chart, onClose, onEdit, currentUser }) {
           <div>
             <h2 className="text-base font-bold text-slate-800">{chart?.title}</h2>
             {chart?.description && <p className="text-xs text-slate-400">{chart.description}</p>}
-            {lastFetched && <p className="text-[10px] text-emerald-500 mt-0.5">● Live · {lastFetched.toLocaleTimeString()}</p>}
+            <SourceBadge chart={chart} data={data} lastFetched={lastFetched} />
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -123,14 +149,14 @@ export default function ChartViewer({ chart, onClose, onEdit, currentUser }) {
         </div>
       </div>
 
-      {/* Query label panel */}
+      {/* Query/source panel */}
       {showQuery && (
         <div className="bg-slate-950 px-6 py-4 border-b border-slate-800">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-            {chart?.sql_query ? "SQL Query — runs live against analytics datamart" : "Copilot Tool — re-called live on every open"}
+            {chart?.sql_query ? "SQL Query - runs live against available data sources" : "Source - re-called or replayed when opened"}
           </p>
           <pre className="text-[11px] text-emerald-400 font-mono whitespace-pre-wrap">
-            {chart?.sql_query || `Tool: ${chart?.tool_name}\nParams: ${chart?.tool_params || "{}"}`}
+            {chart?.sql_query || (chart?.tool_name ? `Tool: ${chart?.tool_name}\nParams: ${chart?.tool_params || "{}"}` : "Static snapshot")}
           </pre>
         </div>
       )}
@@ -157,6 +183,9 @@ export default function ChartViewer({ chart, onClose, onEdit, currentUser }) {
             ) : (
               <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
                 <ChartRenderer chart={chart} data={data} height={400} />
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <SourceBadge chart={chart} data={data} lastFetched={lastFetched} />
+                </div>
               </div>
             )}
           </>

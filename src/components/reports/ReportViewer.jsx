@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer, MessageSquare, Send } from "lucide-react";
 import { format } from "date-fns";
 import ChartSection from "./ChartSection";
+import { sourceMeta } from "@/components/shared/chartUtils";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, Radar,
@@ -49,12 +50,16 @@ function SectionViewer({ section, charts }) {
   if (section.type === "chart") {
     const chart = charts?.find((c) => c.id === section.chart_id);
     if (!chart) return null;
+    const meta = sourceMeta(chart);
     return (
       <div className={`mb-6 ${section.width === "half" ? "inline-block w-[48%] mr-4 align-top" : "block"}`}>
         <div className="bg-white border border-slate-200 rounded-2xl p-5">
         <p className="text-sm font-semibold text-slate-800 mb-1">{chart.title}</p>
         {chart.description && <p className="text-xs text-slate-400 mb-3">{chart.description}</p>}
         <ChartSection chart={chart} height={280} />
+        <p className="mt-3 pt-2 border-t border-slate-100 text-[10px] text-slate-400">
+          Source: <span className="font-semibold text-slate-500">{meta.label}</span> - {meta.detail}
+        </p>
         </div>
         {section.caption && <p className="text-xs text-slate-400 mt-1.5 text-center italic">{section.caption}</p>}
       </div>

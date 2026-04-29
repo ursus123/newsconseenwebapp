@@ -2,9 +2,16 @@ import React from "react";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend,
+  ResponsiveContainer, Legend, LabelList,
 } from "recharts";
 import MapChart from "@/components/querybuilder/MapChart";
+import {
+  CHART_COLORS,
+  compactNumber,
+  formatChartValue,
+  shouldShowBarLabels,
+  titleize,
+} from "@/components/shared/chartUtils";
 
 export function safeVal(val) {
   if (val === null || val === undefined) return "—";
@@ -52,7 +59,37 @@ const SCHEME_COLOR = {
   amber: "#f59e0b",
 };
 
-const COLORS = ["#10b981", "#3b82f6", "#8b5cf6", "#f97316", "#f43f5e", "#f59e0b", "#06b6d4", "#84cc16"];
+const COLORS = CHART_COLORS;
+
+function ChartTooltip({ active, payload, label, chart }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-lg">
+      {label !== undefined && <p className="text-[11px] font-bold text-slate-700 mb-1">{titleize(label)}</p>}
+      <div className="space-y-1">
+        {payload.map((p, i) => (
+          <div key={`${p.dataKey}-${i}`} className="flex items-center justify-between gap-5 text-[11px]">
+            <span className="flex items-center gap-1.5 text-slate-500">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color || p.fill }} />
+              {titleize(p.name || p.dataKey)}
+            </span>
+            <span className="font-semibold text-slate-800">{formatChartValue(p.value, p.dataKey, chart)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function axisTickFormatter(v) {
+  if (typeof v === "number") return compactNumber(v);
+  const s = String(v ?? "");
+  return s.length > 14 ? `${s.slice(0, 12)}...` : titleize(s);
+}
+
+function valueLabelFormatter(v, key, chart) {
+  return formatChartValue(v, key, chart);
+}
 
 export default function ChartRenderer({ chart, data, height = 320 }) {
   if (!chart) return null;
@@ -85,7 +122,7 @@ export default function ChartRenderer({ chart, data, height = 320 }) {
     const val = chartData[0]?.[yKey] ?? chartData[0]?.[Object.keys(chartData[0])[0]];
     return (
       <div className="flex flex-col items-center justify-center h-full" style={{ height }}>
-        <p className="text-6xl font-black" style={{ color }}>{Number(val ?? 0).toLocaleString()}</p>
+        <p className="text-6xl font-black" style={{ color }}>{formatChartValue(val ?? 0, yKey, chart)}</p>
         {chart.title && <p className="text-sm text-slate-500 mt-2">{chart.title}</p>}
       </div>
     );
@@ -123,11 +160,13 @@ export default function ChartRenderer({ chart, data, height = 320 }) {
             nameKey={xKey}
             cx="50%" cy="50%"
             outerRadius={Math.min(height / 2 - 30, 100)}
-            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+            label={({ name, percent }) => percent >= 0.06 ? `${titleize(name)} ${(percent * 100).toFixed(0)}%` : ""}
+            labelLine={false}
           >
             {chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
           </Pie>
-          <Tooltip />
+          <Tooltip content={<ChartTooltip chart={chart} />} />
+          <Legend formatter={(value) => titleize(value)} />
         </PieChart>
       </ResponsiveContainer>
     );
@@ -143,10 +182,10 @@ export default function ChartRenderer({ chart, data, height = 320 }) {
               <stop offset="95%" stopColor={color} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-          <XAxis dataKey={xKey} tick={{ fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 11 }} />
-          <Tooltip />
+          <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+          <XAxis dataKey={xKey} tick={{ fontSize: 11 }} tickFormatter={axisTickFormatter} tickLine={false} />
+          <YAxis tick={{ fontSize: 11 }} tickFormatter={compactNumber} tickLine={false} axisLine={false} />
+          <Tooltip content={<ChartTooltip chart={chart} />} />
           <Area type="monotone" dataKey={yKey} stroke={color} fill="url(#colorGrad)" strokeWidth={2} />
         </AreaChart>
       </ResponsiveContainer>
@@ -158,15 +197,16 @@ export default function ChartRenderer({ chart, data, height = 320 }) {
     return (
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-          <XAxis dataKey={xKey} tick={{ fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 11 }} />
-          <Tooltip />
-          {seriesKeys.length > 1 && <Legend />}
+          <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+          <XAxis dataKey={xKey} tick={{ fontSize: 11 }} tickFormatter={axisTickFormatter} tickLine={false} />
+          <YAxis tick={{ fontSize: 11 }} tickFormatter={compactNumber} tickLine={false} axisLine={false} />
+          <Tooltip content={<ChartTooltip chart={chart} />} />
+          {seriesKeys.length > 1 && <Legend formatter={(value) => titleize(value)} />}
           {seriesKeys.map((key, i) => (
             <Line key={key} type="monotone" dataKey={key} stroke={COLORS[i % COLORS.length]}
               strokeWidth={2.5} dot={{ r: 3, fill: COLORS[i % COLORS.length] }}
-              name={key.replace(/_/g, " ")} />
+              activeDot={{ r: 5 }}
+              name={titleize(key)} />
           ))}
         </LineChart>
       </ResponsiveContainer>
@@ -177,15 +217,19 @@ export default function ChartRenderer({ chart, data, height = 320 }) {
   const seriesKeys = allNumericKeys.length > 0 ? allNumericKeys : [yKey];
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={chartData} margin={{ top: 10, right: 20, bottom: 5, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-        <XAxis dataKey={xKey} tick={{ fontSize: 10 }} tickLine={false} />
-        <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-        <Tooltip />
-        {seriesKeys.length > 1 && <Legend />}
+      <BarChart data={chartData} margin={{ top: 16, right: 20, bottom: 5, left: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+        <XAxis dataKey={xKey} tick={{ fontSize: 10 }} tickFormatter={axisTickFormatter} tickLine={false} />
+        <YAxis tick={{ fontSize: 10 }} tickFormatter={compactNumber} tickLine={false} axisLine={false} />
+        <Tooltip content={<ChartTooltip chart={chart} />} />
+        {seriesKeys.length > 1 && <Legend formatter={(value) => titleize(value)} />}
         {seriesKeys.map((key, i) => (
           <Bar key={key} dataKey={key} fill={COLORS[i % COLORS.length]}
-            radius={[4, 4, 0, 0]} name={key.replace(/_/g, " ")} />
+            radius={[5, 5, 0, 0]} name={titleize(key)}>
+            {shouldShowBarLabels(chartData, key) && (
+              <LabelList dataKey={key} position="top" formatter={(v) => valueLabelFormatter(v, key, chart)} className="text-[10px]" />
+            )}
+          </Bar>
         ))}
       </BarChart>
     </ResponsiveContainer>

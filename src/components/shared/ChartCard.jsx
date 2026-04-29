@@ -2,8 +2,17 @@ import React, { useState } from "react";
 import { BarChart2, Code2, Pin, Check, Table2, Bot, X, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { makeChartDescription, rowCountLabel, sourceMeta } from "@/components/shared/chartUtils";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const SOURCE_TONE = {
+  emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  blue:    "bg-blue-50 text-blue-700 border-blue-200",
+  indigo:  "bg-indigo-50 text-indigo-700 border-indigo-200",
+  violet:  "bg-violet-50 text-violet-700 border-violet-200",
+  amber:   "bg-amber-50 text-amber-700 border-amber-200",
+  slate:   "bg-slate-50 text-slate-600 border-slate-200",
+};
 
 export default function ChartCard({ title, description, sql, currentUser, entity, tableData, children }) {
   const [view, setView] = useState("chart");
@@ -18,10 +27,15 @@ export default function ChartCard({ title, description, sql, currentUser, entity
     if (pinning || pinned) return;
     setPinning(true);
     try {
+      const rows = Array.isArray(tableData) ? tableData : [];
       await base44.entities.ReportChart.create({
         title, sql_query: sql || "", chart_type: "bar", status: "active",
         company_id: currentUser?.company_id,
-        description: (copilotText ? copilotText.slice(0, 400) + " [AI insight]" : "Pinned from " + (entity || "analytics")),
+        description: (copilotText
+          ? `${copilotText.slice(0, 360)} [AI insight]`
+          : makeChartDescription({ chart: { title, description }, entity, sql, rows })),
+        source: "entity_analytics",
+        table_snapshot: rows.length ? JSON.stringify({ headers: Object.keys(rows[0] || {}), rows: rows.map(r => Object.values(r)) }) : "",
         shared_with_roles: ["admin","analyst","executive"],
       });
       setPinned(true);
@@ -63,13 +77,23 @@ export default function ChartCard({ title, description, sql, currentUser, entity
 
   const rows = Array.isArray(tableData) ? tableData : [];
   const cols = rows.length > 0 ? Object.keys(rows[0]) : [];
+  const meta = sourceMeta({ sql_query: sql, source: "base44" }, { source: sql ? "query" : "base44" });
+  const rowLabel = rowCountLabel(rows);
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 p-5 flex flex-col gap-3">
+    <div className="bg-white rounded-2xl border border-slate-100 p-5 flex flex-col gap-3 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-bold text-slate-600 uppercase tracking-wider truncate">{title}</p>
           {description && <p className="text-[10px] text-slate-400 mt-0.5">{description}</p>}
+          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${SOURCE_TONE[meta.tone] || SOURCE_TONE.slate}`}>
+              {meta.label}
+            </span>
+            <span className="text-[10px] text-slate-400">{meta.detail}</span>
+            {rowLabel && <span className="text-[10px] text-slate-300">·</span>}
+            {rowLabel && <span className="text-[10px] text-slate-400">{rowLabel}</span>}
+          </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <div className="flex items-center bg-slate-100 rounded-lg p-0.5">

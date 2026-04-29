@@ -1,5 +1,6 @@
 import React, { useState, useRef } from "react";
 import { executeSQL } from "@/components/querybuilder/sqlEngine";
+import { rowCountLabel, sourceMeta } from "@/components/shared/chartUtils";
 
 function safeVal(val) {
   if (val === null || val === undefined) return "—";
@@ -460,6 +461,15 @@ Respond with just the insight text, no headers or bullet points.`,
   };
 
   const columns = previewData?.length > 0 ? Object.keys(previewData[0]) : [];
+  const source = sourceMeta({ sql_query: sql });
+  const qualityIssues = [
+    !title.trim() ? "Add a clear chart title." : "",
+    !description.trim() ? "Add a short description so viewers know what the chart means." : "",
+    !sql.trim() ? "Choose a data source or SQL query." : "",
+    previewData && previewData.length === 0 ? "The current query returns no rows." : "",
+    chartType !== "number" && chartType !== "table" && !xKey ? "Choose an X axis." : "",
+    chartType !== "table" && !yKey ? "Choose a value/Y axis." : "",
+  ].filter(Boolean);
 
   const saveMut = useMutation({
     mutationFn: (data) => chart
@@ -565,7 +575,7 @@ Respond with just the insight text, no headers or bullet points.`,
                 </button>
               ))}
             </div>
-            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5" onClick={handleSave} disabled={saveMut.isPending}>
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5" onClick={handleSave} disabled={saveMut.isPending || qualityIssues.length > 0}>
               <Save className="w-3.5 h-3.5" /> {saveMut.isPending ? "Saving..." : "Save Chart"}
             </Button>
           </>
@@ -805,6 +815,12 @@ Respond with just the insight text, no headers or bullet points.`,
             <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
               <p className="text-sm font-semibold text-slate-800 mb-1">{title || "Chart Title"}</p>
               {description && <p className="text-xs text-slate-400 mb-3">{description}</p>}
+              <div className="flex flex-wrap items-center gap-2 mb-3 text-[10px]">
+                <span className="px-2 py-0.5 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 font-bold">{source.label}</span>
+                <span className="text-slate-400">{source.detail}</span>
+                {rowCountLabel(previewData) && <span className="text-slate-300">·</span>}
+                {rowCountLabel(previewData) && <span className="text-slate-400">{rowCountLabel(previewData)}</span>}
+              </div>
               <div className="h-64">
                 <MiniChartPreview
                   chartType={chartType}
@@ -820,6 +836,21 @@ Respond with just the insight text, no headers or bullet points.`,
                     <span key={t} className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{t.trim()}</span>
                   ))}
                 </div>
+              )}
+            </div>
+
+            <div className={`mt-4 rounded-2xl border p-4 ${qualityIssues.length ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"}`}>
+              <p className={`text-xs font-bold mb-2 ${qualityIssues.length ? "text-amber-800" : "text-emerald-800"}`}>
+                {qualityIssues.length ? "Before saving" : "Ready to save"}
+              </p>
+              {qualityIssues.length ? (
+                <ul className="space-y-1">
+                  {qualityIssues.map((issue) => (
+                    <li key={issue} className="text-[11px] text-amber-700">- {issue}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[11px] text-emerald-700">This chart has a title, description, source query, and selected data columns.</p>
               )}
             </div>
 
