@@ -161,15 +161,16 @@ def _write_run_status(engine, run_id: str, **kwargs) -> None:
         logger.warning("Could not update run status: %s", e)
 
 
-def _mark_plan_loaded(engine, plan_id: str) -> None:
+def _mark_plan_loaded(engine, plan_id: str, had_failures: bool) -> None:
     if engine is None or not plan_id:
         return
     try:
-        now = datetime.now(timezone.utc)
+        now    = datetime.now(timezone.utc)
+        status = "loaded_with_errors" if had_failures else "loaded"
         with engine.begin() as conn:
             conn.execute(
-                text(f"UPDATE {_PLAN_TABLE} SET status = 'loaded', loaded_at = :loaded_at WHERE id = :id"),
-                {"loaded_at": now, "id": plan_id},
+                text(f"UPDATE {_PLAN_TABLE} SET status = :status, loaded_at = :loaded_at WHERE id = :id"),
+                {"status": status, "loaded_at": now, "id": plan_id},
             )
     except Exception as e:
         logger.warning("Could not mark plan as loaded: %s", e)
@@ -372,6 +373,7 @@ def execute(
     api_key: str,
     engine=None,
     plan_id: str | None = None,
+    duplicate_action: str = "skip",
 ) -> dict[str, Any]:
     """
     Execute an approved ingestion plan.
@@ -457,7 +459,7 @@ def execute(
             entity_rows_cache[entity_type] = entity_rows
 
             existing  = _fetch_existing(client, entity_type, company_id)
-            annotated = deduplicate(entity_type, entity_rows, existing)
+            annotated = deduplicate(entity_type, entity_rows, existing, duplicate_action=duplicate_action)
 
             row_entity_ids[entity_type] = {}
 
@@ -517,7 +519,7 @@ def execute(
         finished_at           = finished_at,
     )
     if plan_id:
-        _mark_plan_loaded(engine, plan_id)
+        _mark_plan_loaded(engine, plan_id, had_failures=stats["entities_failed"] > 0)
 
     logger.info(
         "Ingestion run %s complete: +%d created, ~%d updated, %d failed, %d relationships",

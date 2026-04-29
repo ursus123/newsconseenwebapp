@@ -9,8 +9,9 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_SAMPLE_ROWS = 8
-_MAX_ROWS    = 5000
+_SAMPLE_ROWS   = 8
+_MAX_ROWS      = 50_000   # max rows stored in rows_json and used for loading
+_ANALYSIS_ROWS = 5_000    # max rows passed to profiler
 
 
 def _flatten(obj: Any, prefix: str = "") -> dict:
@@ -36,7 +37,6 @@ def extract(file_bytes: bytes, filename: str) -> dict[str, Any]:
     try:
         if fname.endswith(".json"):
             data = json.loads(file_bytes.decode("utf-8", errors="replace"))
-            # Support array-of-objects or {data: [...]}
             if isinstance(data, list):
                 records = data
             elif isinstance(data, dict):
@@ -59,14 +59,24 @@ def extract(file_bytes: bytes, filename: str) -> dict[str, Any]:
     except Exception as e:
         raise ValueError(f"Could not parse '{filename}': {e}") from e
 
-    rows = [_flatten(r) for r in records[:_MAX_ROWS]]
+    total_row_count = len(records)
+    records_capped  = records[:_MAX_ROWS]
+    rows_capped     = total_row_count > _MAX_ROWS
+
+    rows = [_flatten(r) for r in records_capped]
     if not rows:
-        return {"columns": [], "rows": [], "row_count": 0, "sample_rows": []}
+        return {
+            "columns": [], "rows": [], "row_count": 0, "rows_stored": 0,
+            "rows_capped": False, "analysis_rows": [], "sample_rows": [],
+        }
 
     columns = list(rows[0].keys())
     return {
-        "columns":    columns,
-        "rows":       rows,
-        "row_count":  len(rows),
-        "sample_rows": rows[:_SAMPLE_ROWS],
+        "columns":       columns,
+        "rows":          rows,
+        "row_count":     total_row_count,
+        "rows_stored":   len(rows),
+        "rows_capped":   rows_capped,
+        "analysis_rows": rows[:_ANALYSIS_ROWS],
+        "sample_rows":   rows[:_SAMPLE_ROWS],
     }

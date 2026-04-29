@@ -16,6 +16,9 @@ Returns each row annotated with:
   _dedup_action: "create" | "update" | "skip"
   _dedup_match_id: existing record id if action != "create"
   _dedup_score: 0.0–1.0 similarity score
+
+Default behaviour for matches is "skip" — re-importing the same file twice will
+not overwrite existing data. Pass duplicate_action="update" to override.
 """
 import logging
 import re
@@ -62,17 +65,15 @@ _KEY_FIELDS: dict[str, list[tuple[str, float]]] = {
     "Observation":  [],   # never dedup observations
 }
 
+# Score thresholds — same for all entity types
+_HIGH_MATCH  = 0.85   # near-certain duplicate
+_LOW_MATCH   = 0.70   # probable duplicate
+
 
 def _alias(entity_type: str, row: dict) -> dict:
     """
     Add computed alias fields to a row before key comparison so that dedup
     works even when field names differ from the canonical _KEY_FIELDS names.
-
-    Person:      first_name + last_name  → full_name (if absent)
-    Enterprise:  enterprise_name         → name      (if absent)
-    Transaction: reference               → reference_number (if absent)
-                 transaction_date        → date             (if absent)
-    Product:     item_name / product_name → name            (if absent)
     """
     r = dict(row)
     if entity_type == "Person":
@@ -126,31 +127,33 @@ def deduplicate(
     entity_type: str,
     incoming_rows: list[dict],
     existing_records: list[dict],
-    create_threshold: float = 0.85,
-    update_threshold: float = 0.70,
+    duplicate_action: str = "skip",
 ) -> list[dict]:
     """
     Annotate each incoming row with _dedup_action, _dedup_match_id, _dedup_score.
 
     Args:
-        entity_type:        One of the 15 canonical entity names
-        incoming_rows:      Rows to be loaded (already transformed)
-        existing_records:   Records already in Base44 for this entity + company
-        create_threshold:   Score ≥ this → treat as duplicate → action="update"
-        update_threshold:   Score in [update_threshold, create_threshold) → action="update"
-                            Score < update_threshold → action="create"
+        entity_type:       One of the 15 canonical entity names.
+        incoming_rows:     Rows to be loaded (already transformed).
+        existing_records:  Records already in Base44 for this entity + company.
+        duplicate_action:  What to do when a match is found above threshold.
+                           "skip"   — leave the existing record untouched (default).
+                           "update" — merge incoming fields onto the existing record.
 
     Returns:
-        incoming_rows with _dedup_* keys added in-place (copies returned)
+        incoming_rows with _dedup_* keys added in-place (copies returned).
     """
+    if duplicate_action not in ("skip", "update"):
+        duplicate_action = "skip"
+
     fields = _KEY_FIELDS.get(entity_type, [])
 
     if not fields:
-        # Observations and any unknown entity: always create
+        # Observations and unknown entity types: always create
         for row in incoming_rows:
-            row["_dedup_action"]    = "create"
-            row["_dedup_match_id"]  = None
-            row["_dedup_score"]     = 0.0
+            row["_dedup_action"]   = "create"
+            row["_dedup_match_id"] = None
+            row["_dedup_score"]    = 0.0
         return incoming_rows
 
     annotated = []
@@ -164,13 +167,11 @@ def deduplicate(
                 best_score = score
                 best_id    = existing.get("id")
 
-        if best_score >= create_threshold:
-            action = "update"
-        elif best_score >= update_threshold:
-            action = "update"
+        if best_score >= _LOW_MATCH:
+            action = duplicate_action   # "skip" or "update" — operator's choice
         else:
-            action    = "create"
-            best_id   = None
+            action  = "create"
+            best_id = None
 
         annotated.append({
             **row,
@@ -180,7 +181,10 @@ def deduplicate(
         })
 
     created  = sum(1 for r in annotated if r["_dedup_action"] == "create")
+    skipped  = sum(1 for r in annotated if r["_dedup_action"] == "skip")
     updated  = sum(1 for r in annotated if r["_dedup_action"] == "update")
-    logger.info("Dedup [%s]: %d incoming → %d create, %d update",
-                entity_type, len(incoming_rows), created, updated)
+    logger.info(
+        "Dedup [%s]: %d incoming → %d create, %d skip, %d update",
+        entity_type, len(incoming_rows), created, skipped, updated,
+    )
     return annotated

@@ -275,11 +275,24 @@ export default function SmartImportButton({
     setPhase("loading");
     setError(null);
 
-    // Rows were cached in analytics.ingestion_plans at upload time — no re-upload needed.
-    const fd = new FormData();
-    fd.append("company_id", companyId);
-
     try {
+      // If plan is pending_review, approve it first before loading.
+      // Backend requires status = "approved" to allow load.
+      if (plan.status === "pending_review") {
+        const approveRes = await fetch(
+          `${RAILWAY_URL}/ingestion/approve/${plan.plan_id}?company_id=${encodeURIComponent(companyId)}`,
+          { method: "POST", headers: apiHeaders() },
+        );
+        if (!approveRes.ok) {
+          const err = await approveRes.json().catch(() => ({}));
+          throw new Error(err.detail || `Approval failed (${approveRes.status})`);
+        }
+      }
+
+      // Rows were cached in analytics.ingestion_plans at upload time — no re-upload needed.
+      const fd = new FormData();
+      fd.append("company_id", companyId);
+
       const res = await fetch(`${RAILWAY_URL}/ingestion/load/${plan.plan_id}`, {
         method: "POST",
         headers: apiHeaders(),

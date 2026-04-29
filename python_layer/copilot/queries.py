@@ -5817,6 +5817,35 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "name": "generate_import_template",
+        "description": (
+            "Generate a blank CSV import template for any entity type so the operator can "
+            "fill it in and upload it via Smart Import or Bulk Import. "
+            "Use when the operator asks: 'give me a template for importing people', "
+            "'what columns do I need for a product import', "
+            "'I want to import transactions — what format?', "
+            "'generate an Excel template for staff'. "
+            "Returns the CSV header row, a sample data row, the raw CSV content, "
+            "and a download URL. Display the CSV content in a code block so the operator "
+            "can copy-paste it directly."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["entity_type"],
+            "properties": {
+                "entity_type": {
+                    "type": "string",
+                    "enum": [
+                        "person", "enterprise", "product", "task", "transaction",
+                        "relationship", "address", "document", "schedule", "signal",
+                        "channel", "territory", "animal", "plot", "observation",
+                    ],
+                    "description": "The entity type to generate a template for.",
+                },
+            },
+        },
+    },
 ]
 
 
@@ -7653,6 +7682,66 @@ def execute_ingestion_plan(
     }
 
 
+# ── Import template generator ─────────────────────────────────────────────────
+
+def generate_import_template(company_id: str, entity_type: str) -> dict:
+    """
+    Generate a CSV import template for any entity type.
+
+    Returns the column headers, sample rows, and a CSV string that operators can
+    save as a .csv file and use directly with the BulkImportDialog or SmartImportButton.
+
+    Also returns the RAILWAY_URL-relative download link so the copilot can give
+    the operator a direct link to /ingestion/template/{entity_type}.csv.
+    """
+    from ingestion.schema_registry import ENTITY_FIELDS, VALID_ENTITY_TYPES
+    import csv, io
+
+    entity_cap = entity_type.capitalize()
+    if entity_cap not in VALID_ENTITY_TYPES:
+        return {
+            "error": f"Unknown entity type '{entity_type}'. Valid types: {', '.join(sorted(VALID_ENTITY_TYPES))}",
+        }
+
+    fields = sorted(ENTITY_FIELDS[entity_cap] - {"company_id"})
+
+    # Build a sample row with placeholder values
+    sample: dict[str, str] = {}
+    for f in fields:
+        if "date" in f:
+            sample[f] = "2025-01-15"
+        elif f in {"amount", "price", "cost", "stock_quantity", "reorder_point",
+                   "weight_kg", "area_ha", "numeric_value", "strength"}:
+            sample[f] = "0.00"
+        elif f in {"is_primary", "is_anomaly"}:
+            sample[f] = "false"
+        elif f.endswith("_id"):
+            sample[f] = ""
+        else:
+            sample[f] = f"example_{f}"
+
+    # Render CSV
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fields)
+    writer.writeheader()
+    writer.writerow(sample)
+    csv_content = buf.getvalue()
+
+    return {
+        "entity_type":    entity_cap,
+        "columns":        fields,
+        "sample_row":     sample,
+        "csv_content":    csv_content,
+        "download_url":   f"/ingestion/template/{entity_type.lower()}.csv",
+        "instructions": (
+            f"Copy the CSV content above into a file named '{entity_type.lower()}_import.csv'. "
+            f"Fill in your data rows below the header. "
+            f"Then use 'Smart Import' or 'Bulk Import' on any {entity_cap} page to upload it. "
+            f"You can also visit the download URL to get a pre-built template file."
+        ),
+    }
+
+
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
 
 def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
@@ -7753,6 +7842,8 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "query_external_table":         query_external_table,
         # Ontology Ingestion Agent — execute a pre-approved import plan
         "execute_ingestion_plan":       execute_ingestion_plan,
+        # Generate a blank CSV template for any entity type (for manual bulk import)
+        "generate_import_template":     generate_import_template,
     }
 
     fn = dispatch.get(tool_name)

@@ -924,6 +924,23 @@ _INGESTION_DDL = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_ingestion_runs_company ON analytics.ingestion_runs (company_id, started_at DESC)",
+
+    # ── Ingestion schedules — recurring re-ingestion ────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.ingestion_schedules (
+        id                  TEXT PRIMARY KEY,
+        company_id          TEXT NOT NULL,
+        source_fingerprint  TEXT NOT NULL,
+        source_name         TEXT,
+        cron_expression     TEXT DEFAULT '0 6 * * 1',
+        auto_approve        BOOLEAN DEFAULT FALSE,
+        status              TEXT DEFAULT 'active',
+        last_triggered_at   TIMESTAMPTZ,
+        created_at          TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (company_id, source_fingerprint)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ingestion_schedules_company ON analytics.ingestion_schedules (company_id)",
 ]
 
 
@@ -932,6 +949,8 @@ _MIGRATIONS = [
     "ALTER TABLE analytics.ingestion_plans ADD COLUMN IF NOT EXISTS rows_json TEXT",
     # Ingestion agent — overall_confidence for /plans listing endpoint
     "ALTER TABLE analytics.ingestion_plans ADD COLUMN IF NOT EXISTS overall_confidence NUMERIC",
+    # Ingestion agent — schema contract validation violations stored with plan
+    "ALTER TABLE analytics.ingestion_plans ADD COLUMN IF NOT EXISTS schema_violations_json TEXT",
     # Gap 1: outcome reason counts
     "ALTER TABLE analytics.task_summary ADD COLUMN IF NOT EXISTS refused_tasks             BIGINT",
     "ALTER TABLE analytics.task_summary ADD COLUMN IF NOT EXISTS missed_tasks              BIGINT",
