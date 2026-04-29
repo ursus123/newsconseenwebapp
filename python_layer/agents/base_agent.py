@@ -125,6 +125,7 @@ class BaseAgent(ABC):
         messages  = [{"role": "user", "content": user_msg}]
         actions:  list[dict] = []
         findings: list[dict] = []
+        last_parsed: dict = {}  # full LLM JSON — passed to _store_observations as _raw
 
         for loop in range(MAX_TOOL_LOOPS):
             response = client.messages.create(
@@ -142,9 +143,8 @@ class BaseAgent(ABC):
                     text = block.text.strip()
                     parsed = _try_parse_json(text)
                     if parsed and isinstance(parsed, dict):
+                        last_parsed = parsed  # capture full JSON for agent-specific use
                         findings = parsed.get("findings", findings)
-                        if "summary" not in locals():
-                            summary_text = parsed.get("summary", "")
 
             if response.stop_reason == "end_turn":
                 break
@@ -169,6 +169,7 @@ class BaseAgent(ABC):
             if hasattr(block, "text") and block.text:
                 parsed = _try_parse_json(block.text)
                 if parsed:
+                    last_parsed = parsed
                     summary_text = parsed.get("summary", block.text[:300])
                     findings = parsed.get("findings", findings)
                 else:
@@ -179,6 +180,7 @@ class BaseAgent(ABC):
             "summary":  summary_text or f"{self.name} run complete.",
             "findings": findings,
             "actions":  actions,
+            "_raw":     last_parsed,  # full LLM JSON (competitive_landscape, opportunities, etc.)
         }
 
     # ── Parallel tool execution ───────────────────────────────────────────────

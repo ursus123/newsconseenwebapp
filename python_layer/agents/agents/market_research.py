@@ -213,50 +213,66 @@ Produce a JSON response:
         return results
 
     def _store_observations(self, company_id: str, findings: dict) -> None:
-        """Store the weekly briefing in analytics.market_briefings."""
+        """Store briefing, competitor profiles, market signals, and recommendation tasks."""
         super()._store_observations(company_id, findings)
         if not self.engine:
             return
 
-        # Store the briefing
+        # Full LLM JSON response — contains competitive_landscape, opportunities, recommendations
+        raw = findings.get("_raw", {})
+
+        landscape      = raw.get("competitive_landscape", {})
+        opportunities  = raw.get("opportunities", [])
+        recommendations = raw.get("recommendations", [])
+        week_of        = raw.get("week_of", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+        briefing_text  = raw.get("summary", findings.get("summary", ""))
+
+        # 1. Store the weekly briefing
         try:
             from sqlalchemy import text
-            if self.engine:
-                ensure_market_tables(self.engine)
-                week_of = findings.get("week_of", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
-                briefing_text = findings.get("summary", "")
-                with self.engine.connect() as conn:
-                    conn.execute(text("""
-                        INSERT INTO analytics.market_briefings
-                            (company_id, week_of, briefing, findings)
-                        VALUES (:company_id, :week_of, :briefing, :findings::jsonb)
-                        ON CONFLICT (company_id, week_of)
-                        DO UPDATE SET
-                            briefing = EXCLUDED.briefing,
-                            findings = EXCLUDED.findings,
-                            created_at = NOW()
-                    """), {
-                        "company_id": company_id,
-                        "week_of":    week_of,
-                        "briefing":   briefing_text,
-                        "findings":   json.dumps(findings.get("findings", [])),
-                    })
-                    conn.commit()
+            ensure_market_tables(self.engine)
+            with self.engine.connect() as conn:
+                conn.execute(text("""
+                    INSERT INTO analytics.market_briefings
+                        (company_id, week_of, briefing, findings)
+                    VALUES (:company_id, :week_of, :briefing, :findings::jsonb)
+                    ON CONFLICT (company_id, week_of)
+                    DO UPDATE SET
+                        briefing   = EXCLUDED.briefing,
+                        findings   = EXCLUDED.findings,
+                        created_at = NOW()
+                """), {
+                    "company_id": company_id,
+                    "week_of":    week_of,
+                    "briefing":   briefing_text,
+                    "findings":   json.dumps(findings.get("findings", [])),
+                })
+                conn.commit()
         except Exception as e:
             logger.warning("market_research: failed to store briefing: %s", e)
 
-        # Store threat level as memory for trend tracking
-        threat_level = findings.get("competitive_landscape", {}).get("threat_level", "low")
+        # 2. Agent memory — threat level trend + top opportunity
+        threat_level = landscape.get("threat_level", "low")
         remember(self.engine, company_id, self.name,
                  "observation", "competitive_threat_level",
-                 {"level": threat_level, "week": findings.get("week_of", "")})
-
-        # Store top opportunity for agent calibration
-        opportunities = findings.get("opportunities", [])
+                 {"level": threat_level, "week": week_of})
         if opportunities:
             remember(self.engine, company_id, self.name,
                      "observation", "top_opportunity",
                      opportunities[0])
+
+        # 3. Write new competitors to analytics.competitor_profiles
+        new_competitors = landscape.get("new_competitors", [])
+        if new_competitors:
+            _upsert_competitor_profiles(self.engine, company_id, new_competitors)
+
+        # 4. Write opportunities to analytics.market_signals
+        if opportunities:
+            _insert_market_signals(self.engine, company_id, opportunities)
+
+        # 5. Create tasks for high/critical recommendations
+        if recommendations:
+            _create_recommendation_tasks(company_id, recommendations)
 
     def get_recent_briefings(self, company_id: str, limit: int = 4) -> list[dict]:
         """Get the N most recent market briefings for a company."""
@@ -278,3 +294,90 @@ Produce a JSON response:
         except Exception as e:
             logger.warning("market_research: get_recent_briefings failed: %s", e)
             return []
+
+
+# ── Write-back helpers ────────────────────────────────────────────────────────
+
+def _upsert_competitor_profiles(engine, company_id: str, new_competitors: list) -> None:
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            for comp in new_competitors[:20]:
+                if isinstance(comp, str):
+                    name = comp
+                    signals: dict = {}
+                elif isinstance(comp, dict):
+                    name = comp.get("name") or comp.get("competitor_name", "")
+                    signals = {k: v for k, v in comp.items()
+                               if k not in ("name", "competitor_name")}
+                else:
+                    continue
+                if not name:
+                    continue
+                conn.execute(text("""
+                    INSERT INTO analytics.competitor_profiles
+                        (company_id, competitor_name, signals, last_updated)
+                    VALUES (:company_id, :name, :signals::jsonb, NOW())
+                    ON CONFLICT (company_id, competitor_name)
+                    DO UPDATE SET
+                        signals      = analytics.competitor_profiles.signals || EXCLUDED.signals,
+                        last_updated = NOW()
+                """), {
+                    "company_id": company_id,
+                    "name":       name[:200],
+                    "signals":    json.dumps(signals),
+                })
+            conn.commit()
+    except Exception as e:
+        logger.warning("market_research: competitor profile upsert failed: %s", e)
+
+
+_PRIORITY_RELEVANCE = {"low": 0.3, "medium": 0.6, "high": 0.85, "critical": 1.0}
+
+
+def _insert_market_signals(engine, company_id: str, opportunities: list) -> None:
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            for opp in opportunities[:20]:
+                if not isinstance(opp, dict):
+                    continue
+                conn.execute(text("""
+                    INSERT INTO analytics.market_signals
+                        (company_id, signal_type, source, title, summary, sentiment, relevance)
+                    VALUES (:company_id, :signal_type, :source, :title, :summary, :sentiment, :relevance)
+                """), {
+                    "company_id":  company_id,
+                    "signal_type": opp.get("type", "opportunity"),
+                    "source":      "market_research_agent",
+                    "title":       (opp.get("location_or_detail") or "")[:200],
+                    "summary":     (opp.get("supporting_data") or "")[:500],
+                    "sentiment":   "positive",
+                    "relevance":   _PRIORITY_RELEVANCE.get(opp.get("priority", "medium"), 0.5),
+                })
+            conn.commit()
+    except Exception as e:
+        logger.warning("market_research: market signal insert failed: %s", e)
+
+
+def _create_recommendation_tasks(company_id: str, recommendations: list) -> None:
+    """Create Base44 tasks for high/critical priority recommendations."""
+    for rec in recommendations:
+        if not isinstance(rec, dict):
+            continue
+        priority = rec.get("priority", "low")
+        if priority not in ("high", "critical"):
+            continue
+        try:
+            execute_tool("create_task", {
+                "company_id":  company_id,
+                "title":       (rec.get("title") or "Market strategy task")[:150],
+                "description": (
+                    f"{rec.get('rationale', '')}\n\nData: {rec.get('data_source', '')}"
+                ).strip(),
+                "status":      "open",
+                "priority":    priority,
+                "task_type":   "strategic",
+            })
+        except Exception as e:
+            logger.warning("market_research: failed to create recommendation task: %s", e)

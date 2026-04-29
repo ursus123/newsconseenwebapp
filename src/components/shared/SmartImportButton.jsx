@@ -149,12 +149,24 @@ function PlanCard({ plan, onLoad, onReset, loading }) {
         </div>
       )}
 
+      {plan.status === "pending_review" && (
+        <div className="flex gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+          <span>
+            <strong>Review required.</strong> The agent flagged this mapping for manual approval.
+            Check the column mappings above, then click <strong>Approve &amp; Load</strong> to confirm and import.
+          </span>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex gap-3 pt-2">
         <Button onClick={onLoad} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
           {loading
             ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Loading…</>
-            : <><Upload className="w-4 h-4 mr-2" />Load into Newsconseen</>}
+            : plan.status === "pending_review"
+              ? <><CheckCircle2 className="w-4 h-4 mr-2" />Approve &amp; Load</>
+              : <><Upload className="w-4 h-4 mr-2" />Load into Newsconseen</>}
         </Button>
         <Button variant="outline" onClick={onReset} disabled={loading}>Try different file</Button>
       </div>

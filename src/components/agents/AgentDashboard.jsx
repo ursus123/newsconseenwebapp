@@ -13,7 +13,9 @@ import {
   UserPlus, Shield, Globe, Network, ChevronRight, Zap,
 } from "lucide-react";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_URL     = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = /** @type {any} */ (import.meta).env?.VITE_RAILWAY_API_KEY || "";
+const apiHeaders = (extra = {}) => ({ "x-api-key": RAILWAY_API_KEY, ...extra });
 
 const AGENT_META = {
   operations:      { icon: Activity,   color: "blue",   label: "Operations Monitor",    phase: "4B", schedule: "Every 15 min" },
@@ -44,22 +46,24 @@ const ICON_COLOR = {
 };
 
 async function fetchStatus(companyId) {
-  const r = await fetch(`${RAILWAY_URL}/agents/status?company_id=${companyId}`);
+  const r = await fetch(`${RAILWAY_URL}/agents/status?company_id=${companyId}`,
+    { headers: apiHeaders() });
   if (!r.ok) throw new Error("Agents status unavailable");
   return r.json();
 }
 
 async function fetchRuns(companyId) {
-  const r = await fetch(`${RAILWAY_URL}/agents/runs?company_id=${companyId}&limit=20`);
+  const r = await fetch(`${RAILWAY_URL}/agents/runs?company_id=${companyId}&limit=20`,
+    { headers: apiHeaders() });
   if (!r.ok) return { runs: [] };
   return r.json();
 }
 
 async function runAgent(agentName, companyId) {
   const r = await fetch(`${RAILWAY_URL}/agents/run/${agentName}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ company_id: companyId, trigger: "manual" }),
+    method:  "POST",
+    headers: apiHeaders({ "Content-Type": "application/json" }),
+    body:    JSON.stringify({ company_id: companyId, trigger: "manual" }),
   });
   if (!r.ok) throw new Error("Agent run failed");
   return r.json();

@@ -15,14 +15,18 @@ import {
   CheckCircle2, XCircle, Clock, AlertCircle, TrendingUp,
 } from "lucide-react";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_URL     = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = /** @type {any} */ (import.meta).env?.VITE_RAILWAY_API_KEY || "";
 
 // ── Market Briefings panel ────────────────────────────────────────────────────
 function MarketBriefings({ companyId }) {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["market-briefings", companyId],
     queryFn:  async () => {
-      const r = await fetch(`${RAILWAY_URL}/agents/market/briefings?company_id=${companyId}&limit=4`);
+      const r = await fetch(
+        `${RAILWAY_URL}/agents/market/briefings?company_id=${companyId}&limit=4`,
+        { headers: { "x-api-key": RAILWAY_API_KEY } },
+      );
       if (!r.ok) return { briefings: [] };
       return r.json();
     },

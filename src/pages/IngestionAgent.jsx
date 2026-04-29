@@ -417,11 +417,21 @@ export default function IngestionAgent() {
 
           {/* Actions */}
           <div className="flex gap-3 pt-2">
-            <Button onClick={handleLoad} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
+            <Button
+              onClick={handleLoad}
+              disabled={loading || plan.status === "low_confidence"}
+              title={plan.status === "low_confidence" ? "Fix the mapping confidence issues above before loading" : undefined}
+              className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               {loading ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Loading…</> : <><Database className="w-4 h-4 mr-2" /> Load into Newsconseen</>}
             </Button>
             <Button variant="outline" onClick={reset}>Cancel</Button>
           </div>
+          {plan.status === "low_confidence" && (
+            <p className="text-xs text-red-600 mt-1">
+              Loading is disabled until the mapping issues above are resolved. Try re-uploading a more structured file, or adjust the column mapping manually.
+            </p>
+          )}
         </div>
       )}
 

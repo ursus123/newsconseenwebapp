@@ -107,7 +107,7 @@ def _exec_create_task(company_id: str, inputs: dict) -> dict:
         "title":            inputs.get("title", "Agent-created task"),
         "description":      inputs.get("description", ""),
         "task_type":        inputs.get("task_type", "follow_up"),
-        "status":           inputs.get("status", "pending"),
+        "status":           inputs.get("status", "open"),
         "priority":         inputs.get("priority", "medium"),
         "assigned_to_name": inputs.get("assigned_to_name", ""),
         "due_date":         inputs.get("due_date", ""),
