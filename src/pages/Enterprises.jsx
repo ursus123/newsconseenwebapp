@@ -182,6 +182,16 @@ export default function Enterprises() {
   const createMut = useMutation({
     mutationFn: async (data) => {
       const { company_id: _, ...cleanData } = data;
+
+      if (currentUser?.company_id) {
+        const created = await base44.entities.Enterprise.create(withScope(cleanData));
+        if (!created.company_id) {
+          await base44.entities.Enterprise.update(created.id, { company_id: currentUser.company_id });
+          return { ...created, company_id: currentUser.company_id };
+        }
+        return created;
+      }
+
       const created = await base44.entities.Enterprise.create({
         ...cleanData,
         created_by: currentUser?.email,
@@ -194,7 +204,7 @@ export default function Enterprises() {
       }
       return { ...created, company_id: workspaceId };
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); qc.refetchQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); logAudit(currentUser?.company_id, "created", editing, currentUser?.email); triggerWorkflows(currentUser?.company_id, "entity_created", editing); setFormOpen(false); },
+    onSuccess: (created) => { qc.invalidateQueries({ queryKey: ["enterprises"] }); qc.refetchQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created); setFormOpen(false); setEditing(null); },
   });
 
   const updateMut = useMutation({
@@ -407,7 +417,7 @@ export default function Enterprises() {
       <EnterpriseForm
         open={formOpen}
         onClose={() => { setFormOpen(false); setEditing(null); }}
-        onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)}
+        onSubmit={(d) => editing ? updateMut.mutateAsync({ id: editing.id, data: d }) : createMut.mutateAsync(d)}
         onArchive={handleArchive}
         initialData={editing}
         currentUser={currentUser}

@@ -138,8 +138,10 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
   const withScope = useWithScope(currentUser);
 
   const { data: enterprises = [] } = useQuery({
-    queryKey: ["enterprises-list"],
-    queryFn: () => base44.entities.Enterprise.list(),
+    queryKey: ["enterprises-list", currentUser?.company_id],
+    queryFn: () => currentUser?.company_id
+      ? base44.entities.Enterprise.filter({ company_id: currentUser.company_id })
+      : base44.entities.Enterprise.list(),
     enabled: open,
   });
 

@@ -267,16 +267,17 @@ export default function People() {
 
   const createMut = useMutation({
     mutationFn: (d) => base44.entities.Person.create(withCompany(d)),
-    onSuccess: () => {
+    onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ["people"] });
       qc.refetchQueries({ queryKey: ["people"] });
       qc.invalidateQueries({ queryKey: ["addresses"] });
       qc.invalidateQueries({ queryKey: ["relationships"] });
       triggerETL("people");
       notifyTaxonomyChange("person", currentUser?.company_id);
-      logAudit(currentUser?.company_id, "created", editing, currentUser?.email);
-      triggerWorkflows(currentUser?.company_id, "entity_created", editing);
+      logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email);
+      triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created);
       setFormOpen(false);
+      setEditing(null);
     },
   });
   const updateMut = useMutation({
@@ -519,9 +520,9 @@ export default function People() {
         onClose={() => { setFormOpen(false); setEditing(null); }}
         onSubmit={(d) => {
           if (editing) {
-            updateMut.mutate({ id: editing.id, data: d });
+            return updateMut.mutateAsync({ id: editing.id, data: d });
           } else {
-            createMut.mutate(d);
+            return createMut.mutateAsync(d);
           }
         }}
         initialData={editing}
