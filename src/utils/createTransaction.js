@@ -198,7 +198,11 @@ export async function createTransaction(fields, options = {}, currentUser) {
     period_end:       fields.period_end       || null,
   };
 
-  const created = await base44.entities.Transaction.create(record);
+  let created = await base44.entities.Transaction.create(record);
+  if (created?.id && created.company_id !== currentUser.company_id) {
+    await base44.entities.Transaction.update(created.id, { company_id: currentUser.company_id });
+    created = { ...created, company_id: currentUser.company_id };
+  }
 
   if (toast && created) {
     toast({

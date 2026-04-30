@@ -13,7 +13,7 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -190,7 +190,7 @@ export default function Animals() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => base44.entities.Animal.create(withScope(d)),
+    mutationFn: (d) => createWithScope(base44.entities.Animal, d, currentUser),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["animals"] }); qc.refetchQueries({ queryKey: ["animals"] });
       triggerETL(); logAudit(companyId, "created", editing, currentUser?.email); setFormOpen(false);
@@ -306,7 +306,7 @@ export default function Animals() {
       )}
 
       <AnimalForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }}
-        initial={editing} onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)} />
+        initial={editing} onSubmit={(d) => editing ? updateMut.mutateAsync({ id: editing.id, data: d }) : createMut.mutateAsync(d)} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name || "this animal"} />
       <DeleteAllDialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} onConfirm={handleDeleteAll} entityLabel="Animals" count={animals.length} />
       <BulkImportDialog open={importOpen}
@@ -315,7 +315,7 @@ export default function Animals() {
         templateExample={ANIMAL_TEMPLATE_EXAMPLE}
         entityFetchFn={() => listFn(base44.entities.Animal)}
         validateRow={validateAnimal} transformRow={transformAnimal}
-        onImport={(row) => base44.entities.Animal.create(withScope(row))}
+        onImport={(row) => createWithScope(base44.entities.Animal, row, currentUser)}
         currentUser={currentUser} requiredField="name" />
     </div>
   );

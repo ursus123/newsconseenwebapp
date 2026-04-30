@@ -27,7 +27,7 @@ import EndRelationshipDialog from "../components/relationships/EndRelationshipDi
 import RelationshipDetailPanel from "../components/relationships/RelationshipDetailPanel";
 import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 
@@ -181,26 +181,25 @@ export default function Relationships() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); qc.refetchQueries({ queryKey: ["relationships"] }); triggerETL("relationship"); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); },
   });
 
-  const handleSubmit = (data, saveAndNew = false) => {
+  const handleSubmit = async (data, saveAndNew = false) => {
     if (editing) {
-      updateMut.mutate({ id: editing.id, data });
+      return updateMut.mutateAsync({ id: editing.id, data });
     } else {
-      base44.entities.Relationship.create(withScope(data)).then((created) => {
-        qc.invalidateQueries({ queryKey: ["relationships"] });
-        qc.refetchQueries({ queryKey: ["relationships"] });
-        triggerETL("relationship");
-        logAudit(currentUser?.company_id, "created", created, currentUser?.email);
-        triggerWorkflows(currentUser?.company_id, "entity_created", created);
-        toast({ title: "Relationship created" });
-        if (saveAndNew) {
-          setEditing(null);
-          setFormPrefill(null);
-          // keep form open for next entry
-        } else {
-          setFormOpen(false);
-          setFormPrefill(null);
-        }
-      });
+      const created = await createWithScope(base44.entities.Relationship, data, currentUser);
+      qc.invalidateQueries({ queryKey: ["relationships"] });
+      qc.refetchQueries({ queryKey: ["relationships"] });
+      triggerETL("relationship");
+      logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email);
+      triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created);
+      toast({ title: "Relationship created" });
+      if (saveAndNew) {
+        setEditing(null);
+        setFormPrefill(null);
+      } else {
+        setFormOpen(false);
+        setFormPrefill(null);
+      }
+      return created;
     }
   };
 
@@ -209,7 +208,7 @@ export default function Relationships() {
   const openNew = (type, prefill = null) => { setFormType(type); setEditing(null); setFormPrefill(prefill); setFormOpen(true); };
 
   const handleBulkAssign = async (pairs) => {
-    for (const pair of pairs) await base44.entities.Relationship.create(withScope(pair));
+    for (const pair of pairs) await createWithScope(base44.entities.Relationship, pair, currentUser);
     qc.invalidateQueries({ queryKey: ["relationships"] });
     qc.refetchQueries({ queryKey: ["relationships"] });
     triggerETL("relationship");
@@ -420,7 +419,7 @@ export default function Relationships() {
         templateExample={RELATIONSHIP_TEMPLATE_EXAMPLE} templateInstructions={RELATIONSHIP_TEMPLATE_INSTRUCTIONS}
         entityFetchFn={() => listFn(base44.entities.Relationship)}
         validateRow={(row) => validateRelationship(row, { people, enterprises, products, services })}
-        onImport={(row) => base44.entities.Relationship.create(withScope(row))}
+        onImport={(row) => createWithScope(base44.entities.Relationship, row, currentUser)}
         currentUser={currentUser} previewColumns={REL_PREVIEW_COLS} requiredField="relationship_type"
       />
     </div>

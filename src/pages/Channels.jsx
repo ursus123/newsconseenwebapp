@@ -13,7 +13,7 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -169,7 +169,7 @@ export default function Channels() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => base44.entities.Channel.create(withScope(d)),
+    mutationFn: (d) => createWithScope(base44.entities.Channel, d, currentUser),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["channels"] });
       qc.refetchQueries({ queryKey: ["channels"] });
@@ -289,7 +289,7 @@ export default function Channels() {
       )}
 
       <ChannelForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }}
-        initial={editing} onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)} />
+        initial={editing} onSubmit={(d) => editing ? updateMut.mutateAsync({ id: editing.id, data: d }) : createMut.mutateAsync(d)} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name || "this channel"} />
       <DeleteAllDialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} onConfirm={handleDeleteAll} entityLabel="Channels" count={channels.length} />
       <BulkImportDialog open={importOpen}
@@ -298,7 +298,7 @@ export default function Channels() {
         templateExample={CHANNEL_TEMPLATE_EXAMPLE} templateInstructions={CHANNEL_TEMPLATE_INSTRUCTIONS}
         entityFetchFn={() => listFn(base44.entities.Channel)}
         validateRow={validateChannel} transformRow={transformChannel}
-        onImport={(row) => base44.entities.Channel.create(withScope(row))}
+        onImport={(row) => createWithScope(base44.entities.Channel, row, currentUser)}
         currentUser={currentUser} requiredField="name" />
     </div>
   );

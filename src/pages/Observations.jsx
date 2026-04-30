@@ -13,7 +13,7 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -181,7 +181,7 @@ export default function Observations() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => base44.entities.Observation.create(withScope(d)),
+    mutationFn: (d) => createWithScope(base44.entities.Observation, d, currentUser),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["observations"] }); qc.refetchQueries({ queryKey: ["observations"] });
       triggerETL(); logAudit(companyId, "created", editing, currentUser?.email); setFormOpen(false);
@@ -302,7 +302,7 @@ export default function Observations() {
       )}
 
       <ObservationForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }}
-        initial={editing} onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)} />
+        initial={editing} onSubmit={(d) => editing ? updateMut.mutateAsync({ id: editing.id, data: d }) : createMut.mutateAsync(d)} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={`${deleting?.observation_type || "this observation"}`} />
       <DeleteAllDialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} onConfirm={handleDeleteAll} entityLabel="Observations" count={observations.length} />
       <BulkImportDialog open={importOpen}
@@ -311,7 +311,7 @@ export default function Observations() {
         templateExample={OBSERVATION_TEMPLATE_EXAMPLE}
         entityFetchFn={() => listFn(base44.entities.Observation)}
         validateRow={validateObservation} transformRow={transformObservation}
-        onImport={(row) => base44.entities.Observation.create(withScope(row))}
+        onImport={(row) => createWithScope(base44.entities.Observation, row, currentUser)}
         currentUser={currentUser} requiredField="observation_type" />
     </div>
   );

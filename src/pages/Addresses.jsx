@@ -10,7 +10,7 @@ import AddressLeafletMap from "../components/addresses/AddressLeafletMap";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Badge } from "@/components/ui/badge";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
@@ -135,9 +135,9 @@ export default function Addresses() {
         const coords = await geocodeAddress(data);
         if (coords) data = { ...data, ...coords };
       }
-      return base44.entities.Address.create(withScope(data));
+      return createWithScope(base44.entities.Address, data, currentUser);
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); triggerETL("address"); logAudit(currentUser?.company_id, "created", editing, currentUser?.email); triggerWorkflows(currentUser?.company_id, "entity_created", editing); setFormOpen(false); },
+    onSuccess: (created) => { qc.invalidateQueries({ queryKey: ["addresses"] }); qc.refetchQueries({ queryKey: ["addresses"] }); triggerETL("address"); logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created); setFormOpen(false); setEditing(null); },
   });
 
   const updateMut = useMutation({
@@ -166,9 +166,11 @@ export default function Addresses() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); triggerETL("address"); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); },
   });
 
-  const handleSubmit = (data, saveAndNew = false) => {
-    if (editing) { updateMut.mutate({ id: editing.id, data, prevData: editing }); }
-    else { createMut.mutate(data); if (saveAndNew) { setEditing(null); setFormOpen(true); } }
+  const handleSubmit = async (data, saveAndNew = false) => {
+    if (editing) { return updateMut.mutateAsync({ id: editing.id, data, prevData: editing }); }
+    const created = await createMut.mutateAsync(data);
+    if (saveAndNew) { setEditing(null); setFormOpen(true); }
+    return created;
   };
 
   const handleArchive = (item) => {
@@ -398,7 +400,7 @@ export default function Addresses() {
         templateExample={ADDRESS_TEMPLATE_EXAMPLE} templateInstructions={ADDRESS_TEMPLATE_INSTRUCTIONS}
         entityFetchFn={() => listFn(base44.entities.Address)}
         validateRow={validateAddress} transformRow={transformAddress}
-        onImport={(row) => base44.entities.Address.create(withScope(row))}
+        onImport={(row) => createWithScope(base44.entities.Address, row, currentUser)}
         currentUser={currentUser} previewColumns={ADDR_PREVIEW_COLS} requiredField="address_line1"
       />
 

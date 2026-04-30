@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import PageHeader from "../components/shared/PageHeader";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { triggerTaskTransaction } from "../components/shared/triggerTaskTransaction";
 import TaskForm, { taskTypeLabel } from "../components/tasks/TaskForm";
 import DeleteDialog from "../components/shared/DeleteDialog";
@@ -267,8 +267,8 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   };
 
   const createMut = useMutation({
-    mutationFn: async (d) => base44.entities.Task.create(withScope({ ...d, app_source: d.app_source || "manual" })),
-    onSuccess: () => { setFormOpen(false); invalidate(); triggerETL("task"); logAudit(companyId, "created", editing, currentUser?.email); triggerWorkflows(companyId, "entity_created", editing); },
+    mutationFn: async (d) => createWithScope(base44.entities.Task, { ...d, app_source: d.app_source || "manual" }, currentUser),
+    onSuccess: (created) => { setFormOpen(false); setEditing(null); invalidate(); triggerETL("task"); logAudit(created?.company_id || companyId, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || companyId, "entity_created", created); },
   });
   const updateMut = useMutation({
     mutationFn: async ({ id, data }) => {
@@ -586,7 +586,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         onClose={() => { setFormOpen(false); setEditing(null); }}
         onSubmit={(d, saveAndNew) => {
           if (editing) { updateMut.mutate({ id: editing.id, data: d }); }
-          else { createMut.mutate(d); if (saveAndNew) { setEditing(null); setFormOpen(true); } }
+          else { return createMut.mutateAsync(d).then((created) => { if (saveAndNew) { setEditing(null); setFormOpen(true); } return created; }); }
         }}
         initialData={editing}
         appUsers={appUsers}
@@ -637,7 +637,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         entityFetchFn={() => listFn(base44.entities.Task)}
         validateRow={validateTask}
         transformRow={transformTask}
-        onImport={(row) => base44.entities.Task.create(withScope({ ...row, app_source: "import" }))}
+        onImport={(row) => createWithScope(base44.entities.Task, { ...row, app_source: "import" }, currentUser)}
         currentUser={currentUser}
         previewColumns={TASK_PREVIEW_COLS}
         requiredField="title"

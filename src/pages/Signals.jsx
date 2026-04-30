@@ -13,7 +13,7 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -171,7 +171,7 @@ export default function Signals() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => base44.entities.Signal.create(withScope(d)),
+    mutationFn: (d) => createWithScope(base44.entities.Signal, d, currentUser),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["signals"] });
       qc.refetchQueries({ queryKey: ["signals"] });
@@ -302,7 +302,7 @@ export default function Signals() {
 
       <SignalForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }}
         initial={editing}
-        onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)} />
+        onSubmit={(d) => editing ? updateMut.mutateAsync({ id: editing.id, data: d }) : createMut.mutateAsync(d)} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name || "this signal"} />
       <DeleteAllDialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} onConfirm={handleDeleteAll} entityLabel="Signals" count={signals.length} />
       <BulkImportDialog open={importOpen}
@@ -311,7 +311,7 @@ export default function Signals() {
         templateExample={SIGNAL_TEMPLATE_EXAMPLE} templateInstructions={SIGNAL_TEMPLATE_INSTRUCTIONS}
         entityFetchFn={() => listFn(base44.entities.Signal)}
         validateRow={validateSignal} transformRow={transformSignal}
-        onImport={(row) => base44.entities.Signal.create(withScope(row))}
+        onImport={(row) => createWithScope(base44.entities.Signal, row, currentUser)}
         currentUser={currentUser} requiredField="name" />
     </div>
   );

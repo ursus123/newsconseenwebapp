@@ -21,7 +21,7 @@ import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
 import OrgManagementTab from "@/components/enterprise/OrgManagementTab";
 import { useQuery } from "@tanstack/react-query";
 import TaxonomySelect from "@/components/shared/TaxonomySelect";
-import { useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope } from "@/components/shared/useDataQuery";
 
 const TABS = [
   { id: "basic", label: "Basic Info", icon: Building2 },
@@ -124,8 +124,6 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
   const [geocoding, setGeocoding] = useState(false);
   const [showOwnerPicker, setShowOwnerPicker] = useState(false);
   const [showMgmtPicker, setShowMgmtPicker] = useState(false);
-  const withScope = useWithScope(currentUser);
-
   useEffect(() => {
     if (open) {
       setActiveTab("basic");
@@ -194,12 +192,12 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
     if (selection.isNew && selection.name) {
       // Create a new Person record with type staff, role owner
       const nameParts = selection.name.trim().split(" ");
-      const newPerson = await base44.entities.Person.create(withScope({
+      const newPerson = await createWithScope(base44.entities.Person, {
         first_name: nameParts[0] || selection.name,
         last_name: nameParts.slice(1).join(" ") || "",
         person_type: "staff",
         primary_role: "Owner",
-      }));
+      }, currentUser);
       triggerETL("people");
       personName = `${newPerson.first_name} ${newPerson.last_name}`;
     }
@@ -209,14 +207,14 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
 
     // Create Relationship
     if (form.enterprise_name) {
-      await base44.entities.Relationship.create(withScope({
+      await createWithScope(base44.entities.Relationship, {
         relationship_type: "person_enterprise",
         person_name: personName,
         enterprise_name: form.enterprise_name,
         role: "Owner",
         status: "active",
         start_date: new Date().toISOString().split("T")[0],
-      }));
+      }, currentUser);
       triggerETL("relationship");
     }
   };
@@ -228,12 +226,12 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
 
     if (selection.isNew && selection.name) {
       const nameParts = selection.name.trim().split(" ");
-      const newPerson = await base44.entities.Person.create(withScope({
+      const newPerson = await createWithScope(base44.entities.Person, {
         first_name: nameParts[0] || selection.name,
         last_name: nameParts.slice(1).join(" ") || "",
         person_type: "staff",
         primary_role: roleTitle || "Manager",
-      }));
+      }, currentUser);
       triggerETL("people");
       personName = `${newPerson.first_name} ${newPerson.last_name}`;
     }
@@ -241,14 +239,14 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
     addItem("management_roles", { role: roleTitle || "", assigned_person: personName });
 
     if (form.enterprise_name) {
-      await base44.entities.Relationship.create(withScope({
+      await createWithScope(base44.entities.Relationship, {
         relationship_type: "person_enterprise",
         person_name: personName,
         enterprise_name: form.enterprise_name,
         role: roleTitle || "Manager",
         status: "active",
         start_date: new Date().toISOString().split("T")[0],
-      }));
+      }, currentUser);
       triggerETL("relationship");
     }
   };
@@ -268,7 +266,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
     // Create Address record if address data was entered
     if (form.primary_address || form.city || form.country) {
       try {
-        await base44.entities.Address.create(withScope({
+        await createWithScope(base44.entities.Address, {
           label: `${form.enterprise_name} – Primary`,
           status: "active",
           address_line1: form.primary_address || "",
@@ -283,7 +281,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
             address_type: "Primary",
             active: true
           }],
-        }));
+        }, currentUser);
         triggerETL("address");
       } catch (e) {
         console.error("Address record creation failed", e);

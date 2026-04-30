@@ -17,7 +17,7 @@ import {
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -250,7 +250,7 @@ export default function Products() {
     });
   }, [products]);
 
-  const createMut = useMutation({ mutationFn: (d) => base44.entities.Product.create(withScope(d)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(currentUser?.company_id, "created", editing, currentUser?.email); triggerWorkflows(currentUser?.company_id, "entity_created", editing); setFormOpen(false); } });
+  const createMut = useMutation({ mutationFn: (d) => createWithScope(base44.entities.Product, d, currentUser), onSuccess: (created) => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created); setFormOpen(false); setEditing(null); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Product.update(id, withScope(data)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(currentUser?.company_id, "updated", editing, currentUser?.email); triggerWorkflows(currentUser?.company_id, "entity_updated", editing); setFormOpen(false); setEditing(null); } });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Product.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); } });
 
@@ -443,7 +443,7 @@ export default function Products() {
         count={products.length}
       />
       <ProductForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }}
-        onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)}
+        onSubmit={(d) => editing ? updateMut.mutateAsync({ id: editing.id, data: d }) : createMut.mutateAsync(d)}
         onArchive={handleArchive} initialData={editing} currentUser={currentUser} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name} />
       <BulkImportDialog
@@ -456,7 +456,7 @@ export default function Products() {
         validateRow={validateProduct}
         transformRow={(row) => transformProduct(row, currentUser)}
         entityFetchFn={() => listFn(base44.entities.Product)}
-        onImport={async (row) => base44.entities.Product.create({ ...row, company_id: currentUser?.company_id })}
+        onImport={(row) => createWithScope(base44.entities.Product, row, currentUser)}
         currentUser={currentUser}
         previewColumns={[
           { label: "Product Name", render: (r) => r.product_name || <span className="text-rose-500">MISSING</span> },

@@ -7,7 +7,7 @@ import DeleteDialog from "../components/shared/DeleteDialog";
 import EnterpriseForm from "../components/enterprise/EnterpriseForm";
 import EnterpriseToolbar from "../components/enterprise/EnterpriseToolbar";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Badge } from "@/components/ui/badge";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
@@ -184,12 +184,7 @@ export default function Enterprises() {
       const { company_id: _, ...cleanData } = data;
 
       if (currentUser?.company_id) {
-        const created = await base44.entities.Enterprise.create(withScope(cleanData));
-        if (!created.company_id) {
-          await base44.entities.Enterprise.update(created.id, { company_id: currentUser.company_id });
-          return { ...created, company_id: currentUser.company_id };
-        }
-        return created;
+        return createWithScope(base44.entities.Enterprise, cleanData, currentUser);
       }
 
       const created = await base44.entities.Enterprise.create({
@@ -446,15 +441,13 @@ export default function Enterprises() {
         transformRow={transformEnterprise}
         onImport={async (row) => {
           const { company_id: _, ...cleanRow } = row;
-          const created = await base44.entities.Enterprise.create({
+          if (currentUser?.company_id) {
+            return createWithScope(base44.entities.Enterprise, cleanRow, currentUser);
+          }
+          return base44.entities.Enterprise.create({
             ...cleanRow,
             created_by: currentUser?.email,
-            company_id: currentUser?.company_id || undefined,
           });
-          if (!created.company_id && currentUser?.company_id) {
-            await base44.entities.Enterprise.update(created.id, { company_id: currentUser.company_id });
-          }
-          return created;
         }}
         currentUser={currentUser}
         previewColumns={ENT_PREVIEW_COLS}

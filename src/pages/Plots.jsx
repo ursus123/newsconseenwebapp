@@ -13,7 +13,7 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -184,7 +184,7 @@ export default function Plots() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => base44.entities.Plot.create(withScope(d)),
+    mutationFn: (d) => createWithScope(base44.entities.Plot, d, currentUser),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["plots"] }); qc.refetchQueries({ queryKey: ["plots"] });
       triggerETL(); logAudit(companyId, "created", editing, currentUser?.email); setFormOpen(false);
@@ -299,7 +299,7 @@ export default function Plots() {
       )}
 
       <PlotForm open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }}
-        initial={editing} onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)} />
+        initial={editing} onSubmit={(d) => editing ? updateMut.mutateAsync({ id: editing.id, data: d }) : createMut.mutateAsync(d)} />
       <DeleteDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={() => deleteMut.mutate(deleting.id)} itemName={deleting?.name || "this plot"} />
       <DeleteAllDialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} onConfirm={handleDeleteAll} entityLabel="Plots" count={plots.length} />
       <BulkImportDialog open={importOpen}
@@ -308,7 +308,7 @@ export default function Plots() {
         templateExample={PLOT_TEMPLATE_EXAMPLE}
         entityFetchFn={() => listFn(base44.entities.Plot)}
         validateRow={validatePlot} transformRow={transformPlot}
-        onImport={(row) => base44.entities.Plot.create(withScope(row))}
+        onImport={(row) => createWithScope(base44.entities.Plot, row, currentUser)}
         currentUser={currentUser} requiredField="name" />
     </div>
   );

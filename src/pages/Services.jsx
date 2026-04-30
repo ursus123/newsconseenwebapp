@@ -9,7 +9,7 @@ import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
@@ -166,7 +166,7 @@ export default function Services() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => base44.entities.Service.create(withScope(d)),
+    mutationFn: (d) => createWithScope(base44.entities.Service, d, currentUser),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["services"] });
       qc.refetchQueries({ queryKey: ["services"] });
@@ -207,13 +207,13 @@ export default function Services() {
     onError: (err) => toast({ title: "Failed to delete service", description: err?.message || String(err), variant: "destructive" }),
   });
 
-  const handleSubmit = (data, saveAndNew = false) => {
+  const handleSubmit = async (data, saveAndNew = false) => {
     if (editing) {
-      updateMut.mutate({ id: editing.id, data });
-    } else {
-      createMut.mutate(data);
-      if (saveAndNew) { setEditing(null); setFormOpen(true); }
+      return updateMut.mutateAsync({ id: editing.id, data });
     }
+    const created = await createMut.mutateAsync(data);
+    if (saveAndNew) { setEditing(null); setFormOpen(true); }
+    return created;
   };
 
   const handleArchive = (item) => {
@@ -415,7 +415,7 @@ export default function Services() {
         validateRow={validateService}
         transformRow={transformService}
         entityFetchFn={() => listFn(base44.entities.Service)}
-        onImport={async (row) => { const s = await base44.entities.Service.create(withScope(row)); triggerETL("service"); return s; }}
+        onImport={async (row) => { const s = await createWithScope(base44.entities.Service, row, currentUser); triggerETL("service"); return s; }}
         currentUser={currentUser}
         previewColumns={SVC_PREVIEW_COLS}
         requiredField="name"

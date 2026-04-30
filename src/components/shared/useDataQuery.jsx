@@ -101,6 +101,40 @@ export function useWithScope(currentUser) {
 }
 
 /**
+ * Creates a tenant-scoped record and verifies the saved record still carries
+ * the current workspace id. Some Base44 create responses can omit custom
+ * fields, so we patch company_id immediately when needed.
+ */
+export async function createWithScope(entity, data, currentUser) {
+  if (!currentUser) {
+    throw new Error("Cannot create record before current user is loaded.");
+  }
+
+  if (currentUser.role !== "super_admin" && !currentUser.company_id) {
+    throw new Error("Cannot create record without a workspace company_id.");
+  }
+
+  const payload = {
+    ...data,
+    created_by: currentUser.email,
+  };
+
+  if (currentUser.role !== "super_admin") {
+    payload.company_id = currentUser.company_id;
+  }
+
+  const created = await entity.create(payload);
+  const expectedCompanyId = currentUser.role === "super_admin" ? payload.company_id : currentUser.company_id;
+
+  if (expectedCompanyId && created?.id && created.company_id !== expectedCompanyId) {
+    await entity.update(created.id, { company_id: expectedCompanyId });
+    return { ...created, company_id: expectedCompanyId };
+  }
+
+  return created;
+}
+
+/**
  * Builds a plain filter object for use outside React hooks.
  * Used in non-hook contexts like event handlers or utilities.
  */

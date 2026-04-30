@@ -9,7 +9,7 @@ import PeopleForm from "../components/people/PeopleForm";
 import PeopleToolbar from "../components/people/PeopleToolbar";
 import PeopleGroupedView from "../components/people/PeopleGroupedView";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Badge } from "@/components/ui/badge";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
@@ -255,7 +255,6 @@ export default function People() {
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
   const withScope  = useWithScope(currentUser);
-  const withCompany = withScope;
 
   const { data: people = [], isLoading } = useQuery({
     queryKey: ["people", companyId, currentUser?.email],
@@ -266,7 +265,7 @@ export default function People() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => base44.entities.Person.create(withCompany(d)),
+    mutationFn: (d) => createWithScope(base44.entities.Person, d, currentUser),
     onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ["people"] });
       qc.refetchQueries({ queryKey: ["people"] });
@@ -553,7 +552,7 @@ export default function People() {
         entityFetchFn={() => listFn(base44.entities.Person)}
         validateRow={validatePerson}
         transformRow={transformPerson}
-        onImport={(row) => base44.entities.Person.create(withScope(row))}
+        onImport={(row) => createWithScope(base44.entities.Person, row, currentUser)}
         currentUser={currentUser}
         previewColumns={PEOPLE_PREVIEW_COLS}
         requiredField="first_name"

@@ -7,7 +7,7 @@ import VoidDialog from "../components/transactions/VoidDialog";
 import PostConfirmDialog from "../components/transactions/PostConfirmDialog";
 import AuditTrail from "../components/transactions/AuditTrail";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { createWithScope, useEntityListFn } from "@/components/shared/useDataQuery";
 import { Button } from "@/components/ui/button";
 import { Lock, Upload, ChevronDown, ChevronUp, Plus, Search, X, BarChart2 } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
@@ -396,7 +396,6 @@ export default function Transactions() {
   const companyId = currentUser?.company_id;
   const perms     = usePermissions(currentUser);
   const listFn    = useEntityListFn(currentUser);
-  const withScope = useWithScope(currentUser);
 
   const { data: transactions = [] } = useQuery({
     queryKey: ["transactions", companyId, currentUser?.email],
@@ -439,14 +438,14 @@ export default function Transactions() {
   });
 
   const createMut = useMutation({
-    mutationFn: async (data) => createTransaction(data, currentUser, {
+    mutationFn: async (data) => createTransaction(data, {
       autoPost:        data.status === "posted",
       generateNumber:  data.status === "posted" && REVENUE_TYPES.includes(data.transaction_type),
       toast,
       existingTransactions: transactions,
       enterprise:      enterprises.find(e => e.enterprise_name === data.enterprise),
-    }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); setFormOpen(false); triggerETL("transaction"); logAudit(companyId, "created", editing, currentUser?.email); triggerWorkflows(companyId, "entity_created", editing); },
+    }, currentUser),
+    onSuccess: (created) => { qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); triggerETL("transaction"); logAudit(created?.company_id || companyId, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || companyId, "entity_created", created); },
     onError: (e) => toast({ title: "Failed to create transaction", description: e.message, variant: "destructive" }),
   });
 
@@ -916,7 +915,7 @@ export default function Transactions() {
       <TransactionForm
         open={formOpen}
         onClose={() => { setFormOpen(false); setEditing(null); }}
-        onSubmit={(d) => editing ? updateMut.mutate({ id: editing.id, data: d }) : createMut.mutate(d)}
+        onSubmit={(d) => editing ? updateMut.mutateAsync({ id: editing.id, data: d }) : createMut.mutateAsync(d)}
         initialData={editing}
         enterprises={enterprises}
         people={people}
@@ -947,7 +946,7 @@ export default function Transactions() {
         entityFetchFn={() => listFn(base44.entities.Transaction)}
         validateRow={validateTransaction}
         transformRow={transformTransaction}
-        onImport={(row) => base44.entities.Transaction.create(withScope(row))}
+        onImport={(row) => createWithScope(base44.entities.Transaction, row, currentUser)}
         currentUser={currentUser}
         previewColumns={[
           { label: "Type",       render: (r) => r.transaction_type || <span className="text-rose-500">MISSING</span> },
