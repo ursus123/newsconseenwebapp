@@ -287,6 +287,14 @@ experience grounded in real data.
 - **Bulk import** any entity type (`import_records` tool, max 200 records) — always queues for operator approval before executing
 - Low-risk actions execute immediately; higher-risk actions queue for operator review
 
+**Ontology-Native Intelligence** (added in Copilot v2):
+- Traverse the company graph — fetch an entity and its full web of relationships, tasks, and transactions (`get_company_graph_context`)
+- Read enrichment data for any entity — sanctions flags, risk scores, geocoding, spend trends (`get_enrichment_context`)
+- Search the intelligence layer — insights, risks, opportunities saved by the copilot or agents (`search_intelligence`)
+- Introspect the full ontology schema with valid enum values for all 15 entities (`get_ontology_schema`)
+- **Propose actions** without executing — `propose_task`, `propose_chart`, `propose_record_update` all write to the approval gate for operator review
+- **Save insights** to the intelligence layer immediately (`write_insight`) — appears in the Saved to Intelligence Layer panel in chat
+
 **Persistent Memory**:
 - Saves operator preferences, instructions, and context across all future sessions
 - Examples: "always show amounts in KES", "our fiscal year starts in July",
@@ -360,6 +368,15 @@ experience grounded in real data.
 | `search_public_data` (faostat) | FAO crop production data by country and commodity |
 | `execute_ingestion_plan` | Load a previously analysed import plan into Newsconseen using cached rows. Requires the operator to say "yes, load it" or "confirm" with the plan_id. Never call without explicit confirmation. |
 | `generate_import_template` | Generate a blank CSV import template for any entity type. Returns column headers, a sample row, raw CSV content, and a download URL. Use when operators ask "give me a template for importing people" or "what format do I need for a product import". |
+| **Ontology-Native Tools (Copilot v2)** | |
+| `get_company_graph_context` | Fetch an entity and its full graph — relationships, open tasks, recent transactions. Returns: center entity fields, connected nodes (type/label/status/strength), edge list, node_count, edge_count. Use for questions about a specific entity's connections or context. |
+| `get_enrichment_context` | Read enrichment data attached to an entity — sanctions flags, geocoding, risk scores, spend_trend, churn_probability, domain metadata. Returns structured enrichment records grouped by enrichment_type. |
+| `search_intelligence` | Search the intelligence layer for insights, risks, opportunities, or recommendations. Tries Base44 intelligence entities first, falls back to analytics.copilot_insights, then analytics.agent_approvals. Filter by intelligence_type, subject_type, or subject_id. |
+| `get_ontology_schema` | Returns the full schema for all 15 canonical entities — field names, valid enum values, and descriptions. Use when an operator asks what fields exist, what values are valid, or before proposing a record update. |
+| `propose_task` | Proposes a new task for operator review. Writes to analytics.agent_approvals with action_type="create_task". Returns approval_id. NEVER executes without the operator approving in the Agents panel. |
+| `propose_chart` | Proposes a chart or visualisation for operator review. Returns a preview config (type, metric, title) plus approval_id. Chart is not rendered until approved. |
+| `propose_record_update` | Proposes a field-level patch on an existing entity record. Returns approval_id. The update is NOT applied until the operator approves. Always call `get_ontology_schema` first to confirm valid field values. |
+| `write_insight` | Immediately saves a structured insight to the intelligence layer (analytics.copilot_insights or Base44 insights entity). Returns insight_id. Appears in the "Saved to Intelligence Layer" panel in the chat UI. Use for key findings the operator should be able to retrieve later. |
 
 ---
 
@@ -376,6 +393,73 @@ Copilot questions you can ask:
 - "Who is overloaded?" / "Who has spare capacity?"
 - "Show me the timesheet for Mary"
 - "Utilisation report for the last 30 days"
+
+---
+
+## Ontology-Native Copilot (Copilot v2)
+
+The copilot is ontology-native: it answers from structured objects in the company graph,
+datamart, enrichment layer, and intelligence layer — not from free-text generation alone.
+
+### Four Data Layers Available to the Copilot
+
+| Layer | Tools | What it contains |
+|-------|-------|-----------------|
+| Company Graph | `get_company_graph_context` | Entity + all its relationships, tasks, transactions |
+| Datamart | All `get_*` query tools | Aggregated metrics, trends, ML predictions |
+| Enrichment | `get_enrichment_context` | Sanctions flags, risk scores, spend trends, domain data |
+| Intelligence | `search_intelligence`, `write_insight` | Saved insights, risks, opportunities, copilot proposals |
+
+### Structured Answer Format
+
+Every copilot response is structured as four sections:
+1. **Answer** — the direct answer to the question
+2. **Evidence** — the specific data used (tool name + key metric)
+3. **Recommended Actions** — proposed next steps (may include propose_* tool calls)
+4. **Limitations** — what the copilot couldn't verify or data gaps
+
+### Propose → Approve Workflow
+
+`propose_task`, `propose_chart`, and `propose_record_update` write to the approval gate
+(`analytics.agent_approvals`) with `agent_name='copilot'`. They **never execute directly**.
+
+The operator sees a "Proposed Actions" card in the chat UI with Approve / Reject buttons.
+Approve calls `POST /copilot/recommendations/{id}/approve`.
+Reject calls `POST /copilot/recommendations/{id}/reject`.
+
+When approved, the action status updates to 'approved' in the approvals table.
+Full execution (actually creating the record/task) is wired to the approval event.
+
+### Intelligence Layer Storage
+
+`write_insight` persists findings to `analytics.copilot_insights`:
+
+| Column | Description |
+|--------|-------------|
+| id | UUID primary key |
+| company_id | Tenant ID |
+| insight_type | insight / risk / opportunity / recommendation |
+| title | Short headline |
+| body | Full insight text |
+| subject_type | Entity type the insight is about |
+| subject_id | Entity record ID |
+| evidence | JSONB array of supporting data points |
+| status | active / archived |
+| source | copilot (default) |
+| created_at | Timestamp |
+
+Saved insights appear in the "Saved to Intelligence Layer" panel in the chat UI and are
+searchable via `search_intelligence` in future sessions.
+
+### Entity Context in AskRequest
+
+When the operator is on an entity page (Enterprises, People, etc.), the frontend can pass:
+- `current_page` — which page the operator is on
+- `selected_entity_type` — e.g. "enterprise"
+- `selected_entity_id` — the specific record being viewed
+
+The copilot receives this context and can automatically call `get_company_graph_context`
+or `get_enrichment_context` for the selected entity without the operator needing to specify it.
 
 ---
 
@@ -563,6 +647,10 @@ to Railway, or make the fields `Optional[str] = None` in `settings.py`.
 | ML predictions empty | ETL not run since data was added | Trigger POST /cron/etl-all |
 | Alerts not sending | SENDGRID/WHATSAPP env vars missing | Add to Railway env vars |
 | Agent actions not executing | ANTHROPIC_API_KEY not set | Add key to Railway env vars |
+| `get_company_graph_context` returns empty nodes | raw.relationships table is empty | Trigger POST /load/relationship-summary to populate raw tables |
+| `write_insight` falls back to PostgreSQL | BASE44_INSIGHTS_URL not set | Set env var in Railway, or leave as-is (PostgreSQL fallback is intentional) |
+| `propose_task` approval not appearing in UI | analytics.agent_approvals table missing | Run POST /health to trigger startup DDL which pre-creates the table |
+| `search_intelligence` returns no results | No insights saved yet | Use write_insight tool to save findings; or run agents which also save to the table |
 
 ---
 
@@ -601,6 +689,7 @@ to Railway, or make the fields `Optional[str] = None` in `settings.py`.
 | 11 | Spatial Intelligence — Map Explorer converted to PostGIS engine: /postgis/spatial-pins (multi-layer unified pin feed), /postgis/spatial-density (heatmap grid, adjustable cell size), /postgis/coverage-analysis (boundary coverage %). MapView.jsx rebuilt with Pins/Clusters/Density/Boundaries mode tabs + entity layer toggles. | ✅ |
 | 9+ | Copilot Write-Back — `create_record` + `import_records` tools with approval gate routing | ✅ |
 | 12 | Ontology Ingestion Agent — universal 7-stage AI import pipeline (Extract → Profile → Fingerprint → Memory recall → LLM Analyse → Deduplicate → Load) supporting CSV, XLSX, JSON, XML. Schema fingerprinting and fuzzy Jaccard memory reuse skip LLM for repeat templates. Row-level relationship materialisation (same-row pairing, FK value lookup, self-referential). Wired into BulkImportDialog, copilot chat (file upload in sidebar), and connectors. Copilot can trigger load via `execute_ingestion_plan` without file re-upload. Phase 12 overhaul: 50k row cap (raised from 5k), dedup defaults to skip-not-update, plan only marked loaded after clean run, memory saved only after successful load, low_confidence blocked at backend, schema contract validation flags unknown field names, webhook endpoint for external pushes, scheduled re-ingestion, `generate_import_template` copilot tool. | ✅ |
+| — | Copilot v2 — Ontology-Native Mode: 8 new tools (get_company_graph_context, get_enrichment_context, search_intelligence, get_ontology_schema, propose_task, propose_chart, propose_record_update, write_insight). Structured answer format (Answer / Evidence / Recommended Actions / Limitations). Propose → Approve workflow writes to analytics.agent_approvals. Intelligence layer storage in analytics.copilot_insights. Entity-page context (current_page, selected_entity_type, selected_entity_id) passed in AskRequest. Approve/reject endpoints: POST /copilot/recommendations/{id}/approve|reject. ProposedActionsPanel UI with per-recommendation state management. Company Graph home page as default landing for admin/executive. | ✅ |
 
 ---
 
@@ -615,11 +704,19 @@ POST /load/plot-summary             ETL: plots → analytics.plot_summary
 POST /load/observation-summary      ETL: observations → analytics.observation_summary
 GET  /copilot/status                Copilot health check
 POST /copilot/ask                   Ask a question (returns JSON)
+                                    Body: {question, company_id, current_page?,
+                                           selected_entity_type?, selected_entity_id?}
 POST /copilot/ask/stream            Ask a question (SSE streaming)
 GET  /copilot/context               Data freshness and scope
 GET  /copilot/diagnose              Run all tools, report row counts
 GET  /copilot/sample-questions      Suggested questions for UI
 POST /copilot/feedback              Rate a copilot answer
+GET  /copilot/recommendations       List pending copilot proposals for a company
+                                    Query: ?company_id=&status=pending|approved|rejected
+POST /copilot/recommendations/{id}/approve   Approve a copilot proposal
+                                    Query: ?company_id=
+POST /copilot/recommendations/{id}/reject    Reject a copilot proposal
+                                    Query: ?company_id=&reason=
 GET  /dataquality/report            AI Readiness Score + issues
 GET  /bi/export                     Export charts to Excel/Tableau/CSV
 GET  /security/compliance           SOC 2 compliance evidence

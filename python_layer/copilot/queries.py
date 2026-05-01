@@ -5846,6 +5846,186 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    # ── Ontology-native graph context ─────────────────────────────────────────
+    {
+        "name": "get_company_graph_context",
+        "description": (
+            "Get a graph subgraph around a specific entity — its connections, linked tasks, "
+            "transactions, and related entities (1 hop by default). "
+            "Use when asked 'who is connected to X', 'what tasks are linked to this enterprise', "
+            "'show me everything attached to this person', 'what is in the graph around Y'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["subject_type", "subject_id"],
+            "properties": {
+                "subject_type":  {
+                    "type": "string",
+                    "enum": ["enterprise", "person", "product", "task", "transaction", "address"],
+                    "description": "Entity type of the center node.",
+                },
+                "subject_id":    {"type": "string", "description": "Entity ID of the center node."},
+                "depth":         {"type": "integer", "description": "Graph traversal depth. Default 1."},
+                "include_types": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Restrict to specific connected node types. Default all.",
+                },
+            },
+        },
+    },
+    # ── Enrichment context ────────────────────────────────────────────────────
+    {
+        "name": "get_enrichment_context",
+        "description": (
+            "Get external enrichment data collected for a specific entity — competitors, market "
+            "news, economic indicators, location data, industry context. "
+            "Use when asked 'what do we know about this market', 'has this entity been enriched', "
+            "'what external context do we have on this enterprise'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["entity_type", "entity_id"],
+            "properties": {
+                "entity_type":      {"type": "string", "description": "Entity type (enterprise, person, product, address)."},
+                "entity_id":        {"type": "string", "description": "Entity ID."},
+                "enrichment_types": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Filter to specific enrichment types: competitors, news, economic, labor, location, industry.",
+                },
+            },
+        },
+    },
+    # ── Intelligence entity search ────────────────────────────────────────────
+    {
+        "name": "search_intelligence",
+        "description": (
+            "Search insights, risks, opportunities, or recommendations in the intelligence layer. "
+            "Use when asked 'what risks exist', 'what opportunities have been identified', "
+            "'what insights do we have', 'show pending recommendations', "
+            "'what has the system found', 'what evidence supports this'. "
+            "intelligence_type: insight | risk | opportunity | recommendation"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "intelligence_type": {
+                    "type": "string",
+                    "enum": ["insight", "risk", "opportunity", "recommendation"],
+                    "description": "Type of intelligence to search. Default: insight.",
+                },
+                "subject_type": {"type": "string", "description": "Filter by subject entity type."},
+                "subject_id":   {"type": "string", "description": "Filter by subject entity ID."},
+                "status":       {"type": "string", "description": "Filter by status (active, proposed, accepted, rejected)."},
+                "limit":        {"type": "integer", "description": "Max items to return. Default 20."},
+            },
+        },
+    },
+    # ── Ontology schema ───────────────────────────────────────────────────────
+    {
+        "name": "get_ontology_schema",
+        "description": (
+            "Get the complete Newsconseen ontology schema — all 15 entity types with their "
+            "key fields and valid enum values, plus intelligence entity schemas. "
+            "Call this before complex entity queries to understand what fields are available."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    # ── Propose tools (write to approval gate — no direct execution) ──────────
+    {
+        "name": "propose_task",
+        "description": (
+            "Propose creating a new task for operator approval. "
+            "The task is NOT created until the operator approves it in the Agents panel. "
+            "Use when you identify an action that should be taken: follow-ups, escalations, reviews. "
+            "ALWAYS tell the operator what you are proposing BEFORE calling this tool."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["title", "description"],
+            "properties": {
+                "title":               {"type": "string", "description": "Task title."},
+                "description":         {"type": "string", "description": "Task description and instructions."},
+                "assigned_to":         {"type": "string", "description": "Name or ID of person to assign to."},
+                "due_date":            {"type": "string", "description": "Due date (ISO format YYYY-MM-DD)."},
+                "related_entity_type": {"type": "string", "description": "Entity type this task relates to."},
+                "related_entity_id":   {"type": "string", "description": "Entity ID this task relates to."},
+                "rationale":           {"type": "string", "description": "Why this task is being proposed."},
+                "evidence":            {"type": "array", "items": {"type": "string"}, "description": "Evidence strings supporting the proposal."},
+            },
+        },
+    },
+    {
+        "name": "propose_chart",
+        "description": (
+            "Propose a chart or visualization for the operator to approve. "
+            "Returns a preview chart config immediately for display. "
+            "Use when the operator asks to 'create a chart', 'show a graph of X', 'add this to my report'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["title", "metric", "entity_type"],
+            "properties": {
+                "title":       {"type": "string", "description": "Chart title."},
+                "metric":      {"type": "string", "description": "Metric to visualise (revenue, headcount, task_completion, etc.)."},
+                "entity_type": {"type": "string", "description": "Entity type (people, transactions, tasks, products)."},
+                "chart_type":  {"type": "string", "enum": ["bar", "line", "area", "pie"], "description": "Chart type. Default: bar."},
+                "filters":     {"type": "object", "description": "Optional filters to apply."},
+                "group_by":    {"type": "string", "description": "Field to group by."},
+                "date_range":  {"type": "string", "description": "Date range (e.g. 'last_30_days', 'this_year')."},
+                "rationale":   {"type": "string", "description": "Why this chart is useful."},
+            },
+        },
+    },
+    {
+        "name": "propose_record_update",
+        "description": (
+            "Propose updating fields on an existing record. Requires operator approval. "
+            "Use when data should be corrected or enriched based on your analysis."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["entity_type", "entity_id", "patch"],
+            "properties": {
+                "entity_type": {
+                    "type": "string",
+                    "enum": ["enterprise", "person", "product", "task", "transaction"],
+                    "description": "Entity type of the record to update.",
+                },
+                "entity_id":   {"type": "string", "description": "Record ID to update."},
+                "patch":       {"type": "object", "description": "Fields to update: {field_name: new_value}."},
+                "rationale":   {"type": "string", "description": "Reason for the update."},
+            },
+        },
+    },
+    # ── Insight write-back (executes immediately, no approval needed) ─────────
+    {
+        "name": "write_insight",
+        "description": (
+            "Write a new insight to the intelligence layer immediately (no approval required). "
+            "Use when you derive a meaningful conclusion worth storing for future reference: "
+            "a trend explanation, pattern finding, risk conclusion, or data-backed forecast. "
+            "Good candidates: 'Revenue declined because...', 'Client X shows churn pattern...', "
+            "'Stock levels trending below reorder point for product Y'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["insight_type", "title", "body"],
+            "properties": {
+                "insight_type": {
+                    "type": "string",
+                    "enum": ["explanation", "trend", "anomaly", "correlation", "forecast", "risk_finding"],
+                    "description": "Category of insight.",
+                },
+                "title":        {"type": "string", "description": "Short insight title (one sentence)."},
+                "body":         {"type": "string", "description": "Full insight text with evidence and reasoning."},
+                "subject_type": {"type": "string", "description": "Entity type this insight is about."},
+                "subject_id":   {"type": "string", "description": "Specific entity ID this insight applies to."},
+                "evidence":     {"type": "array", "items": {"type": "string"}, "description": "List of evidence strings supporting this insight."},
+            },
+        },
+    },
 ]
 
 
@@ -7844,6 +8024,17 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         "execute_ingestion_plan":       execute_ingestion_plan,
         # Generate a blank CSV template for any entity type (for manual bulk import)
         "generate_import_template":     generate_import_template,
+        # ─── Ontology-native read tools ───────────────────────────────────────
+        "get_company_graph_context":    _dispatch_graph_context,
+        "get_enrichment_context":       _dispatch_enrichment_context,
+        "search_intelligence":          _dispatch_search_intelligence,
+        "get_ontology_schema":          _dispatch_ontology_schema,
+        # ── Propose tools (approval gate write-back) ──────────────────────────
+        "propose_task":                 _dispatch_propose_task,
+        "propose_chart":                _dispatch_propose_chart,
+        "propose_record_update":        _dispatch_propose_record_update,
+        # ── Insight write-back (immediate) ────────────────────────────────────
+        "write_insight":                _dispatch_write_insight,
     }
 
     fn = dispatch.get(tool_name)
@@ -7962,3 +8153,64 @@ class QueryEngine:
 
     def query_service_overview(self) -> dict:
         return get_service_overview(self.company_id)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Ontology-native tool dispatch wrappers
+# Thin shims so execute_tool can inject company_id uniformly.
+# The real implementations live in copilot/ontology_tools.py and
+# copilot/action_tools.py — keeping queries.py import-free of those modules
+# until first call (avoids circular imports at load time).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _dispatch_graph_context(company_id: str, subject_type: str, subject_id: str,
+                             depth: int = 1, include_types=None) -> dict:
+    from copilot.ontology_tools import get_company_graph_context
+    return get_company_graph_context(company_id, subject_type, subject_id, depth, include_types)
+
+
+def _dispatch_enrichment_context(company_id: str, entity_type: str, entity_id: str,
+                                  enrichment_types=None) -> dict:
+    from copilot.ontology_tools import get_enrichment_context
+    return get_enrichment_context(company_id, entity_type, entity_id, enrichment_types)
+
+
+def _dispatch_search_intelligence(company_id: str, intelligence_type: str = "insight",
+                                   subject_type=None, subject_id=None,
+                                   status=None, limit: int = 20) -> dict:
+    from copilot.ontology_tools import search_intelligence
+    return search_intelligence(company_id, intelligence_type, subject_type, subject_id, status, limit)
+
+
+def _dispatch_ontology_schema(company_id: str) -> dict:
+    from copilot.ontology_tools import get_ontology_schema
+    return get_ontology_schema(company_id)
+
+
+def _dispatch_propose_task(company_id: str, title: str, description: str,
+                            assigned_to=None, due_date=None,
+                            related_entity_type=None, related_entity_id=None,
+                            rationale=None, evidence=None) -> dict:
+    from copilot.action_tools import propose_task
+    return propose_task(company_id, title, description, assigned_to, due_date,
+                        related_entity_type, related_entity_id, rationale, evidence)
+
+
+def _dispatch_propose_chart(company_id: str, title: str, metric: str, entity_type: str,
+                             chart_type: str = "bar", filters=None, group_by=None,
+                             date_range=None, rationale=None) -> dict:
+    from copilot.action_tools import propose_chart
+    return propose_chart(company_id, title, metric, entity_type, chart_type,
+                         filters, group_by, date_range, rationale)
+
+
+def _dispatch_propose_record_update(company_id: str, entity_type: str, entity_id: str,
+                                    patch: dict, rationale=None) -> dict:
+    from copilot.action_tools import propose_record_update
+    return propose_record_update(company_id, entity_type, entity_id, patch, rationale)
+
+
+def _dispatch_write_insight(company_id: str, insight_type: str, title: str, body: str,
+                             subject_type=None, subject_id=None, evidence=None) -> dict:
+    from copilot.action_tools import write_insight
+    return write_insight(company_id, insight_type, title, body, subject_type, subject_id, evidence)

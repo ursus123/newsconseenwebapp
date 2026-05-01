@@ -37,12 +37,16 @@ COPILOT_BACKEND = os.getenv("COPILOT_BACKEND", "anthropic")
 # ----------------------------------------------------------
 
 class AskRequest(BaseModel):
-    question:       str
-    company_id:     str
-    enterprise_name:Optional[str] = ""
-    history:        Optional[list[dict]] = []
-    context:        Optional[dict] = {}
-    session_id:     Optional[str] = ""   # if set, history persisted in session store
+    question:             str
+    company_id:           str
+    enterprise_name:      Optional[str] = ""
+    history:              Optional[list[dict]] = []
+    context:              Optional[dict] = {}
+    session_id:           Optional[str] = ""   # if set, history persisted in session store
+    # Entity-page context — injected when Copilot is opened from an entity record
+    current_page:         Optional[str] = ""
+    selected_entity_type: Optional[str] = ""
+    selected_entity_id:   Optional[str] = ""
 
 
 class FeedbackRequest(BaseModel):
@@ -134,10 +138,19 @@ def ask(request: AskRequest):
         railway_url=RAILWAY_URL,
     )
 
+    # Merge entity-page context into the context dict so Claude knows the viewport
+    ctx = dict(request.context or {})
+    if request.current_page:
+        ctx["current_page"] = request.current_page
+    if request.selected_entity_type:
+        ctx["selected_entity_type"] = request.selected_entity_type
+    if request.selected_entity_id:
+        ctx["selected_entity_id"] = request.selected_entity_id
+
     result = engine.ask(
         question=request.question,
         history=request.history or [],
-        context=request.context or {},
+        context=ctx,
         session_id=request.session_id or "",
     )
 
@@ -358,6 +371,120 @@ def diagnose(company_id: str = Query(...)):
         "raw_row_counts":      raw_counts,
         "analytics_companies": analytics_companies,
         "tools":               tools,
+    }
+
+
+@router.get("/recommendations")
+def list_recommendations(company_id: str = Query(...), status: Optional[str] = Query(None)):
+    """
+    List copilot-proposed recommendations (from analytics.agent_approvals where agent_name='copilot').
+    Supports filtering by status: pending | approved | rejected | executed.
+    """
+    from database import get_engine_safe
+    from sqlalchemy import text as _text
+
+    engine = get_engine_safe()
+    if not engine:
+        return {"recommendations": [], "count": 0, "note": "Database unavailable."}
+
+    params: dict = {"cid": company_id}
+    status_clause = ""
+    if status:
+        status_clause = "AND status = :status"
+        params["status"] = status
+
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(_text(f"""
+                SELECT id, action_type, action_label AS title, action_payload,
+                       risk_level, reasoning AS rationale, status, created_at, updated_at
+                FROM analytics.agent_approvals
+                WHERE company_id = :cid
+                  AND agent_name = 'copilot'
+                  {status_clause}
+                ORDER BY created_at DESC
+                LIMIT 50
+            """), params).fetchall()
+            cols = ["id", "action_type", "title", "action_payload",
+                    "risk_level", "rationale", "status", "created_at", "updated_at"]
+            recs = [dict(zip(cols, r)) for r in rows]
+    except Exception as e:
+        logger.error("list_recommendations failed: %s", e)
+        return {"recommendations": [], "count": 0, "error": str(e)}
+
+    return {"recommendations": recs, "count": len(recs)}
+
+
+@router.post("/recommendations/{approval_id}/approve")
+def approve_recommendation(approval_id: str, company_id: str = Query(...)):
+    """Approve a copilot-proposed recommendation and queue it for execution."""
+    from database import get_engine_safe
+    from sqlalchemy import text as _text
+
+    engine = get_engine_safe()
+    if not engine:
+        raise HTTPException(status_code=503, detail="Database unavailable.")
+
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(_text("""
+                UPDATE analytics.agent_approvals
+                SET status = 'approved', updated_at = NOW()
+                WHERE id = :id AND company_id = :cid AND agent_name = 'copilot'
+                RETURNING id, action_type, action_label, status
+            """), {"id": approval_id, "cid": company_id})
+            row = result.fetchone()
+            conn.commit()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Recommendation not found or wrong company_id.")
+
+    return {
+        "status":      "approved",
+        "approval_id": approval_id,
+        "action_type": row[1],
+        "message":     f"'{row[2]}' approved and queued for execution.",
+    }
+
+
+@router.post("/recommendations/{approval_id}/reject")
+def reject_recommendation(
+    approval_id: str,
+    company_id: str = Query(...),
+    reason: Optional[str] = Query(""),
+):
+    """Reject a copilot-proposed recommendation."""
+    from database import get_engine_safe
+    from sqlalchemy import text as _text
+
+    engine = get_engine_safe()
+    if not engine:
+        raise HTTPException(status_code=503, detail="Database unavailable.")
+
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(_text("""
+                UPDATE analytics.agent_approvals
+                SET status = 'rejected', reasoning = CONCAT(reasoning, ' | Rejected: ', :reason),
+                    updated_at = NOW()
+                WHERE id = :id AND company_id = :cid AND agent_name = 'copilot'
+                RETURNING id, action_type, action_label, status
+            """), {"id": approval_id, "cid": company_id, "reason": reason or "No reason given."})
+            row = result.fetchone()
+            conn.commit()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Recommendation not found or wrong company_id.")
+
+    return {
+        "status":      "rejected",
+        "approval_id": approval_id,
+        "action_type": row[1],
+        "message":     f"'{row[2]}' rejected.",
     }
 
 

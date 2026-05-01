@@ -9,6 +9,7 @@ import {
   MessageSquare, X, History, Download, ChevronRight,
   Search, ArrowUpRight, Database, Pin, Code2, Paperclip,
   FileText, Upload, CheckCircle2, Layers,
+  Zap, ListTodo, Lightbulb, XCircle,
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import {
@@ -34,13 +35,13 @@ const PALETTE = [
 const SAMPLE_QUESTIONS = [
   "Give me an overview of how we are doing today",
   "Which clients are most at risk of churning?",
-  "What are the latest trends in our industry?",
+  "What risks and opportunities has the system identified?",
   "Which items expire in the next 7 days?",
-  "Show me customer segmentation and lifetime value",
-  "What regulations should our business be aware of?",
-  "Which tasks are overdue?",
-  "Forecast demand for the next quarter",
-  "What is Newsconseen and what can it do?",
+  "Create a follow-up task for our top 3 overdue accounts",
+  "Show me revenue by month and create a chart for my report",
+  "Which tasks are overdue and who should I assign them to?",
+  "What do we know about the market around our main enterprise?",
+  "Explain why revenue changed this month and save the insight",
 ];
 
 // ── Utility: format timestamp ────────────────────────────────────────────────
@@ -646,6 +647,149 @@ function SourcesPanel({ toolsDetail, onOpenQueryBuilder }) {
   );
 }
 
+// ── Proposed actions panel (approve / reject) ────────────────────────────────
+function ProposedActionsPanel({ recommendations, insights, companyId }) {
+  const [states, setStates] = useState({}); // approval_id → "approving"|"rejecting"|"approved"|"rejected"
+
+  if ((!recommendations || recommendations.length === 0) &&
+      (!insights || insights.length === 0)) return null;
+
+  const RAIL_HEADERS = RAILWAY_API_KEY
+    ? { "Content-Type": "application/json", "x-api-key": RAILWAY_API_KEY }
+    : { "Content-Type": "application/json" };
+
+  const approve = async (rec) => {
+    const id = rec.approval_id;
+    setStates(s => ({ ...s, [id]: "approving" }));
+    try {
+      const r = await fetch(
+        `${RAILWAY_URL}/copilot/recommendations/${id}/approve?company_id=${encodeURIComponent(companyId)}`,
+        { method: "POST", headers: RAIL_HEADERS }
+      );
+      setStates(s => ({ ...s, [id]: r.ok ? "approved" : "error" }));
+    } catch {
+      setStates(s => ({ ...s, [id]: "error" }));
+    }
+  };
+
+  const reject = async (rec) => {
+    const id = rec.approval_id;
+    setStates(s => ({ ...s, [id]: "rejecting" }));
+    try {
+      const r = await fetch(
+        `${RAILWAY_URL}/copilot/recommendations/${id}/reject?company_id=${encodeURIComponent(companyId)}`,
+        { method: "POST", headers: RAIL_HEADERS }
+      );
+      setStates(s => ({ ...s, [id]: r.ok ? "rejected" : "error" }));
+    } catch {
+      setStates(s => ({ ...s, [id]: "error" }));
+    }
+  };
+
+  const ACTION_ICON = {
+    create_task:    <ListTodo className="w-3.5 h-3.5 text-orange-500" />,
+    create_chart:   <BarChart2 className="w-3.5 h-3.5 text-blue-500" />,
+    create_report:  <FileText className="w-3.5 h-3.5 text-violet-500" />,
+    update_record:  <Database className="w-3.5 h-3.5 text-slate-500" />,
+  };
+
+  return (
+    <div className="w-full mt-2 space-y-1.5">
+      {/* Proposed actions */}
+      {recommendations?.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 overflow-hidden">
+          <div className="flex items-center gap-1.5 px-3 py-2 border-b border-amber-100">
+            <Zap className="w-3.5 h-3.5 text-amber-600" />
+            <span className="text-xs font-semibold text-amber-800">
+              Proposed Actions ({recommendations.length})
+            </span>
+            <span className="text-[10px] text-amber-600 ml-auto">Review and approve below</span>
+          </div>
+          <div className="divide-y divide-amber-100">
+            {recommendations.map((rec, i) => {
+              const st = states[rec.approval_id];
+              return (
+                <div key={i} className="flex items-start gap-2 px-3 py-2.5">
+                  <div className="mt-0.5">
+                    {ACTION_ICON[rec.action_type] || <Zap className="w-3.5 h-3.5 text-amber-500" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-slate-800 truncate">{rec.title}</p>
+                    {rec.rationale && (
+                      <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">{rec.rationale}</p>
+                    )}
+                    <p className="text-[9px] text-amber-600 mt-0.5 font-mono">
+                      {rec.action_type?.replace(/_/g, " ")} · ID {rec.approval_id?.slice(0, 8)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {!st && (
+                      <>
+                        <button
+                          onClick={() => approve(rec)}
+                          className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+                        >
+                          <CheckCircle2 className="w-3 h-3" /> Approve
+                        </button>
+                        <button
+                          onClick={() => reject(rec)}
+                          className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                        >
+                          <XCircle className="w-3 h-3" /> Reject
+                        </button>
+                      </>
+                    )}
+                    {st === "approving" && <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />}
+                    {st === "rejecting" && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />}
+                    {st === "approved" && (
+                      <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
+                        <CheckCircle className="w-3 h-3" /> Approved
+                      </span>
+                    )}
+                    {st === "rejected" && (
+                      <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-400">
+                        <X className="w-3 h-3" /> Rejected
+                      </span>
+                    )}
+                    {st === "error" && (
+                      <span className="text-[10px] text-rose-500">Error — retry</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Created insights */}
+      {insights?.length > 0 && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50 overflow-hidden">
+          <div className="flex items-center gap-1.5 px-3 py-2 border-b border-violet-100">
+            <Lightbulb className="w-3.5 h-3.5 text-violet-600" />
+            <span className="text-xs font-semibold text-violet-800">
+              Saved to Intelligence Layer ({insights.length})
+            </span>
+          </div>
+          <div className="divide-y divide-violet-100">
+            {insights.map((ins, i) => (
+              <div key={i} className="flex items-start gap-2 px-3 py-2">
+                <CheckCircle className="w-3.5 h-3.5 text-violet-500 mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-slate-800 truncate">{ins.title}</p>
+                  <p className="text-[9px] text-violet-600 mt-0.5">
+                    {ins.insight_type} · stored in {ins.storage || "analytics"}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── ML result mini-cards ─────────────────────────────────────────────────────
 function MLPanel({ data }) {
   const mlResults = Object.entries(data || {})
@@ -729,22 +873,33 @@ function MLPanel({ data }) {
 
 // ── Tool activity badges ─────────────────────────────────────────────────────
 const TOOL_LABELS = {
-  get_operator_context:    "Company context",
-  get_people_summary:      "People data",
-  get_transaction_summary: "Financials",
-  get_task_summary:        "Tasks",
-  get_product_summary:     "Inventory",
-  get_network_overview:    "Network",
-  get_ml_predictions:      "ML models",
-  web_search:              "Web search",
-  search_public_data:      "Public data",
-  get_overdue_invoices:    "Overdue invoices",
-  get_person_churn_risk:   "Churn risk",
-  get_staff_availability:  "Staff availability",
-  get_enterprise_overview: "Enterprises",
-  get_service_overview:    "Services",
-  get_relationship_summary:"Relationships",
-  get_address_overview:    "Addresses",
+  get_operator_context:       "Company context",
+  get_people_summary:         "People data",
+  get_transaction_summary:    "Financials",
+  get_task_summary:           "Tasks",
+  get_product_summary:        "Inventory",
+  get_network_overview:       "Network",
+  get_ml_predictions:         "ML models",
+  web_search:                 "Web search",
+  search_public_data:         "Public data",
+  get_overdue_invoices:       "Overdue invoices",
+  get_person_churn_risk:      "Churn risk",
+  get_staff_availability:     "Staff availability",
+  get_enterprise_overview:    "Enterprises",
+  get_service_overview:       "Services",
+  get_relationship_summary:   "Relationships",
+  get_address_overview:       "Addresses",
+  // Ontology-native tools
+  get_company_graph_context:  "Company graph",
+  get_enrichment_context:     "Enrichment",
+  search_intelligence:        "Intelligence",
+  get_ontology_schema:        "Schema",
+  // Propose tools
+  propose_task:               "Proposing task",
+  propose_chart:              "Proposing chart",
+  propose_record_update:      "Proposing update",
+  // Write tools
+  write_insight:              "Saving insight",
 };
 
 function ToolActivity({ tools }) {
@@ -885,6 +1040,15 @@ function MessageBubble({ message, onFeedback, companyId, currentUser, onOpenQuer
           <div className="w-full">
             <CitationsPanel citations={message.citations} />
           </div>
+        )}
+
+        {/* Proposed actions + created insights */}
+        {!isUser && (message.created_recommendations?.length > 0 || message.created_insights?.length > 0) && (
+          <ProposedActionsPanel
+            recommendations={message.created_recommendations}
+            insights={message.created_insights}
+            companyId={companyId}
+          />
         )}
 
         {/* Sources verification panel */}
@@ -1327,11 +1491,14 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       const result = await resp.json();
       const assistantMsg = {
         id: Date.now() + 2, role: "assistant",
-        content: result.answer,
-        tools_called: result.tools_called || [],
-        data: result.data || {},
-        charts: [], citations: [],
-        timestamp: new Date().toISOString(),
+        content:                 result.answer,
+        tools_called:            result.tools_called            || [],
+        data:                    result.data                    || {},
+        charts:                  [],
+        citations:               [],
+        created_recommendations: result.created_recommendations || [],
+        created_insights:        result.created_insights        || [],
+        timestamp:               new Date().toISOString(),
       };
       setMessages(prev => [
         ...prev.filter(m => m.type !== "thinking"),
@@ -1394,18 +1561,20 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       const result = await resp.json();
 
       const assistantMsg = {
-        id:             Date.now() + 2,
-        role:           "assistant",
-        content:        result.answer,
-        data:           result.data           || {},
-        charts:         result.charts         || [],
-        citations:      result.citations      || [],
-        tools_called:   result.tools_called   || [],
-        tools_detail:   result.tools_detail   || [],
-        data_freshness: result.data_freshness || null,
-        intent:         result.intent,
-        feedback:       null,
-        timestamp:      new Date().toISOString(),
+        id:                      Date.now() + 2,
+        role:                    "assistant",
+        content:                 result.answer,
+        data:                    result.data                    || {},
+        charts:                  result.charts                  || [],
+        citations:               result.citations               || [],
+        tools_called:            result.tools_called            || [],
+        tools_detail:            result.tools_detail            || [],
+        data_freshness:          result.data_freshness          || null,
+        intent:                  result.intent,
+        feedback:                null,
+        created_recommendations: result.created_recommendations || [],
+        created_insights:        result.created_insights        || [],
+        timestamp:               new Date().toISOString(),
       };
 
       setMessages(prev => [

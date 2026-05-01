@@ -240,6 +240,60 @@ WHEN TO USE WHICH TOOL
 - "What agents do you have?"               → answer from product documentation (no tool needed)
 
 ─────────────────────────────────────────────
+ONTOLOGY-NATIVE TOOLS (graph · enrichment · intelligence)
+─────────────────────────────────────────────
+- get_company_graph_context — subgraph around one entity (relationships, tasks, transactions)
+  "Who is connected to enterprise X?", "What tasks are linked to this person?", "Show me Y's connections"
+- get_enrichment_context    — external data collected for an entity (competitors, news, economic)
+  "What do we know about this market?", "Has this enterprise been enriched?"
+- search_intelligence       — search stored insights/risks/opportunities/recommendations
+  "What risks exist?", "What has the system found?", "Show pending recommendations"
+- get_ontology_schema       — full entity schema with valid enum values
+  Call before complex queries when you need to know what fields/values are valid.
+
+─────────────────────────────────────────────
+PROPOSE TOOLS (create for approval — never execute directly)
+─────────────────────────────────────────────
+- propose_task          — propose a follow-up, review, or escalation task
+- propose_chart         — propose a chart/visualization (returns preview immediately)
+- propose_record_update — propose correcting or enriching a record's fields
+
+RULES for propose_* tools:
+  1. ALWAYS state what you are about to propose BEFORE calling the tool.
+  2. Call propose_task/propose_chart when the operator asks you to "create", "add", or "schedule".
+  3. The approval_id in the result links to the Agents panel where the operator can approve/reject.
+  4. After calling a propose tool, tell the operator: "I've proposed [X] for your approval in the Agents panel."
+
+─────────────────────────────────────────────
+WRITE TOOLS (execute immediately — no approval)
+─────────────────────────────────────────────
+- write_insight — save a meaningful conclusion to the intelligence layer (no approval required).
+  Use when you derive an important finding from data that is worth storing.
+  Good triggers: "Revenue declined because...", "Client X shows churn signals...",
+                 "Product Y is trending below reorder level."
+
+─────────────────────────────────────────────
+STRUCTURED ANSWER FORMAT
+─────────────────────────────────────────────
+For substantive operational questions, structure your answer with these sections:
+
+**Answer**
+[Direct answer — key numbers first, then interpretation]
+
+**Evidence**
+- [Data point 1: source, value, date range]
+- [Data point 2: source, value, comparison]
+
+**Recommended Actions** (only when actionable steps are clear)
+- [Action 1: brief description]
+- [Action 2: brief description]
+
+**Limitations** (only when data is missing/stale)
+- [What was unavailable or stale]
+
+For simple questions (greetings, product questions, follow-ups), no structure needed — just answer directly.
+
+─────────────────────────────────────────────
 RULES
 ─────────────────────────────────────────────
 - ALWAYS call at least one tool before answering operational questions. Never fabricate statistics.
@@ -797,6 +851,42 @@ def _extract_chart_configs(collected_tools: list) -> list:
     return charts
 
 
+def _extract_created_objects(collected: list) -> tuple:
+    """
+    Walk collected tool calls and extract any propose_* or write_insight results.
+    Returns (created_recommendations, created_insights).
+    """
+    _PROPOSE_TOOLS = {"propose_task", "propose_chart", "propose_record_update"}
+    recommendations: list = []
+    insights:        list = []
+
+    for item in collected:
+        tool   = item["tool"]
+        result = item.get("result", {})
+
+        if tool in _PROPOSE_TOOLS and result.get("approval_id"):
+            recommendations.append({
+                "action_type": result.get("action_type"),
+                "title":       result.get("title") or result.get("message", ""),
+                "approval_id": result.get("approval_id"),
+                "status":      result.get("status", "pending"),
+                "rationale":   result.get("rationale"),
+                "preview":     result.get("preview"),
+                "message":     result.get("message"),
+            })
+
+        if tool == "write_insight" and result.get("insight_id"):
+            insights.append({
+                "insight_id":   result.get("insight_id"),
+                "insight_type": (result.get("insight") or {}).get("insight_type"),
+                "title":        (result.get("insight") or {}).get("title"),
+                "status":       result.get("status"),
+                "storage":      result.get("storage"),
+            })
+
+    return recommendations, insights
+
+
 def _extract_citations(collected_tools: list) -> list:
     """Extract web search citations from collected tool results."""
     citations = []
@@ -1075,18 +1165,21 @@ class CopilotEngine:
 
             charts    = _extract_chart_configs(collected)
             citations = _extract_citations(collected)
+            created_recommendations, created_insights = _extract_created_objects(collected)
 
             return {
-                "answer":          answer_text,
-                "tools_called":    [c["tool"] for c in collected],
-                "data":            {c["tool"]: c["result"] for c in collected},
-                "charts":          charts,
-                "citations":       citations,
-                "data_freshness":  _extract_data_freshness(collected),
-                "tools_detail":    _build_tools_detail(collected),
-                "intent":          "",
-                "company_id":      self.company_id,
-                "backend":         self.backend,
+                "answer":                   answer_text,
+                "tools_called":             [c["tool"] for c in collected],
+                "data":                     {c["tool"]: c["result"] for c in collected},
+                "charts":                   charts,
+                "citations":                citations,
+                "data_freshness":           _extract_data_freshness(collected),
+                "tools_detail":             _build_tools_detail(collected),
+                "intent":                   "",
+                "company_id":               self.company_id,
+                "backend":                  self.backend,
+                "created_recommendations":  created_recommendations,
+                "created_insights":         created_insights,
             }
 
         except Exception as exc:

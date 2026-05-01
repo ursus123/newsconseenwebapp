@@ -1123,6 +1123,38 @@ _INGESTION_DDL = [
 ]
 
 
+_ENRICHMENT_EVENTS_DDL = [
+    """
+    CREATE TABLE IF NOT EXISTS analytics.enrichment_events (
+        id                  TEXT PRIMARY KEY,
+        company_id          TEXT,
+        entity_type         TEXT,
+        entity_id           TEXT,
+        enrichment_type     TEXT,
+        status              TEXT,
+        trigger             TEXT,
+        insights_generated  INTEGER DEFAULT 0,
+        error_message       TEXT,
+        data_summary        TEXT,
+        completed_at        TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_enrich_events_company ON analytics.enrichment_events (company_id, completed_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_enrich_events_entity  ON analytics.enrichment_events (company_id, entity_type, entity_id)",
+    """
+    CREATE TABLE IF NOT EXISTS analytics.enrichment_freshness (
+        company_id          TEXT,
+        entity_type         TEXT,
+        entity_id           TEXT,
+        enrichment_type     TEXT,
+        last_enriched_at    TIMESTAMPTZ,
+        is_stale            BOOLEAN DEFAULT TRUE,
+        PRIMARY KEY (company_id, entity_type, entity_id, enrichment_type)
+    )
+    """,
+]
+
+
 _MIGRATIONS = [
     # Ingestion agent — rows cache for copilot-triggered load
     "ALTER TABLE analytics.ingestion_plans ADD COLUMN IF NOT EXISTS rows_json TEXT",
@@ -1197,6 +1229,41 @@ def ensure_all_analytics_tables(engine) -> None:
                 except Exception as exc:
                     logger.warning("setup: other DDL failed — %s", exc)
                     errors += 1
+
+            # Enrichment event log tables
+            for ddl in _ENRICHMENT_EVENTS_DDL:
+                try:
+                    conn.execute(text(ddl))
+                    created += 1
+                except Exception as exc:
+                    logger.warning("setup: enrichment events DDL failed — %s", exc)
+                    errors += 1
+
+            # Copilot insights — local fallback storage for write_insight
+            _COPILOT_INSIGHTS_DDL = """
+                CREATE TABLE IF NOT EXISTS analytics.copilot_insights (
+                    id           TEXT PRIMARY KEY,
+                    company_id   TEXT,
+                    insight_type TEXT,
+                    title        TEXT,
+                    body         TEXT,
+                    subject_type TEXT,
+                    subject_id   TEXT,
+                    evidence     JSONB DEFAULT '[]'::jsonb,
+                    status       TEXT DEFAULT 'active',
+                    source       TEXT DEFAULT 'copilot',
+                    created_at   TIMESTAMPTZ DEFAULT NOW()
+                )
+            """
+            try:
+                conn.execute(text(_COPILOT_INSIGHTS_DDL))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS idx_copilot_insights_company "
+                    "ON analytics.copilot_insights (company_id, created_at DESC)"
+                ))
+                created += 1
+            except Exception as exc:
+                logger.warning("setup: copilot_insights DDL failed — %s", exc)
 
             # Intelligence layer tables (Insight, Recommendation, Risk, Opportunity, ModelRun)
             for ddl in _INTELLIGENCE_DDL:

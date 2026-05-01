@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     base44_animals_url:        Optional[str] = None
     base44_plots_url:          Optional[str] = None
     base44_observations_url:   Optional[str] = None
+    # Intelligence layer entities — write-back targets for enrichment engine
+    base44_insights_url:         Optional[str] = None
+    base44_recommendations_url:  Optional[str] = None
+    base44_risks_url:            Optional[str] = None
+    base44_opportunities_url:    Optional[str] = None
+    base44_decisions_url:        Optional[str] = None
 
     # ----------------------------------------------------------
     # Base44 authentication

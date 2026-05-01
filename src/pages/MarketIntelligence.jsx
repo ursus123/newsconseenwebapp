@@ -23,7 +23,8 @@ import { Button } from "@/components/ui/button";
 import {
   BookmarkPlus, Loader2, Download, Building2, ExternalLink,
   Code2, ChevronDown, X, FileText, CheckCircle2, AlertCircle,
-  TrendingUp, Lightbulb, Search, Target, Bell,
+  TrendingUp, Lightbulb, Search, Target, Bell, RefreshCw,
+  BarChart3, Activity, Zap, Shield, ArrowRight, MapPin,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Link } from "react-router-dom";
@@ -592,7 +593,8 @@ export default function MarketIntelligence() {
     refetchOnMount: "always",
   });
   const listFn = useEntityListFn(currentUser);
-  const [pageMode, setPageMode]               = useState("intelligence"); // "intelligence" | "research"
+  const [pageMode, setPageMode]               = useState("overview"); // "overview" | "activity" | "intelligence" | "actions" | "research"
+  const [enrichRunning, setEnrichRunning]     = useState(false);
   const [params, setParams]                   = useState({ location: "", businessType: "home_healthcare", radiusKm: 30 });
   const [running, setRunning]                 = useState(false);
   const [saving, setSaving]                   = useState(false);
@@ -637,6 +639,64 @@ export default function MarketIntelligence() {
     staleTime: 0,
     refetchOnMount: "always",
   });
+
+  // ── Enrichment Command Center data ────────────────────────────────────────
+  const cid = currentUser?.company_id;
+
+  const _railFetch = (url) =>
+    fetch(url, RAILWAY_API_KEY ? { headers: { "x-api-key": String(RAILWAY_API_KEY) } } : {});
+
+  const { data: enrichCoverage = {}, refetch: refetchCoverage } = useQuery({
+    queryKey: ["enrich_coverage", cid],
+    queryFn: async () => {
+      if (!cid) return {};
+      const res = await _railFetch(`${RAILWAY_URL}/market/enrichment-coverage?company_id=${cid}`);
+      return res.ok ? res.json() : {};
+    },
+    enabled: !!cid,
+    staleTime: 60_000,
+  });
+
+  const { data: enrichEvents = [], refetch: refetchEvents } = useQuery({
+    queryKey: ["enrich_events", cid],
+    queryFn: async () => {
+      if (!cid) return [];
+      const res = await _railFetch(`${RAILWAY_URL}/market/enrichment-events?company_id=${cid}&limit=50`);
+      return res.ok ? (await res.json()).events || [] : [];
+    },
+    enabled: !!cid,
+    staleTime: 30_000,
+  });
+
+  const { data: inboxData = {}, refetch: refetchInbox } = useQuery({
+    queryKey: ["enrich_inbox", cid],
+    queryFn: async () => {
+      if (!cid) return {};
+      const res = await _railFetch(`${RAILWAY_URL}/intelligence/inbox?company_id=${cid}&limit=100`);
+      return res.ok ? res.json() : {};
+    },
+    enabled: !!cid,
+    staleTime: 30_000,
+  });
+
+  const enrichInsights      = (inboxData.insights || []).filter(/** @param {any} i */ i => i.source === "market_enrichment");
+  const enrichRisks         = (inboxData.risks || []).filter(/** @param {any} r */ r => r.source === "market_enrichment");
+  const enrichOpportunities = (inboxData.opportunities || []).filter(/** @param {any} o */ o => o.source === "market_enrichment");
+  const enrichRecs          = (inboxData.recommendations || []).filter(/** @param {any} r */ r => r.source === "market_enrichment");
+
+  const runBatchEnrichment = async () => {
+    if (!cid || enrichRunning) return;
+    setEnrichRunning(true);
+    try {
+      await fetch(`${RAILWAY_URL}/market/enrich-batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": String(RAILWAY_API_KEY) } : {}) },
+        body: JSON.stringify({ company_id: cid, trigger: "manual", max_entities: 10 }),
+      });
+      await Promise.all([refetchCoverage(), refetchEvents(), refetchInbox()]);
+    } catch (_) {}
+    setEnrichRunning(false);
+  };
 
   // Build enterprise → coordinates map via enterprise_address relationships
   const enterpriseCoords = useMemo(() => {
@@ -1043,25 +1103,262 @@ export default function MarketIntelligence() {
     <div className="flex flex-col gap-0 min-h-full">
       <style>{PRINT_STYLES}</style>
 
-      {/* ── Mode switcher ── */}
-      <div className="flex gap-2 mb-4 no-print">
+      {/* ── Tab bar ── */}
+      <div className="flex gap-1.5 mb-5 no-print flex-wrap border-b border-slate-100 pb-3">
+        {[
+          { key: "overview",      label: "Overview",      icon: <BarChart3 className="w-3.5 h-3.5" /> },
+          { key: "activity",      label: "Activity",      icon: <Activity className="w-3.5 h-3.5" /> },
+          { key: "intelligence",  label: "Intelligence",  icon: <Lightbulb className="w-3.5 h-3.5" />, badge: enrichInsights.length + enrichRisks.length + enrichOpportunities.length },
+          { key: "actions",       label: "Actions",       icon: <Zap className="w-3.5 h-3.5" />, badge: enrichRecs.filter(/** @param {any} r */ r => r.status === "pending").length },
+          { key: "research",      label: "Research",      icon: <Search className="w-3.5 h-3.5" /> },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setPageMode(tab.key)}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors relative ${pageMode === tab.key ? "bg-slate-800 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+          >
+            {tab.icon} {tab.label}
+            {tab.badge > 0 && (
+              <span className={`ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${pageMode === tab.key ? "bg-white/20 text-white" : "bg-slate-700 text-white"}`}>{tab.badge}</span>
+            )}
+          </button>
+        ))}
         <button
-          onClick={() => setPageMode("intelligence")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${pageMode === "intelligence" ? "bg-slate-800 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+          onClick={runBatchEnrichment}
+          disabled={enrichRunning}
+          className="ml-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-60"
         >
-          <TrendingUp className="w-4 h-4" /> Intelligence Hub
-        </button>
-        <button
-          onClick={() => setPageMode("research")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${pageMode === "research" ? "bg-slate-800 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
-        >
-          <Search className="w-4 h-4" /> Location Research
+          {enrichRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          Enrich Now
         </button>
       </div>
 
-      {/* ── Intelligence Hub mode ── */}
+      {/* ── Overview tab ── */}
+      {pageMode === "overview" && (
+        <div className="flex flex-col gap-5">
+          {/* Coverage grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {["enterprise","address","territory","product","person"].map(etype => {
+              const cov = /** @type {any} */ (enrichCoverage)[etype] || { total: 0, enriched: 0, pct: 0, stale: 0 };
+              return (
+                <div key={etype} className="bg-white border border-slate-200 rounded-2xl p-4">
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide capitalize mb-2">{etype}s</p>
+                  <p className="text-2xl font-black text-slate-800">{cov.pct}%</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{cov.enriched}/{cov.total} enriched</p>
+                  {cov.stale > 0 && <p className="text-[10px] text-amber-500 mt-1">{cov.stale} stale</p>}
+                  <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${cov.pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Summary stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "Insights Generated", value: enrichInsights.length, icon: <Lightbulb className="w-4 h-4 text-amber-500" />, bg: "bg-amber-50" },
+              { label: "Risks Identified",   value: enrichRisks.length,   icon: <Shield className="w-4 h-4 text-rose-500" />, bg: "bg-rose-50" },
+              { label: "Opportunities",      value: enrichOpportunities.length, icon: <TrendingUp className="w-4 h-4 text-emerald-500" />, bg: "bg-emerald-50" },
+              { label: "Pending Actions",    value: enrichRecs.filter(/** @param {any} r */ r => r.status === "pending").length, icon: <Zap className="w-4 h-4 text-violet-500" />, bg: "bg-violet-50" },
+            ].map(stat => (
+              <div key={stat.label} className={`${stat.bg} border border-slate-200 rounded-2xl p-4 flex items-start gap-3`}>
+                <div className="mt-0.5">{stat.icon}</div>
+                <div>
+                  <p className="text-2xl font-black text-slate-800">{stat.value}</p>
+                  <p className="text-xs text-slate-500">{stat.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Recent activity preview */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-slate-800 text-sm">Recent Enrichment Activity</h3>
+              <button onClick={() => setPageMode("activity")} className="text-xs text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
+                View all <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+            {enrichEvents.slice(0, 5).length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-6">No enrichment events yet. Click <strong>Enrich Now</strong> to start.</p>
+            ) : (
+              <div className="space-y-2">
+                {enrichEvents.slice(0, 5).map((/** @type {any} */ ev, i) => (
+                  <div key={i} className="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${ev.status === "completed" ? "bg-emerald-400" : "bg-rose-400"}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-slate-700 truncate capitalize">{ev.entity_type} · {ev.enrichment_type}</p>
+                      <p className="text-[10px] text-slate-400">{ev.trigger} · {ev.completed_at ? new Date(ev.completed_at).toLocaleString() : "—"}</p>
+                    </div>
+                    {ev.insights_generated > 0 && (
+                      <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full shrink-0">+{ev.insights_generated} insights</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Activity tab ── */}
+      {pageMode === "activity" && (
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="font-semibold text-slate-800">Enrichment Event Log</h3>
+            <button onClick={() => refetchEvents()} className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1">
+              <RefreshCw className="w-3 h-3" /> Refresh
+            </button>
+          </div>
+          {enrichEvents.length === 0 ? (
+            <div className="py-16 text-center">
+              <Activity className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+              <p className="text-sm text-slate-400">No enrichment events yet.</p>
+              <p className="text-xs text-slate-400 mt-1">Click <strong>Enrich Now</strong> to run automatic enrichment.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-50">
+              {enrichEvents.map((/** @type {any} */ ev, i) => (
+                <div key={i} className="flex items-start gap-4 px-5 py-3 hover:bg-slate-50 transition-colors">
+                  <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${ev.status === "completed" ? "bg-emerald-400" : "bg-rose-400"}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-slate-800 capitalize">{ev.entity_type}</span>
+                      <span className="text-xs text-slate-400">{ev.entity_id?.slice(0, 8)}…</span>
+                      <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full capitalize">{ev.enrichment_type}</span>
+                      <span className="text-xs bg-slate-50 text-slate-400 px-1.5 py-0.5 rounded-full">{ev.trigger}</span>
+                    </div>
+                    {ev.data_summary && (
+                      <p className="text-[10px] text-slate-400 mt-0.5 truncate">{ev.data_summary}</p>
+                    )}
+                    {ev.error_message && (
+                      <p className="text-[10px] text-rose-500 mt-0.5 truncate">{ev.error_message}</p>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    {ev.insights_generated > 0 && (
+                      <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full block mb-1">+{ev.insights_generated}</span>
+                    )}
+                    <p className="text-[10px] text-slate-400">{ev.completed_at ? new Date(ev.completed_at).toLocaleString() : "—"}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Intelligence tab ── */}
       {pageMode === "intelligence" && (
-        <IntelligenceHub currentUser={currentUser} enrichedCoords={{ ...enterpriseCoords, ...nominatimCoords }} />
+        <div className="flex flex-col gap-5">
+          {/* Insights */}
+          {enrichInsights.length + enrichRisks.length + enrichOpportunities.length === 0 ? (
+            <div className="bg-white border border-slate-200 rounded-2xl py-16 text-center">
+              <Lightbulb className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+              <p className="text-sm text-slate-400">No enrichment-sourced intelligence yet.</p>
+              <p className="text-xs text-slate-400 mt-1">Click <strong>Enrich Now</strong> — insights are written automatically as enrichment runs.</p>
+            </div>
+          ) : (
+            <>
+              {enrichRisks.length > 0 && (
+                <div className="bg-white border border-rose-100 rounded-2xl overflow-hidden">
+                  <div className="px-5 py-3 bg-rose-50 border-b border-rose-100 flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-rose-500" />
+                    <h3 className="font-semibold text-rose-800 text-sm">Risks Identified ({enrichRisks.length})</h3>
+                  </div>
+                  <div className="divide-y divide-slate-50">
+                    {enrichRisks.map((/** @type {any} */ risk, i) => (
+                      <div key={i} className="px-5 py-3">
+                        <div className="flex items-start gap-3">
+                          <span className={`mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${risk.severity === "high" || risk.severity === "critical" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>{risk.severity}</span>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">{risk.title}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">{risk.description}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {enrichOpportunities.length > 0 && (
+                <div className="bg-white border border-emerald-100 rounded-2xl overflow-hidden">
+                  <div className="px-5 py-3 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-emerald-600" />
+                    <h3 className="font-semibold text-emerald-800 text-sm">Opportunities ({enrichOpportunities.length})</h3>
+                  </div>
+                  <div className="divide-y divide-slate-50">
+                    {enrichOpportunities.map((/** @type {any} */ opp, i) => (
+                      <div key={i} className="px-5 py-3">
+                        <p className="text-sm font-semibold text-slate-800">{opp.title}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{opp.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {enrichInsights.length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                  <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
+                    <Lightbulb className="w-4 h-4 text-amber-500" />
+                    <h3 className="font-semibold text-slate-800 text-sm">All Insights ({enrichInsights.length})</h3>
+                  </div>
+                  <div className="divide-y divide-slate-50">
+                    {enrichInsights.map((/** @type {any} */ ins, i) => (
+                      <div key={i} className="px-5 py-3">
+                        <div className="flex items-start gap-3">
+                          <span className={`mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${ins.severity === "high" || ins.severity === "critical" ? "bg-rose-100 text-rose-700" : ins.severity === "medium" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>{ins.severity || "low"}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-800">{ins.title}</p>
+                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{ins.body}</p>
+                            <p className="text-[10px] text-slate-400 mt-1 capitalize">{ins.insight_type} · {ins.subject_name}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          <IntelligenceHub currentUser={currentUser} enrichedCoords={{ ...enterpriseCoords, ...nominatimCoords }} />
+        </div>
+      )}
+
+      {/* ── Actions tab ── */}
+      {pageMode === "actions" && (
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+            <Zap className="w-4 h-4 text-violet-500" />
+            <h3 className="font-semibold text-slate-800">Enrichment-Generated Recommendations</h3>
+          </div>
+          {enrichRecs.length === 0 ? (
+            <div className="py-16 text-center">
+              <Zap className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+              <p className="text-sm text-slate-400">No recommendations yet from enrichment.</p>
+              <p className="text-xs text-slate-400 mt-1">Recommendations are created automatically when enrichment finds high-severity risks or opportunities.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-50">
+              {enrichRecs.map((/** @type {any} */ rec, i) => (
+                <div key={i} className="px-5 py-4 hover:bg-slate-50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <span className={`mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${rec.status === "pending" ? "bg-amber-100 text-amber-700" : rec.status === "approved" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{rec.status}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800">{rec.title}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{rec.body}</p>
+                      <p className="text-[10px] text-slate-400 mt-1 capitalize">{rec.action_type} · {rec.subject_name}</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-slate-300 shrink-0 mt-0.5" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── Location Research mode ── */}

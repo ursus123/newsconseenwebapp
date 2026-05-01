@@ -64,7 +64,10 @@ const NAV_CONFIG = {
   super_admin: [
     {
       section: null,
-      items: [{ name: "Dashboard", icon: LayoutDashboard }],
+      items: [
+        { name: "CompanyGraphHome", label: "Company Graph", icon: Network },
+        { name: "Dashboard",        icon: LayoutDashboard },
+      ],
     },
     {
       section: "Platform",
@@ -140,7 +143,10 @@ const NAV_CONFIG = {
   admin: [
     {
       section: null,
-      items: [{ name: "Dashboard", icon: LayoutDashboard }],
+      items: [
+        { name: "CompanyGraphHome", label: "Company Graph", icon: Network },
+        { name: "Dashboard",        icon: LayoutDashboard },
+      ],
     },
     {
       section: "My Organization",
@@ -216,7 +222,10 @@ const NAV_CONFIG = {
   executive: [
     {
       section: null,
-      items: [{ name: "Dashboard", icon: LayoutDashboard }],
+      items: [
+        { name: "CompanyGraphHome", label: "Company Graph", icon: Network },
+        { name: "Dashboard",        icon: LayoutDashboard },
+      ],
     },
     {
       section: "Intelligence",
@@ -484,7 +493,7 @@ export default function Layout({ children, currentPageName }) {
 
             {/* Logo */}
             <div className="flex items-center justify-between px-5 h-16 border-b border-white/5 shrink-0">
-              <Link to={createPageUrl("Dashboard")} className="flex items-center gap-3 min-w-0">
+              <Link to={createPageUrl("CompanyGraphHome")} className="flex items-center gap-3 min-w-0">
                 {branding.logoUrl ? (
                   <img src={branding.logoUrl} alt={branding.appName} className="h-7 w-auto object-contain max-w-[140px]" />
                 ) : (

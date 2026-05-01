@@ -76,6 +76,7 @@ import Territories from './pages/Territories';
 import Animals from './pages/Animals';
 import Plots from './pages/Plots';
 import Observations from './pages/Observations';
+import CompanyGraphHome from './pages/CompanyGraphHome';
 
 export const PAGES = {
     "AddClient": AddClient,
@@ -107,9 +108,10 @@ export const PAGES = {
     "Animals": Animals,
     "Plots": Plots,
     "Observations": Observations,
+    "CompanyGraphHome": CompanyGraphHome,
 }
 
 export const pagesConfig = {
-    mainPage: "Dashboard",
+    mainPage: "CompanyGraphHome",
     Pages: PAGES,
 };

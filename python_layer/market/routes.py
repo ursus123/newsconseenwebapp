@@ -1443,6 +1443,124 @@ def save_competitor(req: SaveCompetitorRequest):
     }
 
 
+@router.get("/enrichment-coverage")
+def get_enrichment_coverage(company_id: str = Query(...)):
+    """
+    Return per-entity-type enrichment coverage percentages.
+    Reads from analytics.enrichment_events and Base44 entity counts.
+    """
+    try:
+        from market.enrichment_planner import build_coverage_report
+        return build_coverage_report(company_id)
+    except Exception as exc:
+        logger.warning("enrichment-coverage: %s", exc)
+        return {}
+
+
+@router.get("/enrichment-plan")
+def get_enrichment_plan(company_id: str = Query(...)):
+    """Return a prioritised enrichment plan for all entities."""
+    try:
+        from market.enrichment_planner import build_enrichment_plan
+        return build_enrichment_plan(company_id)
+    except Exception as exc:
+        logger.warning("enrichment-plan: %s", exc)
+        return {"plan": [], "summary": {}}
+
+
+@router.get("/enrichment-events")
+def get_enrichment_events(
+    company_id: str = Query(...),
+    entity_type: Optional[str] = Query(None),
+    limit: int = Query(100, le=500),
+):
+    """Return enrichment event log for a company."""
+    from database import get_engine_safe
+    from sqlalchemy import text as sa_text
+
+    engine = get_engine_safe()
+    if not engine:
+        return {"events": []}
+    try:
+        where = "WHERE company_id = :cid"
+        params = {"cid": company_id}
+        if entity_type:
+            where += " AND entity_type = :etype"
+            params["etype"] = entity_type
+        with engine.connect() as conn:
+            rows = conn.execute(
+                sa_text(f"""
+                    SELECT * FROM analytics.enrichment_events
+                    {where}
+                    ORDER BY completed_at DESC
+                    LIMIT :lim
+                """),
+                {**params, "lim": limit},
+            ).mappings().all()
+        return {"events": [dict(r) for r in rows]}
+    except Exception as exc:
+        logger.warning("enrichment-events: %s", exc)
+        return {"events": []}
+
+
+class EnrichRequest(BaseModel):
+    company_id:       str
+    entity_type:      str
+    entity_id:        str
+    enrichment_types: Optional[List[str]] = None
+    trigger:          str = "manual"
+
+
+@router.post("/enrich")
+def run_enrichment(req: EnrichRequest):
+    """
+    Run market enrichment for a single entity.
+    Dispatches to enrichment_engine, logs events, writes Intelligence objects.
+    """
+    try:
+        from market.enrichment_planner import ENRICHMENT_TYPES_BY_ENTITY
+        from market.enrichment_engine import run_market_enrichment
+        types = req.enrichment_types or ENRICHMENT_TYPES_BY_ENTITY.get(req.entity_type, [])
+        return run_market_enrichment(
+            company_id=req.company_id,
+            entity_type=req.entity_type,
+            entity_id=req.entity_id,
+            enrichment_types=types,
+            trigger=req.trigger,
+        )
+    except Exception as exc:
+        logger.warning("enrich: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+class EnrichBatchRequest(BaseModel):
+    company_id:   str
+    trigger:      str = "manual"
+    max_entities: int = 10
+
+
+@router.post("/enrich-batch")
+def run_enrichment_batch(req: EnrichBatchRequest):
+    """
+    Run enrichment for the highest-priority items in the enrichment plan.
+    Caps at max_entities to avoid Railway timeout.
+    """
+    try:
+        from market.enrichment_planner import build_enrichment_plan
+        from market.enrichment_engine import run_market_enrichment_batch
+        plan_result = build_enrichment_plan(req.company_id)
+        plan = plan_result.get("plan", [])
+        return run_market_enrichment_batch(
+            company_id=req.company_id,
+            plan=plan,
+            trigger=req.trigger,
+            max_entities=req.max_entities,
+        )
+    except Exception as exc:
+        logger.warning("enrich-batch: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @router.get("/saved-competitors")
 def get_saved_competitors(company_id: str):
     """Return all competitors saved to the datamart for this company."""
