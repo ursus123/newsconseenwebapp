@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import PageHeader from "../components/shared/PageHeader";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { triggerTaskTransaction } from "../components/shared/triggerTaskTransaction";
 import TaskForm, { taskTypeLabel } from "../components/tasks/TaskForm";
 import DeleteDialog from "../components/shared/DeleteDialog";
@@ -268,7 +268,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
 
   const createMut = useMutation({
     mutationFn: async (d) => createWithScope(base44.entities.Task, { ...d, app_source: d.app_source || "manual" }, currentUser),
-    onSuccess: (created) => { setFormOpen(false); setEditing(null); invalidate(); triggerETL("task"); logAudit(created?.company_id || companyId, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || companyId, "entity_created", created); },
+    onSuccess: (created) => { addRecordToQueryCache(qc, ["tasks"], created); setFormOpen(false); setEditing(null); invalidate(); triggerETL("task"); logAudit(created?.company_id || companyId, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || companyId, "entity_created", created); },
   });
   const updateMut = useMutation({
     mutationFn: async ({ id, data }) => {

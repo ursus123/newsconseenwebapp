@@ -17,7 +17,7 @@ import {
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -250,7 +250,7 @@ export default function Products() {
     });
   }, [products]);
 
-  const createMut = useMutation({ mutationFn: (d) => createWithScope(base44.entities.Product, d, currentUser), onSuccess: (created) => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created); setFormOpen(false); setEditing(null); } });
+  const createMut = useMutation({ mutationFn: (d) => createWithScope(base44.entities.Product, d, currentUser), onSuccess: (created) => { addRecordToQueryCache(qc, ["products"], created); qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created); setFormOpen(false); setEditing(null); } });
   const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Product.update(id, withScope(data)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(currentUser?.company_id, "updated", editing, currentUser?.email); triggerWorkflows(currentUser?.company_id, "entity_updated", editing); setFormOpen(false); setEditing(null); } });
   const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Product.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); } });
 

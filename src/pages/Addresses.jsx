@@ -10,7 +10,7 @@ import AddressLeafletMap from "../components/addresses/AddressLeafletMap";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Badge } from "@/components/ui/badge";
-import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
@@ -137,7 +137,7 @@ export default function Addresses() {
       }
       return createWithScope(base44.entities.Address, data, currentUser);
     },
-    onSuccess: (created) => { qc.invalidateQueries({ queryKey: ["addresses"] }); qc.refetchQueries({ queryKey: ["addresses"] }); triggerETL("address"); logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created); setFormOpen(false); setEditing(null); },
+    onSuccess: (created) => { addRecordToQueryCache(qc, ["addresses"], created); qc.invalidateQueries({ queryKey: ["addresses"] }); qc.refetchQueries({ queryKey: ["addresses"] }); triggerETL("address"); logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created); setFormOpen(false); setEditing(null); },
   });
 
   const updateMut = useMutation({

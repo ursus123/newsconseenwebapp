@@ -135,6 +135,24 @@ export async function createWithScope(entity, data, currentUser) {
 }
 
 /**
+ * Keeps newly-created records visible immediately after a mutation succeeds,
+ * even if Base44 indexing/refetching lags for a moment.
+ */
+export function addRecordToQueryCache(queryClient, queryKey, record) {
+  if (!queryClient || !record?.id) return;
+
+  const apply = () => queryClient.setQueriesData({ queryKey }, (existing) => {
+    if (!Array.isArray(existing)) return existing;
+    if (existing.some((row) => row?.id === record.id)) return existing;
+    return [record, ...existing];
+  });
+
+  apply();
+  globalThis.setTimeout?.(apply, 250);
+  globalThis.setTimeout?.(apply, 1000);
+}
+
+/**
  * Builds a plain filter object for use outside React hooks.
  * Used in non-hook contexts like event handlers or utilities.
  */

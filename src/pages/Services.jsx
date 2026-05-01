@@ -9,7 +9,7 @@ import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
@@ -167,13 +167,15 @@ export default function Services() {
 
   const createMut = useMutation({
     mutationFn: (d) => createWithScope(base44.entities.Service, d, currentUser),
-    onSuccess: () => {
+    onSuccess: (created) => {
+      addRecordToQueryCache(qc, ["services"], created);
       qc.invalidateQueries({ queryKey: ["services"] });
       qc.refetchQueries({ queryKey: ["services"] });
       triggerETL("service");
-      logAudit(currentUser?.company_id, "created", editing, currentUser?.email);
-      triggerWorkflows(currentUser?.company_id, "entity_created", editing);
+      logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email);
+      triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created);
       setFormOpen(false);
+      setEditing(null);
       toast({ title: "Service saved" });
     },
     onError: (err) => toast({ title: "Failed to save service", description: err?.message || String(err), variant: "destructive" }),

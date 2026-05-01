@@ -13,7 +13,7 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -185,9 +185,10 @@ export default function Plots() {
 
   const createMut = useMutation({
     mutationFn: (d) => createWithScope(base44.entities.Plot, d, currentUser),
-    onSuccess: () => {
+    onSuccess: (created) => {
+      addRecordToQueryCache(qc, ["plots"], created);
       qc.invalidateQueries({ queryKey: ["plots"] }); qc.refetchQueries({ queryKey: ["plots"] });
-      triggerETL(); logAudit(companyId, "created", editing, currentUser?.email); setFormOpen(false);
+      triggerETL(); logAudit(created?.company_id || companyId, "created", created, currentUser?.email); setFormOpen(false); setEditing(null);
     },
   });
   const updateMut = useMutation({

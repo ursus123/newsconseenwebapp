@@ -13,7 +13,7 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -172,12 +172,14 @@ export default function Signals() {
 
   const createMut = useMutation({
     mutationFn: (d) => createWithScope(base44.entities.Signal, d, currentUser),
-    onSuccess: () => {
+    onSuccess: (created) => {
+      addRecordToQueryCache(qc, ["signals"], created);
       qc.invalidateQueries({ queryKey: ["signals"] });
       qc.refetchQueries({ queryKey: ["signals"] });
       triggerETL();
-      logAudit(companyId, "created", editing, currentUser?.email);
+      logAudit(created?.company_id || companyId, "created", created, currentUser?.email);
       setFormOpen(false);
+      setEditing(null);
     },
   });
   const updateMut = useMutation({

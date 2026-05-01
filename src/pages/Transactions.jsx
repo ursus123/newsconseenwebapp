@@ -7,7 +7,7 @@ import VoidDialog from "../components/transactions/VoidDialog";
 import PostConfirmDialog from "../components/transactions/PostConfirmDialog";
 import AuditTrail from "../components/transactions/AuditTrail";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { createWithScope, useEntityListFn } from "@/components/shared/useDataQuery";
+import { addRecordToQueryCache, createWithScope, useEntityListFn } from "@/components/shared/useDataQuery";
 import { Button } from "@/components/ui/button";
 import { Lock, Upload, ChevronDown, ChevronUp, Plus, Search, X, BarChart2 } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
@@ -445,7 +445,7 @@ export default function Transactions() {
       existingTransactions: transactions,
       enterprise:      enterprises.find(e => e.enterprise_name === data.enterprise),
     }, currentUser),
-    onSuccess: (created) => { qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); triggerETL("transaction"); logAudit(created?.company_id || companyId, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || companyId, "entity_created", created); },
+    onSuccess: (created) => { addRecordToQueryCache(qc, ["transactions"], created); qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); triggerETL("transaction"); logAudit(created?.company_id || companyId, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || companyId, "entity_created", created); },
     onError: (e) => toast({ title: "Failed to create transaction", description: e.message, variant: "destructive" }),
   });
 

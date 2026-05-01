@@ -27,7 +27,7 @@ import EndRelationshipDialog from "../components/relationships/EndRelationshipDi
 import RelationshipDetailPanel from "../components/relationships/RelationshipDetailPanel";
 import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 
@@ -186,6 +186,7 @@ export default function Relationships() {
       return updateMut.mutateAsync({ id: editing.id, data });
     } else {
       const created = await createWithScope(base44.entities.Relationship, data, currentUser);
+      addRecordToQueryCache(qc, ["relationships"], created);
       qc.invalidateQueries({ queryKey: ["relationships"] });
       qc.refetchQueries({ queryKey: ["relationships"] });
       triggerETL("relationship");

@@ -7,7 +7,7 @@ import DeleteDialog from "../components/shared/DeleteDialog";
 import EnterpriseForm from "../components/enterprise/EnterpriseForm";
 import EnterpriseToolbar from "../components/enterprise/EnterpriseToolbar";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Badge } from "@/components/ui/badge";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
@@ -199,7 +199,7 @@ export default function Enterprises() {
       }
       return { ...created, company_id: workspaceId };
     },
-    onSuccess: (created) => { qc.invalidateQueries({ queryKey: ["enterprises"] }); qc.refetchQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created); setFormOpen(false); setEditing(null); },
+    onSuccess: (created) => { addRecordToQueryCache(qc, ["enterprises"], created); qc.invalidateQueries({ queryKey: ["enterprises"] }); qc.refetchQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created); setFormOpen(false); setEditing(null); },
   });
 
   const updateMut = useMutation({

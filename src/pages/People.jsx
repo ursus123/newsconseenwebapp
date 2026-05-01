@@ -9,7 +9,7 @@ import PeopleForm from "../components/people/PeopleForm";
 import PeopleToolbar from "../components/people/PeopleToolbar";
 import PeopleGroupedView from "../components/people/PeopleGroupedView";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { Badge } from "@/components/ui/badge";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
@@ -267,6 +267,7 @@ export default function People() {
   const createMut = useMutation({
     mutationFn: (d) => createWithScope(base44.entities.Person, d, currentUser),
     onSuccess: (created) => {
+      addRecordToQueryCache(qc, ["people"], created);
       qc.invalidateQueries({ queryKey: ["people"] });
       qc.refetchQueries({ queryKey: ["people"] });
       qc.invalidateQueries({ queryKey: ["addresses"] });

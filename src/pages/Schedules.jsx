@@ -13,7 +13,7 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -168,12 +168,14 @@ export default function Schedules() {
 
   const createMut = useMutation({
     mutationFn: (d) => createWithScope(base44.entities.Schedule, d, currentUser),
-    onSuccess: () => {
+    onSuccess: (created) => {
+      addRecordToQueryCache(qc, ["schedules"], created);
       qc.invalidateQueries({ queryKey: ["schedules"] });
       qc.refetchQueries({ queryKey: ["schedules"] });
       triggerETL();
-      logAudit(companyId, "created", editing, currentUser?.email);
+      logAudit(created?.company_id || companyId, "created", created, currentUser?.email);
       setFormOpen(false);
+      setEditing(null);
     },
   });
   const updateMut = useMutation({
