@@ -7,7 +7,8 @@ import VoidDialog from "../components/transactions/VoidDialog";
 import PostConfirmDialog from "../components/transactions/PostConfirmDialog";
 import AuditTrail from "../components/transactions/AuditTrail";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { addRecordToQueryCache, createWithScope, useEntityListFn } from "@/components/shared/useDataQuery";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
+import dataService from "@/services/dataService";
 import { Button } from "@/components/ui/button";
 import { Lock, Upload, ChevronDown, ChevronUp, Plus, Search, X, BarChart2 } from "lucide-react";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
@@ -31,25 +32,6 @@ import {
 import { createTransaction, TRANSACTION_SOURCES } from "@/utils/createTransaction";
 import { generateInvoiceNumber } from "@/utils/autoInvoice";
 import { DateRangeInput3 } from "@blueprintjs/datetime2";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
-function triggerWorkflows(companyId, triggerType, entityData) {
-  fetch(`${RAILWAY_URL}/workflows/trigger`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "transaction", entity_data: entityData }),
-  }).catch(() => {});
-}
-function logAudit(companyId, action, record, userEmail) {
-  fetch(`${RAILWAY_URL}/audit/log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, entity_type: "transaction", entity_id: record?.id, entity_name: record?.reference_number || record?.transaction_type || record?.id, action, changed_by: userEmail }),
-  }).catch(() => {});
-}
 
 const STOCK_IMPACT_TYPES = ["stock_out", "item_assignment"];
 const STOCK_IN_TYPES = ["stock_in", "item_return"];
@@ -445,13 +427,21 @@ export default function Transactions() {
       existingTransactions: transactions,
       enterprise:      enterprises.find(e => e.enterprise_name === data.enterprise),
     }, currentUser),
-    onSuccess: (created) => { addRecordToQueryCache(qc, ["transactions"], created); qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); triggerETL("transaction"); logAudit(created?.company_id || companyId, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || companyId, "entity_created", created); },
+    onSuccess: (created) => {
+      dataService.syncQueryCache(qc, "transaction", created, "created");
+      dataService.triggerEntityETL("transaction");
+      setFormOpen(false);
+      setEditing(null);
+    },
     onError: (e) => toast({ title: "Failed to create transaction", description: e.message, variant: "destructive" }),
   });
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Transaction.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["transactions"] }); qc.refetchQueries({ queryKey: ["transactions"] }); setFormOpen(false); setEditing(null); triggerETL("transaction"); logAudit(companyId, "updated", editing, currentUser?.email); triggerWorkflows(companyId, "entity_updated", editing); },
+    mutationFn: ({ id, data }) => dataService.updateRecord("transaction", id, data, currentUser, { queryClient: qc, record: editing }),
+    onSuccess: () => {
+      setFormOpen(false);
+      setEditing(null);
+    },
   });
 
   // Period filtering — preset buttons OR custom Blueprint date range
@@ -576,7 +566,7 @@ export default function Transactions() {
     for (const id of selectedIds) await base44.entities.Transaction.delete(id);
     qc.invalidateQueries({ queryKey: ["transactions"] });
     qc.refetchQueries({ queryKey: ["transactions"] });
-    triggerETL("transaction");
+    dataService.triggerEntityETL("transaction");
     toast({ title: `${selectedIds.length} transactions deleted` });
     setSelectedIds([]);
   };
@@ -585,7 +575,7 @@ export default function Transactions() {
     for (const t of transactions) { try { await base44.entities.Transaction.delete(t.id); } catch (e) { /* 404 = already gone */ } }
     qc.invalidateQueries({ queryKey: ["transactions"] });
     qc.refetchQueries({ queryKey: ["transactions"] });
-    triggerETL("transaction");
+    dataService.triggerEntityETL("transaction");
     toast({ title: `All ${transactions.length} transactions deleted` });
   };
 
@@ -852,7 +842,7 @@ export default function Transactions() {
           for (const { id, field, value } of updates) {
             await base44.entities.Transaction.update(id, { [field]: value });
           }
-          triggerETL("transaction");
+          dataService.triggerEntityETL("transaction");
           qc.invalidateQueries({ queryKey: ["transactions"] });
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
@@ -946,7 +936,7 @@ export default function Transactions() {
         entityFetchFn={() => listFn(base44.entities.Transaction)}
         validateRow={validateTransaction}
         transformRow={transformTransaction}
-        onImport={(row) => createWithScope(base44.entities.Transaction, row, currentUser)}
+        onImport={(row) => dataService.createRecord("transaction", row, currentUser, { queryClient: qc })}
         currentUser={currentUser}
         previewColumns={[
           { label: "Type",       render: (r) => r.transaction_type || <span className="text-rose-500">MISSING</span> },

@@ -13,8 +13,9 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
+import dataService from "@/services/dataService";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,19 +27,6 @@ import {
   validateObservation, transformObservation,
 } from "@/components/shared/importConfigs";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-
-const triggerETL = () =>
-  fetch(`${RAILWAY_URL}/load/observation-summary`, { method: "POST", headers: { "x-api-key": RAILWAY_API_KEY } }).catch(() => {});
-
-function logAudit(companyId, action, record, userEmail) {
-  fetch(`${RAILWAY_URL}/audit/log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, entity_type: "observation", entity_id: record?.id, entity_name: record?.observation_type || record?.id, action, changed_by: userEmail }),
-  }).catch(() => {});
-}
 
 const TYPE_TABS = [
   { id: "all",    label: "All" },
@@ -158,13 +146,12 @@ export default function Observations() {
 
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { syncState } = useTaxonomySync();
+  const { syncState, notifyTaxonomyChange } = useTaxonomySync();
 
   const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 0 });
   const companyId = currentUser?.company_id;
   const perms     = usePermissions(currentUser);
   const listFn    = useEntityListFn(currentUser);
-  const withScope = useWithScope(currentUser);
 
   useEffect(() => {
     const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["observations"] }); };
@@ -181,36 +168,32 @@ export default function Observations() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => createWithScope(base44.entities.Observation, d, currentUser),
-    onSuccess: (created) => {
-      addRecordToQueryCache(qc, ["observations"], created);
-      qc.invalidateQueries({ queryKey: ["observations"] }); qc.refetchQueries({ queryKey: ["observations"] });
-      triggerETL(); logAudit(created?.company_id || companyId, "created", created, currentUser?.email); setFormOpen(false); setEditing(null);
+    mutationFn: (d) => dataService.createRecord("observation", d, currentUser, { queryClient: qc, notifyTaxonomyChange }),
+    onSuccess: () => {
+      setFormOpen(false); setEditing(null);
     },
   });
   const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Observation.update(id, withScope(data)),
+    mutationFn: ({ id, data }) => dataService.updateRecord("observation", id, data, currentUser, { queryClient: qc, notifyTaxonomyChange, record: editing }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["observations"] }); qc.refetchQueries({ queryKey: ["observations"] });
-      triggerETL(); logAudit(companyId, "updated", editing, currentUser?.email); setFormOpen(false); setEditing(null);
+      setFormOpen(false); setEditing(null);
     },
   });
   const deleteMut = useMutation({
-    mutationFn: (id) => base44.entities.Observation.delete(id),
+    mutationFn: (id) => dataService.deleteRecord("observation", id, currentUser, { queryClient: qc, record: deleting }),
     onSuccess: () => {
-      logAudit(companyId, "deleted", deleting, currentUser?.email);
-      qc.invalidateQueries({ queryKey: ["observations"] }); qc.refetchQueries({ queryKey: ["observations"] }); triggerETL(); setDeleting(null);
+      setDeleting(null);
     },
   });
 
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Observation.delete(id).catch(() => {});
-    qc.invalidateQueries({ queryKey: ["observations"] }); qc.refetchQueries({ queryKey: ["observations"] }); triggerETL();
+    qc.invalidateQueries({ queryKey: ["observations"] }); qc.refetchQueries({ queryKey: ["observations"] }); dataService.triggerEntityETL("observation");
     toast({ title: `${selectedIds.length} observations deleted` }); setSelectedIds([]);
   };
   const handleDeleteAll = async () => {
     for (const o of observations) { try { await base44.entities.Observation.delete(o.id); } catch {} }
-    qc.invalidateQueries({ queryKey: ["observations"] }); qc.refetchQueries({ queryKey: ["observations"] }); triggerETL();
+    qc.invalidateQueries({ queryKey: ["observations"] }); qc.refetchQueries({ queryKey: ["observations"] }); dataService.triggerEntityETL("observation");
     toast({ title: `All ${observations.length} observations deleted` });
   };
 
@@ -312,7 +295,7 @@ export default function Observations() {
         templateExample={OBSERVATION_TEMPLATE_EXAMPLE}
         entityFetchFn={() => listFn(base44.entities.Observation)}
         validateRow={validateObservation} transformRow={transformObservation}
-        onImport={(row) => createWithScope(base44.entities.Observation, row, currentUser)}
+        onImport={(row) => dataService.createRecord("observation", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} requiredField="observation_type" />
     </div>
   );

@@ -27,28 +27,10 @@ import EndRelationshipDialog from "../components/relationships/EndRelationshipDi
 import RelationshipDetailPanel from "../components/relationships/RelationshipDetailPanel";
 import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
+import dataService from "@/services/dataService";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
-function triggerWorkflows(companyId, triggerType, entityData) {
-  fetch(`${RAILWAY_URL}/workflows/trigger`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "relationship", entity_data: entityData }),
-  }).catch(() => {});
-}
-function logAudit(companyId, action, record, userEmail) {
-  fetch(`${RAILWAY_URL}/audit/log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, entity_type: "relationship", entity_id: record?.id, entity_name: record?.relationship_type || record?.id, action, changed_by: userEmail }),
-  }).catch(() => {});
-}
 
 const TYPE_CONFIG = {
   person_enterprise:    { label: "Person → Enterprise",    color: "bg-blue-50 text-blue-700" },
@@ -150,7 +132,6 @@ export default function Relationships() {
 
   const perms = usePermissions(currentUser);
   const listFn = useEntityListFn(currentUser);
-  const withScope = useWithScope(currentUser);
 
   const { data: relationships = [] } = useQuery({ queryKey: ["relationships", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Relationship), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
   const { data: people = [] } = useQuery({ queryKey: ["people", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Person), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
@@ -163,36 +144,23 @@ export default function Relationships() {
 
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Relationship.update(id, data),
+    mutationFn: ({ id, data }) => dataService.updateRecord("relationship", id, data, currentUser, { queryClient: qc, record: editing }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["relationships"] });
-      qc.refetchQueries({ queryKey: ["relationships"] });
-      triggerETL("relationship");
-      logAudit(currentUser?.company_id, "updated", editing, currentUser?.email);
-      triggerWorkflows(currentUser?.company_id, "entity_updated", editing);
       setFormOpen(false);
       setEditing(null);
       setEndTarget(null);
-      toast({ title: "Relationship updated" });
     },
   });
   const deleteMut = useMutation({
-    mutationFn: (id) => base44.entities.Relationship.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["relationships"] }); qc.refetchQueries({ queryKey: ["relationships"] }); triggerETL("relationship"); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); },
+    mutationFn: (id) => dataService.deleteRecord("relationship", id, currentUser, { queryClient: qc, record: deleting }),
+    onSuccess: () => { setDeleting(null); },
   });
 
   const handleSubmit = async (data, saveAndNew = false) => {
     if (editing) {
       return updateMut.mutateAsync({ id: editing.id, data });
     } else {
-      const created = await createWithScope(base44.entities.Relationship, data, currentUser);
-      addRecordToQueryCache(qc, ["relationships"], created);
-      qc.invalidateQueries({ queryKey: ["relationships"] });
-      qc.refetchQueries({ queryKey: ["relationships"] });
-      triggerETL("relationship");
-      logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email);
-      triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created);
-      toast({ title: "Relationship created" });
+      const created = await dataService.createRecord("relationship", data, currentUser, { queryClient: qc });
       if (saveAndNew) {
         setEditing(null);
         setFormPrefill(null);
@@ -209,10 +177,8 @@ export default function Relationships() {
   const openNew = (type, prefill = null) => { setFormType(type); setEditing(null); setFormPrefill(prefill); setFormOpen(true); };
 
   const handleBulkAssign = async (pairs) => {
-    for (const pair of pairs) await createWithScope(base44.entities.Relationship, pair, currentUser);
-    qc.invalidateQueries({ queryKey: ["relationships"] });
-    qc.refetchQueries({ queryKey: ["relationships"] });
-    triggerETL("relationship");
+    for (const pair of pairs) await dataService.createRecord("relationship", pair, currentUser, { queryClient: qc });
+    dataService.triggerEntityETL("relationship");
     toast({ title: `${pairs.length} relationship${pairs.length !== 1 ? "s" : ""} created` });
   };
 
@@ -220,7 +186,7 @@ export default function Relationships() {
     for (const r of relationships) { try { await base44.entities.Relationship.delete(r.id); } catch (e) { /* 404 = already gone */ } }
     qc.invalidateQueries({ queryKey: ["relationships"] });
     qc.refetchQueries({ queryKey: ["relationships"] });
-    triggerETL("relationship");
+    dataService.triggerEntityETL("relationship");
     toast({ title: `All ${relationships.length} relationships deleted` });
   };
 
@@ -228,7 +194,7 @@ export default function Relationships() {
     for (const id of selectedIds) await base44.entities.Relationship.delete(id);
     qc.invalidateQueries({ queryKey: ["relationships"] });
     qc.refetchQueries({ queryKey: ["relationships"] });
-    triggerETL("relationship");
+    dataService.triggerEntityETL("relationship");
     toast({ title: `${selectedIds.length} relationships deleted` });
     setSelectedIds([]);
   };
@@ -345,7 +311,7 @@ export default function Relationships() {
           for (const { id, field, value } of updates) {
             await base44.entities.Relationship.update(id, { [field]: value });
           }
-          triggerETL("relationship");
+          dataService.triggerEntityETL("relationship");
           qc.invalidateQueries({ queryKey: ["relationships"] });
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
@@ -369,7 +335,7 @@ export default function Relationships() {
           bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
           onCellEdit={perms.l2_assign ? async (id, field, value) => {
             await base44.entities.Relationship.update(id, { [field]: value });
-            triggerETL("relationship");
+            dataService.triggerEntityETL("relationship");
             qc.invalidateQueries({ queryKey: ["relationships"] });
           } : undefined}
         />
@@ -420,7 +386,7 @@ export default function Relationships() {
         templateExample={RELATIONSHIP_TEMPLATE_EXAMPLE} templateInstructions={RELATIONSHIP_TEMPLATE_INSTRUCTIONS}
         entityFetchFn={() => listFn(base44.entities.Relationship)}
         validateRow={(row) => validateRelationship(row, { people, enterprises, products, services })}
-        onImport={(row) => createWithScope(base44.entities.Relationship, row, currentUser)}
+        onImport={(row) => dataService.createRecord("relationship", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} previewColumns={REL_PREVIEW_COLS} requiredField="relationship_type"
       />
     </div>

@@ -17,7 +17,8 @@ import {
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
+import dataService from "@/services/dataService";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,25 +33,6 @@ import ProductsAnalytics from "@/components/products/ProductsAnalytics";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
-    method: "POST",
-    headers: { "x-api-key": RAILWAY_API_KEY },
-  }).catch(() => {});
-function triggerWorkflows(companyId, triggerType, entityData) {
-  fetch(`${RAILWAY_URL}/workflows/trigger`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "product", entity_data: entityData }),
-  }).catch(() => {});
-}
-function logAudit(companyId, action, record, userEmail) {
-  fetch(`${RAILWAY_URL}/audit/log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, entity_type: "product", entity_id: record?.id, entity_name: record?.name || record?.id, action, changed_by: userEmail }),
-  }).catch(() => {});
-}
 
 const statusColor = (s) => ({ active: "bg-emerald-50 text-emerald-700", discontinued: "bg-slate-100 text-slate-600", out_of_stock: "bg-rose-50 text-rose-700", archived: "bg-slate-100 text-slate-400" }[s] || "bg-slate-100 text-slate-600");
 
@@ -229,7 +211,6 @@ export default function Products() {
   const companyId = currentUser?.company_id;
   const perms = usePermissions(currentUser);
   const listFn = useEntityListFn(currentUser);
-  const withScope = useWithScope(currentUser);
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products", companyId, currentUser?.email],
@@ -250,9 +231,18 @@ export default function Products() {
     });
   }, [products]);
 
-  const createMut = useMutation({ mutationFn: (d) => createWithScope(base44.entities.Product, d, currentUser), onSuccess: (created) => { addRecordToQueryCache(qc, ["products"], created); qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created); setFormOpen(false); setEditing(null); } });
-  const updateMut = useMutation({ mutationFn: ({ id, data }) => base44.entities.Product.update(id, withScope(data)), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(currentUser?.company_id, "updated", editing, currentUser?.email); triggerWorkflows(currentUser?.company_id, "entity_updated", editing); setFormOpen(false); setEditing(null); } });
-  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Product.delete(id), onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); qc.refetchQueries({ queryKey: ["products"] }); triggerETL("product"); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); } });
+  const createMut = useMutation({
+    mutationFn: (d) => dataService.createRecord("product", d, currentUser, { queryClient: qc }),
+    onSuccess: () => { setFormOpen(false); setEditing(null); },
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }) => dataService.updateRecord("product", id, data, currentUser, { queryClient: qc, record: editing }),
+    onSuccess: () => { setFormOpen(false); setEditing(null); },
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id) => dataService.deleteRecord("product", id, currentUser, { queryClient: qc, record: deleting }),
+    onSuccess: () => { setDeleting(null); },
+  });
 
   const handleArchive = (item) => { updateMut.mutate({ id: item.id, data: { ...item, status: "archived" } }); setFormOpen(false); setEditing(null); };
 
@@ -260,7 +250,7 @@ export default function Products() {
     for (const id of selectedIds) await base44.entities.Product.delete(id);
     qc.invalidateQueries({ queryKey: ["products"] });
     qc.refetchQueries({ queryKey: ["products"] });
-    triggerETL("product");
+    dataService.triggerEntityETL("product");
     toast({ title: `${selectedIds.length} items deleted` });
     setSelectedIds([]);
   };
@@ -269,7 +259,7 @@ export default function Products() {
     for (const p of products) { try { await base44.entities.Product.delete(p.id); } catch (e) { /* 404 = already gone */ } }
     qc.invalidateQueries({ queryKey: ["products"] });
     qc.refetchQueries({ queryKey: ["products"] });
-    triggerETL("product");
+    dataService.triggerEntityETL("product");
     toast({ title: `All ${products.length} items deleted` });
   };
 
@@ -405,7 +395,7 @@ export default function Products() {
           for (const { id, field, value } of updates) {
             await base44.entities.Product.update(id, { [field]: value });
           }
-          triggerETL("product");
+          dataService.triggerEntityETL("product");
           qc.invalidateQueries({ queryKey: ["products"] });
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
@@ -429,7 +419,7 @@ export default function Products() {
           bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
           onCellEdit={perms.can_edit ? async (id, field, value) => {
             await base44.entities.Product.update(id, { [field]: value });
-            triggerETL("product");
+            dataService.triggerEntityETL("product");
             qc.invalidateQueries({ queryKey: ["products"] });
           } : undefined}
         />
@@ -456,7 +446,7 @@ export default function Products() {
         validateRow={validateProduct}
         transformRow={(row) => transformProduct(row, currentUser)}
         entityFetchFn={() => listFn(base44.entities.Product)}
-        onImport={(row) => createWithScope(base44.entities.Product, row, currentUser)}
+        onImport={(row) => dataService.createRecord("product", row, currentUser, { queryClient: qc })}
         currentUser={currentUser}
         previewColumns={[
           { label: "Product Name", render: (r) => r.product_name || <span className="text-rose-500">MISSING</span> },

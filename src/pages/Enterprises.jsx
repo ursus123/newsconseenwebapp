@@ -7,7 +7,8 @@ import DeleteDialog from "../components/shared/DeleteDialog";
 import EnterpriseForm from "../components/enterprise/EnterpriseForm";
 import EnterpriseToolbar from "../components/enterprise/EnterpriseToolbar";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
+import dataService from "@/services/dataService";
 import { Badge } from "@/components/ui/badge";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
@@ -30,27 +31,6 @@ import {
   ENTERPRISE_TEMPLATE_INSTRUCTIONS, validateEnterprise, transformEnterprise,
 } from "@/components/shared/importConfigs";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
-    method: "POST",
-    headers: { "x-api-key": RAILWAY_API_KEY },
-  }).catch(() => {});
-function triggerWorkflows(companyId, triggerType, entityData) {
-  fetch(`${RAILWAY_URL}/workflows/trigger`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "enterprise", entity_data: entityData }),
-  }).catch(() => {});
-}
-function logAudit(companyId, action, record, userEmail) {
-  fetch(`${RAILWAY_URL}/audit/log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, entity_type: "enterprise", entity_id: record?.id, entity_name: record?.enterprise_name || record?.id, action, changed_by: userEmail }),
-  }).catch(() => {});
-}
 
 // ── Status colors ──────────────────────────────────────────────────
 const statusColor = (s) => ({
@@ -169,7 +149,6 @@ export default function Enterprises() {
   const { t } = useTerminology(currentUser);
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
-  const withScope  = useWithScope(currentUser);
 
   const { data: enterprises = [], isLoading } = useQuery({
     queryKey: ["enterprises", companyId, currentUser?.email],
@@ -184,7 +163,7 @@ export default function Enterprises() {
       const { company_id: _, ...cleanData } = data;
 
       if (currentUser?.company_id) {
-        return createWithScope(base44.entities.Enterprise, cleanData, currentUser);
+        return dataService.createRecord("enterprise", cleanData, currentUser, { queryClient: qc });
       }
 
       const created = await base44.entities.Enterprise.create({
@@ -199,17 +178,17 @@ export default function Enterprises() {
       }
       return { ...created, company_id: workspaceId };
     },
-    onSuccess: (created) => { addRecordToQueryCache(qc, ["enterprises"], created); qc.invalidateQueries({ queryKey: ["enterprises"] }); qc.refetchQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created); setFormOpen(false); setEditing(null); },
+    onSuccess: () => { setFormOpen(false); setEditing(null); },
   });
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Enterprise.update(id, withScope(data)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); qc.refetchQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); logAudit(currentUser?.company_id, "updated", editing, currentUser?.email); triggerWorkflows(currentUser?.company_id, "entity_updated", editing); setFormOpen(false); setEditing(null); },
+    mutationFn: ({ id, data }) => dataService.updateRecord("enterprise", id, data, currentUser, { queryClient: qc, record: editing }),
+    onSuccess: () => { setFormOpen(false); setEditing(null); },
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id) => base44.entities.Enterprise.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["enterprises"] }); qc.refetchQueries({ queryKey: ["enterprises"] }); triggerETL("enterprise"); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); },
+    mutationFn: (id) => dataService.deleteRecord("enterprise", id, currentUser, { queryClient: qc, record: deleting }),
+    onSuccess: () => { setDeleting(null); },
   });
 
   const processedEnterprises = useMemo(() => {
@@ -236,7 +215,7 @@ export default function Enterprises() {
     for (const id of selectedIds) await base44.entities.Enterprise.delete(id);
     qc.invalidateQueries({ queryKey: ["enterprises"] });
     qc.refetchQueries({ queryKey: ["enterprises"] });
-    triggerETL("enterprise");
+    dataService.triggerEntityETL("enterprise");
     toast({ title: `${selectedIds.length} enterprises deleted` });
     setSelectedIds([]);
   };
@@ -245,7 +224,7 @@ export default function Enterprises() {
     for (const e of enterprises) { try { await base44.entities.Enterprise.delete(e.id); } catch (e) { /* 404 = already gone */ } }
     qc.invalidateQueries({ queryKey: ["enterprises"] });
     qc.refetchQueries({ queryKey: ["enterprises"] });
-    triggerETL("enterprise");
+    dataService.triggerEntityETL("enterprise");
     toast({ title: `All ${enterprises.length} enterprises deleted` });
   };
 
@@ -327,7 +306,7 @@ export default function Enterprises() {
           for (const { id, field, value } of updates) {
             await base44.entities.Enterprise.update(id, { [field]: value });
           }
-          triggerETL("enterprise");
+          dataService.triggerEntityETL("enterprise");
           qc.invalidateQueries({ queryKey: ["enterprises"] });
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
@@ -395,7 +374,7 @@ export default function Enterprises() {
           bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
           onCellEdit={perms.can_edit ? async (id, field, value) => {
             await base44.entities.Enterprise.update(id, { [field]: value });
-            triggerETL("enterprise");
+            dataService.triggerEntityETL("enterprise");
             qc.invalidateQueries({ queryKey: ["enterprises"] });
           } : undefined}
         />
@@ -442,7 +421,7 @@ export default function Enterprises() {
         onImport={async (row) => {
           const { company_id: _, ...cleanRow } = row;
           if (currentUser?.company_id) {
-            return createWithScope(base44.entities.Enterprise, cleanRow, currentUser);
+            return dataService.createRecord("enterprise", cleanRow, currentUser, { queryClient: qc });
           }
           return base44.entities.Enterprise.create({
             ...cleanRow,

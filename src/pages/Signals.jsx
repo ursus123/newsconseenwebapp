@@ -13,7 +13,8 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
+import dataService from "@/services/dataService";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,19 +27,6 @@ import {
   SIGNAL_TEMPLATE_INSTRUCTIONS, validateSignal, transformSignal,
 } from "@/components/shared/importConfigs";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-
-const triggerETL = () =>
-  fetch(`${RAILWAY_URL}/load/signal-summary`, { method: "POST", headers: { "x-api-key": RAILWAY_API_KEY } }).catch(() => {});
-
-function logAudit(companyId, action, record, userEmail) {
-  fetch(`${RAILWAY_URL}/audit/log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, entity_type: "signal", entity_id: record?.id, entity_name: record?.name || record?.id, action, changed_by: userEmail }),
-  }).catch(() => {});
-}
 
 const STATUS_COLOR = {
   active:   "bg-emerald-50 text-emerald-700",
@@ -148,13 +136,12 @@ export default function Signals() {
 
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { syncState } = useTaxonomySync();
+  const { syncState, notifyTaxonomyChange } = useTaxonomySync();
 
   const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 0 });
   const companyId  = currentUser?.company_id;
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
-  const withScope  = useWithScope(currentUser);
 
   useEffect(() => {
     const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["signals"] }); };
@@ -171,34 +158,22 @@ export default function Signals() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => createWithScope(base44.entities.Signal, d, currentUser),
-    onSuccess: (created) => {
-      addRecordToQueryCache(qc, ["signals"], created);
-      qc.invalidateQueries({ queryKey: ["signals"] });
-      qc.refetchQueries({ queryKey: ["signals"] });
-      triggerETL();
-      logAudit(created?.company_id || companyId, "created", created, currentUser?.email);
+    mutationFn: (d) => dataService.createRecord("signal", d, currentUser, { queryClient: qc, notifyTaxonomyChange }),
+    onSuccess: () => {
       setFormOpen(false);
       setEditing(null);
     },
   });
   const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Signal.update(id, withScope(data)),
+    mutationFn: ({ id, data }) => dataService.updateRecord("signal", id, data, currentUser, { queryClient: qc, notifyTaxonomyChange, record: editing }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["signals"] });
-      qc.refetchQueries({ queryKey: ["signals"] });
-      triggerETL();
-      logAudit(companyId, "updated", editing, currentUser?.email);
-      setFormOpen(false); setEditing(null);
+      setFormOpen(false);
+      setEditing(null);
     },
   });
   const deleteMut = useMutation({
-    mutationFn: (id) => base44.entities.Signal.delete(id),
+    mutationFn: (id) => dataService.deleteRecord("signal", id, currentUser, { queryClient: qc, record: deleting }),
     onSuccess: () => {
-      logAudit(companyId, "deleted", deleting, currentUser?.email);
-      qc.invalidateQueries({ queryKey: ["signals"] });
-      qc.refetchQueries({ queryKey: ["signals"] });
-      triggerETL();
       setDeleting(null);
     },
   });
@@ -207,7 +182,6 @@ export default function Signals() {
     for (const id of selectedIds) await base44.entities.Signal.delete(id).catch(() => {});
     qc.invalidateQueries({ queryKey: ["signals"] });
     qc.refetchQueries({ queryKey: ["signals"] });
-    triggerETL();
     toast({ title: `${selectedIds.length} signals deleted` });
     setSelectedIds([]);
   };
@@ -216,7 +190,6 @@ export default function Signals() {
     for (const s of signals) { try { await base44.entities.Signal.delete(s.id); } catch {} }
     qc.invalidateQueries({ queryKey: ["signals"] });
     qc.refetchQueries({ queryKey: ["signals"] });
-    triggerETL();
     toast({ title: `All ${signals.length} signals deleted` });
   };
 
@@ -313,7 +286,7 @@ export default function Signals() {
         templateExample={SIGNAL_TEMPLATE_EXAMPLE} templateInstructions={SIGNAL_TEMPLATE_INSTRUCTIONS}
         entityFetchFn={() => listFn(base44.entities.Signal)}
         validateRow={validateSignal} transformRow={transformSignal}
-        onImport={(row) => createWithScope(base44.entities.Signal, row, currentUser)}
+        onImport={(row) => dataService.createRecord("signal", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} requiredField="name" />
     </div>
   );

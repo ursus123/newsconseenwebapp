@@ -13,7 +13,8 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
+import dataService from "@/services/dataService";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,19 +27,6 @@ import {
   SCHEDULE_TEMPLATE_INSTRUCTIONS, validateSchedule, transformSchedule,
 } from "@/components/shared/importConfigs";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-
-const triggerETL = () =>
-  fetch(`${RAILWAY_URL}/load/schedule-summary`, { method: "POST", headers: { "x-api-key": RAILWAY_API_KEY } }).catch(() => {});
-
-function logAudit(companyId, action, record, userEmail) {
-  fetch(`${RAILWAY_URL}/audit/log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, entity_type: "schedule", entity_id: record?.id, entity_name: record?.title || record?.id, action, changed_by: userEmail }),
-  }).catch(() => {});
-}
 
 const STATUS_COLOR = {
   active:  "bg-emerald-50 text-emerald-700",
@@ -144,13 +132,12 @@ export default function Schedules() {
 
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { syncState } = useTaxonomySync();
+  const { syncState, notifyTaxonomyChange } = useTaxonomySync();
 
   const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 0 });
   const companyId  = currentUser?.company_id;
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
-  const withScope  = useWithScope(currentUser);
 
   useEffect(() => {
     const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["schedules"] }); };
@@ -167,34 +154,22 @@ export default function Schedules() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => createWithScope(base44.entities.Schedule, d, currentUser),
-    onSuccess: (created) => {
-      addRecordToQueryCache(qc, ["schedules"], created);
-      qc.invalidateQueries({ queryKey: ["schedules"] });
-      qc.refetchQueries({ queryKey: ["schedules"] });
-      triggerETL();
-      logAudit(created?.company_id || companyId, "created", created, currentUser?.email);
+    mutationFn: (d) => dataService.createRecord("schedule", d, currentUser, { queryClient: qc, notifyTaxonomyChange }),
+    onSuccess: () => {
       setFormOpen(false);
       setEditing(null);
     },
   });
   const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Schedule.update(id, withScope(data)),
+    mutationFn: ({ id, data }) => dataService.updateRecord("schedule", id, data, currentUser, { queryClient: qc, notifyTaxonomyChange, record: editing }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["schedules"] });
-      qc.refetchQueries({ queryKey: ["schedules"] });
-      triggerETL();
-      logAudit(companyId, "updated", editing, currentUser?.email);
-      setFormOpen(false); setEditing(null);
+      setFormOpen(false);
+      setEditing(null);
     },
   });
   const deleteMut = useMutation({
-    mutationFn: (id) => base44.entities.Schedule.delete(id),
+    mutationFn: (id) => dataService.deleteRecord("schedule", id, currentUser, { queryClient: qc, record: deleting }),
     onSuccess: () => {
-      logAudit(companyId, "deleted", deleting, currentUser?.email);
-      qc.invalidateQueries({ queryKey: ["schedules"] });
-      qc.refetchQueries({ queryKey: ["schedules"] });
-      triggerETL();
       setDeleting(null);
     },
   });
@@ -203,7 +178,6 @@ export default function Schedules() {
     for (const id of selectedIds) await base44.entities.Schedule.delete(id).catch(() => {});
     qc.invalidateQueries({ queryKey: ["schedules"] });
     qc.refetchQueries({ queryKey: ["schedules"] });
-    triggerETL();
     toast({ title: `${selectedIds.length} schedules deleted` });
     setSelectedIds([]);
   };
@@ -212,7 +186,6 @@ export default function Schedules() {
     for (const s of schedules) { try { await base44.entities.Schedule.delete(s.id); } catch {} }
     qc.invalidateQueries({ queryKey: ["schedules"] });
     qc.refetchQueries({ queryKey: ["schedules"] });
-    triggerETL();
     toast({ title: `All ${schedules.length} schedules deleted` });
   };
 
@@ -305,7 +278,7 @@ export default function Schedules() {
         templateExample={SCHEDULE_TEMPLATE_EXAMPLE} templateInstructions={SCHEDULE_TEMPLATE_INSTRUCTIONS}
         entityFetchFn={() => listFn(base44.entities.Schedule)}
         validateRow={validateSchedule} transformRow={transformSchedule}
-        onImport={(row) => createWithScope(base44.entities.Schedule, row, currentUser)}
+        onImport={(row) => dataService.createRecord("schedule", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} requiredField="title" />
     </div>
   );

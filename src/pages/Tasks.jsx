@@ -5,7 +5,8 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import PageHeader from "../components/shared/PageHeader";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
+import dataService from "@/services/dataService";
 import { triggerTaskTransaction } from "../components/shared/triggerTaskTransaction";
 import TaskForm, { taskTypeLabel } from "../components/tasks/TaskForm";
 import DeleteDialog from "../components/shared/DeleteDialog";
@@ -36,25 +37,6 @@ import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { format, isToday, isPast, parseISO } from "date-fns";
 import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
-function triggerWorkflows(companyId, triggerType, entityData) {
-  fetch(`${RAILWAY_URL}/workflows/trigger`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "task", entity_data: entityData }),
-  }).catch(() => {});
-}
-function logAudit(companyId, action, record, userEmail) {
-  fetch(`${RAILWAY_URL}/audit/log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, entity_type: "task", entity_id: record?.id, entity_name: record?.title || record?.id, action, changed_by: userEmail }),
-  }).catch(() => {});
-}
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -237,7 +219,6 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const qc = useQueryClient();
   const perms = usePermissions(currentUser);
-  const withScope = useWithScope(currentUser);
   const { toast } = useToast();
 
   const invalidate = () => { qc.invalidateQueries({ queryKey: ["tasks"] }); qc.refetchQueries({ queryKey: ["tasks"] }); };
@@ -267,12 +248,15 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   };
 
   const createMut = useMutation({
-    mutationFn: async (d) => createWithScope(base44.entities.Task, { ...d, app_source: d.app_source || "manual" }, currentUser),
-    onSuccess: (created) => { addRecordToQueryCache(qc, ["tasks"], created); setFormOpen(false); setEditing(null); invalidate(); triggerETL("task"); logAudit(created?.company_id || companyId, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || companyId, "entity_created", created); },
+    mutationFn: (d) => dataService.createRecord("task", { ...d, app_source: d.app_source || "manual" }, currentUser, { queryClient: qc }),
+    onSuccess: () => {
+      setFormOpen(false);
+      setEditing(null);
+    },
   });
   const updateMut = useMutation({
     mutationFn: async ({ id, data }) => {
-      const task = await base44.entities.Task.update(id, data);
+      const task = await dataService.updateRecord("task", id, data, currentUser, { queryClient: qc, record: editing });
       if (task.status === "completed" && task.trigger_transaction) {
         const tx = await triggerTaskTransaction(task, currentUser);
         if (tx) {
@@ -284,9 +268,17 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
       }
       return task;
     },
-    onSuccess: () => { setFormOpen(false); setEditing(null); invalidate(); triggerETL("task"); logAudit(companyId, "updated", editing, currentUser?.email); triggerWorkflows(companyId, "entity_updated", editing); },
+    onSuccess: () => {
+      setFormOpen(false);
+      setEditing(null);
+    },
   });
-  const deleteMut = useMutation({ mutationFn: (id) => base44.entities.Task.delete(id), onSuccess: () => { invalidate(); logAudit(companyId, "deleted", deleting, currentUser?.email); setDeleting(null); triggerETL("task"); } });
+  const deleteMut = useMutation({
+    mutationFn: (id) => dataService.deleteRecord("task", id, currentUser, { queryClient: qc, record: deleting }),
+    onSuccess: () => {
+      setDeleting(null);
+    },
+  });
 
   const filtered = (() => {
     let list = search ? fuzzyFilter(tasks, search, ["title", "enterprise", "assigned_to_name", "related_person", "outcome_notes"]) : [...tasks];
@@ -386,7 +378,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const handleDeleteAll = async () => {
     for (const t of tasks) { try { await base44.entities.Task.delete(t.id); } catch (e) { /* 404 = already gone */ } }
     invalidate();
-    triggerETL("task");
+    dataService.triggerEntityETL("task");
     toast({ title: `All ${tasks.length} tasks deleted` });
   };
 
@@ -458,7 +450,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
           for (const { id, field, value } of updates) {
             await base44.entities.Task.update(id, { [field]: value });
           }
-          triggerETL("task");
+          dataService.triggerEntityETL("task");
           invalidate();
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
@@ -637,7 +629,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         entityFetchFn={() => listFn(base44.entities.Task)}
         validateRow={validateTask}
         transformRow={transformTask}
-        onImport={(row) => createWithScope(base44.entities.Task, { ...row, app_source: "import" }, currentUser)}
+        onImport={(row) => dataService.createRecord("task", { ...row, app_source: "import" }, currentUser, { queryClient: qc })}
         currentUser={currentUser}
         previewColumns={TASK_PREVIEW_COLS}
         requiredField="title"

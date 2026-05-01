@@ -10,7 +10,8 @@ import AddressLeafletMap from "../components/addresses/AddressLeafletMap";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Badge } from "@/components/ui/badge";
-import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
+import dataService from "@/services/dataService";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
@@ -30,23 +31,6 @@ import {
 } from "@/components/shared/importConfigs";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
-function triggerWorkflows(companyId, triggerType, entityData) {
-  fetch(`${RAILWAY_URL}/workflows/trigger`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "address", entity_data: entityData }),
-  }).catch(() => {});
-}
-function logAudit(companyId, action, record, userEmail) {
-  fetch(`${RAILWAY_URL}/audit/log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, entity_type: "address", entity_id: record?.id, entity_name: [record?.address_line1, record?.city].filter(Boolean).join(", ") || record?.id, action, changed_by: userEmail }),
-  }).catch(() => {});
-}
 
 const statusColor = (s) => ({
   active: "bg-emerald-50 text-emerald-700",
@@ -118,7 +102,6 @@ export default function Addresses() {
   }, [qc]);
 
   const listFn = useEntityListFn(currentUser);
-  const withScope = useWithScope(currentUser);
 
   const { data: addresses = [] } = useQuery({
     queryKey: ["addresses", currentUser?.company_id, currentUser?.email],
@@ -135,9 +118,9 @@ export default function Addresses() {
         const coords = await geocodeAddress(data);
         if (coords) data = { ...data, ...coords };
       }
-      return createWithScope(base44.entities.Address, data, currentUser);
+      return dataService.createRecord("address", data, currentUser, { queryClient: qc });
     },
-    onSuccess: (created) => { addRecordToQueryCache(qc, ["addresses"], created); qc.invalidateQueries({ queryKey: ["addresses"] }); qc.refetchQueries({ queryKey: ["addresses"] }); triggerETL("address"); logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email); triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created); setFormOpen(false); setEditing(null); },
+    onSuccess: () => { setFormOpen(false); setEditing(null); },
   });
 
   const updateMut = useMutation({
@@ -148,22 +131,17 @@ export default function Addresses() {
         const coords = await geocodeAddress(data);
         if (coords) updated = { ...updated, ...coords };
       }
-      return base44.entities.Address.update(id, updated);
+      return dataService.updateRecord("address", id, updated, currentUser, { queryClient: qc, record: editing });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["addresses"] });
-      qc.refetchQueries({ queryKey: ["addresses"] });
-      triggerETL("address");
-      logAudit(currentUser?.company_id, "updated", editing, currentUser?.email);
-      triggerWorkflows(currentUser?.company_id, "entity_updated", editing);
       setFormOpen(false); setEditing(null);
       if (detailAddress) setDetailAddress(null);
     },
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id) => base44.entities.Address.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["addresses"] }); triggerETL("address"); logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email); setDeleting(null); },
+    mutationFn: (id) => dataService.deleteRecord("address", id, currentUser, { queryClient: qc, record: deleting }),
+    onSuccess: () => { setDeleting(null); },
   });
 
   const handleSubmit = async (data, saveAndNew = false) => {
@@ -204,7 +182,7 @@ export default function Addresses() {
   const handleDeleteAll = async () => {
     for (const a of addresses) { try { await base44.entities.Address.delete(a.id); } catch (e) { /* 404 = already gone */ } }
     qc.invalidateQueries({ queryKey: ["addresses"] });
-    triggerETL("address");
+    dataService.triggerEntityETL("address");
     toast({ title: `All ${addresses.length} addresses deleted` });
   };
 
@@ -212,7 +190,7 @@ export default function Addresses() {
     setBulkDeleting(true);
     for (const id of selectedIds) await base44.entities.Address.delete(id);
     qc.invalidateQueries({ queryKey: ["addresses"] });
-    triggerETL("address");
+    dataService.triggerEntityETL("address");
     toast({ title: `${selectedIds.length} addresses deleted` });
     setSelectedIds([]);
     setBulkDeleting(false);
@@ -362,7 +340,7 @@ export default function Addresses() {
               for (const { id, field, value } of updates) {
                 await base44.entities.Address.update(id, { [field]: value });
               }
-              triggerETL("address");
+              dataService.triggerEntityETL("address");
               qc.invalidateQueries({ queryKey: ["addresses"] });
               toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
             }}
@@ -378,7 +356,7 @@ export default function Addresses() {
             onSelectionChange={setSelectedIds}
             onCellEdit={async (id, field, value) => {
               await base44.entities.Address.update(id, { [field]: value });
-              triggerETL("address");
+              dataService.triggerEntityETL("address");
               qc.invalidateQueries({ queryKey: ["addresses"] });
             }}
           />
@@ -400,7 +378,7 @@ export default function Addresses() {
         templateExample={ADDRESS_TEMPLATE_EXAMPLE} templateInstructions={ADDRESS_TEMPLATE_INSTRUCTIONS}
         entityFetchFn={() => listFn(base44.entities.Address)}
         validateRow={validateAddress} transformRow={transformAddress}
-        onImport={(row) => createWithScope(base44.entities.Address, row, currentUser)}
+        onImport={(row) => dataService.createRecord("address", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} previewColumns={ADDR_PREVIEW_COLS} requiredField="address_line1"
       />
 

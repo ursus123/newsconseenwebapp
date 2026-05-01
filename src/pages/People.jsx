@@ -9,7 +9,8 @@ import PeopleForm from "../components/people/PeopleForm";
 import PeopleToolbar from "../components/people/PeopleToolbar";
 import PeopleGroupedView from "../components/people/PeopleGroupedView";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
+import dataService from "@/services/dataService";
 import { Badge } from "@/components/ui/badge";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
@@ -30,39 +31,6 @@ import {
   PEOPLE_FIELDS, PEOPLE_MAPPING_RULES, PEOPLE_TEMPLATE_EXAMPLE,
   PEOPLE_TEMPLATE_INSTRUCTIONS, validatePerson, transformPerson,
 } from "@/components/shared/importConfigs";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
-    method: "POST",
-    headers: { "x-api-key": RAILWAY_API_KEY },
-  }).catch(() => {});
-
-// Fire-and-forget workflow trigger — never blocks the UI
-function triggerWorkflows(companyId, triggerType, entityData) {
-  fetch(`${RAILWAY_URL}/workflows/trigger`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "person", entity_data: entityData }),
-  }).catch(() => {});
-}
-
-// Fire-and-forget audit log — never blocks the UI
-function logAudit(companyId, action, record, userEmail) {
-  fetch(`${RAILWAY_URL}/audit/log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({
-      company_id:  companyId,
-      entity_type: "person",
-      entity_id:   record?.id,
-      entity_name: [record?.first_name, record?.last_name].filter(Boolean).join(" ") || record?.id,
-      action,
-      changed_by:  userEmail,
-    }),
-  }).catch(() => {});
-}
 
 // ── Color helpers ──────────────────────────────────────────────────
 const statusColor = (s) => ({
@@ -254,7 +222,6 @@ export default function People() {
   const companyId  = currentUser?.company_id;
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
-  const withScope  = useWithScope(currentUser);
 
   const { data: people = [], isLoading } = useQuery({
     queryKey: ["people", companyId, currentUser?.email],
@@ -265,41 +232,24 @@ export default function People() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => createWithScope(base44.entities.Person, d, currentUser),
-    onSuccess: (created) => {
-      addRecordToQueryCache(qc, ["people"], created);
-      qc.invalidateQueries({ queryKey: ["people"] });
-      qc.refetchQueries({ queryKey: ["people"] });
+    mutationFn: (d) => dataService.createRecord("person", d, currentUser, { queryClient: qc, notifyTaxonomyChange }),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["addresses"] });
       qc.invalidateQueries({ queryKey: ["relationships"] });
-      triggerETL("people");
-      notifyTaxonomyChange("person", currentUser?.company_id);
-      logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email);
-      triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created);
       setFormOpen(false);
       setEditing(null);
     },
   });
   const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Person.update(id, withScope(data)),
+    mutationFn: ({ id, data }) => dataService.updateRecord("person", id, data, currentUser, { queryClient: qc, notifyTaxonomyChange, record: editing }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["people"] });
-      qc.refetchQueries({ queryKey: ["people"] });
-      triggerETL("people");
-      notifyTaxonomyChange("person", currentUser?.company_id);
-      logAudit(currentUser?.company_id, "updated", editing, currentUser?.email);
-      triggerWorkflows(currentUser?.company_id, "entity_updated", editing);
       setFormOpen(false);
       setEditing(null);
     },
   });
   const deleteMut = useMutation({
-    mutationFn: (id) => base44.entities.Person.delete(id),
+    mutationFn: (id) => dataService.deleteRecord("person", id, currentUser, { queryClient: qc, record: deleting }),
     onSuccess: () => {
-      logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email);
-      qc.invalidateQueries({ queryKey: ["people"] });
-      qc.refetchQueries({ queryKey: ["people"] });
-      triggerETL("people");
       setDeleting(null);
     },
   });
@@ -308,7 +258,7 @@ export default function People() {
     for (const id of selectedIds) await base44.entities.Person.delete(id);
     qc.invalidateQueries({ queryKey: ["people"] });
     qc.refetchQueries({ queryKey: ["people"] });
-    triggerETL("people");
+    dataService.triggerEntityETL("person");
     toast({ title: `${selectedIds.length} people deleted` });
     setSelectedIds([]);
   };
@@ -317,7 +267,7 @@ export default function People() {
     for (const p of people) { try { await base44.entities.Person.delete(p.id); } catch (e) { /* 404 = already gone */ } }
     qc.invalidateQueries({ queryKey: ["people"] });
     qc.refetchQueries({ queryKey: ["people"] });
-    triggerETL("people");
+    dataService.triggerEntityETL("person");
     toast({ title: `All ${people.length} people deleted` });
   };
 
@@ -472,7 +422,7 @@ export default function People() {
           for (const { id, field, value } of updates) {
             await base44.entities.Person.update(id, { [field]: value });
           }
-          triggerETL("people");
+          dataService.triggerEntityETL("person");
           qc.invalidateQueries({ queryKey: ["people"] });
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
@@ -508,7 +458,7 @@ export default function People() {
           bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
           onCellEdit={perms.l1_edit ? async (id, field, value) => {
             await base44.entities.Person.update(id, { [field]: value });
-            triggerETL("people");
+            dataService.triggerEntityETL("person");
             qc.invalidateQueries({ queryKey: ["people"] });
           } : undefined}
         />
@@ -553,7 +503,7 @@ export default function People() {
         entityFetchFn={() => listFn(base44.entities.Person)}
         validateRow={validatePerson}
         transformRow={transformPerson}
-        onImport={(row) => createWithScope(base44.entities.Person, row, currentUser)}
+        onImport={(row) => dataService.createRecord("person", row, currentUser, { queryClient: qc })}
         currentUser={currentUser}
         previewColumns={PEOPLE_PREVIEW_COLS}
         requiredField="first_name"

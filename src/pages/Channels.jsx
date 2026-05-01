@@ -13,7 +13,8 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
+import dataService from "@/services/dataService";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,19 +27,6 @@ import {
   CHANNEL_TEMPLATE_INSTRUCTIONS, validateChannel, transformChannel,
 } from "@/components/shared/importConfigs";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-
-const triggerETL = () =>
-  fetch(`${RAILWAY_URL}/load/channel-summary`, { method: "POST", headers: { "x-api-key": RAILWAY_API_KEY } }).catch(() => {});
-
-function logAudit(companyId, action, record, userEmail) {
-  fetch(`${RAILWAY_URL}/audit/log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, entity_type: "channel", entity_id: record?.id, entity_name: record?.name || record?.id, action, changed_by: userEmail }),
-  }).catch(() => {});
-}
 
 const STATUS_COLOR = {
   active:   "bg-emerald-50 text-emerald-700",
@@ -146,13 +134,12 @@ export default function Channels() {
 
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { syncState } = useTaxonomySync();
+  const { syncState, notifyTaxonomyChange } = useTaxonomySync();
 
   const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 0 });
   const companyId  = currentUser?.company_id;
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
-  const withScope  = useWithScope(currentUser);
 
   useEffect(() => {
     const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["channels"] }); };
@@ -169,46 +156,34 @@ export default function Channels() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => createWithScope(base44.entities.Channel, d, currentUser),
-    onSuccess: (created) => {
-      addRecordToQueryCache(qc, ["channels"], created);
-      qc.invalidateQueries({ queryKey: ["channels"] });
-      qc.refetchQueries({ queryKey: ["channels"] });
-      triggerETL();
-      logAudit(created?.company_id || companyId, "created", created, currentUser?.email);
+    mutationFn: (d) => dataService.createRecord("channel", d, currentUser, { queryClient: qc, notifyTaxonomyChange }),
+    onSuccess: () => {
       setFormOpen(false);
       setEditing(null);
     },
   });
   const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Channel.update(id, withScope(data)),
+    mutationFn: ({ id, data }) => dataService.updateRecord("channel", id, data, currentUser, { queryClient: qc, notifyTaxonomyChange, record: editing }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["channels"] });
-      qc.refetchQueries({ queryKey: ["channels"] });
-      triggerETL();
-      logAudit(companyId, "updated", editing, currentUser?.email);
-      setFormOpen(false); setEditing(null);
+      setFormOpen(false);
+      setEditing(null);
     },
   });
   const deleteMut = useMutation({
-    mutationFn: (id) => base44.entities.Channel.delete(id),
+    mutationFn: (id) => dataService.deleteRecord("channel", id, currentUser, { queryClient: qc, record: deleting }),
     onSuccess: () => {
-      logAudit(companyId, "deleted", deleting, currentUser?.email);
-      qc.invalidateQueries({ queryKey: ["channels"] });
-      qc.refetchQueries({ queryKey: ["channels"] });
-      triggerETL();
       setDeleting(null);
     },
   });
 
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Channel.delete(id).catch(() => {});
-    qc.invalidateQueries({ queryKey: ["channels"] }); qc.refetchQueries({ queryKey: ["channels"] }); triggerETL();
+    qc.invalidateQueries({ queryKey: ["channels"] }); qc.refetchQueries({ queryKey: ["channels"] });
     toast({ title: `${selectedIds.length} channels deleted` }); setSelectedIds([]);
   };
   const handleDeleteAll = async () => {
     for (const c of channels) { try { await base44.entities.Channel.delete(c.id); } catch {} }
-    qc.invalidateQueries({ queryKey: ["channels"] }); qc.refetchQueries({ queryKey: ["channels"] }); triggerETL();
+    qc.invalidateQueries({ queryKey: ["channels"] }); qc.refetchQueries({ queryKey: ["channels"] });
     toast({ title: `All ${channels.length} channels deleted` });
   };
 
@@ -300,7 +275,7 @@ export default function Channels() {
         templateExample={CHANNEL_TEMPLATE_EXAMPLE} templateInstructions={CHANNEL_TEMPLATE_INSTRUCTIONS}
         entityFetchFn={() => listFn(base44.entities.Channel)}
         validateRow={validateChannel} transformRow={transformChannel}
-        onImport={(row) => createWithScope(base44.entities.Channel, row, currentUser)}
+        onImport={(row) => dataService.createRecord("channel", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} requiredField="name" />
     </div>
   );

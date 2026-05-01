@@ -13,8 +13,9 @@ import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
 import { useTaxonomySync } from "@/hooks/useTaxonomySync";
+import dataService from "@/services/dataService";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,19 +27,6 @@ import {
   validatePlot, transformPlot,
 } from "@/components/shared/importConfigs";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-
-const triggerETL = () =>
-  fetch(`${RAILWAY_URL}/load/plot-summary`, { method: "POST", headers: { "x-api-key": RAILWAY_API_KEY } }).catch(() => {});
-
-function logAudit(companyId, action, record, userEmail) {
-  fetch(`${RAILWAY_URL}/audit/log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, entity_type: "plot", entity_id: record?.id, entity_name: record?.name || record?.id, action, changed_by: userEmail }),
-  }).catch(() => {});
-}
 
 const STATUS_COLOR = {
   active:     "bg-emerald-50 text-emerald-700",
@@ -161,13 +149,12 @@ export default function Plots() {
 
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { syncState } = useTaxonomySync();
+  const { syncState, notifyTaxonomyChange } = useTaxonomySync();
 
   const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 0 });
   const companyId = currentUser?.company_id;
   const perms     = usePermissions(currentUser);
   const listFn    = useEntityListFn(currentUser);
-  const withScope = useWithScope(currentUser);
 
   useEffect(() => {
     const fn = () => { if (document.visibilityState === "visible") qc.refetchQueries({ queryKey: ["plots"] }); };
@@ -184,36 +171,32 @@ export default function Plots() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => createWithScope(base44.entities.Plot, d, currentUser),
-    onSuccess: (created) => {
-      addRecordToQueryCache(qc, ["plots"], created);
-      qc.invalidateQueries({ queryKey: ["plots"] }); qc.refetchQueries({ queryKey: ["plots"] });
-      triggerETL(); logAudit(created?.company_id || companyId, "created", created, currentUser?.email); setFormOpen(false); setEditing(null);
+    mutationFn: (d) => dataService.createRecord("plot", d, currentUser, { queryClient: qc, notifyTaxonomyChange }),
+    onSuccess: () => {
+      setFormOpen(false); setEditing(null);
     },
   });
   const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Plot.update(id, withScope(data)),
+    mutationFn: ({ id, data }) => dataService.updateRecord("plot", id, data, currentUser, { queryClient: qc, notifyTaxonomyChange, record: editing }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["plots"] }); qc.refetchQueries({ queryKey: ["plots"] });
-      triggerETL(); logAudit(companyId, "updated", editing, currentUser?.email); setFormOpen(false); setEditing(null);
+      setFormOpen(false); setEditing(null);
     },
   });
   const deleteMut = useMutation({
-    mutationFn: (id) => base44.entities.Plot.delete(id),
+    mutationFn: (id) => dataService.deleteRecord("plot", id, currentUser, { queryClient: qc, record: deleting }),
     onSuccess: () => {
-      logAudit(companyId, "deleted", deleting, currentUser?.email);
-      qc.invalidateQueries({ queryKey: ["plots"] }); qc.refetchQueries({ queryKey: ["plots"] }); triggerETL(); setDeleting(null);
+      setDeleting(null);
     },
   });
 
   const handleBulkDelete = async () => {
     for (const id of selectedIds) await base44.entities.Plot.delete(id).catch(() => {});
-    qc.invalidateQueries({ queryKey: ["plots"] }); qc.refetchQueries({ queryKey: ["plots"] }); triggerETL();
+    qc.invalidateQueries({ queryKey: ["plots"] }); qc.refetchQueries({ queryKey: ["plots"] }); dataService.triggerEntityETL("plot");
     toast({ title: `${selectedIds.length} plots deleted` }); setSelectedIds([]);
   };
   const handleDeleteAll = async () => {
     for (const p of plots) { try { await base44.entities.Plot.delete(p.id); } catch {} }
-    qc.invalidateQueries({ queryKey: ["plots"] }); qc.refetchQueries({ queryKey: ["plots"] }); triggerETL();
+    qc.invalidateQueries({ queryKey: ["plots"] }); qc.refetchQueries({ queryKey: ["plots"] }); dataService.triggerEntityETL("plot");
     toast({ title: `All ${plots.length} plots deleted` });
   };
 
@@ -309,7 +292,7 @@ export default function Plots() {
         templateExample={PLOT_TEMPLATE_EXAMPLE}
         entityFetchFn={() => listFn(base44.entities.Plot)}
         validateRow={validatePlot} transformRow={transformPlot}
-        onImport={(row) => createWithScope(base44.entities.Plot, row, currentUser)}
+        onImport={(row) => dataService.createRecord("plot", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} requiredField="name" />
     </div>
   );

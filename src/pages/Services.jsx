@@ -9,7 +9,8 @@ import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/components/shared/usePermissions";
-import { addRecordToQueryCache, createWithScope, useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
+import { useEntityListFn } from "@/components/shared/useDataQuery";
+import dataService from "@/services/dataService";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
 import { Button } from "@/components/ui/button";
@@ -25,30 +26,6 @@ import {
   SERVICE_TEMPLATE_INSTRUCTIONS, validateService, transformService,
 } from "@/components/shared/importConfigs";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
-    method: "POST",
-    headers: { "x-api-key": RAILWAY_API_KEY },
-  }).catch(() => {});
-
-function triggerWorkflows(companyId, triggerType, entityData) {
-  fetch(`${RAILWAY_URL}/workflows/trigger`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, trigger_type: triggerType, entity_type: "service", entity_data: entityData }),
-  }).catch(() => {});
-}
-
-function logAudit(companyId, action, record, userEmail) {
-  fetch(`${RAILWAY_URL}/audit/log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
-    body: JSON.stringify({ company_id: companyId, entity_type: "service", entity_id: record?.id, entity_name: record?.name || record?.id, action, changed_by: userEmail }),
-  }).catch(() => {});
-}
 
 const statusColor = (s) => ({
   active:   "bg-emerald-50 text-emerald-700",
@@ -155,7 +132,6 @@ export default function Services() {
 
   const perms = usePermissions(currentUser);
   const listFn = useEntityListFn(currentUser);
-  const withScope = useWithScope(currentUser);
 
   const { data: services = [], isLoading, isError } = useQuery({
     queryKey: ["services", currentUser?.company_id, currentUser?.email],
@@ -166,14 +142,8 @@ export default function Services() {
   });
 
   const createMut = useMutation({
-    mutationFn: (d) => createWithScope(base44.entities.Service, d, currentUser),
-    onSuccess: (created) => {
-      addRecordToQueryCache(qc, ["services"], created);
-      qc.invalidateQueries({ queryKey: ["services"] });
-      qc.refetchQueries({ queryKey: ["services"] });
-      triggerETL("service");
-      logAudit(created?.company_id || currentUser?.company_id, "created", created, currentUser?.email);
-      triggerWorkflows(created?.company_id || currentUser?.company_id, "entity_created", created);
+    mutationFn: (d) => dataService.createRecord("service", d, currentUser, { queryClient: qc }),
+    onSuccess: () => {
       setFormOpen(false);
       setEditing(null);
       toast({ title: "Service saved" });
@@ -182,13 +152,8 @@ export default function Services() {
   });
 
   const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Service.update(id, withScope(data)),
+    mutationFn: ({ id, data }) => dataService.updateRecord("service", id, data, currentUser, { queryClient: qc, record: editing }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["services"] });
-      qc.refetchQueries({ queryKey: ["services"] });
-      triggerETL("service");
-      logAudit(currentUser?.company_id, "updated", editing, currentUser?.email);
-      triggerWorkflows(currentUser?.company_id, "entity_updated", editing);
       setFormOpen(false);
       setEditing(null);
       toast({ title: "Service updated" });
@@ -197,12 +162,8 @@ export default function Services() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id) => base44.entities.Service.delete(id),
+    mutationFn: (id) => dataService.deleteRecord("service", id, currentUser, { queryClient: qc, record: deleting }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["services"] });
-      qc.refetchQueries({ queryKey: ["services"] });
-      triggerETL("service");
-      logAudit(currentUser?.company_id, "deleted", deleting, currentUser?.email);
       setDeleting(null);
       toast({ title: "Service deleted" });
     },
@@ -228,7 +189,7 @@ export default function Services() {
     for (const id of selectedIds) await base44.entities.Service.delete(id);
     qc.invalidateQueries({ queryKey: ["services"] });
     qc.refetchQueries({ queryKey: ["services"] });
-    triggerETL("service");
+    dataService.triggerEntityETL("service");
     toast({ title: `${selectedIds.length} services deleted` });
     setSelectedIds([]);
   };
@@ -237,7 +198,7 @@ export default function Services() {
     for (const s of services) { try { await base44.entities.Service.delete(s.id); } catch (_) {} }
     qc.invalidateQueries({ queryKey: ["services"] });
     qc.refetchQueries({ queryKey: ["services"] });
-    triggerETL("service");
+    dataService.triggerEntityETL("service");
     toast({ title: `All ${services.length} services deleted` });
   };
 
@@ -343,7 +304,7 @@ export default function Services() {
           for (const { id, field, value } of updates) {
             await base44.entities.Service.update(id, { [field]: value });
           }
-          triggerETL("service");
+          dataService.triggerEntityETL("service");
           qc.invalidateQueries({ queryKey: ["services"] });
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
@@ -375,7 +336,7 @@ export default function Services() {
           onSelectionChange={setSelectedIds}
           onCellEdit={perms.can_edit ? async (id, field, value) => {
             await base44.entities.Service.update(id, { [field]: value });
-            triggerETL("service");
+            dataService.triggerEntityETL("service");
             qc.invalidateQueries({ queryKey: ["services"] });
           } : undefined}
         />
@@ -417,7 +378,7 @@ export default function Services() {
         validateRow={validateService}
         transformRow={transformService}
         entityFetchFn={() => listFn(base44.entities.Service)}
-        onImport={async (row) => { const s = await createWithScope(base44.entities.Service, row, currentUser); triggerETL("service"); return s; }}
+        onImport={(row) => dataService.createRecord("service", row, currentUser, { queryClient: qc })}
         currentUser={currentUser}
         previewColumns={SVC_PREVIEW_COLS}
         requiredField="name"
