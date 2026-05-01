@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   Wrench,
   TrendingUp,
+  Lightbulb,
   Sparkles,
   Bell,
   Plug,
@@ -96,6 +97,7 @@ const NAV_CONFIG = {
       items: [
         { name: "Reports",             icon: BarChart2 },
         { name: "QueryBuilder",        label: "Query Builder",        icon: Code2 },
+        { name: "IntelligenceInbox",   label: "Intelligence Inbox",   icon: Lightbulb },
         { name: "MarketIntelligence",  label: "Market Intelligence",  icon: TrendingUp },
         { name: "copilot",             label: "Copilot",              icon: Sparkles },
         { name: "alerts",              label: "Alerts",               icon: Bell, badge: "alerts" },
@@ -171,6 +173,7 @@ const NAV_CONFIG = {
       items: [
         { name: "Reports",            icon: BarChart2 },
         { name: "QueryBuilder",       label: "Query Builder",       icon: Code2 },
+        { name: "IntelligenceInbox",  label: "Intelligence Inbox",  icon: Lightbulb },
         { name: "MarketIntelligence", label: "Market Intelligence", icon: TrendingUp },
         { name: "copilot",            label: "Copilot",             icon: Sparkles },
         { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
@@ -218,6 +221,7 @@ const NAV_CONFIG = {
     {
       section: "Intelligence",
       items: [
+        { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
         { name: "Reports",      icon: BarChart2 },
         { name: "QueryBuilder", label: "Query Builder", icon: Code2 },
         { name: "copilot",      label: "Copilot",       icon: Sparkles },

@@ -515,6 +515,14 @@ try:
 except Exception as _ing_err:
     logger.warning("Ingestion router failed to load — %s", _ing_err)
 
+# Intelligence Layer — Insight, Recommendation, Risk, Opportunity
+try:
+    from intelligence.routes import router as intelligence_router
+    app.include_router(intelligence_router)
+    logger.info("Intelligence layer router loaded")
+except Exception as _intel_err:
+    logger.warning("Intelligence router failed to load — %s", _intel_err)
+
 
 # ----------------------------------------------------------
 # Idjwi — Public Demo Copilot (landing page, no auth required)

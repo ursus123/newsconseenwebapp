@@ -862,6 +862,185 @@ _OTHER_DDL = [
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Intelligence Layer — Insight, Recommendation, Risk, Opportunity, ModelRun
+# Phase: Intelligence Memory
+# ─────────────────────────────────────────────────────────────────────────────
+
+_INTELLIGENCE_DDL = [
+    """
+    CREATE TABLE IF NOT EXISTS analytics.insight_summary (
+        id                 TEXT,
+        company_id         TEXT,
+        subject_type       TEXT,
+        subject_id         TEXT,
+        subject_name       TEXT,
+        insight_type       TEXT,
+        title              TEXT,
+        body               TEXT,
+        severity           TEXT,
+        confidence         NUMERIC,
+        status             TEXT,
+        source             TEXT,
+        source_run_id      TEXT,
+        evidence           TEXT,
+        model_version      TEXT,
+        related_metric_id  TEXT,
+        detected_at        TIMESTAMP,
+        expires_at         TIMESTAMP,
+        acknowledged_by    TEXT,
+        acknowledged_at    TIMESTAMP,
+        dismissed_by       TEXT,
+        dismissed_at       TIMESTAMP,
+        actioned_by        TEXT,
+        actioned_at        TIMESTAMP,
+        resolved_by        TEXT,
+        resolved_at        TIMESTAMP,
+        resolution_notes   TEXT,
+        created_by         TEXT,
+        snapshot_date      DATE,
+        loaded_at          TIMESTAMP
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_insight_summary_company   ON analytics.insight_summary (company_id)",
+    "CREATE INDEX IF NOT EXISTS idx_insight_summary_status    ON analytics.insight_summary (company_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_insight_summary_subject   ON analytics.insight_summary (company_id, subject_type, subject_id)",
+    "CREATE INDEX IF NOT EXISTS idx_insight_summary_type      ON analytics.insight_summary (company_id, insight_type)",
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.recommendation_summary (
+        id                  TEXT,
+        company_id          TEXT,
+        insight_id          TEXT,
+        title               TEXT,
+        rationale           TEXT,
+        priority            TEXT,
+        estimated_impact    TEXT,
+        confidence          NUMERIC,
+        action_type         TEXT,
+        action_payload      TEXT,
+        status              TEXT,
+        assigned_to         TEXT,
+        due_date            DATE,
+        rejection_reason    TEXT,
+        created_task_id     TEXT,
+        created_workflow_id TEXT,
+        source              TEXT,
+        approved_by         TEXT,
+        approved_at         TIMESTAMP,
+        rejected_by         TEXT,
+        rejected_at         TIMESTAMP,
+        created_by          TEXT,
+        snapshot_date       DATE,
+        loaded_at           TIMESTAMP
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_recommendation_company ON analytics.recommendation_summary (company_id)",
+    "CREATE INDEX IF NOT EXISTS idx_recommendation_status  ON analytics.recommendation_summary (company_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_recommendation_insight ON analytics.recommendation_summary (insight_id)",
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.risk_summary (
+        id           TEXT,
+        company_id   TEXT,
+        subject_type TEXT,
+        subject_id   TEXT,
+        category     TEXT,
+        severity     TEXT,
+        likelihood   TEXT,
+        title        TEXT,
+        description  TEXT,
+        mitigation   TEXT,
+        owner        TEXT,
+        status       TEXT,
+        source       TEXT,
+        insight_id   TEXT,
+        opened_at    TIMESTAMP,
+        resolved_at  TIMESTAMP,
+        created_by   TEXT,
+        snapshot_date DATE,
+        loaded_at    TIMESTAMP
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_risk_summary_company  ON analytics.risk_summary (company_id)",
+    "CREATE INDEX IF NOT EXISTS idx_risk_summary_status   ON analytics.risk_summary (company_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_risk_summary_severity ON analytics.risk_summary (company_id, severity)",
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.opportunity_summary (
+        id                  TEXT,
+        company_id          TEXT,
+        subject_type        TEXT,
+        subject_id          TEXT,
+        type                TEXT,
+        title               TEXT,
+        description         TEXT,
+        estimated_value     NUMERIC,
+        confidence          NUMERIC,
+        market_context      TEXT,
+        supporting_evidence TEXT,
+        status              TEXT,
+        assigned_to         TEXT,
+        source              TEXT,
+        insight_id          TEXT,
+        outcome_value       NUMERIC,
+        created_by          TEXT,
+        created_at          TIMESTAMP,
+        closed_at           TIMESTAMP,
+        snapshot_date       DATE,
+        loaded_at           TIMESTAMP
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_opportunity_company ON analytics.opportunity_summary (company_id)",
+    "CREATE INDEX IF NOT EXISTS idx_opportunity_status  ON analytics.opportunity_summary (company_id, status)",
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.decision_log (
+        id                TEXT,
+        company_id        TEXT,
+        recommendation_id TEXT,
+        insight_id        TEXT,
+        decision          TEXT,
+        decided_by        TEXT,
+        decided_at        TIMESTAMP,
+        notes             TEXT,
+        rejection_reason  TEXT,
+        modified_payload  TEXT,
+        outcome_status    TEXT,
+        outcome_summary   TEXT,
+        outcome_metric_delta NUMERIC,
+        created_by        TEXT,
+        snapshot_date     DATE,
+        loaded_at         TIMESTAMP
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_decision_log_company ON analytics.decision_log (company_id)",
+    "CREATE INDEX IF NOT EXISTS idx_decision_log_rec     ON analytics.decision_log (recommendation_id)",
+
+    """
+    CREATE TABLE IF NOT EXISTS analytics.model_runs (
+        id                TEXT,
+        company_id        TEXT,
+        model_name        TEXT,
+        model_version     TEXT,
+        entity_type       TEXT,
+        entity_id         TEXT,
+        inputs_json       TEXT,
+        outputs_json      TEXT,
+        confidence        NUMERIC,
+        ran_at            TIMESTAMP,
+        trigger           TEXT,
+        accuracy_feedback NUMERIC,
+        snapshot_date     DATE,
+        loaded_at         TIMESTAMP
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_model_runs_company ON analytics.model_runs (company_id)",
+    "CREATE INDEX IF NOT EXISTS idx_model_runs_model   ON analytics.model_runs (model_name)",
+    "CREATE INDEX IF NOT EXISTS idx_model_runs_entity  ON analytics.model_runs (company_id, entity_type, entity_id)",
+]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Column migrations — run after every CREATE TABLE IF NOT EXISTS.
 # Required for live deployments where the table already exists but is missing
 # columns added in later phases. Add one entry per new column on any existing
@@ -1017,6 +1196,15 @@ def ensure_all_analytics_tables(engine) -> None:
                     created += 1
                 except Exception as exc:
                     logger.warning("setup: other DDL failed — %s", exc)
+                    errors += 1
+
+            # Intelligence layer tables (Insight, Recommendation, Risk, Opportunity, ModelRun)
+            for ddl in _INTELLIGENCE_DDL:
+                try:
+                    conn.execute(text(ddl))
+                    created += 1
+                except Exception as exc:
+                    logger.warning("setup: intelligence DDL failed — %s", exc)
                     errors += 1
 
             # Column migrations — add new columns to existing tables

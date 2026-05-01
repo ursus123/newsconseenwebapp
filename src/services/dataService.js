@@ -146,6 +146,50 @@ export const ENTITY_REGISTRY = {
     taxonomyType: "observation",
     displayName:  (r) => r.observation_type || r.id,
   },
+
+  // ── Intelligence Layer ─────────────────────────────────────────
+  insight: {
+    entity:      () => base44.entities.Insight,
+    queryKey:    "insights",
+    etl:         "insight",
+    auditType:   "insight",
+    displayName: (r) => r.title || r.id,
+  },
+  recommendation: {
+    entity:      () => base44.entities.Recommendation,
+    queryKey:    "recommendations",
+    etl:         "recommendation",
+    auditType:   "recommendation",
+    displayName: (r) => r.title || r.id,
+  },
+  decision: {
+    entity:      () => base44.entities.Decision,
+    queryKey:    "decisions",
+    etl:         "decision",
+    auditType:   "decision",
+    displayName: (r) => r.decision || r.id,
+  },
+  risk: {
+    entity:      () => base44.entities.Risk,
+    queryKey:    "risks",
+    etl:         "risk",
+    auditType:   "risk",
+    displayName: (r) => r.title || r.id,
+  },
+  opportunity: {
+    entity:      () => base44.entities.Opportunity,
+    queryKey:    "opportunities",
+    etl:         "opportunity",
+    auditType:   "opportunity",
+    displayName: (r) => r.title || r.id,
+  },
+  metric_definition: {
+    entity:      () => base44.entities.MetricDefinition,
+    queryKey:    "metric_definitions",
+    etl:         "metric_definition",
+    auditType:   "metric_definition",
+    displayName: (r) => r.name || r.id,
+  },
 };
 
 function _reg(entityName) {
