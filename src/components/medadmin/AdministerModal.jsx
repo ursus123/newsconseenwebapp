@@ -1,14 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation } from "@tanstack/react-query";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
-    method: "POST",
-    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
-  }).catch(() => {});
+import { createRecord, updateRecord } from "@/services/dataService";
 import { format } from "date-fns";
 import { CheckCircle2, AlertCircle, X, AlertTriangle, Package } from "lucide-react";
 import RefusalCaptureForm from "./RefusalCaptureForm";
@@ -81,18 +74,16 @@ export default function AdministerModal({ task, user, products = [], onClose, on
       if (vitalsNote) finalNotes = (finalNotes ? `${finalNotes} | ` : "") + `Vitals: ${vitalsNote}`;
       finalNotes = (finalNotes ? `${finalNotes} | ` : "") + `Recorded at ${time} by ${user?.full_name || user?.email}`;
 
-      await base44.entities.Task.update(task.id, {
+      await updateRecord("task", task.id, {
         status: "completed",
         outcome,
         outcome_notes: finalNotes,
-      });
-      triggerETL("task");
+      }, user);
 
       if (outcome === "completed" || outcome === "partially_done") {
         if (productRecord) {
           const newQty = Math.max(0, (productRecord.stock_quantity || 0) - doseQty);
-          await base44.entities.Product.update(productRecord.id, { stock_quantity: newQty });
-          triggerETL("product");
+          await updateRecord("product", productRecord.id, { stock_quantity: newQty }, user);
           await createStockTransaction(
             "stock_out",
             { id: productRecord.id, name: productRecord.name || task.title, unit: productRecord.unit || "dose", cost_price: productRecord.cost_price || 0 },
@@ -149,15 +140,14 @@ export default function AdministerModal({ task, user, products = [], onClose, on
           </div>
           <button
             onClick={async () => {
-              await base44.entities.Task.create({
+              await createRecord("task", {
                 task_type: "stock_counting",
                 title: `URGENT: Reorder ${task.title}`,
                 priority: "urgent",
                 status: "open",
                 scheduled_date: todayStr(),
                 internal_notes: `Auto-generated from MedAdmin out-of-stock check. Medication: ${task.title}`,
-              });
-              triggerETL("task");
+              }, user);
               setReorderCreated(true);
             }}
             disabled={reorderCreated}

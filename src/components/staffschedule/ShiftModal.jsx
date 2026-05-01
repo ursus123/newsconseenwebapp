@@ -1,14 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Trash2, AlertTriangle } from "lucide-react";
-import { base44 } from "@/api/base44Client";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
-    method: "POST",
-    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
-  }).catch(() => {});
+import { createRecord, updateRecord, deleteRecord } from "@/services/dataService";
 import { format, addDays } from "date-fns";
 import { SHIFT_TYPES, parseShiftMeta, calcHours, getShiftTypeDef } from "./shiftUtils";
 
@@ -102,13 +94,12 @@ export default function ShiftModal({ existingTask, prefillDate, prefillStaff, pe
     setSaving(true);
     const payload = buildPayload();
     if (isEdit) {
-      await base44.entities.Task.update(existingTask.id, payload);
+      await updateRecord("task", existingTask.id, payload, user);
     } else {
-      await base44.entities.Task.create(payload);
+      await createRecord("task", payload, user);
       const extraDates = getRepeatDates();
-      await Promise.all(extraDates.map((d) => base44.entities.Task.create(buildPayload(d))));
+      await Promise.all(extraDates.map((d) => createRecord("task", buildPayload(d), user)));
     }
-    triggerETL("task");
     setSaving(false);
     if (andAddAnother) onAddAnother?.();
     else onSuccess?.();
@@ -117,7 +108,7 @@ export default function ShiftModal({ existingTask, prefillDate, prefillStaff, pe
   const handleDelete = async () => {
     if (!existingTask?.id) return;
     setDeleting(true);
-    await base44.entities.Task.delete(existingTask.id);
+    await deleteRecord("task", existingTask.id, user);
     setDeleting(false);
     onSuccess?.();
   };

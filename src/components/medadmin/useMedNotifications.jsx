@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { format, differenceInMinutes } from "date-fns";
 import { base44 } from "@/api/base44Client";
+import { createRecord } from "@/services/dataService";
 
 /**
  * Polls medication tasks every 60s and generates in-app notifications.
@@ -71,7 +72,7 @@ export function useMedNotifications(user, enabled = true) {
           if (!level2CreatedRef.current.has(l2Key)) {
             level2CreatedRef.current.add(l2Key);
             try {
-              await base44.entities.Task.create({
+              await createRecord("task", {
                 task_type: "other",
                 title: `URGENT: Missed dose — ${task.title} for ${task.related_person || "patient"}`,
                 priority: "urgent",
@@ -79,7 +80,7 @@ export function useMedNotifications(user, enabled = true) {
                 outcome: "pending",
                 scheduled_date: today,
                 internal_notes: `Auto-generated missed dose escalation. Original task ID: ${task.id}`,
-              });
+              }, user);
             } catch {}
           }
           const key = buildKey(task, "overdue_l2");

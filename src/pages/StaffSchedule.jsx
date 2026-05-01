@@ -8,16 +8,8 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-
+import { createRecord, updateRecord } from "@/services/dataService";
 import { getWeekDays, formatWeekLabel, parseShiftMeta, todayStr } from "@/components/staffschedule/shiftUtils";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
-    method: "POST",
-    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
-  }).catch(() => {});
 import WeekView from "@/components/staffschedule/WeekView";
 import DayView from "@/components/staffschedule/DayView";
 import MonthView from "@/components/staffschedule/MonthView";
@@ -119,7 +111,7 @@ export default function StaffSchedule() {
         const oldDate = new Date(s.scheduled_date);
         const newDate = new Date(oldDate.getTime() + 7 * 86400000);
         const meta = { ...parseShiftMeta(s), published: false };
-        return base44.entities.Task.create({
+        return createRecord("task", {
           ...s,
           id: undefined,
           created_date: undefined,
@@ -128,14 +120,13 @@ export default function StaffSchedule() {
           outcome_notes: JSON.stringify(meta),
           status: "open",
           outcome: "pending",
-        });
+        }, user, { queryClient: qc });
       });
-      await Promise.all(creates);
-      return creates.length;
+      const results = await Promise.all(creates);
+      return results.length;
     },
     onSuccess: (count) => {
       qc.invalidateQueries({ queryKey: ["shift-tasks"] });
-      triggerETL("task");
       setCopyConfirm(false);
       setCopyResult(`✅ ${count} shifts copied from last week`);
       setTimeout(() => setCopyResult(null), 4000);
@@ -148,13 +139,12 @@ export default function StaffSchedule() {
       const drafts = weekShifts.filter((s) => !parseShiftMeta(s).published);
       await Promise.all(drafts.map((s) => {
         const meta = { ...parseShiftMeta(s), published: true };
-        return base44.entities.Task.update(s.id, { outcome_notes: JSON.stringify(meta) });
+        return updateRecord("task", s.id, { outcome_notes: JSON.stringify(meta) }, user, { queryClient: qc });
       }));
       return drafts.length;
     },
     onSuccess: (count) => {
       qc.invalidateQueries({ queryKey: ["shift-tasks"] });
-      triggerETL("task");
       setPublishResult(`✅ ${count} shifts published`);
       setTimeout(() => setPublishResult(null), 4000);
     },

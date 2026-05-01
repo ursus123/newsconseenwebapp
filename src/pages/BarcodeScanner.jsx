@@ -14,14 +14,7 @@ import ActivityLog from "@/components/barcodescanner/ActivityLog";
 import LowStockPanel from "@/components/barcodescanner/LowStockPanel";
 import BulkQueue from "@/components/barcodescanner/BulkQueue";
 import { createStockTransaction } from "@/utils/createTransaction";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
-    method: "POST",
-    headers: { "x-api-key": RAILWAY_API_KEY },
-  }).catch(() => {});
+import { createRecord, updateRecord, deleteRecord } from "@/services/dataService";
 
 export function playBeep(error = false) {
   try {
@@ -188,7 +181,7 @@ export default function BarcodeScanner() {
     const oldQty = prod.stock_quantity || 0;
     const newQty = dir === "in" ? oldQty + effectiveQty : Math.max(0, oldQty - effectiveQty);
 
-    await base44.entities.Product.update(prod.id, { stock_quantity: newQty });
+    await updateRecord("product", prod.id, { stock_quantity: newQty }, user);
 
     const txn = await createStockTransaction(
       dir === "in" ? "stock_in" : "stock_out",
@@ -203,42 +196,36 @@ export default function BarcodeScanner() {
       }
     );
 
-    const task = await base44.entities.Task.create({
+    const task = await createRecord("task", {
       task_type: "stock_counting",
       title: `${dir === "in" ? "Stock IN" : "Stock OUT"}: ${prod.name} x${effectiveQty}`,
       status: "completed",
       outcome: "completed",
-      company_id: user?.company_id,
       enterprise: selectedEnterprise,
       related_item: prod.name,
       assigned_to_name: user?.full_name || user?.email,
       assigned_to_email: user?.email,
       outcome_notes: `Barcode: ${prod.sku || "—"} | Qty: ${effectiveQty} | New stock: ${newQty} | Notes: ${notes || "none"}`,
-    });
+    }, user);
 
     // Auto-create reorder task if stock hits zero
     let reorderCreated = false;
     if (dir === "out" && newQty === 0) {
       reorderCreated = true;
-      await base44.entities.Task.create({
+      await createRecord("task", {
         task_type: "stock_counting",
         title: `URGENT: Reorder ${prod.name} — OUT OF STOCK`,
         status: "open",
         priority: "urgent",
-        company_id: user?.company_id,
         enterprise: selectedEnterprise,
         related_item: prod.name,
         assigned_to_email: user?.email,
         outcome_notes: `${prod.name} (SKU: ${prod.sku || "—"}) reached zero stock after scan by ${user?.full_name || user?.email} at ${format(new Date(), "HH:mm on MMM d")}`,
-      });
+      }, user);
     }
 
     // Update local products cache
     setProducts((ps) => ps.map((p) => p.id === prod.id ? { ...p, stock_quantity: newQty } : p));
-
-    // Sync analytics — fire and forget
-    triggerETL("product");
-    triggerETL("transaction");
 
     playBeep(false);
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
@@ -275,11 +262,11 @@ export default function BarcodeScanner() {
     if (!entry.txnId && !entry.taskId) return;
     const prod = products.find((p) => p.id === entry.product.id);
     if (prod) {
-      await base44.entities.Product.update(prod.id, { stock_quantity: entry.oldQty });
+      await updateRecord("product", prod.id, { stock_quantity: entry.oldQty }, user);
       setProducts((ps) => ps.map((p) => p.id === prod.id ? { ...p, stock_quantity: entry.oldQty } : p));
     }
-    if (entry.txnId) await base44.entities.Transaction.delete(entry.txnId).catch(() => {});
-    if (entry.taskId) await base44.entities.Task.delete(entry.taskId).catch(() => {});
+    if (entry.txnId) await deleteRecord("transaction", entry.txnId, user).catch(() => {});
+    if (entry.taskId) await deleteRecord("task", entry.taskId, user).catch(() => {});
     setActivityLog((l) => l.filter((e) => e.id !== entry.id));
   };
 

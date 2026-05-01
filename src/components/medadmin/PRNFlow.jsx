@@ -1,14 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation } from "@tanstack/react-query";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
-    method: "POST",
-    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
-  }).catch(() => {});
+import { createRecord, updateRecord } from "@/services/dataService";
 import { format } from "date-fns";
 import { X, CheckCircle2, Search, Pill, ChevronDown } from "lucide-react";
 import MedMedicationPicker from "@/components/medadmin/MedMedicationPicker";
@@ -96,7 +89,7 @@ export default function PRNFlow({ user, selectedClient, people, products, enterp
       const now = nowTimeStr();
 
       // Create the Task (intent + execution record)
-      const mainTask = await base44.entities.Task.create({
+      const mainTask = await createRecord("task", {
         task_type: "medication_admin",
         title: `PRN: ${medName}`,
         status: "completed",
@@ -115,10 +108,10 @@ export default function PRNFlow({ user, selectedClient, people, products, enterp
           effectiveness && `Effectiveness: ${effectiveness}`,
         ].filter(Boolean).join(" | "),
         internal_notes: `PRN | Batch: ${medication?.batch_number || "—"} | Location: ${address?.label || address?.address_line1 || "—"}`,
-      });
+      }, user);
 
       // Create Transaction (stock out — fact record)
-      await base44.entities.Transaction.create({
+      await createRecord("transaction", {
         transaction_type: "stock_out",
         status: "posted",
         date: today,
@@ -133,19 +126,19 @@ export default function PRNFlow({ user, selectedClient, people, products, enterp
           unit_price: medication?.cost_price || 0,
         }],
         internal_notes: `Admin: ${adminName} | Route: ${route} | Indication: ${symptom} | Task ref: ${mainTask.id}`,
-      });
+      }, user);
 
       // Reduce stock_quantity on the Product record
       if (medication?.id) {
         try {
           const newQty = Math.max(0, (medication.stock_quantity || 0) - 1);
-          await base44.entities.Product.update(medication.id, { stock_quantity: newQty });
+          await updateRecord("product", medication.id, { stock_quantity: newQty }, user);
         } catch {}
       }
 
       // Follow-up task if requested
       if (scheduleFollowup) {
-        await base44.entities.Task.create({
+        await createRecord("task", {
           task_type: "medication_admin",
           title: `PRN Follow-up: ${medName} effectiveness check`,
           status: "open",
@@ -157,11 +150,8 @@ export default function PRNFlow({ user, selectedClient, people, products, enterp
           scheduled_date: today,
           scheduled_time: format(new Date(Date.now() + parseInt(followupHours) * 3600000), "HH:mm"),
           internal_notes: `Follow-up PRN effectiveness check for ${medName}`,
-        });
+        }, user);
       }
-
-      triggerETL("task");
-      triggerETL("transaction");
       triggerETL("product");
       return mainTask;
     },

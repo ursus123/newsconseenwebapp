@@ -18,14 +18,7 @@ import ClockInModal from "@/components/clockinout/ClockInModal";
 import ClockOutModal from "@/components/clockinout/ClockOutModal";
 import WeeklyView from "@/components/clockinout/WeeklyView";
 import { TeamTodayView, TeamWeekView } from "@/components/clockinout/TeamView";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
-    method: "POST",
-    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
-  }).catch(() => {});
+import { createRecord } from "@/services/dataService";
 
 function LiveClock() {
   const [now, setNow] = useState(new Date());
@@ -199,7 +192,7 @@ export default function ClockInOut() {
       if (queue.length === 0) return;
       // Process queue
       for (const action of queue) {
-        await base44.entities.Task.create(action.taskData).catch(() => {});
+        await createRecord("task", action.taskData, user).catch(() => {});
       }
       clearOfflineQueue(user.email);
       setOfflineQueue([]);
@@ -328,13 +321,13 @@ export default function ClockInOut() {
         return { offline: true };
       }
 
-      const task = await base44.entities.Task.create(taskData);
+      const task = await createRecord("task", taskData, user, { queryClient: qc });
       if (data.task_type === "clock_in" || data.task_type === "clock_out") {
         await triggerAttendanceTransaction(data.task_type, task, user).catch(() => {});
       }
       return task;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["clock-tasks"] }); triggerETL("task"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["clock-tasks"] }); },
   });
 
   const handleClockIn = () => {

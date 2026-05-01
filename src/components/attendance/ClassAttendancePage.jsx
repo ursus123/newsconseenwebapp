@@ -4,14 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { ArrowLeft, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
-    method: "POST",
-    headers: { "x-api-key": RAILWAY_API_KEY },
-  }).catch(() => {});
+import { createRecord } from "@/services/dataService";
 
 const STUDENT_SUBTYPES = [
   "Student Customer",
@@ -101,30 +94,22 @@ export default function ClassAttendancePage({ classObj, currentUser, onBack, onO
     setSubmitting(true);
     try {
       const today = new Date().toISOString().split("T")[0];
-      
+
       for (const [studentId, state] of Object.entries(attendance)) {
         if (state) {
-          await base44.entities.Task.create({
+          await createRecord("task", {
             task_type: "attendance",
             title: `Attendance — ${classObj.enterprise_name}`,
             status: "completed",
             outcome: state === "present" ? "completed" : "cancelled",
             date: today,
             enterprise: classObj.id,
-            company_id: currentUser.company_id,
             assigned_to_email: people.find(p => p.id === studentId)?.email,
             assigned_to_name: people.find(p => p.id === studentId)?.preferred_name || people.find(p => p.id === studentId)?.first_name,
-          });
+          }, currentUser);
         }
       }
 
-      // Fire and forget refresh
-      fetch(`${RAILWAY_URL}/load/task-summary`, {
-        method: "POST",
-        headers: { "x-api-key": RAILWAY_API_KEY },
-      }).catch(() => {});
-
-      triggerETL("task");
       toast({ title: "Attendance recorded", description: `${Object.values(attendance).filter(s => s).length} students marked.` });
       onBack();
     } catch (e) {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation } from "@tanstack/react-query";
+import { createRecord } from "@/services/dataService";
 import { format } from "date-fns";
 import { Lock, Bell, Monitor, Info, RefreshCw, AlertCircle, Sun, Moon, Check } from "lucide-react";
 
@@ -69,7 +70,7 @@ export default function SettingsTab({ user, darkMode, onDarkModeChange, onRefres
   };
 
   const reportMut = useMutation({
-    mutationFn: () => base44.entities.Task.create({
+    mutationFn: () => createRecord("task", {
       task_type: "incident_observation",
       title: `Problem Report from ${user?.full_name || user?.email}`,
       status: "open",
@@ -78,7 +79,7 @@ export default function SettingsTab({ user, darkMode, onDarkModeChange, onRefres
       scheduled_time: format(new Date(), "HH:mm"),
       assigned_to_email: user?.email,
       internal_notes: `Auto-generated problem report via MedAdmin Settings`,
-    }),
+    }, user),
   });
 
   const cardCls = darkMode ? "bg-slate-800 border-slate-700" : "bg-white border-gray-100";

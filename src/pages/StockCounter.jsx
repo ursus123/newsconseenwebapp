@@ -14,14 +14,7 @@ import SubmitDialog from "@/components/stockcounter/SubmitDialog";
 import SuccessScreen from "@/components/stockcounter/SuccessScreen";
 import { createStockTransaction } from "@/utils/createTransaction";
 import { useToast } from "@/components/ui/use-toast";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
-    method: "POST",
-    headers: { "x-api-key": RAILWAY_API_KEY },
-  }).catch(() => {});
+import { createRecord, updateRecord } from "@/services/dataService";
 
 const TABS = [
   { id: "sheet",   label: "Count Sheet", icon: ClipboardList },
@@ -199,7 +192,7 @@ export default function StockCounter() {
       if (diff === 0) { results.skipped++; continue; }
 
       try {
-        await base44.entities.Product.update(productId, { stock_quantity: count.physical_count });
+        await updateRecord("product", productId, { stock_quantity: count.physical_count }, currentUser);
         await createStockTransaction(
           "stock_adjustment",
           { id: productId, name: count.product_name, unit: count.unit || "units", cost_price: count.cost_price || 0 },
@@ -219,13 +212,12 @@ export default function StockCounter() {
       await new Promise(r => setTimeout(r, 150));
     }
 
-    await base44.entities.Task.create({
+    await createRecord("task", {
       task_type: "stock_count",
       title: `Stock Count — ${session.enterprise} — ${new Date().toLocaleDateString()}`,
       status: "completed",
       outcome: "completed",
       enterprise: session.enterprise,
-      company_id: currentUser.company_id,
       assigned_to_name: session.counted_by,
       assigned_to_email: currentUser?.email,
       outcome_notes: JSON.stringify({
@@ -238,7 +230,7 @@ export default function StockCounter() {
         started_at: session.started_at,
         completed_at: new Date().toISOString(),
       }),
-    });
+    }, currentUser);
 
     const draftKey = `stock_count_draft_${currentUser?.email}_${session?.enterprise || "default"}`;
     localStorage.removeItem(draftKey);
