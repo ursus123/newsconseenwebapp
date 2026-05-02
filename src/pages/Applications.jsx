@@ -8,6 +8,7 @@ import {
   APP_REGISTRY, CATEGORIES, PLAN_ORDER, APPS_BY_ENTERPRISE_CATEGORY,
   ONTOLOGY_TYPES, CATEGORY_EMOJIS,
 } from "@/components/applications/appRegistry";
+import { checkAppReadiness } from "@/components/applications/appManifests";
 import { getCategoryFromType } from "@/config/enterpriseTerminology";
 import AppCard from "@/components/applications/AppCard";
 import ComingSoonModal from "@/components/applications/ComingSoonModal";
@@ -59,6 +60,32 @@ export default function Applications() {
   const enterprise = enterprises[0];
   const industry = enterprise?.enterprise_type || "";
   const enterpriseCategory = getCategoryFromType(industry);
+
+  // Lightweight entity counts for app readiness badges (stale for 2 min — not critical)
+  const { data: staffCount = 0 } = useQuery({
+    queryKey: ["readiness_staff", user?.company_id],
+    queryFn: () => base44.entities.Person.filter({ company_id: user.company_id, person_type: "staff" }).then((r) => r.length),
+    enabled: !!user?.company_id,
+    staleTime: 120000,
+  });
+  const { data: clientsCount = 0 } = useQuery({
+    queryKey: ["readiness_clients", user?.company_id],
+    queryFn: () => base44.entities.Person.filter({ company_id: user.company_id, person_type: "client" }).then((r) => r.length),
+    enabled: !!user?.company_id,
+    staleTime: 120000,
+  });
+  const { data: productsCount = 0 } = useQuery({
+    queryKey: ["readiness_products", user?.company_id],
+    queryFn: () => base44.entities.Product.filter({ company_id: user.company_id, status: "active" }).then((r) => r.length),
+    enabled: !!user?.company_id,
+    staleTime: 120000,
+  });
+  const entityCounts = {
+    staff_exist:      staffCount,
+    clients_exist:    clientsCount,
+    products_exist:   productsCount,
+    enterprise_exist: enterprises.length,
+  };
   const recommendedIds = APPS_BY_ENTERPRISE_CATEGORY[enterpriseCategory] || [];
 
   const isEducation = industry === "education";
@@ -220,6 +247,7 @@ export default function Applications() {
                   key={app.id}
                   app={app}
                   isLocked={isLocked(app)}
+                  readiness={checkAppReadiness(app.id, entityCounts)}
                   onLaunch={handleCardClick}
                   onUpgrade={() => setUpgradeApp(app)}
                 />

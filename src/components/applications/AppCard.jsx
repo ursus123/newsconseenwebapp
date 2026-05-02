@@ -1,5 +1,5 @@
 import React from "react";
-import { Lock, Sparkles } from "lucide-react";
+import { Lock, Sparkles, CheckCircle2, AlertCircle, Circle } from "lucide-react";
 import { COLOR_MAP, ONTOLOGY_MAP } from "./appRegistry";
 
 const PLAN_LABELS = { starter: "Starter", professional: "Professional", consultant: "Consultant" };
@@ -15,7 +15,30 @@ function OntologyBadge({ typeKey }) {
   );
 }
 
-export default function AppCard({ app, isLocked, onLaunch, onUpgrade }) {
+function ReadinessBadge({ readiness, exists }) {
+  if (!exists || !readiness) return null;
+  if (readiness.score === 100) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-semibold border border-emerald-200" title="Setup complete">
+        <CheckCircle2 className="w-2.5 h-2.5" /> Ready
+      </span>
+    );
+  }
+  if (readiness.score > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 text-[10px] font-semibold border border-amber-200" title={`Missing: ${readiness.missing.join(", ")}`}>
+        <Circle className="w-2.5 h-2.5 fill-amber-400" /> {readiness.score}% ready
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-500 text-[10px] font-semibold border border-red-200" title={`Missing: ${readiness.missing.join(", ")}`}>
+      <AlertCircle className="w-2.5 h-2.5" /> Setup needed
+    </span>
+  );
+}
+
+export default function AppCard({ app, isLocked, readiness, onLaunch, onUpgrade }) {
   const colors = COLOR_MAP[app.color] || COLOR_MAP.slate;
 
   const handleClick = () => {
@@ -59,7 +82,19 @@ export default function AppCard({ app, isLocked, onLaunch, onUpgrade }) {
           {app.category}
         </span>
         <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">{app.description}</p>
+        {readiness && app.exists && !isLocked && readiness.missing.length > 0 && (
+          <p className="text-[10px] text-amber-600 mt-1.5 leading-snug">
+            Setup needed: {readiness.missing[0]}
+          </p>
+        )}
       </div>
+
+      {/* Readiness badge */}
+      {app.exists && !isLocked && (
+        <div className="flex items-center gap-1.5">
+          <ReadinessBadge readiness={readiness} exists={app.exists} />
+        </div>
+      )}
 
       {/* Ontology object badges */}
       {app.ontologyObjects && app.ontologyObjects.length > 0 && (
