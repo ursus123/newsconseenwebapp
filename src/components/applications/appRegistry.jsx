@@ -67,6 +67,7 @@ export const APP_REGISTRY = [
 
   // TOOLS & UTILITIES
   { id: "pdftoexcel",        name: "PDF to Excel",               emoji: "📄",  description: "Convert PDF documents into structured Excel spreadsheets using AI",                   category: "Tools",       route: "PdfToExcel",          color: "violet",  roles: "all",        plan: "starter",      exists: true,  isNew: true, backend: "datamart",  ontologyObjects: ["Person", "Enterprise", "Transaction"] },
+  { id: "pdftoontology",    name: "PDF to Ontology",            emoji: "🧠",  description: "Extract records from any PDF and load directly into the ontology via AI",              category: "Tools",       route: "PdfToOntology",       color: "blue",    roles: "all",        plan: "starter",      exists: true,  isNew: true, backend: "ontology",  ontologyObjects: ["Person", "Enterprise", "Product", "Transaction"] },
 
   // FINANCE & ADMIN
   { id: "pettycashlog",      name: "Petty Cash Log",             emoji: "💰",  description: "Track small cash payments and maintain petty cash balance",                           category: "Finance",     route: "PettyCashLog",        color: "emerald", roles: "admin_only", plan: "starter",      exists: false, backend: "ontology",  ontologyObjects: ["Transaction"] },
