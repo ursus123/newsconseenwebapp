@@ -15,6 +15,7 @@ import LowStockPanel from "@/components/barcodescanner/LowStockPanel";
 import BulkQueue from "@/components/barcodescanner/BulkQueue";
 import { createStockTransaction } from "@/utils/createTransaction";
 import { createRecord, updateRecord, deleteRecord } from "@/services/dataService";
+import { createRisk } from "@/services/intelligenceService";
 
 export function playBeep(error = false) {
   try {
@@ -222,6 +223,17 @@ export default function BarcodeScanner() {
         assigned_to_email: user?.email,
         outcome_notes: `${prod.name} (SKU: ${prod.sku || "—"}) reached zero stock after scan by ${user?.full_name || user?.email} at ${format(new Date(), "HH:mm on MMM d")}`,
       }, user);
+      createRisk({
+        subject_type: "Product",
+        subject_id: prod.id,
+        subject_name: prod.name,
+        category: "operational",
+        severity: "high",
+        likelihood: "certain",
+        title: `Stockout: ${prod.name} has zero stock`,
+        description: `${prod.name} (SKU: ${prod.sku || "—"}) reached zero stock after scan by ${user?.full_name || user?.email}. Reorder task created.`,
+        source: "barcode",
+      }, user).catch(() => {});
     }
 
     // Update local products cache

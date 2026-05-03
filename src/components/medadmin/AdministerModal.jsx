@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useMutation } from "@tanstack/react-query";
 import { createRecord, updateRecord } from "@/services/dataService";
+import { createRisk } from "@/services/intelligenceService";
 import { format } from "date-fns";
 import { CheckCircle2, AlertCircle, X, AlertTriangle, Package } from "lucide-react";
 import RefusalCaptureForm from "./RefusalCaptureForm";
@@ -79,6 +80,20 @@ export default function AdministerModal({ task, user, products = [], onClose, on
         outcome,
         outcome_notes: finalNotes,
       }, user);
+
+      if (outcome === "refused") {
+        createRisk({
+          subject_type: "Task",
+          subject_id: task.id,
+          subject_name: task.related_person || "resident",
+          category: "compliance",
+          severity: "medium",
+          likelihood: "medium",
+          title: `Medication refused: ${task.title}`,
+          description: `${task.related_person || "Resident"} refused ${task.title} (scheduled ${task.scheduled_time}). ${refusalData.structured ? `Reason: ${refusalData.structured}.` : ""}`,
+          source: "medadmin",
+        }, user).catch(() => {});
+      }
 
       if (outcome === "completed" || outcome === "partially_done") {
         if (productRecord) {

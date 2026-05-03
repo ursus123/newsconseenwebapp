@@ -5,6 +5,7 @@ import { ArrowLeft, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { createRecord } from "@/services/dataService";
+import { createRisk } from "@/services/intelligenceService";
 
 const STUDENT_SUBTYPES = [
   "Student Customer",
@@ -108,6 +109,25 @@ export default function ClassAttendancePage({ classObj, currentUser, onBack, onO
             assigned_to_name: people.find(p => p.id === studentId)?.preferred_name || people.find(p => p.id === studentId)?.first_name,
           }, currentUser);
         }
+      }
+
+      // Fire absenteeism risk if ≥30% of class is absent
+      const absentIds = Object.entries(attendance)
+        .filter(([, state]) => state === "absent")
+        .map(([id]) => id);
+      const absentRate = total > 0 ? absentIds.length / total : 0;
+      if (absentIds.length > 0 && absentRate >= 0.3) {
+        createRisk({
+          subject_type: "Enterprise",
+          subject_id: classObj.id,
+          subject_name: classObj.enterprise_name,
+          category: "operational",
+          severity: absentRate >= 0.5 ? "high" : "medium",
+          likelihood: "medium",
+          title: `High absenteeism: ${Math.round(absentRate * 100)}% absent in ${classObj.enterprise_name}`,
+          description: `${absentIds.length} of ${total} students absent on ${today}. Rate: ${Math.round(absentRate * 100)}%.`,
+          source: "attendance",
+        }, currentUser).catch(() => {});
       }
 
       toast({ title: "Attendance recorded", description: `${Object.values(attendance).filter(s => s).length} students marked.` });

@@ -15,6 +15,7 @@ import SuccessScreen from "@/components/stockcounter/SuccessScreen";
 import { createStockTransaction } from "@/utils/createTransaction";
 import { useToast } from "@/components/ui/use-toast";
 import { createRecord, updateRecord } from "@/services/dataService";
+import { createInsight } from "@/services/intelligenceService";
 
 const TABS = [
   { id: "sheet",   label: "Count Sheet", icon: ClipboardList },
@@ -235,9 +236,32 @@ export default function StockCounter() {
     const draftKey = `stock_count_draft_${currentUser?.email}_${session?.enterprise || "default"}`;
     localStorage.removeItem(draftKey);
 
-    // Refresh analytics after stock count so dashboards reflect new levels immediately
-    triggerETL("product");      // fire and forget — don't block the success screen
-    triggerETL("transaction");  // stock adjustment transactions also update analytics
+    // Fire shrinkage insight if negative variance found
+    const shrinkageItems = Object.values(session.counts).filter(
+      (c) => c.counted && c.physical_count !== null && c.physical_count < c.system_count,
+    );
+    if (shrinkageItems.length > 0) {
+      const totalLoss = shrinkageItems.reduce((acc, c) => acc + (c.system_count - c.physical_count), 0);
+      createInsight({
+        subject_type: "Enterprise",
+        subject_id: session.enterprise || currentUser?.company_id,
+        subject_name: session.enterprise || "Warehouse",
+        insight_type: "anomaly",
+        title: `Stock shrinkage: ${shrinkageItems.length} item(s), ${totalLoss} units`,
+        body: `Stock count found ${shrinkageItems.length} item(s) with negative variance totalling ${totalLoss} units. Items: ${shrinkageItems.slice(0, 3).map((c) => c.product_name).join(", ")}${shrinkageItems.length > 3 ? ` and ${shrinkageItems.length - 3} more` : ""}.`,
+        severity: totalLoss > 20 ? "high" : "medium",
+        confidence: 0.95,
+        source: "report",
+        source_run_id: `stockcounter-${session.id}`,
+        evidence: shrinkageItems.map((c) => ({
+          type: "internal_metric",
+          source: "stockcounter",
+          label: c.product_name,
+          value: c.physical_count,
+          comparison_value: c.system_count,
+        })),
+      }, currentUser).catch(() => {});
+    }
 
     setShowSubmit(false);
     setSubmitResult({ ...results, session });
