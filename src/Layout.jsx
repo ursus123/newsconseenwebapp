@@ -47,8 +47,6 @@ import {
   Upload,
   Clock,
   UserPlus,
-  ScanLine,
-  Wifi,
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import SetupWizard from "@/components/shared/SetupWizard";
@@ -117,8 +115,8 @@ const NAV_CONFIG = {
         { name: "alerts",             label: "Alerts",               icon: Bell, badge: "alerts" },
         { name: "MarketIntelligence", label: "Market Intelligence",  icon: TrendingUp },
         { name: "MapExplorer",        label: "Spatial Intelligence", icon: Map },
-        { name: "network",            label: "Network Intelligence", icon: Wifi, requiresNetwork: true },
-        { name: "MLModels",           label: "ML Models",            icon: ScanLine },
+        { name: "network",            label: "Network Intelligence", icon: Globe, requiresNetwork: true },
+        { name: "MLModels",           label: "ML Models",            icon: Activity },
         { name: "KineticLayer",       label: "Kinetic Layer",        icon: Zap },
       ],
     },
@@ -130,7 +128,7 @@ const NAV_CONFIG = {
         { name: "ObjectExplorer", label: "Object Explorer", icon: Search },
         { name: "ObjectViews",    label: "Object Views",    icon: Layers },
         { name: "EntityGraph",    label: "Entity Graph",    icon: Network },
-        { name: "MLModels",       label: "ML Models",       icon: ScanLine },
+        { name: "MLModels",       label: "ML Models",       icon: Activity },
       ],
     },
     {
@@ -201,8 +199,8 @@ const NAV_CONFIG = {
         { name: "alerts",             label: "Alerts",               icon: Bell, badge: "alerts" },
         { name: "MarketIntelligence", label: "Market Intelligence",  icon: TrendingUp },
         { name: "MapExplorer",        label: "Spatial Intelligence", icon: Map },
-        { name: "network",            label: "Network Intelligence", icon: Wifi, requiresNetwork: true },
-        { name: "MLModels",           label: "ML Models",            icon: ScanLine },
+        { name: "network",            label: "Network Intelligence", icon: Globe, requiresNetwork: true },
+        { name: "MLModels",           label: "ML Models",            icon: Activity },
       ],
     },
     {
