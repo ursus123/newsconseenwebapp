@@ -1155,6 +1155,28 @@ _ENRICHMENT_EVENTS_DDL = [
 ]
 
 
+_OPERATIONAL_EVENTS_DDL = [
+    """
+    CREATE TABLE IF NOT EXISTS analytics.operational_events (
+        id              SERIAL PRIMARY KEY,
+        company_id      TEXT,
+        event_type      TEXT,
+        entity_type     TEXT,
+        entity_id       TEXT,
+        entity_name     TEXT,
+        actor_email     TEXT,
+        actor_role      TEXT,
+        app_source      TEXT,
+        payload         JSONB,
+        occurred_at     TIMESTAMPTZ,
+        loaded_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_op_events_company ON analytics.operational_events (company_id, occurred_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_op_events_entity  ON analytics.operational_events (company_id, entity_type, entity_id)",
+]
+
+
 _MIGRATIONS = [
     # Ingestion agent — rows cache for copilot-triggered load
     "ALTER TABLE analytics.ingestion_plans ADD COLUMN IF NOT EXISTS rows_json TEXT",
@@ -1272,6 +1294,15 @@ def ensure_all_analytics_tables(engine) -> None:
                     created += 1
                 except Exception as exc:
                     logger.warning("setup: intelligence DDL failed — %s", exc)
+                    errors += 1
+
+            # Operational event stream (Phase E)
+            for ddl in _OPERATIONAL_EVENTS_DDL:
+                try:
+                    conn.execute(text(ddl))
+                    created += 1
+                except Exception as exc:
+                    logger.warning("setup: operational_events DDL failed — %s", exc)
                     errors += 1
 
             # Column migrations — add new columns to existing tables

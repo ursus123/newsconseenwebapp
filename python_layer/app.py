@@ -523,6 +523,14 @@ try:
 except Exception as _intel_err:
     logger.warning("Intelligence router failed to load — %s", _intel_err)
 
+# Operational Event Stream (Phase E) — fire-and-forget event sink
+try:
+    from events.routes import router as events_router
+    app.include_router(events_router)
+    logger.info("Operational event stream router loaded")
+except Exception as _ev_err:
+    logger.warning("Events router failed to load — %s", _ev_err)
+
 
 # ----------------------------------------------------------
 # Idjwi — Public Demo Copilot (landing page, no auth required)

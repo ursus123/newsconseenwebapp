@@ -227,6 +227,26 @@ function _logAudit(reg, companyId, action, record, userEmail) {
   }).catch(() => {});
 }
 
+function _fireEvent(eventType, entityType, entityId, entityName, currentUser) {
+  fetch(`${RAILWAY_URL}/events/record`, {
+    method:  "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}),
+    },
+    body: JSON.stringify({
+      company_id:  currentUser?.company_id,
+      event_type:  eventType,
+      entity_type: entityType,
+      entity_id:   entityId ? String(entityId) : null,
+      entity_name: entityName || null,
+      actor_email: currentUser?.email,
+      actor_role:  currentUser?.role,
+      occurred_at: new Date().toISOString(),
+    }),
+  }).catch(() => {});
+}
+
 function _triggerWorkflows(reg, companyId, triggerType, entityData) {
   fetch(`${RAILWAY_URL}/workflows/trigger`, {
     method:  "POST",
@@ -348,6 +368,7 @@ export async function createRecord(entityName, data, currentUser, options = {}) 
   triggerEntityETL(entityName);
   _logAudit(reg, companyId, "created", created, currentUser?.email);
   _triggerWorkflows(reg, companyId, "entity_created", created);
+  _fireEvent(`${entityName}.created`, entityName, created?.id, reg.displayName(created || {}), currentUser);
   if (notifyTaxonomyChange && reg.taxonomyType) {
     notifyTaxonomyChange(reg.taxonomyType, companyId);
   }
@@ -384,6 +405,7 @@ export async function updateRecord(entityName, id, data, currentUser, options = 
   triggerEntityETL(entityName);
   _logAudit(reg, companyId, "updated", auditRecord, currentUser?.email);
   _triggerWorkflows(reg, companyId, "entity_updated", auditRecord);
+  _fireEvent(`${entityName}.updated`, entityName, id, reg.displayName(auditRecord), currentUser);
   if (notifyTaxonomyChange && reg.taxonomyType) {
     notifyTaxonomyChange(reg.taxonomyType, companyId);
   }
@@ -411,6 +433,7 @@ export async function deleteRecord(entityName, id, currentUser, options = {}) {
   const auditRecord = record || { id };
 
   _logAudit(reg, companyId, "deleted", auditRecord, currentUser?.email);
+  _fireEvent(`${entityName}.deleted`, entityName, id, reg.displayName(auditRecord), currentUser);
   syncQueryCache(queryClient, entityName, null, "deleted");
   triggerEntityETL(entityName);
 }
