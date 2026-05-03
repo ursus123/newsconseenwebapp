@@ -45,6 +45,10 @@ import {
   Tractor,
   FlaskConical,
   Upload,
+  Clock,
+  UserPlus,
+  ScanLine,
+  Wifi,
 } from "lucide-react";
 import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import SetupWizard from "@/components/shared/SetupWizard";
@@ -61,21 +65,28 @@ import QuickAddButton from "@/components/layout/QuickAddButton";
 
 // ─── Role-aware nav config ────────────────────────────────────────────────────
 // Sections: Home · Work · Views · Intelligence · Reports · Admin
+// Max 6 items shown per section; remainder revealed with "View All"
 const NAV_CONFIG = {
   super_admin: [
     {
       section: null,
       items: [
-        { name: "CompanyGraphHome", label: "Company Graph", icon: Network },
-        { name: "Dashboard",        icon: LayoutDashboard },
+        { name: "CompanyGraphHome",  label: "Company Graph",      icon: Network },
+        { name: "Dashboard",                                       icon: LayoutDashboard },
+        { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
+        { name: "Tasks",             label: "My Tasks",           icon: CheckSquare },
+        { name: "alerts",            label: "Alerts",             icon: Bell, badge: "alerts" },
       ],
     },
     {
       section: "Work",
       items: [
-        { name: "Applications", icon: Grid3x3 },
-        { name: "Tasks",        icon: CheckSquare },
-        { name: "Transactions", icon: Receipt },
+        { name: "Applications",  icon: Grid3x3 },
+        { name: "Tasks",         icon: CheckSquare },
+        { name: "Transactions",  icon: Receipt },
+        { name: "ClockInOut",    label: "Clock In/Out",   icon: Clock },
+        { name: "StaffSchedule", label: "Staff Schedule", icon: Calendar },
+        { name: "AddClient",     label: "Add Client",     icon: UserPlus },
       ],
     },
     {
@@ -100,84 +111,15 @@ const NAV_CONFIG = {
     {
       section: "Intelligence",
       items: [
-        { name: "IntelligenceInbox",  label: "Intelligence Inbox",  icon: Lightbulb },
-        { name: "copilot",            label: "Copilot",             icon: Sparkles },
-        { name: "agents",             label: "Agents",              icon: Brain },
-        { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
-        { name: "MarketIntelligence", label: "Market Intelligence", icon: TrendingUp },
-      ],
-    },
-    {
-      section: "Reports",
-      items: [
-        { name: "Reports",       icon: BarChart2 },
-        { name: "QueryBuilder",  label: "Query Builder",  icon: Code2 },
-        { name: "ObjectExplorer",label: "Object Explorer",icon: Search },
-        { name: "ObjectViews",   label: "Object Views",   icon: Layers },
-        { name: "MLModels",      label: "ML Models",      icon: TrendingUp },
-      ],
-    },
-    {
-      section: "Admin",
-      items: [
-        { name: "TenantAdmin",    label: "Tenant Admin",    icon: ShieldCheck },
-        { name: "UserManagement", label: "User Management", icon: UserCog },
-        { name: "Permissions",    icon: Shield },
-        { name: "Connectors",     icon: Plug },
-        { name: "Workflows",      icon: Zap },
-        { name: "IngestionAgent", label: "Ingestion Agent", icon: Upload },
-        { name: "DataModels",     label: "Data Models",     icon: GitBranch },
-        { name: "KineticLayer",   label: "Kinetic Layer",   icon: Zap },
-        { name: "Pipelines",      icon: GitBranch },
-        { name: "network",        label: "Network",         icon: Globe, requiresNetwork: true },
-        { name: "Billing",        icon: CreditCard },
-      ],
-    },
-  ],
-
-  admin: [
-    {
-      section: null,
-      items: [
-        { name: "CompanyGraphHome", label: "Company Graph", icon: Network },
-        { name: "Dashboard",        icon: LayoutDashboard },
-      ],
-    },
-    {
-      section: "Work",
-      items: [
-        { name: "Applications", icon: Grid3x3 },
-        { name: "Tasks",        icon: CheckSquare },
-        { name: "Transactions", icon: Receipt },
-      ],
-    },
-    {
-      section: "Views",
-      items: [
-        { name: "Enterprises",   icon: Building2 },
-        { name: "People",        icon: Users },
-        { name: "Products",      icon: Package },
-        { name: "Services",      icon: Wrench },
-        { name: "Addresses",     icon: MapPin },
-        { name: "Relationships", icon: Link2 },
-        { name: "Documents",     icon: FileText },
-        { name: "Schedules",     icon: Calendar },
-        { name: "Signals",       icon: Activity },
-        { name: "Channels",      icon: MessageSquare },
-        { name: "Territories",   icon: Map },
-        { name: "Animals",       icon: PawPrint },
-        { name: "Plots",         icon: Tractor },
-        { name: "Observations",  icon: FlaskConical },
-      ],
-    },
-    {
-      section: "Intelligence",
-      items: [
-        { name: "IntelligenceInbox",  label: "Intelligence Inbox",  icon: Lightbulb },
-        { name: "copilot",            label: "Copilot",             icon: Sparkles },
-        { name: "agents",             label: "Agents",              icon: Brain },
-        { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
-        { name: "MarketIntelligence", label: "Market Intelligence", icon: TrendingUp },
+        { name: "IntelligenceInbox",  label: "Intelligence Inbox",   icon: Lightbulb },
+        { name: "copilot",            label: "Copilot",              icon: Sparkles },
+        { name: "agents",             label: "Agents",               icon: Brain },
+        { name: "alerts",             label: "Alerts",               icon: Bell, badge: "alerts" },
+        { name: "MarketIntelligence", label: "Market Intelligence",  icon: TrendingUp },
+        { name: "MapExplorer",        label: "Spatial Intelligence", icon: Map },
+        { name: "network",            label: "Network Intelligence", icon: Wifi, requiresNetwork: true },
+        { name: "MLModels",           label: "ML Models",            icon: ScanLine },
+        { name: "KineticLayer",       label: "Kinetic Layer",        icon: Zap },
       ],
     },
     {
@@ -186,20 +128,105 @@ const NAV_CONFIG = {
         { name: "Reports",        icon: BarChart2 },
         { name: "QueryBuilder",   label: "Query Builder",   icon: Code2 },
         { name: "ObjectExplorer", label: "Object Explorer", icon: Search },
+        { name: "ObjectViews",    label: "Object Views",    icon: Layers },
+        { name: "EntityGraph",    label: "Entity Graph",    icon: Network },
+        { name: "MLModels",       label: "ML Models",       icon: ScanLine },
+      ],
+    },
+    {
+      section: "Admin",
+      items: [
+        { name: "TenantAdmin",    label: "Tenant Admin",    icon: ShieldCheck },
+        { name: "UserManagement", label: "User Management", icon: UserCog },
+        { name: "Permissions",                              icon: Shield },
+        { name: "TaxonomyAdmin",  label: "Taxonomy Admin",  icon: Tags },
+        { name: "Connectors",                               icon: Plug },
+        { name: "Workflows",                                icon: Zap },
+        { name: "IngestionAgent", label: "Ingestion Agent", icon: Upload },
+        { name: "Pipelines",                                icon: GitBranch },
+        { name: "DataRepair",     label: "Data Repair",     icon: Wrench },
+        { name: "DataModels",     label: "Data Models",     icon: GitBranch },
+        { name: "Billing",                                  icon: CreditCard },
+      ],
+    },
+  ],
+
+  admin: [
+    {
+      section: null,
+      items: [
+        { name: "CompanyGraphHome",  label: "Company Graph",      icon: Network },
+        { name: "Dashboard",                                       icon: LayoutDashboard },
+        { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
+        { name: "Tasks",             label: "My Tasks",           icon: CheckSquare },
+        { name: "alerts",            label: "Alerts",             icon: Bell, badge: "alerts" },
+      ],
+    },
+    {
+      section: "Work",
+      items: [
+        { name: "Applications",  icon: Grid3x3 },
+        { name: "Tasks",         icon: CheckSquare },
+        { name: "Transactions",  icon: Receipt },
+        { name: "ClockInOut",    label: "Clock In/Out",   icon: Clock },
+        { name: "StaffSchedule", label: "Staff Schedule", icon: Calendar },
+        { name: "AddClient",     label: "Add Client",     icon: UserPlus },
+      ],
+    },
+    {
+      section: "Views",
+      items: [
+        { name: "Enterprises",   icon: Building2 },
+        { name: "People",        icon: Users },
+        { name: "Products",      icon: Package },
+        { name: "Services",      icon: Wrench },
+        { name: "Addresses",     icon: MapPin },
+        { name: "Relationships", icon: Link2 },
+        { name: "Documents",     icon: FileText },
+        { name: "Schedules",     icon: Calendar },
+        { name: "Signals",       icon: Activity },
+        { name: "Channels",      icon: MessageSquare },
+        { name: "Territories",   icon: Map },
+        { name: "Animals",       icon: PawPrint },
+        { name: "Plots",         icon: Tractor },
+        { name: "Observations",  icon: FlaskConical },
+      ],
+    },
+    {
+      section: "Intelligence",
+      items: [
+        { name: "IntelligenceInbox",  label: "Intelligence Inbox",   icon: Lightbulb },
+        { name: "copilot",            label: "Copilot",              icon: Sparkles },
+        { name: "agents",             label: "Agents",               icon: Brain },
+        { name: "alerts",             label: "Alerts",               icon: Bell, badge: "alerts" },
+        { name: "MarketIntelligence", label: "Market Intelligence",  icon: TrendingUp },
+        { name: "MapExplorer",        label: "Spatial Intelligence", icon: Map },
+        { name: "network",            label: "Network Intelligence", icon: Wifi, requiresNetwork: true },
+        { name: "MLModels",           label: "ML Models",            icon: ScanLine },
+      ],
+    },
+    {
+      section: "Reports",
+      items: [
+        { name: "Reports",        icon: BarChart2 },
+        { name: "QueryBuilder",   label: "Query Builder",   icon: Code2 },
+        { name: "ObjectExplorer", label: "Object Explorer", icon: Search },
+        { name: "ObjectViews",    label: "Object Views",    icon: Layers },
+        { name: "EntityGraph",    label: "Entity Graph",    icon: Network },
       ],
     },
     {
       section: "Admin",
       items: [
         { name: "UserManagement", label: "User Management", icon: UserCog },
-        { name: "Permissions",    icon: Shield },
+        { name: "Permissions",                              icon: Shield },
         { name: "TaxonomyAdmin",  label: "Taxonomy Admin",  icon: Tags },
-        { name: "Connectors",     icon: Plug },
-        { name: "Workflows",      icon: Zap },
+        { name: "Connectors",                               icon: Plug },
+        { name: "Workflows",                                icon: Zap },
         { name: "IngestionAgent", label: "Ingestion Agent", icon: Upload },
+        { name: "DataRepair",     label: "Data Repair",     icon: Wrench },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },
-        { name: "network",        label: "Network",         icon: Globe, requiresNetwork: true },
-        { name: "Billing",        icon: CreditCard },
+        { name: "Billing",                                  icon: CreditCard },
       ],
     },
   ],
@@ -208,16 +235,18 @@ const NAV_CONFIG = {
     {
       section: null,
       items: [
-        { name: "CompanyGraphHome", label: "Company Graph", icon: Network },
-        { name: "Dashboard",        icon: LayoutDashboard },
+        { name: "CompanyGraphHome",  label: "Company Graph",      icon: Network },
+        { name: "Dashboard",                                       icon: LayoutDashboard },
+        { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
       ],
     },
     {
       section: "Intelligence",
       items: [
-        { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
-        { name: "copilot",           label: "Copilot",            icon: Sparkles },
-        { name: "agents",            label: "Agents",             icon: Brain },
+        { name: "copilot",           label: "Copilot",           icon: Sparkles },
+        { name: "agents",            label: "Agents",            icon: Brain },
+        { name: "alerts",            label: "Alerts",            icon: Bell, badge: "alerts" },
+        { name: "MarketIntelligence",label: "Market Intelligence",icon: TrendingUp },
       ],
     },
     {
@@ -225,6 +254,7 @@ const NAV_CONFIG = {
       items: [
         { name: "Reports",      icon: BarChart2 },
         { name: "QueryBuilder", label: "Query Builder", icon: Code2 },
+        { name: "EntityGraph",  label: "Entity Graph",  icon: Network },
       ],
     },
     {
@@ -232,24 +262,32 @@ const NAV_CONFIG = {
       items: [
         { name: "Enterprises", icon: Building2 },
         { name: "People",      icon: Users },
+        { name: "Products",    icon: Package },
       ],
-    },
-    {
-      section: "Work",
-      items: [{ name: "Applications", icon: Grid3x3 }],
-    },
-  ],
-
-  user: [
-    {
-      section: null,
-      items: [{ name: "Dashboard", icon: LayoutDashboard }],
     },
     {
       section: "Work",
       items: [
         { name: "Applications", icon: Grid3x3 },
         { name: "Tasks",        icon: CheckSquare },
+      ],
+    },
+  ],
+
+  user: [
+    {
+      section: null,
+      items: [
+        { name: "Dashboard",    icon: LayoutDashboard },
+        { name: "Tasks",        label: "My Tasks", icon: CheckSquare },
+      ],
+    },
+    {
+      section: "Work",
+      items: [
+        { name: "Applications", icon: Grid3x3 },
+        { name: "Tasks",        icon: CheckSquare },
+        { name: "ClockInOut",   label: "Clock In/Out", icon: Clock },
       ],
     },
   ],
@@ -263,6 +301,7 @@ const ROLE_BADGE = {
 };
 
 // ─── NavItem ─────────────────────────────────────────────────────────────────
+/** @param {{ name: any, label: any, icon: any, isActive: any, onClick: any, showRedDot: any, primaryColor: any }} props */
 function NavItem({ name, label, icon: Icon, isActive, onClick, showRedDot, primaryColor }) {
   return (
     <button
@@ -329,6 +368,8 @@ export default function Layout({ children, currentPageName }) {
   const [showWizard, setShowWizard] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [criticalAlerts, setCriticalAlerts] = useState(0);
+  const [expandedSections, setExpandedSections] = useState(/** @type {Record<string,boolean>} */ ({}));
+  const toggleSection = (/** @type {string} */ key) => setExpandedSections((/** @type {Record<string,boolean>} */ p) => ({ ...p, [key]: !p[key] }));
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -426,12 +467,12 @@ export default function Layout({ children, currentPageName }) {
   const role = currentUser?.role || "user";
   const industryMode = currentUser?.industry_mode || "";
   const modeOverrides = MODE_LABELS[industryMode] || {};
-  let navSections = NAV_CONFIG[role] || NAV_CONFIG.user;
+  let navSections = NAV_CONFIG[/** @type {keyof typeof NAV_CONFIG} */ (role)] || NAV_CONFIG.user;
   
   // Filter nav items based on permissions
   navSections = navSections.map((section) => ({
     ...section,
-    items: section.items.filter((item) => {
+    items: section.items.filter((/** @type {any} */ item) => {
       if (!canAccessPage(item.name)) return false;
       if (item.requiresNetwork && !currentUser?.network_company_id) return false;
       return true;
@@ -512,27 +553,44 @@ export default function Layout({ children, currentPageName }) {
 
             {/* Navigation */}
             <nav className="flex-1 px-3 py-3 overflow-y-auto">
-              {currentUser && navSections.map((section, si) => (
-                <div key={si} className="mb-1">
-                  {section.section && (
-                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-3 mb-1 mt-3">
-                      {section.section}
-                    </p>
-                  )}
-                  {section.items.map((item) => (
-                    <NavItem
-                      key={item.name}
-                      name={item.name}
-                      label={ADAPTIVE_LABELS[item.name] || item.label || item.name}
-                      icon={item.icon}
-                      isActive={currentPageName === item.name}
-                      primaryColor={branding.primaryColor}
-                      onClick={() => handleNavClick(item.name)}
-                      showRedDot={item.badge === "alerts" && criticalAlerts > 0}
-                    />
-                  ))}
-                </div>
-              ))}
+              {currentUser && navSections.map((section, si) => {
+                const sectionKey = section.section || "home";
+                const LIMIT = 6;
+                const allItems = section.items;
+                const needsExpand = allItems.length > LIMIT;
+                const isExpanded = expandedSections[sectionKey];
+                const visibleItems = needsExpand && !isExpanded ? allItems.slice(0, LIMIT) : allItems;
+                return (
+                  <div key={si} className="mb-1">
+                    {section.section && (
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-3 mb-1 mt-3">
+                        {section.section}
+                      </p>
+                    )}
+                    {visibleItems.map((/** @type {any} */ item) => (
+                      <NavItem
+                        key={item.name}
+                        name={item.name}
+                        label={/** @type {any} */ (ADAPTIVE_LABELS)[item.name] || item.label || item.name}
+                        icon={item.icon}
+                        isActive={currentPageName === item.name}
+                        primaryColor={branding.primaryColor}
+                        onClick={() => handleNavClick(item.name)}
+                        showRedDot={item.badge === "alerts" && criticalAlerts > 0}
+                      />
+                    ))}
+                    {needsExpand && (
+                      <button
+                        onClick={() => toggleSection(sectionKey)}
+                        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-slate-500 hover:text-slate-300 transition-colors"
+                      >
+                        <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                        {isExpanded ? "Show less" : `${allItems.length - LIMIT} more`}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </nav>
 
             {/* Footer */}
