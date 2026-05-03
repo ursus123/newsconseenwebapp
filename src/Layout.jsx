@@ -58,6 +58,7 @@ import { base44 } from "@/api/base44Client";
 import TenantGuard from "@/components/shared/TenantGuard";
 import NetworkBanner from "@/components/shared/NetworkBanner";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/lib/AuthContext";
 import CommandPalette from "@/components/layout/CommandPalette";
 import QuickAddButton from "@/components/layout/QuickAddButton";
 
@@ -369,6 +370,7 @@ export default function Layout({ children, currentPageName }) {
   const [expandedSections, setExpandedSections] = useState(/** @type {Record<string,boolean>} */ ({}));
   const toggleSection = (/** @type {string} */ key) => setExpandedSections((/** @type {Record<string,boolean>} */ p) => ({ ...p, [key]: !p[key] }));
   const navigate = useNavigate();
+  const { logout: authLogout } = useAuth();
 
   useEffect(() => {
     base44.auth.me().then(u => {
@@ -625,7 +627,7 @@ export default function Layout({ children, currentPageName }) {
                 <span className="text-slate-500 text-xs">✏️ Rename labels</span>
               </button>
               <button
-                onClick={() => base44.auth.logout("/")}
+                onClick={() => authLogout()}
                 className="flex items-center gap-2.5 px-3 py-2 w-full rounded-xl text-sm text-slate-400 hover:text-red-400 hover:bg-red-500/5 transition-all"
               >
                 <LogOut className="w-4 h-4" />
@@ -711,7 +713,7 @@ export default function Layout({ children, currentPageName }) {
                       </div>
                       <div className="border-t border-slate-100 py-1.5">
                         <button
-                          onClick={() => base44.auth.logout("/")}
+                          onClick={() => authLogout()}
                           className="flex items-center gap-2.5 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors w-full text-left"
                         >
                           <LogOut className="w-4 h-4" /> Sign Out
