@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import dataService from "@/services/dataService";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
@@ -189,18 +190,18 @@ export default function Onboarding() {
   const saveTeam = async () => {
     if (people.length === 0) return true;
     setSaving(true);
+    const userCtx = { ...currentUser, company_id: createdEnterprise?.id || currentUser?.company_id };
     try {
       await Promise.all(people.map((p) =>
-        base44.entities.Person.create({
+        dataService.createRecord("person", {
           first_name: p.first_name,
           last_name: p.last_name,
           primary_role: p.role,
           person_type: p.person_type,
           status: "active",
           company_id: createdEnterprise?.id,
-        })
+        }, userCtx)
       ));
-      triggerETL("people");
       return true;
     } catch (e) {
       console.error(e);
@@ -213,31 +214,31 @@ export default function Onboarding() {
   const saveOfferings = async () => {
     if (items.length === 0) return true;
     setSaving(true);
+    const userCtx = { ...currentUser, company_id: createdEnterprise?.id || currentUser?.company_id };
     try {
       const products = items.filter((i) => i._type === "product");
       const services = items.filter((i) => i._type === "service");
       await Promise.all([
         ...products.map((p) =>
-          base44.entities.Product.create({
+          dataService.createRecord("product", {
             name: p.name,
             item_type: p.item_type,
             stock_quantity: Number(p.stock_quantity) || 0,
             unit_price: Number(p.unit_price) || 0,
             status: "active",
             company_id: createdEnterprise?.id,
-          })
+          }, userCtx)
         ),
         ...services.map((s) =>
-          base44.entities.Service.create({
+          dataService.createRecord("service", {
             name: s.name,
             category: s.category,
             pricing_model: s.pricing_model,
             price: Number(s.price) || 0,
             status: "active",
-          })
+          }, userCtx)
         ),
       ]);
-      if (products.length > 0) triggerETL("product");
       return true;
     } catch (e) {
       console.error(e);
@@ -251,8 +252,9 @@ export default function Onboarding() {
     if (!taskData.title?.trim()) return true;
     if (!validateTask()) return false;
     setSaving(true);
+    const userCtx = { ...currentUser, company_id: createdEnterprise?.id || currentUser?.company_id };
     try {
-      await base44.entities.Task.create({
+      await dataService.createRecord("task", {
         title: taskData.title,
         task_type: taskData.task_type || "other",
         assigned_to_name: taskData.assigned_to_name || "",
@@ -261,8 +263,7 @@ export default function Onboarding() {
         status: "open",
         enterprise: createdEnterprise?.enterprise_name || "",
         company_id: createdEnterprise?.id,
-      });
-      triggerETL("task");
+      }, userCtx);
       return true;
     } catch (e) {
       console.error(e);

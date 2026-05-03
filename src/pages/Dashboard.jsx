@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import dataService from "@/services/dataService";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -615,10 +616,6 @@ function WorkerDashboard({ user }) {
     refetchOnMount: "always",
   });
 
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
-  });
 
   // Aggregate — analytics summaries vs raw/base44 full records
   const isAnalytics    = taskResult.source === "analytics";
@@ -640,7 +637,7 @@ function WorkerDashboard({ user }) {
 
   const handleMarkComplete = (task) => setOutcomeTask(task);
   const handleOutcomeConfirm = ({ outcome, outcome_notes }) => {
-    updateMut.mutate({ id: outcomeTask.id, data: { ...outcomeTask, status: "completed", outcome, outcome_notes } });
+    dataService.updateRecord("task", outcomeTask.id, { ...outcomeTask, status: "completed", outcome, outcome_notes }, user, { queryClient: qc });
     toast({ title: "Task marked as completed" });
     setOutcomeTask(null);
   };

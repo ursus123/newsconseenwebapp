@@ -1,14 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
-    method: "POST",
-    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
-  }).catch(() => {});
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import dataService from "@/services/dataService";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +22,7 @@ function Field({ label, required, children }) {
 }
 
 export default function InviteUser() {
+  const qc = useQueryClient();
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
     queryFn: () => base44.auth.me(),
@@ -55,7 +49,7 @@ export default function InviteUser() {
       await base44.users.inviteUser(form.email, form.role);
 
       // Also create a Person record to store the full profile
-      await base44.entities.Person.create({
+      await dataService.createRecord("person", {
         first_name: form.first_name,
         last_name: form.last_name,
         email: form.email,
@@ -64,9 +58,7 @@ export default function InviteUser() {
         status: "active",
         company_id: form.company_id || currentUser?.company_id || undefined,
         internal_notes: form.enterprise_name ? `Enterprise: ${form.enterprise_name}` : undefined,
-      });
-
-      triggerETL("people");
+      }, currentUser, { queryClient: qc });
       setStatus("success");
       setForm({ first_name: "", last_name: "", email: "", phone: "", enterprise_name: "", company_id: "", role: "user" });
     } catch (err) {

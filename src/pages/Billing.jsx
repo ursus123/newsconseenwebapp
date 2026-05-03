@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import dataService from "@/services/dataService";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -146,13 +147,17 @@ export default function Billing() {
     ? Math.max(0, differenceInDays(new Date(enterprise.trial_ends_at), new Date()))
     : null;
 
-  const cancelMut = useMutation({
-    mutationFn: () => base44.entities.Enterprise.update(enterprise.id, { subscription_status: "cancelled" }),
-    onSuccess: () => {
+  const [cancelling, setCancelling] = useState(false);
+  const handleCancelPlan = async () => {
+    setCancelling(true);
+    try {
+      await dataService.updateRecord("enterprise", enterprise.id, { subscription_status: "cancelled" }, currentUser, { queryClient: qc });
       qc.invalidateQueries({ queryKey: ["enterprises_billing"] });
       setShowCancel(false);
-    },
-  });
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   if (!currentUser) return (
     <div className="flex items-center justify-center h-64">
@@ -325,8 +330,8 @@ export default function Billing() {
       {showCancel && (
         <CancelDialog
           onClose={() => setShowCancel(false)}
-          onConfirm={() => cancelMut.mutate()}
-          loading={cancelMut.isPending}
+          onConfirm={handleCancelPlan}
+          loading={cancelling}
         />
       )}
     </div>

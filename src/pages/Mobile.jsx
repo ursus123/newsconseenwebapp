@@ -17,6 +17,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import dataService from "@/services/dataService";
 import { format, isToday, parseISO } from "date-fns";
 import {
   CheckCircle2, Clock, Plus, RefreshCw, Wifi, WifiOff,
@@ -157,7 +158,8 @@ function TaskCard({ task, onComplete, completing }) {
 }
 
 // ── Complete task sheet ────────────────────────────────────────────────────────
-function CompleteSheet({ task, onClose, onDone, isOnline }) {
+function CompleteSheet({ task, user, onClose, onDone, isOnline }) {
+  const qc = useQueryClient();
   const [outcome, setOutcome] = useState("completed");
   const [notes,   setNotes]   = useState("");
   const [saving,  setSaving]  = useState(false);
@@ -167,8 +169,7 @@ function CompleteSheet({ task, onClose, onDone, isOnline }) {
     const payload = { ...task, status: "completed", outcome, notes };
     try {
       if (isOnline) {
-        await base44.entities.Task.update(task.id, payload);
-        triggerETL("task");
+        await dataService.updateRecord("task", task.id, { status: "completed", outcome, outcome_notes: notes }, user, { queryClient: qc });
       } else {
         await addToOfflineQueue(`/api/entities/Task/${task.id}`, "PATCH", payload);
       }
@@ -326,6 +327,7 @@ function TodayTab({ user, isOnline }) {
       {sheet && (
         <CompleteSheet
           task={sheet}
+          user={user}
           isOnline={isOnline}
           onClose={() => setSheet(null)}
           onDone={handleDone}
@@ -337,6 +339,7 @@ function TodayTab({ user, isOnline }) {
 
 // ── Tab: Quick Log ─────────────────────────────────────────────────────────────
 function LogTab({ user, isOnline }) {
+  const qc = useQueryClient();
   const [form,   setForm]   = useState({ title: "", task_type: "visit", priority: "normal", notes: "" });
   const [saving, setSaving] = useState(false);
   const [done,   setDone]   = useState(false);
@@ -359,8 +362,7 @@ function LogTab({ user, isOnline }) {
     };
     try {
       if (isOnline) {
-        await base44.entities.Task.create(payload);
-        triggerETL("task");
+        await dataService.createRecord("task", payload, user, { queryClient: qc });
       } else {
         await addToOfflineQueue("/api/entities/Task", "POST", payload);
       }

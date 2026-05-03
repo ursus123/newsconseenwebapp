@@ -533,6 +533,13 @@ except Exception as _intel_err:
 
 # Operational Event Stream (Phase E) — fire-and-forget event sink
 try:
+    from gateway.routes import router as gateway_router
+    app.include_router(gateway_router)
+    logger.info("Assistant Gateway router loaded")
+except Exception as _gateway_err:
+    logger.warning("Assistant Gateway router failed to load: %s", _gateway_err)
+
+try:
     from events.routes import router as events_router
     app.include_router(events_router)
     logger.info("Operational event stream router loaded")
