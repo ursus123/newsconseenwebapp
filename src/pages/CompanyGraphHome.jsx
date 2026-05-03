@@ -150,8 +150,29 @@ const PULSE_FILTERS = [
   { key: "unconnected",   label: "Unconnected",    icon: Unlink,       color: "text-slate-500  bg-slate-50  border-slate-200",  highlight: [] },
 ];
 
+// ── App signal severity colours ───────────────────────────────────────────────
+const SEV_STYLE = {
+  high:   { bg: "bg-rose-50",    text: "text-rose-700",    border: "border-rose-200"   },
+  medium: { bg: "bg-amber-50",   text: "text-amber-700",   border: "border-amber-200"  },
+  low:    { bg: "bg-slate-50",   text: "text-slate-500",   border: "border-slate-200"  },
+  info:   { bg: "bg-violet-50",  text: "text-violet-700",  border: "border-violet-200" },
+};
+const SIG_TYPE_STYLE = {
+  risk:        { icon: ShieldAlert, color: "text-rose-500",    label: "Risk"        },
+  insight:     { icon: Lightbulb,   color: "text-violet-500",  label: "Insight"     },
+  opportunity: { icon: TrendingUp,  color: "text-emerald-500", label: "Opportunity" },
+};
+
+const APP_LABEL = {
+  medadmin:    "Med Admin",
+  barcode:     "Barcode",
+  stockcounter:"Stock Counter",
+  attendance:  "Attendance",
+  report:      "Report",
+};
+
 // ── Context Panel ─────────────────────────────────────────────────────────────
-function ContextPanel({ selected, onClose, navigate }) {
+function ContextPanel({ selected, onClose, navigate, insights = [], risks = [], opportunities = [] }) {
   if (!selected) {
     return (
       <div className="flex flex-col h-full">
@@ -187,6 +208,14 @@ function ContextPanel({ selected, onClose, navigate }) {
   }
 
   const { node, connectedNodes } = selected;
+
+  // App-generated signals referencing this entity
+  const appSignals = [
+    ...risks.filter(r => r.subject_id === node.id).map(r => ({ ...r, _kind: "risk" })),
+    ...insights.filter(i => i.subject_id === node.id).map(i => ({ ...i, _kind: "insight" })),
+    ...opportunities.filter(o => o.subject_id === node.id).map(o => ({ ...o, _kind: "opportunity" })),
+  ].sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0));
+
   const cfg = ENTITY_CONFIG[node.entity_type] || {};
   const Icon = cfg.icon || Circle;
   const meta = node.metadata || {};
@@ -294,6 +323,48 @@ function ContextPanel({ selected, onClose, navigate }) {
               })}
               {connectedNodes.length > 8 && (
                 <p className="text-[10px] text-slate-400">+{connectedNodes.length - 8} more</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* App signals */}
+        {appSignals.length > 0 && (
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+              App Signals ({appSignals.length})
+            </p>
+            <div className="space-y-1.5">
+              {appSignals.slice(0, 6).map((sig, i) => {
+                const kind = SIG_TYPE_STYLE[sig._kind] || SIG_TYPE_STYLE.insight;
+                const SigIcon = kind.icon;
+                const sev = sig.severity || (sig._kind === "insight" ? "info" : "medium");
+                const sevStyle = SEV_STYLE[sev] || SEV_STYLE.low;
+                const appLabel = APP_LABEL[sig.source] || sig.source || "App";
+                return (
+                  <div
+                    key={sig.id || i}
+                    className={`flex items-start gap-2 p-2 rounded-lg border ${sevStyle.bg} ${sevStyle.border}`}
+                  >
+                    <SigIcon className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${kind.color}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-[11px] font-semibold leading-snug ${sevStyle.text} truncate`}>
+                        {sig.title || sig._kind}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">{appLabel}</span>
+                        {sev !== "info" && (
+                          <span className={`text-[9px] font-bold uppercase ${sevStyle.text} opacity-70`}>
+                            {sev}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {appSignals.length > 6 && (
+                <p className="text-[10px] text-slate-400">+{appSignals.length - 6} more signals</p>
               )}
             </div>
           </div>
@@ -691,6 +762,9 @@ export default function CompanyGraphHome() {
             selected={selectedNode}
             onClose={() => setSelectedNode(null)}
             navigate={navigate}
+            insights={insights}
+            risks={risks}
+            opportunities={opportunities}
           />
         </div>
       </div>
