@@ -60,6 +60,7 @@ import CommandPalette from "@/components/layout/CommandPalette";
 import QuickAddButton from "@/components/layout/QuickAddButton";
 
 // ─── Role-aware nav config ────────────────────────────────────────────────────
+// Sections: Home · Work · Views · Intelligence · Reports · Admin
 const NAV_CONFIG = {
   super_admin: [
     {
@@ -70,7 +71,15 @@ const NAV_CONFIG = {
       ],
     },
     {
-      section: "Platform",
+      section: "Work",
+      items: [
+        { name: "Applications", icon: Grid3x3 },
+        { name: "Tasks",        icon: CheckSquare },
+        { name: "Transactions", icon: Receipt },
+      ],
+    },
+    {
+      section: "Views",
       items: [
         { name: "Enterprises",   icon: Building2 },
         { name: "People",        icon: Users },
@@ -89,52 +98,38 @@ const NAV_CONFIG = {
       ],
     },
     {
-      section: "Operations",
+      section: "Intelligence",
       items: [
-        { name: "Tasks",        icon: CheckSquare },
-        { name: "Transactions", icon: Receipt },
+        { name: "IntelligenceInbox",  label: "Intelligence Inbox",  icon: Lightbulb },
+        { name: "copilot",            label: "Copilot",             icon: Sparkles },
+        { name: "agents",             label: "Agents",              icon: Brain },
+        { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
+        { name: "MarketIntelligence", label: "Market Intelligence", icon: TrendingUp },
       ],
     },
     {
-      section: "Analytics",
+      section: "Reports",
       items: [
-        { name: "Reports",             icon: BarChart2 },
-        { name: "QueryBuilder",        label: "Query Builder",        icon: Code2 },
-        { name: "IntelligenceInbox",   label: "Intelligence Inbox",   icon: Lightbulb },
-        { name: "MarketIntelligence",  label: "Market Intelligence",  icon: TrendingUp },
-        { name: "copilot",             label: "Copilot",              icon: Sparkles },
-        { name: "alerts",              label: "Alerts",               icon: Bell, badge: "alerts" },
-        { name: "agents",              label: "Agents",               icon: Brain },
-        { name: "Connectors",          icon: Plug },
-        { name: "Workflows",           icon: Zap },
-        { name: "IngestionAgent",      label: "Ingestion Agent",      icon: Upload },
+        { name: "Reports",       icon: BarChart2 },
+        { name: "QueryBuilder",  label: "Query Builder",  icon: Code2 },
+        { name: "ObjectExplorer",label: "Object Explorer",icon: Search },
+        { name: "ObjectViews",   label: "Object Views",   icon: Layers },
+        { name: "MLModels",      label: "ML Models",      icon: TrendingUp },
       ],
     },
     {
-      section: "Ontology",
-      items: [
-        { name: "ObjectExplorer", label: "Object Explorer", icon: Search },
-        { name: "KineticLayer",   label: "Kinetic Layer",   icon: Zap },
-        { name: "ObjectViews",    label: "Object Views",    icon: Layers },
-      ],
-    },
-    {
-      section: "Applications",
-      items: [
-        { name: "Applications", icon: Grid3x3 },
-        { name: "MLModels", label: "ML Models", icon: TrendingUp },
-      ],
-    },
-    {
-      section: "Admin Tools",
+      section: "Admin",
       items: [
         { name: "TenantAdmin",    label: "Tenant Admin",    icon: ShieldCheck },
         { name: "UserManagement", label: "User Management", icon: UserCog },
         { name: "Permissions",    icon: Shield },
+        { name: "Connectors",     icon: Plug },
+        { name: "Workflows",      icon: Zap },
+        { name: "IngestionAgent", label: "Ingestion Agent", icon: Upload },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },
-        { name: "EntityGraph",    label: "Enterprise Intelligence", icon: Network },
+        { name: "KineticLayer",   label: "Kinetic Layer",   icon: Zap },
         { name: "Pipelines",      icon: GitBranch },
-        { name: "network",        label: "Network",        icon: Globe, requiresNetwork: true },
+        { name: "network",        label: "Network",         icon: Globe, requiresNetwork: true },
         { name: "Billing",        icon: CreditCard },
       ],
     },
@@ -149,7 +144,15 @@ const NAV_CONFIG = {
       ],
     },
     {
-      section: "My Organization",
+      section: "Work",
+      items: [
+        { name: "Applications", icon: Grid3x3 },
+        { name: "Tasks",        icon: CheckSquare },
+        { name: "Transactions", icon: Receipt },
+      ],
+    },
+    {
+      section: "Views",
       items: [
         { name: "Enterprises",   icon: Building2 },
         { name: "People",        icon: Users },
@@ -168,40 +171,21 @@ const NAV_CONFIG = {
       ],
     },
     {
-      section: "Operations",
+      section: "Intelligence",
       items: [
-        { name: "Tasks",        icon: CheckSquare },
-        { name: "Transactions", icon: Receipt },
-      ],
-    },
-    {
-      section: "Analytics",
-      items: [
-        { name: "Reports",            icon: BarChart2 },
-        { name: "QueryBuilder",       label: "Query Builder",       icon: Code2 },
         { name: "IntelligenceInbox",  label: "Intelligence Inbox",  icon: Lightbulb },
-        { name: "MarketIntelligence", label: "Market Intelligence", icon: TrendingUp },
         { name: "copilot",            label: "Copilot",             icon: Sparkles },
-        { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
         { name: "agents",             label: "Agents",              icon: Brain },
-        { name: "Connectors",         icon: Plug },
-        { name: "Workflows",          icon: Zap },
-        { name: "IngestionAgent",     label: "Ingestion Agent",     icon: Upload },
+        { name: "alerts",             label: "Alerts",              icon: Bell, badge: "alerts" },
+        { name: "MarketIntelligence", label: "Market Intelligence", icon: TrendingUp },
       ],
     },
     {
-      section: "Ontology",
+      section: "Reports",
       items: [
+        { name: "Reports",        icon: BarChart2 },
+        { name: "QueryBuilder",   label: "Query Builder",   icon: Code2 },
         { name: "ObjectExplorer", label: "Object Explorer", icon: Search },
-        { name: "KineticLayer",   label: "Kinetic Layer",   icon: Zap },
-        { name: "ObjectViews",    label: "Object Views",    icon: Layers },
-      ],
-    },
-    {
-      section: "Applications",
-      items: [
-        { name: "Applications", icon: Grid3x3 },
-        { name: "MLModels", label: "ML Models", icon: TrendingUp },
       ],
     },
     {
@@ -210,10 +194,11 @@ const NAV_CONFIG = {
         { name: "UserManagement", label: "User Management", icon: UserCog },
         { name: "Permissions",    icon: Shield },
         { name: "TaxonomyAdmin",  label: "Taxonomy Admin",  icon: Tags },
-        { name: "EntityGraph",    label: "Enterprise Intelligence", icon: Network },
+        { name: "Connectors",     icon: Plug },
+        { name: "Workflows",      icon: Zap },
+        { name: "IngestionAgent", label: "Ingestion Agent", icon: Upload },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },
-        { name: "Pipelines",      icon: GitBranch },
-        { name: "network",        label: "Network",        icon: Globe, requiresNetwork: true },
+        { name: "network",        label: "Network",         icon: Globe, requiresNetwork: true },
         { name: "Billing",        icon: CreditCard },
       ],
     },
@@ -231,21 +216,26 @@ const NAV_CONFIG = {
       section: "Intelligence",
       items: [
         { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
-        { name: "Reports",      icon: BarChart2 },
-        { name: "QueryBuilder", label: "Query Builder", icon: Code2 },
-        { name: "copilot",      label: "Copilot",       icon: Sparkles },
-        { name: "agents",       label: "Agents",        icon: Brain },
+        { name: "copilot",           label: "Copilot",            icon: Sparkles },
+        { name: "agents",            label: "Agents",             icon: Brain },
       ],
     },
     {
-      section: "Overview",
+      section: "Reports",
+      items: [
+        { name: "Reports",      icon: BarChart2 },
+        { name: "QueryBuilder", label: "Query Builder", icon: Code2 },
+      ],
+    },
+    {
+      section: "Views",
       items: [
         { name: "Enterprises", icon: Building2 },
         { name: "People",      icon: Users },
       ],
     },
     {
-      section: "Applications",
+      section: "Work",
       items: [{ name: "Applications", icon: Grid3x3 }],
     },
   ],
@@ -256,12 +246,11 @@ const NAV_CONFIG = {
       items: [{ name: "Dashboard", icon: LayoutDashboard }],
     },
     {
-      section: "My Work",
-      items: [{ name: "Tasks", icon: CheckSquare }],
-    },
-    {
-      section: "Applications",
-      items: [{ name: "Applications", icon: Grid3x3 }],
+      section: "Work",
+      items: [
+        { name: "Applications", icon: Grid3x3 },
+        { name: "Tasks",        icon: CheckSquare },
+      ],
     },
   ],
 };
