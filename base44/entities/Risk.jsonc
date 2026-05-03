@@ -1,0 +1,39 @@
+{
+  "name": "Risk",
+  "type": "object",
+  "properties": {
+    "company_id": { "type": "string", "description": "Tenant scope" },
+    "subject_type": { "type": "string", "description": "Ontology entity type affected by the risk" },
+    "subject_id": { "type": "string", "description": "Ontology entity id affected by the risk" },
+    "category": {
+      "type": "string",
+      "enum": ["operational", "financial", "compliance", "market", "reputational", "clinical", "safety", "data_quality"],
+      "default": "operational"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"],
+      "default": "medium"
+    },
+    "likelihood": {
+      "type": "string",
+      "enum": ["unlikely", "possible", "likely", "certain"],
+      "default": "possible"
+    },
+    "title": { "type": "string", "description": "Risk title" },
+    "description": { "type": "string", "description": "Risk explanation" },
+    "mitigation": { "type": "string", "description": "Mitigation plan" },
+    "owner": { "type": "string", "description": "Responsible operator" },
+    "status": {
+      "type": "string",
+      "enum": ["open", "acknowledged", "mitigating", "resolved", "accepted", "closed"],
+      "default": "open"
+    },
+    "source": { "type": "string", "description": "Agent, enrichment, model, or manual source" },
+    "insight_id": { "type": "string", "description": "Related insight id" },
+    "opened_at": { "type": "string", "format": "date-time" },
+    "resolved_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string" }
+  },
+  "required": ["title", "company_id"]
+}

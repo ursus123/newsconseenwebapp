@@ -51,6 +51,14 @@ except Exception as _agri_err:
     _agri_entities_ok = False
     animal_etl = plot_etl = observation_etl = None
     logger.warning("Agricultural entity ETL modules failed to load — %s", _agri_err)
+try:
+    from etl import intelligence as intelligence_etl
+    _intelligence_entities_ok = True
+except Exception as _intel_etl_err:
+    _intelligence_entities_ok = False
+    intelligence_etl = None
+    logger.warning("Intelligence entity ETL module failed to load â€” %s", _intel_etl_err)
+
 from etl.load import load_dataframe, load_dataframe_replace, load_raw
 
 # Schemas
@@ -2165,6 +2173,128 @@ def load_observation_summary(
 # ── Intelligence analytics — GET + POST load endpoints ────────────────────────
 
 # KPI Summary ────────────────────────────────────────────────────────────────
+
+def _intel_unavailable():
+    return {"status": "skipped", "reason": "intelligence ETL not loaded"}
+
+
+@app.get("/insight-summary", tags=["ETL"])
+def get_insight_summary_endpoint(company_id: Optional[str] = Query(None)):
+    if not _intelligence_entities_ok:
+        return []
+    df = filter_by_company(intelligence_etl.extract_insights(), company_id)
+    summary = intelligence_etl.transform_insights(df)
+    return summary.where(summary.notna(), None).to_dict(orient="records")
+
+
+@app.post("/load/insight-summary", tags=["ETL"])
+def load_insight_summary(
+    company_id: Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    if not _intelligence_entities_ok:
+        return _intel_unavailable()
+    df = filter_by_company(intelligence_etl.extract_insights(), company_id)
+    summary = intelligence_etl.transform_insights(df)
+    return load_dataframe(summary, "insight_summary", company_id=company_id)
+
+
+@app.get("/recommendation-summary", tags=["ETL"])
+def get_recommendation_summary_endpoint(company_id: Optional[str] = Query(None)):
+    if not _intelligence_entities_ok:
+        return []
+    df = filter_by_company(intelligence_etl.extract_recommendations(), company_id)
+    summary = intelligence_etl.transform_recommendations(df)
+    return summary.where(summary.notna(), None).to_dict(orient="records")
+
+
+@app.post("/load/recommendation-summary", tags=["ETL"])
+def load_recommendation_summary(
+    company_id: Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    if not _intelligence_entities_ok:
+        return _intel_unavailable()
+    df = filter_by_company(intelligence_etl.extract_recommendations(), company_id)
+    summary = intelligence_etl.transform_recommendations(df)
+    return load_dataframe(summary, "recommendation_summary", company_id=company_id)
+
+
+@app.get("/risk-summary", tags=["ETL"])
+def get_risk_summary_endpoint(company_id: Optional[str] = Query(None)):
+    if not _intelligence_entities_ok:
+        return []
+    df = filter_by_company(intelligence_etl.extract_risks(), company_id)
+    summary = intelligence_etl.transform_risks(df)
+    return summary.where(summary.notna(), None).to_dict(orient="records")
+
+
+@app.post("/load/risk-summary", tags=["ETL"])
+def load_risk_summary(
+    company_id: Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    if not _intelligence_entities_ok:
+        return _intel_unavailable()
+    df = filter_by_company(intelligence_etl.extract_risks(), company_id)
+    summary = intelligence_etl.transform_risks(df)
+    return load_dataframe(summary, "risk_summary", company_id=company_id)
+
+
+@app.get("/opportunity-summary", tags=["ETL"])
+def get_opportunity_summary_endpoint(company_id: Optional[str] = Query(None)):
+    if not _intelligence_entities_ok:
+        return []
+    df = filter_by_company(intelligence_etl.extract_opportunities(), company_id)
+    summary = intelligence_etl.transform_opportunities(df)
+    return summary.where(summary.notna(), None).to_dict(orient="records")
+
+
+@app.post("/load/opportunity-summary", tags=["ETL"])
+def load_opportunity_summary(
+    company_id: Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    if not _intelligence_entities_ok:
+        return _intel_unavailable()
+    df = filter_by_company(intelligence_etl.extract_opportunities(), company_id)
+    summary = intelligence_etl.transform_opportunities(df)
+    return load_dataframe(summary, "opportunity_summary", company_id=company_id)
+
+
+@app.get("/decision-log", tags=["ETL"])
+def get_decision_log_endpoint(company_id: Optional[str] = Query(None)):
+    if not _intelligence_entities_ok:
+        return []
+    df = filter_by_company(intelligence_etl.extract_decisions(), company_id)
+    summary = intelligence_etl.transform_decisions(df)
+    return summary.where(summary.notna(), None).to_dict(orient="records")
+
+
+@app.post("/load/decision-log", tags=["ETL"])
+def load_decision_log(
+    company_id: Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    _check_cron_secret(x_cron_secret)
+    if not _intelligence_entities_ok:
+        return _intel_unavailable()
+    df = filter_by_company(intelligence_etl.extract_decisions(), company_id)
+    summary = intelligence_etl.transform_decisions(df)
+    return load_dataframe(summary, "decision_log", company_id=company_id)
+
+
+@app.post("/load/decision-summary", tags=["ETL"])
+def load_decision_summary_alias(
+    company_id: Optional[str] = Query(None),
+    x_cron_secret: str = Header(None),
+):
+    return load_decision_log(company_id=company_id, x_cron_secret=x_cron_secret)
+
 
 @app.get("/analytics/kpi-summary", tags=["Analytics"])
 def get_kpi_summary(company_id: Optional[str] = Query(None)):

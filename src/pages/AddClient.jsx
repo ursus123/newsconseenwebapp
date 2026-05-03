@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import dataService from "@/services/dataService";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
-const triggerETL = (entity) =>
-  fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
+const triggerETL = (entity, companyId) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary${companyId ? `?company_id=${encodeURIComponent(companyId)}` : ""}`, {
     method: "POST",
     headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
   }).catch(() => {});
@@ -406,16 +407,13 @@ export default function AddClient() {
 
     const companyId = currentUser?.company_id;
     if (needsPerson && !selectedPerson && personData.first_name) {
-      finalPerson = await base44.entities.Person.create({ ...personData, status: "active", company_id: companyId });
-      triggerETL("people");
+      finalPerson = await dataService.createRecord("person", { ...personData, status: "active" }, currentUser, { queryClient: qc });
     }
     if (needsEnterprise && !selectedEnterprise && enterpriseData.enterprise_name) {
-      finalEnterprise = await base44.entities.Enterprise.create({ ...enterpriseData, status: "active", company_id: companyId });
-      triggerETL("enterprise");
+      finalEnterprise = await dataService.createRecord("enterprise", { ...enterpriseData, status: "active" }, currentUser, { queryClient: qc });
     }
     if (!skipAddress && !selectedAddress && addressData.address_line1) {
-      finalAddress = await base44.entities.Address.create({ ...addressData, status: "active", company_id: companyId });
-      triggerETL("address");
+      finalAddress = await dataService.createRecord("address", { ...addressData, status: "active" }, currentUser, { queryClient: qc });
     }
 
     const personName = finalPerson ? `${finalPerson.first_name} ${finalPerson.last_name}` : null;
@@ -424,16 +422,43 @@ export default function AddClient() {
 
     const relPromises = [];
     if (personName && entName) {
-      relPromises.push(base44.entities.Relationship.create({ relationship_type: "person_enterprise", person_name: personName, enterprise_name: entName, role: personData.primary_role || "Client", start_date: today, status: "active" }));
+      relPromises.push(dataService.createRecord("relationship", {
+        relationship_type: "person_enterprise",
+        person_id: finalPerson?.id,
+        enterprise_id: finalEnterprise?.id,
+        person_name: personName,
+        enterprise_name: entName,
+        role: personData.primary_role || "Client",
+        start_date: today,
+        status: "active",
+      }, currentUser, { queryClient: qc }));
     }
     if (personName && addrLine1) {
-      relPromises.push(base44.entities.Relationship.create({ relationship_type: "item_person", person_name: personName, item_name: addrLine1, role: "Billing Address", start_date: today, status: "active" }));
+      relPromises.push(dataService.createRecord("relationship", {
+        relationship_type: "item_person",
+        person_id: finalPerson?.id,
+        item_id: finalAddress?.id,
+        person_name: personName,
+        item_name: addrLine1,
+        role: "Billing Address",
+        start_date: today,
+        status: "active",
+      }, currentUser, { queryClient: qc }));
     }
     if (entName && addrLine1) {
-      relPromises.push(base44.entities.Relationship.create({ relationship_type: "item_enterprise", enterprise_name: entName, item_name: addrLine1, role: enterpriseData.relationshipRole || "Client", start_date: today, status: "active" }));
+      relPromises.push(dataService.createRecord("relationship", {
+        relationship_type: "item_enterprise",
+        enterprise_id: finalEnterprise?.id,
+        item_id: finalAddress?.id,
+        enterprise_name: entName,
+        item_name: addrLine1,
+        role: enterpriseData.relationshipRole || "Client",
+        start_date: today,
+        status: "active",
+      }, currentUser, { queryClient: qc }));
     }
     await Promise.all(relPromises);
-    if (relPromises.length > 0) triggerETL("relationship");
+    if (relPromises.length > 0) triggerETL("relationship", companyId);
 
     qc.invalidateQueries();
     setSaving(false);

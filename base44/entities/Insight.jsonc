@@ -1,0 +1,48 @@
+{
+  "name": "Insight",
+  "type": "object",
+  "properties": {
+    "company_id": { "type": "string", "description": "Tenant scope" },
+    "subject_type": { "type": "string", "description": "Ontology entity type this insight is about" },
+    "subject_id": { "type": "string", "description": "Ontology entity id this insight is about" },
+    "subject_name": { "type": "string", "description": "Human-readable subject name" },
+    "insight_type": {
+      "type": "string",
+      "enum": ["anomaly", "trend", "risk_signal", "opportunity_signal", "compliance", "market", "forecast", "benchmark", "explanation", "competitive", "economic", "news"],
+      "description": "Kind of learning captured by the system"
+    },
+    "title": { "type": "string", "description": "Short insight title" },
+    "body": { "type": "string", "description": "Plain-language explanation" },
+    "severity": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"],
+      "default": "medium",
+      "description": "Importance of the insight"
+    },
+    "confidence": { "type": "number", "description": "Confidence score from 0 to 1" },
+    "status": {
+      "type": "string",
+      "enum": ["new", "acknowledged", "actioned", "resolved", "dismissed"],
+      "default": "new",
+      "description": "Operator lifecycle state"
+    },
+    "source": { "type": "string", "description": "Agent, enrichment phase, report, or ML model source" },
+    "source_run_id": { "type": "string", "description": "Source execution id or run key" },
+    "evidence": { "type": "string", "description": "JSON array of evidence items backing the insight" },
+    "model_version": { "type": "string", "description": "Model version when produced by ML" },
+    "related_metric_id": { "type": "string", "description": "MetricDefinition id when applicable" },
+    "detected_at": { "type": "string", "format": "date-time", "description": "When the insight was detected" },
+    "expires_at": { "type": "string", "format": "date-time", "description": "When the insight should be considered stale" },
+    "acknowledged_by": { "type": "string" },
+    "acknowledged_at": { "type": "string", "format": "date-time" },
+    "dismissed_by": { "type": "string" },
+    "dismissed_at": { "type": "string", "format": "date-time" },
+    "actioned_by": { "type": "string" },
+    "actioned_at": { "type": "string", "format": "date-time" },
+    "resolved_by": { "type": "string" },
+    "resolved_at": { "type": "string", "format": "date-time" },
+    "resolution_notes": { "type": "string" },
+    "created_by": { "type": "string" }
+  },
+  "required": ["title", "insight_type", "company_id"]
+}

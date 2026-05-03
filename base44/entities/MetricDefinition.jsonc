@@ -1,0 +1,31 @@
+{
+  "name": "MetricDefinition",
+  "type": "object",
+  "properties": {
+    "company_id": { "type": "string", "description": "Tenant scope" },
+    "name": { "type": "string", "description": "Metric name" },
+    "description": { "type": "string", "description": "Plain-language metric description" },
+    "formula": { "type": "string", "description": "SQL or structured expression that defines the metric" },
+    "entity_type": { "type": "string", "description": "Primary ontology entity type" },
+    "aggregation_period": {
+      "type": "string",
+      "enum": ["daily", "weekly", "monthly", "quarterly", "yearly"],
+      "default": "monthly"
+    },
+    "target_value": { "type": "number", "description": "Target threshold" },
+    "target_direction": {
+      "type": "string",
+      "enum": ["higher", "lower", "between"],
+      "default": "higher"
+    },
+    "owner": { "type": "string" },
+    "visible_to_roles": { "type": "string", "description": "JSON array of roles allowed to see this metric" },
+    "status": {
+      "type": "string",
+      "enum": ["active", "inactive", "archived"],
+      "default": "active"
+    },
+    "created_by": { "type": "string" }
+  },
+  "required": ["name", "formula", "company_id"]
+}

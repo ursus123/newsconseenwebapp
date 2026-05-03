@@ -19,6 +19,7 @@ import ForecastingModule from "@/components/marketintelligence/ForecastingModule
 import { executeSQL } from "@/components/querybuilder/sqlEngine";
 import { fetchPeopleFallback, fetchTasksFallback, fetchTransactionsFallback } from "@/utils/fetchWithFallback";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
+import dataService from "@/services/dataService";
 import { Button } from "@/components/ui/button";
 import {
   BookmarkPlus, Loader2, Download, Building2, ExternalLink,
@@ -421,14 +422,13 @@ function MarketDecisionPanel({ results, currentUser, toast, myEnterprises = [] }
           loading={creating === "task"}
           done={done.task}
           onClick={() => act("task", "task", () =>
-            base44.entities.Task.create({
+            dataService.createRecord("task", {
               title: `Evaluate ${bizType} expansion in ${location}`,
               description: `Market score: ${score}/100. ${decisionConfig.reason} Annual market: $${((mkt.annual_market_usd || 0) / 1e6).toFixed(1)}M/yr. Competitors: ${mkt.existing_competitors ?? "N/A"}.`,
               task_type: "strategic_review",
               status: "open",
               priority: score >= 70 ? "high" : "medium",
-              company_id: cid,
-            })
+            }, currentUser)
           )}
         />
 
@@ -471,14 +471,13 @@ function MarketDecisionPanel({ results, currentUser, toast, myEnterprises = [] }
             loading={creating === "staffing"}
             done={done.staffing}
             onClick={() => act("staffing", "task", () =>
-              base44.entities.Task.create({
+              dataService.createRecord("task", {
                 title: `Staffing plan: ${bizType} in ${location}`,
                 description: `Supply gap: ${mkt.supply_gap || "unknown"} providers needed. Market score: ${score}/100.`,
                 task_type: "workforce_planning",
                 status: "open",
                 priority: "medium",
-                company_id: cid,
-              })
+              }, currentUser)
             )}
           />
         )}
@@ -489,7 +488,7 @@ function MarketDecisionPanel({ results, currentUser, toast, myEnterprises = [] }
           loading={creating === "signal"}
           done={done.signal}
           onClick={() => act("signal", "signal", () =>
-            base44.entities.Signal.create({
+            dataService.createRecord("signal", {
               name:            `Market opportunity: ${bizType} in ${location}`,
               signal_type:     "automated",
               signal_subtype:  "market_intelligence",
@@ -500,8 +499,7 @@ function MarketDecisionPanel({ results, currentUser, toast, myEnterprises = [] }
               is_anomaly:      score < 40 || score > 85,
               recorded_at:     new Date().toISOString(),
               status:          "active",
-              company_id:      cid,
-            })
+            }, currentUser)
           )}
         />
 
@@ -511,14 +509,13 @@ function MarketDecisionPanel({ results, currentUser, toast, myEnterprises = [] }
           loading={creating === "goal"}
           done={done.goal}
           onClick={() => act("goal", "task", () =>
-            base44.entities.Task.create({
+            dataService.createRecord("task", {
               title: `Growth goal: ${bizType} in ${location}`,
               description: `Target market: $${((mkt.annual_market_usd || 0) / 1e6).toFixed(1)}M/yr. Opportunity score: ${score}/100.${mkt.supply_gap > 0 ? ` Supply gap: ${mkt.supply_gap} providers needed.` : ""}`,
               task_type: "goal",
               status: "open",
               priority: "high",
-              company_id: cid,
-            })
+            }, currentUser)
           )}
         />
       </div>

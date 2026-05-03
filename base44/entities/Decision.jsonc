@@ -1,0 +1,24 @@
+{
+  "name": "Decision",
+  "type": "object",
+  "properties": {
+    "company_id": { "type": "string", "description": "Tenant scope" },
+    "recommendation_id": { "type": "string", "description": "Recommendation being decided" },
+    "insight_id": { "type": "string", "description": "Related insight id" },
+    "decision": {
+      "type": "string",
+      "enum": ["approved", "rejected", "modified"],
+      "description": "Operator decision"
+    },
+    "decided_by": { "type": "string" },
+    "decided_at": { "type": "string", "format": "date-time" },
+    "notes": { "type": "string" },
+    "rejection_reason": { "type": "string" },
+    "modified_payload": { "type": "string", "description": "JSON payload for modified decision" },
+    "outcome_status": { "type": "string", "description": "Outcome after execution" },
+    "outcome_summary": { "type": "string", "description": "Plain-language result" },
+    "outcome_metric_delta": { "type": "number", "description": "Measured metric change after action" },
+    "created_by": { "type": "string" }
+  },
+  "required": ["recommendation_id", "decision", "company_id"]
+}

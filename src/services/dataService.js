@@ -213,12 +213,13 @@ function _reg(entityName) {
 
 // ── Fire-and-forget side effects ───────────────────────────────────
 
-export function triggerEntityETL(entityName) {
+export function triggerEntityETL(entityName, companyId) {
   const reg = ENTITY_REGISTRY[entityName];
   if (!reg) return;
-  fetch(`${RAILWAY_URL}/load/${reg.etl}-summary`, {
+  const qs = companyId ? `?company_id=${encodeURIComponent(companyId)}` : "";
+  fetch(`${RAILWAY_URL}/load/${reg.etl}-summary${qs}`, {
     method:  "POST",
-    headers: { "x-api-key": RAILWAY_API_KEY },
+    headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
   }).catch(() => {});
 }
 
@@ -272,6 +273,25 @@ function _triggerWorkflows(reg, companyId, triggerType, entityData) {
       trigger_type: triggerType,
       entity_type:  reg.auditType,
       entity_data:  entityData,
+    }),
+  }).catch(() => {});
+}
+
+const MARKET_ENRICHMENT_ENTITIES = new Set(["enterprise", "address", "territory", "product"]);
+
+function _triggerMarketEnrichment(entityName, companyId, record, trigger = "entity_changed") {
+  if (!companyId || !record?.id || !MARKET_ENRICHMENT_ENTITIES.has(entityName)) return;
+  fetch(`${RAILWAY_URL}/market/enrich`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}),
+    },
+    body: JSON.stringify({
+      company_id: companyId,
+      entity_type: entityName,
+      entity_id: String(record.id),
+      trigger,
     }),
   }).catch(() => {});
 }
@@ -378,10 +398,11 @@ export async function createRecord(entityName, data, currentUser, options = {}) 
   const companyId = created?.company_id || currentUser?.company_id;
 
   syncQueryCache(queryClient, entityName, created, "created");
-  triggerEntityETL(entityName);
+  triggerEntityETL(entityName, companyId);
   _logAudit(reg, companyId, "created", created, currentUser?.email);
   _triggerWorkflows(reg, companyId, "entity_created", created);
   _fireEvent(`${entityName}.created`, entityName, created?.id, reg.displayName(created || {}), currentUser);
+  _triggerMarketEnrichment(entityName, companyId, created, "entity_created");
   if (notifyTaxonomyChange && reg.taxonomyType) {
     notifyTaxonomyChange(reg.taxonomyType, companyId);
   }
@@ -415,10 +436,11 @@ export async function updateRecord(entityName, id, data, currentUser, options = 
   const auditRecord = record || updated || { id, ...data };
 
   syncQueryCache(queryClient, entityName, null, "updated");
-  triggerEntityETL(entityName);
+  triggerEntityETL(entityName, companyId);
   _logAudit(reg, companyId, "updated", auditRecord, currentUser?.email);
   _triggerWorkflows(reg, companyId, "entity_updated", auditRecord);
   _fireEvent(`${entityName}.updated`, entityName, id, reg.displayName(auditRecord), currentUser);
+  _triggerMarketEnrichment(entityName, companyId, updated || auditRecord, "entity_updated");
   if (notifyTaxonomyChange && reg.taxonomyType) {
     notifyTaxonomyChange(reg.taxonomyType, companyId);
   }
@@ -448,7 +470,7 @@ export async function deleteRecord(entityName, id, currentUser, options = {}) {
   _logAudit(reg, companyId, "deleted", auditRecord, currentUser?.email);
   _fireEvent(`${entityName}.deleted`, entityName, id, reg.displayName(auditRecord), currentUser);
   syncQueryCache(queryClient, entityName, null, "deleted");
-  triggerEntityETL(entityName);
+  triggerEntityETL(entityName, companyId);
 }
 
 // ── Default export (namespace object) ─────────────────────────────

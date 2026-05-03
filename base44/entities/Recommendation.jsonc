@@ -1,0 +1,41 @@
+{
+  "name": "Recommendation",
+  "type": "object",
+  "properties": {
+    "company_id": { "type": "string", "description": "Tenant scope" },
+    "insight_id": { "type": "string", "description": "Insight that triggered this recommendation" },
+    "title": { "type": "string", "description": "Recommended action title" },
+    "rationale": { "type": "string", "description": "Why this action is being proposed" },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"],
+      "default": "medium"
+    },
+    "estimated_impact": { "type": "string", "description": "Expected benefit or avoided loss" },
+    "confidence": { "type": "number", "description": "Confidence score from 0 to 1" },
+    "action_type": {
+      "type": "string",
+      "enum": ["create_task", "update_record", "create_chart", "create_report", "create_workflow", "send_message", "investigate", "restock", "contact_customer", "adjust_price"],
+      "description": "Action to perform after approval"
+    },
+    "action_payload": { "type": "string", "description": "JSON payload for the proposed action" },
+    "status": {
+      "type": "string",
+      "enum": ["proposed", "approved", "rejected", "deferred", "executed"],
+      "default": "proposed"
+    },
+    "assigned_to": { "type": "string" },
+    "due_date": { "type": "string", "format": "date" },
+    "rejection_reason": { "type": "string" },
+    "created_task_id": { "type": "string" },
+    "created_workflow_id": { "type": "string" },
+    "source": { "type": "string", "description": "Agent, model, report, or enrichment source" },
+    "approval_required": { "type": "boolean", "default": true },
+    "approved_by": { "type": "string" },
+    "approved_at": { "type": "string", "format": "date-time" },
+    "rejected_by": { "type": "string" },
+    "rejected_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string" }
+  },
+  "required": ["title", "action_type", "company_id"]
+}
