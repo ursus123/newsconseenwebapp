@@ -531,6 +531,14 @@ try:
 except Exception as _ev_err:
     logger.warning("Events router failed to load — %s", _ev_err)
 
+# App Readiness Scoring (Phase G)
+try:
+    from apps.routes import router as apps_router
+    app.include_router(apps_router)
+    logger.info("App readiness router loaded")
+except Exception as _apps_err:
+    logger.warning("App readiness router failed to load — %s", _apps_err)
+
 
 # ----------------------------------------------------------
 # Idjwi — Public Demo Copilot (landing page, no auth required)
