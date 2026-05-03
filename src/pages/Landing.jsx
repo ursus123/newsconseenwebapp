@@ -310,12 +310,15 @@ function IdjwiChat() {
   const [started, setStarted]         = useState(false);
   const [progressLabel, setProgressLabel] = useState(null);
 
-  const inputRef   = useRef(null);
-  const bottomRef  = useRef(null);
-  const historyRef = useRef([]);
+  const inputRef      = useRef(null);
+  const bottomRef     = useRef(null);
+  const historyRef    = useRef([]);
+  const msgContainerRef = useRef(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (msgContainerRef.current) {
+      msgContainerRef.current.scrollTop = msgContainerRef.current.scrollHeight;
+    }
   }, [messages, loading, progressLabel]);
 
   const updateMsg = useCallback((id, patch) => {
@@ -498,7 +501,7 @@ function IdjwiChat() {
         </div>
 
         {/* Messages */}
-        <div className="h-[55vh] min-h-[380px] md:h-[520px] overflow-y-auto px-5 py-5 space-y-5 scroll-smooth">
+        <div ref={msgContainerRef} className="h-[55vh] min-h-[380px] md:h-[520px] overflow-y-auto px-5 py-5 space-y-5 scroll-smooth">
           {messages.map((m) => (
             <Message key={m._id} role={m.role} content={m.content}
               charts={m.charts} citations={m.citations}
