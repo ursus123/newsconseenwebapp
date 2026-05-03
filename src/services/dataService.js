@@ -14,7 +14,20 @@
  */
 
 import { base44 } from "@/api/base44Client";
-import { createWithScope, addRecordToQueryCache } from "@/components/shared/useDataQuery";
+import { createWithScope } from "@/components/shared/useDataQuery";
+
+/** @param {any} queryClient @param {any} queryKey @param {any} record */
+function addRecordToQueryCache(queryClient, queryKey, record) {
+  if (!queryClient || !record?.id) return;
+  const apply = () => queryClient.setQueriesData({ queryKey }, (/** @type {any} */ existing) => {
+    if (!Array.isArray(existing)) return existing;
+    if (existing.some((/** @type {any} */ row) => row?.id === record.id)) return existing;
+    return [record, ...existing];
+  });
+  apply();
+  globalThis.setTimeout?.(apply, 250);
+  globalThis.setTimeout?.(apply, 1000);
+}
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = /** @type {any} */ (import.meta).env?.VITE_RAILWAY_API_KEY || "";
