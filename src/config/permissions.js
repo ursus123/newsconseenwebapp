@@ -21,7 +21,10 @@ export const ROLE_PERMISSIONS = {
   },
   admin: {
     pages: [
+      // Home
+      "CompanyGraphHome",
       "Dashboard",
+      "IntelligenceInbox",
       // Core entities
       "People",
       "Enterprises",
@@ -41,29 +44,45 @@ export const ROLE_PERMISSIONS = {
       "Animals",
       "Plots",
       "Observations",
+      // Work apps
+      "Applications",
+      "ClockInOut",
+      "StaffSchedule",
+      "AddClient",
+      "LeaveRequest",
+      "ExpenseClaim",
+      "VisitorLog",
+      "IncidentReport",
+      "MaintenanceRequest",
+      "FieldVisitReport",
+      "PurchaseOrder",
+      "GoodsReceived",
+      "InspectionChecklist",
+      "DocumentExpiry",
       // Analytics & intelligence
       "Reports",
       "QueryBuilder",
       "MarketIntelligence",
+      "MapExplorer",
       "MLModels",
       "copilot",
       "alerts",
       "agents",
       "Connectors",
       "Workflows",
-      // Ontology
+      "IngestionAgent",
+      // Ontology / Reports
       "ObjectExplorer",
       "KineticLayer",
       "ObjectViews",
-      // Applications
-      "Applications",
+      "EntityGraph",
       // Admin
       "Attendance",
       "Permissions",
       "UserManagement",
       "TaxonomyAdmin",
       "DataModels",
-      "EntityGraph",
+      "DataRepair",
       "Pipelines",
       "network",
       "Billing",
