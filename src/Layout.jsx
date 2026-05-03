@@ -369,6 +369,7 @@ export default function Layout({ children, currentPageName }) {
   const [criticalAlerts, setCriticalAlerts] = useState(0);
   const [expandedSections, setExpandedSections] = useState(/** @type {Record<string,boolean>} */ ({}));
   const toggleSection = (/** @type {string} */ key) => setExpandedSections((/** @type {Record<string,boolean>} */ p) => ({ ...p, [key]: !p[key] }));
+  const [activeSection, setActiveSection] = useState(/** @type {string|null} */ (null));
   const navigate = useNavigate();
   const { logout: authLogout } = useAuth();
 
@@ -551,46 +552,71 @@ export default function Layout({ children, currentPageName }) {
               </button>
             </div>
 
-            {/* Navigation */}
+            {/* Horizontal section tabs */}
+            {currentUser && (
+              <div
+                className="flex shrink-0 border-b border-white/5 px-2 pt-2 pb-0 gap-0.5"
+                style={{ overflowX: "auto", scrollbarWidth: "none" }}
+              >
+                {navSections.map((section) => {
+                  const key = section.section ?? null;
+                  const label = section.section || "Home";
+                  const isActive = activeSection === key;
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => setActiveSection(key)}
+                      style={isActive && branding.primaryColor ? { color: branding.primaryColor } : {}}
+                      className={`px-3 py-2 text-[10px] font-bold rounded-t-lg whitespace-nowrap shrink-0 transition-all border-b-2 ${
+                        isActive
+                          ? "text-white border-current bg-white/5"
+                          : "text-slate-500 border-transparent hover:text-slate-300 hover:bg-white/5"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Active section items */}
             <nav className="flex-1 px-3 py-3 overflow-y-auto">
-              {currentUser && navSections.map((section, si) => {
-                const sectionKey = section.section || "home";
-                const LIMIT = 6;
-                const allItems = section.items;
-                const needsExpand = allItems.length > LIMIT;
-                const isExpanded = expandedSections[sectionKey];
-                const visibleItems = needsExpand && !isExpanded ? allItems.slice(0, LIMIT) : allItems;
-                return (
-                  <div key={si} className="mb-1">
-                    {section.section && (
-                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-3 mb-1 mt-3">
-                        {section.section}
-                      </p>
-                    )}
-                    {visibleItems.map((/** @type {any} */ item) => (
-                      <NavItem
-                        key={item.name}
-                        name={item.name}
-                        label={/** @type {any} */ (ADAPTIVE_LABELS)[item.name] || item.label || item.name}
-                        icon={item.icon}
-                        isActive={currentPageName === item.name}
-                        primaryColor={branding.primaryColor}
-                        onClick={() => handleNavClick(item.name)}
-                        showRedDot={item.badge === "alerts" && criticalAlerts > 0}
-                      />
-                    ))}
-                    {needsExpand && (
-                      <button
-                        onClick={() => toggleSection(sectionKey)}
-                        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-slate-500 hover:text-slate-300 transition-colors"
-                      >
-                        <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                        {isExpanded ? "Show less" : `${allItems.length - LIMIT} more`}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+              {currentUser && navSections
+                .filter((section) => (section.section ?? null) === activeSection)
+                .map((section, si) => {
+                  const sectionKey = section.section || "home";
+                  const LIMIT = 6;
+                  const allItems = section.items;
+                  const needsExpand = allItems.length > LIMIT;
+                  const isExpanded = expandedSections[sectionKey];
+                  const visibleItems = needsExpand && !isExpanded ? allItems.slice(0, LIMIT) : allItems;
+                  return (
+                    <div key={si}>
+                      {visibleItems.map((/** @type {any} */ item) => (
+                        <NavItem
+                          key={item.name}
+                          name={item.name}
+                          label={/** @type {any} */ (ADAPTIVE_LABELS)[item.name] || item.label || item.name}
+                          icon={item.icon}
+                          isActive={currentPageName === item.name}
+                          primaryColor={branding.primaryColor}
+                          onClick={() => handleNavClick(item.name)}
+                          showRedDot={item.badge === "alerts" && criticalAlerts > 0}
+                        />
+                      ))}
+                      {needsExpand && (
+                        <button
+                          onClick={() => toggleSection(sectionKey)}
+                          className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-slate-500 hover:text-slate-300 transition-colors"
+                        >
+                          <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                          {isExpanded ? "Show less" : `${allItems.length - LIMIT} more`}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
             </nav>
 
             {/* Footer */}
