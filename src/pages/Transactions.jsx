@@ -485,14 +485,14 @@ export default function Transactions() {
     const existing = await base44.entities.Transaction.filter({ company_id: currentUser.company_id, enterprise: tx.enterprise }).catch(() => []);
     const enterprise = enterprises.find(e => e.enterprise_name === tx.enterprise);
     const invoiceNumber = generateInvoiceNumber(enterprise, existing);
-    await base44.entities.Transaction.update(tx.id, { status: "posted", invoice_number: invoiceNumber, posted_by: currentUser?.email, posted_date: new Date().toISOString() });
+    await dataService.updateRecord("transaction", tx.id, { status: "posted", invoice_number: invoiceNumber, posted_by: currentUser?.email, posted_date: new Date().toISOString() }, currentUser, { queryClient: qc });
 
     // Stock impact
     for (const type of STOCK_IMPACT_TYPES) {
       if (tx.transaction_type === type) {
         for (const line of (tx.line_items || [])) {
           const matched = products.find(p => p.name === line.item_name);
-          if (matched && line.quantity) await base44.entities.Product.update(matched.id, { stock_quantity: (parseFloat(matched.stock_quantity) || 0) - (parseFloat(line.quantity) || 0) });
+          if (matched && line.quantity) await dataService.updateRecord("product", matched.id, { stock_quantity: (parseFloat(matched.stock_quantity) || 0) - (parseFloat(line.quantity) || 0) }, currentUser, { queryClient: qc });
         }
       }
     }
@@ -500,28 +500,23 @@ export default function Transactions() {
       if (tx.transaction_type === type) {
         for (const line of (tx.line_items || [])) {
           const matched = products.find(p => p.name === line.item_name);
-          if (matched && line.quantity) await base44.entities.Product.update(matched.id, { stock_quantity: (parseFloat(matched.stock_quantity) || 0) + (parseFloat(line.quantity) || 0) });
+          if (matched && line.quantity) await dataService.updateRecord("product", matched.id, { stock_quantity: (parseFloat(matched.stock_quantity) || 0) + (parseFloat(line.quantity) || 0) }, currentUser, { queryClient: qc });
         }
       }
     }
-
-    qc.invalidateQueries({ queryKey: ["transactions"] });
-    qc.refetchQueries({ queryKey: ["transactions"] });
-    qc.invalidateQueries({ queryKey: ["products"] });
-    qc.refetchQueries({ queryKey: ["products"] });
     setPostTarget(null);
     toast({ title: `Invoice ${invoiceNumber} posted`, description: `$${tx.amount} invoice posted.` });
   };
 
   const handleVoid = async (tx, reason) => {
-    await base44.entities.Transaction.update(tx.id, { status: "voided", voided_reason: reason, voided_by: currentUser?.email, voided_date: new Date().toISOString() });
+    await dataService.updateRecord("transaction", tx.id, { status: "voided", voided_reason: reason, voided_by: currentUser?.email, voided_date: new Date().toISOString() }, currentUser, { queryClient: qc });
 
     // Reverse stock
     for (const type of STOCK_IMPACT_TYPES) {
       if (tx.transaction_type === type) {
         for (const line of (tx.line_items || [])) {
           const matched = products.find(p => p.name === line.item_name);
-          if (matched && line.quantity) await base44.entities.Product.update(matched.id, { stock_quantity: (parseFloat(matched.stock_quantity) || 0) + (parseFloat(line.quantity) || 0) });
+          if (matched && line.quantity) await dataService.updateRecord("product", matched.id, { stock_quantity: (parseFloat(matched.stock_quantity) || 0) + (parseFloat(line.quantity) || 0) }, currentUser, { queryClient: qc });
         }
       }
     }
@@ -529,53 +524,39 @@ export default function Transactions() {
       if (tx.transaction_type === type) {
         for (const line of (tx.line_items || [])) {
           const matched = products.find(p => p.name === line.item_name);
-          if (matched && line.quantity) await base44.entities.Product.update(matched.id, { stock_quantity: (parseFloat(matched.stock_quantity) || 0) - (parseFloat(line.quantity) || 0) });
+          if (matched && line.quantity) await dataService.updateRecord("product", matched.id, { stock_quantity: (parseFloat(matched.stock_quantity) || 0) - (parseFloat(line.quantity) || 0) }, currentUser, { queryClient: qc });
         }
       }
     }
-    qc.invalidateQueries({ queryKey: ["transactions"] });
-    qc.refetchQueries({ queryKey: ["transactions"] });
-    qc.invalidateQueries({ queryKey: ["products"] });
-    qc.refetchQueries({ queryKey: ["products"] });
     setVoidTarget(null);
     toast({ title: "Transaction voided" });
   };
 
   const handleMarkPaid = async (tx) => {
-    await base44.entities.Transaction.update(tx.id, {
+    await dataService.updateRecord("transaction", tx.id, {
       payment_status: "paid",
       payment_date:   new Date().toISOString().slice(0, 10),
       status:         "reconciled",
-    });
-    qc.invalidateQueries({ queryKey: ["transactions"] });
-    qc.refetchQueries({ queryKey: ["transactions"] });
+    }, currentUser, { queryClient: qc });
     toast({ title: "Payment recorded", description: `${tx.invoice_number || "Transaction"} marked as paid.` });
   };
 
   const handleBulkVoid = async () => {
     for (const id of selectedIds) {
-      await base44.entities.Transaction.update(id, { status: "voided", voided_by: currentUser?.email, voided_date: new Date().toISOString() });
+      await dataService.updateRecord("transaction", id, { status: "voided", voided_by: currentUser?.email, voided_date: new Date().toISOString() }, currentUser, { queryClient: qc });
     }
-    qc.invalidateQueries({ queryKey: ["transactions"] });
-    qc.refetchQueries({ queryKey: ["transactions"] });
     toast({ title: `${selectedIds.length} transactions voided` });
     setSelectedIds([]);
   };
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Transaction.delete(id);
-    qc.invalidateQueries({ queryKey: ["transactions"] });
-    qc.refetchQueries({ queryKey: ["transactions"] });
-    dataService.triggerEntityETL("transaction");
+    for (const id of selectedIds) await dataService.deleteRecord("transaction", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} transactions deleted` });
     setSelectedIds([]);
   };
 
   const handleDeleteAll = async () => {
-    for (const t of transactions) { try { await base44.entities.Transaction.delete(t.id); } catch (e) { /* 404 = already gone */ } }
-    qc.invalidateQueries({ queryKey: ["transactions"] });
-    qc.refetchQueries({ queryKey: ["transactions"] });
-    dataService.triggerEntityETL("transaction");
+    for (const t of transactions) { try { await dataService.deleteRecord("transaction", t.id, currentUser, { queryClient: qc }); } catch (e) { /* 404 = already gone */ } }
     toast({ title: `All ${transactions.length} transactions deleted` });
   };
 
@@ -840,10 +821,8 @@ export default function Transactions() {
         onClearSelect={() => setSelectedIds([])}
         onWriteBack={perms.l4_create_draft ? async (updates) => {
           for (const { id, field, value } of updates) {
-            await base44.entities.Transaction.update(id, { [field]: value });
+            await dataService.updateRecord("transaction", id, { [field]: value }, currentUser, { queryClient: qc });
           }
-          dataService.triggerEntityETL("transaction");
-          qc.invalidateQueries({ queryKey: ["transactions"] });
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
       />

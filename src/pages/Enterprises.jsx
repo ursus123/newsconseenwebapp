@@ -212,19 +212,13 @@ export default function Enterprises() {
   const ss = useSpreadsheet(processedEnterprises, columns);
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Enterprise.delete(id);
-    qc.invalidateQueries({ queryKey: ["enterprises"] });
-    qc.refetchQueries({ queryKey: ["enterprises"] });
-    dataService.triggerEntityETL("enterprise");
+    for (const id of selectedIds) await dataService.deleteRecord("enterprise", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} enterprises deleted` });
     setSelectedIds([]);
   };
 
   const handleDeleteAll = async () => {
-    for (const e of enterprises) { try { await base44.entities.Enterprise.delete(e.id); } catch (e) { /* 404 = already gone */ } }
-    qc.invalidateQueries({ queryKey: ["enterprises"] });
-    qc.refetchQueries({ queryKey: ["enterprises"] });
-    dataService.triggerEntityETL("enterprise");
+    for (const e of enterprises) { try { await dataService.deleteRecord("enterprise", e.id, currentUser, { queryClient: qc }); } catch (e) { /* 404 = already gone */ } }
     toast({ title: `All ${enterprises.length} enterprises deleted` });
   };
 
@@ -304,10 +298,8 @@ export default function Enterprises() {
         onClearSelect={() => setSelectedIds([])}
         onWriteBack={perms.can_edit ? async (updates) => {
           for (const { id, field, value } of updates) {
-            await base44.entities.Enterprise.update(id, { [field]: value });
+            await dataService.updateRecord("enterprise", id, { [field]: value }, currentUser, { queryClient: qc });
           }
-          dataService.triggerEntityETL("enterprise");
-          qc.invalidateQueries({ queryKey: ["enterprises"] });
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
       />
@@ -373,9 +365,7 @@ export default function Enterprises() {
           onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
           bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
           onCellEdit={perms.can_edit ? async (id, field, value) => {
-            await base44.entities.Enterprise.update(id, { [field]: value });
-            dataService.triggerEntityETL("enterprise");
-            qc.invalidateQueries({ queryKey: ["enterprises"] });
+            await dataService.updateRecord("enterprise", id, { [field]: value }, currentUser, { queryClient: qc });
           } : undefined}
         />
       )}

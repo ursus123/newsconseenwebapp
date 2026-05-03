@@ -186,19 +186,13 @@ export default function Services() {
   };
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Service.delete(id);
-    qc.invalidateQueries({ queryKey: ["services"] });
-    qc.refetchQueries({ queryKey: ["services"] });
-    dataService.triggerEntityETL("service");
+    for (const id of selectedIds) await dataService.deleteRecord("service", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} services deleted` });
     setSelectedIds([]);
   };
 
   const handleDeleteAll = async () => {
-    for (const s of services) { try { await base44.entities.Service.delete(s.id); } catch (_) {} }
-    qc.invalidateQueries({ queryKey: ["services"] });
-    qc.refetchQueries({ queryKey: ["services"] });
-    dataService.triggerEntityETL("service");
+    for (const s of services) { try { await dataService.deleteRecord("service", s.id, currentUser, { queryClient: qc }); } catch (_) {} }
     toast({ title: `All ${services.length} services deleted` });
   };
 
@@ -302,10 +296,8 @@ export default function Services() {
         onClearSelect={() => setSelectedIds([])}
         onWriteBack={perms.can_edit ? async (updates) => {
           for (const { id, field, value } of updates) {
-            await base44.entities.Service.update(id, { [field]: value });
+            await dataService.updateRecord("service", id, { [field]: value }, currentUser, { queryClient: qc });
           }
-          dataService.triggerEntityETL("service");
-          qc.invalidateQueries({ queryKey: ["services"] });
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
       />
@@ -335,9 +327,7 @@ export default function Services() {
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
           onCellEdit={perms.can_edit ? async (id, field, value) => {
-            await base44.entities.Service.update(id, { [field]: value });
-            dataService.triggerEntityETL("service");
-            qc.invalidateQueries({ queryKey: ["services"] });
+            await dataService.updateRecord("service", id, { [field]: value }, currentUser, { queryClient: qc });
           } : undefined}
         />
       )}

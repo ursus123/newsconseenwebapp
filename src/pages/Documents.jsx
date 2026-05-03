@@ -178,17 +178,13 @@ export default function Documents() {
   });
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Document.delete(id).catch(() => {});
-    qc.invalidateQueries({ queryKey: ["documents"] });
-    qc.refetchQueries({ queryKey: ["documents"] });
+    for (const id of selectedIds) await dataService.deleteRecord("document", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} documents deleted` });
     setSelectedIds([]);
   };
 
   const handleDeleteAll = async () => {
-    for (const d of docs) { try { await base44.entities.Document.delete(d.id); } catch {} }
-    qc.invalidateQueries({ queryKey: ["documents"] });
-    qc.refetchQueries({ queryKey: ["documents"] });
+    for (const d of docs) { try { await dataService.deleteRecord("document", d.id, currentUser, { queryClient: qc }); } catch {} }
     toast({ title: `All ${docs.length} documents deleted` });
   };
 

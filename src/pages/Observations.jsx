@@ -187,13 +187,11 @@ export default function Observations() {
   });
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Observation.delete(id).catch(() => {});
-    qc.invalidateQueries({ queryKey: ["observations"] }); qc.refetchQueries({ queryKey: ["observations"] }); dataService.triggerEntityETL("observation");
+    for (const id of selectedIds) await dataService.deleteRecord("observation", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} observations deleted` }); setSelectedIds([]);
   };
   const handleDeleteAll = async () => {
-    for (const o of observations) { try { await base44.entities.Observation.delete(o.id); } catch {} }
-    qc.invalidateQueries({ queryKey: ["observations"] }); qc.refetchQueries({ queryKey: ["observations"] }); dataService.triggerEntityETL("observation");
+    for (const o of observations) { try { await dataService.deleteRecord("observation", o.id, currentUser, { queryClient: qc }); } catch {} }
     toast({ title: `All ${observations.length} observations deleted` });
   };
 

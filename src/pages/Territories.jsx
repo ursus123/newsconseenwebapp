@@ -182,13 +182,11 @@ export default function Territories() {
   });
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Territory.delete(id).catch(() => {});
-    qc.invalidateQueries({ queryKey: ["territories"] }); qc.refetchQueries({ queryKey: ["territories"] }); dataService.triggerEntityETL("territory");
+    for (const id of selectedIds) await dataService.deleteRecord("territory", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} territories deleted` }); setSelectedIds([]);
   };
   const handleDeleteAll = async () => {
-    for (const t of territories) { try { await base44.entities.Territory.delete(t.id); } catch {} }
-    qc.invalidateQueries({ queryKey: ["territories"] }); qc.refetchQueries({ queryKey: ["territories"] }); dataService.triggerEntityETL("territory");
+    for (const t of territories) { try { await dataService.deleteRecord("territory", t.id, currentUser, { queryClient: qc }); } catch {} }
     toast({ title: `All ${territories.length} territories deleted` });
   };
 

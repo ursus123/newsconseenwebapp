@@ -247,19 +247,13 @@ export default function Products() {
   const handleArchive = (item) => { updateMut.mutate({ id: item.id, data: { ...item, status: "archived" } }); setFormOpen(false); setEditing(null); };
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Product.delete(id);
-    qc.invalidateQueries({ queryKey: ["products"] });
-    qc.refetchQueries({ queryKey: ["products"] });
-    dataService.triggerEntityETL("product");
+    for (const id of selectedIds) await dataService.deleteRecord("product", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} items deleted` });
     setSelectedIds([]);
   };
 
   const handleDeleteAll = async () => {
-    for (const p of products) { try { await base44.entities.Product.delete(p.id); } catch (e) { /* 404 = already gone */ } }
-    qc.invalidateQueries({ queryKey: ["products"] });
-    qc.refetchQueries({ queryKey: ["products"] });
-    dataService.triggerEntityETL("product");
+    for (const p of products) { try { await dataService.deleteRecord("product", p.id, currentUser, { queryClient: qc }); } catch (e) { /* 404 = already gone */ } }
     toast({ title: `All ${products.length} items deleted` });
   };
 
@@ -393,10 +387,8 @@ export default function Products() {
         onClearSelect={() => setSelectedIds([])}
         onWriteBack={perms.can_edit ? async (updates) => {
           for (const { id, field, value } of updates) {
-            await base44.entities.Product.update(id, { [field]: value });
+            await dataService.updateRecord("product", id, { [field]: value }, currentUser, { queryClient: qc });
           }
-          dataService.triggerEntityETL("product");
-          qc.invalidateQueries({ queryKey: ["products"] });
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
       />
@@ -418,9 +410,7 @@ export default function Products() {
           onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
           bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
           onCellEdit={perms.can_edit ? async (id, field, value) => {
-            await base44.entities.Product.update(id, { [field]: value });
-            dataService.triggerEntityETL("product");
-            qc.invalidateQueries({ queryKey: ["products"] });
+            await dataService.updateRecord("product", id, { [field]: value }, currentUser, { queryClient: qc });
           } : undefined}
         />
       )}

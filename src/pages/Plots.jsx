@@ -190,13 +190,11 @@ export default function Plots() {
   });
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Plot.delete(id).catch(() => {});
-    qc.invalidateQueries({ queryKey: ["plots"] }); qc.refetchQueries({ queryKey: ["plots"] }); dataService.triggerEntityETL("plot");
+    for (const id of selectedIds) await dataService.deleteRecord("plot", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} plots deleted` }); setSelectedIds([]);
   };
   const handleDeleteAll = async () => {
-    for (const p of plots) { try { await base44.entities.Plot.delete(p.id); } catch {} }
-    qc.invalidateQueries({ queryKey: ["plots"] }); qc.refetchQueries({ queryKey: ["plots"] }); dataService.triggerEntityETL("plot");
+    for (const p of plots) { try { await dataService.deleteRecord("plot", p.id, currentUser, { queryClient: qc }); } catch {} }
     toast({ title: `All ${plots.length} plots deleted` });
   };
 

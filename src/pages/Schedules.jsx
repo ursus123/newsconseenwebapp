@@ -175,17 +175,13 @@ export default function Schedules() {
   });
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Schedule.delete(id).catch(() => {});
-    qc.invalidateQueries({ queryKey: ["schedules"] });
-    qc.refetchQueries({ queryKey: ["schedules"] });
+    for (const id of selectedIds) await dataService.deleteRecord("schedule", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} schedules deleted` });
     setSelectedIds([]);
   };
 
   const handleDeleteAll = async () => {
-    for (const s of schedules) { try { await base44.entities.Schedule.delete(s.id); } catch {} }
-    qc.invalidateQueries({ queryKey: ["schedules"] });
-    qc.refetchQueries({ queryKey: ["schedules"] });
+    for (const s of schedules) { try { await dataService.deleteRecord("schedule", s.id, currentUser, { queryClient: qc }); } catch {} }
     toast({ title: `All ${schedules.length} schedules deleted` });
   };
 

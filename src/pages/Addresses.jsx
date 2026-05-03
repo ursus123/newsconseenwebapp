@@ -163,7 +163,7 @@ export default function Addresses() {
     for (let i = 0; i < missing.length; i++) {
       setGeocodeProgress(`Geocoding ${i + 1} of ${missing.length}...`);
       const coords = await geocodeAddress(missing[i]);
-      if (coords) await base44.entities.Address.update(missing[i].id, { ...missing[i], ...coords });
+      if (coords) await dataService.updateRecord("address", missing[i].id, { ...missing[i], ...coords }, currentUser, { queryClient: qc });
     }
     setGeocodeProgress("✅ All addresses geocoded");
     qc.invalidateQueries({ queryKey: ["addresses"] });
@@ -175,22 +175,18 @@ export default function Addresses() {
     e.stopPropagation();
     setGeocodingRowId(row.id);
     const coords = await geocodeAddress(row);
-    if (coords) { await base44.entities.Address.update(row.id, { ...row, ...coords }); qc.invalidateQueries({ queryKey: ["addresses"] }); }
+    if (coords) { await dataService.updateRecord("address", row.id, { ...row, ...coords }, currentUser, { queryClient: qc }); }
     setGeocodingRowId(null);
   };
 
   const handleDeleteAll = async () => {
-    for (const a of addresses) { try { await base44.entities.Address.delete(a.id); } catch (e) { /* 404 = already gone */ } }
-    qc.invalidateQueries({ queryKey: ["addresses"] });
-    dataService.triggerEntityETL("address");
+    for (const a of addresses) { try { await dataService.deleteRecord("address", a.id, currentUser, { queryClient: qc }); } catch (e) { /* 404 = already gone */ } }
     toast({ title: `All ${addresses.length} addresses deleted` });
   };
 
   const handleBulkDelete = async () => {
     setBulkDeleting(true);
-    for (const id of selectedIds) await base44.entities.Address.delete(id);
-    qc.invalidateQueries({ queryKey: ["addresses"] });
-    dataService.triggerEntityETL("address");
+    for (const id of selectedIds) await dataService.deleteRecord("address", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} addresses deleted` });
     setSelectedIds([]);
     setBulkDeleting(false);
@@ -338,10 +334,8 @@ export default function Addresses() {
             onClearSelect={() => setSelectedIds([])}
             onWriteBack={async (updates) => {
               for (const { id, field, value } of updates) {
-                await base44.entities.Address.update(id, { [field]: value });
+                await dataService.updateRecord("address", id, { [field]: value }, currentUser, { queryClient: qc });
               }
-              dataService.triggerEntityETL("address");
-              qc.invalidateQueries({ queryKey: ["addresses"] });
               toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
             }}
           />
@@ -355,9 +349,7 @@ export default function Addresses() {
             selectedIds={selectedIds}
             onSelectionChange={setSelectedIds}
             onCellEdit={async (id, field, value) => {
-              await base44.entities.Address.update(id, { [field]: value });
-              dataService.triggerEntityETL("address");
-              qc.invalidateQueries({ queryKey: ["addresses"] });
+              await dataService.updateRecord("address", id, { [field]: value }, currentUser, { queryClient: qc });
             }}
           />
         </>

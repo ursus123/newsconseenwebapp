@@ -179,17 +179,13 @@ export default function Signals() {
   });
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Signal.delete(id).catch(() => {});
-    qc.invalidateQueries({ queryKey: ["signals"] });
-    qc.refetchQueries({ queryKey: ["signals"] });
+    for (const id of selectedIds) await dataService.deleteRecord("signal", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} signals deleted` });
     setSelectedIds([]);
   };
 
   const handleDeleteAll = async () => {
-    for (const s of signals) { try { await base44.entities.Signal.delete(s.id); } catch {} }
-    qc.invalidateQueries({ queryKey: ["signals"] });
-    qc.refetchQueries({ queryKey: ["signals"] });
+    for (const s of signals) { try { await dataService.deleteRecord("signal", s.id, currentUser, { queryClient: qc }); } catch {} }
     toast({ title: `All ${signals.length} signals deleted` });
   };
 

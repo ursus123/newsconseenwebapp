@@ -177,13 +177,11 @@ export default function Channels() {
   });
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Channel.delete(id).catch(() => {});
-    qc.invalidateQueries({ queryKey: ["channels"] }); qc.refetchQueries({ queryKey: ["channels"] });
+    for (const id of selectedIds) await dataService.deleteRecord("channel", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} channels deleted` }); setSelectedIds([]);
   };
   const handleDeleteAll = async () => {
-    for (const c of channels) { try { await base44.entities.Channel.delete(c.id); } catch {} }
-    qc.invalidateQueries({ queryKey: ["channels"] }); qc.refetchQueries({ queryKey: ["channels"] });
+    for (const c of channels) { try { await dataService.deleteRecord("channel", c.id, currentUser, { queryClient: qc }); } catch {} }
     toast({ title: `All ${channels.length} channels deleted` });
   };
 

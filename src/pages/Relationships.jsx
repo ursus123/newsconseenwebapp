@@ -183,18 +183,12 @@ export default function Relationships() {
   };
 
   const handleDeleteAll = async () => {
-    for (const r of relationships) { try { await base44.entities.Relationship.delete(r.id); } catch (e) { /* 404 = already gone */ } }
-    qc.invalidateQueries({ queryKey: ["relationships"] });
-    qc.refetchQueries({ queryKey: ["relationships"] });
-    dataService.triggerEntityETL("relationship");
+    for (const r of relationships) { try { await dataService.deleteRecord("relationship", r.id, currentUser, { queryClient: qc }); } catch (e) { /* 404 = already gone */ } }
     toast({ title: `All ${relationships.length} relationships deleted` });
   };
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Relationship.delete(id);
-    qc.invalidateQueries({ queryKey: ["relationships"] });
-    qc.refetchQueries({ queryKey: ["relationships"] });
-    dataService.triggerEntityETL("relationship");
+    for (const id of selectedIds) await dataService.deleteRecord("relationship", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} relationships deleted` });
     setSelectedIds([]);
   };
@@ -309,10 +303,8 @@ export default function Relationships() {
         onClearSelect={() => setSelectedIds([])}
         onWriteBack={perms.l2_assign ? async (updates) => {
           for (const { id, field, value } of updates) {
-            await base44.entities.Relationship.update(id, { [field]: value });
+            await dataService.updateRecord("relationship", id, { [field]: value }, currentUser, { queryClient: qc });
           }
-          dataService.triggerEntityETL("relationship");
-          qc.invalidateQueries({ queryKey: ["relationships"] });
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
       />
@@ -334,9 +326,7 @@ export default function Relationships() {
           onDelete={perms.l2_unassign ? (row) => setDeleting(row) : undefined}
           bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
           onCellEdit={perms.l2_assign ? async (id, field, value) => {
-            await base44.entities.Relationship.update(id, { [field]: value });
-            dataService.triggerEntityETL("relationship");
-            qc.invalidateQueries({ queryKey: ["relationships"] });
+            await dataService.updateRecord("relationship", id, { [field]: value }, currentUser, { queryClient: qc });
           } : undefined}
         />
       )}

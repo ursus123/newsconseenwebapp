@@ -196,13 +196,11 @@ export default function Animals() {
   });
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Animal.delete(id).catch(() => {});
-    qc.invalidateQueries({ queryKey: ["animals"] }); qc.refetchQueries({ queryKey: ["animals"] }); dataService.triggerEntityETL("animal");
+    for (const id of selectedIds) await dataService.deleteRecord("animal", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} animals deleted` }); setSelectedIds([]);
   };
   const handleDeleteAll = async () => {
-    for (const a of animals) { try { await base44.entities.Animal.delete(a.id); } catch {} }
-    qc.invalidateQueries({ queryKey: ["animals"] }); qc.refetchQueries({ queryKey: ["animals"] }); dataService.triggerEntityETL("animal");
+    for (const a of animals) { try { await dataService.deleteRecord("animal", a.id, currentUser, { queryClient: qc }); } catch {} }
     toast({ title: `All ${animals.length} animals deleted` });
   };
 

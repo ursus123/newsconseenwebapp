@@ -224,13 +224,13 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const invalidate = () => { qc.invalidateQueries({ queryKey: ["tasks"] }); qc.refetchQueries({ queryKey: ["tasks"] }); };
 
   const completeTask = async (task, outcomeData) => {
-    const updated = await base44.entities.Task.update(task.id, {
+    const updated = await dataService.updateRecord("task", task.id, {
       ...task,
       status: "completed",
       outcome: outcomeData.outcome,
       outcome_notes: outcomeData.outcome_notes,
       scheduled_time: outcomeData.completed_time || task.scheduled_time,
-    });
+    }, currentUser, { queryClient: qc });
     if (task.trigger_transaction) {
       const tx = await triggerTaskTransaction(updated, currentUser);
       if (tx) {
@@ -347,14 +347,13 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
     for (const id of selectedIds) {
       const task = tasks.find((t) => t.id === id);
       if (task) {
-        await base44.entities.Task.update(id, {
+        await dataService.updateRecord("task", id, {
           ...task,
           assigned_to_email: bulkAssignee,
           assigned_to_name: user ? (user.full_name || user.email) : bulkAssignee,
-        });
+        }, currentUser, { queryClient: qc });
       }
     }
-    invalidate();
     clearSelection();
     setBulkAssignee("");
     toast({ title: `${selectedIds.length} tasks reassigned` });
@@ -364,21 +363,18 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
     let deleted = 0;
     for (const id of selectedIds) {
       try {
-        await base44.entities.Task.delete(id);
+        await dataService.deleteRecord("task", id, currentUser, { queryClient: qc });
         deleted++;
       } catch (e) {
         // Task may have already been deleted or not found — skip it
       }
     }
-    invalidate();
     clearSelection();
     toast({ title: `${deleted} task${deleted !== 1 ? "s" : ""} deleted` });
   };
 
   const handleDeleteAll = async () => {
-    for (const t of tasks) { try { await base44.entities.Task.delete(t.id); } catch (e) { /* 404 = already gone */ } }
-    invalidate();
-    dataService.triggerEntityETL("task");
+    for (const t of tasks) { try { await dataService.deleteRecord("task", t.id, currentUser, { queryClient: qc }); } catch (e) { /* 404 = already gone */ } }
     toast({ title: `All ${tasks.length} tasks deleted` });
   };
 
@@ -448,10 +444,8 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         onClearSelect={clearSelection}
         onWriteBack={perms.can_edit ? async (updates) => {
           for (const { id, field, value } of updates) {
-            await base44.entities.Task.update(id, { [field]: value });
+            await dataService.updateRecord("task", id, { [field]: value }, currentUser, { queryClient: qc });
           }
-          dataService.triggerEntityETL("task");
-          invalidate();
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
       />

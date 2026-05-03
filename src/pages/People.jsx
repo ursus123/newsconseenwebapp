@@ -255,19 +255,13 @@ export default function People() {
   });
 
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) await base44.entities.Person.delete(id);
-    qc.invalidateQueries({ queryKey: ["people"] });
-    qc.refetchQueries({ queryKey: ["people"] });
-    dataService.triggerEntityETL("person");
+    for (const id of selectedIds) await dataService.deleteRecord("person", id, currentUser, { queryClient: qc });
     toast({ title: `${selectedIds.length} people deleted` });
     setSelectedIds([]);
   };
 
   const handleDeleteAll = async () => {
-    for (const p of people) { try { await base44.entities.Person.delete(p.id); } catch (e) { /* 404 = already gone */ } }
-    qc.invalidateQueries({ queryKey: ["people"] });
-    qc.refetchQueries({ queryKey: ["people"] });
-    dataService.triggerEntityETL("person");
+    for (const p of people) { try { await dataService.deleteRecord("person", p.id, currentUser, { queryClient: qc }); } catch (e) { /* 404 = already gone */ } }
     toast({ title: `All ${people.length} people deleted` });
   };
 
@@ -420,10 +414,8 @@ export default function People() {
         onClearSelect={() => setSelectedIds([])}
         onWriteBack={perms.can_edit ? async (updates) => {
           for (const { id, field, value } of updates) {
-            await base44.entities.Person.update(id, { [field]: value });
+            await dataService.updateRecord("person", id, { [field]: value }, currentUser, { queryClient: qc });
           }
-          dataService.triggerEntityETL("person");
-          qc.invalidateQueries({ queryKey: ["people"] });
           toast({ title: `${updates.length} record${updates.length !== 1 ? "s" : ""} updated` });
         } : undefined}
       />
@@ -457,9 +449,7 @@ export default function People() {
           onDelete={perms.can_delete ? (row) => setDeleting(row) : undefined}
           bulkMode selectedIds={selectedIds} onSelectionChange={setSelectedIds}
           onCellEdit={perms.l1_edit ? async (id, field, value) => {
-            await base44.entities.Person.update(id, { [field]: value });
-            dataService.triggerEntityETL("person");
-            qc.invalidateQueries({ queryKey: ["people"] });
+            await dataService.updateRecord("person", id, { [field]: value }, currentUser, { queryClient: qc });
           } : undefined}
         />
       )}
