@@ -77,6 +77,16 @@ import Animals from './pages/Animals';
 import Plots from './pages/Plots';
 import Observations from './pages/Observations';
 import CompanyGraphHome from './pages/CompanyGraphHome';
+import LeaveRequest from './pages/LeaveRequest';
+import ExpenseClaim from './pages/ExpenseClaim';
+import VisitorLog from './pages/VisitorLog';
+import IncidentReport from './pages/IncidentReport';
+import MaintenanceRequest from './pages/MaintenanceRequest';
+import FieldVisitReport from './pages/FieldVisitReport';
+import PurchaseOrder from './pages/PurchaseOrder';
+import GoodsReceived from './pages/GoodsReceived';
+import InspectionChecklist from './pages/InspectionChecklist';
+import DocumentExpiry from './pages/DocumentExpiry';
 
 export const PAGES = {
     "AddClient": AddClient,
@@ -109,6 +119,16 @@ export const PAGES = {
     "Plots": Plots,
     "Observations": Observations,
     "CompanyGraphHome": CompanyGraphHome,
+    "LeaveRequest": LeaveRequest,
+    "ExpenseClaim": ExpenseClaim,
+    "VisitorLog": VisitorLog,
+    "IncidentReport": IncidentReport,
+    "MaintenanceRequest": MaintenanceRequest,
+    "FieldVisitReport": FieldVisitReport,
+    "PurchaseOrder": PurchaseOrder,
+    "GoodsReceived": GoodsReceived,
+    "InspectionChecklist": InspectionChecklist,
+    "DocumentExpiry": DocumentExpiry,
 }
 
 export const pagesConfig = {
