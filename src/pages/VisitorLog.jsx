@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { createRecord } from "@/services/dataService";
+import dataService, { createRecord } from "@/services/dataService";
 import { ChevronLeft, Users, CheckCircle2, AlertCircle, LogIn, LogOut, Clock } from "lucide-react";
 import { format } from "date-fns";
 
@@ -82,12 +82,12 @@ export default function VisitorLog() {
 
   const handleSignOut = async (visit) => {
     try {
-      await base44.entities.Task.update(visit.id, {
+      await dataService.updateRecord("task", visit.id, {
         status:  "completed",
         outcome: "signed_out",
         outcome_notes: (visit.outcome_notes || "") + ` | Signed out: ${nowStr()}`,
         due_date: todayStr,
-      });
+      }, currentUser, { queryClient: qc });
       qc.invalidateQueries({ queryKey: ["visitor-log"] });
       showToast("Signed out ✓", true);
     } catch {

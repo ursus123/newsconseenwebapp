@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import dataService from "@/services/dataService";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { createRecord } from "@/services/dataService";
@@ -82,9 +83,9 @@ export default function ExpenseClaim() {
 
   const handleApprove = async (claim, approved) => {
     try {
-      await base44.entities.Transaction.update(claim.id, {
+      await dataService.updateRecord("transaction", claim.id, {
         status: approved ? "completed" : "cancelled",
-      });
+      }, currentUser, { queryClient: qc });
       qc.invalidateQueries({ queryKey: ["expense-claims"] });
       showToast(approved ? "Approved!" : "Rejected", approved);
     } catch {

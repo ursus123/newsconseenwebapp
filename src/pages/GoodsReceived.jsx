@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import dataService from "@/services/dataService";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { createRecord } from "@/services/dataService";
@@ -96,7 +97,7 @@ export default function GoodsReceived() {
         const prod = products.find(p => p.id === form.product_id);
         if (prod) {
           const newQty = (Number(prod.quantity_in_stock) || 0) + Number(form.qty_received);
-          base44.entities.Product.update(form.product_id, { quantity_in_stock: newQty }).catch(() => {});
+          dataService.updateRecord("product", form.product_id, { quantity_in_stock: newQty }, currentUser, { queryClient: qc });
         }
       }
 

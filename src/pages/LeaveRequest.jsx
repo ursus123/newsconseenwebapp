@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import dataService from "@/services/dataService";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { createRecord } from "@/services/dataService";
@@ -100,11 +101,11 @@ export default function LeaveRequest() {
 
   const handleApprove = async (req, approved) => {
     try {
-      await base44.entities.Task.update(req.id, {
+      await dataService.updateRecord("task", req.id, {
         status:  approved ? "completed" : "cancelled",
         outcome: approved ? "approved" : "rejected",
         outcome_notes: (req.outcome_notes || "") + (approved ? " [Approved]" : " [Rejected]"),
-      });
+      }, currentUser, { queryClient: qc });
       qc.invalidateQueries({ queryKey: ["leave-requests"] });
       showToast(approved ? "Approved!" : "Rejected", approved);
     } catch {

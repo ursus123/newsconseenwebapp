@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import dataService from "@/services/dataService";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { createRecord } from "@/services/dataService";
@@ -108,7 +109,7 @@ export default function MaintenanceRequest() {
 
   const handleClose = async (req) => {
     try {
-      await base44.entities.Task.update(req.id, { status: "completed", outcome: "resolved" });
+      await dataService.updateRecord("task", req.id, { status: "completed", outcome: "resolved" }, currentUser, { queryClient: qc });
       qc.invalidateQueries({ queryKey: ["maintenance-requests"] });
       showToast("Marked as resolved ✓", true);
     } catch {

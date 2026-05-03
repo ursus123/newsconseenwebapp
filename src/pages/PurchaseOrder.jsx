@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import dataService from "@/services/dataService";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { createRecord } from "@/services/dataService";
@@ -115,7 +116,7 @@ export default function PurchaseOrder() {
 
   const handleApprove = async (order, approved) => {
     try {
-      await base44.entities.Transaction.update(order.id, { status: approved ? "approved" : "cancelled" });
+      await dataService.updateRecord("transaction", order.id, { status: approved ? "approved" : "cancelled" }, currentUser, { queryClient: qc });
       qc.invalidateQueries({ queryKey: ["purchase-orders"] });
       showToast(approved ? "PO Approved!" : "PO Cancelled", approved);
     } catch {

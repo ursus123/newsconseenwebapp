@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import dataService from "@/services/dataService";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { createRecord } from "@/services/dataService";
@@ -120,7 +121,7 @@ export default function DocumentExpiry() {
 
   const handleRenew = async (doc) => {
     try {
-      await base44.entities.Task.update(doc.id, { status: "completed", outcome: "renewed" });
+      await dataService.updateRecord("task", doc.id, { status: "completed", outcome: "renewed" }, currentUser, { queryClient: qc });
       qc.invalidateQueries({ queryKey: ["document-expiry"] });
       showToast("Marked as renewed ✓", true);
     } catch {
