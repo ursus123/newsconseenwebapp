@@ -129,21 +129,25 @@ def resolve_approval(approval_id: str, req: ResolveRequest):
     # First resolve (flip status in DB)
     resolution = resolve(engine, approval_id, req.decision, req.resolved_by, req.note)
 
+    # Fetch company_id, agent_name, action_type from the approval record (needed for all paths)
+    company_id = None
+    agent_name = None
+    action_type = None
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT company_id, agent_name, action_type FROM analytics.agent_approvals WHERE id = :id"),
+                {"id": approval_id}
+            ).fetchone()
+        if row:
+            company_id, agent_name, action_type = row[0], row[1], row[2]
+    except Exception:
+        pass
+
     # Phase 13: if approved, execute immediately
     execution = None
     if req.decision == "approved":
-        # Fetch company_id from the approval record
-        try:
-            from sqlalchemy import text
-            with engine.connect() as conn:
-                row = conn.execute(
-                    text("SELECT company_id FROM analytics.agent_approvals WHERE id = :id"),
-                    {"id": approval_id}
-                ).fetchone()
-            company_id = row[0] if row else None
-        except Exception:
-            company_id = None
-
         if company_id:
             execution = execute_approved(engine, approval_id, company_id)
         else:
@@ -163,6 +167,28 @@ def resolve_approval(approval_id: str, req: ResolveRequest):
         )
     except Exception as _dec_err:
         logger.warning("write_decision failed: %s", _dec_err)
+
+    # Step 4 — feed decision outcome back into agent memory (learn loop)
+    if company_id and agent_name:
+        try:
+            from .agent_memory import remember
+            remember(
+                engine=engine,
+                company_id=company_id,
+                agent_name=agent_name,
+                memory_type="outcome",
+                key=f"decision_{action_type or 'action'}",
+                value={
+                    "decision":         req.decision,
+                    "action_type":      action_type,
+                    "decided_by":       req.resolved_by,
+                    "executed":         bool(execution and execution.get("executed")),
+                    "execution_ok":     bool(execution and not execution.get("error")),
+                },
+                confidence=1.0 if req.decision == "approved" else 0.3,
+            )
+        except Exception as _mem_err:
+            logger.debug("agent memory update failed: %s", _mem_err)
 
     return {**resolution, "execution": execution, "decision": decision_result}
 
