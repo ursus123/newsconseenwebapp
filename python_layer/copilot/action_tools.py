@@ -327,3 +327,164 @@ def write_insight(
 
     return {"status": "failed", "insight_id": insight_id,
             "error": "Neither Base44 nor local DB available"}
+
+
+# ─── Recommendation write-back ────────────────────────────────────────────────
+
+def write_recommendation(
+    company_id: str,
+    title: str,
+    description: str,
+    action_type: str,
+    source_agent: str,
+    priority: str = "medium",
+    insight_id: Optional[str] = None,
+    action_payload: Optional[dict] = None,
+    approval_required: bool = True,
+) -> dict:
+    """
+    Write a Recommendation record to the intelligence layer.
+    Links to an Insight (insight_id) when available.
+    action_type: "create_task" | "contact_customer" | "restock" | "review_record" | "other"
+    priority: "low" | "medium" | "high" | "critical"
+    """
+    from config.settings import settings
+
+    rec_id = str(uuid.uuid4())
+    record = {
+        "id":                rec_id,
+        "company_id":        company_id,
+        "title":             title,
+        "description":       description,
+        "action_type":       action_type,
+        "source_agent":      source_agent,
+        "priority":          priority,
+        "insight_id":        insight_id,
+        "action_payload":    action_payload or {},
+        "approval_required": approval_required,
+        "status":            "pending",
+        "created_at":        datetime.utcnow().isoformat(),
+    }
+
+    url = getattr(settings, "base44_recommendations_url", None)
+    if url:
+        try:
+            import httpx
+            headers = {"api_key": settings.base44_api_key, "Content-Type": "application/json"}
+            r = httpx.post(url, json=record, headers=headers, timeout=10)
+            if r.status_code in (200, 201):
+                logger.info("write_recommendation: wrote rec_id=%s", rec_id)
+                return {"status": "created", "recommendation_id": rec_id, "storage": "base44"}
+        except Exception as e:
+            logger.warning("write_recommendation Base44 failed: %s", e)
+
+    # Fall back to analytics table
+    try:
+        engine = get_engine_safe()
+        if engine:
+            with engine.connect() as conn:
+                conn.execute(text("""
+                    INSERT INTO analytics.recommendation_summary
+                        (id, company_id, title, rationale, action_type,
+                         source, priority, insight_id, action_payload,
+                         source_agent, approval_required, status, loaded_at)
+                    VALUES
+                        (:id, :company_id, :title, :rationale, :action_type,
+                         :source, :priority, :insight_id, :action_payload::jsonb,
+                         :source_agent, :approval_required, 'pending', NOW())
+                    ON CONFLICT DO NOTHING
+                """), {
+                    "id":               rec_id,
+                    "company_id":       company_id,
+                    "title":            title,
+                    "rationale":        description,
+                    "action_type":      action_type,
+                    "source":           source_agent,
+                    "source_agent":     source_agent,
+                    "priority":         priority,
+                    "insight_id":       insight_id,
+                    "action_payload":   _json.dumps(action_payload or {}),
+                    "approval_required": approval_required,
+                })
+                conn.commit()
+            return {"status": "created", "recommendation_id": rec_id, "storage": "local"}
+    except Exception as e:
+        logger.warning("write_recommendation local fallback failed: %s", e)
+
+    return {"status": "failed", "recommendation_id": rec_id}
+
+
+# ─── Decision write-back ──────────────────────────────────────────────────────
+
+def write_decision(
+    company_id: str,
+    approval_id: str,
+    decision: str,
+    decided_by: str,
+    recommendation_id: Optional[str] = None,
+    note: Optional[str] = None,
+    execution_result: Optional[dict] = None,
+) -> dict:
+    """
+    Write a Decision record after an approval gate item is resolved.
+    decision: "approved" | "rejected"
+    """
+    from config.settings import settings
+
+    dec_id = str(uuid.uuid4())
+    record = {
+        "id":                dec_id,
+        "company_id":        company_id,
+        "approval_id":       approval_id,
+        "recommendation_id": recommendation_id,
+        "decision":          decision,
+        "decided_by":        decided_by,
+        "note":              note,
+        "execution_result":  execution_result or {},
+        "outcome_metric_delta": {},  # populated by Step 4 (learn loop)
+        "created_at":        datetime.utcnow().isoformat(),
+    }
+
+    url = getattr(settings, "base44_decisions_url", None)
+    if url:
+        try:
+            import httpx
+            headers = {"api_key": settings.base44_api_key, "Content-Type": "application/json"}
+            r = httpx.post(url, json=record, headers=headers, timeout=10)
+            if r.status_code in (200, 201):
+                logger.info("write_decision: wrote dec_id=%s", dec_id)
+                return {"status": "created", "decision_id": dec_id, "storage": "base44"}
+        except Exception as e:
+            logger.warning("write_decision Base44 failed: %s", e)
+
+    # Fall back to analytics table
+    try:
+        engine = get_engine_safe()
+        if engine:
+            with engine.connect() as conn:
+                conn.execute(text("""
+                    INSERT INTO analytics.decision_log
+                        (id, company_id, approval_id, recommendation_id,
+                         decision, decided_by, notes, execution_result,
+                         loaded_at)
+                    VALUES
+                        (:id, :company_id, :approval_id, :recommendation_id,
+                         :decision, :decided_by, :notes, :execution_result,
+                         NOW())
+                    ON CONFLICT DO NOTHING
+                """), {
+                    "id":                dec_id,
+                    "company_id":        company_id,
+                    "approval_id":       approval_id,
+                    "recommendation_id": recommendation_id,
+                    "decision":          decision,
+                    "decided_by":        decided_by,
+                    "notes":             note,
+                    "execution_result":  _json.dumps(execution_result or {}),
+                })
+                conn.commit()
+            return {"status": "created", "decision_id": dec_id, "storage": "local"}
+    except Exception as e:
+        logger.warning("write_decision local fallback failed: %s", e)
+
+    return {"status": "failed", "decision_id": dec_id}

@@ -104,6 +104,9 @@ class BaseAgent(ABC):
         # Store key observations as memory
         self._store_observations(company_id, findings)
 
+        # Write Insight + Recommendation records to intelligence layer
+        self._write_intelligence(company_id, findings)
+
         logger.info("Agent %s finished — %d taken, %d pending",
                     self.name, actions_taken, actions_pending)
         return findings
@@ -255,6 +258,63 @@ class BaseAgent(ABC):
             }
             for b in tool_blocks
         ]
+
+    # ── Intelligence layer write-back ─────────────────────────────────────────
+
+    def _write_intelligence(self, company_id: str, findings: dict) -> None:
+        """
+        After every run, write Insight records for significant findings and
+        Recommendation records for pending actions requiring approval.
+        Fire-and-forget — never blocks the run result.
+        """
+        if "error" in findings:
+            return
+
+        try:
+            from copilot.action_tools import write_insight, write_recommendation
+        except Exception:
+            return
+
+        insight_id = None
+
+        # Write one Insight per agent run summarising findings
+        summary = findings.get("summary", "")
+        raw_findings = findings.get("findings", [])
+        if summary and raw_findings:
+            try:
+                result = write_insight(
+                    company_id=company_id,
+                    insight_type="trend",
+                    title=f"{self.name.replace('_', ' ').title()} — {summary[:80]}",
+                    body=summary,
+                    subject_type="company",
+                    subject_id=company_id,
+                    evidence=[json.dumps(f, default=str)[:200] for f in raw_findings[:5]],
+                )
+                insight_id = result.get("insight_id")
+            except Exception as e:
+                logger.debug("_write_intelligence insight failed: %s", e)
+
+        # Write Recommendation records for pending approval-gate actions
+        pending_actions = [a for a in findings.get("actions", [])
+                           if a.get("status") == "pending"]
+        for action in pending_actions[:5]:  # cap at 5 per run
+            try:
+                tool = action.get("tool", "action")
+                label = action.get("action_label", tool)
+                write_recommendation(
+                    company_id=company_id,
+                    title=label[:120],
+                    description=json.dumps(action.get("action_payload", {}), default=str)[:500],
+                    action_type=action.get("action_type", tool),
+                    source_agent=self.name,
+                    priority="high" if action.get("risk") == "critical" else "medium",
+                    insight_id=insight_id,
+                    action_payload=action.get("action_payload"),
+                    approval_required=True,
+                )
+            except Exception as e:
+                logger.debug("_write_intelligence recommendation failed: %s", e)
 
     # ── Memory storage ────────────────────────────────────────────────────────
 

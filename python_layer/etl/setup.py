@@ -925,6 +925,8 @@ _INTELLIGENCE_DDL = [
         created_task_id     TEXT,
         created_workflow_id TEXT,
         source              TEXT,
+        source_agent        TEXT,
+        approval_required   BOOLEAN,
         approved_by         TEXT,
         approved_at         TIMESTAMP,
         rejected_by         TEXT,
@@ -997,6 +999,7 @@ _INTELLIGENCE_DDL = [
     CREATE TABLE IF NOT EXISTS analytics.decision_log (
         id                TEXT,
         company_id        TEXT,
+        approval_id       TEXT,
         recommendation_id TEXT,
         insight_id        TEXT,
         decision          TEXT,
@@ -1008,6 +1011,7 @@ _INTELLIGENCE_DDL = [
         outcome_status    TEXT,
         outcome_summary   TEXT,
         outcome_metric_delta NUMERIC,
+        execution_result  TEXT,
         created_by        TEXT,
         snapshot_date     DATE,
         loaded_at         TIMESTAMP
@@ -1191,6 +1195,12 @@ _MIGRATIONS = [
     "ALTER TABLE analytics.task_summary ADD COLUMN IF NOT EXISTS avg_completion_delay_mins DOUBLE PRECISION",
     # Gap 3: quantity consumed
     "ALTER TABLE analytics.task_summary ADD COLUMN IF NOT EXISTS total_quantity_used       DOUBLE PRECISION",
+    # Intelligence layer — recommendation_summary new columns for agent write-back
+    "ALTER TABLE analytics.recommendation_summary ADD COLUMN IF NOT EXISTS source_agent      TEXT",
+    "ALTER TABLE analytics.recommendation_summary ADD COLUMN IF NOT EXISTS approval_required BOOLEAN",
+    # Intelligence layer — decision_log new columns for approve→act loop
+    "ALTER TABLE analytics.decision_log ADD COLUMN IF NOT EXISTS approval_id      TEXT",
+    "ALTER TABLE analytics.decision_log ADD COLUMN IF NOT EXISTS execution_result TEXT",
 ]
 
 

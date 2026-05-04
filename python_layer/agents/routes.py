@@ -149,7 +149,22 @@ def resolve_approval(approval_id: str, req: ResolveRequest):
         else:
             execution = {"executed": False, "error": "Could not determine company_id"}
 
-    return {**resolution, "execution": execution}
+    # Write Decision record to intelligence layer
+    decision_result = None
+    try:
+        from copilot.action_tools import write_decision
+        decision_result = write_decision(
+            company_id=company_id or "",
+            approval_id=approval_id,
+            decision=req.decision,
+            decided_by=req.resolved_by or "operator",
+            note=req.note,
+            execution_result=execution,
+        )
+    except Exception as _dec_err:
+        logger.warning("write_decision failed: %s", _dec_err)
+
+    return {**resolution, "execution": execution, "decision": decision_result}
 
 
 # ── Executed actions (Phase 13) ───────────────────────────────────────────────
