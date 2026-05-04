@@ -1,0 +1,2 @@
+"""Newsconseen Assistant Gateway."""
+
