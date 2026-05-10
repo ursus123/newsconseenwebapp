@@ -21,7 +21,8 @@ function getDemoSessionId() {
     const sid = `sid-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     localStorage.setItem(DEMO_SESSION_KEY, sid);
     return sid;
-  } catch {
+  } catch (err) {
+    console.debug("Idjwi session storage unavailable", err);
     return `sid-${Date.now()}`;
   }
 }
@@ -627,9 +628,21 @@ function IdjwiChat() {
       ]);
       trackEvent("briefing_viewed", { industry });
     } catch (_) {
+      const fallbackMessage = {
+        _id: `brief-err-${Date.now()}`,
+        role: "assistant",
+        content: "Could not generate briefing. Please try again.",
+        charts: [],
+        citations: [],
+        toolsCalled: [],
+        toolsDetail: [],
+        actions: [],
+        streaming: false,
+        question: `briefing:${industry}`,
+      };
       setMessages(prev => [
         ...prev,
-        { _id: `brief-err-${Date.now()}`, role: "assistant", content: "Could not generate briefing. Please try again.", charts: [], citations: [], toolsCalled: [], toolsDetail: [], actions: [], streaming: false, question: `briefing:${industry}` },
+        fallbackMessage,
       ]);
     } finally {
       setLoading(false);

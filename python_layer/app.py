@@ -736,7 +736,7 @@ async def idjwi_demo_briefing(payload: _DemoBriefingRequest, request: _Request):
 
 
 @app.post("/telemetry/demo-event", tags=["idjwi"])
-async def record_demo_event(payload: _TelemetryEvent, request: _Request):
+async def demo_event_endpoint(payload: _TelemetryEvent, request: _Request):
     """Structured funnel event sink for Landing page analytics."""
     ip = request.client.host if request.client else "unknown"
     try:

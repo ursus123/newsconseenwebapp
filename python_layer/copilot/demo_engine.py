@@ -16,12 +16,14 @@ import hashlib
 import json
 import logging
 import os
+import secrets
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+_RUNTIME_HASH_SALT = os.getenv("IDJWI_IP_HASH_SALT") or secrets.token_hex(16)
 
 # ── Docs loader ───────────────────────────────────────────────────────────────
 
@@ -102,9 +104,12 @@ _TOOL_TIMEOUT = {
 
 
 def _ip_hash(ip: str) -> str:
-    salt = os.getenv("IDJWI_IP_HASH_SALT", "idjwi-demo")
-    raw = f"{salt}:{ip or 'unknown'}"
+    raw = f"{_RUNTIME_HASH_SALT}:{ip or 'unknown'}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
+def _safe_text(v: str | None, max_len: int) -> str:
+    return (v or "")[:max_len]
 
 
 def _get_engine():
@@ -306,10 +311,10 @@ def persist_interaction(session_id: str, ip: str, question: str, answer: str, to
                     (:session_id, :ip_hash, :question, :answer,
                      CAST(:tools_called AS JSONB), CAST(:tools_detail AS JSONB), CAST(:actions AS JSONB), NOW())
             """), {
-                "session_id": session_id or "",
+                "session_id": _safe_text(session_id, 128),
                 "ip_hash": _ip_hash(ip),
-                "question": question[:5000],
-                "answer": (answer or "")[:30000],
+                "question": _safe_text(question, 5000),
+                "answer": _safe_text(answer, 30000),
                 "tools_called": json.dumps(tools_called, default=str),
                 "tools_detail": json.dumps(tools_detail, default=str),
                 "actions": json.dumps(actions, default=str),
@@ -332,12 +337,12 @@ def persist_feedback(session_id: str, ip: str, question: str, rating: int, comme
                 VALUES
                     (:session_id, :ip_hash, :question, :rating, :comment, :outcome, NOW())
             """), {
-                "session_id": session_id or "",
+                "session_id": _safe_text(session_id, 128),
                 "ip_hash": _ip_hash(ip),
-                "question": question[:5000],
+                "question": _safe_text(question, 5000),
                 "rating": rating,
-                "comment": (comment or "")[:4000],
-                "outcome": (outcome or "")[:1000],
+                "comment": _safe_text(comment, 4000),
+                "outcome": _safe_text(outcome, 1000),
             })
         return True
     except Exception as exc:
@@ -346,9 +351,10 @@ def persist_feedback(session_id: str, ip: str, question: str, rating: int, comme
 
 
 def get_demo_telemetry_summary(days: int = 7) -> dict:
+    safe_days = max(1, min(90, int(days)))
     engine = _get_engine()
     if engine is None:
-        return {"days": days, "events": [], "top_starters": [], "feedback": {}, "daily": []}
+        return {"days": safe_days, "events": [], "top_starters": [], "feedback": {}, "daily": []}
     try:
         from sqlalchemy import text
         _ensure_demo_tables(engine)
@@ -360,7 +366,7 @@ def get_demo_telemetry_summary(days: int = 7) -> dict:
                 GROUP BY event
                 ORDER BY total DESC
                 LIMIT 20
-            """), {"days": str(max(1, days))}).fetchall()
+            """), {"days": str(safe_days)}).fetchall()
             starters = conn.execute(text("""
                 SELECT COALESCE(properties->>'label', '(unknown)') AS label, COUNT(*)::INT AS total
                 FROM analytics.idjwi_events
@@ -369,23 +375,23 @@ def get_demo_telemetry_summary(days: int = 7) -> dict:
                 GROUP BY label
                 ORDER BY total DESC
                 LIMIT 10
-            """), {"days": str(max(1, days))}).fetchall()
+            """), {"days": str(safe_days)}).fetchall()
             daily = conn.execute(text("""
                 SELECT TO_CHAR(date_trunc('day', occurred_at), 'YYYY-MM-DD') AS day, COUNT(*)::INT AS total
                 FROM analytics.idjwi_events
                 WHERE occurred_at >= NOW() - (:days || ' days')::interval
                 GROUP BY day
                 ORDER BY day ASC
-            """), {"days": str(max(1, days))}).fetchall()
+            """), {"days": str(safe_days)}).fetchall()
             fb = conn.execute(text("""
                 SELECT
                     SUM(CASE WHEN rating > 0 THEN 1 ELSE 0 END)::INT AS upvotes,
                     SUM(CASE WHEN rating < 0 THEN 1 ELSE 0 END)::INT AS downvotes
                 FROM analytics.idjwi_feedback
                 WHERE created_at >= NOW() - (:days || ' days')::interval
-            """), {"days": str(max(1, days))}).fetchone()
+            """), {"days": str(safe_days)}).fetchone()
         return {
-            "days": days,
+            "days": safe_days,
             "events": [{"event": r[0], "total": int(r[1] or 0)} for r in events],
             "top_starters": [{"label": r[0], "total": int(r[1] or 0)} for r in starters],
             "daily": [{"day": r[0], "total": int(r[1] or 0)} for r in daily],
@@ -393,7 +399,7 @@ def get_demo_telemetry_summary(days: int = 7) -> dict:
         }
     except Exception as exc:
         logger.debug("Idjwi telemetry summary failed: %s", exc)
-        return {"days": days, "events": [], "top_starters": [], "feedback": {}, "daily": []}
+        return {"days": safe_days, "events": [], "top_starters": [], "feedback": {}, "daily": []}
 
 
 # ── Idjwi system prompt ───────────────────────────────────────────────────────
@@ -646,7 +652,9 @@ def _build_next_actions(question: str, answer: str, collected: list) -> list:
             "payload": {"source": "idjwi_demo", "question": question[:240]},
         },
     ]
-    if "invoice" in (question + " " + answer).lower():
+    ql = question.lower()
+    al = (answer or "").lower()
+    if "invoice" in ql or "invoice" in al:
         candidates.append({
             "action_type": "send_whatsapp",
             "label": "Draft client reminder messages",
