@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Send, Loader2, ArrowRight, Globe, Cpu, Users, BarChart2,
   Zap, Shield, GitBranch, Package, CheckSquare, Wifi, Database,
-  Brain, TrendingUp, Map, RefreshCw, AlertCircle, ExternalLink,
+  Brain, TrendingUp, Map, RefreshCw, AlertCircle, ExternalLink, ThumbsUp, ThumbsDown, RotateCcw, StopCircle, Sparkles,
   Code2, CheckCircle, Star,
 } from "lucide-react";
 import DemoShell from "@/components/demo/DemoShell";
@@ -13,13 +13,27 @@ import DemoChartCard from "@/components/demo/DemoChartCard";
 const RAILWAY_URL = import.meta.env.VITE_RAILWAY_URL
   || "https://newsconseenwebapp-production.up.railway.app";
 
+const DEMO_SESSION_KEY = "idjwi_demo_session_id";
+function getDemoSessionId() {
+  try {
+    const existing = localStorage.getItem(DEMO_SESSION_KEY);
+    if (existing) return existing;
+    const sid = `sid-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(DEMO_SESSION_KEY, sid);
+    return sid;
+  } catch {
+    return `sid-${Date.now()}`;
+  }
+}
+
 // ── Funnel telemetry ──────────────────────────────────────────────────────────
 function trackEvent(event, properties = {}) {
+  const session_id = getDemoSessionId();
   try {
     fetch(`${RAILWAY_URL}/telemetry/demo-event`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event, properties }),
+      body: JSON.stringify({ event, properties, session_id }),
     }).catch(() => {});
   } catch (_) {}
 }
@@ -62,6 +76,12 @@ const STARTERS = [
   { label: "How does the copilot work?",   q: "Explain how the Newsconseen copilot works — tools, data sources, and architecture." },
   { label: "What is Idjwi?",              q: "What is Idjwi, what can it do, and how is it different from a regular AI assistant?" },
   { label: "Newsconseen for a school",     q: "How would Newsconseen work for a school group with 5 campuses?" },
+];
+
+const INDUSTRY_PLAYBOOKS = [
+  { label: "Clinic quick start", industry: "clinic", q: "Show me a 3-step quick start for a clinic: today's risk alerts, missed revenue, and overdue task execution plan." },
+  { label: "School quick start", industry: "school", q: "Show me a 3-step quick start for a school group: attendance risk, fee collection risk, and staff execution focus." },
+  { label: "NGO quick start", industry: "ngo", q: "Show me a 3-step quick start for an NGO: field staff productivity, beneficiary risk, and funding execution priorities." },
 ];
 
 const TESTIMONIALS = [
@@ -235,6 +255,45 @@ function ToolBadges({ toolsCalled }) {
   );
 }
 
+function ToolTracePanel({ toolsDetail = [] }) {
+  if (!toolsDetail?.length) return null;
+  return (
+    <div className="mt-2 space-y-1.5">
+      {toolsDetail.slice(0, 4).map((t, i) => (
+        <div key={`${t.tool}-${i}`} className="text-[10px] text-slate-400 bg-slate-900/70 border border-slate-700/60 rounded-lg px-2 py-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-slate-300 font-medium">{toolLabel(t.tool)}</span>
+            <span className={`px-1.5 py-0.5 rounded-full border text-[9px] ${t.status === "ok" ? "text-emerald-400 border-emerald-500/30" : "text-amber-400 border-amber-500/30"}`}>{t.status}</span>
+            <span className="text-slate-500">{t.latency_ms || 0}ms</span>
+            <span className="text-slate-500">freshness: {t.freshness || "unknown"}</span>
+            <span className={`text-[9px] ${t.trace_quality === "high" ? "text-emerald-400" : "text-amber-400"}`}>trace: {t.trace_quality || "medium"}</span>
+            {t.cache_hit && <span className="text-cyan-400">cache hit</span>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ActionPanel({ actions = [] }) {
+  if (!actions?.length) return null;
+  return (
+    <div className="mt-2.5 space-y-1.5">
+      {actions.slice(0, 3).map((a, i) => (
+        <div key={`${a.action_type}-${i}`} className="text-[10px] text-slate-300 bg-slate-900/70 border border-slate-700/60 rounded-lg px-2.5 py-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium">{a.label}</span>
+            <span className={`px-1.5 py-0.5 rounded-full border ${a.approval_required ? "text-amber-400 border-amber-500/30" : "text-emerald-400 border-emerald-500/30"}`}>
+              {a.approval_required ? `approval • ${a.risk_level}` : `auto • ${a.risk_level}`}
+            </span>
+          </div>
+          <p className="text-slate-500 mt-1">{a.why}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Progress indicator ────────────────────────────────────────────────────────
 function ProgressLabel({ label }) {
   return (
@@ -246,7 +305,7 @@ function ProgressLabel({ label }) {
 }
 
 // ── Message ───────────────────────────────────────────────────────────────────
-function Message({ role, content, charts, citations, toolsCalled, streaming, onAskIdjwi }) {
+function Message({ role, content, charts, citations, toolsCalled, toolsDetail, actions, streaming, onAskIdjwi, onFeedback, question }) {
   const isUser = role === "user";
   const showDots = !isUser && streaming && !content;
 
@@ -286,14 +345,27 @@ function Message({ role, content, charts, citations, toolsCalled, streaming, onA
           </div>
         )}
         {!isUser && !streaming && <ToolBadges toolsCalled={toolsCalled} />}
+        {!isUser && !streaming && <ToolTracePanel toolsDetail={toolsDetail} />}
+        {!isUser && !streaming && <ActionPanel actions={actions} />}
         {!isUser && !streaming && citations && citations.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2 px-1">
             {citations.map((c, i) => (
               <a key={i} href={c.url} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-emerald-400 transition-colors">
-                <ExternalLink className="w-2.5 h-2.5" />{(c.title || c.url || "Source").slice(0, 36)}
+                <ExternalLink className="w-2.5 h-2.5" />{(c.title || c.url || "Source").slice(0, 28)}
+                <span className="text-slate-600">{c.source ? `· ${c.source}` : ""}</span>
               </a>
             ))}
+          </div>
+        )}
+        {!isUser && !streaming && onFeedback && (
+          <div className="flex items-center gap-2 mt-2 px-1">
+            <button onClick={() => onFeedback({ rating: 1, question })} className="text-[10px] text-slate-400 hover:text-emerald-400 inline-flex items-center gap-1">
+              <ThumbsUp className="w-3 h-3" /> Helpful
+            </button>
+            <button onClick={() => onFeedback({ rating: -1, question })} className="text-[10px] text-slate-400 hover:text-rose-400 inline-flex items-center gap-1">
+              <ThumbsDown className="w-3 h-3" /> Needs work
+            </button>
           </div>
         )}
       </div>
@@ -309,11 +381,15 @@ function IdjwiChat() {
   const [rateLimited, setRateLimited] = useState(false);
   const [started, setStarted]         = useState(false);
   const [progressLabel, setProgressLabel] = useState(null);
+  const [interrupted, setInterrupted] = useState(false);
+  const [lastQuestion, setLastQuestion] = useState("");
 
   const inputRef      = useRef(null);
   const bottomRef     = useRef(null);
   const historyRef    = useRef([]);
   const msgContainerRef = useRef(null);
+  const sessionIdRef  = useRef(getDemoSessionId());
+  const activeControllerRef = useRef(null);
 
   useEffect(() => {
     if (msgContainerRef.current) {
@@ -330,6 +406,8 @@ function IdjwiChat() {
     if (!q || loading || rateLimited) return;
     setInput("");
     setStarted(true);
+    setInterrupted(false);
+    setLastQuestion(q);
     trackEvent("prompt_sent", { is_starter: !!text, length: q.length });
 
     const msgId = `msg-${Date.now()}`;
@@ -338,14 +416,18 @@ function IdjwiChat() {
     setMessages(prev => [
       ...prev,
       { _id: `u-${msgId}`, role: "user", content: q },
-      { _id: msgId, role: "assistant", content: "", charts: [], citations: [], toolsCalled: [], streaming: true },
+      { _id: msgId, role: "assistant", content: "", charts: [], citations: [], toolsCalled: [], toolsDetail: [], actions: [], question: q, streaming: true },
     ]);
     setLoading(true);
-    setProgressLabel(null);
+    setProgressLabel("Connecting…");
 
     let finalContent = "";
     let finalCharts  = [];
     let finalTools   = [];
+    let finalToolsDetail = [];
+    let finalActions = [];
+    const controller = new AbortController();
+    activeControllerRef.current = controller;
 
     try {
       // Try SSE streaming first; fall back to the sync endpoint if unavailable
@@ -354,11 +436,13 @@ function IdjwiChat() {
         const resp = await fetch(`${RAILWAY_URL}/copilot/demo-stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: q, history: userHistory }),
+          body: JSON.stringify({ question: q, history: userHistory, session_id: sessionIdRef.current }),
+          signal: controller.signal,
         });
 
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         usedStreaming = true;
+        setProgressLabel("Connected. Waiting for first tokens…");
 
         const reader  = resp.body.getReader();
         const decoder = new TextDecoder();
@@ -383,7 +467,7 @@ function IdjwiChat() {
               if (!finalTools.includes(event.tool)) finalTools.push(event.tool);
 
             } else if (event.type === "tool_done") {
-              setProgressLabel("Processing results…");
+              setProgressLabel("Synthesising answer…");
 
             } else if (event.type === "text_delta") {
               finalContent += event.text;
@@ -400,8 +484,12 @@ function IdjwiChat() {
                 content:     finalContent || "Done.",
                 citations:   event.citations || [],
                 toolsCalled: finalTools,
+                toolsDetail: event.tools_detail || [],
+                actions:     event.actions || [],
                 streaming:   false,
               });
+              finalToolsDetail = event.tools_detail || [];
+              finalActions = event.actions || [];
               if (event.rate_limited) setRateLimited(true);
               trackEvent("response_success", { tools: finalTools.length, has_chart: finalCharts.length > 0 });
               historyRef.current = [
@@ -435,18 +523,23 @@ function IdjwiChat() {
         const resp = await fetch(`${RAILWAY_URL}/copilot/demo-ask`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: q, history: userHistory }),
+          body: JSON.stringify({ question: q, history: userHistory, session_id: sessionIdRef.current }),
+          signal: controller.signal,
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         finalContent = data.answer || "";
         finalCharts  = data.charts || [];
         finalTools   = data.tools_called || [];
+        finalToolsDetail = data.tools_detail || [];
+        finalActions = data.actions || [];
         updateMsg(msgId, {
           content:     finalContent,
           charts:      finalCharts,
           citations:   data.citations || [],
           toolsCalled: finalTools,
+          toolsDetail: finalToolsDetail,
+          actions:     finalActions,
           streaming:   false,
         });
         if (data.rate_limited) setRateLimited(true);
@@ -459,15 +552,88 @@ function IdjwiChat() {
       }
 
     } catch (e) {
+      const aborted = e?.name === "AbortError";
       updateMsg(msgId, {
-        content:  finalContent || "Connection interrupted. Please try again.",
+        content:  finalContent || (aborted ? "Request stopped." : "Connection interrupted. Please try again."),
+        toolsDetail: finalToolsDetail,
+        actions: finalActions,
         streaming: false,
       });
-      trackEvent("response_error", { error: e.message });
+      if (aborted) {
+        setInterrupted(true);
+        trackEvent("response_stopped", { has_partial: finalContent.length > 0 });
+      } else {
+        setInterrupted(true);
+        trackEvent("response_error", { error: e.message });
+      }
     } finally {
+      activeControllerRef.current = null;
       setLoading(false);
       setProgressLabel(null);
       setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  };
+
+  const stopRequest = () => {
+    if (activeControllerRef.current) activeControllerRef.current.abort();
+  };
+
+  const submitFeedback = async ({ rating, question }) => {
+    try {
+      await fetch(`${RAILWAY_URL}/copilot/demo-feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: question || lastQuestion,
+          rating,
+          session_id: sessionIdRef.current,
+        }),
+      });
+      trackEvent("feedback_submitted", { rating });
+    } catch (_) {}
+  };
+
+  const runBriefing = async (industry = "general") => {
+    if (loading || rateLimited) return;
+    setStarted(true);
+    setLoading(true);
+    setProgressLabel("Generating proactive briefing…");
+    try {
+      const resp = await fetch(`${RAILWAY_URL}/copilot/demo-briefing`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ industry, session_id: sessionIdRef.current }),
+      });
+      const data = await resp.json();
+      const briefing = data?.briefing || {};
+      const content = [
+        `### ${briefing.headline || "Idjwi Daily Briefing"}`,
+        ...(briefing.bullets || []).map((b) => `- ${b}`),
+      ].join("\n");
+      setMessages(prev => [
+        ...prev,
+        {
+          _id: `brief-${Date.now()}`,
+          role: "assistant",
+          content,
+          charts: [],
+          citations: [],
+          toolsCalled: ["search_public_data"],
+          toolsDetail: [{ tool: "search_public_data", status: "ok", trace_quality: "high", freshness: "live lookup" }],
+          actions: briefing.actions || [],
+          streaming: false,
+          question: `briefing:${industry}`,
+        },
+      ]);
+      trackEvent("briefing_viewed", { industry });
+    } catch (_) {
+      setMessages(prev => [
+        ...prev,
+        { _id: `brief-err-${Date.now()}`, role: "assistant", content: "Could not generate briefing. Please try again.", charts: [], citations: [], toolsCalled: [], toolsDetail: [], actions: [], streaming: false, question: `briefing:${industry}` },
+      ]);
+    } finally {
+      setLoading(false);
+      setProgressLabel(null);
     }
   };
 
@@ -505,20 +671,40 @@ function IdjwiChat() {
           {messages.map((m) => (
             <Message key={m._id} role={m.role} content={m.content}
               charts={m.charts} citations={m.citations}
-              toolsCalled={m.toolsCalled} streaming={m.streaming}
+              toolsCalled={m.toolsCalled} toolsDetail={m.toolsDetail} actions={m.actions}
+              streaming={m.streaming} question={m.question}
+              onFeedback={submitFeedback}
               onAskIdjwi={send} />
           ))}
 
           {/* Starter chips — before user has typed */}
           {!started && (
-            <div className="flex flex-wrap gap-2 pt-1">
-              {STARTERS.slice(0, 6).map((s, i) => (
-                <button key={i} onClick={() => { trackEvent("starter_clicked", { label: s.label }); send(s.q); }}
+            <div className="space-y-2 pt-1">
+              <div className="flex flex-wrap gap-2">
+                {STARTERS.slice(0, 6).map((s, i) => (
+                  <button key={i} onClick={() => { trackEvent("starter_clicked", { label: s.label }); send(s.q); }}
+                    disabled={loading}
+                    className="text-xs text-slate-400 border border-slate-700 hover:border-emerald-500/50 hover:text-emerald-400 rounded-full px-3 py-1.5 transition-all hover:bg-emerald-500/5 disabled:opacity-40">
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {INDUSTRY_PLAYBOOKS.map((s, i) => (
+                  <button key={i} onClick={() => { trackEvent("starter_clicked", { label: s.label, industry: s.industry }); send(s.q); }}
+                    disabled={loading}
+                    className="text-xs text-violet-300/80 border border-violet-500/30 hover:border-violet-400/60 rounded-full px-3 py-1.5 transition-all hover:bg-violet-500/10 disabled:opacity-40">
+                    <Sparkles className="w-3 h-3 inline mr-1" />{s.label}
+                  </button>
+                ))}
+                <button
+                  onClick={() => runBriefing("general")}
                   disabled={loading}
-                  className="text-xs text-slate-400 border border-slate-700 hover:border-emerald-500/50 hover:text-emerald-400 rounded-full px-3 py-1.5 transition-all hover:bg-emerald-500/5 disabled:opacity-40">
-                  {s.label}
+                  className="text-xs text-cyan-300/80 border border-cyan-500/30 hover:border-cyan-400/60 rounded-full px-3 py-1.5 transition-all hover:bg-cyan-500/10 disabled:opacity-40"
+                >
+                  <RefreshCw className="w-3 h-3 inline mr-1" />Generate daily briefing
                 </button>
-              ))}
+              </div>
             </div>
           )}
 
@@ -529,6 +715,12 @@ function IdjwiChat() {
             <div className="flex items-start gap-2 text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-xs">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>Demo limit reached. <a href="/onboarding" className="underline font-medium" onClick={() => trackEvent("signup_clicked", { source: "rate_limit" })}>Sign up free</a> for unlimited Idjwi access with your own data.</span>
+            </div>
+          )}
+          {interrupted && !loading && (
+            <div className="flex items-start gap-2 text-sky-300 bg-sky-500/10 border border-sky-500/20 rounded-xl p-3 text-xs">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>Response interrupted. <button className="underline font-medium" onClick={() => lastQuestion && send(lastQuestion)}>Retry last question</button>.</span>
             </div>
           )}
           <div ref={bottomRef} />
@@ -561,6 +753,18 @@ function IdjwiChat() {
                 : <Send className="w-3.5 h-3.5 text-white" />
               }
             </button>
+            {loading && (
+              <button onClick={stopRequest}
+                className="shrink-0 w-8 h-8 rounded-xl bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors">
+                <StopCircle className="w-4 h-4 text-slate-300" />
+              </button>
+            )}
+            {!loading && interrupted && (
+              <button onClick={() => lastQuestion && send(lastQuestion)}
+                className="shrink-0 w-8 h-8 rounded-xl bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors">
+                <RotateCcw className="w-4 h-4 text-slate-300" />
+              </button>
+            )}
           </div>
           <p className="text-[10px] text-slate-600 mt-1.5 text-center">
             Idjwi · Powered by Claude · Full capabilities demo · No company data connected

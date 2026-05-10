@@ -707,6 +707,10 @@ POST /copilot/ask                   Ask a question (returns JSON)
                                     Body: {question, company_id, current_page?,
                                            selected_entity_type?, selected_entity_id?}
 POST /copilot/ask/stream            Ask a question (SSE streaming)
+POST /copilot/demo-ask              Public Idjwi ask endpoint (no auth, rate-limited)
+POST /copilot/demo-stream           Public Idjwi SSE endpoint (tool traces + actions)
+POST /copilot/demo-feedback         Store Idjwi thumbs up/down feedback
+POST /copilot/demo-briefing         Generate proactive briefing + nudges for demo users
 GET  /copilot/context               Data freshness and scope
 GET  /copilot/diagnose              Run all tools, report row counts
 GET  /copilot/sample-questions      Suggested questions for UI
@@ -719,6 +723,8 @@ POST /copilot/recommendations/{id}/reject    Reject a copilot proposal
                                     Query: ?company_id=&reason=
 GET  /dataquality/report            AI Readiness Score + issues
 GET  /bi/export                     Export charts to Excel/Tableau/CSV
+POST /telemetry/demo-event          Structured landing telemetry event ingestion
+GET  /telemetry/demo-summary        Aggregated landing telemetry (events, starters, feedback, daily trend)
 GET  /security/compliance           SOC 2 compliance evidence
 GET  /audit/changes                 Immutable audit trail
 POST /onboarding/provision          Seed taxonomy + defaults for new tenant

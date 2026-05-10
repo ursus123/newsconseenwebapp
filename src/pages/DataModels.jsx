@@ -1315,6 +1315,64 @@ const PG_INTELLIGENCE_TABLES = [
     ],
   },
   {
+    id: "an_idjwi_events", label: "analytics.idjwi_events", color: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd",
+    icon: "📈", layer: "Infrastructure",
+    description: "Structured Idjwi landing telemetry events. Replaces log-only funnel tracking with queryable analytics for conversion and UX quality.",
+    fields: [
+      { name: "id", type: "SERIAL PK", pk: true },
+      { name: "session_id / event", type: "TEXT" },
+      { name: "properties", type: "JSONB" },
+      { name: "ip_hash / user_agent", type: "TEXT" },
+      { name: "occurred_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_idjwi_interactions", label: "analytics.idjwi_interactions", color: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd",
+    icon: "🧾", layer: "Infrastructure",
+    description: "Idjwi chat interaction log with tool traces and recommended next actions for learning loops and quality review.",
+    fields: [
+      { name: "id", type: "SERIAL PK", pk: true },
+      { name: "session_id / ip_hash", type: "TEXT" },
+      { name: "question / answer", type: "TEXT" },
+      { name: "tools_called / tools_detail / actions", type: "JSONB" },
+      { name: "created_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_idjwi_feedback", label: "analytics.idjwi_feedback", color: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd",
+    icon: "👍", layer: "Infrastructure",
+    description: "Explicit Idjwi response feedback captured from landing chat (up/down rating + optional comment/outcome).",
+    fields: [
+      { name: "id", type: "SERIAL PK", pk: true },
+      { name: "session_id / ip_hash", type: "TEXT" },
+      { name: "question", type: "TEXT" },
+      { name: "rating", type: "INT (-1|1)" },
+      { name: "comment / outcome", type: "TEXT" },
+      { name: "created_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_idjwi_rate_limit", label: "analytics.idjwi_rate_limit", color: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd",
+    icon: "⏱️", layer: "Infrastructure",
+    description: "Shared rate limiter state for Idjwi demo (multi-instance safe). Primary key on (ip_hash, window_start).",
+    fields: [
+      { name: "ip_hash / window_start", type: "TEXT / BIGINT (PK)" },
+      { name: "request_count", type: "INT" },
+      { name: "updated_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
+    id: "an_idjwi_tool_cache", label: "analytics.idjwi_tool_cache", color: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd",
+    icon: "🗃️", layer: "Infrastructure",
+    description: "Shared tool-response cache for Idjwi demo. Avoids repeated external calls across workers/restarts.",
+    fields: [
+      { name: "cache_key", type: "TEXT PK", pk: true },
+      { name: "tool_name", type: "TEXT" },
+      { name: "payload", type: "JSONB" },
+      { name: "expires_at / created_at", type: "TIMESTAMPTZ" },
+    ],
+  },
+  {
     id: "an_backup_log", label: "analytics.backup_log", color: "#0369a1", bg: "#f0f9ff", border: "#bae6fd",
     icon: "💾", layer: "Infrastructure",
     description: "Database backup history. Written by POST /backup/run. Each row records one backup run — status, size, storage backends (local + S3), and duration.",
@@ -1613,6 +1671,11 @@ const DEFAULT_PG_POSITIONS = {
   an_agent_approvals: { x: 450,  y: 860 },
   an_agent_runs:      { x: 820,  y: 860 },
   an_copilot_memory:  { x: 1190, y: 860 },
+  an_idjwi_events:       { x: 1560, y: 860 },
+  an_idjwi_interactions: { x: 1930, y: 860 },
+  an_idjwi_feedback:     { x: 2300, y: 860 },
+  an_idjwi_rate_limit:   { x: 1560, y: 970 },
+  an_idjwi_tool_cache:   { x: 1930, y: 970 },
   // Ingestion Agent (y=1080)
   an_ingestion_plans:     { x: 80,   y: 1080 },
   an_ingestion_memory:    { x: 450,  y: 1080 },
@@ -1650,9 +1713,21 @@ const API_CATALOGUE = [
     desc: "Claude-powered Q&A grounded in operator data. Tool loop with 40+ query tools + create_record + import_records write-back.",
     endpoints: [
       { method: "POST", path: "/copilot/ask",              desc: "Submit query → tool loop → grounded answer (streaming)" },
+      { method: "POST", path: "/copilot/demo-ask",         desc: "Public Idjwi ask endpoint (demo mode, no auth, rate-limited)" },
+      { method: "POST", path: "/copilot/demo-stream",      desc: "Public Idjwi streaming SSE endpoint with tool traces + actions" },
+      { method: "POST", path: "/copilot/demo-feedback",    desc: "Persist Idjwi response feedback for quality learning loops" },
+      { method: "POST", path: "/copilot/demo-briefing",    desc: "Generate proactive daily briefing + anomaly nudges for demo" },
       { method: "GET",  path: "/copilot/status",           desc: "Backend availability + ANTHROPIC_API_KEY check" },
       { method: "GET",  path: "/copilot/memory",           desc: "Read analytics.copilot_memory for company" },
       { method: "DELETE",path: "/copilot/memory/{key}",   desc: "Remove a memory entry by key" },
+    ],
+  },
+  {
+    name: "Telemetry", prefix: "/telemetry", color: "#0ea5e9", bg: "#f0f9ff",
+    desc: "Structured Idjwi funnel and UX telemetry for product analytics dashboards.",
+    endpoints: [
+      { method: "POST", path: "/telemetry/demo-event",     desc: "Write structured landing-page event (session + properties JSON)" },
+      { method: "GET",  path: "/telemetry/demo-summary",   desc: "Aggregate event, starter, daily volume, and feedback KPIs" },
     ],
   },
   {

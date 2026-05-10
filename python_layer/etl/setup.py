@@ -773,6 +773,66 @@ _OTHER_DDL = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_bi_export_log_company ON analytics.bi_export_log (company_id, exported_at DESC)",
 
+    # ── Idjwi demo shared infra + analytics persistence ───────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.idjwi_rate_limit (
+        ip_hash       TEXT,
+        window_start  BIGINT,
+        request_count INT DEFAULT 0,
+        updated_at    TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (ip_hash, window_start)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS analytics.idjwi_tool_cache (
+        cache_key    TEXT PRIMARY KEY,
+        tool_name    TEXT,
+        payload      JSONB,
+        expires_at   TIMESTAMPTZ,
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_idjwi_tool_cache_exp ON analytics.idjwi_tool_cache (expires_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS analytics.idjwi_interactions (
+        id           SERIAL PRIMARY KEY,
+        session_id   TEXT,
+        ip_hash      TEXT,
+        question     TEXT,
+        answer       TEXT,
+        tools_called JSONB DEFAULT '[]'::jsonb,
+        tools_detail JSONB DEFAULT '[]'::jsonb,
+        actions      JSONB DEFAULT '[]'::jsonb,
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_idjwi_interactions_time ON analytics.idjwi_interactions (created_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS analytics.idjwi_feedback (
+        id           SERIAL PRIMARY KEY,
+        session_id   TEXT,
+        ip_hash      TEXT,
+        question     TEXT,
+        rating       INT,
+        comment      TEXT,
+        outcome      TEXT,
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_idjwi_feedback_time ON analytics.idjwi_feedback (created_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS analytics.idjwi_events (
+        id           SERIAL PRIMARY KEY,
+        session_id   TEXT,
+        event        TEXT,
+        properties   JSONB DEFAULT '{}'::jsonb,
+        ip_hash      TEXT,
+        user_agent   TEXT,
+        occurred_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_idjwi_events_event_time ON analytics.idjwi_events (event, occurred_at DESC)",
+
     # ── Platform admin: audit log + tenant flags ──────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS analytics.admin_audit_log (

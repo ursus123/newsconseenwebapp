@@ -18,6 +18,7 @@ import logging
 import os
 import time
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -39,9 +40,40 @@ def _load_docs() -> str:
 
 _rate_store: dict = defaultdict(lambda: {"count": 0, "window": 0})
 _RATE_LIMIT = 20
+_db_demo_tables_ready = False
 
 
 def _check_rate_limit(ip: str) -> bool:
+    engine = _get_engine()
+    if engine is not None:
+        try:
+            from sqlalchemy import text
+            _ensure_demo_tables(engine)
+            window = int(time.time()) // 3600
+            with engine.begin() as conn:
+                row = conn.execute(text("""
+                    INSERT INTO analytics.idjwi_rate_limit
+                        (ip_hash, window_start, request_count, updated_at)
+                    VALUES
+                        (:ip_hash, :window_start, 1, NOW())
+                    ON CONFLICT (ip_hash, window_start)
+                    DO UPDATE SET
+                        request_count = CASE
+                            WHEN analytics.idjwi_rate_limit.request_count >= :rate_limit
+                            THEN analytics.idjwi_rate_limit.request_count
+                            ELSE analytics.idjwi_rate_limit.request_count + 1
+                        END,
+                        updated_at = NOW()
+                    RETURNING request_count
+                """), {
+                    "ip_hash": _ip_hash(ip),
+                    "window_start": window,
+                    "rate_limit": _RATE_LIMIT,
+                }).fetchone()
+            return bool(row and int(row[0]) <= _RATE_LIMIT)
+        except Exception as exc:
+            logger.debug("Idjwi DB rate limit fallback: %s", exc)
+
     window = int(time.time()) // 3600
     rec = _rate_store[ip]
     if rec["window"] != window:
@@ -69,6 +101,94 @@ _TOOL_TIMEOUT = {
 }
 
 
+def _ip_hash(ip: str) -> str:
+    salt = os.getenv("IDJWI_IP_HASH_SALT", "idjwi-demo")
+    raw = f"{salt}:{ip or 'unknown'}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
+def _get_engine():
+    try:
+        from database import get_engine_safe
+        return get_engine_safe()
+    except Exception:
+        return None
+
+
+def _ensure_demo_tables(engine) -> None:
+    global _db_demo_tables_ready
+    if _db_demo_tables_ready or engine is None:
+        return
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS analytics.idjwi_rate_limit (
+                    ip_hash      TEXT,
+                    window_start BIGINT,
+                    request_count INT DEFAULT 0,
+                    updated_at   TIMESTAMPTZ DEFAULT NOW(),
+                    PRIMARY KEY (ip_hash, window_start)
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS analytics.idjwi_tool_cache (
+                    cache_key    TEXT PRIMARY KEY,
+                    tool_name    TEXT,
+                    payload      JSONB,
+                    expires_at   TIMESTAMPTZ,
+                    created_at   TIMESTAMPTZ DEFAULT NOW()
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS analytics.idjwi_interactions (
+                    id           SERIAL PRIMARY KEY,
+                    session_id   TEXT,
+                    ip_hash      TEXT,
+                    question     TEXT,
+                    answer       TEXT,
+                    tools_called JSONB DEFAULT '[]'::jsonb,
+                    tools_detail JSONB DEFAULT '[]'::jsonb,
+                    actions      JSONB DEFAULT '[]'::jsonb,
+                    created_at   TIMESTAMPTZ DEFAULT NOW()
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS analytics.idjwi_feedback (
+                    id           SERIAL PRIMARY KEY,
+                    session_id   TEXT,
+                    ip_hash      TEXT,
+                    question     TEXT,
+                    rating       INT,
+                    comment      TEXT,
+                    outcome      TEXT,
+                    created_at   TIMESTAMPTZ DEFAULT NOW()
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS analytics.idjwi_events (
+                    id           SERIAL PRIMARY KEY,
+                    session_id   TEXT,
+                    event        TEXT,
+                    properties   JSONB DEFAULT '{}'::jsonb,
+                    ip_hash      TEXT,
+                    user_agent   TEXT,
+                    occurred_at  TIMESTAMPTZ DEFAULT NOW()
+                )
+            """))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_idjwi_events_event_time "
+                "ON analytics.idjwi_events (event, occurred_at DESC)"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_idjwi_interactions_time "
+                "ON analytics.idjwi_interactions (created_at DESC)"
+            ))
+        _db_demo_tables_ready = True
+    except Exception as exc:
+        logger.debug("Idjwi demo table ensure skipped: %s", exc)
+
+
 def _cache_key(tool_name: str, tool_input: dict) -> str:
     raw = json.dumps(tool_input, sort_keys=True, default=str)
     digest = hashlib.md5(raw.encode()).hexdigest()[:12]
@@ -76,6 +196,28 @@ def _cache_key(tool_name: str, tool_input: dict) -> str:
 
 
 def _get_cached(tool_name: str, tool_input: dict):
+    engine = _get_engine()
+    if engine is not None:
+        try:
+            from sqlalchemy import text
+            _ensure_demo_tables(engine)
+            key = _cache_key(tool_name, tool_input)
+            with engine.begin() as conn:
+                row = conn.execute(text("""
+                    SELECT payload
+                    FROM analytics.idjwi_tool_cache
+                    WHERE cache_key = :key
+                      AND tool_name = :tool_name
+                      AND expires_at > NOW()
+                    LIMIT 1
+                """), {"key": key, "tool_name": tool_name}).fetchone()
+            if row and row[0] is not None:
+                if isinstance(row[0], dict):
+                    return row[0]
+                return json.loads(row[0])
+        except Exception as exc:
+            logger.debug("Idjwi DB cache read fallback: %s", exc)
+
     key = _cache_key(tool_name, tool_input)
     entry = _cache.get(key)
     if entry:
@@ -88,8 +230,170 @@ def _get_cached(tool_name: str, tool_input: dict):
 
 
 def _set_cached(tool_name: str, tool_input: dict, result: dict) -> None:
+    engine = _get_engine()
+    if engine is not None:
+        try:
+            from sqlalchemy import text
+            _ensure_demo_tables(engine)
+            ttl = _CACHE_TTL.get(tool_name, 0)
+            if ttl > 0:
+                with engine.begin() as conn:
+                    conn.execute(text("""
+                        INSERT INTO analytics.idjwi_tool_cache
+                            (cache_key, tool_name, payload, expires_at, created_at)
+                        VALUES
+                            (:cache_key, :tool_name, CAST(:payload AS JSONB),
+                             NOW() + (:ttl || ' seconds')::interval, NOW())
+                        ON CONFLICT (cache_key)
+                        DO UPDATE SET
+                            tool_name  = EXCLUDED.tool_name,
+                            payload    = EXCLUDED.payload,
+                            expires_at = EXCLUDED.expires_at,
+                            created_at = NOW()
+                    """), {
+                        "cache_key": _cache_key(tool_name, tool_input),
+                        "tool_name": tool_name,
+                        "payload": json.dumps(result, default=str),
+                        "ttl": str(ttl),
+                    })
+                return
+        except Exception as exc:
+            logger.debug("Idjwi DB cache write fallback: %s", exc)
+
     if tool_name in _CACHE_TTL:
         _cache[_cache_key(tool_name, tool_input)] = (time.time(), result)
+
+
+def record_demo_event(event: str, properties: dict | None, ip: str, user_agent: str = "", session_id: str = "") -> None:
+    props = dict(properties or {})
+    engine = _get_engine()
+    if engine is not None:
+        try:
+            from sqlalchemy import text
+            _ensure_demo_tables(engine)
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    INSERT INTO analytics.idjwi_events
+                        (session_id, event, properties, ip_hash, user_agent, occurred_at)
+                    VALUES
+                        (:session_id, :event, CAST(:properties AS JSONB), :ip_hash, :user_agent, NOW())
+                """), {
+                    "session_id": session_id or "",
+                    "event": event,
+                    "properties": json.dumps(props, default=str),
+                    "ip_hash": _ip_hash(ip),
+                    "user_agent": (user_agent or "")[:512],
+                })
+            return
+        except Exception as exc:
+            logger.debug("Idjwi event persistence skipped: %s", exc)
+    logger.info("FUNNEL ip=%s event=%s props=%s", _ip_hash(ip), event, props)
+
+
+def persist_interaction(session_id: str, ip: str, question: str, answer: str, tools_detail: list, actions: list) -> None:
+    engine = _get_engine()
+    if engine is None:
+        return
+    try:
+        from sqlalchemy import text
+        _ensure_demo_tables(engine)
+        tools_called = [t.get("tool") for t in tools_detail if t.get("tool")]
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO analytics.idjwi_interactions
+                    (session_id, ip_hash, question, answer, tools_called, tools_detail, actions, created_at)
+                VALUES
+                    (:session_id, :ip_hash, :question, :answer,
+                     CAST(:tools_called AS JSONB), CAST(:tools_detail AS JSONB), CAST(:actions AS JSONB), NOW())
+            """), {
+                "session_id": session_id or "",
+                "ip_hash": _ip_hash(ip),
+                "question": question[:5000],
+                "answer": (answer or "")[:30000],
+                "tools_called": json.dumps(tools_called, default=str),
+                "tools_detail": json.dumps(tools_detail, default=str),
+                "actions": json.dumps(actions, default=str),
+            })
+    except Exception as exc:
+        logger.debug("Idjwi interaction persistence skipped: %s", exc)
+
+
+def persist_feedback(session_id: str, ip: str, question: str, rating: int, comment: str = "", outcome: str = "") -> bool:
+    engine = _get_engine()
+    if engine is None:
+        return False
+    try:
+        from sqlalchemy import text
+        _ensure_demo_tables(engine)
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO analytics.idjwi_feedback
+                    (session_id, ip_hash, question, rating, comment, outcome, created_at)
+                VALUES
+                    (:session_id, :ip_hash, :question, :rating, :comment, :outcome, NOW())
+            """), {
+                "session_id": session_id or "",
+                "ip_hash": _ip_hash(ip),
+                "question": question[:5000],
+                "rating": rating,
+                "comment": (comment or "")[:4000],
+                "outcome": (outcome or "")[:1000],
+            })
+        return True
+    except Exception as exc:
+        logger.debug("Idjwi feedback persistence skipped: %s", exc)
+        return False
+
+
+def get_demo_telemetry_summary(days: int = 7) -> dict:
+    engine = _get_engine()
+    if engine is None:
+        return {"days": days, "events": [], "top_starters": [], "feedback": {}, "daily": []}
+    try:
+        from sqlalchemy import text
+        _ensure_demo_tables(engine)
+        with engine.begin() as conn:
+            events = conn.execute(text("""
+                SELECT event, COUNT(*)::INT AS total
+                FROM analytics.idjwi_events
+                WHERE occurred_at >= NOW() - (:days || ' days')::interval
+                GROUP BY event
+                ORDER BY total DESC
+                LIMIT 20
+            """), {"days": str(max(1, days))}).fetchall()
+            starters = conn.execute(text("""
+                SELECT COALESCE(properties->>'label', '(unknown)') AS label, COUNT(*)::INT AS total
+                FROM analytics.idjwi_events
+                WHERE event = 'starter_clicked'
+                  AND occurred_at >= NOW() - (:days || ' days')::interval
+                GROUP BY label
+                ORDER BY total DESC
+                LIMIT 10
+            """), {"days": str(max(1, days))}).fetchall()
+            daily = conn.execute(text("""
+                SELECT TO_CHAR(date_trunc('day', occurred_at), 'YYYY-MM-DD') AS day, COUNT(*)::INT AS total
+                FROM analytics.idjwi_events
+                WHERE occurred_at >= NOW() - (:days || ' days')::interval
+                GROUP BY day
+                ORDER BY day ASC
+            """), {"days": str(max(1, days))}).fetchall()
+            fb = conn.execute(text("""
+                SELECT
+                    SUM(CASE WHEN rating > 0 THEN 1 ELSE 0 END)::INT AS upvotes,
+                    SUM(CASE WHEN rating < 0 THEN 1 ELSE 0 END)::INT AS downvotes
+                FROM analytics.idjwi_feedback
+                WHERE created_at >= NOW() - (:days || ' days')::interval
+            """), {"days": str(max(1, days))}).fetchone()
+        return {
+            "days": days,
+            "events": [{"event": r[0], "total": int(r[1] or 0)} for r in events],
+            "top_starters": [{"label": r[0], "total": int(r[1] or 0)} for r in starters],
+            "daily": [{"day": r[0], "total": int(r[1] or 0)} for r in daily],
+            "feedback": {"upvotes": int((fb[0] or 0) if fb else 0), "downvotes": int((fb[1] or 0) if fb else 0)},
+        }
+    except Exception as exc:
+        logger.debug("Idjwi telemetry summary failed: %s", exc)
+        return {"days": days, "events": [], "top_starters": [], "feedback": {}, "daily": []}
 
 
 # ── Idjwi system prompt ───────────────────────────────────────────────────────
@@ -263,6 +567,7 @@ def _extract_charts(collected: list) -> list:
 
 def _extract_citations(collected: list) -> list:
     citations = []
+    now_iso = datetime.now(timezone.utc).isoformat()
     for item in collected:
         if item["tool"] in ("web_search", "search_public_data"):
             for r in item.get("result", {}).get("results", []):
@@ -273,8 +578,35 @@ def _extract_citations(collected: list) -> list:
                         "title":   title or url,
                         "url":     url,
                         "snippet": r.get("snippet", ""),
+                        "source": item["tool"],
+                        "retrieved_at": now_iso,
                     })
     return citations[:6]
+
+
+def _infer_freshness(tool: str, result: dict) -> str:
+    if not isinstance(result, dict):
+        return "unknown"
+    for k in ("as_of", "updated_at", "last_updated", "snapshot_date", "date"):
+        v = result.get(k)
+        if v:
+            return str(v)
+    if tool in ("web_search", "search_public_data"):
+        return "live lookup"
+    return "demo/internal"
+
+
+def _trace_quality(item: dict) -> str:
+    result = item.get("result", {}) or {}
+    if result.get("error"):
+        return "low"
+    if result.get("skipped"):
+        return "low"
+    if item.get("tool") in ("web_search", "search_public_data"):
+        return "high"
+    if result.get("data_source") == "base44":
+        return "medium"
+    return "high"
 
 
 def _build_tools_detail(collected: list) -> list:
@@ -282,26 +614,74 @@ def _build_tools_detail(collected: list) -> list:
     detail = []
     for c in collected:
         tool = c["tool"]
-        if tool in ("web_search", "search_public_data"):
-            continue
         params = {k: v for k, v in c.get("input", {}).items() if k != "company_id"}
+        result = c.get("result", {}) or {}
         detail.append({
             "tool":        tool,
             "params":      params,
-            "data_source": c.get("result", {}).get("data_source", "demo"),
+            "data_source": result.get("data_source", "demo"),
+            "status":      "error" if result.get("error") else ("timeout" if result.get("skipped") else "ok"),
+            "cache_hit":   bool(c.get("meta", {}).get("cache_hit")),
+            "latency_ms":  int(c.get("meta", {}).get("latency_ms", 0)),
+            "freshness":   _infer_freshness(tool, result),
+            "trace_quality": _trace_quality(c),
         })
     return detail
 
 
+def _build_next_actions(question: str, answer: str, collected: list) -> list:
+    from agents.approval_gate import get_risk_level, RiskLevel
+
+    candidates = [
+        {
+            "action_type": "generate_report",
+            "label": "Generate a daily operating briefing",
+            "why": "Convert this answer into a repeatable daily decision pack.",
+            "payload": {"question": question[:240], "mode": "daily_briefing"},
+        },
+        {
+            "action_type": "create_task",
+            "label": "Create follow-up tasks from this insight",
+            "why": "Turn recommendations into trackable execution work.",
+            "payload": {"source": "idjwi_demo", "question": question[:240]},
+        },
+    ]
+    if "invoice" in (question + " " + answer).lower():
+        candidates.append({
+            "action_type": "send_whatsapp",
+            "label": "Draft client reminder messages",
+            "why": "Use approval gate before outbound financial communication.",
+            "payload": {"template": "invoice_reminder"},
+        })
+    if any((c.get("tool") == "web_search") for c in collected):
+        candidates.append({
+            "action_type": "internal_alert",
+            "label": "Create anomaly watch alert",
+            "why": "Get proactive nudges when this trend moves materially.",
+            "payload": {"alert_kind": "trend_anomaly"},
+        })
+
+    actions = []
+    for c in candidates[:4]:
+        risk = get_risk_level(c["action_type"])
+        actions.append({
+            **c,
+            "risk_level": risk.value,
+            "approval_required": risk in (RiskLevel.APPROVE, RiskLevel.CRITICAL),
+        })
+    return actions
+
+
 # ── Async tool execution with per-tool budget ─────────────────────────────────
 
-async def _run_tool_async(tool_name: str, tool_input: dict, company_id: str) -> dict:
+async def _run_tool_async(tool_name: str, tool_input: dict, company_id: str):
     """Run a synchronous tool inside a thread with a per-tool timeout."""
     from copilot.queries import execute_tool
 
+    t0 = time.perf_counter()
     cached = _get_cached(tool_name, tool_input)
     if cached is not None:
-        return cached
+        return cached, {"cache_hit": True, "latency_ms": int((time.perf_counter() - t0) * 1000)}
 
     timeout = _TOOL_TIMEOUT.get(tool_name, _TOOL_TIMEOUT["default"])
     loop = asyncio.get_event_loop()
@@ -315,18 +695,25 @@ async def _run_tool_async(tool_name: str, tool_input: dict, company_id: str) -> 
             timeout=timeout,
         )
         _set_cached(tool_name, tool_input, result)
-        return result
+        return result, {"cache_hit": False, "latency_ms": int((time.perf_counter() - t0) * 1000)}
     except asyncio.TimeoutError:
         logger.warning("Tool %s timed out (%.1fs budget)", tool_name, timeout)
-        return {"skipped": True, "reason": "timeout", "note": f"{tool_name} timed out — budget {timeout}s exceeded."}
+        return {
+            "skipped": True,
+            "reason": "timeout",
+            "note": f"{tool_name} timed out — budget {timeout}s exceeded.",
+        }, {"cache_hit": False, "latency_ms": int((time.perf_counter() - t0) * 1000)}
     except Exception as exc:
         logger.warning("Tool %s error: %s", tool_name, exc)
-        return {"error": str(exc), "note": "Tool unavailable in demo mode."}
+        return {"error": str(exc), "note": "Tool unavailable in demo mode."}, {
+            "cache_hit": False,
+            "latency_ms": int((time.perf_counter() - t0) * 1000),
+        }
 
 
 # ── Streaming ask function ────────────────────────────────────────────────────
 
-async def ask_idjwi_stream(question: str, history: list = None):
+async def ask_idjwi_stream(question: str, history: list = None, session_id: str = "", ip: str = "unknown"):
     """
     Async generator — yields SSE-compatible dicts for the streaming endpoint.
 
@@ -386,14 +773,27 @@ async def ask_idjwi_stream(question: str, history: list = None):
             return
 
         if stop_reason == "end_turn":
+            text_blocks = [b.text for b in response_content if hasattr(b, "text")]
+            answer_text = "\n".join(text_blocks).strip()
             charts = _extract_charts(collected)
             for cfg in charts:
                 yield {"type": "chart", "config": cfg}
+            tools_detail = _build_tools_detail(collected)
+            actions = _build_next_actions(question, answer_text, collected)
+            persist_interaction(
+                session_id=session_id,
+                ip=ip,
+                question=question,
+                answer=answer_text,
+                tools_detail=tools_detail,
+                actions=actions,
+            )
             yield {
                 "type":         "done",
                 "citations":    _extract_citations(collected),
                 "tools_called": [c["tool"] for c in collected],
-                "tools_detail": _build_tools_detail(collected),
+                "tools_detail": tools_detail,
+                "actions":      actions,
             }
             return
 
@@ -405,13 +805,14 @@ async def ask_idjwi_stream(question: str, history: list = None):
                 if block.type != "tool_use":
                     continue
                 yield {"type": "tool_start", "tool": block.name}
-                result = await _run_tool_async(block.name, dict(block.input), "demo")
+                result, meta = await _run_tool_async(block.name, dict(block.input), "demo")
                 yield {"type": "tool_done", "tool": block.name}
 
                 collected.append({
                     "tool":   block.name,
                     "input":  dict(block.input) if hasattr(block.input, "items") else {},
                     "result": result,
+                    "meta":   meta,
                 })
                 tool_results.append({
                     "type":        "tool_result",
@@ -429,11 +830,22 @@ async def ask_idjwi_stream(question: str, history: list = None):
     charts = _extract_charts(collected)
     for cfg in charts:
         yield {"type": "chart", "config": cfg}
+    tools_detail = _build_tools_detail(collected)
+    actions = _build_next_actions(question, "", collected)
+    persist_interaction(
+        session_id=session_id,
+        ip=ip,
+        question=question,
+        answer="",
+        tools_detail=tools_detail,
+        actions=actions,
+    )
     yield {
         "type":         "done",
         "citations":    _extract_citations(collected),
         "tools_called": [c["tool"] for c in collected],
-        "tools_detail": _build_tools_detail(collected),
+        "tools_detail": tools_detail,
+        "actions":      actions,
     }
 
 
@@ -447,7 +859,7 @@ def _get_client():
     return anthropic.Anthropic(api_key=api_key)
 
 
-def ask_idjwi(question: str, history: list = None) -> dict:
+def ask_idjwi(question: str, history: list = None, session_id: str = "", ip: str = "unknown") -> dict:
     """
     Ask Idjwi a question in demo mode.
     Uses ALL production tool definitions. Returns full richness:
@@ -482,12 +894,23 @@ def ask_idjwi(question: str, history: list = None) -> dict:
         if response.stop_reason == "end_turn":
             text_blocks = [b.text for b in response.content if hasattr(b, "text")]
             answer = "\n".join(text_blocks).strip()
+            tools_detail = _build_tools_detail(collected)
+            actions = _build_next_actions(question, answer, collected)
+            persist_interaction(
+                session_id=session_id,
+                ip=ip,
+                question=question,
+                answer=answer,
+                tools_detail=tools_detail,
+                actions=actions,
+            )
             return {
                 "answer":       answer or "I couldn't generate a response. Please rephrase.",
                 "charts":       _extract_charts(collected),
                 "citations":    _extract_citations(collected),
                 "tools_called": [c["tool"] for c in collected],
-                "tools_detail": _build_tools_detail(collected),
+                "tools_detail": tools_detail,
+                "actions":      actions,
             }
 
         if response.stop_reason == "tool_use":
@@ -497,6 +920,7 @@ def ask_idjwi(question: str, history: list = None) -> dict:
 
             for block in tool_blocks:
                 logger.info("Idjwi demo tool: %s", block.name)
+                t0 = time.perf_counter()
                 try:
                     # All tools run with company_id="demo" — data tools return empty,
                     # public data tools return live results.
@@ -508,11 +932,13 @@ def ask_idjwi(question: str, history: list = None) -> dict:
                 except Exception as e:
                     logger.warning("Idjwi tool %s failed: %s", block.name, e)
                     result = {"error": str(e), "note": "Tool unavailable in demo mode."}
+                latency_ms = int((time.perf_counter() - t0) * 1000)
 
                 collected.append({
                     "tool":   block.name,
                     "input":  dict(block.input) if hasattr(block.input, "items") else {},
                     "result": result,
+                    "meta":   {"cache_hit": False, "latency_ms": latency_ms},
                 })
                 tool_results.append({
                     "type":        "tool_result",
@@ -525,18 +951,61 @@ def ask_idjwi(question: str, history: list = None) -> dict:
 
         text_blocks = [b.text for b in response.content if hasattr(b, "text")]
         answer = "\n".join(text_blocks).strip()
+        tools_detail = _build_tools_detail(collected)
+        actions = _build_next_actions(question, answer, collected)
+        persist_interaction(
+            session_id=session_id,
+            ip=ip,
+            question=question,
+            answer=answer,
+            tools_detail=tools_detail,
+            actions=actions,
+        )
         return {
             "answer":       answer or "Unexpected response. Please try again.",
             "charts":       _extract_charts(collected),
             "citations":    _extract_citations(collected),
             "tools_called": [c["tool"] for c in collected],
-            "tools_detail": _build_tools_detail(collected),
+            "tools_detail": tools_detail,
+            "actions":      actions,
         }
 
+    tools_detail = _build_tools_detail(collected)
+    actions = _build_next_actions(question, "", collected)
+    persist_interaction(
+        session_id=session_id,
+        ip=ip,
+        question=question,
+        answer="",
+        tools_detail=tools_detail,
+        actions=actions,
+    )
     return {
         "answer":       "This question required more steps than expected. Please try a more focused question.",
         "charts":       _extract_charts(collected),
         "citations":    _extract_citations(collected),
         "tools_called": [c["tool"] for c in collected],
-        "tools_detail": _build_tools_detail(collected),
+        "tools_detail": tools_detail,
+        "actions":      actions,
+    }
+
+
+def generate_demo_briefing(industry: str = "general") -> dict:
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    headline = f"Idjwi Daily Briefing — {industry.title()} — {today}"
+    bullets = [
+        "Top external signals refreshed (market data + web intelligence).",
+        "Priority focus: mitigate overdue tasks, protect revenue collection, and monitor anomalies.",
+        "Recommended operator cadence: 10-minute morning review, then execution tracking at noon.",
+    ]
+    actions = _build_next_actions(
+        question=f"Generate a proactive briefing for {industry}",
+        answer="Briefing generated",
+        collected=[{"tool": "search_public_data", "result": {"data_source": "live"}}],
+    )
+    return {
+        "headline": headline,
+        "bullets": bullets,
+        "actions": actions,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }

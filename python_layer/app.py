@@ -564,6 +564,21 @@ class _DemoMessage(_BaseModel):
 class _DemoAskRequest(_BaseModel):
     question: str
     history:  _List[_Dict[str, _Any]] = []
+    session_id: str = ""
+    industry: str = ""
+
+
+class _DemoFeedbackRequest(_BaseModel):
+    question: str
+    rating: int
+    comment: str = ""
+    outcome: str = ""
+    session_id: str = ""
+
+
+class _DemoBriefingRequest(_BaseModel):
+    industry: str = "general"
+    session_id: str = ""
 
 
 @app.post("/copilot/demo-ask", tags=["idjwi"])
@@ -589,6 +604,8 @@ def idjwi_demo_ask(req: _DemoAskRequest, request: _Request):
         result = ask_idjwi(
             question=req.question,
             history=req.history,
+            session_id=req.session_id,
+            ip=ip,
         )
         result["rate_limited"] = False
         return result
@@ -637,6 +654,8 @@ async def idjwi_demo_stream(req: _DemoAskRequest, request: _Request):
                 async for event in ask_idjwi_stream(
                     question=req.question,
                     history=req.history,
+                    session_id=req.session_id,
+                    ip=ip,
                 ):
                     t = event.get("type", "")
                     if t in ("tool_start", "tool_done"):
@@ -675,14 +694,74 @@ async def idjwi_demo_stream(req: _DemoAskRequest, request: _Request):
 class _TelemetryEvent(_BaseModel):
     event: str
     properties: dict = {}
+    session_id: str = ""
+
+
+@app.post("/copilot/demo-feedback", tags=["idjwi"])
+async def idjwi_demo_feedback(payload: _DemoFeedbackRequest, request: _Request):
+    ip = request.client.host if request.client else "unknown"
+    ok = False
+    try:
+        from copilot.demo_engine import persist_feedback
+        ok = persist_feedback(
+            session_id=payload.session_id,
+            ip=ip,
+            question=payload.question,
+            rating=payload.rating,
+            comment=payload.comment,
+            outcome=payload.outcome,
+        )
+    except Exception as e:
+        logger.warning("Idjwi feedback store failed: %s", e)
+    return {"ok": ok}
+
+
+@app.post("/copilot/demo-briefing", tags=["idjwi"])
+async def idjwi_demo_briefing(payload: _DemoBriefingRequest, request: _Request):
+    ip = request.client.host if request.client else "unknown"
+    try:
+        from copilot.demo_engine import generate_demo_briefing, record_demo_event
+        briefing = generate_demo_briefing(industry=payload.industry or "general")
+        record_demo_event(
+            event="briefing_generated",
+            properties={"industry": payload.industry or "general"},
+            ip=ip,
+            user_agent=request.headers.get("user-agent", ""),
+            session_id=payload.session_id or "",
+        )
+        return {"ok": True, "briefing": briefing}
+    except Exception as e:
+        logger.error("Idjwi briefing failed: %s", e)
+        return {"ok": False, "briefing": {}}
 
 
 @app.post("/telemetry/demo-event", tags=["idjwi"])
 async def record_demo_event(payload: _TelemetryEvent, request: _Request):
-    """Lightweight funnel event sink for Landing page analytics."""
+    """Structured funnel event sink for Landing page analytics."""
     ip = request.client.host if request.client else "unknown"
-    logger.info("FUNNEL ip=%s event=%s props=%s", ip, payload.event, payload.properties)
+    try:
+        from copilot.demo_engine import record_demo_event as _record_demo_event
+        _record_demo_event(
+            event=payload.event,
+            properties=payload.properties or {},
+            ip=ip,
+            user_agent=request.headers.get("user-agent", ""),
+            session_id=payload.session_id or "",
+        )
+    except Exception as e:
+        logger.warning("FUNNEL persistence fallback: %s", e)
+        logger.info("FUNNEL ip=%s event=%s props=%s", ip, payload.event, payload.properties)
     return {"ok": True}
+
+
+@app.get("/telemetry/demo-summary", tags=["idjwi"])
+async def demo_telemetry_summary(days: int = Query(7, ge=1, le=90)):
+    try:
+        from copilot.demo_engine import get_demo_telemetry_summary
+        return get_demo_telemetry_summary(days=days)
+    except Exception as e:
+        logger.warning("Idjwi telemetry summary failed: %s", e)
+        return {"days": days, "events": [], "top_starters": [], "feedback": {}, "daily": []}
 
 
 # ----------------------------------------------------------
