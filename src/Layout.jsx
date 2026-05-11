@@ -674,16 +674,16 @@ export default function Layout({ children, currentPageName }) {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 flex flex-col overflow-hidden">
-          <header className="flex items-center h-16 px-4 lg:px-8 bg-white border-b border-slate-100 shrink-0 gap-4">
+        <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          <header className="flex items-center h-16 px-3 sm:px-4 lg:px-8 bg-white border-b border-slate-100 shrink-0 gap-2 sm:gap-4">
             <button
               onClick={() => setSidebarOpen(true)}
               className="lg:hidden p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="ml-2 lg:ml-0 flex items-center gap-3 flex-1 min-w-0">
-              <h2 className="text-lg font-semibold text-slate-800 shrink-0">{currentPageName}</h2>
+            <div className="ml-1 sm:ml-2 lg:ml-0 flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+              <h2 className="text-base sm:text-lg font-semibold text-slate-800 min-w-0 truncate">{currentPageName}</h2>
               <GlobalSearchBar currentUser={currentUser} />
               {currentUser && (
                 currentUser.role === "super_admin" ? (
@@ -699,7 +699,7 @@ export default function Layout({ children, currentPageName }) {
             </div>
 
             {/* Empty Datamart + Smart Import + Undo */}
-            <div className="flex items-center gap-1.5">
+            <div className="hidden sm:flex items-center gap-1.5 shrink-0">
               <EmptyDatamartButton currentUser={currentUser} />
               <SmartImportButton currentUser={currentUser} />
               <UndoImportButton />
@@ -710,7 +710,7 @@ export default function Layout({ children, currentPageName }) {
               <div className="relative">
                 <button
                   onClick={() => setUserMenuOpen((o) => !o)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-slate-50 transition-colors"
+                  className="flex items-center gap-2 px-1.5 sm:px-3 py-1.5 rounded-xl hover:bg-slate-50 transition-colors"
                 >
                   <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
                     {(currentUser.full_name || currentUser.email || "?")[0].toUpperCase()}

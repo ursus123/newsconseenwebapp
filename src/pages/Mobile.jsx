@@ -97,10 +97,10 @@ const PRIORITY_STYLE = {
 // ── Online/offline pill ────────────────────────────────────────────────────────
 function OnlinePill({ isOnline, queueCount }) {
   return (
-    <div className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full ${
+    <div className={`flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full max-w-[128px] overflow-hidden whitespace-nowrap ${
       isOnline ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
     }`}>
-      {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+      {isOnline ? <Wifi className="w-3 h-3 shrink-0" /> : <WifiOff className="w-3 h-3 shrink-0" />}
       {isOnline ? "Online" : `Offline${queueCount > 0 ? ` · ${queueCount} queued` : ""}`}
     </div>
   );
@@ -658,14 +658,14 @@ export default function Mobile() {
       {/* Status bar area */}
       <div className="shrink-0 bg-white border-b border-slate-100 safe-top">
         {/* Header */}
-        <div className="px-4 pt-4 pb-3 flex items-center justify-between">
-          <div>
+        <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
             <p className="text-[11px] text-slate-400 font-medium">{greeting()},</p>
-            <p className="text-base font-black text-slate-800 leading-tight">
+            <p className="text-base font-black text-slate-800 leading-tight truncate">
               {user?.full_name?.split(" ")[0] || user?.email?.split("@")[0] || "Field Agent"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <OnlinePill isOnline={isOnline} queueCount={queueCount} />
             {queueCount > 0 && (
               <button
@@ -699,7 +699,7 @@ export default function Mobile() {
       )}
 
       {/* Tab content */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4">
         {activeTab === "today" && <TodayTab user={user} isOnline={isOnline} />}
         {activeTab === "log"   && <LogTab   user={user} isOnline={isOnline} />}
         {activeTab === "sync"  && <SyncTab  isOnline={isOnline} />}
@@ -707,7 +707,7 @@ export default function Mobile() {
 
       {/* Bottom tab bar */}
       <div className="shrink-0 bg-white border-t border-slate-100 safe-bottom">
-        <div className="flex items-center justify-around px-2 py-2">
+        <div className="flex items-center gap-1 px-2 py-2">
           {TABS.map(tab => {
             const Icon    = tab.icon;
             const isActive = activeTab === tab.id;
@@ -716,7 +716,7 @@ export default function Mobile() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex flex-col items-center gap-1 py-1.5 px-6 rounded-2xl transition-all relative ${
+                className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-1.5 px-2 rounded-2xl transition-all relative ${
                   isActive ? "bg-emerald-50" : ""
                 }`}
               >
@@ -725,7 +725,7 @@ export default function Mobile() {
                   {tab.label}
                 </span>
                 {hasBadge && (
-                  <span className="absolute top-1 right-4 w-4 h-4 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                  <span className="absolute top-1 right-3 w-4 h-4 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
                     {queueCount}
                   </span>
                 )}
