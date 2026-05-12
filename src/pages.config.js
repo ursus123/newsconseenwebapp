@@ -88,6 +88,7 @@ import GoodsReceived from './pages/GoodsReceived';
 import InspectionChecklist from './pages/InspectionChecklist';
 import DocumentExpiry from './pages/DocumentExpiry';
 import PdfToOntology from './pages/PdfToOntology';
+import IntelligenceInbox from './pages/IntelligenceInbox';
 
 export const PAGES = {
     "AddClient": AddClient,
@@ -131,6 +132,7 @@ export const PAGES = {
     "InspectionChecklist": InspectionChecklist,
     "DocumentExpiry": DocumentExpiry,
     "PdfToOntology": PdfToOntology,
+    "IntelligenceInbox": IntelligenceInbox,
 }
 
 export const pagesConfig = {
