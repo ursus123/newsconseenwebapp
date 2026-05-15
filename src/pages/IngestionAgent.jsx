@@ -243,11 +243,25 @@ export default function IngestionAgent() {
   async function handleLoad() {
     if (!plan?.plan_id || !selectedFile) return;
     setLoading(true);
-    const fd = new FormData();
-    fd.append("file", selectedFile);
-    fd.append("company_id", companyId);
 
     try {
+      // Approve first if operator is still on the review screen
+      if (plan.status === "pending_review") {
+        const approveRes = await fetch(
+          `${RAILWAY_URL}/ingestion/approve/${plan.plan_id}?company_id=${companyId}`,
+          { method: "POST", headers: apiHeaders() },
+        );
+        if (!approveRes.ok) {
+          const err = await approveRes.json().catch(() => ({}));
+          throw new Error(err.detail || `Approve failed (${approveRes.status})`);
+        }
+        setPlan(prev => ({ ...prev, status: "approved" }));
+      }
+
+      const fd = new FormData();
+      fd.append("file", selectedFile);
+      fd.append("company_id", companyId);
+
       const res = await fetch(`${RAILWAY_URL}/ingestion/load/${plan.plan_id}`, {
         method: "POST",
         headers: apiHeaders(),
