@@ -229,14 +229,52 @@ def _b44_people(company_id: str):
 
 
 def _b44_enterprises(company_id: str):
+    # Tier 1: raw table strict company_id match
     raw = _read_raw_table("enterprises", company_id)
     if not raw.empty:
-        logger.info("_b44_enterprises: using raw.enterprises (%d rows)", len(raw))
+        logger.info("_b44_enterprises: raw strict (%d rows)", len(raw))
         return raw
+
+    # Tier 2: raw table null-company_id — enterprises created before tenant tagging
+    engine = get_engine_safe()
+    if engine:
+        try:
+            with engine.connect() as conn:
+                null_raw = _pd.read_sql(
+                    text(
+                        "SELECT * FROM raw.enterprises "
+                        "WHERE company_id IS NULL OR TRIM(company_id) = '' "
+                        "LIMIT 500"
+                    ),
+                    conn,
+                )
+            if not null_raw.empty:
+                logger.info(
+                    "_b44_enterprises: null-cid raw fallback (%d rows) for company_id=%s",
+                    len(null_raw), company_id,
+                )
+                return null_raw
+        except Exception as e:
+            logger.debug("_b44_enterprises: null-cid raw query failed: %s", e)
+
+    # Tier 3: Base44 live — strict filter, then null-cid fallback
     try:
         from etl.enterprises import extract_enterprises
         df = extract_enterprises()
-        return _filter_by_company(df, company_id)
+        filtered = _filter_by_company(df, company_id)
+        if not filtered.empty:
+            return filtered
+        # Tier 4: Base44 live null-cid — enterprises without tenant tag
+        if "company_id" in df.columns:
+            null_mask = df["company_id"].isna() | (df["company_id"].astype(str).str.strip() == "")
+            null_ents = df[null_mask]
+            if not null_ents.empty:
+                logger.info(
+                    "_b44_enterprises: live null-cid fallback (%d rows) for company_id=%s",
+                    len(null_ents), company_id,
+                )
+                return null_ents
+        return _pd.DataFrame()
     except Exception as e:
         logger.warning("_b44_enterprises fallback failed: %s", e)
         return _pd.DataFrame()
