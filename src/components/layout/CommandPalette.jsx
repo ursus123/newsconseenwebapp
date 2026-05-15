@@ -36,7 +36,7 @@ const NAV_COMMANDS = [
   { id: "nav-transactions", label: "Transactions",        page: "Transactions",icon: Receipt,         section: "Navigate" },
   { id: "nav-addresses",    label: "Addresses",           page: "Addresses",   icon: MapPin,          section: "Navigate" },
   { id: "nav-relationships",label: "Relationships",       page: "Relationships",icon: Link2,          section: "Navigate" },
-  { id: "nav-copilot",      label: "Copilot",             page: "copilot",     icon: Sparkles,        section: "Navigate" },
+  { id: "nav-idjwi",        label: "Idjwi",               page: "idjwi",       icon: Sparkles,        section: "Navigate" },
   { id: "nav-alerts",       label: "Alerts",              page: "alerts",      icon: Bell,            section: "Navigate" },
   { id: "nav-agents",       label: "Agents",              page: "agents",      icon: Brain,           section: "Navigate" },
   { id: "nav-workflows",    label: "Workflows",           page: "Workflows",   icon: GitBranch,       section: "Navigate" },
@@ -134,10 +134,10 @@ export default function CommandPalette({ currentUser }) {
 
     const filtered = [
       ...(isCopilotQuery ? [{
-        id:      "ask-copilot",
-        label:   `Ask Copilot: "${query}"`,
+        id:      "ask-idjwi",
+        label:   `Ask Idjwi: "${query}"`,
         icon:    Sparkles,
-        section: "Copilot",
+        section: "Idjwi",
         _query:  query,
       }] : []),
       ...ACTION_COMMANDS.filter(c => c.label.toLowerCase().includes(q)),
@@ -210,8 +210,8 @@ export default function CommandPalette({ currentUser }) {
 
   async function execute(item) {
     // Ask copilot
-    if (item.id === "ask-copilot") {
-      navigate(createPageUrl("copilot") + `?q=${encodeURIComponent(item._query)}`);
+    if (item.id === "ask-idjwi") {
+      navigate(createPageUrl("idjwi") + `?q=${encodeURIComponent(item._query)}`);
       setOpen(false);
       return;
     }

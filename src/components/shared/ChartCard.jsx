@@ -67,10 +67,10 @@ export default function ChartCard({ title, description, sql, currentUser, entity
         const data = await resp.json();
         setCopilotText(data.answer || data.response || data.message || "No explanation available.");
       } else {
-        setCopilotText("Copilot unavailable — check Railway connection.");
+        setCopilotText("Idjwi unavailable — check Railway connection.");
       }
     } catch (e) {
-      setCopilotText("Could not reach copilot. Ensure python_layer is running.");
+      setCopilotText("Could not reach Idjwi. Ensure python_layer is running.");
     }
     setCopilotLoading(false);
   };

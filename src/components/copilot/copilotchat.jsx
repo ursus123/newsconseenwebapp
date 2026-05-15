@@ -96,7 +96,7 @@ function PinnableTable({ headers, rows, companyId, toolsDetail, tableIndex }) {
   const handlePin = async () => {
     if (pinning || pinned || !companyId) return;
     setPinning(true);
-    const title = headers.join(" / ").slice(0, 60) || `Copilot Table ${tableIndex + 1}`;
+    const title = headers.join(" / ").slice(0, 60) || `Idjwi Table ${tableIndex + 1}`;
     const toolName  = toolsDetail?.[0]?.tool || "";
     const toolParams = toolsDetail?.[0]?.params || {};
     try {
@@ -108,10 +108,10 @@ function PinnableTable({ headers, rows, companyId, toolsDetail, tableIndex }) {
         chart_type:  "table",
         status:      "active",
         company_id:  companyId,
-        description: `Copilot table · ${headers.length} cols · ${rows.length} rows · tool: ${toolName}`,
+        description: `Idjwi table · ${headers.length} cols · ${rows.length} rows · tool: ${toolName}`,
         table_snapshot: JSON.stringify({ headers, rows }),
         shared_with_roles: ["admin","analyst","executive"],
-        source: "copilot",
+        source: "idjwi",
       });
       setPinned(true);
       setTimeout(() => setPinned(false), 3000);
@@ -1331,7 +1331,7 @@ function IngestionPlanCard({ plan, companyId, onConfirm, onDismiss }) {
 }
 
 // ── Main CopilotChat component ───────────────────────────────────────────────
-export default function CopilotChat({ currentUser, className = "", initialMessage = "" }) {
+export default function CopilotChat({ currentUser, className = "", initialMessage = "", selectedModel = "claude-sonnet-4-6" }) {
   const navigate = useNavigate();
   const [messages, setMessages]   = useState([]);
   const [input, setInput]         = useState(initialMessage || "");
@@ -1486,6 +1486,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           question:   confirmMsg.content,
           company_id: companyId,
           history,
+          model:      selectedModel,
         }),
       });
       const result = await resp.json();
@@ -1549,6 +1550,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           company_id:      companyId,
           enterprise_name: currentUser?.enterprise_name || "",
           history,
+          model:           selectedModel,
         }),
       });
 
@@ -1617,7 +1619,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
   if (!companyId) {
     return (
       <div className="flex items-center justify-center h-64 text-slate-400 text-sm">
-        Sign in to use the Copilot
+        Sign in to use Idjwi
       </div>
     );
   }
@@ -1642,7 +1644,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
               <Sparkles className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-800">AI Copilot</p>
+              <p className="text-sm font-semibold text-slate-800">Idjwi</p>
               <p className="text-[10px] text-slate-400">
                 {context?.data_available
                   ? `${context.enterprise_count ?? 0} enterprise${context.enterprise_count !== 1 ? "s" : ""} · ${

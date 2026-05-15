@@ -28,7 +28,7 @@ export const DESKTOP_APPS = [
   { id: "objectexplorer",name: "Object Explorer",      icon: "🔭", color: "#9333ea", route: "/ObjectExplorer",     category: "Analytics" },
 
   // Intelligence
-  { id: "copilot",       name: "Copilot",              icon: "🧠", color: "#10b981", route: "/copilot",            category: "Intelligence" },
+  { id: "copilot",       name: "Idjwi",                icon: "🧠", color: "#10b981", route: "/idjwi",             category: "Intelligence" },
   { id: "alerts",        name: "Alerts",               icon: "🔔", color: "#f43f5e", route: "/alerts",             category: "Intelligence" },
   { id: "agents",        name: "Agents",               icon: "⚡", color: "#8b5cf6", route: "/agents",             category: "Intelligence" },
 

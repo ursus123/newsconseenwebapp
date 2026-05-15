@@ -578,8 +578,9 @@ function MLInsightsPanel({ currentUser, onBack }) {
 // Shows all charts pinned from Copilot (source="copilot" or tool_name set) and
 // from QueryBuilder (sql_query set). Each card has a query label + Open button.
 function PinnedChartsGrid({ charts, currentUser, onOpen }) {
-  const pinned = charts.filter(c => c.source === "copilot" || c.tool_name || c.sql_query);
-  const copilotCharts = pinned.filter(c => c.source === "copilot" || c.tool_name);
+  const isIdjwi = c => c.source === "copilot" || c.source === "idjwi" || c.tool_name;
+  const pinned = charts.filter(c => isIdjwi(c) || c.sql_query);
+  const copilotCharts = pinned.filter(isIdjwi);
   const queryCharts   = pinned.filter(c => c.sql_query && !c.tool_name);
 
   const CardGroup = ({ title, icon: Icon, color, items }) => {
@@ -604,7 +605,7 @@ function PinnedChartsGrid({ charts, currentUser, onOpen }) {
                       ? "bg-violet-100 text-violet-600"
                       : "bg-blue-100 text-blue-600"
                   }`}>
-                    {chart.source === "copilot" || chart.tool_name ? "Copilot" : "QueryBuilder"}
+                    {chart.source === "copilot" || chart.source === "idjwi" || chart.tool_name ? "Idjwi" : "QueryBuilder"}
                   </span>
                   <span className="text-[9px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full uppercase tracking-wide">
                     {chart.chart_type || "table"}
@@ -659,7 +660,7 @@ function PinnedChartsGrid({ charts, currentUser, onOpen }) {
           <Pin className="w-10 h-10 text-slate-200 mb-4" />
           <p className="text-sm font-semibold text-slate-600 mb-1">No pinned charts yet</p>
           <p className="text-xs text-slate-400 max-w-xs">
-            Pin charts from the Copilot by clicking the pin button on any table or chart response.
+            Pin charts from Idjwi by clicking the pin button on any table or chart response.
             QueryBuilder charts pinned here too.
           </p>
         </div>
@@ -946,9 +947,9 @@ export default function Reports() {
               }`}
             >
               <Pin className="w-3.5 h-3.5" /> Pinned Charts
-              {charts.filter(c => c.source === "copilot" || c.tool_name).length > 0 && (
+              {charts.filter(c => c.source === "copilot" || c.source === "idjwi" || c.tool_name).length > 0 && (
                 <span className="ml-0.5 bg-violet-100 text-violet-600 text-[9px] font-bold px-1.5 py-0.5 rounded-full">
-                  {charts.filter(c => c.source === "copilot" || c.tool_name).length}
+                  {charts.filter(c => c.source === "copilot" || c.source === "idjwi" || c.tool_name).length}
                 </span>
               )}
             </button>

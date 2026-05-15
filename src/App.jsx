@@ -26,6 +26,7 @@ import FileManager from './pages/FileManager';
 import Attendance from './pages/Attendance';
 import MapExplorer from './pages/MapExplorer';
 import Copilot from './pages/Copilot';
+import Idjwi from './pages/Idjwi';
 import AlertsPageWrapper from './pages/AlertsPageWrapper';
 import NetworkPage from './pages/NetworkPage';
 import Connectors from './pages/Connectors';
@@ -133,7 +134,8 @@ const AuthenticatedApp = () => {
       <Route path="/ClientOnboarding" element={<LayoutWrapper currentPageName="Enroll Student/Client"><ClientOnboarding /></LayoutWrapper>} />
       <Route path="/Attendance" element={<LayoutWrapper currentPageName="Attendance"><Attendance /></LayoutWrapper>} />
       <Route path="/MapExplorer" element={<LayoutWrapper currentPageName="Map Explorer"><MapExplorer /></LayoutWrapper>} />
-      <Route path="/copilot" element={<LayoutWrapper currentPageName="Copilot"><Copilot /></LayoutWrapper>} />
+      <Route path="/idjwi"   element={<LayoutWrapper currentPageName="Idjwi"><Idjwi /></LayoutWrapper>} />
+      <Route path="/copilot" element={<LayoutWrapper currentPageName="Idjwi"><Idjwi /></LayoutWrapper>} />
       <Route path="/alerts" element={<LayoutWrapper currentPageName="Operational Alerts"><AlertsPageWrapper /></LayoutWrapper>} />
       <Route path="/network" element={<LayoutWrapper currentPageName="Network"><NetworkPage /></LayoutWrapper>} />
       <Route path="/Connectors" element={<LayoutWrapper currentPageName="Connectors"><Connectors /></LayoutWrapper>} />

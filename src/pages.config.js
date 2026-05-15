@@ -89,6 +89,7 @@ import InspectionChecklist from './pages/InspectionChecklist';
 import DocumentExpiry from './pages/DocumentExpiry';
 import PdfToOntology from './pages/PdfToOntology';
 import IntelligenceInbox from './pages/IntelligenceInbox';
+import Idjwi from './pages/Idjwi';
 
 export const PAGES = {
     "AddClient": AddClient,
@@ -133,6 +134,7 @@ export const PAGES = {
     "DocumentExpiry": DocumentExpiry,
     "PdfToOntology": PdfToOntology,
     "IntelligenceInbox": IntelligenceInbox,
+    "idjwi": Idjwi,
 }
 
 export const pagesConfig = {

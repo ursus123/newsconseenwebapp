@@ -113,7 +113,7 @@ export default function CopilotWidget({ open, onClose, user }) {
       const data = await res.json();
       setMessages(prev => [...prev, { role: "assistant", content: data.response || data.message || "No response" }]);
     } catch (err) {
-      setMessages(prev => [...prev, { role: "assistant", content: `Sorry, I couldn't connect to the Copilot right now. (${err.message})` }]);
+      setMessages(prev => [...prev, { role: "assistant", content: `Sorry, I couldn't connect to Idjwi right now. (${err.message})` }]);
     }
     setLoading(false);
   };
@@ -156,7 +156,7 @@ export default function CopilotWidget({ open, onClose, user }) {
                   <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                 </div>
                 <div>
-                  <span className="text-white font-semibold text-sm">Copilot</span>
+                  <span className="text-white font-semibold text-sm">Idjwi</span>
                   <span className="ml-2 text-[10px] text-emerald-400 font-medium">AI</span>
                 </div>
               </div>

@@ -1646,10 +1646,10 @@ const API_CATALOGUE = [
     ],
   },
   {
-    name: "Copilot", prefix: "/copilot", color: "#0891b2", bg: "#ecfeff",
-    desc: "Claude-powered Q&A grounded in operator data. Tool loop with 40+ query tools + create_record + import_records write-back.",
+    name: "Idjwi", prefix: "/copilot", color: "#0891b2", bg: "#ecfeff",
+    desc: "Idjwi reasoning engine — LLM-powered Q&A grounded in operator data. Accepts model param (Haiku/Sonnet/Opus). Tool loop with 40+ query tools + create_record + import_records write-back.",
     endpoints: [
-      { method: "POST", path: "/copilot/ask",              desc: "Submit query → tool loop → grounded answer (streaming)" },
+      { method: "POST", path: "/copilot/ask",              desc: "Submit query → tool loop → grounded answer. Accepts model: claude-haiku-4-5 | claude-sonnet-4-6 | claude-opus-4-7" },
       { method: "GET",  path: "/copilot/status",           desc: "Backend availability + ANTHROPIC_API_KEY check" },
       { method: "GET",  path: "/copilot/memory",           desc: "Read analytics.copilot_memory for company" },
       { method: "DELETE",path: "/copilot/memory/{key}",   desc: "Remove a memory entry by key" },

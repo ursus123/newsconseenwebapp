@@ -49,8 +49,10 @@ be tested against it.
 
 - If a feature creates a new silo instead of connecting to master data — it violates the mantra.
 - If an app hardcodes its own type system instead of reading from the taxonomy — it violates the mantra.
-- If a dashboard reads directly from Base44 instead of the analytical layer — it violates the mantra.
+- If a dashboard reads directly from Supabase instead of the analytical layer — it violates the mantra.
 - If a new vertical requires rebuilding the data model — it violates the mantra.
+- If an agent acts without reading from the analytical layer — it violates the mantra.
+- If the system surfaces an insight but leaves a human to manually close every loop — it violates the mantra.
 
 The mantra also sets the ambition ceiling. Newsconseen gives SMEs the same
 operational intelligence capability that enterprise systems give large organisations:
@@ -58,31 +60,37 @@ operational intelligence capability that enterprise systems give large organisat
 | Enterprise capability | Newsconseen equivalent |
 |---|---|
 | Ontology — semantic object model | Three master entities + universal taxonomy |
-| Pipelines — ingest from any source | python_layer ETL + external connectors (roadmap) |
-| Analytical datasets layer | PostgreSQL analytics.* via nightly ETL |
-| Applications built on the ontology | Base44 apps filtered through taxonomy |
+| Pipelines — ingest from any source | python_layer ETL + 35 external connectors |
+| Analytical datasets layer | PostgreSQL analytics.* via ETL pipeline |
+| Applications built on the ontology | React apps (Supabase-backed) filtered through taxonomy |
 | Actions — write back to source | Form → master data → ETL trigger |
 | Typed ontology SDK | useTaxonomy + TaxonomySelect + TYPE_ALIASES |
-| AI reasoning over ontology | Operational copilot + autonomous agents |
+| AI reasoning over ontology | Operational copilot grounded in Layer 2 data |
+| **Autonomous execution** | **8 agents: monitor → reason → act → learn via agent memory** |
 | Multi-tenant | company_id scoping across all entities |
 | Operator extensibility | MasterDataOption custom taxonomy values |
 
 ---
 
-## 3. The Three Pillars
+## 3. The Four Pillars
 
 Every screen, every feature, every component in Newsconseen does exactly one of
-three things:
+four things:
 
 ```
-Forms create reality → Databases store reality → Dashboards explain reality
+Forms create reality → Databases store reality → Intelligence explains reality → Agents act on reality
 ```
 
 | Pillar | What it means | Examples |
 |---|---|---|
-| Forms create reality | User input creates or updates master data | Add Person, Add Enterprise, Log Transaction, Stock Count, Attendance Register |
-| Databases store reality | ETL extracts, transforms, loads into analytical layer | python_layer nightly pipeline, PostgreSQL analytics summaries |
-| Dashboards explain reality | Intelligence reads from analytical layer, surfaces insights | Revenue trends, Inventory alerts, Attendance rates, People retention |
+| Forms create reality | Human input creates or updates master data | Add Person, Add Enterprise, Log Transaction, Stock Count, Attendance Register |
+| Databases store reality | ETL extracts, transforms, loads into analytical layer | python_layer pipeline, PostgreSQL analytics summaries |
+| Intelligence explains reality | Reads from analytical layer, surfaces insights for the operator | Revenue trends, Inventory alerts, Attendance rates, Copilot answers |
+| **Agents act on reality** | **AI reads insight → reasons → drafts action → executes (with or without approval) → learns** | **Retention alert sent, task auto-created, reorder triggered, risk escalated, weekly briefing drafted** |
+
+The fourth pillar is what makes the mantra true. The first three pillars describe
+any capable BI platform. The fourth is what makes Newsconseen an *autonomous* OS —
+the operator's business runs itself, and gets smarter every day it runs.
 
 If you are building something and cannot identify which pillar it belongs to —
 stop and ask before building.
@@ -97,7 +105,7 @@ Newsconseen has three distinct product layers. Every component belongs to one of
 ┌─────────────────────────────────────────────────────────────────┐
 │  LAYER 1 — ENTERPRISE OS                                         │
 │  System of record for operations                                 │
-│  Base44 · Master entities · Forms · Taxonomy · Relationships     │
+│  Supabase · Master entities · Forms · Taxonomy · Relationships   │
 ├─────────────────────────────────────────────────────────────────┤
 │  LAYER 2 — DEPLOYABLE DATAMART                                   │
 │  Analytical engine                                               │
@@ -113,9 +121,10 @@ Newsconseen has three distinct product layers. Every component belongs to one of
 
 The system of record. Every operational event — a person joining, a transaction
 posted, stock counted, attendance marked — is captured here as structured master
-data. Base44 is the runtime. The canonical entities (Person, Enterprise, Product, Task,
-Transaction, Relationship, Address — plus the Phase 9/10 extension and domain-native entities)
-are the objects. The universal taxonomy classifies every object without constraining it.
+data. Supabase (PostgreSQL + RLS + Auth + Realtime) is the runtime. The canonical
+entities (Person, Enterprise, Product, Task, Transaction, Relationship, Address —
+plus the Phase 9/10 extension and domain-native entities) are the objects. The
+universal taxonomy classifies every object without constraining it.
 
 This layer answers: *What is happening in this enterprise right now?*
 
@@ -125,7 +134,7 @@ The analytical engine. python_layer extracts from the Enterprise OS nightly,
 transforms raw records into classified analytics summaries, and loads them into
 PostgreSQL. FastAPI serves those summaries to any consumer. The datamart is
 tenant-scoped, schema-consistent, and taxonomy-clean — whatever raw values come
-in from Base44, the ETL normalizes them to taxonomy values before storing.
+in from Supabase, the ETL normalizes them to taxonomy values before storing.
 
 This layer answers: *What has been happening over time, and how does it compare?*
 
@@ -133,7 +142,7 @@ This layer answers: *What has been happening over time, and how does it compare?
 
 The intelligence surface. QueryBuilder, dashboards, operational copilot, and
 autonomous agents that act on behalf of the operator. This layer reads exclusively
-from the Datamart — never from Base44 directly. It speaks in ontology terms —
+from the Datamart — never from Supabase directly. It speaks in ontology terms —
 person_type, enterprise_subtype, item_class — not in raw SQL columns.
 
 The copilot allows an operator to ask questions in plain language and receive
@@ -148,7 +157,7 @@ This layer answers: *What does this data mean, and what should I do about it?*
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                      BASE44 (Layer 1)                             │
+│                    SUPABASE (Layer 1)                             │
 │                                                                   │
 │  ┌──────────┐  ┌─────────────┐  ┌──────────┐  ┌─────────────┐   │
 │  │  People  │  │ Enterprises │  │  Items   │  │    Apps     │   │
@@ -159,8 +168,8 @@ This layer answers: *What does this data mean, and what should I do about it?*
 │              Person · Enterprise · Product · Relationship         │
 │                   MasterDataOption (Taxonomy)                     │
 └──────────────────────────────┬───────────────────────────────────┘
-                               │ Base44 REST API (nightly pull)
-                               │ Webhook / event trigger (roadmap)
+                               │ Supabase REST API (nightly pull)
+                               │ Supabase Realtime / event trigger
 ┌──────────────────────────────▼───────────────────────────────────┐
 │                  python_layer on Railway (Layer 2)                 │
 │                                                                   │
@@ -175,12 +184,12 @@ This layer answers: *What does this data mean, and what should I do about it?*
 └──────────────────────────────┬───────────────────────────────────┘
                                │ python_layer REST API
 ┌──────────────────────────────▼───────────────────────────────────┐
-│           Base44 QueryBuilder / Reports / Dashboards (Layer 3)    │
+│              React QueryBuilder / Reports / Dashboards (Layer 3)  │
 │                                                                   │
 │   analytics_people · analytics_transactions · analytics_products  │
 │   analytics_tasks · analytics_relationships · analytics_addresses │
 │                                                                   │
-│   Operational copilot — LLM reasoning over ontology (roadmap)    │
+│   Operational copilot — LLM reasoning over ontology              │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -210,51 +219,51 @@ vertical requires a different build. If types are stored in MasterDataOption and
 loaded at runtime, the same codebase works for every vertical. The taxonomy is the
 technical implementation of the mantra.
 
-### Why a nightly ETL instead of querying Base44 directly?
+### Why a nightly ETL instead of querying Supabase directly?
 
-Because operational systems and analytical systems have different jobs. Base44 is
-optimized for transactional writes. PostgreSQL analytics tables are optimized for
-aggregations, trends, and cross-entity queries. Running analytical queries directly
-against an operational system degrades performance for both. The ETL separates the
-concerns cleanly.
+Because operational systems and analytical systems have different jobs. Supabase is
+optimized for transactional writes (Row-Level Security, auth, realtime). PostgreSQL
+analytics tables are optimized for aggregations, trends, and cross-entity queries.
+Running analytical queries directly against the operational database degrades
+performance for both. The ETL separates the concerns cleanly.
 
 ---
 
-## 8. The Base44 Fallback Doctrine
+## 8. The Supabase Fallback Doctrine
 
 **This is a mandatory architectural rule. Every feature that reads data must follow it.**
 
 ### The data flow
 
 ```
-Base44 (Layer 1)
-   │  forms write master data here
+Supabase (Layer 1)
+   │  forms write master data here (via base44Client proxy → supabaseEntityClient)
    │  ETL pulls from here on every mutation
    ▼
 python_layer (Layer 2)
-   │  GET /people-summary → extract_people() from Base44 live → return JSON
+   │  GET /people-summary → extract_people() from Supabase live → return JSON
    │  POST /load/people-summary → ETL write to PostgreSQL analytics.*
    │  GET /raw/{entity} → read from PostgreSQL raw.* schema
    ▼
 Frontend / Intelligence (Layer 3)
    │  reads from python_layer
-   │  if python_layer unreachable or returns empty → must fall back to Base44
+   │  if python_layer unreachable or returns empty → must fall back to Supabase
    ▼
 User sees complete data always
 ```
 
 **Key fact:** python_layer GET summary endpoints (`/people-summary`, `/enterprise-summary`, etc.)
-already call `extract_*()` from Base44 live on every request — they do NOT read from PostgreSQL.
+already call `extract_*()` from Supabase live on every request — they do NOT read from PostgreSQL.
 PostgreSQL is only written to by the POST `/load/*` ETL endpoints, and read by the analytics
 Query Builder tables (`analytics_*`).
 
 ### When does data go missing?
 
 1. Railway is cold-starting or unreachable → GET requests fail → frontend gets `[]`
-2. A user enters new data in Base44 and goes to the dashboard immediately — before python_layer
+2. A user enters new data and goes to the dashboard immediately — before python_layer
    responds, the frontend has `[]` from a failed or slow request
 3. Query Builder queries `analytics_people` or `raw_people` — if ETL has not run, these
-   PostgreSQL tables are empty even though Base44 has data
+   PostgreSQL tables are empty even though Supabase has data
 
 ### The mandatory fallback pattern
 
@@ -263,9 +272,9 @@ Query Builder tables (`analytics_*`).
 ```
 Tier 1: Try python_layer endpoint
          ↓ if empty or unreachable
-Tier 2: Fall back to Base44 entities directly (already loaded or fetched live)
-         ↓ (never show 0 if Base44 has data)
-Tier 3: Show empty state only if Base44 also returns nothing
+Tier 2: Fall back to Supabase entities directly (via base44Client proxy)
+         ↓ (never show 0 if Supabase has data)
+Tier 3: Show empty state only if Supabase also returns nothing
 ```
 
 ### Frontend implementation rule
@@ -274,19 +283,19 @@ Tier 3: Show empty state only if Base44 also returns nothing
 // WRONG — shows 0 whenever Railway is slow or unreachable
 const totalPeople = peopleSummary.reduce((sum, r) => sum + (r.total_count || 0), 0);
 
-// CORRECT — falls back to already-loaded Base44 entities when summary is empty
+// CORRECT — falls back to already-loaded Supabase entities when summary is empty
 const totalPeople = peopleSummary.length > 0
   ? peopleSummary.reduce((sum, r) => sum + (r.total_count || 0), 0)
-  : people.length;  // people = base44.entities.Person already loaded
+  : people.length;  // people = base44.entities.Person (proxied to Supabase)
 ```
 
 ### Query Builder rule
 
 When `analytics_*` or `raw_*` table returns empty from python_layer, fall back to
-the equivalent Base44 entity:
+the equivalent Supabase entity query:
 
 ```javascript
-// analytics_people / raw_people empty → base44.entities.Person.list()
+// analytics_people / raw_people empty → base44.entities.Person.list()   (→ Supabase)
 // analytics_enterprises / raw_enterprises empty → base44.entities.Enterprise.list()
 // etc.
 ```
@@ -302,14 +311,14 @@ the equivalent Base44 entity:
 - Any future feature reading from python_layer ✓
 
 PostgreSQL is for clean data export to exterior databases and for analytical performance
-acceleration. It is never the sole data source. Base44 is always the fallback.
+acceleration. It is never the sole data source. Supabase is always the fallback.
 
 ### Why does taxonomy normalization happen in the ETL and API?
 
 Because the frontend cannot be trusted to normalize consistently across every
 component and every developer. The ETL and API are the chokepoints — all data
 passes through them. Normalizing at those layers means every consumer of the API
-always receives clean taxonomy values regardless of what was stored in Base44.
+always receives clean taxonomy values regardless of what was stored in Supabase.
 
 ---
 
@@ -324,7 +333,7 @@ verifies it.
 
 ### Phase 2 — External connectivity
 
-python_layer opens up to external data sources beyond Base44:
+python_layer opens up to external data sources beyond Supabase:
 
 - **Excel and Google Sheets** — import years of existing operational data into the
   ontology without re-entry
@@ -345,7 +354,7 @@ The ontology absorbs new data sources without changing.
 Move from nightly ETL to event-driven updates:
 
 - **Stage 1** — Triggered ETL after every mutation (partially built)
-- **Stage 2** — Webhook from Base44 to python_layer. Records push events on change.
+- **Stage 2** — Supabase Realtime events to python_layer. Records push events on change.
   ETL processes events within seconds not hours.
 - **Stage 3** — In-memory operational queries for high-frequency apps
   (attendance, stock, scheduling)
@@ -568,7 +577,7 @@ people.filter(p => p.person_type === "staff"  && p.person_subtype === "Teacher")
 
 ### 11.2 TYPE_ALIASES — backward compatibility
 
-Old Base44 data uses old type values. Always include aliases until all data is migrated.
+Legacy data may use old type values. Always include aliases until all data is migrated.
 
 ```javascript
 const TYPE_ALIASES = {
@@ -619,7 +628,7 @@ triggerETL("transaction");  // after transaction posted
 ## 12. python_layer — ETL and API
 
 The python_layer is a FastAPI service on Railway. It is the analytical engine — Layer 2.
-**It never writes back to Base44. Data flows one way only: Base44 → python_layer → PostgreSQL.**
+**It never writes back to Supabase. Data flows one way only: Supabase → python_layer → PostgreSQL.**
 
 **Railway production URL:** `https://newsconseenwebapp-production.up.railway.app`
 
@@ -705,7 +714,7 @@ All `/cron/*` and `/load/*` endpoints require `x-cron-secret` header.
 | GET | `/ml/segments` | Customer segmentation (requires ML_ENABLED=true) |
 | GET | `/ml/survival` | Churn survival analysis (requires ML_ENABLED=true) |
 
-### 12.5 How Base44 reads from python_layer
+### 12.5 How the frontend reads from python_layer
 
 ```javascript
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
@@ -731,15 +740,23 @@ const fetchAnalyticsTable = async (tableName, companyId) => {
 
 Go to Railway → your service → Variables and set the following.
 
-#### Core (existing — confirm still set)
+#### Core
 
 ```
-DATABASE_URL              — Railway PostgreSQL connection string
-BASE44_API_KEY            — Base44 API key for ETL extraction
-VITE_BASE44_APP_ID        — Base44 app ID
-CRON_SECRET               — Protects all /cron/* and /load/* endpoints
-ML_ENABLED                — false (set true only when ML endpoints are ready)
-NOMINATIM_CONTACT_EMAIL   — Required for Nominatim geocoding
+# Layer 1 — Supabase (authoritative data store)
+SUPABASE_URL                — Supabase project URL (https://<ref>.supabase.co)
+SUPABASE_SERVICE_ROLE_KEY   — Service-role key for server-side ETL queries (bypasses RLS)
+
+# Frontend build (Vite)
+VITE_SUPABASE_URL           — Same as SUPABASE_URL — exposed to browser
+VITE_SUPABASE_ANON_KEY      — Anon/public key — used by browser (RLS enforced)
+VITE_DATA_LAYER             — Set to "supabase" (default)
+
+# Layer 2 — python_layer
+DATABASE_URL                — Railway PostgreSQL connection string
+CRON_SECRET                 — Protects all /cron/* and /load/* endpoints
+ML_ENABLED                  — false (set true only when ML endpoints are ready)
+NOMINATIM_CONTACT_EMAIL     — Required for Nominatim geocoding
 ```
 
 #### Phase 3A — Operational Copilot
@@ -772,16 +789,9 @@ AT_API_KEY                — from africastalking.com dashboard
 AT_USERNAME               — your AT username
 AT_SENDER_ID              — Newsconseen
 
-# SMS — Twilio (alternative)
-# SMS_PROVIDER            — twilio
-# TWILIO_ACCOUNT_SID      — ACxxx
-# TWILIO_AUTH_TOKEN       — xxx
-# TWILIO_FROM_NUMBER      — +1234567890
-
 # Alert defaults (fallback before AlertConfig is configured in the DB)
 ALERT_DEFAULT_EMAIL       — your@email.com
 ALERT_DEFAULT_WHATSAPP    — +254712345678
-ALERT_DEFAULT_PHONE       — +254712345678
 ALERT_FROM_EMAIL          — alerts@newsconseen.com
 ALERT_FROM_NAME           — Newsconseen Alerts
 ```
@@ -790,16 +800,6 @@ ALERT_FROM_NAME           — Newsconseen Alerts
 
 ```
 NETWORK_ADMIN_KEY         — secret key protecting join code generation and member removal endpoints
-```
-
-#### Phase 3C — Base44 entity API URLs (replace YOUR_APP_ID with your actual Base44 app ID)
-
-```
-BASE44_NETWORK_MEMBERSHIP_URL   — https://app.base44.com/api/apps/YOUR_APP_ID/entities/networkmemberships
-BASE44_JOIN_CODES_URL           — https://app.base44.com/api/apps/YOUR_APP_ID/entities/joincodes
-BASE44_ALERT_CONFIG_URL         — https://app.base44.com/api/apps/YOUR_APP_ID/entities/alertconfigs
-BASE44_ALERT_LOG_URL            — https://app.base44.com/api/apps/YOUR_APP_ID/entities/alertlogs
-BASE44_CONNECTOR_MAPPINGS_URL   — https://app.base44.com/api/apps/YOUR_APP_ID/entities/connectormappings
 ```
 
 ---
@@ -892,7 +892,7 @@ GET https://newsconseenwebapp-production.up.railway.app/health
 
 ## 16. Data Migration
 
-Run once in QueryBuilder to align all existing Base44 data to the current taxonomy.
+Run once in QueryBuilder to align legacy data to the current taxonomy.
 
 ```sql
 UPDATE people SET person_type = 'staff'
@@ -904,7 +904,7 @@ WHERE person_type IN ('vendor', 'supplier', 'external_partner');
 UPDATE products SET item_type = 'physical'
 WHERE item_type IN ('product', 'goods', 'medication', 'equipment');
 
--- NOTE (Phase 10): The Animal entity (base44.entities.Animal) is now the
+-- NOTE (Phase 10): The Animal entity (supabaseEntities.Animal) is now the
 -- preferred data path for livestock, poultry, and aquatic species that need
 -- individual tracking (age, weight, health records, vet data).
 -- item_type = 'living' remains valid for non-individually-tracked living goods
@@ -958,7 +958,7 @@ Before saving any file, verify every item. If any item cannot be checked — sto
 
 **Analytics integrity**
 - [ ] Fires ETL refresh after mutations that affect analytics
-- [ ] Reads analytics from python_layer endpoints — not Base44 entities directly
+- [ ] Reads analytics from python_layer endpoints — not Supabase entities directly
 - [ ] Uses analytics_* table names that map to python_layer endpoints
 
 **Architecture integrity**

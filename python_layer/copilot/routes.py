@@ -43,7 +43,8 @@ class AskRequest(BaseModel):
     history:              Optional[list[dict]] = []
     context:              Optional[dict] = {}
     session_id:           Optional[str] = ""   # if set, history persisted in session store
-    # Entity-page context — injected when Copilot is opened from an entity record
+    model:                Optional[str] = None  # LLM model override; defaults to engine default
+    # Entity-page context — injected when Idjwi is opened from an entity record
     current_page:         Optional[str] = ""
     selected_entity_type: Optional[str] = ""
     selected_entity_id:   Optional[str] = ""
@@ -136,6 +137,7 @@ def ask(request: AskRequest):
         enterprise_name=request.enterprise_name or "",
         backend=COPILOT_BACKEND,
         railway_url=RAILWAY_URL,
+        model=request.model or None,
     )
 
     # Merge entity-page context into the context dict so Claude knows the viewport
@@ -162,14 +164,15 @@ def ask(request: AskRequest):
         # Friendly messages for known error types
         if "ANTHROPIC_API_KEY" in error_msg:
             friendly = (
-                "The Copilot is not configured yet.\n\n"
+                "Idjwi's reasoning engine is not configured yet.\n\n"
                 "To enable it, add ANTHROPIC_API_KEY to the Railway environment variables "
                 "for the python_layer service.\n\n"
-                "Once set, redeploy and the Copilot will be available."
+                "Once set, redeploy and Idjwi will be available.\n\n"
+                "_Note: Idjwi's autonomous monitor (ETL, alerts, agents) continues to run regardless._"
             )
         else:
             friendly = (
-                f"The Copilot encountered an error:\n\n{error_msg}\n\n"
+                f"Idjwi encountered a reasoning error:\n\n{error_msg}\n\n"
                 "If this persists, check the python_layer logs on Railway."
             )
 

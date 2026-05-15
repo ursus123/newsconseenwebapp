@@ -59,7 +59,7 @@ const STARTERS = [
   { label: "What are autonomous agents?",  q: "What autonomous agents does Newsconseen run and what do they do automatically without being asked?" },
   { label: "Live exchange rates",          q: "Show me current exchange rates for major currencies against USD as a chart." },
   { label: "Newsconseen for an NGO",       q: "How would Newsconseen work for an NGO with 50 field staff? What does Idjwi answer day-to-day?" },
-  { label: "How does the copilot work?",   q: "Explain how the Newsconseen copilot works — tools, data sources, and architecture." },
+  { label: "How does Idjwi work?",          q: "Explain how Idjwi works — tools, data sources, two modes (reasoning vs autonomous), and architecture." },
   { label: "What is Idjwi?",              q: "What is Idjwi, what can it do, and how is it different from a regular AI assistant?" },
   { label: "Newsconseen for a school",     q: "How would Newsconseen work for a school group with 5 campuses?" },
 ];
@@ -647,7 +647,7 @@ function AppMockup() {
   const [tab, setTab] = useState("dashboard");
   const TABS = [
     { id: "dashboard", label: "Dashboard", Icon: BarChart2 },
-    { id: "copilot",   label: "Copilot",   Icon: Brain },
+    { id: "idjwi",     label: "Idjwi",     Icon: Brain },
     { id: "agents",    label: "Agents",    Icon: Zap },
   ];
   const SIDEBAR = [BarChart2, Users, Package, CheckSquare, Database, Brain];
@@ -685,7 +685,7 @@ function AppMockup() {
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             {tab === "dashboard" && <DashboardTab />}
-            {tab === "copilot"   && <CopilotTab />}
+            {tab === "idjwi"     && <CopilotTab />}
             {tab === "agents"    && <AgentsTab />}
           </div>
         </div>

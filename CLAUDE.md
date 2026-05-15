@@ -39,10 +39,12 @@ No competitor can replicate this without the history.
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  LAYER 1 — ENTERPRISE OS                                │
-│  Base44 frontend (React)                                │
+│  Supabase (PostgreSQL + RLS + Auth + Realtime)          │
 │  System of record. Master data. Forms create reality.   │
 │  Entities: Person, Enterprise, Product,                 │
 │            Relationship, Task, Transaction, Address     │
+│  Frontend: React — all entity access via base44Client   │
+│            proxy which routes to Supabase               │
 └──────────────────────┬──────────────────────────────────┘
                        │ ETL trigger after every mutation
 ┌──────────────────────▼──────────────────────────────────┐
@@ -50,7 +52,7 @@ No competitor can replicate this without the history.
 │  python_layer on Railway (FastAPI + PostgreSQL)         │
 │  Analytical engine. ETL pipeline. Analytics tables.     │
 │  Rule: ALL stat card values come from here.             │
-│        Never query Base44 directly for analytics.       │
+│        Never query Layer 1 directly for analytics.      │
 └──────────────────────┬──────────────────────────────────┘
                        │ reads Layer 2 only
 ┌──────────────────────▼──────────────────────────────────┐
@@ -60,11 +62,11 @@ No competitor can replicate this without the history.
 └─────────────────────────────────────────────────────────┘
 ```
 
-Golden rule: Forms create reality → Databases store reality → Dashboards explain reality.
+Golden rule: Forms create reality → Databases store reality → Intelligence explains reality → Agents act on reality.
 
 Layer violation example:
 ```javascript
-// WRONG — Layer 1 queried directly for a stat card
+// WRONG — Supabase entity queried directly for a stat card
 const count = await base44.entities.Person.filter({}).then(p => p.length);
 
 // CORRECT — Layer 2 analytics endpoint
@@ -75,24 +77,24 @@ const { data } = useQuery({ queryFn: () => fetchSummary("/people-summary", compa
 
 ## PostgreSQL role — clean data export, not primary source
 
-PostgreSQL (Layer 2) is NOT the authoritative data store. Base44 (Layer 1) is.
+PostgreSQL (Layer 2) is NOT the authoritative data store. Supabase (Layer 1) is.
 
 PostgreSQL serves two purposes:
 1. **Analytics acceleration** — pre-aggregated tables for fast stat cards, charts, copilot queries
-2. **Clean data export** — a structured, clean mirror of Base44 data that operators can connect to
-   external tools (BI tools, Excel, custom databases) without touching Base44 directly
+2. **Clean data export** — a structured, clean mirror of Supabase data that operators can connect to
+   external tools (BI tools, Excel, custom databases) without touching Supabase directly
 
-**Base44 is always the fallback. Every single feature must show complete data even when python_layer
+**Supabase is always the fallback. Every single feature must show complete data even when python_layer
 is unreachable, cold-starting, or has empty tables.**
 
 ### How the data actually flows
 
 ```
-User enters data → Base44 stores it (Layer 1)
+User enters data → Supabase stores it (Layer 1)
                         │
                         ▼
 python_layer GET /people-summary
-  → calls extract_people() → fetches from Base44 live
+  → calls extract_people() → fetches from Supabase live
   → returns JSON to frontend
   (does NOT read PostgreSQL on GET requests)
 
@@ -102,12 +104,12 @@ python_layer POST /load/people-summary
 
 Frontend
   → tries python_layer first
-  → if unreachable or empty → falls back to base44.entities.* directly
+  → if unreachable or empty → falls back to Supabase entity queries directly
   → user ALWAYS sees their data
 ```
 
 This means: **if ETL has not run (analytics tables are empty), every feature must still work**
-by falling back to Base44 live data.
+by falling back to Supabase live data.
 
 ### Three-tier fallback chain (applies to ALL features)
 
@@ -116,7 +118,7 @@ Tier 1 — analytics.*          PostgreSQL analytics tables (fast, aggregated)
            ↓ if empty or unavailable
 Tier 2 — raw.*                PostgreSQL raw tables (full records, still fast)
            ↓ if empty or unavailable
-Tier 3 — Base44 live API      Direct Base44 entity query (always available)
+Tier 3 — Supabase entity query  Direct Supabase entity query (always available)
 ```
 
 This applies to:
@@ -149,22 +151,25 @@ def _load_raw(table, company_id=None):
                 return filter_by_company(df, company_id)
         except Exception:
             pass
-    return _fetch_from_base44(table, company_id)
+    return _fetch_from_supabase(table, company_id)
 
-def _fetch_from_base44(url_attr, company_id=None):
-    url = getattr(settings, url_attr, None)
-    if not url:
-        return pd.DataFrame()
-    df = fetch_json_to_df(url, HEADERS)
-    if company_id and "company_id" in df.columns:
-        df = df[df["company_id"] == company_id]
-    return df
+def _fetch_from_supabase(table, company_id=None):
+    # Query Supabase via the REST API as the ultimate fallback
+    from config.settings import settings
+    url = f"{settings.supabase_url}/rest/v1/{table}"
+    headers = {"apikey": settings.supabase_service_role_key,
+               "Authorization": f"Bearer {settings.supabase_service_role_key}"}
+    params = {"select": "*"}
+    if company_id:
+        params["company_id"] = f"eq.{company_id}"
+    r = httpx.get(url, headers=headers, params=params)
+    return pd.DataFrame(r.json()) if r.is_success else pd.DataFrame()
 ```
 
 ### Frontend fallback pattern
 ```javascript
-// Always try python_layer first; fall back to Base44 if 404/empty
-async function fetchWithFallback(endpoint, base44Fn, companyId) {
+// Always try python_layer first; fall back to Supabase entity query if 404/empty
+async function fetchWithFallback(endpoint, entityFn, companyId) {
   try {
     const res = await fetch(`${RAILWAY_URL}${endpoint}?company_id=${companyId}`);
     if (res.ok) {
@@ -173,8 +178,8 @@ async function fetchWithFallback(endpoint, base44Fn, companyId) {
         return data;
     }
   } catch (_) {}
-  // Fallback to Base44 live
-  return base44Fn();
+  // Fallback to Supabase live
+  return entityFn();
 }
 ```
 
@@ -185,7 +190,7 @@ async function fetchWithFallback(endpoint, base44Fn, companyId) {
 ```
 newsconseenwebapp/
 ├── CLAUDE.md
-├── src/                              Base44 frontend (React)
+├── src/                              React frontend (Supabase-backed via base44Client proxy)
 │   ├── pages/
 │   │   ├── Enterprises.jsx
 │   │   ├── People.jsx
@@ -261,7 +266,7 @@ The Newsconseen ontology has three tiers:
 
 - **Core (7)** — Person, Enterprise, Product, Task, Transaction, Relationship, Address. Universal across every industry. The original architecture.
 - **Operational extensions (5)** — Document, Schedule, Signal, Channel, Territory. Cross-cutting operational entities added in Phase 9 that any industry may need.
-- **Domain-native (3)** — Animal, Plot, Observation. Agricultural, aquaculture, veterinary, and ecological entities added in Phase 10. These exist as dedicated Base44 entities with their own ETL, analytics tables, copilot tools, and frontend pages.
+- **Domain-native (3)** — Animal, Plot, Observation. Agricultural, aquaculture, veterinary, and ecological entities added in Phase 10. These exist as dedicated Supabase entities (via supabaseEntities registry) with their own ETL, analytics tables, copilot tools, and frontend pages.
 
 The rule "use Person/Enterprise/Product before creating a new entity" still holds for general-purpose cases. It does not apply when the entity model is fundamentally different from all 12 existing entities — that is the threshold that justified Animal, Plot, and Observation.
 
@@ -313,7 +318,7 @@ Any item, service, resource, or deliverable.
 item_type (enum):
   physical | living | digital | service_package | financial_instrument
 
-  Note: item_type = 'living' is a valid Base44 schema value and still used for
+  Note: item_type = 'living' is a valid schema value and still used for
   generic living-goods stock management (e.g. seedlings, plants as inventory items).
   For livestock, poultry, aquatic species, or any animal that needs individual
   tracking, health records, age, weight, or vet data — use the Animal entity instead.
@@ -430,7 +435,7 @@ GET  /health                        Status + last run timestamps + counts
 
 ### ETL multi-tenancy rule — CRITICAL
 The ETL pipeline is shared across ALL tenants. It must:
-- Extract ALL records from Base44 (no company_id filter on extract)
+- Extract ALL records from Supabase (no company_id filter on extract)
 - Stamp each analytics row with the company_id FROM the source record
 - Load all rows for all companies into the same analytics tables
 
@@ -658,20 +663,21 @@ useBrand(currentUser) reads these at runtime and injects CSS variables.
 ## Environment variables (Railway)
 
 ```
-BASE44_API_KEY
-BASE44_APP_ID
-BASE44_PEOPLE_URL
-BASE44_ENTERPRISES_URL
-BASE44_PRODUCTS_URL
-BASE44_TASKS_URL
-BASE44_TRANSACTIONS_URL
-BASE44_SERVICES_URL
-BASE44_RELATIONSHIPS_URL     ← commonly missing → startup crash
-BASE44_ADDRESSES_URL         ← commonly missing → startup crash
+# Layer 1 — Supabase (authoritative data store)
+SUPABASE_URL                 Supabase project URL (https://<ref>.supabase.co)
+SUPABASE_SERVICE_ROLE_KEY    Service-role key for server-side queries (bypasses RLS)
 
+# Frontend (Vite build)
+VITE_SUPABASE_URL            Same as SUPABASE_URL — exposed to browser via vite
+VITE_SUPABASE_ANON_KEY       Anon/public key — used by browser client (RLS enforced)
+VITE_DATA_LAYER              Set to "supabase" to activate Supabase mode (default: supabase)
+
+# Layer 2 — python_layer (datamart)
 DATABASE_URL
 CRON_SECRET
 API_KEY
+
+# Layer 3 — intelligence
 ANTHROPIC_API_KEY
 SENDGRID_API_KEY
 WHATSAPP_TOKEN
@@ -679,13 +685,7 @@ WHATSAPP_PHONE_ID
 NETWORK_ADMIN_KEY
 ```
 
-Startup crash pattern:
-```
-pydantic_core.ValidationError: Field required
-base44_relationships_url
-base44_addresses_url
-```
-Fix: add variables to Railway OR make them Optional[str] = None in settings.py.
+All new settings.py fields must be `Optional[str] = None` so missing variables never crash startup.
 
 ---
 
@@ -726,9 +726,9 @@ const { data } = useQuery({ queryFn: () => fetch(`${RAILWAY_URL}/open-data/excha
 
 ### Never
 - Hardcode person_type values like "employee", "student", "vendor"
-- Query Base44 entities directly for analytics stat card values when python_layer is available
-- Show 0 or empty on any stat card, chart, or ML feature if Base44 entities have data
-- Build any data-reading feature without a Base44 fallback
+- Query Supabase entities directly for analytics stat card values when python_layer is available
+- Show 0 or empty on any stat card, chart, or ML feature if Supabase entities have data
+- Build any data-reading feature without a Supabase entity fallback
 - Create a new entity when any of the 15 canonical entities covers the use case
 - Create a new entity solely because the label is different — use MasterDataOption subtypes instead
 - Change entity schema when only the import config needs updating
@@ -766,7 +766,7 @@ answers about Newsconseen's own features — the most visible form of product re
 - Use staleTime:0 + refetchOnMount:always on list pages
 - Add entityFetchFn to every BulkImportDialog
 - Make new settings.py fields Optional[str] = None
-- Implement three-tier fallback (analytics → raw → Base44 live) in every data-reading feature
+- Implement three-tier fallback (analytics → raw → Supabase live) in every data-reading feature
 - Use PostgreSQL for analytics acceleration and clean data export — never as the sole data source
 - Keep DataModels.jsx and ObjectExplorer.jsx as accurate technical/imagery references (see rule below)
 - Declare `backend` + `ontologyObjects` for every app added to APP_REGISTRY (see Applications rule below)
@@ -783,8 +783,8 @@ external API, or bespoke backend:
 
 | Backend | Layer | When to use | Data path |
 |---------|-------|-------------|-----------|
-| `ontology` | Layer 1 — Base44 entities | Write-heavy apps: forms, intake, data entry, mutations | Reads/writes base44.entities.* with company_id stamped on every record |
-| `datamart` | Layer 2 — python_layer | Read-heavy apps: dashboards, reports, analytics views | Reads python_layer endpoints with three-tier fallback (analytics → raw → Base44 live) |
+| `ontology` | Layer 1 — Supabase entities | Write-heavy apps: forms, intake, data entry, mutations | Reads/writes via base44Client proxy (Supabase) with company_id stamped on every record |
+| `datamart` | Layer 2 — python_layer | Read-heavy apps: dashboards, reports, analytics views | Reads python_layer endpoints with three-tier fallback (analytics → raw → Supabase live) |
 
 **Rules:**
 - Every entry in APP_REGISTRY must declare `backend: "ontology"` or `backend: "datamart"`
@@ -794,12 +794,12 @@ external API, or bespoke backend:
   Document, Schedule, Signal, Channel, Territory, Animal, Plot, Observation.
 - Ontology-backed apps must always stamp `company_id: currentUser?.company_id` on every
   created or updated record — never allow tenant bleed
-- Datamart-backed apps must implement three-tier fallback (analytics → raw → Base44 live)
-  and never show empty if Base44 has data
+- Datamart-backed apps must implement three-tier fallback (analytics → raw → Supabase live)
+  and never show empty if Supabase has data
 - Applications must never hardcode industry-specific labels — use MasterDataOption /
   TaxonomySelect for any field that varies by operator (person_subtype, task_type, etc.)
 - Streamlit-generated apps are datamart-backed only — they read from python_layer and
-  never write directly to Base44
+  never write directly to Supabase
 - Config-rendered React apps can be either backend — ontology for forms, datamart for views
 
 **When adding a new app:**
@@ -1045,7 +1045,7 @@ and a sync history table in the Connectors page showing last run, status, record
 ```
 
 ```
-Build Phase 8 — Audit Trail: a python_layer /audit endpoint that reads from Base44
+Build Phase 8 — Audit Trail: a python_layer /audit endpoint that reads from Supabase
 entity change history, stores to PostgreSQL audit.change_log, and a Settings > Audit Trail
 tab in the frontend with date/entity/user filters and CSV export.
 ```

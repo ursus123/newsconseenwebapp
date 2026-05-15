@@ -192,7 +192,7 @@ function ContextPanel({ selected, onClose, navigate, insights = [], risks = [], 
           ].map(q => (
             <button
               key={q}
-              onClick={() => navigate(createPageUrl("Copilot"), { state: { prefillMessage: q } })}
+              onClick={() => navigate(createPageUrl("idjwi"), { state: { prefillMessage: q } })}
               className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 hover:bg-violet-50 hover:border-violet-200 hover:text-violet-700 transition-colors flex items-center gap-2"
             >
               <Sparkles className="w-3.5 h-3.5 shrink-0 text-violet-400" />
@@ -382,7 +382,7 @@ function ContextPanel({ selected, onClose, navigate, insights = [], risks = [], 
             ].map(q => (
               <button
                 key={q}
-                onClick={() => navigate(createPageUrl("Copilot"), { state: { prefillMessage: q } })}
+                onClick={() => navigate(createPageUrl("idjwi"), { state: { prefillMessage: q } })}
                 className="w-full text-left px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600 hover:bg-violet-50 hover:border-violet-200 hover:text-violet-700 transition-colors flex items-center gap-1.5"
               >
                 <Sparkles className="w-3 h-3 shrink-0 text-violet-400" />
@@ -406,7 +406,7 @@ function ContextPanel({ selected, onClose, navigate, insights = [], risks = [], 
           </button>
         )}
         <button
-          onClick={() => navigate(createPageUrl("Copilot"), { state: { prefillMessage: copilotQ } })}
+          onClick={() => navigate(createPageUrl("idjwi"), { state: { prefillMessage: copilotQ } })}
           className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
         >
           <Sparkles className="w-3.5 h-3.5" />

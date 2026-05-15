@@ -905,11 +905,20 @@ def _extract_citations(collected_tools: list) -> list:
     return citations[:8]
 
 
+_VALID_MODELS = {
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-6",
+    "claude-opus-4-7",
+}
+_DEFAULT_MODEL = "claude-sonnet-4-6"
+
+
 def _run_tool_loop(
     messages: list,
     company_id: str,
     on_tool_call=None,      # optional callback(tool_name, tool_input) → None
     _collected=None,        # if list, append {"tool", "input", "result"} per call
+    model: str = None,      # caller-selected LLM model ID
 ) -> str:
     """
     Run the Anthropic tool loop and return the final text answer.
@@ -920,11 +929,12 @@ def _run_tool_loop(
     """
     client = _get_client()
     system = build_system_prompt(company_id)
+    resolved_model = model if model in _VALID_MODELS else _DEFAULT_MODEL
 
     for attempt in range(6):
         try:
             response = client.messages.create(
-                model="claude-sonnet-4-6",
+                model=resolved_model,
                 max_tokens=8192,           # FIX: was 1024, caused truncated answers
                 system=system,
                 tools=TOOL_DEFINITIONS,
@@ -1098,11 +1108,13 @@ class CopilotEngine:
         enterprise_name: str = "",
         backend: str = "anthropic",
         railway_url: str = "",
+        model: str = None,
     ):
         self.company_id      = company_id
         self.enterprise_name = enterprise_name
         self.backend         = backend
         self.railway_url     = railway_url
+        self.model           = model  # caller-selected LLM; None = use engine default
         self.query_engine    = QueryEngine(company_id)
         # Ensure copilot memory table exists (idempotent, fast after first call)
         try:
@@ -1152,7 +1164,8 @@ class CopilotEngine:
             collected: list = []
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 future = pool.submit(
-                    _run_tool_loop, messages, self.company_id, None, collected
+                    _run_tool_loop, messages, self.company_id, None, collected,
+                    self.model,
                 )
                 answer_text = future.result(timeout=120)
 

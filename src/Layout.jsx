@@ -111,7 +111,7 @@ const NAV_CONFIG = {
       section: "Intelligence",
       items: [
         { name: "IntelligenceInbox",  label: "Intelligence Inbox",   icon: Lightbulb },
-        { name: "copilot",            label: "Copilot",              icon: Sparkles },
+        { name: "idjwi",              label: "Idjwi",                icon: Sparkles },
         { name: "agents",             label: "Agents",               icon: Brain },
         { name: "alerts",             label: "Alerts",               icon: Bell, badge: "alerts" },
         { name: "MarketIntelligence", label: "Market Intelligence",  icon: TrendingUp },
@@ -195,7 +195,7 @@ const NAV_CONFIG = {
       section: "Intelligence",
       items: [
         { name: "IntelligenceInbox",  label: "Intelligence Inbox",   icon: Lightbulb },
-        { name: "copilot",            label: "Copilot",              icon: Sparkles },
+        { name: "idjwi",              label: "Idjwi",                icon: Sparkles },
         { name: "agents",             label: "Agents",               icon: Brain },
         { name: "alerts",             label: "Alerts",               icon: Bell, badge: "alerts" },
         { name: "MarketIntelligence", label: "Market Intelligence",  icon: TrendingUp },
@@ -242,7 +242,7 @@ const NAV_CONFIG = {
     {
       section: "Intelligence",
       items: [
-        { name: "copilot",           label: "Copilot",           icon: Sparkles },
+        { name: "idjwi",             label: "Idjwi",             icon: Sparkles },
         { name: "agents",            label: "Agents",            icon: Brain },
         { name: "alerts",            label: "Alerts",            icon: Bell, badge: "alerts" },
         { name: "MarketIntelligence",label: "Market Intelligence",icon: TrendingUp },

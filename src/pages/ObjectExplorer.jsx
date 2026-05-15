@@ -359,11 +359,11 @@ function RecordDetailPanel({ selection, navigate, onClose }) {
           View in {typeDef.label}
         </button>
         <button
-          onClick={() => navigate(createPageUrl("Copilot"), { state: { prefillMessage: copilotMsg } })}
+          onClick={() => navigate(createPageUrl("idjwi"), { state: { prefillMessage: copilotMsg } })}
           className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 hover:bg-emerald-100 transition-colors"
         >
           <Sparkles className="w-3.5 h-3.5" />
-          Ask Copilot about this
+          Ask Idjwi about this
         </button>
       </div>
     </div>

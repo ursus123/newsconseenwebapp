@@ -269,7 +269,7 @@ export default function Taskbar({
         </Tooltip>
 
         {/* Copilot */}
-        <Tooltip label="Copilot  (Ctrl+I)">
+        <Tooltip label="Idjwi  (Ctrl+I)">
           <button
             onClick={onToggleCopilot}
             className="relative w-9 h-9 rounded-xl flex items-center justify-center transition-all"

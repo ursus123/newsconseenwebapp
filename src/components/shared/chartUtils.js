@@ -72,10 +72,10 @@ export function sourceMeta(chart = {}, fallback = {}) {
     return { label: "Query", detail: "Live query", tone: "indigo" };
   }
   if (fallback.source) return sourceMeta({ source: fallback.source });
-  if (chart.tool_name) return { label: "Copilot", detail: "Tool re-called live", tone: "violet" };
+  if (chart.tool_name) return { label: "Idjwi", detail: "Tool re-called live", tone: "violet" };
   if (chart.table_snapshot) return { label: "Snapshot", detail: "Saved table result", tone: "slate" };
   if (chart.source === "query") return { label: "Query", detail: "Live query", tone: "indigo" };
-  if (chart.source === "copilot") return { label: "Copilot", detail: "Pinned insight", tone: "violet" };
+  if (chart.source === "copilot" || chart.source === "idjwi") return { label: "Idjwi", detail: "Pinned insight", tone: "violet" };
   if (chart.source === "base44" || fallback.source === "base44") return { label: "Live", detail: "Base44 records", tone: "blue" };
   if (chart.source === "ml") return { label: "ML", detail: "Model output", tone: "violet" };
   if (chart.source === "public") return { label: "Public API", detail: "External source", tone: "amber" };
