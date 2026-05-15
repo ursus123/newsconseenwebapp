@@ -20,6 +20,7 @@ class ModelSpec:
     max_tokens: int
     task_tier: str
     env_key: str
+    supports_tools: bool = False
 
     @property
     def available(self) -> bool:
@@ -34,6 +35,7 @@ class ModelSpec:
             "description": self.description,
             "max_tokens": self.max_tokens,
             "task_tier": self.task_tier,
+            "supports_tools": self.supports_tools,
             "available": self.available,
         }
 
@@ -53,6 +55,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         max_tokens=2048,
         task_tier="triage",
         env_key="ANTHROPIC_API_KEY",
+        supports_tools=True,
     ),
     MODEL_SONNET: ModelSpec(
         id=MODEL_SONNET,
@@ -63,6 +66,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         max_tokens=8192,
         task_tier="execution",
         env_key="ANTHROPIC_API_KEY",
+        supports_tools=True,
     ),
     MODEL_OPUS: ModelSpec(
         id=MODEL_OPUS,
@@ -73,6 +77,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         max_tokens=16000,
         task_tier="strategy",
         env_key="ANTHROPIC_API_KEY",
+        supports_tools=True,
     ),
     "gpt-4.1": ModelSpec(
         id="gpt-4.1",
@@ -83,6 +88,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         max_tokens=8192,
         task_tier="execution",
         env_key="OPENAI_API_KEY",
+        supports_tools=True,
     ),
     "gemini-2.5-pro": ModelSpec(
         id="gemini-2.5-pro",
@@ -93,6 +99,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         max_tokens=8192,
         task_tier="strategy",
         env_key="GOOGLE_API_KEY",
+        supports_tools=False,
     ),
 }
 
@@ -147,6 +154,98 @@ IDJWI_CAPABILITIES = [
     },
 ]
 
+TOOL_CAPABILITIES = {
+    "get_operator_context": "read_company_data",
+    "get_people_summary": "read_company_data",
+    "get_person_churn_risk": "read_company_data",
+    "get_staff_availability": "read_company_data",
+    "get_transaction_summary": "read_company_data",
+    "get_overdue_invoices": "read_company_data",
+    "get_task_summary": "read_company_data",
+    "get_task_outcomes": "read_company_data",
+    "get_product_summary": "read_company_data",
+    "get_enterprise_overview": "read_company_data",
+    "get_network_overview": "read_company_data",
+    "get_ml_predictions": "read_company_data",
+    "find_people_records": "read_company_data",
+    "find_task_records": "read_company_data",
+    "find_transaction_records": "read_company_data",
+    "find_relationship_records": "read_company_data",
+    "find_product_records": "read_company_data",
+    "find_address_records": "read_company_data",
+    "inspect_raw_record": "read_company_data",
+    "get_entity_join": "read_company_data",
+    "get_company_graph_context": "read_company_data",
+    "get_enrichment_context": "read_company_data",
+    "get_ontology_schema": "read_company_data",
+    "search_intelligence": "search_intelligence",
+    "save_copilot_memory": "save_memory",
+    "list_copilot_memory": "save_memory",
+    "delete_copilot_memory": "save_memory",
+    "create_record": "create_task",
+    "request_action": "create_task",
+    "propose_task": "create_task",
+    "propose_record_update": "propose_record_update",
+    "propose_chart": "generate_report",
+    "write_insight": "search_intelligence",
+    "invoke_agent": "run_agents",
+    "get_agent_status": "run_agents",
+    "execute_ingestion_plan": "create_task",
+    "import_records": "create_task",
+    "web_search": "read_company_data",
+    "search_public_data": "read_company_data",
+}
+
+ACTION_CAPABILITIES = {
+    "read_data": "read_company_data",
+    "generate_report": "generate_report",
+    "create_task": "create_task",
+    "create_follow_up": "create_task",
+    "update_task_status": "create_task",
+    "flag_record": "create_task",
+    "update_record": "propose_record_update",
+    "reassign_task": "propose_record_update",
+    "create_person": "propose_record_update",
+    "create_enterprise": "propose_record_update",
+    "create_product": "propose_record_update",
+    "create_transaction": "propose_record_update",
+    "import_records": "propose_record_update",
+    "invoke_agent": "run_agents",
+}
+
+
+def capability_ids() -> set[str]:
+    return {cap["id"] for cap in IDJWI_CAPABILITIES}
+
+
+def get_capability(capability_id: str) -> Optional[dict]:
+    return next((cap for cap in IDJWI_CAPABILITIES if cap["id"] == capability_id), None)
+
+
+def capability_for_tool(tool_name: str) -> str:
+    return TOOL_CAPABILITIES.get(tool_name, "read_company_data")
+
+
+def capability_for_action(action_type: str) -> str:
+    return ACTION_CAPABILITIES.get(action_type, "propose_record_update")
+
+
+def check_capability(capability_id: str, llm_available: bool = True) -> dict:
+    cap = get_capability(capability_id)
+    if not cap:
+        return {
+            "allowed": False,
+            "capability": capability_id,
+            "reason": "Unknown Idjwi capability.",
+        }
+    if cap.get("requires_llm") and not llm_available:
+        return {
+            "allowed": False,
+            "capability": capability_id,
+            "reason": "This capability needs an LLM. Use a no-LLM capability or queue it.",
+        }
+    return {"allowed": True, "capability": capability_id, "reason": "allowed"}
+
 
 def list_models() -> list[dict]:
     return [spec.public_dict() for spec in MODEL_REGISTRY.values()]
@@ -178,4 +277,3 @@ def provider_status() -> dict:
         providers.setdefault(spec.provider, False)
         providers[spec.provider] = providers[spec.provider] or spec.available
     return providers
-

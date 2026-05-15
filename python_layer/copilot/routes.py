@@ -14,7 +14,7 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -62,6 +62,18 @@ class FeedbackRequest(BaseModel):
     company_id: str
     rating:     int   # 1 = thumbs up, -1 = thumbs down
     comment:    Optional[str] = None
+
+
+class CommandRequest(BaseModel):
+    command:    str
+    company_id: str
+    payload:    Optional[dict] = None
+
+
+class WorkflowRequest(BaseModel):
+    workflow:   str
+    company_id: str
+    payload:    Optional[dict] = None
 
 
 # ----------------------------------------------------------
@@ -113,6 +125,8 @@ def copilot_status():
         "endpoints": [
             "POST /copilot/ask",
             "POST /copilot/ask/stream",
+            "POST /copilot/command",
+            "GET  /copilot/models",
             "GET  /copilot/context",
             "POST /copilot/feedback",
         ],
@@ -131,7 +145,10 @@ def copilot_models():
 
 
 @router.post("/ask")
-def ask(request: AskRequest):
+def ask(
+    request: AskRequest,
+    x_idjwi_api_key: Optional[str] = Header(None),
+):
     """
     Ask the copilot a question about your enterprise data.
 
@@ -200,6 +217,214 @@ def ask(request: AskRequest):
         result["answer"] = friendly
 
     return result
+
+
+@router.post("/command")
+def deterministic_command(
+    request: CommandRequest,
+    x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+):
+    """
+    Deterministic Idjwi command endpoint.
+
+    These actions do not need an LLM. They use Idjwi's capability/tool layer
+    directly so the assistant can still perform governed work when AI is down.
+    """
+    if not request.company_id:
+        raise HTTPException(status_code=400, detail="company_id is required")
+
+    command = (request.command or "").strip().lower()
+    payload = request.payload or {}
+
+    try:
+        from copilot.queries import execute_tool
+        from copilot.idjwi_memory import remember, recall, forget, summary
+        from copilot.idjwi_security import (
+            authorize_capability,
+            principal_from_headers,
+            require_api_key,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    api_gate = require_api_key(x_idjwi_api_key)
+    if not api_gate.get("allowed"):
+        raise HTTPException(status_code=401, detail=api_gate.get("reason"))
+
+    principal = principal_from_headers(
+        company_id=request.company_id,
+        user_id=x_idjwi_user,
+        role=x_idjwi_role,
+    )
+    try:
+        from copilot.idjwi_observability import log_event
+        log_event(
+            "command.request",
+            company_id=request.company_id,
+            actor=principal.user_id,
+            subject=command,
+            metadata={"role": principal.role, "payload_keys": sorted(payload.keys())},
+        )
+    except Exception:
+        pass
+
+    def require(capability_id: str):
+        gate = authorize_capability(capability_id, principal=principal, llm_available=False)
+        if not gate.get("allowed"):
+            raise HTTPException(status_code=403, detail=gate.get("reason"))
+
+    if command in ("list_overdue_tasks", "overdue_tasks"):
+        require("read_company_data")
+        return execute_tool(
+            "find_task_records",
+            {"overdue_only": True, "limit": int(payload.get("limit", 20))},
+            request.company_id,
+        )
+
+    if command in ("task_summary", "list_tasks"):
+        require("read_company_data")
+        return execute_tool("get_task_summary", payload, request.company_id)
+
+    if command in ("search_people", "find_people"):
+        require("read_company_data")
+        return execute_tool("find_people_records", payload, request.company_id)
+
+    if command in ("search_intelligence", "intelligence"):
+        require("search_intelligence")
+        return execute_tool("search_intelligence", payload, request.company_id)
+
+    if command in ("create_task", "add_task"):
+        require("create_task")
+        fields = {
+            "title": payload.get("title") or payload.get("name") or "New task",
+            "description": payload.get("description") or "",
+            "assigned_to": payload.get("assigned_to"),
+            "due_date": payload.get("due_date"),
+            "priority": payload.get("priority"),
+            "status": payload.get("status", "open"),
+        }
+        return execute_tool(
+            "create_record",
+            {
+                "entity_type": "task",
+                "fields": fields,
+                "reasoning": payload.get("reasoning", "Created through deterministic Idjwi command."),
+            },
+            request.company_id,
+        )
+
+    if command in ("remember", "save_memory"):
+        require("save_memory")
+        key = payload.get("key")
+        if not key:
+            raise HTTPException(status_code=400, detail="payload.key is required")
+        return remember(
+            company_id=request.company_id,
+            key=key,
+            value=payload.get("value", ""),
+            memory_type=payload.get("memory_type", "note"),
+            owner=payload.get("owner", "operator"),
+        )
+
+    if command in ("list_memory", "memory"):
+        require("save_memory")
+        return {"entries": recall(request.company_id, limit=int(payload.get("limit", 100)))}
+
+    if command in ("forget", "delete_memory"):
+        require("save_memory")
+        key = payload.get("key")
+        if not key:
+            raise HTTPException(status_code=400, detail="payload.key is required")
+        return forget(request.company_id, key)
+
+    if command in ("memory_summary", "summarize_memory"):
+        require("save_memory")
+        return summary(request.company_id)
+
+    if command in ("approve_action", "approve_recommendation"):
+        require("approve_actions")
+        approval_id = payload.get("approval_id")
+        if not approval_id:
+            raise HTTPException(status_code=400, detail="payload.approval_id is required")
+        return approve_recommendation(approval_id, request.company_id)
+
+    return {
+        "error": "Unknown deterministic command.",
+        "valid_commands": [
+            "list_overdue_tasks",
+            "task_summary",
+            "search_people",
+            "search_intelligence",
+            "create_task",
+            "remember",
+            "list_memory",
+            "forget",
+            "memory_summary",
+            "approve_action",
+        ],
+    }
+
+
+@router.get("/health/full")
+def idjwi_full_health():
+    """Detailed health snapshot for Idjwi's providers, memory, events, and workflows."""
+    from copilot.idjwi_observability import health_snapshot
+    from copilot.idjwi_workflows import list_workflows
+
+    return {
+        **health_snapshot(),
+        "workflows": list_workflows()["workflows"],
+    }
+
+
+@router.get("/workflows")
+def idjwi_workflows():
+    """List deterministic no-LLM workflows."""
+    from copilot.idjwi_workflows import list_workflows
+    return list_workflows()
+
+
+@router.post("/workflows/run")
+def idjwi_run_workflow(
+    request: WorkflowRequest,
+    x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+):
+    """Run a deterministic Idjwi workflow without requiring an LLM."""
+    from copilot.idjwi_workflows import run_workflow
+
+    def command_runner(command: str, payload: dict):
+        return deterministic_command(
+            CommandRequest(command=command, company_id=request.company_id, payload=payload),
+            x_idjwi_api_key=x_idjwi_api_key,
+            x_idjwi_role=x_idjwi_role,
+            x_idjwi_user=x_idjwi_user,
+        )
+
+    return run_workflow(
+        company_id=request.company_id,
+        workflow=request.workflow,
+        payload=request.payload or {},
+        command_runner=command_runner,
+    )
+
+
+@router.get("/evals")
+def idjwi_evals():
+    """Run lightweight Idjwi registry and no-LLM capability evals."""
+    from copilot.idjwi_evals import run_registry_evals
+    return run_registry_evals()
+
+
+@router.post("/memory/migrate")
+def idjwi_migrate_memory(company_id: str = Query(...)):
+    """Copy legacy copilot/agent memory into unified Idjwi memory."""
+    from copilot.idjwi_memory import migrate_legacy, summary
+    result = migrate_legacy(company_id)
+    return {**result, "summary": summary(company_id)}
 
 
 @router.post("/ask/stream")

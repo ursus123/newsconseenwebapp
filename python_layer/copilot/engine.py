@@ -23,7 +23,8 @@ from .queries import (
     TOOL_DEFINITIONS, execute_tool, get_operator_context, QueryEngine,
     load_copilot_memory, _ensure_copilot_memory_table,
 )
-from .llm_registry import get_max_tokens, resolve_model
+from .llm_adapters import get_adapter
+from .llm_registry import resolve_model
 
 # ── Documentation loader ─────────────────────────────────────────────────────
 # Loaded at request time so docs updates are reflected immediately without
@@ -921,28 +922,17 @@ def _run_tool_loop(
                   used by the streaming path to yield progress events.
     """
     resolved_spec = resolve_model(model)
-    if resolved_spec.provider != "anthropic":
-        return (
-            f"{resolved_spec.label} is registered in Idjwi, but its provider adapter "
-            "is not wired to the tool loop yet. Choose a Claude model for grounded "
-            "tool use while this adapter is completed."
-        )
-
-    client = _get_client()
+    adapter = get_adapter(resolved_spec)
     system = build_system_prompt(company_id)
-    resolved_model = resolved_spec.id
-
     for attempt in range(6):
         try:
-            response = client.messages.create(
-                model=resolved_model,
-                max_tokens=get_max_tokens(resolved_model),
+            response = adapter.create(
                 system=system,
                 tools=TOOL_DEFINITIONS,
                 messages=messages,
             )
         except Exception as e:
-            logger.error("Anthropic API call failed (attempt %d): %s", attempt + 1, e)
+            logger.error("%s API call failed (attempt %d): %s", resolved_spec.provider, attempt + 1, e)
             return (
                 "I encountered an error reaching the AI service. "
                 "Please try again in a moment. "

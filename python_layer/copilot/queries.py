@@ -10,6 +10,7 @@ Every function signature matches the tool definition in engine.py.
 
 import json as _json
 import logging
+import time
 import urllib.parse
 import urllib.request
 from typing import Optional
@@ -2964,6 +2965,19 @@ def request_action(
             "valid":  sorted(VALID_ACTIONS),
         }
 
+    try:
+        from copilot.llm_registry import capability_for_action, check_capability
+        capability_id = capability_for_action(action_type)
+        gate = check_capability(capability_id, llm_available=True)
+        if not gate.get("allowed"):
+            return {
+                "status": "denied",
+                "capability": capability_id,
+                "message": gate.get("reason", "This Idjwi capability is not available."),
+            }
+    except Exception:
+        pass
+
     payload = {
         "entity":    entity,
         "record_id": record_id,
@@ -3245,9 +3259,40 @@ def save_copilot_memory(
               "always show costs in USD", "our fiscal year starts in July".
     """
     _ensure_copilot_memory_table()
+    try:
+        from copilot.idjwi_memory import recall as _idjwi_recall
+        unified = _idjwi_recall(company_id=company_id, limit=50)
+        if unified:
+            return [
+                {
+                    "key": item.get("key"),
+                    "value": item.get("value"),
+                    "memory_type": item.get("memory_type"),
+                    "updated_at": str(item.get("updated_at")),
+                    "owner": item.get("owner"),
+                    "scope": item.get("scope"),
+                }
+                for item in unified
+            ]
+    except Exception:
+        pass
+
     engine = get_engine_safe()
     if not engine:
         return {"saved": False, "reason": "database unavailable"}
+    try:
+        from copilot.idjwi_memory import remember as _idjwi_remember
+        _idjwi_remember(
+            company_id=company_id,
+            key=key,
+            value=value,
+            memory_type=memory_type,
+            scope="company",
+            owner="copilot",
+            engine=engine,
+        )
+    except Exception:
+        pass
     try:
         with engine.connect() as conn:
             conn.execute(text("""
@@ -3280,6 +3325,23 @@ def list_copilot_memory(company_id: str) -> dict:
               "what preferences have I set?", "list your memory".
     """
     entries = load_copilot_memory(company_id)
+    try:
+        from copilot.idjwi_memory import recall as _idjwi_recall
+        unified = _idjwi_recall(company_id=company_id, limit=100)
+        if unified:
+            entries = [
+                {
+                    "key": item.get("key"),
+                    "value": item.get("value"),
+                    "memory_type": item.get("memory_type"),
+                    "updated_at": str(item.get("updated_at")),
+                    "owner": item.get("owner"),
+                    "scope": item.get("scope"),
+                }
+                for item in unified
+            ]
+    except Exception:
+        pass
     return {
         "count":   len(entries),
         "entries": entries,
@@ -3299,6 +3361,11 @@ def delete_copilot_memory(company_id: str, key: str) -> dict:
     engine = get_engine_safe()
     if not engine:
         return {"deleted": False, "reason": "database unavailable"}
+    try:
+        from copilot.idjwi_memory import forget as _idjwi_forget
+        _idjwi_forget(company_id=company_id, key=key, engine=engine)
+    except Exception:
+        pass
     try:
         with engine.connect() as conn:
             result = conn.execute(text("""
@@ -8084,7 +8151,35 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         }
 
     try:
+        from copilot.llm_registry import capability_for_tool, check_capability
+        capability_id = capability_for_tool(tool_name)
+        gate = check_capability(capability_id, llm_available=True)
+        if not gate.get("allowed"):
+            return {
+                "error": "Capability denied",
+                "capability": capability_id,
+                "unable_to_fetch": True,
+                "message": gate.get("reason", "This Idjwi capability is not available."),
+            }
+    except Exception:
+        pass
+
+    started = time.perf_counter()
+    try:
         result = fn(**kwargs)
+        try:
+            from copilot.idjwi_observability import log_event
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            log_event(
+                "tool.execute",
+                company_id=company_id,
+                subject=tool_name,
+                metadata={"capability": capability_for_tool(tool_name)},
+                duration_ms=duration_ms,
+                status="ok",
+            )
+        except Exception:
+            pass
         # Normalise: if the function returned None, give Claude an explicit empty result
         if result is None:
             return {"records": [], "count": 0, "unable_to_fetch": False}
@@ -8097,6 +8192,19 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
             "message": "I was unable to query this data due to a parameter mismatch.",
         }
     except Exception as e:
+        try:
+            from copilot.idjwi_observability import log_event
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            log_event(
+                "tool.execute",
+                company_id=company_id,
+                subject=tool_name,
+                metadata={"error": str(e)},
+                duration_ms=duration_ms,
+                status="error",
+            )
+        except Exception:
+            pass
         logger.warning("Tool %s raised unexpected error: %s", tool_name, e)
         return {
             "error": str(e),

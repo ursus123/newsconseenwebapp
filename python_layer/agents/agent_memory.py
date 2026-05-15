@@ -80,6 +80,22 @@ def remember(engine, company_id: str, agent_name: str,
     except Exception as e:
         logger.warning("agent_memory.remember failed: %s", e)
 
+    # Also write to unified Idjwi memory so chat and agents share context.
+    try:
+        from copilot.idjwi_memory import remember as idjwi_remember
+        idjwi_remember(
+            company_id=company_id,
+            key=key,
+            value=value,
+            memory_type=memory_type,
+            scope="agent",
+            owner=agent_name,
+            confidence=confidence,
+            engine=engine,
+        )
+    except Exception:
+        pass
+
 
 def recall(engine, company_id: str, agent_name: str,
            memory_type: Optional[str] = None,
@@ -120,9 +136,23 @@ def recall(engine, company_id: str, agent_name: str,
             rows = conn.execute(text(sql), params).fetchall()
             cols = ["id", "memory_type", "key", "value",
                     "confidence", "observation_count", "updated_at"]
-            return [dict(zip(cols, r)) for r in rows]
+            native = [dict(zip(cols, r)) for r in rows]
+            if native:
+                return native
     except Exception as e:
         logger.warning("agent_memory.recall failed: %s", e)
+
+    try:
+        from copilot.idjwi_memory import recall as idjwi_recall
+        return idjwi_recall(
+            company_id=company_id,
+            memory_type=memory_type,
+            key=key,
+            owner=agent_name,
+            limit=100,
+            engine=engine,
+        )
+    except Exception:
         return []
 
 
