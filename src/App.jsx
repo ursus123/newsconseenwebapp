@@ -34,6 +34,7 @@ import ObjectExplorer from './pages/ObjectExplorer';
 import KineticLayer from './pages/KineticLayer';
 import ObjectViews from './pages/ObjectViews';
 import Landing from './pages/Landing';
+import Login from './pages/Login';
 import QueryPublic from './pages/QueryPublic';
 import ExplorePublic from './pages/ExplorePublic';
 import Agents from './pages/Agents';
@@ -173,6 +174,7 @@ function App() {
           <Router>
             <Routes>
               {/* Public routes — no auth required */}
+              <Route path="/login" element={<Login />} />
               <Route path="/" element={<Landing />} />
               <Route path="/query" element={<QueryPublic />} />
               <Route path="/explore" element={<ExplorePublic />} />

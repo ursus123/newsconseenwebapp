@@ -4,6 +4,8 @@ import { appParams } from '@/lib/app-params';
 // Lazy getter — avoids pulling @base44/sdk into the React module init chain
 const getBase44 = () => import('@/api/base44Client').then(m => m.base44);
 
+const DATA_LAYER = import.meta.env.VITE_DATA_LAYER || 'base44';
+
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
@@ -15,8 +17,67 @@ export const AuthProvider = ({ children }) => {
   const [appPublicSettings, setAppPublicSettings] = useState(null); // Contains only { id, public_settings }
 
   useEffect(() => {
-    checkAppState();
+    if (DATA_LAYER === 'supabase') {
+      _initSupabaseAuth();
+    } else {
+      checkAppState();
+    }
   }, []);
+
+  // ── Supabase auth path ────────────────────────────────────────────────────
+  const _loadSupabaseUser = async (authUser) => {
+    try {
+      const { supabase } = await import('@/api/supabaseEntityClient');
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('company_id, role, full_name')
+        .eq('id', authUser.id)
+        .single();
+
+      setUser({
+        id:         authUser.id,
+        email:      authUser.email,
+        full_name:  profile?.full_name  || authUser.user_metadata?.full_name || authUser.email,
+        company_id: profile?.company_id || authUser.app_metadata?.company_id || null,
+        role:       profile?.role       || authUser.app_metadata?.role       || 'user',
+        ...authUser.user_metadata,
+      });
+      setIsAuthenticated(true);
+    } catch (e) {
+      console.error('Failed to load Supabase user profile:', e);
+      setIsAuthenticated(false);
+      setAuthError({ type: 'auth_required', message: 'Could not load user profile' });
+    } finally {
+      setIsLoadingAuth(false);
+      setIsLoadingPublicSettings(false);
+    }
+  };
+
+  const _initSupabaseAuth = async () => {
+    const { supabase } = await import('@/api/supabaseEntityClient');
+
+    // Check existing session
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await _loadSupabaseUser(session.user);
+    } else {
+      setIsLoadingAuth(false);
+      setIsLoadingPublicSettings(false);
+      setAuthError({ type: 'auth_required', message: 'Authentication required' });
+    }
+
+    // Keep in sync with Supabase session changes
+    supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        setAuthError(null);
+        await _loadSupabaseUser(session.user);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setIsAuthenticated(false);
+        setAuthError({ type: 'auth_required', message: 'Authentication required' });
+      }
+    });
+  };
 
   const checkAppState = async () => {
     try {

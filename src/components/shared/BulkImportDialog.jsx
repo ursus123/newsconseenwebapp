@@ -69,11 +69,14 @@ function rowsMatch(a, b, entityName) {
       return false;
 
     case "Tasks":
-    case "Task":
+    case "Task": {
+      const aDate = (a.due_date || a.scheduled_date)?.toString() || "";
+      const bDate = (b.due_date || b.scheduled_date)?.toString() || "";
       return a.title?.toLowerCase().trim() === b.title?.toLowerCase().trim() &&
-             a.scheduled_date?.toString() === b.scheduled_date?.toString() &&
+             aDate === bDate &&
              (a.client_name || a.related_person)?.toLowerCase().trim() ===
              (b.client_name || b.related_person)?.toLowerCase().trim();
+    }
 
     case "Addresses":
     case "Address": {

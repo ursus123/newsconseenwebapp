@@ -36,7 +36,7 @@ export default function DeleteAllDialog({ open, onClose, onConfirm, entityLabel 
               <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
                 <p className="text-sm text-rose-700">
-                  This will permanently delete <span className="font-bold">{count} {entityLabel}</span> from the Base44 database. This action cannot be undone.
+                  This will permanently delete <span className="font-bold">{count} {entityLabel}</span>. This action cannot be undone.
                 </p>
               </div>
               <p className="text-sm text-slate-600">

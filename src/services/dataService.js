@@ -14,7 +14,27 @@
  */
 
 import { base44 } from "@/api/base44Client";
+import { supabaseEntities } from "@/api/supabaseEntityClient";
 import { createWithScope } from "@/components/shared/useDataQuery";
+
+/**
+ * DATA_LAYER controls which Layer 1 backend is used.
+ *   "base44"   — original Base44 SDK (default)
+ *   "supabase" — Supabase Postgres + RLS (migration target)
+ *
+ * Switch by setting VITE_DATA_LAYER=supabase in .env.local.
+ * No other file needs to change — all entity access goes through this service.
+ */
+const DATA_LAYER = import.meta.env.VITE_DATA_LAYER || "base44";
+
+function _ent(base44Name) {
+  if (DATA_LAYER === "supabase") {
+    const e = supabaseEntities[base44Name];
+    if (!e) throw new Error(`[dataService] No Supabase entity for "${base44Name}"`);
+    return e;
+  }
+  return base44.entities[base44Name];
+}
 
 /** @param {any} queryClient @param {any} queryKey @param {any} record */
 function addRecordToQueryCache(queryClient, queryKey, record) {
@@ -37,7 +57,7 @@ const RAILWAY_API_KEY = /** @type {any} */ (import.meta).env?.VITE_RAILWAY_API_K
 
 export const ENTITY_REGISTRY = {
   person: {
-    entity:       () => base44.entities.Person,
+    entity:       () => _ent("Person"),
     queryKey:     "people",
     etl:          "people",
     auditType:    "person",
@@ -45,7 +65,7 @@ export const ENTITY_REGISTRY = {
     displayName:  (r) => `${r.first_name || ""} ${r.last_name || ""}`.trim() || r.id,
   },
   enterprise: {
-    entity:       () => base44.entities.Enterprise,
+    entity:       () => _ent("Enterprise"),
     queryKey:     "enterprises",
     etl:          "enterprise",
     auditType:    "enterprise",
@@ -53,7 +73,7 @@ export const ENTITY_REGISTRY = {
     displayName:  (r) => r.enterprise_name || r.id,
   },
   product: {
-    entity:       () => base44.entities.Product,
+    entity:       () => _ent("Product"),
     queryKey:     "products",
     etl:          "product",
     auditType:    "product",
@@ -61,42 +81,42 @@ export const ENTITY_REGISTRY = {
     displayName:  (r) => r.item_name || r.name || r.id,
   },
   service: {
-    entity:      () => base44.entities.Service,
+    entity:      () => _ent("Service"),
     queryKey:    "services",
     etl:         "service",
     auditType:   "service",
     displayName: (r) => r.name || r.service_name || r.id,
   },
   task: {
-    entity:      () => base44.entities.Task,
+    entity:      () => _ent("Task"),
     queryKey:    "tasks",
     etl:         "task",
     auditType:   "task",
     displayName: (r) => r.title || r.task_name || r.id,
   },
   transaction: {
-    entity:      () => base44.entities.Transaction,
+    entity:      () => _ent("Transaction"),
     queryKey:    "transactions",
     etl:         "transaction",
     auditType:   "transaction",
     displayName: (r) => r.reference_number || r.description || r.id,
   },
   relationship: {
-    entity:      () => base44.entities.Relationship,
+    entity:      () => _ent("Relationship"),
     queryKey:    "relationships",
     etl:         "relationship",
     auditType:   "relationship",
     displayName: (r) => r.relationship_type || r.id,
   },
   address: {
-    entity:      () => base44.entities.Address,
+    entity:      () => _ent("Address"),
     queryKey:    "addresses",
     etl:         "address",
     auditType:   "address",
     displayName: (r) => r.address_line1 || r.address || r.id,
   },
   document: {
-    entity:       () => base44.entities.Document,
+    entity:       () => _ent("Document"),
     queryKey:     "documents",
     etl:          "document",
     auditType:    "document",
@@ -104,7 +124,7 @@ export const ENTITY_REGISTRY = {
     displayName:  (r) => r.title || r.file_name || r.id,
   },
   schedule: {
-    entity:       () => base44.entities.Schedule,
+    entity:       () => _ent("Schedule"),
     queryKey:     "schedules",
     etl:          "schedule",
     auditType:    "schedule",
@@ -112,7 +132,7 @@ export const ENTITY_REGISTRY = {
     displayName:  (r) => r.name || r.title || r.id,
   },
   signal: {
-    entity:       () => base44.entities.Signal,
+    entity:       () => _ent("Signal"),
     queryKey:     "signals",
     etl:          "signal",
     auditType:    "signal",
@@ -120,7 +140,7 @@ export const ENTITY_REGISTRY = {
     displayName:  (r) => r.name || r.signal_type || r.id,
   },
   channel: {
-    entity:       () => base44.entities.Channel,
+    entity:       () => _ent("Channel"),
     queryKey:     "channels",
     etl:          "channel",
     auditType:    "channel",
@@ -128,7 +148,7 @@ export const ENTITY_REGISTRY = {
     displayName:  (r) => r.name || r.channel_name || r.id,
   },
   territory: {
-    entity:       () => base44.entities.Territory,
+    entity:       () => _ent("Territory"),
     queryKey:     "territories",
     etl:          "territory",
     auditType:    "territory",
@@ -136,7 +156,7 @@ export const ENTITY_REGISTRY = {
     displayName:  (r) => r.name || r.territory_name || r.id,
   },
   animal: {
-    entity:       () => base44.entities.Animal,
+    entity:       () => _ent("Animal"),
     queryKey:     "animals",
     etl:          "animal",
     auditType:    "animal",
@@ -144,7 +164,7 @@ export const ENTITY_REGISTRY = {
     displayName:  (r) => r.name || r.id,
   },
   plot: {
-    entity:       () => base44.entities.Plot,
+    entity:       () => _ent("Plot"),
     queryKey:     "plots",
     etl:          "plot",
     auditType:    "plot",
@@ -152,7 +172,7 @@ export const ENTITY_REGISTRY = {
     displayName:  (r) => r.name || r.id,
   },
   observation: {
-    entity:       () => base44.entities.Observation,
+    entity:       () => _ent("Observation"),
     queryKey:     "observations",
     etl:          "observation",
     auditType:    "observation",
@@ -162,42 +182,42 @@ export const ENTITY_REGISTRY = {
 
   // ── Intelligence Layer ─────────────────────────────────────────
   insight: {
-    entity:      () => base44.entities.Insight,
+    entity:      () => _ent("Insight"),
     queryKey:    "insights",
     etl:         "insight",
     auditType:   "insight",
     displayName: (r) => r.title || r.id,
   },
   recommendation: {
-    entity:      () => base44.entities.Recommendation,
+    entity:      () => _ent("Recommendation"),
     queryKey:    "recommendations",
     etl:         "recommendation",
     auditType:   "recommendation",
     displayName: (r) => r.title || r.id,
   },
   decision: {
-    entity:      () => base44.entities.Decision,
+    entity:      () => _ent("Decision"),
     queryKey:    "decisions",
     etl:         "decision",
     auditType:   "decision",
     displayName: (r) => r.decision || r.id,
   },
   risk: {
-    entity:      () => base44.entities.Risk,
+    entity:      () => _ent("Risk"),
     queryKey:    "risks",
     etl:         "risk",
     auditType:   "risk",
     displayName: (r) => r.title || r.id,
   },
   opportunity: {
-    entity:      () => base44.entities.Opportunity,
+    entity:      () => _ent("Opportunity"),
     queryKey:    "opportunities",
     etl:         "opportunity",
     auditType:   "opportunity",
     displayName: (r) => r.title || r.id,
   },
   metric_definition: {
-    entity:      () => base44.entities.MetricDefinition,
+    entity:      () => _ent("MetricDefinition"),
     queryKey:    "metric_definitions",
     etl:         "metric_definition",
     auditType:   "metric_definition",

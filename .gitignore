@@ -1,6 +1,7 @@
 #env
 .env
 .env.*
+python_layer/.env
 
 # Logs
 logs

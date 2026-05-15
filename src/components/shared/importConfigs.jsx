@@ -913,8 +913,7 @@ export const TASK_TEMPLATE_EXAMPLE = {
   status: "open", priority: "normal",
   assigned_to_name: "Jane Smith", assigned_to_email: "jane@example.com",
   enterprise: "Acme Corp", related_person: "", related_item: "",
-  scheduled_date: "2025-02-01", scheduled_time: "09:00",
-  due_date: "2025-02-05", due_time: "", outcome: "pending", outcome_notes: "", internal_notes: "",
+  due_date: "2025-02-05", outcome: "pending", outcome_notes: "", internal_notes: "",
 };
 
 export const TASK_TEMPLATE_INSTRUCTIONS = [
@@ -976,8 +975,7 @@ export function transformTask(row, currentUser) {
     assigned_to_email:row.assigned_to_email|| undefined,
     enterprise,
     related_person:   relatedPerson,
-    scheduled_date:   row.scheduled_date   || undefined,
-    due_date:         row.due_date         || undefined,
+    due_date:         row.due_date || row.scheduled_date || undefined,
     outcome:          row.outcome          || "pending",
     outcome_notes:    row.outcome_notes    || undefined,
     internal_notes:   [...existing, ...notes].join(" | ") || undefined,
@@ -1149,8 +1147,8 @@ export function transformTransaction(row, currentUser) {
     date:             txDate,
     status:           ["draft","posted","voided"].includes(row.status)
                         ? row.status : "draft",
-    payment_status:   ["paid","unpaid","partial","na"].includes(row.payment_status)
-                        ? row.payment_status : "na",
+    payment_status:   ["paid","unpaid","partial","waived"].includes(row.payment_status)
+                        ? row.payment_status : "unpaid",
     amount:           row.amount,
     tax_amount:       row.tax_amount,
     amount_paid:      row.amount_paid,
@@ -1351,23 +1349,22 @@ export function transformProduct(row, currentUser) {
   const stockQty   = row.stock_quantity != null ? parseFloat(row.stock_quantity) : undefined;
   const reorderLvl = row.reorder_level  != null ? parseFloat(row.reorder_level)  : undefined;
 
-  const existing = row.internal_notes ? [row.internal_notes] : [];
-  const internal_notes = [...existing, ...notes].join(" | ") || undefined;
+  const descParts = [row.description, ...notes].filter(Boolean);
+  const description = descParts.join(" | ") || undefined;
 
   return {
     name:            row.product_name,
     item_type:       itemType,
     item_subtype:    row.item_subtype   || undefined,
-    item_class:      itemClass ? [itemClass] : undefined,
+    item_class:      itemClass          || undefined,
     item_brand:      row.item_brand     || undefined,
     item_variant:    row.item_variant   || undefined,
     unit_of_measure: uom,
     stock_quantity:  isNaN(stockQty)   ? undefined : stockQty,
-    min_stock_level: isNaN(reorderLvl) ? undefined : reorderLvl,
+    reorder_level:   isNaN(reorderLvl) ? undefined : reorderLvl,
     expiry_date:     row.expiry_date   || undefined,
     status,
-    description:     row.description   || undefined,
-    internal_notes,
+    description,
     company_id:      row.company_id    || currentUser?.company_id,
   };
 }
