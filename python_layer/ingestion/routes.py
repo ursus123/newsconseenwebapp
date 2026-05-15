@@ -430,18 +430,18 @@ async def load_plan(
                 "Re-upload the original file or ensure rows were saved at analysis time.",
             )
 
-    if not settings.base44_api_url or not settings.base44_api_key:
-        raise HTTPException(503, "BASE44 API not configured.")
+    if not settings.supabase_url or not settings.supabase_service_role_key:
+        raise HTTPException(503, "Supabase not configured — set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.")
 
     run_stats = loader.execute(
-        plan             = db_plan["analysis"],
-        rows             = rows,
-        company_id       = company_id,
-        base44_api_url   = settings.base44_api_url,
-        api_key          = settings.base44_api_key,
-        engine           = engine,
-        plan_id          = plan_id,
-        duplicate_action = duplicate_action,
+        plan              = db_plan["analysis"],
+        rows              = rows,
+        company_id        = company_id,
+        supabase_url      = settings.supabase_url,
+        service_role_key  = settings.supabase_service_role_key,
+        engine            = engine,
+        plan_id           = plan_id,
+        duplicate_action  = duplicate_action,
     )
 
     # Save mapping to memory only after a clean load — prevents bad mappings
@@ -615,15 +615,15 @@ async def ingest_from_connector(request: dict):
     # Auto-load if confidence is high enough and caller requested it
     # Only "approved" status auto-loads — pending_review requires explicit operator approval
     if auto_load and status == "approved":
-        if not settings.base44_api_url or not settings.base44_api_key:
-            result["auto_load_skipped"] = "BASE44 API not configured"
+        if not settings.supabase_url or not settings.supabase_service_role_key:
+            result["auto_load_skipped"] = "Supabase not configured"
         else:
             run_stats = loader.execute(
-                plan           = analysis,
-                rows           = rows,
-                company_id     = company_id,
-                base44_api_url = settings.base44_api_url,
-                api_key        = settings.base44_api_key,
+                plan             = analysis,
+                rows             = rows,
+                company_id       = company_id,
+                supabase_url     = settings.supabase_url,
+                service_role_key = settings.supabase_service_role_key,
                 engine         = engine,
                 plan_id        = plan_id,
             )

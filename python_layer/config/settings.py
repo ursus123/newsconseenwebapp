@@ -103,8 +103,13 @@ class Settings(BaseSettings):
     anthropic_api_key: Optional[str] = None
 
     # ----------------------------------------------------------
-    # Base44 REST API base URL — used by Ingestion Agent loader
-    # e.g. https://api.base44.com/v1/apps/<app_id>
+    # Supabase — server-side entity writes (ingestion loader, enrichment)
+    # ----------------------------------------------------------
+    supabase_url:              Optional[str] = None
+    supabase_service_role_key: Optional[str] = None
+
+    # ----------------------------------------------------------
+    # Base44 REST API base URL — kept for backward compat, unused
     # ----------------------------------------------------------
     base44_api_url: Optional[str] = None
 

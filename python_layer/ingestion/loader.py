@@ -41,23 +41,23 @@ _RUN_TABLE  = "analytics.ingestion_runs"
 _PLAN_TABLE = "analytics.ingestion_plans"
 
 
-# ── Base44 entity → REST endpoint slug ───────────────────────────────────────
-_BASE44_SLUG: dict[str, str] = {
-    "Person":       "Person",
-    "Enterprise":   "Enterprise",
-    "Product":      "Product",
-    "Task":         "Task",
-    "Transaction":  "Transaction",
-    "Relationship": "Relationship",
-    "Address":      "Address",
-    "Document":     "Document",
-    "Schedule":     "Schedule",
-    "Signal":       "Signal",
-    "Channel":      "Channel",
-    "Territory":    "Territory",
-    "Animal":       "Animal",
-    "Plot":         "Plot",
-    "Observation":  "Observation",
+# ── Entity type → Supabase table name ────────────────────────────────────────
+_SUPABASE_TABLE: dict[str, str] = {
+    "Person":       "persons",
+    "Enterprise":   "enterprises",
+    "Product":      "products",
+    "Task":         "tasks",
+    "Transaction":  "transactions",
+    "Relationship": "relationships",
+    "Address":      "addresses",
+    "Document":     "documents",
+    "Schedule":     "schedules",
+    "Signal":       "signals",
+    "Channel":      "channels",
+    "Territory":    "territories",
+    "Animal":       "animals",
+    "Plot":         "plots",
+    "Observation":  "observations",
 }
 
 
@@ -110,39 +110,48 @@ def _apply_transform(value: Any, hint: str | None) -> Any:
     return value
 
 
-# ── HTTP helpers ──────────────────────────────────────────────────────────────
+# ── Supabase REST helpers ─────────────────────────────────────────────────────
 
-def _make_client(base44_api_url: str, api_key: str) -> httpx.Client:
+def _make_client(supabase_url: str, service_role_key: str) -> httpx.Client:
     return httpx.Client(
-        base_url=base44_api_url,
-        headers={"x-api-key": api_key, "Content-Type": "application/json"},
+        base_url=f"{supabase_url.rstrip('/')}/rest/v1",
+        headers={
+            "apikey":        service_role_key,
+            "Authorization": f"Bearer {service_role_key}",
+            "Content-Type":  "application/json",
+            "Prefer":        "return=representation",
+        },
         timeout=_TIMEOUT,
     )
 
 
 def _fetch_existing(client: httpx.Client, entity_type: str, company_id: str) -> list[dict]:
-    slug = _BASE44_SLUG.get(entity_type, entity_type)
+    table = _SUPABASE_TABLE.get(entity_type, entity_type.lower() + "s")
     try:
-        r = client.get(f"/entities/{slug}", params={"company_id": company_id, "limit": 2000})
+        r = client.get(f"/{table}", params={"company_id": f"eq.{company_id}", "select": "*", "limit": 2000})
         r.raise_for_status()
-        return r.json().get("data", [])
+        data = r.json()
+        return data if isinstance(data, list) else []
     except Exception as e:
         logger.warning("Could not fetch existing %s records: %s", entity_type, e)
         return []
 
 
 def _create(client: httpx.Client, entity_type: str, payload: dict) -> dict:
-    slug = _BASE44_SLUG.get(entity_type, entity_type)
-    r = client.post(f"/entities/{slug}", content=json.dumps(payload, default=str))
+    table = _SUPABASE_TABLE.get(entity_type, entity_type.lower() + "s")
+    r = client.post(f"/{table}", content=json.dumps(payload, default=str))
     r.raise_for_status()
-    return r.json()
+    result = r.json()
+    # Supabase returns a list with Prefer: return=representation
+    return result[0] if isinstance(result, list) and result else {}
 
 
 def _update(client: httpx.Client, entity_type: str, record_id: str, payload: dict) -> dict:
-    slug = _BASE44_SLUG.get(entity_type, entity_type)
-    r = client.patch(f"/entities/{slug}/{record_id}", content=json.dumps(payload, default=str))
+    table = _SUPABASE_TABLE.get(entity_type, entity_type.lower() + "s")
+    r = client.patch(f"/{table}", params={"id": f"eq.{record_id}"}, content=json.dumps(payload, default=str))
     r.raise_for_status()
-    return r.json()
+    result = r.json()
+    return result[0] if isinstance(result, list) and result else {}
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -369,11 +378,14 @@ def execute(
     plan: dict[str, Any],
     rows: list[dict],
     company_id: str,
-    base44_api_url: str,
-    api_key: str,
+    supabase_url: str,
+    service_role_key: str,
     engine=None,
     plan_id: str | None = None,
     duplicate_action: str = "skip",
+    # Legacy aliases kept for callers that haven't migrated yet
+    base44_api_url: str | None = None,
+    api_key: str | None = None,
 ) -> dict[str, Any]:
     """
     Execute an approved ingestion plan.
@@ -430,7 +442,7 @@ def execute(
     # entity_rows_cache[entity_type] = transformed rows (same index as source rows)
     entity_rows_cache: dict[str, list[dict]] = {}
 
-    client = _make_client(base44_api_url, api_key)
+    client = _make_client(supabase_url, service_role_key)
 
     try:
         # ── Phase 1: load entities ────────────────────────────────────────────
