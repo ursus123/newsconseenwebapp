@@ -100,18 +100,18 @@ export default function CopilotWidget({ open, onClose, user }) {
     setLoading(true);
 
     try {
-      const res = await fetch(`${RAILWAY_URL}/copilot/chat`, {
+      const res = await fetch(`${RAILWAY_URL}/copilot/ask`, {
         method: "POST",
         headers: API_HEADERS,
         body: JSON.stringify({
-          message:    q,
+          question:   q,
           company_id: user?.company_id || "",
           session_id: sessionId,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setMessages(prev => [...prev, { role: "assistant", content: data.response || data.message || "No response" }]);
+      setMessages(prev => [...prev, { role: "assistant", content: data.answer || data.response || data.message || "No response" }]);
     } catch (err) {
       setMessages(prev => [...prev, { role: "assistant", content: `Sorry, I couldn't connect to Idjwi right now. (${err.message})` }]);
     }

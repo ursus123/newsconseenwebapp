@@ -23,6 +23,7 @@ from .queries import (
     TOOL_DEFINITIONS, execute_tool, get_operator_context, QueryEngine,
     load_copilot_memory, _ensure_copilot_memory_table,
 )
+from .llm_registry import get_max_tokens, resolve_model
 
 # ── Documentation loader ─────────────────────────────────────────────────────
 # Loaded at request time so docs updates are reflected immediately without
@@ -905,14 +906,6 @@ def _extract_citations(collected_tools: list) -> list:
     return citations[:8]
 
 
-_VALID_MODELS = {
-    "claude-haiku-4-5-20251001",
-    "claude-sonnet-4-6",
-    "claude-opus-4-7",
-}
-_DEFAULT_MODEL = "claude-sonnet-4-6"
-
-
 def _run_tool_loop(
     messages: list,
     company_id: str,
@@ -927,15 +920,23 @@ def _run_tool_loop(
     on_tool_call: optional callable invoked before each tool executes,
                   used by the streaming path to yield progress events.
     """
+    resolved_spec = resolve_model(model)
+    if resolved_spec.provider != "anthropic":
+        return (
+            f"{resolved_spec.label} is registered in Idjwi, but its provider adapter "
+            "is not wired to the tool loop yet. Choose a Claude model for grounded "
+            "tool use while this adapter is completed."
+        )
+
     client = _get_client()
     system = build_system_prompt(company_id)
-    resolved_model = model if model in _VALID_MODELS else _DEFAULT_MODEL
+    resolved_model = resolved_spec.id
 
     for attempt in range(6):
         try:
             response = client.messages.create(
                 model=resolved_model,
-                max_tokens=8192,           # FIX: was 1024, caused truncated answers
+                max_tokens=get_max_tokens(resolved_model),
                 system=system,
                 tools=TOOL_DEFINITIONS,
                 messages=messages,

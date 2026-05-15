@@ -19,6 +19,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from copilot.engine import CopilotEngine, ask_stream_events
+from copilot.llm_registry import (
+    DEFAULT_MODEL,
+    IDJWI_CAPABILITIES,
+    list_models,
+    provider_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -100,12 +106,27 @@ def copilot_status():
         "backend":           backend,
         "backend_available": backend_available,
         "backend_note":      backend_note if not backend_available else None,
+        "default_model":     DEFAULT_MODEL,
+        "models":            list_models(),
+        "providers":         provider_status(),
+        "capabilities":      IDJWI_CAPABILITIES,
         "endpoints": [
             "POST /copilot/ask",
             "POST /copilot/ask/stream",
             "GET  /copilot/context",
             "POST /copilot/feedback",
         ],
+    }
+
+
+@router.get("/models")
+def copilot_models():
+    """Return Idjwi's registered reasoning models and stable capabilities."""
+    return {
+        "default_model": DEFAULT_MODEL,
+        "models": list_models(),
+        "providers": provider_status(),
+        "capabilities": IDJWI_CAPABILITIES,
     }
 
 
@@ -444,11 +465,20 @@ def approve_recommendation(approval_id: str, company_id: str = Query(...)):
     if not row:
         raise HTTPException(status_code=404, detail="Recommendation not found or wrong company_id.")
 
+    execution_result = None
+    try:
+        from agents.approval_gate import execute_approved
+        execution_result = execute_approved(engine, approval_id, company_id)
+    except Exception as e:
+        logger.error("approve_recommendation execution failed: %s", e)
+        execution_result = {"executed": False, "error": str(e)}
+
     return {
-        "status":      "approved",
-        "approval_id": approval_id,
-        "action_type": row[1],
-        "message":     f"'{row[2]}' approved and queued for execution.",
+        "status":           "approved",
+        "approval_id":      approval_id,
+        "action_type":      row[1],
+        "execution_result": execution_result,
+        "message":          f"'{row[2]}' approved.",
     }
 
 

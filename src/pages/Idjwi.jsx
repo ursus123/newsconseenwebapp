@@ -12,7 +12,7 @@ import CopilotChat from "@/components/copilot/copilotchat";
 const RAILWAY_URL   = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 
-const MODELS = [
+const FALLBACK_MODELS = [
   {
     id:   "claude-haiku-4-5-20251001",
     label: "Haiku 4.5",
@@ -39,9 +39,9 @@ const MODELS = [
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 
 // ── Model selector dropdown ───────────────────────────────────────────────────
-function ModelSelector({ selected, onChange }) {
+function ModelSelector({ selected, onChange, models = FALLBACK_MODELS }) {
   const [open, setOpen] = useState(false);
-  const current = MODELS.find(m => m.id === selected) || MODELS[1];
+  const current = models.find(m => m.id === selected) || models[0] || FALLBACK_MODELS[1];
 
   useEffect(() => {
     if (!open) return;
@@ -62,9 +62,9 @@ function ModelSelector({ selected, onChange }) {
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-emerald-300 hover:bg-emerald-50 transition-all shadow-sm"
       >
-        <span className="text-sm leading-none">{current.icon}</span>
+        <span className="text-sm leading-none">{current.icon || current.provider || "LLM"}</span>
         <span>{current.label}</span>
-        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${tagColor[current.tag]}`}>
+        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${tagColor[current.tag] || "bg-slate-100 text-slate-500"}`}>
           {current.tag}
         </span>
         <ChevronDown className="w-3 h-3 text-slate-400" />
@@ -75,28 +75,33 @@ function ModelSelector({ selected, onChange }) {
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 pt-1 pb-2">
             Choose LLM
           </p>
-          {MODELS.map(m => (
+          {models.map(m => (
             <button
               key={m.id}
-              onClick={() => { onChange(m.id); setOpen(false); }}
+              disabled={m.available === false}
+              onClick={() => { if (m.available !== false) { onChange(m.id); setOpen(false); } }}
               className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-left transition-colors ${
                 m.id === selected
                   ? "bg-emerald-50 text-emerald-700"
+                  : m.available === false
+                  ? "opacity-50 cursor-not-allowed text-slate-400"
                   : "hover:bg-slate-50 text-slate-700"
               }`}
             >
-              <span className="text-base leading-none mt-0.5 shrink-0">{m.icon}</span>
+              <span className="text-base leading-none mt-0.5 shrink-0">{m.icon || m.provider || "LLM"}</span>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 mb-0.5">
                   <span className="text-xs font-semibold">{m.label}</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${tagColor[m.tag]}`}>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${tagColor[m.tag] || "bg-slate-100 text-slate-500"}`}>
                     {m.tag}
                   </span>
                   {m.id === selected && (
                     <CheckCircle2 className="w-3 h-3 text-emerald-500 ml-auto shrink-0" />
                   )}
                 </div>
-                <p className="text-[10px] text-slate-400 leading-tight">{m.desc}</p>
+                <p className="text-[10px] text-slate-400 leading-tight">
+                  {m.available === false ? "Provider key not configured" : (m.description || m.desc)}
+                </p>
               </div>
             </button>
           ))}
@@ -107,7 +112,7 @@ function ModelSelector({ selected, onChange }) {
 }
 
 // ── Autonomous Monitor panel ──────────────────────────────────────────────────
-function AutonomousMonitor({ companyId }) {
+function AutonomousMonitor({ companyId, capabilities: backendCapabilities = [] }) {
   const [health, setHealth]   = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -124,7 +129,7 @@ function AutonomousMonitor({ companyId }) {
 
   useEffect(() => { load(); }, []);
 
-  const capabilities = [
+  const fallbackCapabilities = [
     { name: "ETL Pipeline",      desc: "Multi-tenant data sync after every mutation", icon: Database,   color: "emerald" },
     { name: "Alert Engine",      desc: "10 alert types — WhatsApp / Email / SMS",     icon: Bell,       color: "amber"   },
     { name: "Agent Queue",       desc: "8 agents monitoring and executing actions",    icon: Bot,        color: "violet"  },
@@ -134,6 +139,26 @@ function AutonomousMonitor({ companyId }) {
     { name: "Enrichment Engine", desc: "Phone / geo / sanctions / scores auto-run",  icon: Sparkles,   color: "pink"    },
     { name: "Offline Sync",      desc: "PWA IndexedDB queue processing",              icon: RefreshCw,  color: "slate"   },
   ];
+
+  const iconByCapability = {
+    read_company_data: Database,
+    create_task: Bot,
+    propose_record_update: Shield,
+    save_memory: Brain,
+    search_intelligence: Sparkles,
+    run_agents: Bot,
+    generate_report: Activity,
+    approve_actions: CheckCircle2,
+  };
+  const colors = ["emerald", "amber", "violet", "blue", "rose", "teal", "pink", "slate"];
+  const capabilities = backendCapabilities.length
+    ? backendCapabilities.map((cap, index) => ({
+        name: cap.name,
+        desc: cap.description,
+        icon: iconByCapability[cap.id] || Activity,
+        color: colors[index % colors.length],
+      }))
+    : fallbackCapabilities;
 
   const colorRing = {
     emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
@@ -305,6 +330,8 @@ export default function Idjwi() {
     () => localStorage.getItem("idjwi_model") || DEFAULT_MODEL
   );
   const [backendStatus, setBackendStatus] = useState(null);
+  const [availableModels, setAvailableModels] = useState(FALLBACK_MODELS);
+  const [idjwiCapabilities, setIdjwiCapabilities] = useState([]);
 
   const handleModelChange = (modelId) => {
     setSelectedModel(modelId);
@@ -316,11 +343,24 @@ export default function Idjwi() {
       headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
     })
       .then(r => r.json())
-      .then(d => setBackendStatus(d.backend_available ? "ok" : "degraded"))
+      .then(d => {
+        setBackendStatus(d.backend_available ? "ok" : "degraded");
+        if (Array.isArray(d.models) && d.models.length > 0) {
+          setAvailableModels(d.models);
+          const current = localStorage.getItem("idjwi_model") || DEFAULT_MODEL;
+          if (!d.models.some(m => m.id === current && m.available !== false)) {
+            const fallback = d.models.find(m => m.available !== false)?.id || d.default_model || DEFAULT_MODEL;
+            setSelectedModel(fallback);
+            localStorage.setItem("idjwi_model", fallback);
+          }
+        }
+        if (Array.isArray(d.capabilities)) setIdjwiCapabilities(d.capabilities);
+      })
       .catch(() => setBackendStatus("unreachable"));
   }, []);
 
-  const currentModel = MODELS.find(m => m.id === selectedModel) || MODELS[1];
+  const currentModel = availableModels.find(m => m.id === selectedModel) || availableModels[0] || FALLBACK_MODELS[1];
+  const currentModelMark = currentModel.icon || currentModel.provider || "LLM";
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -335,7 +375,7 @@ export default function Idjwi() {
             <h1 className="text-xl font-bold text-slate-800">Idjwi</h1>
             <p className="text-xs text-slate-500">
               {mode === "reasoning"
-                ? `${currentModel.icon} ${currentModel.label} · reasoning grounded in your data`
+                ? `${currentModelMark} ${currentModel.label} · reasoning grounded in your data`
                 : "Autonomous monitor — 8 capabilities running without LLM"}
             </p>
           </div>
@@ -393,7 +433,11 @@ export default function Idjwi() {
 
           {/* Model selector — only in reasoning mode */}
           {mode === "reasoning" && (
-            <ModelSelector selected={selectedModel} onChange={handleModelChange} />
+            <ModelSelector
+              selected={selectedModel}
+              onChange={handleModelChange}
+              models={availableModels}
+            />
           )}
         </div>
       </div>
@@ -408,7 +452,10 @@ export default function Idjwi() {
             selectedModel={selectedModel}
           />
         ) : (
-          <AutonomousMonitor companyId={currentUser?.company_id} />
+          <AutonomousMonitor
+            companyId={currentUser?.company_id}
+            capabilities={idjwiCapabilities}
+          />
         )}
       </div>
     </div>
