@@ -65,7 +65,7 @@ export const ROLE_PERMISSIONS = {
       "MarketIntelligence",
       "MapExplorer",
       "MLModels",
-      "copilot",
+      "idjwi",
       "alerts",
       "agents",
       "Connectors",
