@@ -25,6 +25,13 @@ const API_HEADERS   = RAILWAY_API_KEY
   ? { "Content-Type": "application/json", "x-api-key": RAILWAY_API_KEY }
   : { "Content-Type": "application/json" };
 
+const idjwiHeaders = (user) => ({
+  ...API_HEADERS,
+  ...(RAILWAY_API_KEY ? { "x-idjwi-api-key": RAILWAY_API_KEY } : {}),
+  ...(user?.email ? { "x-idjwi-user": user.email } : {}),
+  ...(user?.role ? { "x-idjwi-role": user.role } : {}),
+});
+
 // ── Colour palette for charts ────────────────────────────────────────────────
 const PALETTE = [
   "#10b981","#3b82f6","#f59e0b","#ef4444","#8b5cf6",
@@ -1481,7 +1488,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
 
       const resp = await fetch(`${RAILWAY_URL}/copilot/ask`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+        headers: idjwiHeaders(currentUser),
         body: JSON.stringify({
           question:   confirmMsg.content,
           company_id: companyId,
@@ -1511,7 +1518,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
     } finally {
       setLoading(false);
     }
-  }, [companyId, messages]);
+  }, [companyId, messages, currentUser, selectedModel]);
 
   const handleIngestionDismiss = useCallback((planId) => {
     setMessages(prev => prev.filter(m =>
@@ -1544,7 +1551,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
 
       const resp = await fetch(`${RAILWAY_URL}/copilot/ask`, {
         method:  "POST",
-        headers: API_HEADERS,
+        headers: idjwiHeaders(currentUser),
         body: JSON.stringify({
           question:        question,
           company_id:      companyId,
@@ -1597,7 +1604,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       setLoading(false);
       inputRef.current?.focus();
     }
-  }, [input, loading, companyId, messages, currentUser]);
+  }, [input, loading, companyId, messages, currentUser, selectedModel]);
 
   const handleFeedback = async (messageId, rating) => {
     setMessages(prev =>

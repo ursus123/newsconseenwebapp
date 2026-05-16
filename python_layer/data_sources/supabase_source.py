@@ -259,7 +259,12 @@ def _normalise_payload(table: str, payload: dict) -> dict:
     return out
 
 
-def list_records(entity: str, company_id: Optional[str] = None, limit: int = 5000) -> list[dict]:
+def list_records(
+    entity: str,
+    company_id: Optional[str] = None,
+    created_by: Optional[str] = None,
+    limit: int = 5000,
+) -> list[dict]:
     table = table_for(entity)
     rows = []
     offset = 0
@@ -272,6 +277,8 @@ def list_records(entity: str, company_id: Optional[str] = None, limit: int = 500
         }
         if company_id:
             params["company_id"] = f"eq.{company_id}"
+        if created_by:
+            params["created_by"] = f"eq.{created_by}"
         resp = _request("GET", table, headers=_headers(), params=params)
         page = resp.json()
         if not isinstance(page, list) or not page:

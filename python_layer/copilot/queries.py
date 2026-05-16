@@ -13,11 +13,13 @@ import logging
 import time
 import urllib.parse
 import urllib.request
+from contextvars import ContextVar
 from typing import Optional
 from sqlalchemy import text
 from database import get_engine_safe, _clean_df
 
 logger = logging.getLogger(__name__)
+_CURRENT_PRINCIPAL = ContextVar("idjwi_current_principal", default=None)
 
 # ── Staleness threshold ───────────────────────────────────────────────────────
 # If the most recent analytics snapshot is older than this, the copilot falls
@@ -228,6 +230,16 @@ def _supabase_live(entity: str, company_id: str, label: str = None) -> "_pd.Data
         if rows:
             logger.info("_supabase_live(%s): %d rows for company_id=%s", tag, len(rows), company_id)
             return _pd.DataFrame(rows)
+        principal = _CURRENT_PRINCIPAL.get()
+        created_by = getattr(principal, "user_id", None)
+        if created_by and "@" in str(created_by):
+            rows = list_records(entity, created_by=created_by)
+            if rows:
+                logger.info(
+                    "_supabase_live(%s): %d rows for created_by=%s after empty company_id=%s",
+                    tag, len(rows), created_by, company_id,
+                )
+                return _pd.DataFrame(rows)
     except Exception as e:
         logger.warning("_supabase_live(%s) failed: %s", tag, e)
     return _pd.DataFrame()
@@ -8071,6 +8083,7 @@ def execute_tool(
         pass
 
     started = time.perf_counter()
+    token = _CURRENT_PRINCIPAL.set(principal)
     try:
         result = fn(**kwargs)
         try:
@@ -8117,6 +8130,8 @@ def execute_tool(
             "unable_to_fetch": True,
             "message": "I was unable to fetch this data. The data source may be unavailable.",
         }
+    finally:
+        _CURRENT_PRINCIPAL.reset(token)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

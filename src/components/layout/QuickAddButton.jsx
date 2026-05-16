@@ -9,6 +9,13 @@ const API_HEADERS   = RAILWAY_API_KEY
   ? { "Content-Type": "application/json", "x-api-key": RAILWAY_API_KEY }
   : { "Content-Type": "application/json" };
 
+const idjwiHeaders = (user) => ({
+  ...API_HEADERS,
+  ...(RAILWAY_API_KEY ? { "x-idjwi-api-key": RAILWAY_API_KEY } : {}),
+  ...(user?.email ? { "x-idjwi-user": user.email } : {}),
+  ...(user?.role ? { "x-idjwi-role": user.role } : {}),
+});
+
 const HINTS = [
   "Add Sarah Kamau as a new client, active, Westlands branch",
   "New staff member: John Mwangi, driver, starts Monday",
@@ -87,7 +94,7 @@ export default function QuickAddButton({ currentUser }) {
     try {
       const resp = await fetch(`${RAILWAY_URL}/copilot/ask`, {
         method:  "POST",
-        headers: API_HEADERS,
+        headers: idjwiHeaders(currentUser),
         body: JSON.stringify({
           question:        `Please add the following record: ${question}`,
           company_id:      currentUser.company_id,

@@ -40,6 +40,13 @@ const API_HEADERS   = RAILWAY_API_KEY
   ? { "Content-Type": "application/json", "x-api-key": RAILWAY_API_KEY }
   : { "Content-Type": "application/json" };
 
+const idjwiHeaders = (user) => ({
+  ...API_HEADERS,
+  ...(RAILWAY_API_KEY ? { "x-idjwi-api-key": RAILWAY_API_KEY } : {}),
+  ...(user?.email ? { "x-idjwi-user": user.email } : {}),
+  ...(user?.role ? { "x-idjwi-role": user.role } : {}),
+});
+
 const QUICK_PROMPTS = [
   "How are we doing today?",
   "Which tasks are overdue?",
@@ -102,7 +109,7 @@ export default function CopilotWidget({ open, onClose, user }) {
     try {
       const res = await fetch(`${RAILWAY_URL}/copilot/ask`, {
         method: "POST",
-        headers: API_HEADERS,
+        headers: idjwiHeaders(user),
         body: JSON.stringify({
           question:   q,
           company_id: user?.company_id || "",
