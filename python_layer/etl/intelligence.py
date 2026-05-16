@@ -3,36 +3,33 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from config import settings
-from etl.base import fetch_json_to_df
+from etl.base import fetch_supabase_entity_to_df
 
 logger = logging.getLogger(__name__)
 
 
-def _extract(url: str | None) -> pd.DataFrame:
-    if not url:
-        return pd.DataFrame()
-    return fetch_json_to_df(url)
+def _extract(entity: str) -> pd.DataFrame:
+    return fetch_supabase_entity_to_df(entity)
 
 
 def extract_insights() -> pd.DataFrame:
-    return _extract(settings.base44_insights_url)
+    return _extract("insights")
 
 
 def extract_recommendations() -> pd.DataFrame:
-    return _extract(settings.base44_recommendations_url)
+    return _extract("recommendations")
 
 
 def extract_decisions() -> pd.DataFrame:
-    return _extract(settings.base44_decisions_url)
+    return _extract("decisions")
 
 
 def extract_risks() -> pd.DataFrame:
-    return _extract(settings.base44_risks_url)
+    return _extract("risks")
 
 
 def extract_opportunities() -> pd.DataFrame:
-    return _extract(settings.base44_opportunities_url)
+    return _extract("opportunities")
 
 
 def _empty(columns: list[str]) -> pd.DataFrame:

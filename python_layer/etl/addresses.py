@@ -6,7 +6,7 @@ from typing import Optional
 import pandas as pd
 import requests
 
-from etl.base import fetch_json_to_df
+from etl.base import fetch_supabase_entity_to_df
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -58,15 +58,8 @@ REQUIRED_COLUMNS = {"id"}
 
 
 def extract_addresses() -> pd.DataFrame:
-    """
-    Extract all address records from Base44.
-    Returns raw DataFrame — no transformation applied here.
-    Returns empty DataFrame if BASE44_ADDRESSES_URL is not configured.
-    """
-    if not settings.base44_addresses_url:
-        logger.warning("BASE44_ADDRESSES_URL not set — skipping address extract")
-        return pd.DataFrame()
-    return fetch_json_to_df(settings.base44_addresses_url)
+    """Extract all address records from Supabase."""
+    return fetch_supabase_entity_to_df("addresses")
 
 
 def transform_addresses(df: pd.DataFrame) -> pd.DataFrame:

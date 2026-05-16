@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from etl.base import fetch_json_to_df
-from config import settings
+from etl.base import fetch_supabase_entity_to_df
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +18,7 @@ GROUP_COLUMNS = ["enterprise_id", "company_id", "channel_type", "purpose", "stat
 
 
 def extract_channels() -> pd.DataFrame:
-    if not settings.base44_channels_url:
-        return pd.DataFrame()
-    return fetch_json_to_df(settings.base44_channels_url)
+    return fetch_supabase_entity_to_df("channels")
 
 
 def transform_channels(df: pd.DataFrame) -> pd.DataFrame:

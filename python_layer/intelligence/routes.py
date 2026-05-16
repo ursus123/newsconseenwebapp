@@ -4,10 +4,10 @@ intelligence/routes.py
 REST endpoints for the Newsconseen Intelligence Layer.
 
 Serves Insight, Recommendation, Risk, and Opportunity objects with
-three-tier fallback: analytics.* → raw.* → Base44 live.
+three-tier fallback: analytics.* → raw.* → Supabase live.
 
 All reads are company_id-scoped. No writes from python_layer —
-writes happen through the Base44 SDK on the frontend.
+writes happen through the Supabase on the frontend.
 """
 
 import logging
@@ -15,17 +15,11 @@ from fastapi import APIRouter, Query
 from typing import Optional
 import pandas as pd
 from database import get_engine_safe
+from data_sources import supabase_source
 from sqlalchemy import text
-import httpx
-from config.settings import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/intelligence", tags=["intelligence"])
-
-BASE44_HEADERS = {
-    "Authorization": f"Bearer {settings.base44_api_key}",
-    "Content-Type": "application/json",
-}
 
 # ── Shared helpers ─────────────────────────────────────────────────
 
@@ -53,26 +47,13 @@ def _load_analytics(table: str, company_id: Optional[str], extra_where: str = ""
         return []
 
 
-def _fetch_base44_entity(url_attr: str, company_id: Optional[str]) -> list:
-    url = getattr(settings, url_attr, None)
-    if not url:
-        return []
+def _fetch_supabase_entity(entity: str, company_id: Optional[str]) -> list:
     try:
-        resp = httpx.get(url, headers=BASE44_HEADERS, timeout=10)
-        if not resp.is_success:
-            return []
-        rows = resp.json()
-        if not isinstance(rows, list):
-            rows = rows.get("items", rows.get("results", []))
-        if company_id:
-            rows = [r for r in rows if r.get("company_id") == company_id]
-        return rows
+        return supabase_source.list_records(entity, company_id=company_id, limit=1000)
     except Exception as exc:
-        logger.debug("Base44 %s fallback failed — %s", url_attr, exc)
+        logger.debug("Supabase %s fallback failed - %s", entity, exc)
         return []
-
-
-# ── Insights ───────────────────────────────────────────────────────
+# -- Insights ───────────────────────────────────────────────────────
 
 @router.get("/insights")
 def get_insights(
@@ -94,9 +75,9 @@ def get_insights(
 
     rows = _load_analytics("insight_summary", company_id, " AND ".join(extra_parts))
 
-    # Fallback to Base44 live
+    # Fallback to Supabase live
     if not rows:
-        rows = _fetch_base44_entity("base44_insights_url", company_id)
+        rows = _fetch_supabase_entity("insight", company_id)
         if status:       rows = [r for r in rows if r.get("status") == status]
         if insight_type: rows = [r for r in rows if r.get("insight_type") == insight_type]
         if subject_type: rows = [r for r in rows if r.get("subject_type") == subject_type]
@@ -111,7 +92,7 @@ def get_insights_summary(company_id: Optional[str] = Query(None)):
     """Counts by status and insight_type — powers the Inbox tab badges."""
     rows = _load_analytics("insight_summary", company_id)
     if not rows:
-        rows = _fetch_base44_entity("base44_insights_url", company_id)
+        rows = _fetch_supabase_entity("insight", company_id)
 
     df = pd.DataFrame(rows)
     if df.empty:
@@ -154,7 +135,7 @@ def get_recommendations(
     rows = _load_analytics("recommendation_summary", company_id, " AND ".join(extra_parts))
 
     if not rows:
-        rows = _fetch_base44_entity("base44_recommendations_url", company_id)
+        rows = _fetch_supabase_entity("recommendation", company_id)
         if status:      rows = [r for r in rows if r.get("status") == status]
         if action_type: rows = [r for r in rows if r.get("action_type") == action_type]
         if insight_id:  rows = [r for r in rows if r.get("insight_id") == insight_id]
@@ -180,7 +161,7 @@ def get_risks(
     rows = _load_analytics("risk_summary", company_id, " AND ".join(extra_parts))
 
     if not rows:
-        rows = _fetch_base44_entity("base44_risks_url", company_id)
+        rows = _fetch_supabase_entity("risk", company_id)
         if status:       rows = [r for r in rows if r.get("status") == status]
         if severity:     rows = [r for r in rows if r.get("severity") == severity]
         if subject_type: rows = [r for r in rows if r.get("subject_type") == subject_type]
@@ -206,7 +187,7 @@ def get_opportunities(
     rows = _load_analytics("opportunity_summary", company_id, " AND ".join(extra_parts))
 
     if not rows:
-        rows = _fetch_base44_entity("base44_opportunities_url", company_id)
+        rows = _fetch_supabase_entity("opportunity", company_id)
         if status:       rows = [r for r in rows if r.get("status") == status]
         if type_filter:  rows = [r for r in rows if r.get("type") == type_filter]
         if subject_type: rows = [r for r in rows if r.get("subject_type") == subject_type]
@@ -225,10 +206,10 @@ def get_inbox(
     Combined payload for the Intelligence Inbox page.
     Fetches insights, recommendations, risks, and opportunities in one call.
     """
-    insights        = _load_analytics("insight_summary", company_id) or _fetch_base44_entity("base44_insights_url", company_id)
-    recommendations = _load_analytics("recommendation_summary", company_id) or _fetch_base44_entity("base44_recommendations_url", company_id)
-    risks           = _load_analytics("risk_summary", company_id) or _fetch_base44_entity("base44_risks_url", company_id)
-    opportunities   = _load_analytics("opportunity_summary", company_id) or _fetch_base44_entity("base44_opportunities_url", company_id)
+    insights        = _load_analytics("insight_summary", company_id) or _fetch_supabase_entity("insight", company_id)
+    recommendations = _load_analytics("recommendation_summary", company_id) or _fetch_supabase_entity("recommendation", company_id)
+    risks           = _load_analytics("risk_summary", company_id) or _fetch_supabase_entity("risk", company_id)
+    opportunities   = _load_analytics("opportunity_summary", company_id) or _fetch_supabase_entity("opportunity", company_id)
 
     return {
         "insights":        insights[:limit],

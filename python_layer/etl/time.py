@@ -20,8 +20,7 @@ from typing import Optional
 
 import pandas as pd
 
-from etl.base import fetch_json_to_df
-from config import settings
+from etl.base import fetch_supabase_entity_to_df
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,7 @@ def extract_time_tasks() -> pd.DataFrame:
     Extract all task records from Base44, then filter to clock-related types.
     Returns raw DataFrame — no transformation applied here.
     """
-    df = fetch_json_to_df(settings.base44_tasks_url)
+    df = fetch_supabase_entity_to_df("tasks")
     if df.empty:
         return df
     if "task_type" not in df.columns:

@@ -8,14 +8,11 @@ Determines what enrichment is needed, what is stale, and what is missing.
 import logging
 from typing import Optional
 from datetime import datetime, timedelta, timezone
-import httpx
 from database import get_engine_safe
+from data_sources import supabase_source
 from sqlalchemy import text
-from config.settings import settings
 
 logger = logging.getLogger(__name__)
-
-BASE44_HEADERS = {"Authorization": f"Bearer {settings.base44_api_key}", "Content-Type": "application/json"}
 
 # ── Freshness windows (days) ───────────────────────────────────────
 
@@ -65,22 +62,11 @@ ENRICHMENT_TYPES_BY_ENTITY = {
 }
 
 
-def _fetch_base44(url_attr: str, company_id: Optional[str]) -> list:
-    url = getattr(settings, url_attr, None)
-    if not url:
-        return []
+def _fetch_supabase(entity: str, company_id: Optional[str]) -> list:
     try:
-        resp = httpx.get(url, headers=BASE44_HEADERS, timeout=10)
-        if not resp.is_success:
-            return []
-        rows = resp.json()
-        if not isinstance(rows, list):
-            rows = rows.get("items", rows.get("results", []))
-        if company_id:
-            rows = [r for r in rows if r.get("company_id") == company_id]
-        return rows
+        return supabase_source.list_records(entity, company_id=company_id, limit=1000)
     except Exception as exc:
-        logger.debug("Base44 fetch %s — %s", url_attr, exc)
+        logger.debug("Supabase fetch %s - %s", entity, exc)
         return []
 
 
@@ -166,7 +152,7 @@ def build_enrichment_plan(company_id: str) -> dict:
     # ── Enterprises ────────────────────────────────────────────────
     enterprises = _load_analytics("enterprise_summary", company_id)
     if not enterprises:
-        enterprises = _fetch_base44("base44_enterprises_url", company_id)
+        enterprises = _fetch_supabase("enterprise", company_id)
 
     for ent in enterprises[:50]:  # cap at 50 for performance
         entity_id   = str(ent.get("id", ""))
@@ -206,7 +192,7 @@ def build_enrichment_plan(company_id: str) -> dict:
     # ── Addresses ─────────────────────────────────────────────────
     addresses = _load_analytics("address_summary", company_id)
     if not addresses:
-        addresses = _fetch_base44("base44_addresses_url", company_id)
+        addresses = _fetch_supabase("address", company_id)
 
     for addr in addresses[:30]:
         entity_id = str(addr.get("id", ""))
@@ -224,7 +210,7 @@ def build_enrichment_plan(company_id: str) -> dict:
     # ── Territories ────────────────────────────────────────────────
     territories = _load_analytics("territory_summary", company_id)
     if not territories:
-        territories = _fetch_base44("base44_territories_url", company_id)
+        territories = _fetch_supabase("territory", company_id)
 
     for terr in territories[:20]:
         entity_id = str(terr.get("id", ""))
@@ -267,15 +253,15 @@ def build_coverage_report(company_id: str) -> dict:
     coverage = {}
 
     entity_configs = [
-        ("enterprise", "enterprise_summary", "base44_enterprises_url"),
-        ("address",    "address_summary",    "base44_addresses_url"),
-        ("territory",  "territory_summary",  "base44_territories_url"),
-        ("product",    "product_summary",    "base44_products_url"),
-        ("person",     "people_summary",     "base44_people_url"),
+        ("enterprise", "enterprise_summary"),
+        ("address",    "address_summary"),
+        ("territory",  "territory_summary"),
+        ("product",    "product_summary"),
+        ("person",     "people_summary"),
     ]
 
-    for entity_type, analytics_table, b44_url_attr in entity_configs:
-        entities = _load_analytics(analytics_table, company_id) or _fetch_base44(b44_url_attr, company_id)
+    for entity_type, analytics_table in entity_configs:
+        entities = _load_analytics(analytics_table, company_id) or _fetch_supabase(entity_type, company_id)
         total = len(entities)
         if total == 0:
             coverage[entity_type] = {"total": 0, "enriched": 0, "pct": 0, "stale": 0}

@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from etl.base import fetch_json_to_df
-from config import settings
+from etl.base import fetch_supabase_entity_to_df
 from config.taxonomy import (
     ENTERPRISE_ACTIVE_STATUSES as ACTIVE_STATUSES,
     ENTERPRISE_INACTIVE_STATUSES as INACTIVE_STATUSES,
@@ -21,7 +20,7 @@ def extract_enterprises() -> pd.DataFrame:
     Extract all enterprise records from Base44.
     Returns raw DataFrame — no transformation applied here.
     """
-    return fetch_json_to_df(settings.base44_enterprises_url)
+    return fetch_supabase_entity_to_df("enterprises")
 
 
 def enrich_enterprise_coords(

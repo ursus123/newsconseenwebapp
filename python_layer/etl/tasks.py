@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from etl.base import fetch_json_to_df
-from config import settings
+from etl.base import fetch_supabase_entity_to_df
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ def extract_tasks() -> pd.DataFrame:
     Extract all task records from Base44.
     Returns raw DataFrame — no transformation applied here.
     """
-    return fetch_json_to_df(settings.base44_tasks_url)
+    return fetch_supabase_entity_to_df("tasks")
 
 
 def transform_tasks(df: pd.DataFrame) -> pd.DataFrame:

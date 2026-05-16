@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from etl.base import fetch_json_to_df
-from config import settings
+from etl.base import fetch_supabase_entity_to_df
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +14,7 @@ GROUP_COLUMNS = [
 
 
 def extract_observations() -> pd.DataFrame:
-    if not settings.base44_observations_url:
-        return pd.DataFrame()
-    return fetch_json_to_df(settings.base44_observations_url)
+    return fetch_supabase_entity_to_df("observations")
 
 
 def transform_observations(df: pd.DataFrame) -> pd.DataFrame:

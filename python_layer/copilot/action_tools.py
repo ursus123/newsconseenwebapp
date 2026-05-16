@@ -6,7 +6,7 @@ Copilot propose/write-back tools.
 propose_* tools → submit to analytics.agent_approvals (approval gate).
                   Nothing is created until the operator approves.
 
-write_insight   → writes immediately to Base44 Insights or analytics.copilot_insights.
+write_insight   → writes immediately to Supabase Insights or analytics.copilot_insights.
 """
 
 import json as _json
@@ -16,9 +16,23 @@ from datetime import datetime
 from typing import Optional
 
 from database import get_engine_safe
+from data_sources import supabase_source
 from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
+
+
+def _write_supabase_intelligence(entity: str, record: dict) -> Optional[str]:
+    """Write an intelligence record to Supabase when configured."""
+    try:
+        result = supabase_source.create_record(entity, record, company_id=record.get("company_id"))
+        if result.get("error"):
+            logger.warning("write_%s Supabase failed: %s", entity, result["error"])
+            return None
+        return result.get("id") or record.get("id")
+    except Exception as e:
+        logger.warning("write_%s Supabase failed: %s", entity, e)
+        return None
 
 
 def _submit_proposal(
@@ -262,8 +276,6 @@ def write_insight(
     for future reference: trend explanation, anomaly finding, risk conclusion, forecast.
     insight_type: "explanation" | "trend" | "anomaly" | "correlation" | "forecast" | "risk_finding"
     """
-    from config.settings import settings
-
     insight_id = str(uuid.uuid4())
     record = {
         "id":           insight_id,
@@ -279,19 +291,11 @@ def write_insight(
         "created_at":   datetime.utcnow().isoformat(),
     }
 
-    # Try Base44 Insights entity first
-    url = getattr(settings, "base44_insights_url", None)
-    if url:
-        try:
-            import httpx
-            headers = {"api_key": settings.base44_api_key, "Content-Type": "application/json"}
-            r = httpx.post(url, json=record, headers=headers, timeout=10)
-            if r.status_code in (200, 201):
-                logger.info("write_insight: wrote to Base44 insight_id=%s", insight_id)
-                return {"status": "created", "insight_id": insight_id,
-                        "insight": record, "storage": "base44"}
-        except Exception as e:
-            logger.warning("write_insight Base44 failed: %s", e)
+    supabase_id = _write_supabase_intelligence("insight", record)
+    if supabase_id:
+        logger.info("write_insight: wrote to Supabase insight_id=%s", supabase_id)
+        return {"status": "created", "insight_id": supabase_id,
+                "insight": record, "storage": "supabase"}
 
     # Fall back to local analytics.copilot_insights
     try:
@@ -326,7 +330,7 @@ def write_insight(
         logger.warning("write_insight local fallback failed: %s", e)
 
     return {"status": "failed", "insight_id": insight_id,
-            "error": "Neither Base44 nor local DB available"}
+            "error": "Neither Supabase nor local DB available"}
 
 
 # ─── Recommendation write-back ────────────────────────────────────────────────
@@ -348,8 +352,6 @@ def write_recommendation(
     action_type: "create_task" | "contact_customer" | "restock" | "review_record" | "other"
     priority: "low" | "medium" | "high" | "critical"
     """
-    from config.settings import settings
-
     rec_id = str(uuid.uuid4())
     record = {
         "id":                rec_id,
@@ -366,17 +368,10 @@ def write_recommendation(
         "created_at":        datetime.utcnow().isoformat(),
     }
 
-    url = getattr(settings, "base44_recommendations_url", None)
-    if url:
-        try:
-            import httpx
-            headers = {"api_key": settings.base44_api_key, "Content-Type": "application/json"}
-            r = httpx.post(url, json=record, headers=headers, timeout=10)
-            if r.status_code in (200, 201):
-                logger.info("write_recommendation: wrote rec_id=%s", rec_id)
-                return {"status": "created", "recommendation_id": rec_id, "storage": "base44"}
-        except Exception as e:
-            logger.warning("write_recommendation Base44 failed: %s", e)
+    supabase_id = _write_supabase_intelligence("recommendation", record)
+    if supabase_id:
+        logger.info("write_recommendation: wrote rec_id=%s", supabase_id)
+        return {"status": "created", "recommendation_id": supabase_id, "storage": "supabase"}
 
     # Fall back to analytics table
     try:
@@ -429,8 +424,6 @@ def write_decision(
     Write a Decision record after an approval gate item is resolved.
     decision: "approved" | "rejected"
     """
-    from config.settings import settings
-
     dec_id = str(uuid.uuid4())
     record = {
         "id":                dec_id,
@@ -445,17 +438,10 @@ def write_decision(
         "created_at":        datetime.utcnow().isoformat(),
     }
 
-    url = getattr(settings, "base44_decisions_url", None)
-    if url:
-        try:
-            import httpx
-            headers = {"api_key": settings.base44_api_key, "Content-Type": "application/json"}
-            r = httpx.post(url, json=record, headers=headers, timeout=10)
-            if r.status_code in (200, 201):
-                logger.info("write_decision: wrote dec_id=%s", dec_id)
-                return {"status": "created", "decision_id": dec_id, "storage": "base44"}
-        except Exception as e:
-            logger.warning("write_decision Base44 failed: %s", e)
+    supabase_id = _write_supabase_intelligence("decision", record)
+    if supabase_id:
+        logger.info("write_decision: wrote dec_id=%s", supabase_id)
+        return {"status": "created", "decision_id": supabase_id, "storage": "supabase"}
 
     # Fall back to analytics table
     try:

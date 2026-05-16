@@ -5,6 +5,7 @@ import pandas as pd
 import requests
 
 from config import HEADERS
+from data_sources.supabase_source import fetch_entity_df
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,11 @@ def fetch_json_to_df(url: str, params: dict | None = None) -> pd.DataFrame:
         len(df), len(df.columns), url,
     )
     return df
+
+
+def fetch_supabase_entity_to_df(entity: str, company_id: str | None = None) -> pd.DataFrame:
+    """Fetch operational records from Supabase, the Newsconseen system of record."""
+    return fetch_entity_df(entity, company_id=company_id)
 
 
 def _fetch_with_retry(url: str, params: dict) -> list[dict]:

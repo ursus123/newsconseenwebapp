@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # ── Staleness threshold ───────────────────────────────────────────────────────
 # If the most recent analytics snapshot is older than this, the copilot falls
-# through to Base44 live data instead of serving stale cached rows.
+# through to Supabase live data instead of serving stale cached rows.
 # Mutation triggers keep tables fresh within ~30s of any save; this threshold
 # is a safety net for the case where a trigger failed or ETL was delayed.
 STALE_THRESHOLD_HOURS: float = float(
@@ -98,7 +98,7 @@ def _analytics_freshness(table: str, company_id: str) -> tuple[bool, str]:
       3. No rows → stale.
 
     data_as_of_str examples: "just now", "4 min ago", "1h 22m ago",
-                              "today (cached)", "Base44 live"
+                              "today (cached)", "Supabase live"
     """
     from datetime import datetime, date as _date, timezone
 
@@ -124,7 +124,7 @@ def _analytics_freshness(table: str, company_id: str) -> tuple[bool, str]:
             else:
                 age_secs = (now.replace(tzinfo=None) - ts).total_seconds()
             is_stale = age_secs / 3600 > STALE_THRESHOLD_HOURS
-            return is_stale, ("Base44 live" if is_stale else _age_str(age_secs))
+            return is_stale, ("Supabase live" if is_stale else _age_str(age_secs))
     except Exception:
         pass  # column may not exist on load_dataframe_replace tables
 
@@ -140,12 +140,12 @@ def _analytics_freshness(table: str, company_id: str) -> tuple[bool, str]:
                 sd = sd.date()
             today = _date.today()
             is_stale = sd < today
-            return is_stale, ("Base44 live" if is_stale else "today (cached)")
+            return is_stale, ("Supabase live" if is_stale else "today (cached)")
     except Exception:
         pass
 
     # No data at all
-    return True, "Base44 live"
+    return True, "Supabase live"
 
 
 def _query_analytics(
@@ -158,26 +158,26 @@ def _query_analytics(
     Run an analytics query only if the snapshot is fresh enough.
     Returns (rows, data_as_of, source).
 
-    When stale or unavailable, returns ([], "Base44 live", "base44_live")
-    so the caller falls through to its existing Base44 fallback unchanged.
+    When stale or unavailable, returns ([], "Supabase live", "supabase_live")
+    so the caller falls through to its existing Supabase fallback unchanged.
     """
     is_stale, data_as_of = _analytics_freshness(table, company_id)
     if is_stale:
         logger.info(
-            "Copilot: analytics.%s stale → Base44 live (company_id=%s)",
+            "Copilot: analytics.%s stale → Supabase live (company_id=%s)",
             table, company_id,
         )
-        return [], "Base44 live", "base44_live"
+        return [], "Supabase live", "supabase_live"
     rows = _run(sql, params)
     if rows:
         return rows, data_as_of, "analytics"
-    return [], "Base44 live", "base44_live"
+    return [], "Supabase live", "supabase_live"
 
 
-# ── Base44 live-data helpers (fallback when analytics tables are empty) ───────
+# ── Supabase live-data helpers (fallback when analytics tables are empty) ───────
 #
 # Each _b44_* function calls the same extract_*() used by the ETL pipeline.
-# extract_*() fetches from Base44 live — so this is always current data.
+# extract_*() fetches from Supabase live — so this is always current data.
 # Tenant isolation: filter DataFrame by company_id after fetch.
 
 import pandas as _pd
@@ -192,7 +192,7 @@ def _filter_by_company(df: "_pd.DataFrame", company_id: str) -> "_pd.DataFrame":
     verified tenant and must never be shown to another operator.
 
     Normalises both sides to stripped strings before comparison so that
-    int/str type mismatches and trailing whitespace from Base44 do not
+    int/str type mismatches and trailing whitespace from Supabase do not
     cause silent empty results that previously triggered tenant bleed.
     """
     if not company_id or "company_id" not in df.columns:
@@ -219,7 +219,7 @@ def _b44_people(company_id: str):
     if not raw.empty:
         logger.info("_b44_people: using raw.people (%d rows)", len(raw))
         return raw
-    # Tier 3: Base44 live API
+    # Tier 3: Supabase live API
     try:
         from etl.people import extract_people
         df = extract_people()
@@ -258,14 +258,14 @@ def _b44_enterprises(company_id: str):
         except Exception as e:
             logger.debug("_b44_enterprises: null-cid raw query failed: %s", e)
 
-    # Tier 3: Base44 live — strict filter, then null-cid fallback
+    # Tier 3: Supabase live — strict filter, then null-cid fallback
     try:
         from etl.enterprises import extract_enterprises
         df = extract_enterprises()
         filtered = _filter_by_company(df, company_id)
         if not filtered.empty:
             return filtered
-        # Tier 4: Base44 live null-cid — enterprises without tenant tag
+        # Tier 4: Supabase live null-cid — enterprises without tenant tag
         if "company_id" in df.columns:
             null_mask = df["company_id"].isna() | (df["company_id"].astype(str).str.strip() == "")
             null_ents = df[null_mask]
@@ -363,7 +363,7 @@ def get_operator_context(company_id: str) -> dict:
             "website":          ctx.get("website"),
         }
 
-    # Base44 live fallback — analytics table empty (ETL not yet run)
+    # Supabase live fallback — analytics table empty (ETL not yet run)
     df = _b44_enterprises(company_id)
     if not df.empty:
         # Prefer the root/headquarters record; otherwise take the first row
@@ -422,7 +422,7 @@ def get_people_summary(company_id: str, person_type: Optional[str] = None) -> di
     )
 
     if not rows:
-        # Base44 live fallback
+        # Supabase live fallback
         df = _b44_people(company_id)
         if not df.empty:
             if person_type and "person_type" in df.columns:
@@ -435,7 +435,7 @@ def get_people_summary(company_id: str, person_type: Optional[str] = None) -> di
             for r in rows:
                 r["active_count"]   = r["count"] if r.get("status") == "active" else 0
                 r["inactive_count"] = r["count"] if r.get("status") != "active" else 0
-            logger.info("get_people_summary: using Base44 fallback (%d rows)", len(df))
+            logger.info("get_people_summary: using Supabase fallback (%d rows)", len(df))
 
     totals = {}
     for r in rows:
@@ -491,7 +491,7 @@ def get_person_churn_risk(company_id: str, top_n: int = 10) -> dict:
                 rows = grouped.nlargest(top_n, "count").pipe(_clean_df).to_dict(orient="records")
                 for r in rows:
                     r["inactive_count"] = r["count"]
-            logger.info("get_person_churn_risk: using Base44 fallback (%d inactive)", len(inactive))
+            logger.info("get_person_churn_risk: using Supabase fallback (%d inactive)", len(inactive))
 
     total = sum(r.get("count") or 0 for r in rows)
     return {
@@ -544,7 +544,7 @@ def get_staff_availability(
             active_staff = staff[staff["status"] == "active"] if "status" in staff.columns else staff
             rows = [{"person_type": "staff", "status": "active",
                      "count": len(active_staff), "active_count": len(active_staff)}]
-            logger.info("get_staff_availability: using Base44 fallback (%d active staff)", len(active_staff))
+            logger.info("get_staff_availability: using Supabase fallback (%d active staff)", len(active_staff))
 
     total_active = sum(r.get("active_count") or 0 for r in rows)
     return {
@@ -623,7 +623,7 @@ def get_transaction_summary(
                 r["unpaid_amount"]    = 0
                 r["revenue_last_30d"] = r["count"] if r.get("is_revenue") else 0
                 r["expense_last_30d"] = r["count"] if r.get("is_expense") else 0
-            logger.info("get_transaction_summary: using Base44 fallback (%d rows)", len(df))
+            logger.info("get_transaction_summary: using Supabase fallback (%d rows)", len(df))
 
     revenue_rows  = [r for r in rows if r.get("is_revenue")]
     total_revenue = sum(r.get("total_amount") or 0 for r in revenue_rows)
@@ -684,7 +684,7 @@ def get_overdue_invoices(company_id: str, top_n: int = 20) -> dict:
             total_amt = float(overdue_df["amount"].sum()) if "amount" in overdue_df.columns else 0.0
             rows = [{"transaction_type": "invoice", "count": len(overdue_df),
                      "total_outstanding": total_amt}] if not overdue_df.empty else []
-            logger.info("get_overdue_invoices: using Base44 fallback (%d overdue)", len(overdue_df))
+            logger.info("get_overdue_invoices: using Supabase fallback (%d overdue)", len(overdue_df))
 
     total_outstanding = sum(r.get("total_outstanding") or 0 for r in rows)
     return {
@@ -778,7 +778,7 @@ def get_task_summary(
             grouped["avg_completion_delay_mins"] = None
             grouped["total_quantity_used"] = 0.0
             rows = grouped.pipe(_clean_df).to_dict(orient="records")
-            logger.info("get_task_summary: using Base44 fallback (%d rows)", len(df))
+            logger.info("get_task_summary: using Supabase fallback (%d rows)", len(df))
 
     total    = sum(r.get("total_tasks")     or 0 for r in rows)
     completed = sum(r.get("completed_tasks") or 0 for r in rows)
@@ -858,7 +858,7 @@ def get_task_outcomes(
             grouped["completion_rate_pct"] = grouped.apply(lambda r: 100.0 if r["status"] == "completed" else 0.0, axis=1)
             grouped["pct_of_total"]      = grouped["count"].apply(lambda c: round(c / total_all * 100, 1) if total_all else 0)
             rows = grouped.pipe(_clean_df).to_dict(orient="records")
-            logger.info("get_task_outcomes: using Base44 fallback (%d rows)", len(df))
+            logger.info("get_task_outcomes: using Supabase fallback (%d rows)", len(df))
 
     completed = sum(r.get("completed", 0) or 0 for r in rows)
     overdue   = sum(r.get("overdue",    0) or 0 for r in rows)
@@ -954,7 +954,7 @@ def get_product_summary(
                 expiring_30d_count=("_exp30", "sum"),
             ).reset_index()
             rows = grouped.pipe(_clean_df).to_dict(orient="records")
-            logger.info("get_product_summary: using Base44 fallback (%d products)", len(df))
+            logger.info("get_product_summary: using Supabase fallback (%d products)", len(df))
 
     total_low_stock    = sum(r.get("low_stock_count",    0) or 0 for r in rows)
     total_out_of_stock = sum(r.get("out_of_stock_count", 0) or 0 for r in rows)
@@ -1031,7 +1031,7 @@ def get_enterprise_overview(company_id: str) -> dict:
                 "status", "is_active", "is_root", "parent_id",
                 "naics_code", "naics_title", "sic_code", "sic_description",
             ) if c in df.columns]].rename(columns={"enterprise_name": "name"}).pipe(_clean_df).to_dict(orient="records")
-            logger.info("get_enterprise_overview: using Base44 fallback (%d enterprises)", len(df))
+            logger.info("get_enterprise_overview: using Supabase fallback (%d enterprises)", len(df))
 
     active_count = sum(1 for r in rows if r.get("is_active"))
     root_ents    = [r for r in rows if r.get("is_root")]
@@ -1069,7 +1069,7 @@ def get_network_overview(company_id: str) -> dict:
     """
     # Single freshness check covers all four analytics tables in this query
     _net_stale, _dao = _analytics_freshness("enterprise_summary", company_id)
-    _src = "base44_live" if _net_stale else "analytics"
+    _src = "supabase_live" if _net_stale else "analytics"
 
     # Enterprise list
     ent_sql = """
@@ -1096,7 +1096,7 @@ def get_network_overview(company_id: str) -> dict:
             enterprises = df_ent[[c for c in (
                 "enterprise_name", "enterprise_type", "operating_status", "is_active", "is_root",
             ) if c in df_ent.columns]].rename(columns={"enterprise_name": "name"}).pipe(_clean_df).to_dict(orient="records")
-            logger.info("get_network_overview: enterprises from Base44 fallback (%d)", len(enterprises))
+            logger.info("get_network_overview: enterprises from Supabase fallback (%d)", len(enterprises))
 
     # People totals
     people_sql = """
@@ -1122,7 +1122,7 @@ def get_network_overview(company_id: str) -> dict:
                 active=("status", lambda s: (s == "active").sum()),
             ).reset_index()
             people = grp.pipe(_clean_df).to_dict(orient="records")
-            logger.info("get_network_overview: people from Base44 fallback (%d groups)", len(people))
+            logger.info("get_network_overview: people from Supabase fallback (%d groups)", len(people))
 
     # Task totals
     task_sql = """
@@ -1148,7 +1148,7 @@ def get_network_overview(company_id: str) -> dict:
             rate = round(completed / total * 100, 1) if total else 0
             tasks = [{"total_tasks": total, "completed_tasks": completed,
                       "overdue_tasks": 0, "avg_completion_rate": rate}]
-            logger.info("get_network_overview: tasks from Base44 fallback (total=%d)", total)
+            logger.info("get_network_overview: tasks from Supabase fallback (total=%d)", total)
 
     # Transaction totals
     tx_sql = """
@@ -1177,7 +1177,7 @@ def get_network_overview(company_id: str) -> dict:
             total_rev = float(rev_df["amount"].sum()) if "amount" in rev_df.columns else 0.0
             transactions = [{"total_transactions": len(rev_df),
                               "total_revenue": total_rev, "outstanding_amount": 0.0}]
-            logger.info("get_network_overview: transactions from Base44 fallback (total=%d)", len(rev_df))
+            logger.info("get_network_overview: transactions from Supabase fallback (total=%d)", len(rev_df))
 
     task_totals = tasks[0] if tasks else {}
     tx_totals   = transactions[0] if transactions else {}
@@ -1234,7 +1234,7 @@ def get_monthly_kpis(company_id: str, months: int = 12) -> dict:
     )
 
     if not rows:
-        # Tier 2: raw PostgreSQL; Tier 3: Base44 live
+        # Tier 2: raw PostgreSQL; Tier 3: Supabase live
         try:
             import pandas as _pd
             from etl.monthly_kpis import transform_monthly_kpis
@@ -1318,7 +1318,7 @@ def get_entity_list(
     rows, _dao, _src = _query_analytics("entity_index", sql, params, company_id)
 
     if not rows:
-        # Tier 2: raw PostgreSQL entity_index, then Tier 3: Base44 live
+        # Tier 2: raw PostgreSQL entity_index, then Tier 3: Supabase live
         try:
             import pandas as _pd
             from etl.entity_index import transform_entity_index
@@ -1381,7 +1381,7 @@ def get_company_scorecard(company_id: str) -> dict:
     )
 
     if not rows:
-        # Tier 2: raw PostgreSQL; Tier 3: Base44 live
+        # Tier 2: raw PostgreSQL; Tier 3: Supabase live
         try:
             import pandas as _pd
             from etl.company_scorecard import transform_company_scorecard
@@ -1542,7 +1542,7 @@ def get_relationship_summary(
     Used for: "who is connected to Enterprise X", "how many assignments",
               "active relationships", "relationship overview", "connections".
 
-    Reads analytics.relationship_summary; falls back to Base44 live.
+    Reads analytics.relationship_summary; falls back to Supabase live.
     """
     sql = """
         SELECT
@@ -1560,7 +1560,7 @@ def get_relationship_summary(
     rows = _run(sql, {"company_id": company_id, "rel_type": relationship_type})
 
     if not rows:
-        # Tier 2: raw PostgreSQL, then Tier 3: Base44 live
+        # Tier 2: raw PostgreSQL, then Tier 3: Supabase live
         try:
             from etl.relationships import extract_relationships
             df = _read_raw_table("relationships", company_id)
@@ -1601,7 +1601,7 @@ def get_address_overview(company_id: str) -> dict:
     Used for: "how many addresses", "where are our locations",
               "address coverage", "geographic spread", "locations".
 
-    Reads analytics.address_summary; falls back to Base44 live.
+    Reads analytics.address_summary; falls back to Supabase live.
     """
     sql = """
         SELECT
@@ -1631,7 +1631,7 @@ def get_address_overview(company_id: str) -> dict:
                     rows = grp.sort_values("count", ascending=False).head(50).pipe(_clean_df).to_dict(orient="records")
                 else:
                     rows = [{"count": len(df), "note": "address fields not available"}]
-                logger.info("get_address_overview: Base44 fallback — %d addresses", len(df))
+                logger.info("get_address_overview: Supabase fallback — %d addresses", len(df))
         except Exception as e:
             logger.warning("get_address_overview fallback failed: %s", e)
 
@@ -1655,7 +1655,7 @@ def get_service_overview(company_id: str) -> dict:
     Used for: "what services do we offer", "service catalogue",
               "how many services", "service pricing", "active services".
 
-    Reads analytics.service_summary; falls back to Base44 live.
+    Reads analytics.service_summary; falls back to Supabase live.
     """
     sql = """
         SELECT
@@ -1686,7 +1686,7 @@ def get_service_overview(company_id: str) -> dict:
                 grp = df.groupby(grp_cols).agg(agg).reset_index()
                 grp.rename(columns={"id": "count", "price": "avg_price"}, inplace=True)
                 rows = grp.sort_values("count", ascending=False).pipe(_clean_df).to_dict(orient="records")
-                logger.info("get_service_overview: Base44 fallback — %d services", len(df))
+                logger.info("get_service_overview: Supabase fallback — %d services", len(df))
         except Exception as e:
             logger.warning("get_service_overview fallback failed: %s", e)
 
@@ -1718,7 +1718,7 @@ def get_product_at_risk(
     Used for: "what's about to expire?", "which items are low stock?",
               "stock alerts", "what should we reorder?", "expiring products".
 
-    Reads analytics.product_summary; falls back to raw.products then Base44.
+    Reads analytics.product_summary; falls back to raw.products then Supabase.
     """
     sql = """
         SELECT
@@ -1804,8 +1804,8 @@ def get_product_at_risk(
                     ["name", "item_type", "status", "stock_quantity", "reorder_level",
                      "unit_of_measure", "expiry_date", "unit_price"]
                 ].head(top_n).pipe(_clean_df).to_dict(orient="records")
-            _dao, _src = None, "base44_live"
-            logger.info("get_product_at_risk: Base44 fallback — %d at-risk items", len(rows))
+            _dao, _src = None, "supabase_live"
+            logger.info("get_product_at_risk: Supabase fallback — %d at-risk items", len(rows))
 
     low_stock_items  = [r for r in rows if r.get("stock_status") == "low_stock"
                         or (r.get("stock_quantity") is not None
@@ -1837,7 +1837,7 @@ def get_operational_trends(
               "staff changes by month", "headcount trend", "operations last 6 months".
 
     Reads analytics.task_summary + analytics.people_summary time series.
-    Falls back to Base44 live data.
+    Falls back to Supabase live data.
     """
     task_sql = """
         SELECT
@@ -1889,7 +1889,7 @@ def get_operational_trends(
             "headcount_change":      delta,
         })
 
-    # Base44 fallback — derive from raw tasks and people
+    # Supabase fallback — derive from raw tasks and people
     if not trend_months:
         import pandas as _pd2
         from datetime import date
@@ -1942,7 +1942,7 @@ def get_operational_trends(
                         "task_completion_rate": rate,
                         "headcount": hc, "headcount_change": delta,
                     })
-        logger.info("get_operational_trends: Base44 fallback — %d months", len(trend_months))
+        logger.info("get_operational_trends: Supabase fallback — %d months", len(trend_months))
 
     avg_completion_rate = None
     rates = [m["task_completion_rate"] for m in trend_months if m["task_completion_rate"] is not None]
@@ -1967,7 +1967,7 @@ def get_top_debtors(
     Used for: "who owes us money?", "top debtors", "outstanding balances",
               "who hasn't paid?", "largest unpaid invoices", "collections".
 
-    Reads analytics.transaction_summary; falls back to raw.transactions then Base44.
+    Reads analytics.transaction_summary; falls back to raw.transactions then Supabase.
     """
     sql = """
         SELECT
@@ -2030,8 +2030,8 @@ def get_top_debtors(
                     .head(top_n)
                 )
                 rows = grp.pipe(_clean_df).to_dict(orient="records")
-            _dao, _src = None, "base44_live"
-            logger.info("get_top_debtors: Base44 fallback — %d debtors", len(rows))
+            _dao, _src = None, "supabase_live"
+            logger.info("get_top_debtors: Supabase fallback — %d debtors", len(rows))
 
     total_outstanding = sum(float(r.get("total_outstanding") or 0) for r in rows)
 
@@ -2096,7 +2096,7 @@ def _b44_people_records(company_id: str, name_fragment: str = None,
                          person_type: str = None, status: str = None,
                          enterprise_name: str = None, at_risk_only: bool = False,
                          limit: int = 100) -> list:
-    """Base44 live fallback for find_people_records."""
+    """Supabase live fallback for find_people_records."""
     try:
         from datetime import date, timedelta
         df = _b44_people(company_id)
@@ -2151,7 +2151,7 @@ def find_people_records(
     at_risk_only=True: returns people with status='inactive' or recent end_date —
     the individual names behind the churn risk count.
 
-    Queries raw.people directly; falls back to Base44 live.
+    Queries raw.people directly; falls back to Supabase live.
     """
     where, params = [], {}
     if name:
@@ -2186,7 +2186,7 @@ def find_people_records(
 
     if not rows:
         rows = _b44_people_records(company_id, name, person_type, status, enterprise_name, at_risk_only, limit)
-        source = "base44_live"
+        source = "supabase_live"
     else:
         source = "raw"
 
@@ -2215,7 +2215,7 @@ def find_task_records(
     Used for: "show me overdue tasks", "what tasks are assigned to Mary?",
               "pending visits this week", "which tasks did we miss?".
 
-    Queries raw.tasks directly; falls back to Base44 live.
+    Queries raw.tasks directly; falls back to Supabase live.
     """
     where, params = [], {}
     if assignee_name:
@@ -2276,8 +2276,8 @@ def find_task_records(
                                      "enterprise_name", "notes") if c in df.columns]
                 rows = df[keep].head(limit).pipe(_clean_df).to_dict(orient="records")
         except Exception as e:
-            logger.warning("find_task_records Base44 fallback: %s", e)
-        source = "base44_live"
+            logger.warning("find_task_records Supabase fallback: %s", e)
+        source = "supabase_live"
     else:
         source = "raw"
 
@@ -2309,7 +2309,7 @@ def find_transaction_records(
     Used for: "show me invoices for Client X", "unpaid transactions above $1000",
               "recent payments from ABC Corp", "all draft invoices".
 
-    Queries raw.transactions directly; falls back to Base44 live.
+    Queries raw.transactions directly; falls back to Supabase live.
     """
     where, params = [], {}
     if counterparty_name:
@@ -2363,8 +2363,8 @@ def find_transaction_records(
                                      "enterprise_name", "created_date") if c in df.columns]
                 rows = df[keep].head(limit).pipe(_clean_df).to_dict(orient="records")
         except Exception as e:
-            logger.warning("find_transaction_records Base44 fallback: %s", e)
-        source = "base44_live"
+            logger.warning("find_transaction_records Supabase fallback: %s", e)
+        source = "supabase_live"
     else:
         source = "raw"
 
@@ -2408,7 +2408,7 @@ def inspect_raw_record(
     )
 
     if not rows:
-        # Base44 fallback — use the appropriate _b44_* helper and filter by id
+        # Supabase fallback — use the appropriate _b44_* helper and filter by id
         try:
             b44_fns = {
                 "people":        _b44_people,
@@ -2428,10 +2428,10 @@ def inspect_raw_record(
                         "entity":      entity,
                         "record_id":   record_id,
                         "record":      _clean_df(match.iloc[0]).to_dict(),
-                        "data_source": "base44_live",
+                        "data_source": "supabase_live",
                     }
         except Exception as e:
-            logger.warning("inspect_raw_record Base44 fallback: %s", e)
+            logger.warning("inspect_raw_record Supabase fallback: %s", e)
         return {
             "found":     False,
             "entity":    entity,
@@ -2463,7 +2463,7 @@ def find_relationship_records(
               "show all active employment relationships", "item custody for Product Y",
               "which staff are assigned to Enterprise Z?".
 
-    Queries raw.relationships directly; falls back to Base44 live.
+    Queries raw.relationships directly; falls back to Supabase live.
     """
     where, params = [], {}
     if person_name:
@@ -2511,8 +2511,8 @@ def find_relationship_records(
                                      "start_date", "end_date", "notes") if c in df.columns]
                 rows = df[keep].head(limit).pipe(_clean_df).to_dict(orient="records")
         except Exception as e:
-            logger.warning("find_relationship_records Base44 fallback: %s", e)
-        source = "base44_live"
+            logger.warning("find_relationship_records Supabase fallback: %s", e)
+        source = "supabase_live"
     else:
         source = "raw"
 
@@ -2546,7 +2546,7 @@ def find_product_records(
     Used for: "find paracetamol", "show me all medications", "list active products",
               "which livestock are we tracking?", "browse our service catalogue".
 
-    Queries raw.products directly; falls back to Base44 live.
+    Queries raw.products directly; falls back to Supabase live.
     """
     where, params = [], {}
     if name:
@@ -2598,8 +2598,8 @@ def find_product_records(
                                      "batch_number", "enterprise_name") if c in df.columns]
                 rows = df[keep].head(limit).pipe(_clean_df).to_dict(orient="records")
         except Exception as e:
-            logger.warning("find_product_records Base44 fallback: %s", e)
-        source = "base44_live"
+            logger.warning("find_product_records Supabase fallback: %s", e)
+        source = "supabase_live"
     else:
         source = "raw"
 
@@ -2625,7 +2625,7 @@ def find_address_records(
     Used for: "where is Branch X located?", "show all addresses in Nairobi",
               "list delivery addresses", "what's the address for Enterprise Y?".
 
-    Queries raw.addresses directly; falls back to Base44 live.
+    Queries raw.addresses directly; falls back to Supabase live.
     """
     where, params = [], {}
     if city:
@@ -2673,8 +2673,8 @@ def find_address_records(
                                      "person_name", "is_primary") if c in df.columns]
                 rows = df[keep].head(limit).pipe(_clean_df).to_dict(orient="records")
         except Exception as e:
-            logger.warning("find_address_records Base44 fallback: %s", e)
-        source = "base44_live"
+            logger.warning("find_address_records Supabase fallback: %s", e)
+        source = "supabase_live"
     else:
         source = "raw"
 
@@ -2776,7 +2776,7 @@ def get_entity_join(
     secondary_status_filter: status filter on the secondary entity.
     secondary_overdue_only: for tasks, filter to overdue only.
 
-    Queries raw.* directly; falls back to Base44 live per entity.
+    Queries raw.* directly; falls back to Supabase live per entity.
     """
     import pandas as _pd2
 
@@ -2804,7 +2804,7 @@ def get_entity_join(
         select_cols="*", order_by="id", limit=200,
     )
     if not primary_rows:
-        # Base44 fallback
+        # Supabase fallback
         try:
             fn_map = {
                 "people":      _b44_people,
@@ -5736,7 +5736,7 @@ TOOL_DEFINITIONS = [
             "'Which person has the highest workload?', 'Who has the most overdue tasks?', "
             "'Task workload by person', 'Staff efficiency', 'Team performance report', "
             "'Completion rates by person', 'Who completes the most tasks?', 'Workload distribution'. "
-            "Has three-tier fallback: analytics table → raw tasks GROUP BY → Base44 live groupby. "
+            "Has three-tier fallback: analytics table → raw tasks GROUP BY → Supabase live groupby. "
             "Always returns actual names, never just counts without names."
         ),
         "input_schema": {
@@ -6888,7 +6888,7 @@ def get_kpi_snapshot(company_id: str) -> dict:
             row = df[df["company_id"] == company_id]
             if not row.empty:
                 return {"snapshot": row.iloc[0].where(row.iloc[0].notna(), None).to_dict(),
-                        "data_as_of": "Base44 live", "source": "base44_live"}
+                        "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
         logger.warning("get_kpi_snapshot fallback: %s", e)
     return {"snapshot": {}, "data_as_of": "unavailable", "source": "none",
@@ -6928,7 +6928,7 @@ def get_top_clients(company_id: str, top_n: int = 10, segment: str = None) -> di
         if not df.empty:
             df = df[df["company_id"] == company_id].sort_values("total_revenue", ascending=False).head(top_n)
             return {"clients": df.where(df.notna(), None).pipe(_clean_df).to_dict(orient="records"),
-                    "count": len(df), "data_as_of": "Base44 live", "source": "base44_live"}
+                    "count": len(df), "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
         logger.warning("get_top_clients fallback: %s", e)
     return {"clients": [], "count": 0, "note": "Run POST /load/client-value to populate this table."}
@@ -7008,7 +7008,7 @@ def get_staff_leaderboard(company_id: str, metric: str = "completion_rate_pct", 
     except Exception as e:
         logger.warning("get_staff_leaderboard raw fallback: %s", e)
 
-    # Tier 3 — Base44 live tasks, pandas groupby
+    # Tier 3 — Supabase live tasks, pandas groupby
     try:
         df = _b44_tasks(company_id)
         if not df.empty:
@@ -7029,9 +7029,9 @@ def get_staff_leaderboard(company_id: str, metric: str = "completion_rate_pct", 
                 rows = agg.where(agg.notna(), None).to_dict(orient="records")
                 if rows:
                     return {"staff": rows, "count": len(rows), "ranked_by": metric,
-                            "data_as_of": "Base44 live", "source": "base44_live"}
+                            "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
-        logger.warning("get_staff_leaderboard Base44 fallback: %s", e)
+        logger.warning("get_staff_leaderboard Supabase fallback: %s", e)
 
     return {"staff": [], "count": 0, "ranked_by": metric,
             "note": "No task assignment data found."}
@@ -7061,7 +7061,7 @@ def get_ar_report(company_id: str, bucket: str = None) -> dict:
         params["bucket"] = bucket
     detail_sql += " ORDER BY days_overdue DESC LIMIT 100"
 
-    detail_rows = _run(detail_sql, params) if not (data_as_of == "Base44 live") else []
+    detail_rows = _run(detail_sql, params) if not (data_as_of == "Supabase live") else []
 
     if summary_rows:
         return {
@@ -7083,7 +7083,7 @@ def get_ar_report(company_id: str, bucket: str = None) -> dict:
             "summary":  summary[0] if summary else {},
             "detail":   detail.head(100).where(detail.notna(), None).pipe(_clean_df).to_dict(orient="records"),
             "bucket_filter": bucket,
-            "data_as_of": "Base44 live", "source": "base44_live",
+            "data_as_of": "Supabase live", "source": "supabase_live",
         }
     except Exception as e:
         logger.warning("get_ar_report fallback: %s", e)
@@ -7136,7 +7136,7 @@ def get_inventory_health(company_id: str, urgency: str = None) -> dict:
                 "critical_count": int((df["reorder_urgency"] == "critical").sum()),
                 "out_of_stock_count": int(df["out_of_stock"].sum()),
                 "dead_stock_count": int(df["dead_stock"].sum()),
-                "urgency_filter": urgency, "data_as_of": "Base44 live", "source": "base44_live",
+                "urgency_filter": urgency, "data_as_of": "Supabase live", "source": "supabase_live",
             }
     except Exception as e:
         logger.warning("get_inventory_health fallback: %s", e)
@@ -7188,7 +7188,7 @@ def get_network_kpis(company_id: str, tier: str = None) -> dict:
             return {
                 "branches": df.head(50).where(df.notna(), None).pipe(_clean_df).to_dict(orient="records"),
                 "count": len(df), "tier_filter": tier,
-                "data_as_of": "Base44 live", "source": "base44_live",
+                "data_as_of": "Supabase live", "source": "supabase_live",
             }
     except Exception as e:
         logger.warning("get_network_kpis fallback: %s", e)
@@ -7237,7 +7237,7 @@ def get_concentration_risk(company_id: str) -> dict:
             if not row.empty:
                 r = row.iloc[0].where(row.iloc[0].notna(), None).to_dict()
                 flags = [f.strip() for f in (r.get("concentration_flags") or "").split(",") if f.strip()]
-                return {**r, "flags": flags, "data_as_of": "Base44 live", "source": "base44_live"}
+                return {**r, "flags": flags, "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
         logger.warning("get_concentration_risk fallback: %s", e)
     return {"risk_level": "unknown", "flags": [],
@@ -7368,7 +7368,7 @@ def import_records(
     """
     Bulk import multiple records of any entity type.
     Always goes through the approval gate regardless of entity type.
-    Operator reviews the full record list before anything is written to Base44.
+    Operator reviews the full record list before anything is written to Supabase.
     """
     if entity_type not in _ENTITY_ACTION_MAP:
         return {
@@ -7406,7 +7406,7 @@ def import_records(
 def get_document_summary(company_id: str, document_type: str = None) -> dict:
     """
     Return document counts by type and status.
-    Falls back to Base44 live data if analytics table is stale.
+    Falls back to Supabase live data if analytics table is stale.
     """
     sql = """
         SELECT document_type, status,
@@ -7430,12 +7430,12 @@ def get_document_summary(company_id: str, document_type: str = None) -> dict:
     if rows:
         return {"documents": rows, "data_as_of": data_as_of, "source": source}
 
-    # Base44 fallback
+    # Supabase fallback
     raw = _read_raw_table("documents", company_id)
     if not raw.empty:
         return {
             "documents": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
-            "data_as_of": "Base44 live", "source": "raw",
+            "data_as_of": "Supabase live", "source": "raw",
         }
     try:
         from etl.document import extract_documents
@@ -7444,7 +7444,7 @@ def get_document_summary(company_id: str, document_type: str = None) -> dict:
         if document_type and "document_type" in df.columns:
             df = df[df["document_type"] == document_type]
         return {"documents": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "base44_live"}
+                "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
         return {"documents": [], "error": str(e)}
 
@@ -7475,13 +7475,13 @@ def get_schedule_summary(company_id: str, frequency: str = None) -> dict:
     raw = _read_raw_table("schedules", company_id)
     if not raw.empty:
         return {"schedules": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "raw"}
+                "data_as_of": "Supabase live", "source": "raw"}
     try:
         from etl.schedule import extract_schedules
         df = extract_schedules()
         df = _filter_by_company(df, company_id)
         return {"schedules": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "base44_live"}
+                "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
         return {"schedules": [], "error": str(e)}
 
@@ -7513,13 +7513,13 @@ def get_signal_summary(company_id: str, signal_type: str = None) -> dict:
     raw = _read_raw_table("signals", company_id)
     if not raw.empty:
         return {"signals": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "raw"}
+                "data_as_of": "Supabase live", "source": "raw"}
     try:
         from etl.signal import extract_signals
         df = extract_signals()
         df = _filter_by_company(df, company_id)
         return {"signals": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "base44_live"}
+                "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
         return {"signals": [], "error": str(e)}
 
@@ -7552,13 +7552,13 @@ def get_channel_summary(company_id: str, channel_type: str = None) -> dict:
     raw = _read_raw_table("channels", company_id)
     if not raw.empty:
         return {"channels": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "raw"}
+                "data_as_of": "Supabase live", "source": "raw"}
     try:
         from etl.channel import extract_channels
         df = extract_channels()
         df = _filter_by_company(df, company_id)
         return {"channels": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "base44_live"}
+                "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
         return {"channels": [], "error": str(e)}
 
@@ -7590,13 +7590,13 @@ def get_territory_summary(company_id: str, territory_type: str = None) -> dict:
     raw = _read_raw_table("territories", company_id)
     if not raw.empty:
         return {"territories": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "raw"}
+                "data_as_of": "Supabase live", "source": "raw"}
     try:
         from etl.territory import extract_territories
         df = extract_territories()
         df = _filter_by_company(df, company_id)
         return {"territories": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "base44_live"}
+                "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
         return {"territories": [], "error": str(e)}
 
@@ -7637,13 +7637,13 @@ def get_animal_summary(company_id: str, animal_type: str = None, species: str = 
     raw = _read_raw_table("animals", company_id)
     if not raw.empty:
         return {"animals": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "raw"}
+                "data_as_of": "Supabase live", "source": "raw"}
     try:
         from etl.animal import extract_animals
         df = extract_animals()
         df = _filter_by_company(df, company_id)
         return {"animals": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "base44_live"}
+                "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
         return {"animals": [], "error": str(e)}
 
@@ -7680,13 +7680,13 @@ def get_plot_overview(company_id: str, plot_type: str = None, land_use: str = No
     raw = _read_raw_table("plots", company_id)
     if not raw.empty:
         return {"plots": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "raw"}
+                "data_as_of": "Supabase live", "source": "raw"}
     try:
         from etl.plot import extract_plots
         df = extract_plots()
         df = _filter_by_company(df, company_id)
         return {"plots": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "base44_live"}
+                "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
         return {"plots": [], "error": str(e)}
 
@@ -7728,13 +7728,13 @@ def get_observation_summary(
     raw = _read_raw_table("observations", company_id)
     if not raw.empty:
         return {"observations": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "raw"}
+                "data_as_of": "Supabase live", "source": "raw"}
     try:
         from etl.observation import extract_observations
         df = extract_observations()
         df = _filter_by_company(df, company_id)
         return {"observations": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
-                "data_as_of": "Base44 live", "source": "base44_live"}
+                "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
         return {"observations": [], "error": str(e)}
 
@@ -7923,51 +7923,19 @@ def execute_ingestion_plan(
     except Exception as e:
         return {"error": f"Could not deserialise plan data: {e}", "unable_to_fetch": True}
 
-    # Import loader inline — avoid circular imports at module level
-    try:
-        from ingestion.loader import execute as _execute_ingestion
-        from config.settings import settings as _settings
-    except ImportError as e:
-        return {"error": f"Ingestion module unavailable: {e}", "unable_to_fetch": True}
-
-    if not _settings.base44_api_url or not _settings.base44_api_key:
-        return {
-            "error": (
-                "BASE44_API_URL or BASE44_API_KEY not configured. "
-                "Set these in Railway environment variables."
-            ),
-            "unable_to_fetch": True,
-        }
-
-    logger.info("Copilot executing ingestion plan %s for company %s (%d rows)", plan_id, company_id, len(rows))
-
-    stats = _execute_ingestion(
-        plan           = plan,
-        rows           = rows,
-        company_id     = company_id,
-        base44_api_url = _settings.base44_api_url,
-        api_key        = _settings.base44_api_key,
-        engine         = engine,
-        plan_id        = plan_id,
-    )
-
     return {
-        "status":            stats.get("entities_failed", 0) == 0 and "complete" or "partial",
-        "entities_created":  stats.get("entities_created", 0),
-        "entities_updated":  stats.get("entities_updated", 0),
-        "entities_skipped":  stats.get("entities_skipped", 0),
-        "entities_failed":   stats.get("entities_failed", 0),
-        "run_id":            stats.get("run_id"),
-        "message": (
-            f"Import complete: {stats.get('entities_created',0)} created, "
-            f"{stats.get('entities_updated',0)} updated, "
-            f"{stats.get('entities_skipped',0)} skipped (duplicates), "
-            f"{stats.get('entities_failed',0)} failed."
+        "status": "blocked",
+        "error": (
+            "Copilot bulk import execution is disabled until the ingestion loader "
+            "is moved to Supabase. Use the inbound ingest endpoint or an approved "
+            "Supabase action path instead."
         ),
+        "records_ready": len(rows),
+        "plan_id": plan_id,
     }
 
 
-# ── Import template generator ─────────────────────────────────────────────────
+# -- Import template generator ─────────────────────────────────────────────────
 
 def generate_import_template(company_id: str, entity_type: str) -> dict:
     """

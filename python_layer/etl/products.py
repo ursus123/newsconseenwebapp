@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from etl.base import fetch_json_to_df
-from config import settings
+from etl.base import fetch_supabase_entity_to_df
 from config.taxonomy import (
     ITEM_TYPE_SETS,
     ITEM_ACTIVE_STATUSES as ACTIVE_STATUSES,
@@ -69,7 +68,7 @@ def extract_products() -> pd.DataFrame:
     Extract all product/item records from Base44.
     Returns raw DataFrame — no transformation applied here.
     """
-    return fetch_json_to_df(settings.base44_products_url)
+    return fetch_supabase_entity_to_df("products")
 
 
 def transform_products(df: pd.DataFrame) -> pd.DataFrame:

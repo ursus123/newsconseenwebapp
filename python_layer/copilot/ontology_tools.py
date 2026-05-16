@@ -12,6 +12,7 @@ import logging
 from typing import Optional
 
 from database import get_engine_safe
+from data_sources import supabase_source
 from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
@@ -28,28 +29,6 @@ def _run(sql: str, params: dict) -> list[dict]:
             return [dict(zip(cols, row)) for row in result.fetchall()]
     except Exception as e:
         logger.warning("ontology_tools query failed: %s", e)
-        return []
-
-
-def _b44_fetch(url: Optional[str], params: dict = None) -> list[dict]:
-    if not url:
-        return []
-    try:
-        from config.settings import settings
-        import httpx
-        headers = {"api_key": settings.base44_api_key, "Content-Type": "application/json"}
-        r = httpx.get(url, headers=headers, params=params or {}, timeout=10)
-        if r.status_code != 200:
-            return []
-        data = r.json()
-        if isinstance(data, list):
-            return data
-        for key in ("data", "results", "items"):
-            if key in data and isinstance(data[key], list):
-                return data[key]
-        return []
-    except Exception as e:
-        logger.warning("_b44_fetch failed for %s: %s", url, e)
         return []
 
 
@@ -226,32 +205,25 @@ def search_intelligence(
 ) -> dict:
     """
     Search insights, risks, opportunities, or recommendations.
-    Tries Base44 intelligence entity URLs first, falls back to local analytics tables.
+    Tries Supabase intelligence tables first, falls back to local analytics tables.
     """
-    from config.settings import settings
+    if intelligence_type in ("insight", "risk", "opportunity", "recommendation"):
+        items = supabase_source.list_records(intelligence_type, company_id=company_id, limit=limit)
+        if subject_type:
+            items = [i for i in items if i.get("subject_type") == subject_type]
+        if subject_id:
+            items = [i for i in items if i.get("subject_id") == subject_id]
+        if status:
+            items = [i for i in items if i.get("status") == status]
+    else:
+        items = []
 
-    url_map = {
-        "insight":        getattr(settings, "base44_insights_url",        None),
-        "risk":           getattr(settings, "base44_risks_url",           None),
-        "opportunity":    getattr(settings, "base44_opportunities_url",   None),
-        "recommendation": getattr(settings, "base44_recommendations_url", None),
-    }
-    url = url_map.get(intelligence_type)
-
-    if url:
-        params: dict = {"limit": limit}
-        if subject_type: params["subject_type"] = subject_type
-        if subject_id:   params["subject_id"]   = subject_id
-        if status:       params["status"]        = status
-
-        items = _b44_fetch(url, params)
-        cid = str(company_id).strip()
-        items = [i for i in items if str(i.get("company_id", "")).strip() == cid]
+    if items:
         return {
             "intelligence_type": intelligence_type,
             "items":  items[:limit],
             "count":  len(items),
-            "source": "base44_live",
+            "source": "supabase_live",
         }
 
     # Local fallback — copilot_insights table
@@ -273,7 +245,7 @@ def search_intelligence(
             "items":  rows,
             "count":  len(rows),
             "source": "local",
-            "note":   f"Base44 {intelligence_type} URL not configured — showing local only.",
+            "note":   f"Supabase {intelligence_type} records unavailable - showing local only.",
         }
 
     # Recommendation fallback — agent_approvals

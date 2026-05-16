@@ -1,20 +1,20 @@
 """
 python_layer/agents/action_executor.py  — Phase 13: Agent Actions
 =================================================================
-Executes approved (or auto-approved) agent actions as real Base44 mutations.
+Executes approved (or auto-approved) agent actions as real Supabase mutations.
 
 This closes the autonomous loop:
   detect → decide → act → record → learn
 
 Supported action types:
-  create_task          — POST to BASE44_TASKS_URL
-  create_follow_up     — POST to BASE44_TASKS_URL (follow_up task_type)
-  create_purchase_order— POST to BASE44_TASKS_URL (purchase_order task_type)
-  flag_record          — PATCH to entity URL  (sets flagged=True)
-  update_record        — PATCH to entity URL  (arbitrary field updates)
+  create_task          — insert task in Supabase
+  create_follow_up     — insert task in Supabase (follow_up task_type)
+  create_purchase_order— insert task in Supabase (purchase_order task_type)
+  flag_record          — update Supabase entity row (sets flagged=True)
+  update_record        — update Supabase entity row (arbitrary field updates)
   update_task_status   — PATCH task status
   reassign_task        — PATCH task assignee
-  create_transaction   — POST to BASE44_TRANSACTIONS_URL
+  create_transaction   — insert transaction in Supabase
   send_client_message  — via alerts engine (WhatsApp)
   send_whatsapp        — via alerts engine
   send_email           — via alerts engine
@@ -37,7 +37,7 @@ from typing import Optional
 
 import requests
 
-from config.settings import settings, HEADERS as BASE44_HEADERS
+from data_sources import supabase_source
 
 logger = logging.getLogger(__name__)
 
@@ -59,16 +59,18 @@ def _fire_etl(entity: str) -> None:
         pass
 
 
-def _post_base44(url: str, data: dict) -> dict:
-    resp = requests.post(url, json=data, headers=BASE44_HEADERS, timeout=20)
-    resp.raise_for_status()
-    return resp.json()
+def _create_record(entity_type: str, company_id: str, data: dict) -> dict:
+    result = supabase_source.create_record(entity_type, data, company_id=company_id)
+    if result.get("error"):
+        raise RuntimeError(result["error"])
+    return result
 
 
-def _patch_base44(url: str, record_id: str, data: dict) -> dict:
-    resp = requests.patch(f"{url}/{record_id}", json=data, headers=BASE44_HEADERS, timeout=20)
-    resp.raise_for_status()
-    return resp.json()
+def _update_record(entity_type: str, record_id: str, data: dict) -> dict:
+    result = supabase_source.update_record(entity_type, record_id, data)
+    if result.get("error"):
+        raise RuntimeError(result["error"])
+    return result
 
 
 def _write_audit(engine, company_id: str, agent_name: str,
@@ -99,9 +101,6 @@ def _write_audit(engine, company_id: str, agent_name: str,
 # ── Action handlers ───────────────────────────────────────────────────────────
 
 def _exec_create_task(company_id: str, inputs: dict) -> dict:
-    url = getattr(settings, "base44_tasks_url", None)
-    if not url:
-        return {"error": "BASE44_TASKS_URL not configured"}
     task = {k: v for k, v in {
         "company_id":       company_id,
         "title":            inputs.get("title", "Agent-created task"),
@@ -114,65 +113,36 @@ def _exec_create_task(company_id: str, inputs: dict) -> dict:
         "notes":            inputs.get("notes",
                                        f"Created by agent at {_now_iso()[:10]}"),
     }.items() if v not in ("", None)}
-    result = _post_base44(url, task)
+    result = _create_record("task", company_id, task)
     _fire_etl("task")
-    return {"entity_type": "task", "entity_id": result.get("id")}
+    return {"entity_type": "task", "entity_id": result.get("id"), "storage": "supabase"}
 
 
 def _exec_flag_record(company_id: str, inputs: dict) -> dict:
     entity_type = inputs.get("entity_type", "person")
     record_id   = inputs.get("record_id")
-    _url_map = {
-        "person":      getattr(settings, "base44_people_url",        None),
-        "enterprise":  getattr(settings, "base44_enterprises_url",   None),
-        "product":     getattr(settings, "base44_products_url",      None),
-        "task":        getattr(settings, "base44_tasks_url",         None),
-        "document":    getattr(settings, "base44_documents_url",     None),
-        "schedule":    getattr(settings, "base44_schedules_url",     None),
-        "territory":   getattr(settings, "base44_territories_url",   None),
-        "signal":      getattr(settings, "base44_signals_url",       None),
-        "channel":     getattr(settings, "base44_channels_url",      None),
-    }
-    url = _url_map.get(entity_type)
-    if not url:
-        return {"error": f"No Base44 URL for entity_type '{entity_type}'"}
     if not record_id:
         return {"error": "record_id required for flag_record"}
     patch = {"flagged": True, "flag_reason": inputs.get("reason", "Flagged by agent"),
              "flag_date": _now_iso()[:10]}
-    result = _patch_base44(url, record_id, patch)
+    _update_record(entity_type, record_id, patch)
     _etl_map = {"person": "people", "enterprise": "enterprise",
                 "product": "product", "task": "task"}
     _fire_etl(_etl_map.get(entity_type, entity_type))
-    return {"entity_type": entity_type, "entity_id": record_id}
+    return {"entity_type": entity_type, "entity_id": record_id, "storage": "supabase"}
 
 
 def _exec_update_record(company_id: str, inputs: dict) -> dict:
     entity_type = inputs.get("entity_type", "person")
     record_id   = inputs.get("record_id")
     updates     = inputs.get("updates", {})
-    _url_map = {
-        "person":      getattr(settings, "base44_people_url",        None),
-        "enterprise":  getattr(settings, "base44_enterprises_url",   None),
-        "product":     getattr(settings, "base44_products_url",      None),
-        "task":        getattr(settings, "base44_tasks_url",         None),
-        "transaction": getattr(settings, "base44_transactions_url",  None),
-        "document":    getattr(settings, "base44_documents_url",     None),
-        "schedule":    getattr(settings, "base44_schedules_url",     None),
-        "territory":   getattr(settings, "base44_territories_url",   None),
-        "signal":      getattr(settings, "base44_signals_url",       None),
-        "channel":     getattr(settings, "base44_channels_url",      None),
-    }
-    url = _url_map.get(entity_type)
-    if not url:
-        return {"error": f"No Base44 URL for entity_type '{entity_type}'"}
     if not record_id or not updates:
         return {"error": "entity_type, record_id, and updates are all required"}
-    result = _patch_base44(url, record_id, updates)
+    _update_record(entity_type, record_id, updates)
     _etl_map = {"person": "people", "enterprise": "enterprise",
                 "product": "product", "task": "task", "transaction": "transaction"}
     _fire_etl(_etl_map.get(entity_type, entity_type))
-    return {"entity_type": entity_type, "entity_id": record_id}
+    return {"entity_type": entity_type, "entity_id": record_id, "storage": "supabase"}
 
 
 def _exec_update_task_status(company_id: str, inputs: dict) -> dict:
@@ -192,9 +162,6 @@ def _exec_reassign_task(company_id: str, inputs: dict) -> dict:
 
 
 def _exec_create_transaction(company_id: str, inputs: dict) -> dict:
-    url = getattr(settings, "base44_transactions_url", None)
-    if not url:
-        return {"error": "BASE44_TRANSACTIONS_URL not configured"}
     txn = {k: v for k, v in {
         "company_id":       company_id,
         "transaction_type": inputs.get("transaction_type", "invoice"),
@@ -206,9 +173,9 @@ def _exec_create_transaction(company_id: str, inputs: dict) -> dict:
                                        f"Created by agent at {_now_iso()[:10]}"),
         "reference_number": inputs.get("reference_number", ""),
     }.items() if v not in ("", None)}
-    result = _post_base44(url, txn)
+    result = _create_record("transaction", company_id, txn)
     _fire_etl("transaction")
-    return {"entity_type": "transaction", "entity_id": result.get("id")}
+    return {"entity_type": "transaction", "entity_id": result.get("id"), "storage": "supabase"}
 
 
 def _exec_send_message(company_id: str, inputs: dict, channel: str) -> dict:
@@ -260,9 +227,6 @@ def _exec_invoke_agent(company_id: str, inputs: dict) -> dict:
 
 
 def _exec_create_person(company_id: str, inputs: dict) -> dict:
-    url = getattr(settings, "base44_people_url", None)
-    if not url:
-        return {"error": "BASE44_PEOPLE_URL not configured"}
     person = {k: v for k, v in {
         "company_id":    company_id,
         "full_name":     inputs.get("full_name") or inputs.get("name", ""),
@@ -277,15 +241,12 @@ def _exec_create_person(company_id: str, inputs: dict) -> dict:
     }.items() if v not in ("", None)}
     if not person.get("full_name"):
         return {"error": "full_name is required for create_person"}
-    result = _post_base44(url, person)
+    result = _create_record("person", company_id, person)
     _fire_etl("people")
-    return {"entity_type": "person", "entity_id": result.get("id")}
+    return {"entity_type": "person", "entity_id": result.get("id"), "storage": "supabase"}
 
 
 def _exec_create_enterprise(company_id: str, inputs: dict) -> dict:
-    url = getattr(settings, "base44_enterprises_url", None)
-    if not url:
-        return {"error": "BASE44_ENTERPRISES_URL not configured"}
     rec = {k: v for k, v in {
         "company_id":      company_id,
         "name":            inputs.get("name", ""),
@@ -300,15 +261,12 @@ def _exec_create_enterprise(company_id: str, inputs: dict) -> dict:
     }.items() if v not in ("", None)}
     if not rec.get("name"):
         return {"error": "name is required for create_enterprise"}
-    result = _post_base44(url, rec)
+    result = _create_record("enterprise", company_id, rec)
     _fire_etl("enterprise")
-    return {"entity_type": "enterprise", "entity_id": result.get("id")}
+    return {"entity_type": "enterprise", "entity_id": result.get("id"), "storage": "supabase"}
 
 
 def _exec_create_document(company_id: str, inputs: dict) -> dict:
-    url = getattr(settings, "base44_documents_url", None)
-    if not url:
-        return {"error": "BASE44_DOCUMENTS_URL not configured"}
     rec = {k: v for k, v in {
         "company_id":    company_id,
         "title":         inputs.get("title", ""),
@@ -326,15 +284,12 @@ def _exec_create_document(company_id: str, inputs: dict) -> dict:
     }.items() if v not in ("", None)}
     if not rec.get("title"):
         return {"error": "title is required for create_document"}
-    result = _post_base44(url, rec)
+    result = _create_record("document", company_id, rec)
     _fire_etl("document")
-    return {"entity_type": "document", "entity_id": result.get("id")}
+    return {"entity_type": "document", "entity_id": result.get("id"), "storage": "supabase"}
 
 
 def _exec_create_schedule(company_id: str, inputs: dict) -> dict:
-    url = getattr(settings, "base44_schedules_url", None)
-    if not url:
-        return {"error": "BASE44_SCHEDULES_URL not configured"}
     rec = {k: v for k, v in {
         "company_id":       company_id,
         "title":            inputs.get("title", ""),
@@ -351,15 +306,12 @@ def _exec_create_schedule(company_id: str, inputs: dict) -> dict:
     }.items() if v not in ("", None)}
     if not rec.get("title"):
         return {"error": "title is required for create_schedule"}
-    result = _post_base44(url, rec)
+    result = _create_record("schedule", company_id, rec)
     _fire_etl("schedule")
-    return {"entity_type": "schedule", "entity_id": result.get("id")}
+    return {"entity_type": "schedule", "entity_id": result.get("id"), "storage": "supabase"}
 
 
 def _exec_create_territory(company_id: str, inputs: dict) -> dict:
-    url = getattr(settings, "base44_territories_url", None)
-    if not url:
-        return {"error": "BASE44_TERRITORIES_URL not configured"}
     rec = {k: v for k, v in {
         "company_id":          company_id,
         "name":                inputs.get("name", ""),
@@ -376,15 +328,12 @@ def _exec_create_territory(company_id: str, inputs: dict) -> dict:
     }.items() if v not in ("", None)}
     if not rec.get("name"):
         return {"error": "name is required for create_territory"}
-    result = _post_base44(url, rec)
+    result = _create_record("territory", company_id, rec)
     _fire_etl("territory")
-    return {"entity_type": "territory", "entity_id": result.get("id")}
+    return {"entity_type": "territory", "entity_id": result.get("id"), "storage": "supabase"}
 
 
 def _exec_create_signal(company_id: str, inputs: dict) -> dict:
-    url = getattr(settings, "base44_signals_url", None)
-    if not url:
-        return {"error": "BASE44_SIGNALS_URL not configured"}
     rec = {k: v for k, v in {
         "company_id":     company_id,
         "name":           inputs.get("name", ""),
@@ -401,15 +350,12 @@ def _exec_create_signal(company_id: str, inputs: dict) -> dict:
     }.items() if v not in ("", None)}
     if not rec.get("name"):
         return {"error": "name is required for create_signal"}
-    result = _post_base44(url, rec)
+    result = _create_record("signal", company_id, rec)
     _fire_etl("signal")
-    return {"entity_type": "signal", "entity_id": result.get("id")}
+    return {"entity_type": "signal", "entity_id": result.get("id"), "storage": "supabase"}
 
 
 def _exec_create_channel(company_id: str, inputs: dict) -> dict:
-    url = getattr(settings, "base44_channels_url", None)
-    if not url:
-        return {"error": "BASE44_CHANNELS_URL not configured"}
     rec = {k: v for k, v in {
         "company_id":     company_id,
         "name":           inputs.get("name", ""),
@@ -423,9 +369,9 @@ def _exec_create_channel(company_id: str, inputs: dict) -> dict:
     }.items() if v not in ("", None)}
     if not rec.get("name"):
         return {"error": "name is required for create_channel"}
-    result = _post_base44(url, rec)
+    result = _create_record("channel", company_id, rec)
     _fire_etl("channel")
-    return {"entity_type": "channel", "entity_id": result.get("id")}
+    return {"entity_type": "channel", "entity_id": result.get("id"), "storage": "supabase"}
 
 
 def _exec_import_records(company_id: str, inputs: dict) -> dict:
@@ -486,9 +432,6 @@ def _exec_import_records(company_id: str, inputs: dict) -> dict:
 
 
 def _exec_create_product(company_id: str, inputs: dict) -> dict:
-    url = getattr(settings, "base44_products_url", None)
-    if not url:
-        return {"error": "BASE44_PRODUCTS_URL not configured"}
     product = {k: v for k, v in {
         "company_id":   company_id,
         "name":         inputs.get("name", ""),
@@ -504,9 +447,9 @@ def _exec_create_product(company_id: str, inputs: dict) -> dict:
     }.items() if v not in ("", None)}
     if not product.get("name"):
         return {"error": "name is required for create_product"}
-    result = _post_base44(url, product)
+    result = _create_record("product", company_id, product)
     _fire_etl("product")
-    return {"entity_type": "product", "entity_id": result.get("id")}
+    return {"entity_type": "product", "entity_id": result.get("id"), "storage": "supabase"}
 
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
@@ -547,7 +490,7 @@ _HANDLERS = {
 def _push_to_connected_systems(company_id: str, entity_type: str, payload: dict) -> None:
     """
     Phase 14: Fire-and-forget push to all active write-back connectors.
-    Called after every successful Base44 mutation.
+    Called after every successful Supabase mutation.
     Failures are logged but never bubble up to the caller.
     """
     try:
@@ -570,7 +513,7 @@ def execute_action(
     engine=None,
 ) -> dict:
     """
-    Execute a Base44 mutation for an approved agent action.
+    Execute a Supabase mutation for an approved agent action.
 
     Returns:
         {

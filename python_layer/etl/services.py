@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from etl.base import fetch_json_to_df
-from config import settings
+from etl.base import fetch_supabase_entity_to_df
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ def extract_services() -> pd.DataFrame:
     Extract all service records from Base44.
     Returns raw DataFrame — no transformation applied here.
     """
-    return fetch_json_to_df(settings.base44_services_url)
+    return fetch_supabase_entity_to_df("services")
 
 
 def transform_services(df: pd.DataFrame) -> pd.DataFrame:

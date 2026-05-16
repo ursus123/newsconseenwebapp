@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from etl.base import fetch_json_to_df
-from config import settings
+from etl.base import fetch_supabase_entity_to_df
 from config.taxonomy import (
     PERSON_TYPE_SETS,
     PERSON_TYPE_MAP,
@@ -40,7 +39,7 @@ def extract_people() -> pd.DataFrame:
     Extract all people records from Base44.
     Returns raw DataFrame — no transformation applied here.
     """
-    return fetch_json_to_df(settings.base44_people_url)
+    return fetch_supabase_entity_to_df("people")
 
 
 def enrich_people_enterprise(

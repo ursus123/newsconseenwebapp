@@ -6,7 +6,7 @@ Unified market enrichment runner.
 For a given entity, fetches external data (competitors, news, economic
 context, labor market, industry data), logs every enrichment attempt to
 analytics.enrichment_events, and writes Intelligence objects (Insight,
-Risk, Opportunity) back to Base44.
+Risk, Opportunity) back to Supabase.
 
 Entry point:
     from market.enrichment_engine import run_market_enrichment
@@ -26,12 +26,11 @@ from uuid import uuid4
 import httpx
 from sqlalchemy import text
 
-from config.settings import settings, HEADERS
 from database import get_engine_safe
+from data_sources import supabase_source
 
 logger = logging.getLogger(__name__)
 
-_B44_AUTH = {"Authorization": f"Bearer {settings.base44_api_key}", "Content-Type": "application/json"}
 _WB_BASE  = "https://api.worldbank.org/v2"
 _HN_BASE  = "https://hn.algolia.com/api/v1/search"
 _OVP_BASE = "https://overpass-api.de/api/interpreter"
@@ -50,7 +49,7 @@ def _eid() -> str:
 
 
 def _load_entity(entity_type: str, entity_id: str, company_id: str) -> dict:
-    """Load a single entity from analytics → raw → Base44."""
+    """Load a single entity from analytics → raw → Supabase."""
     engine = get_engine_safe()
     if engine:
         table_map = {
@@ -71,25 +70,13 @@ def _load_entity(entity_type: str, entity_id: str, company_id: str) -> dict:
             except Exception:
                 pass
 
-    # Base44 live fallback
-    url_map = {
-        "enterprise": settings.base44_enterprises_url,
-        "address":    getattr(settings, "base44_addresses_url", None),
-        "territory":  getattr(settings, "base44_territories_url", None),
-    }
-    url = url_map.get(entity_type)
-    if url:
-        try:
-            resp = httpx.get(url, headers=_B44_AUTH, timeout=10)
-            if resp.is_success:
-                items = resp.json()
-                if not isinstance(items, list):
-                    items = items.get("items", items.get("results", []))
-                for item in items:
-                    if str(item.get("id")) == entity_id and item.get("company_id") == company_id:
-                        return item
-        except Exception as exc:
-            logger.debug("_load_entity Base44 fallback failed: %s", exc)
+    try:
+        items = supabase_source.list_records(entity_type, company_id=company_id, limit=1000)
+        for item in items:
+            if str(item.get("id")) == entity_id:
+                return item
+    except Exception as exc:
+        logger.debug("_load_entity Supabase fallback failed: %s", exc)
     return {}
 
 
@@ -137,47 +124,35 @@ def _log_enrichment_event(
         logger.debug("_log_enrichment_event failed: %s", exc)
 
 
-def _write_insight_to_base44(payload: dict) -> Optional[str]:
-    """POST a new Insight entity to Base44. Returns the created id or None."""
-    url = getattr(settings, "base44_insights_url", None)
-    if not url:
-        return None
+def _write_insight_to_supabase(payload: dict) -> Optional[str]:
+    """Insert a new Insight entity in Supabase. Returns the created id or None."""
     try:
-        resp = httpx.post(url, json=payload, headers=_B44_AUTH, timeout=10)
-        if resp.is_success:
-            return resp.json().get("id")
+        result = supabase_source.create_record("insight", payload, company_id=payload.get("company_id"))
+        return result.get("id") if not result.get("error") else None
     except Exception as exc:
-        logger.debug("_write_insight_to_base44 failed: %s", exc)
+        logger.debug("_write_insight_to_supabase failed: %s", exc)
     return None
 
 
-def _write_risk_to_base44(payload: dict) -> Optional[str]:
-    url = getattr(settings, "base44_risks_url", None)
-    if not url:
-        return None
+def _write_risk_to_supabase(payload: dict) -> Optional[str]:
     try:
-        resp = httpx.post(url, json=payload, headers=_B44_AUTH, timeout=10)
-        if resp.is_success:
-            return resp.json().get("id")
+        result = supabase_source.create_record("risk", payload, company_id=payload.get("company_id"))
+        return result.get("id") if not result.get("error") else None
     except Exception as exc:
-        logger.debug("_write_risk_to_base44 failed: %s", exc)
+        logger.debug("_write_risk_to_supabase failed: %s", exc)
     return None
 
 
-def _write_opportunity_to_base44(payload: dict) -> Optional[str]:
-    url = getattr(settings, "base44_opportunities_url", None)
-    if not url:
-        return None
+def _write_opportunity_to_supabase(payload: dict) -> Optional[str]:
     try:
-        resp = httpx.post(url, json=payload, headers=_B44_AUTH, timeout=10)
-        if resp.is_success:
-            return resp.json().get("id")
+        result = supabase_source.create_record("opportunity", payload, company_id=payload.get("company_id"))
+        return result.get("id") if not result.get("error") else None
     except Exception as exc:
-        logger.debug("_write_opportunity_to_base44 failed: %s", exc)
+        logger.debug("_write_opportunity_to_supabase failed: %s", exc)
     return None
 
 
-# ── Per-type enrichment functions ─────────────────────────────────────────────
+# -- Per-type enrichment functions ─────────────────────────────────────────────
 
 def _enrich_competitors(entity: dict, company_id: str) -> tuple[Optional[dict], str]:
     """Fetch nearby competitors via Overpass for this entity's location."""
@@ -390,7 +365,7 @@ def _build_competitor_insight(entity: dict, data: dict, company_id: str) -> int:
         f"Top competitors: {', '.join(c.get('tags', {}).get('name', '') for c in (data.get('competitors') or [])[:3])}."
     )
 
-    insight_id = _write_insight_to_base44({
+    insight_id = _write_insight_to_supabase({
         "company_id":    company_id,
         "insight_type":  "competitive",
         "subject_type":  "enterprise",
@@ -416,7 +391,7 @@ def _build_competitor_insight(entity: dict, data: dict, company_id: str) -> int:
         created += 1
 
     if severity in ("high", "medium"):
-        _write_risk_to_base44({
+        _write_risk_to_supabase({
             "company_id":   company_id,
             "insight_id":   insight_id,
             "subject_type": "enterprise",
@@ -441,7 +416,7 @@ def _build_news_insight(entity: dict, data: dict, company_id: str) -> int:
     articles = data.get("articles", [])
     titles = [a.get("title", "") for a in articles[:3] if a.get("title")]
 
-    insight_id = _write_insight_to_base44({
+    insight_id = _write_insight_to_supabase({
         "company_id":    company_id,
         "insight_type":  "news",
         "subject_type":  "enterprise",
@@ -476,7 +451,7 @@ def _build_economic_insight(entity: dict, data: dict, company_id: str) -> int:
 
     body = f"Economic context for {data.get('country')}: " + "; ".join(lines)
 
-    insight_id = _write_insight_to_base44({
+    insight_id = _write_insight_to_supabase({
         "company_id":    company_id,
         "insight_type":  "economic",
         "subject_type":  "enterprise",
@@ -514,7 +489,7 @@ def run_market_enrichment(
     For each requested enrichment_type:
     - Calls the relevant external API
     - Logs the enrichment event to analytics.enrichment_events
-    - Writes Intelligence objects (Insight/Risk/Opportunity) to Base44
+    - Writes Intelligence objects (Insight/Risk/Opportunity) to Supabase
 
     Returns a summary dict: {completed, failed, insights_generated, events: [...]}
     """

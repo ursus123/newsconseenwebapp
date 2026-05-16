@@ -5,8 +5,7 @@ from typing import Optional
 import pandas as pd
 import requests
 
-from etl.base import fetch_json_to_df
-from config import settings
+from etl.base import fetch_supabase_entity_to_df
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ def extract_geospatial() -> pd.DataFrame:
     Geospatial enrichment reads from the enterprises entity —
     the same source as etl/enterprises.py.
     """
-    return fetch_json_to_df(settings.base44_enterprises_url)
+    return fetch_supabase_entity_to_df("enterprises")
 
 
 def transform_geospatial(df: pd.DataFrame) -> pd.DataFrame:

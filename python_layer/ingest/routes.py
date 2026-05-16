@@ -1,4 +1,4 @@
-"""
+﻿"""
 python_layer/ingest/routes.py  — Phase 12: Live Data Feeds
 ===========================================================
 Inbound webhook receiver. Any external system (POS, LIMS, mobile app,
@@ -17,7 +17,7 @@ Security:
     The caller must pass it as the X-Webhook-Secret header or ?secret= query param.
 
 Flow:
-    Payload arrives → validate secret → map fields → POST to Base44 →
+    Payload arrives → validate secret → map fields → write to Supabase →
     trigger ETL (fire-and-forget) → log event → return summary.
 """
 
@@ -31,7 +31,7 @@ import requests
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel
 
-from config.settings import settings, HEADERS as BASE44_HEADERS
+from data_sources import supabase_source
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ingest", tags=["Inbound Webhooks"])
@@ -47,29 +47,29 @@ _EVENTS_MAX               = 500
 # ── Entity routing table ──────────────────────────────────────────────────────
 ENTITY_CONFIG: Dict[str, dict] = {
     "people": {
-        "url_attr": "base44_people_url",
+        "entity": "people",
         "etl_name": "people",
     },
     "enterprises": {
-        "url_attr": "base44_enterprises_url",
+        "entity": "enterprises",
         "etl_name": "enterprise",
     },
     "products": {
-        "url_attr": "base44_products_url",
+        "entity": "products",
         "etl_name": "product",
     },
     "tasks": {
-        "url_attr": "base44_tasks_url",
+        "entity": "tasks",
         "etl_name": "task",
     },
     "transactions": {
-        "url_attr": "base44_transactions_url",
+        "entity": "transactions",
         "etl_name": "transaction",
     },
 }
 
 # ── Auto-mapping heuristics ───────────────────────────────────────────────────
-# External field name (lower-snake) → Base44 field name, per entity type.
+# External field name (lower-snake) → canonical field name, per entity type.
 # Applied AFTER explicit field_mappings from config.
 AUTO_MAP: Dict[str, Dict[str, str]] = {
     "people": {
@@ -167,7 +167,7 @@ AUTO_MAP: Dict[str, Dict[str, str]] = {
     },
 }
 
-# Fields we never pass through to Base44 to avoid schema errors
+# Fields we never pass through to Supabase to avoid schema errors
 _SKIP_FIELDS = frozenset({"id", "_id", "created_at", "updated_at", "__v"})
 
 
@@ -195,7 +195,7 @@ def _apply_mappings(
     explicit: dict,
 ) -> dict:
     """
-    Map an incoming payload dict to Base44 field names.
+    Map an incoming payload dict to canonical field names.
 
     Priority:
       1. Explicit field_mappings stored in config  (override everything)
@@ -232,14 +232,13 @@ def _apply_mappings(
     return result
 
 
-def _post_to_base44(url: str, record: dict) -> str:
-    """POST a single record to Base44. Returns 'created' or 'error'."""
+def _post_to_supabase(entity_type: str, record: dict) -> str:
+    """Create a single record in Supabase. Returns 'created' or 'error'."""
     try:
-        resp = requests.post(url, json=record, headers=BASE44_HEADERS, timeout=20)
-        resp.raise_for_status()
-        return "created"
+        result = supabase_source.create_record(entity_type, record, company_id=record.get("company_id"))
+        return "error" if result.get("error") else "created"
     except Exception as exc:
-        logger.warning("ingest: Base44 write failed — %s", exc)
+        logger.warning("ingest: Supabase write failed - %s", exc)
         return "error"
 
 
@@ -268,7 +267,7 @@ class RegisterBody(BaseModel):
     source_name:    str                          # human-friendly, e.g. "Square POS"
     entity_type:    str                          # people / enterprises / products / tasks / transactions
     description:    Optional[str] = None
-    field_mappings: Optional[Dict[str, str]] = None   # external_field → base44_field
+    field_mappings: Optional[Dict[str, str]] = None   # external_field → canonical field
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -359,7 +358,7 @@ async def receive_webhook(
 
     Body: a single JSON object OR a JSON array of objects.
     Each object is field-mapped to the configured entity type and
-    POSTed to Base44. ETL is triggered immediately after.
+    written to Supabase. ETL is triggered immediately after.
     """
     wid    = _webhook_id(company_id, source_slug)
     config = _CONFIGS.get(wid)
@@ -394,17 +393,8 @@ async def receive_webhook(
     if not records:
         return {"status": "ok", "records_in": 0, "created": 0, "errors": 0}
 
-    # ── Get Base44 URL ────────────────────────────────────────────────────────
     entity_type = config["entity_type"]
     ecfg        = ENTITY_CONFIG[entity_type]
-    base44_url  = getattr(settings, ecfg["url_attr"], None)
-
-    if not base44_url:
-        raise HTTPException(
-            503,
-            f"Base44 URL for '{entity_type}' not set in Railway. "
-            f"Add {ecfg['url_attr'].upper()} to environment variables.",
-        )
 
     # ── Map and write ─────────────────────────────────────────────────────────
     field_mappings = config.get("field_mappings", {})
@@ -418,7 +408,7 @@ async def receive_webhook(
         mapped["company_id"] = company_id
         mapped.setdefault("source", f"webhook:{config['source_name']}")
 
-        outcome = _post_to_base44(base44_url, mapped)
+        outcome = _post_to_supabase(entity_type, mapped)
         if outcome == "created":
             created += 1
         else:

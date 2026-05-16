@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from etl.base import fetch_json_to_df
-from config import settings
+from etl.base import fetch_supabase_entity_to_df
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +17,7 @@ GROUP_COLUMNS = ["enterprise_id", "company_id", "territory_type", "country", "st
 
 
 def extract_territories() -> pd.DataFrame:
-    if not settings.base44_territories_url:
-        return pd.DataFrame()
-    return fetch_json_to_df(settings.base44_territories_url)
+    return fetch_supabase_entity_to_df("territories")
 
 
 def transform_territories(df: pd.DataFrame) -> pd.DataFrame:
