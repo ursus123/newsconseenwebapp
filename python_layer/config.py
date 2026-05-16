@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # Base44 authentication
     # Base44 uses 'api_key' header, not 'Authorization: Bearer'
     # ----------------------------------------------------------
-    base44_api_key: str
+    base44_api_key: Optional[str] = None
 
     # ----------------------------------------------------------
     # Railway PostgreSQL — analytical store
@@ -67,7 +67,7 @@ settings = Settings()
 # Imported by etl/base.py and anywhere else that calls Base44.
 # ----------------------------------------------------------
 HEADERS = {
-    "api_key":      settings.base44_api_key,
+    "api_key":      settings.base44_api_key or "",
     "Content-Type": "application/json",
 }
 

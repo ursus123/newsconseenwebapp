@@ -8,6 +8,7 @@ source.
 
 import json
 import logging
+import time
 from typing import Optional
 
 import pandas as pd
@@ -19,6 +20,12 @@ logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 30
 PAGE_SIZE = 1000
+MAX_RETRIES = 3
+RETRY_STATUSES = {408, 409, 425, 429, 500, 502, 503, 504}
+
+
+class SupabaseSourceError(RuntimeError):
+    """Raised when the Supabase system-of-record adapter cannot complete a request."""
 
 ENTITY_TABLES = {
     "person": "persons",
@@ -112,6 +119,20 @@ BASE44_TO_SUPABASE_COLUMNS = {
         "region": "state_region",
         "notes": "internal_notes",
     },
+    "services": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
+    "documents": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
+    "schedules": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
+    "signals": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
+    "channels": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
+    "territories": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
+    "animals": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
+    "plots": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
+    "observations": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
+    "insights": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
+    "recommendations": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
+    "decisions": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
+    "risks": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
+    "opportunities": {"created_at": "created_date", "updated_at": "updated_date", "notes": "internal_notes"},
 }
 
 SUPABASE_WRITE_ALIASES = {
@@ -129,11 +150,33 @@ SUPABASE_WRITE_ALIASES = {
     "transactions": {"transaction_date": "date", "primary_person": "person_name", "internal_notes": "notes"},
     "relationships": {"internal_notes": "notes"},
     "addresses": {"state_region": "region", "internal_notes": "notes"},
+    "services": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
+    "documents": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
+    "schedules": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
+    "signals": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
+    "channels": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
+    "territories": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
+    "animals": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
+    "plots": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
+    "observations": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
+    "insights": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
+    "recommendations": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
+    "decisions": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
+    "risks": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
+    "opportunities": {"created_date": "created_at", "updated_date": "updated_at", "internal_notes": "notes"},
 }
 
 
 def configured() -> bool:
     return bool(settings.supabase_url and settings.supabase_service_role_key)
+
+
+def require_configured() -> None:
+    if not configured():
+        logger.error("Supabase source is not configured")
+        raise SupabaseSourceError(
+            "Supabase source is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY."
+        )
 
 
 def table_for(entity: str) -> str:
@@ -152,6 +195,44 @@ def _headers(prefer: str = "return=representation") -> dict:
 
 def _url(table: str) -> str:
     return f"{settings.supabase_url.rstrip().rstrip('/')}/rest/v1/{table}"
+
+
+def _request(method: str, table: str, **kwargs) -> requests.Response:
+    require_configured()
+    url = _url(table)
+    last_error: Exception | None = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            resp = requests.request(method, url, timeout=REQUEST_TIMEOUT, **kwargs)
+            if resp.status_code in RETRY_STATUSES and attempt < MAX_RETRIES:
+                delay = 0.5 * (2 ** (attempt - 1))
+                logger.warning(
+                    "supabase_source: %s %s returned HTTP %s on attempt %d/%d; retrying in %.1fs",
+                    method.upper(), table, resp.status_code, attempt, MAX_RETRIES, delay,
+                )
+                time.sleep(delay)
+                continue
+            resp.raise_for_status()
+            return resp
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            last_error = exc
+            if attempt < MAX_RETRIES:
+                delay = 0.5 * (2 ** (attempt - 1))
+                logger.warning(
+                    "supabase_source: %s %s failed on attempt %d/%d: %s; retrying in %.1fs",
+                    method.upper(), table, attempt, MAX_RETRIES, exc, delay,
+                )
+                time.sleep(delay)
+                continue
+            break
+        except requests.HTTPError as exc:
+            last_error = exc
+            break
+        except requests.RequestException as exc:
+            last_error = exc
+            break
+    logger.error("supabase_source: %s %s failed after %d attempts: %s", method.upper(), table, MAX_RETRIES, last_error)
+    raise SupabaseSourceError(str(last_error))
 
 
 def _normalise_row(table: str, row: dict) -> dict:
@@ -179,9 +260,6 @@ def _normalise_payload(table: str, payload: dict) -> dict:
 
 
 def list_records(entity: str, company_id: Optional[str] = None, limit: int = 5000) -> list[dict]:
-    if not configured():
-        logger.warning("Supabase source is not configured")
-        return []
     table = table_for(entity)
     rows = []
     offset = 0
@@ -194,8 +272,7 @@ def list_records(entity: str, company_id: Optional[str] = None, limit: int = 500
         }
         if company_id:
             params["company_id"] = f"eq.{company_id}"
-        resp = requests.get(_url(table), headers=_headers(), params=params, timeout=REQUEST_TIMEOUT)
-        resp.raise_for_status()
+        resp = _request("GET", table, headers=_headers(), params=params)
         page = resp.json()
         if not isinstance(page, list) or not page:
             break
@@ -207,6 +284,7 @@ def list_records(entity: str, company_id: Optional[str] = None, limit: int = 500
 
 
 def fetch_entity_df(entity: str, company_id: Optional[str] = None, limit: int = 5000) -> pd.DataFrame:
+    require_configured()
     rows = list_records(entity, company_id=company_id, limit=limit)
     if not rows:
         return pd.DataFrame()
@@ -223,8 +301,7 @@ def create_record(entity: str, payload: dict, company_id: Optional[str] = None) 
     if company_id and not data.get("company_id"):
         data["company_id"] = company_id
     data.pop("id", None)
-    resp = requests.post(_url(table), headers=_headers(), data=json.dumps(data, default=str), timeout=REQUEST_TIMEOUT)
-    resp.raise_for_status()
+    resp = _request("POST", table, headers=_headers(), data=json.dumps(data, default=str))
     result = resp.json()
     row = result[0] if isinstance(result, list) and result else {}
     return _normalise_row(table, row)
@@ -235,14 +312,13 @@ def update_record(entity: str, record_id: str, payload: dict) -> dict:
         return {"error": "Supabase is not configured"}
     table = table_for(entity)
     data = _normalise_payload(table, payload)
-    resp = requests.patch(
-        _url(table),
+    resp = _request(
+        "PATCH",
+        table,
         headers=_headers(),
         params={"id": f"eq.{record_id}"},
         data=json.dumps(data, default=str),
-        timeout=REQUEST_TIMEOUT,
     )
-    resp.raise_for_status()
     result = resp.json()
     row = result[0] if isinstance(result, list) and result else {}
     return _normalise_row(table, row)
@@ -252,6 +328,15 @@ def delete_record(entity: str, record_id: str) -> dict:
     if not configured():
         return {"error": "Supabase is not configured"}
     table = table_for(entity)
-    resp = requests.delete(_url(table), headers=_headers("return=minimal"), params={"id": f"eq.{record_id}"}, timeout=REQUEST_TIMEOUT)
-    resp.raise_for_status()
+    _request("DELETE", table, headers=_headers("return=minimal"), params={"id": f"eq.{record_id}"})
     return {"id": record_id, "deleted": True}
+
+
+def sample_columns(entity: str) -> list[str]:
+    """Return column names visible from a limit=1 Supabase REST read."""
+    table = table_for(entity)
+    resp = _request("GET", table, headers=_headers(), params={"select": "*", "limit": 1})
+    rows = resp.json()
+    if not isinstance(rows, list) or not rows:
+        return []
+    return sorted(rows[0].keys())

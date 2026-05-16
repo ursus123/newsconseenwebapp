@@ -1,6 +1,6 @@
 """
 ingestion/loader.py
-Executes an approved ingestion plan: writes rows to Base44 and
+Executes an approved ingestion plan: writes rows to Supabase and
 records run statistics in analytics.ingestion_runs.
 
 Relationship materialisation uses three strategies in priority order:
@@ -13,7 +13,7 @@ Relationship materialisation uses three strategies in priority order:
      a value→entity_id lookup from the to_entity's primary-key fields and any
      fields named in the hint; match from_entity rows by those values.
      Works for cross-row foreign keys (Transaction.enterprise_name → Enterprise)
-     and for entities not loaded in the current run (fetched from Base44).
+     and for entities not loaded in the current run (fetched from Supabase).
 
   3. Same-entity self-referential — from_entity == to_entity (e.g. Person.manager_email
      → Person.email); same FK lookup but on the same entity pool; avoids self-loops.
@@ -26,16 +26,15 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-import httpx
 from sqlalchemy import text
 
+from data_sources import supabase_source
 from ingestion.deduplicator import deduplicate
 
 logger = logging.getLogger(__name__)
 
 _CHUNK   = 10      # rows per chunk before rate-limit sleep
 _DELAY   = 0.15    # seconds between chunks
-_TIMEOUT = 20.0    # httpx timeout per request
 
 _RUN_TABLE  = "analytics.ingestion_runs"
 _PLAN_TABLE = "analytics.ingestion_plans"
@@ -112,46 +111,26 @@ def _apply_transform(value: Any, hint: str | None) -> Any:
 
 # ── Supabase REST helpers ─────────────────────────────────────────────────────
 
-def _make_client(supabase_url: str, service_role_key: str) -> httpx.Client:
-    return httpx.Client(
-        base_url=f"{supabase_url.rstrip('/')}/rest/v1",
-        headers={
-            "apikey":        service_role_key,
-            "Authorization": f"Bearer {service_role_key}",
-            "Content-Type":  "application/json",
-            "Prefer":        "return=representation",
-        },
-        timeout=_TIMEOUT,
-    )
-
-
-def _fetch_existing(client: httpx.Client, entity_type: str, company_id: str) -> list[dict]:
-    table = _SUPABASE_TABLE.get(entity_type, entity_type.lower() + "s")
+def _fetch_existing(entity_type: str, company_id: str) -> list[dict]:
     try:
-        r = client.get(f"/{table}", params={"company_id": f"eq.{company_id}", "select": "*", "limit": 2000})
-        r.raise_for_status()
-        data = r.json()
-        return data if isinstance(data, list) else []
+        return supabase_source.list_records(entity_type, company_id=company_id, limit=2000)
     except Exception as e:
         logger.warning("Could not fetch existing %s records: %s", entity_type, e)
         return []
 
 
-def _create(client: httpx.Client, entity_type: str, payload: dict) -> dict:
-    table = _SUPABASE_TABLE.get(entity_type, entity_type.lower() + "s")
-    r = client.post(f"/{table}", content=json.dumps(payload, default=str))
-    r.raise_for_status()
-    result = r.json()
-    # Supabase returns a list with Prefer: return=representation
-    return result[0] if isinstance(result, list) and result else {}
+def _create(entity_type: str, payload: dict) -> dict:
+    result = supabase_source.create_record(entity_type, payload, company_id=payload.get("company_id"))
+    if result.get("error"):
+        raise RuntimeError(result["error"])
+    return result
 
 
-def _update(client: httpx.Client, entity_type: str, record_id: str, payload: dict) -> dict:
-    table = _SUPABASE_TABLE.get(entity_type, entity_type.lower() + "s")
-    r = client.patch(f"/{table}", params={"id": f"eq.{record_id}"}, content=json.dumps(payload, default=str))
-    r.raise_for_status()
-    result = r.json()
-    return result[0] if isinstance(result, list) and result else {}
+def _update(entity_type: str, record_id: str, payload: dict) -> dict:
+    result = supabase_source.update_record(entity_type, record_id, payload)
+    if result.get("error"):
+        raise RuntimeError(result["error"])
+    return result
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -228,7 +207,6 @@ def _build_value_lookup(
 
 
 def _try_create_rel(
-    client: httpx.Client,
     stats: dict,
     company_id: str,
     from_etype: str,
@@ -252,14 +230,13 @@ def _try_create_rel(
         "status":            "active",
     }
     try:
-        _create(client, "Relationship", payload)
+        _create("Relationship", payload)
         stats["relationships_created"] += 1
     except Exception as e:
         logger.warning("Relationship create failed [%s→%s]: %s", from_etype, to_etype, e)
 
 
 def _materialise_relationships(
-    client: httpx.Client,
     relationships: list[dict],
     field_map: list[dict],
     row_entity_ids: dict[str, dict[int, str]],
@@ -268,12 +245,12 @@ def _materialise_relationships(
     stats: dict,
 ) -> None:
     """
-    Create Relationship records in Base44.
+    Create Relationship records in Supabase.
 
     Priority order per relationship:
       1. Same-row pairing (from_etype != to_etype, denormalized file)
       2. FK value lookup via join_hint columns
-      3. FK fallback: fetch to_entity from Base44 if not loaded in this run
+      3. FK fallback: fetch to_entity from Supabase if not loaded in this run
     """
     seen: set = set()  # deduplicate (from_etype, from_id, to_etype, to_id, label)
 
@@ -301,7 +278,7 @@ def _materialise_relationships(
             if common:
                 for row_idx in common:
                     _try_create_rel(
-                        client, stats, company_id,
+                        stats, company_id,
                         from_etype, from_ids[row_idx],
                         to_etype, to_ids[row_idx],
                         rel_label, seen,
@@ -314,15 +291,15 @@ def _materialise_relationships(
         to_entity_rows = entity_rows_cache.get(to_etype, [])
         to_lookup = _build_value_lookup(to_etype, to_ids, to_entity_rows, field_map, hw)
 
-        # If to_entity wasn't loaded this run (or lookup is empty), fetch from Base44
+        # If to_entity wasn't loaded this run (or lookup is empty), fetch from Supabase
         if not to_lookup:
-            logger.debug("to_entity %s has no in-run IDs; fetching from Base44 for FK lookup", to_etype)
+            logger.debug("to_entity %s has no in-run IDs; fetching from Supabase for FK lookup", to_etype)
             pk_fields = {
                 fm["target_field"]
                 for fm in field_map
                 if fm.get("target_entity") == to_etype and fm.get("is_primary_key")
             }
-            for existing in _fetch_existing(client, to_etype, company_id):
+            for existing in _fetch_existing(to_etype, company_id):
                 eid = existing.get("id")
                 if not eid:
                     continue
@@ -365,7 +342,7 @@ def _materialise_relationships(
             # Avoid self-loops (important for same-entity self-referential)
             if matched_to_id and matched_to_id != from_id:
                 _try_create_rel(
-                    client, stats, company_id,
+                    stats, company_id,
                     from_etype, from_id,
                     to_etype, matched_to_id,
                     rel_label, seen,
@@ -378,8 +355,8 @@ def execute(
     plan: dict[str, Any],
     rows: list[dict],
     company_id: str,
-    supabase_url: str,
-    service_role_key: str,
+    supabase_url: str | None = None,
+    service_role_key: str | None = None,
     engine=None,
     plan_id: str | None = None,
     duplicate_action: str = "skip",
@@ -437,83 +414,78 @@ def execute(
         if et:
             entity_fields.setdefault(et, []).append(fm)
 
-    # row_entity_ids[entity_type][row_index] = Base44 entity id
+    # row_entity_ids[entity_type][row_index] = Supabase entity id
     row_entity_ids: dict[str, dict[int, str]] = {}
     # entity_rows_cache[entity_type] = transformed rows (same index as source rows)
     entity_rows_cache: dict[str, list[dict]] = {}
 
-    client = _make_client(supabase_url, service_role_key)
+    # ── Phase 1: load entities ────────────────────────────────────────────
+    for split in entity_splits:
+        entity_type = split.get("entity_type")
+        if not entity_type or entity_type not in entity_fields:
+            logger.debug("No field_map entries for %s — skipping", entity_type)
+            continue
 
-    try:
-        # ── Phase 1: load entities ────────────────────────────────────────────
-        for split in entity_splits:
-            entity_type = split.get("entity_type")
-            if not entity_type or entity_type not in entity_fields:
-                logger.debug("No field_map entries for %s — skipping", entity_type)
-                continue
+        ef = entity_fields[entity_type]
 
-            ef = entity_fields[entity_type]
+        # Build one transformed record per source row
+        entity_rows: list[dict] = []
+        for raw_row in rows:
+            record: dict = {"company_id": company_id}
+            for fm in ef:
+                src_col = fm.get("source_column")
+                tgt_fld = fm.get("target_field")
+                if not src_col or not tgt_fld:
+                    continue
+                raw_val = raw_row.get(src_col)
+                if raw_val is not None:
+                    record[tgt_fld] = _apply_transform(raw_val, fm.get("transform_hint"))
+            entity_rows.append(record)
 
-            # Build one transformed record per source row
-            entity_rows: list[dict] = []
-            for raw_row in rows:
-                record: dict = {"company_id": company_id}
-                for fm in ef:
-                    src_col = fm.get("source_column")
-                    tgt_fld = fm.get("target_field")
-                    if not src_col or not tgt_fld:
-                        continue
-                    raw_val = raw_row.get(src_col)
-                    if raw_val is not None:
-                        record[tgt_fld] = _apply_transform(raw_val, fm.get("transform_hint"))
-                entity_rows.append(record)
+        entity_rows_cache[entity_type] = entity_rows
 
-            entity_rows_cache[entity_type] = entity_rows
+        existing  = _fetch_existing(entity_type, company_id)
+        annotated = deduplicate(entity_type, entity_rows, existing, duplicate_action=duplicate_action)
 
-            existing  = _fetch_existing(client, entity_type, company_id)
-            annotated = deduplicate(entity_type, entity_rows, existing, duplicate_action=duplicate_action)
+        row_entity_ids[entity_type] = {}
 
-            row_entity_ids[entity_type] = {}
+        for row_idx, record in enumerate(annotated):
+            action   = record.pop("_dedup_action",   "create")
+            match_id = record.pop("_dedup_match_id", None)
+            record.pop("_dedup_score", None)
 
-            for row_idx, record in enumerate(annotated):
-                action   = record.pop("_dedup_action",   "create")
-                match_id = record.pop("_dedup_match_id", None)
-                record.pop("_dedup_score", None)
+            entity_id: str | None = None
+            try:
+                if action == "create":
+                    created   = _create(entity_type, record)
+                    entity_id = created.get("id")
+                    stats["entities_created"] += 1
+                elif action == "update" and match_id:
+                    _update(entity_type, match_id, record)
+                    entity_id = match_id
+                    stats["entities_updated"] += 1
+                else:
+                    entity_id = match_id  # skipped — track for relationship wiring
+                    stats["entities_skipped"] += 1
+            except Exception as e:
+                stats["entities_failed"] += 1
+                stats["errors"].append({"entity": entity_type, "row": row_idx, "error": str(e)})
+                logger.warning("Load error [%s row %d]: %s", entity_type, row_idx, e)
 
-                entity_id: str | None = None
-                try:
-                    if action == "create":
-                        created   = _create(client, entity_type, record)
-                        entity_id = created.get("id")
-                        stats["entities_created"] += 1
-                    elif action == "update" and match_id:
-                        _update(client, entity_type, match_id, record)
-                        entity_id = match_id
-                        stats["entities_updated"] += 1
-                    else:
-                        entity_id = match_id  # skipped — track for relationship wiring
-                        stats["entities_skipped"] += 1
-                except Exception as e:
-                    stats["entities_failed"] += 1
-                    stats["errors"].append({"entity": entity_type, "row": row_idx, "error": str(e)})
-                    logger.warning("Load error [%s row %d]: %s", entity_type, row_idx, e)
+            if entity_id:
+                row_entity_ids[entity_type][row_idx] = entity_id
 
-                if entity_id:
-                    row_entity_ids[entity_type][row_idx] = entity_id
+            if row_idx > 0 and row_idx % _CHUNK == 0:
+                time.sleep(_DELAY)
 
-                if row_idx > 0 and row_idx % _CHUNK == 0:
-                    time.sleep(_DELAY)
+    # ── Phase 2: materialise relationships ────────────────────────────────
+    if relationships:
+        _materialise_relationships(
+            relationships, field_map,
+            row_entity_ids, entity_rows_cache,
+            company_id, stats,
+        )
 
-        # ── Phase 2: materialise relationships ────────────────────────────────
-        if relationships:
-            _materialise_relationships(
-                client, relationships, field_map,
-                row_entity_ids, entity_rows_cache,
-                company_id, stats,
-            )
-
-    finally:
-        client.close()
 
     finished_at = datetime.now(timezone.utc)
     errors_json = json.dumps(stats["errors"][:50], default=str)
