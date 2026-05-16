@@ -23,7 +23,7 @@ from .queries import (
     TOOL_DEFINITIONS, execute_tool, get_operator_context, QueryEngine,
 )
 from .llm_adapters import get_adapter
-from .llm_registry import resolve_model
+from .llm_registry import IDJWI_CAPABILITIES, resolve_model
 
 # ── Documentation loader ─────────────────────────────────────────────────────
 # Loaded at request time so docs updates are reflected immediately without
@@ -912,6 +912,9 @@ def _extract_citations(collected_tools: list) -> list:
 # Intent table: first matching entry wins.
 # Each entry: (list-of-keywords, tool_name)
 _AUTONOMOUS_INTENTS = [
+    (["what is idjwi", "tell me about idjwi", "who are you", "what can you do",
+      "your capabilities", "what are you"],
+     "__self_describe__"),
     (["how many people", "people count", "headcount", "number of people", "staff count",
       "how many staff", "how many client", "how many contact"],
      "get_people_summary"),
@@ -955,6 +958,17 @@ def _detect_autonomous_tool(question: str) -> str | None:
         if any(kw in q for kw in keywords):
             return tool_name
     return None
+
+
+def _idjwi_self_describe() -> str:
+    caps = [c for c in IDJWI_CAPABILITIES if not c["requires_llm"]]
+    return (
+        "Idjwi is the autonomous intelligence layer of Newsconseen. "
+        "It can answer questions about your operational data, run workflows, "
+        "manage memory, and execute actions - with or without an LLM.\n\n"
+        "Autonomous capabilities (no LLM needed): "
+        + ", ".join(c["name"] for c in caps)
+    )
 
 
 def _format_autonomous_answer(tool_name: str, result: dict) -> str:
@@ -1063,6 +1077,8 @@ def _autonomous_answer(question: str, company_id: str, principal=None) -> str:
         return ""
     try:
         logger.info("_autonomous_answer: no-LLM fallback → %s", tool_name)
+        if tool_name == "__self_describe__":
+            return _idjwi_self_describe() + "\n\n*(Answered from Idjwi capability registry - no LLM needed)*"
         result = execute_tool(
             tool_name,
             {"company_id": company_id},
