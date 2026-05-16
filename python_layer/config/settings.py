@@ -13,14 +13,14 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # ----------------------------------------------------------
-    # Base44 entity URLs
+    # Base44 entity URLs — all Optional, no longer used (migrated to Supabase)
     # ----------------------------------------------------------
-    base44_tasks_url:          str
-    base44_transactions_url:   str
-    base44_services_url:       str
-    base44_enterprises_url:    str
-    base44_people_url:         str
-    base44_products_url:       str
+    base44_tasks_url:          Optional[str] = None
+    base44_transactions_url:   Optional[str] = None
+    base44_services_url:       Optional[str] = None
+    base44_enterprises_url:    Optional[str] = None
+    base44_people_url:         Optional[str] = None
+    base44_products_url:       Optional[str] = None
     base44_relationships_url:  Optional[str] = None
     base44_addresses_url:      Optional[str] = None
     # New canonical entities
@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------
     # Base44 authentication
     # ----------------------------------------------------------
-    base44_api_key: str
+    base44_api_key: Optional[str] = None
 
     # ----------------------------------------------------------
     # Railway PostgreSQL
@@ -135,7 +135,7 @@ def get_settings() -> Settings:
 # Shared request headers for all Base44 API calls
 # ----------------------------------------------------------
 HEADERS = {
-    "api_key":      settings.base44_api_key,
+    "api_key":      settings.base44_api_key or "",
     "Content-Type": "application/json",
 }
 
