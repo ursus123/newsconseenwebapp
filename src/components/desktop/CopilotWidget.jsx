@@ -34,7 +34,7 @@ function renderInline(text) {
   });
 }
 
-const RAILWAY_URL   = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_URL   = import.meta.env.VITE_RAILWAY_URL || "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 const API_HEADERS   = RAILWAY_API_KEY
   ? { "Content-Type": "application/json", "x-api-key": RAILWAY_API_KEY }
