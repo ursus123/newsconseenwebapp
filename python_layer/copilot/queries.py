@@ -213,72 +213,51 @@ def _filter_by_company(df: "_pd.DataFrame", company_id: str) -> "_pd.DataFrame":
     return _pd.DataFrame(columns=df.columns)
 
 
+def _supabase_live(entity: str, company_id: str, label: str = None) -> "_pd.DataFrame":
+    """
+    Direct Supabase live fetch with server-side company_id filtering.
+    Bypasses the ETL extract chain — no Python-level post-filter needed.
+    Falls back to untagged records if the strict filter returns nothing.
+    """
+    from data_sources.supabase_source import list_records, configured
+    tag = label or entity
+    if not configured():
+        logger.warning("_supabase_live(%s): Supabase not configured", tag)
+        return _pd.DataFrame()
+    try:
+        rows = list_records(entity, company_id=company_id)
+        if rows:
+            logger.info("_supabase_live(%s): %d rows for company_id=%s", tag, len(rows), company_id)
+            return _pd.DataFrame(rows)
+        # Fallback: records created without a company_id tag (pre-migration data)
+        all_rows = list_records(entity, limit=500)
+        if all_rows:
+            df = _pd.DataFrame(all_rows)
+            if "company_id" in df.columns:
+                null_mask = df["company_id"].isna() | (df["company_id"].astype(str).str.strip() == "")
+                untagged = df[null_mask]
+                if not untagged.empty:
+                    logger.info("_supabase_live(%s): null-cid fallback (%d rows)", tag, len(untagged))
+                    return untagged
+    except Exception as e:
+        logger.warning("_supabase_live(%s) failed: %s", tag, e)
+    return _pd.DataFrame()
+
+
 def _b44_people(company_id: str):
-    # Tier 2: raw PostgreSQL table
     raw = _read_raw_table("people", company_id)
     if not raw.empty:
         logger.info("_b44_people: using raw.people (%d rows)", len(raw))
         return raw
-    # Tier 3: Supabase live API
-    try:
-        from etl.people import extract_people
-        df = extract_people()
-        return _filter_by_company(df, company_id)
-    except Exception as e:
-        logger.warning("_b44_people fallback failed: %s", e)
-        return _pd.DataFrame()
+    return _supabase_live("persons", company_id, "people")
 
 
 def _b44_enterprises(company_id: str):
-    # Tier 1: raw table strict company_id match
     raw = _read_raw_table("enterprises", company_id)
     if not raw.empty:
         logger.info("_b44_enterprises: raw strict (%d rows)", len(raw))
         return raw
-
-    # Tier 2: raw table null-company_id — enterprises created before tenant tagging
-    engine = get_engine_safe()
-    if engine:
-        try:
-            with engine.connect() as conn:
-                null_raw = _pd.read_sql(
-                    text(
-                        "SELECT * FROM raw.enterprises "
-                        "WHERE company_id IS NULL OR TRIM(company_id) = '' "
-                        "LIMIT 500"
-                    ),
-                    conn,
-                )
-            if not null_raw.empty:
-                logger.info(
-                    "_b44_enterprises: null-cid raw fallback (%d rows) for company_id=%s",
-                    len(null_raw), company_id,
-                )
-                return null_raw
-        except Exception as e:
-            logger.debug("_b44_enterprises: null-cid raw query failed: %s", e)
-
-    # Tier 3: Supabase live — strict filter, then null-cid fallback
-    try:
-        from etl.enterprises import extract_enterprises
-        df = extract_enterprises()
-        filtered = _filter_by_company(df, company_id)
-        if not filtered.empty:
-            return filtered
-        # Tier 4: Supabase live null-cid — enterprises without tenant tag
-        if "company_id" in df.columns:
-            null_mask = df["company_id"].isna() | (df["company_id"].astype(str).str.strip() == "")
-            null_ents = df[null_mask]
-            if not null_ents.empty:
-                logger.info(
-                    "_b44_enterprises: live null-cid fallback (%d rows) for company_id=%s",
-                    len(null_ents), company_id,
-                )
-                return null_ents
-        return _pd.DataFrame()
-    except Exception as e:
-        logger.warning("_b44_enterprises fallback failed: %s", e)
-        return _pd.DataFrame()
+    return _supabase_live("enterprises", company_id)
 
 
 def _b44_transactions(company_id: str):
@@ -286,13 +265,7 @@ def _b44_transactions(company_id: str):
     if not raw.empty:
         logger.info("_b44_transactions: using raw.transactions (%d rows)", len(raw))
         return raw
-    try:
-        from etl.transactions import extract_transactions
-        df = extract_transactions()
-        return _filter_by_company(df, company_id)
-    except Exception as e:
-        logger.warning("_b44_transactions fallback failed: %s", e)
-        return _pd.DataFrame()
+    return _supabase_live("transactions", company_id)
 
 
 def _b44_tasks(company_id: str):
@@ -300,13 +273,7 @@ def _b44_tasks(company_id: str):
     if not raw.empty:
         logger.info("_b44_tasks: using raw.tasks (%d rows)", len(raw))
         return raw
-    try:
-        from etl.tasks import extract_tasks
-        df = extract_tasks()
-        return _filter_by_company(df, company_id)
-    except Exception as e:
-        logger.warning("_b44_tasks fallback failed: %s", e)
-        return _pd.DataFrame()
+    return _supabase_live("tasks", company_id)
 
 
 def _b44_products(company_id: str):
@@ -314,13 +281,7 @@ def _b44_products(company_id: str):
     if not raw.empty:
         logger.info("_b44_products: using raw.products (%d rows)", len(raw))
         return raw
-    try:
-        from etl.products import extract_products
-        df = extract_products()
-        return _filter_by_company(df, company_id)
-    except Exception as e:
-        logger.warning("_b44_products fallback failed: %s", e)
-        return _pd.DataFrame()
+    return _supabase_live("products", company_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
