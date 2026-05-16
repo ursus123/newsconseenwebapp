@@ -107,3 +107,46 @@ def health_snapshot() -> dict:
         "memory": "ok" if memory_ok() else "unavailable",
         "events": "ok" if events_ok else "unavailable",
     }
+
+
+def list_events(
+    company_id: Optional[str] = None,
+    event_type: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 100,
+    engine=None,
+) -> dict:
+    eng = engine or get_engine_safe()
+    if not eng or not ensure_table(eng):
+        return {"events": [], "count": 0, "error": "events unavailable"}
+
+    filters = []
+    params = {"limit": min(max(limit, 1), 500)}
+    if company_id:
+        filters.append("company_id = :company_id")
+        params["company_id"] = company_id
+    if event_type:
+        filters.append("event_type = :event_type")
+        params["event_type"] = event_type
+    if status:
+        filters.append("status = :status")
+        params["status"] = status
+    where = "WHERE " + " AND ".join(filters) if filters else ""
+
+    try:
+        with eng.connect() as conn:
+            rows = conn.execute(text(f"""
+                SELECT id, company_id, event_type, actor, subject, metadata,
+                       duration_ms, status, created_at
+                FROM analytics.idjwi_events
+                {where}
+                ORDER BY created_at DESC
+                LIMIT :limit
+            """), params).fetchall()
+        cols = ["id", "company_id", "event_type", "actor", "subject", "metadata",
+                "duration_ms", "status", "created_at"]
+        events = [dict(zip(cols, row)) for row in rows]
+        return {"events": events, "count": len(events)}
+    except Exception as e:
+        logger.warning("idjwi_observability.list_events failed: %s", e)
+        return {"events": [], "count": 0, "error": str(e)}

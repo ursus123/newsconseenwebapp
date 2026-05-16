@@ -29,6 +29,7 @@ from copilot.llm_registry import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/copilot", tags=["Copilot"])
+idjwi_router = APIRouter(prefix="/idjwi", tags=["Idjwi"])
 
 RAILWAY_URL = os.getenv(
     "RAILWAY_URL",
@@ -72,6 +73,11 @@ class CommandRequest(BaseModel):
 
 class WorkflowRequest(BaseModel):
     workflow:   str
+    company_id: str
+    payload:    Optional[dict] = None
+
+
+class IdjwiWorkflowRequest(BaseModel):
     company_id: str
     payload:    Optional[dict] = None
 
@@ -148,6 +154,9 @@ def copilot_models():
 def ask(
     request: AskRequest,
     x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+    x_idjwi_plan: Optional[str] = Header(None),
 ):
     """
     Ask the copilot a question about your enterprise data.
@@ -170,6 +179,19 @@ def ask(
     if not request.company_id:
         raise HTTPException(status_code=400, detail="company_id is required")
 
+    from copilot.idjwi_security import principal_from_headers, require_api_key
+
+    api_gate = require_api_key(x_idjwi_api_key)
+    if not api_gate.get("allowed"):
+        raise HTTPException(status_code=401, detail=api_gate.get("reason"))
+
+    principal = principal_from_headers(
+        company_id=request.company_id,
+        user_id=x_idjwi_user,
+        role=x_idjwi_role,
+        plan=x_idjwi_plan,
+    )
+
     engine = CopilotEngine(
         company_id=request.company_id,
         enterprise_name=request.enterprise_name or "",
@@ -177,6 +199,7 @@ def ask(
         railway_url=RAILWAY_URL,
         model=request.model or None,
     )
+    engine.principal = principal
 
     # Merge entity-page context into the context dict so Claude knows the viewport
     ctx = dict(request.context or {})
@@ -281,19 +304,21 @@ def deterministic_command(
             "find_task_records",
             {"overdue_only": True, "limit": int(payload.get("limit", 20))},
             request.company_id,
+            principal=principal,
+            llm_available=False,
         )
 
     if command in ("task_summary", "list_tasks"):
         require("read_company_data")
-        return execute_tool("get_task_summary", payload, request.company_id)
+        return execute_tool("get_task_summary", payload, request.company_id, principal=principal, llm_available=False)
 
     if command in ("search_people", "find_people"):
         require("read_company_data")
-        return execute_tool("find_people_records", payload, request.company_id)
+        return execute_tool("find_people_records", payload, request.company_id, principal=principal, llm_available=False)
 
     if command in ("search_intelligence", "intelligence"):
         require("search_intelligence")
-        return execute_tool("search_intelligence", payload, request.company_id)
+        return execute_tool("search_intelligence", payload, request.company_id, principal=principal, llm_available=False)
 
     if command in ("create_task", "add_task"):
         require("create_task")
@@ -313,6 +338,8 @@ def deterministic_command(
                 "reasoning": payload.get("reasoning", "Created through deterministic Idjwi command."),
             },
             request.company_id,
+            principal=principal,
+            llm_available=False,
         )
 
     if command in ("remember", "save_memory"):
@@ -412,6 +439,49 @@ def idjwi_run_workflow(
     )
 
 
+@idjwi_router.post("/workflow/{name}")
+def idjwi_workflow_by_name(
+    name: str,
+    request: IdjwiWorkflowRequest,
+    x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+):
+    """Run a no-LLM Idjwi workflow by name, suitable for Railway cron calls."""
+    return idjwi_run_workflow(
+        WorkflowRequest(workflow=name, company_id=request.company_id, payload=request.payload or {}),
+        x_idjwi_api_key=x_idjwi_api_key,
+        x_idjwi_role=x_idjwi_role,
+        x_idjwi_user=x_idjwi_user,
+    )
+
+
+@idjwi_router.get("/events")
+def idjwi_events(
+    company_id: Optional[str] = Query(None),
+    event_type: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(100, le=500),
+    x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+):
+    """Read Idjwi observability events."""
+    from copilot.idjwi_security import authorize_capability, principal_from_headers, require_api_key
+    from copilot.idjwi_observability import list_events
+
+    api_gate = require_api_key(x_idjwi_api_key)
+    if not api_gate.get("allowed"):
+        raise HTTPException(status_code=401, detail=api_gate.get("reason"))
+
+    principal = principal_from_headers(company_id=company_id or "", user_id=x_idjwi_user, role=x_idjwi_role)
+    gate = authorize_capability("read_company_data", principal=principal, llm_available=False)
+    if not gate.get("allowed"):
+        raise HTTPException(status_code=403, detail=gate.get("reason"))
+
+    return list_events(company_id=company_id, event_type=event_type, status=status, limit=limit)
+
+
 @router.get("/evals")
 def idjwi_evals():
     """Run lightweight Idjwi registry and no-LLM capability evals."""
@@ -428,7 +498,12 @@ def idjwi_migrate_memory(company_id: str = Query(...)):
 
 
 @router.post("/ask/stream")
-async def ask_stream(request: AskRequest):
+async def ask_stream(
+    request: AskRequest,
+    x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+):
     """
     Real SSE streaming version of /copilot/ask.
 
@@ -446,12 +521,23 @@ async def ask_stream(request: AskRequest):
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
+    from copilot.idjwi_security import principal_from_headers, require_api_key
+    api_gate = require_api_key(x_idjwi_api_key)
+    if not api_gate.get("allowed"):
+        raise HTTPException(status_code=401, detail=api_gate.get("reason"))
+    principal = principal_from_headers(
+        company_id=request.company_id,
+        user_id=x_idjwi_user,
+        role=x_idjwi_role,
+    )
+
     async def generate():
         try:
             async for event_json in ask_stream_events(
                 question=request.question,
                 company_id=request.company_id,
                 history=request.history or [],
+                principal=principal,
             ):
                 yield f"data: {event_json}\n\n"
         except Exception as e:

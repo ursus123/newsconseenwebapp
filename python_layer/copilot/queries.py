@@ -7924,7 +7924,13 @@ def generate_import_template(company_id: str, entity_type: str) -> dict:
 
 # ── Tool dispatcher ───────────────────────────────────────────────────────────
 
-def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
+def execute_tool(
+    tool_name: str,
+    tool_input: dict,
+    company_id: str,
+    principal=None,
+    llm_available: bool = True,
+) -> dict:
     """
     Called by the engine when Claude selects a tool.
     Injects company_id (never from user input) and dispatches to the right function.
@@ -8046,9 +8052,14 @@ def execute_tool(tool_name: str, tool_input: dict, company_id: str) -> dict:
         }
 
     try:
-        from copilot.llm_registry import capability_for_tool, check_capability
+        from copilot.llm_registry import capability_for_tool
+        from copilot.idjwi_security import authorize_capability
         capability_id = capability_for_tool(tool_name)
-        gate = check_capability(capability_id, llm_available=True)
+        gate = authorize_capability(
+            capability_id,
+            principal=principal,
+            llm_available=llm_available,
+        )
         if not gate.get("allowed"):
             return {
                 "error": "Capability denied",

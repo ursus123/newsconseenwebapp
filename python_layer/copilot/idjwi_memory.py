@@ -188,6 +188,8 @@ def migrate_legacy(company_id: str, engine=None) -> dict:
                 WHERE company_id = :company_id
             """), {"company_id": company_id}).fetchall()
         for memory_type, key, value in rows:
+            if recall(company_id, memory_type=memory_type, key=key, owner="copilot", limit=1, engine=eng):
+                continue
             result = remember(company_id, key, value, memory_type, owner="copilot", engine=eng)
             migrated += 1 if result.get("saved") else 0
     except Exception as e:
@@ -201,6 +203,8 @@ def migrate_legacy(company_id: str, engine=None) -> dict:
                 WHERE company_id = :company_id
             """), {"company_id": company_id}).fetchall()
         for agent_name, memory_type, key, value, confidence in rows:
+            if recall(company_id, memory_type=memory_type, key=key, scope="agent", owner=agent_name, limit=1, engine=eng):
+                continue
             result = remember(
                 company_id,
                 key,

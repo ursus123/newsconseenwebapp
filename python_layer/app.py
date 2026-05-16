@@ -81,7 +81,7 @@ from open_data import ALL_ROUTERS
 from connectors.routes import router as connectors_router
 
 # Phase 3A — Operational Copilot
-from copilot.routes import router as copilot_router
+from copilot.routes import idjwi_router, router as copilot_router
 
 # Phase 3B — Proactive Alerts
 from alerts.routes import router as alerts_router
@@ -174,6 +174,30 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.warning("Startup: Agent table setup skipped — %s", e)
 
+        # Idjwi unified memory/events tables and one-time legacy memory migration.
+        try:
+            from sqlalchemy import text as _text
+            from copilot.idjwi_memory import ensure_table as ensure_idjwi_memory, migrate_legacy
+            from copilot.idjwi_observability import ensure_table as ensure_idjwi_events
+            ensure_idjwi_memory(engine)
+            ensure_idjwi_events(engine)
+            company_ids = set()
+            with engine.connect() as conn:
+                for table_name in ("copilot_memory", "agent_memory"):
+                    try:
+                        rows = conn.execute(_text(
+                            f"SELECT DISTINCT company_id FROM analytics.{table_name} WHERE company_id IS NOT NULL"
+                        )).fetchall()
+                        company_ids.update(str(r[0]) for r in rows if r[0])
+                    except Exception:
+                        pass
+            migrated = 0
+            for company_id in company_ids:
+                result = migrate_legacy(company_id, engine=engine)
+                migrated += int(result.get("migrated", 0) or 0)
+            logger.info("Startup: Idjwi memory/events ready; migrated %d legacy memories", migrated)
+        except Exception as e:
+            logger.warning("Startup: Idjwi memory setup skipped - %s", e)
         # Phase 8 — Audit Trail table (immutable change log)
         try:
             from audit.routes import ensure_audit_table
@@ -359,6 +383,7 @@ app.include_router(connectors_router)
 
 # Phase 3A — Operational Copilot
 app.include_router(copilot_router)
+app.include_router(idjwi_router)
 
 # Phase 3B — Proactive Alerts
 app.include_router(alerts_router)

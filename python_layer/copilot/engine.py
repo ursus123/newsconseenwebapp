@@ -21,7 +21,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from .queries import (
     TOOL_DEFINITIONS, execute_tool, get_operator_context, QueryEngine,
-    load_copilot_memory, _ensure_copilot_memory_table,
 )
 from .llm_adapters import get_adapter
 from .llm_registry import resolve_model
@@ -396,12 +395,13 @@ def build_system_prompt(company_id: str) -> str:
     # ── Persistent memory — inject what the operator has told us before ───────
     memory_section = ""
     try:
-        memories = load_copilot_memory(company_id)
+        from .idjwi_memory import recall
+        memories = recall(company_id, limit=100)
         if memories:
             lines = ["OPERATOR MEMORY (from prior conversations — apply these always)"]
             lines.append("=" * 60)
             for m in memories:
-                lines.append(f"[{m['memory_type']}] {m['key']}: {m['value']}")
+                lines.append(f"[{m.get('owner', 'idjwi')}:{m['memory_type']}] {m['key']}: {m['value']}")
             lines.append(
                 "\nApply these remembered preferences and instructions to every response. "
                 "If the operator asks you to update or remove a memory, use save_copilot_memory "
@@ -1052,7 +1052,7 @@ def _format_autonomous_answer(tool_name: str, result: dict) -> str:
     return str(result)
 
 
-def _autonomous_answer(question: str, company_id: str) -> str:
+def _autonomous_answer(question: str, company_id: str, principal=None) -> str:
     """
     Answer a question without an LLM by detecting intent and calling one tool directly.
     Returns empty string if intent cannot be detected or tool fails.
@@ -1063,7 +1063,13 @@ def _autonomous_answer(question: str, company_id: str) -> str:
         return ""
     try:
         logger.info("_autonomous_answer: no-LLM fallback → %s", tool_name)
-        result = execute_tool(tool_name, {"company_id": company_id}, company_id)
+        result = execute_tool(
+            tool_name,
+            {"company_id": company_id},
+            company_id,
+            principal=principal,
+            llm_available=False,
+        )
         answer = _format_autonomous_answer(tool_name, result)
         if answer:
             return answer + "\n\n*(Answered in Idjwi Autonomous Mode — LLM service unavailable)*"
@@ -1078,6 +1084,7 @@ def _run_tool_loop(
     on_tool_call=None,      # optional callback(tool_name, tool_input) → None
     _collected=None,        # if list, append {"tool", "input", "result"} per call
     model: str = None,      # caller-selected LLM model ID
+    principal=None,         # IdjwiPrincipal for role/capability checks
 ) -> str:
     """
     Run the Anthropic tool loop and return the final text answer.
@@ -1105,7 +1112,7 @@ def _run_tool_loop(
                  and isinstance(m.get("content"), str)),
                 "",
             )
-            autonomous = _autonomous_answer(user_text, company_id)
+            autonomous = _autonomous_answer(user_text, company_id, principal=principal)
             if autonomous:
                 return autonomous
             return (
@@ -1143,6 +1150,8 @@ def _run_tool_loop(
                         tool_name=block.name,
                         tool_input=block.input,
                         company_id=company_id,
+                        principal=principal,
+                        llm_available=True,
                     )
                 except Exception as e:
                     logger.warning("Tool %s raised: %s", block.name, e)
@@ -1206,7 +1215,7 @@ async def ask(question: str, company_id: str, history: list = None) -> str:
     return _run_tool_loop(messages, company_id)
 
 
-async def ask_stream_events(question: str, company_id: str, history: list = None):
+async def ask_stream_events(question: str, company_id: str, history: list = None, principal=None):
     """
     Real SSE generator — yields JSON event strings as the tool loop progresses.
 
@@ -1232,7 +1241,7 @@ async def ask_stream_events(question: str, company_id: str, history: list = None
     loop_messages = list(messages)  # copy so we can report intermediate tools
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_run_tool_loop, loop_messages, company_id, _on_tool)
+        future = pool.submit(_run_tool_loop, loop_messages, company_id, _on_tool, None, None, principal)
 
         # Yield accumulated tool events while waiting
         prev_len = 0
@@ -1281,10 +1290,12 @@ class CopilotEngine:
         self.backend         = backend
         self.railway_url     = railway_url
         self.model           = model  # caller-selected LLM; None = use engine default
+        self.principal       = None
         self.query_engine    = QueryEngine(company_id)
-        # Ensure copilot memory table exists (idempotent, fast after first call)
+        # Ensure Idjwi memory table exists (idempotent, fast after first call)
         try:
-            _ensure_copilot_memory_table()
+            from .idjwi_memory import ensure_table
+            ensure_table()
         except Exception:
             pass
 
@@ -1331,7 +1342,7 @@ class CopilotEngine:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 future = pool.submit(
                     _run_tool_loop, messages, self.company_id, None, collected,
-                    self.model,
+                    self.model, self.principal,
                 )
                 answer_text = future.result(timeout=120)
 
