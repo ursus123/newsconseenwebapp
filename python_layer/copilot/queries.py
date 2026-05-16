@@ -216,8 +216,7 @@ def _filter_by_company(df: "_pd.DataFrame", company_id: str) -> "_pd.DataFrame":
 def _supabase_live(entity: str, company_id: str, label: str = None) -> "_pd.DataFrame":
     """
     Direct Supabase live fetch with server-side company_id filtering.
-    Bypasses the ETL extract chain — no Python-level post-filter needed.
-    Falls back to untagged records if the strict filter returns nothing.
+    Filtering happens at the Supabase query level — no Python-level post-filter.
     """
     from data_sources.supabase_source import list_records, configured
     tag = label or entity
@@ -229,16 +228,6 @@ def _supabase_live(entity: str, company_id: str, label: str = None) -> "_pd.Data
         if rows:
             logger.info("_supabase_live(%s): %d rows for company_id=%s", tag, len(rows), company_id)
             return _pd.DataFrame(rows)
-        # Fallback: records created without a company_id tag (pre-migration data)
-        all_rows = list_records(entity, limit=500)
-        if all_rows:
-            df = _pd.DataFrame(all_rows)
-            if "company_id" in df.columns:
-                null_mask = df["company_id"].isna() | (df["company_id"].astype(str).str.strip() == "")
-                untagged = df[null_mask]
-                if not untagged.empty:
-                    logger.info("_supabase_live(%s): null-cid fallback (%d rows)", tag, len(untagged))
-                    return untagged
     except Exception as e:
         logger.warning("_supabase_live(%s) failed: %s", tag, e)
     return _pd.DataFrame()
@@ -1207,12 +1196,11 @@ def get_monthly_kpis(company_id: str, months: int = 12) -> dict:
             txs = _read_raw_table("transactions", company_id)
             tsk = _read_raw_table("tasks", company_id)
 
-            if ppl.empty: ppl = _filter_by_company(extract_people(), company_id)
-            if txs.empty: txs = _filter_by_company(extract_transactions(), company_id)
-            if tsk.empty: tsk = _filter_by_company(extract_tasks(), company_id)
+            if ppl.empty: ppl = _supabase_live("persons", company_id, "people")
+            if txs.empty: txs = _supabase_live("transactions", company_id)
+            if tsk.empty: tsk = _supabase_live("tasks", company_id)
 
             kpi_df = transform_monthly_kpis(ppl, txs, tsk, lookback_months=months)
-            kpi_df = _filter_by_company(kpi_df, company_id)
             rows = kpi_df.pipe(_clean_df).to_dict(orient="records") if not kpi_df.empty else []
             logger.info("get_monthly_kpis: using live fallback (%d months)", len(rows))
         except Exception as e:
@@ -1287,7 +1275,7 @@ def get_entity_list(
 
             ppl = _read_raw_table("people", company_id)
             if ppl.empty:
-                ppl = _filter_by_company(extract_people(), company_id)
+                ppl = _supabase_live("persons", company_id, "people")
 
             idx_df = transform_entity_index(ppl)
             if entity_type and "entity_type" in idx_df.columns:
@@ -1352,20 +1340,19 @@ def get_company_scorecard(company_id: str) -> dict:
             from etl.tasks import extract_tasks
             from etl.products import extract_products
 
-            def _fetch_filtered(raw_table: str, extract_fn):
+            def _fetch_filtered(raw_table: str, supabase_entity: str, label: str = None):
                 df = _read_raw_table(raw_table, company_id)
                 if df.empty:
-                    df = _filter_by_company(extract_fn(), company_id)
+                    df = _supabase_live(supabase_entity, company_id, label)
                 return df
 
             sc_df = transform_company_scorecard(
-                _fetch_filtered("people",       extract_people),
-                _fetch_filtered("enterprises",  extract_enterprises),
-                _fetch_filtered("transactions", extract_transactions),
-                _fetch_filtered("tasks",        extract_tasks),
-                _fetch_filtered("products",     extract_products),
+                _fetch_filtered("people",       "persons",       "people"),
+                _fetch_filtered("enterprises",  "enterprises"),
+                _fetch_filtered("transactions", "transactions"),
+                _fetch_filtered("tasks",        "tasks"),
+                _fetch_filtered("products",     "products"),
             )
-            sc_df = _filter_by_company(sc_df, company_id)
             rows = sc_df.pipe(_clean_df).to_dict(orient="records") if not sc_df.empty else []
             logger.info("get_company_scorecard: using live fallback")
         except Exception as e:
@@ -1523,10 +1510,9 @@ def get_relationship_summary(
     if not rows:
         # Tier 2: raw PostgreSQL, then Tier 3: Supabase live
         try:
-            from etl.relationships import extract_relationships
             df = _read_raw_table("relationships", company_id)
             if df.empty:
-                df = _filter_by_company(extract_relationships(), company_id)
+                df = _supabase_live("relationships", company_id)
             if relationship_type and "relationship_type" in df.columns:
                 df = df[df["relationship_type"] == relationship_type]
             if not df.empty:
@@ -1581,10 +1567,9 @@ def get_address_overview(company_id: str) -> dict:
 
     if not rows:
         try:
-            from etl.addresses import extract_addresses
             df = _read_raw_table("addresses", company_id)
             if df.empty:
-                df = _filter_by_company(extract_addresses(), company_id)
+                df = _supabase_live("addresses", company_id)
             if not df.empty:
                 grp_cols = [c for c in ["address_type", "city", "state_province", "country"] if c in df.columns]
                 if grp_cols:
@@ -1635,10 +1620,9 @@ def get_service_overview(company_id: str) -> dict:
 
     if not rows:
         try:
-            from etl.services import extract_services
             df = _read_raw_table("services", company_id)
             if df.empty:
-                df = _filter_by_company(extract_services(), company_id)
+                df = _supabase_live("services", company_id)
             if not df.empty:
                 grp_cols = [c for c in ["service_type", "status"] if c in df.columns]
                 agg: dict = {"id": "count"}
@@ -2453,10 +2437,9 @@ def find_relationship_records(
 
     if not rows:
         try:
-            from etl.relationships import extract_relationships
             df = _read_raw_table("relationships", company_id)
             if df.empty:
-                df = _filter_by_company(extract_relationships(), company_id)
+                df = _supabase_live("relationships", company_id)
             if not df.empty:
                 if person_name and "person_name" in df.columns:
                     df = df[df["person_name"].str.lower().str.contains(person_name.lower(), na=False)]
@@ -2615,8 +2598,7 @@ def find_address_records(
         try:
             df = _read_raw_table("addresses", company_id)
             if df.empty:
-                from etl.addresses import extract_addresses
-                df = _filter_by_company(extract_addresses(), company_id)
+                df = _supabase_live("addresses", company_id)
             if not df.empty:
                 if city and "city" in df.columns:
                     df = df[df["city"].str.lower().str.contains(city.lower(), na=False)]
@@ -7399,9 +7381,7 @@ def get_document_summary(company_id: str, document_type: str = None) -> dict:
             "data_as_of": "Supabase live", "source": "raw",
         }
     try:
-        from etl.document import extract_documents
-        df = extract_documents()
-        df = _filter_by_company(df, company_id)
+        df = _supabase_live("documents", company_id)
         if document_type and "document_type" in df.columns:
             df = df[df["document_type"] == document_type]
         return {"documents": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
@@ -7438,9 +7418,7 @@ def get_schedule_summary(company_id: str, frequency: str = None) -> dict:
         return {"schedules": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "raw"}
     try:
-        from etl.schedule import extract_schedules
-        df = extract_schedules()
-        df = _filter_by_company(df, company_id)
+        df = _supabase_live("schedules", company_id)
         return {"schedules": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
@@ -7476,9 +7454,7 @@ def get_signal_summary(company_id: str, signal_type: str = None) -> dict:
         return {"signals": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "raw"}
     try:
-        from etl.signal import extract_signals
-        df = extract_signals()
-        df = _filter_by_company(df, company_id)
+        df = _supabase_live("signals", company_id)
         return {"signals": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
@@ -7515,9 +7491,7 @@ def get_channel_summary(company_id: str, channel_type: str = None) -> dict:
         return {"channels": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "raw"}
     try:
-        from etl.channel import extract_channels
-        df = extract_channels()
-        df = _filter_by_company(df, company_id)
+        df = _supabase_live("channels", company_id)
         return {"channels": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
@@ -7553,9 +7527,7 @@ def get_territory_summary(company_id: str, territory_type: str = None) -> dict:
         return {"territories": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "raw"}
     try:
-        from etl.territory import extract_territories
-        df = extract_territories()
-        df = _filter_by_company(df, company_id)
+        df = _supabase_live("territories", company_id)
         return {"territories": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
@@ -7600,9 +7572,7 @@ def get_animal_summary(company_id: str, animal_type: str = None, species: str = 
         return {"animals": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "raw"}
     try:
-        from etl.animal import extract_animals
-        df = extract_animals()
-        df = _filter_by_company(df, company_id)
+        df = _supabase_live("animals", company_id)
         return {"animals": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
@@ -7643,9 +7613,7 @@ def get_plot_overview(company_id: str, plot_type: str = None, land_use: str = No
         return {"plots": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "raw"}
     try:
-        from etl.plot import extract_plots
-        df = extract_plots()
-        df = _filter_by_company(df, company_id)
+        df = _supabase_live("plots", company_id)
         return {"plots": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
@@ -7691,9 +7659,7 @@ def get_observation_summary(
         return {"observations": raw.head(50).where(raw.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "raw"}
     try:
-        from etl.observation import extract_observations
-        df = extract_observations()
-        df = _filter_by_company(df, company_id)
+        df = _supabase_live("observations", company_id)
         return {"observations": df.head(50).where(df.head(50).notna(), None).to_dict(orient="records"),
                 "data_as_of": "Supabase live", "source": "supabase_live"}
     except Exception as e:
