@@ -1088,7 +1088,14 @@ def _autonomous_answer(question: str, company_id: str, principal=None) -> str:
         )
         answer = _format_autonomous_answer(tool_name, result)
         if answer:
-            return answer + "\n\n*(Answered in Idjwi Autonomous Mode — LLM service unavailable)*"
+            suffix = "\n\n*(Answered in Idjwi Autonomous Mode — LLM service unavailable)*"
+            if "not found" in answer.lower() or "no " in answer[:30].lower():
+                suffix = (
+                    f"\n\n*(Autonomous mode — searched company_id: `{company_id}` — "
+                    "if this is wrong, check your user_profiles.company_id in Supabase. "
+                    "LLM service unavailable.)*"
+                )
+            return answer + suffix
     except Exception as e:
         logger.warning("_autonomous_answer tool %s failed: %s", tool_name, e)
     return ""

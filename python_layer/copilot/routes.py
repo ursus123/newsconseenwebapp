@@ -179,6 +179,8 @@ def ask(
     if not request.company_id:
         raise HTTPException(status_code=400, detail="company_id is required")
 
+    logger.info("copilot/ask: company_id=%s question=%r", request.company_id, request.question[:80])
+
     from copilot.idjwi_security import principal_from_headers, require_api_key
 
     api_gate = require_api_key(x_idjwi_api_key)
@@ -697,6 +699,40 @@ def diagnose(company_id: str = Query(...)):
 
     any_data = any(t.get("row_count", 0) > 0 for t in tools.values() if t.get("ok"))
 
+    # ── Supabase live probe — show distinct company_ids in each entity ──────────
+    supabase_probe: dict = {}
+    try:
+        from data_sources.supabase_source import list_records, configured as sb_configured, _request, _headers
+        if sb_configured():
+            for entity in ("persons", "enterprises", "products", "tasks", "transactions"):
+                try:
+                    # Fetch up to 20 rows without company_id filter to reveal all company_ids
+                    import requests as _req
+                    from config.settings import settings as _cfg
+                    url = f"{_cfg.supabase_url.rstrip('/')}/rest/v1/{entity}"
+                    r = _req.get(
+                        url,
+                        headers=_headers(),
+                        params={"select": "company_id", "limit": 100},
+                        timeout=10,
+                    )
+                    if r.ok:
+                        ids = list({row.get("company_id") for row in r.json() if isinstance(row, dict)})
+                        matched = [row for row in r.json() if isinstance(row, dict) and row.get("company_id") == company_id]
+                        supabase_probe[entity] = {
+                            "distinct_company_ids": ids,
+                            "rows_matching_requested_company_id": len(matched),
+                            "total_rows_sampled": len(r.json()),
+                        }
+                    else:
+                        supabase_probe[entity] = {"error": f"HTTP {r.status_code}"}
+                except Exception as exc:
+                    supabase_probe[entity] = {"error": str(exc)}
+        else:
+            supabase_probe["status"] = "Supabase not configured (SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing)"
+    except Exception as exc:
+        supabase_probe["error"] = str(exc)
+
     return {
         "company_id":          company_id,
         "has_data":            any_data,
@@ -705,6 +741,7 @@ def diagnose(company_id: str = Query(...)):
                                     "Re-run ETL after confirming Railway is redeployed.",
         "raw_row_counts":      raw_counts,
         "analytics_companies": analytics_companies,
+        "supabase_probe":      supabase_probe,
         "tools":               tools,
     }
 
