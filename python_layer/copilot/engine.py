@@ -907,6 +907,171 @@ def _extract_citations(collected_tools: list) -> list:
     return citations[:8]
 
 
+# ── Autonomous mode (no LLM) ─────────────────────────────────────────────────
+
+# Intent table: first matching entry wins.
+# Each entry: (list-of-keywords, tool_name)
+_AUTONOMOUS_INTENTS = [
+    (["how many people", "people count", "headcount", "number of people", "staff count",
+      "how many staff", "how many client", "how many contact"],
+     "get_people_summary"),
+    (["how many enterprise", "enterprise count", "number of enterprise",
+      "how many branch", "branch count", "how many location", "how many organisation",
+      "how many organization"],
+     "get_enterprise_overview"),
+    (["how many product", "product count", "inventory", "stock level",
+      "how many item", "how many sku"],
+     "get_product_summary"),
+    (["how many task", "task count", "completion rate", "overdue task",
+      "how many overdue"],
+     "get_task_summary"),
+    (["overdue invoice", "unpaid", "outstanding invoice"],
+     "get_overdue_invoices"),
+    (["revenue", "transaction", "invoice total", "income", "financial summary",
+      "money", "payment total"],
+     "get_transaction_summary"),
+    (["churn", "at risk", "inactive people", "inactive client"],
+     "get_person_churn_risk"),
+    (["overview", "scorecard", "how are we doing", "business summary",
+      "operational health", "health check"],
+     "get_company_scorecard"),
+    # broad fallbacks — must come after specific ones
+    (["people", "person", "staff", "client", "employee", "member", "patient", "student"],
+     "get_people_summary"),
+    (["enterprise", "branch", "location", "organisation", "organization"],
+     "get_enterprise_overview"),
+    (["product", "item", "goods", "stock"],
+     "get_product_summary"),
+    (["task", "assignment", "work order", "job"],
+     "get_task_summary"),
+    (["transaction", "revenue", "expense", "invoice"],
+     "get_transaction_summary"),
+]
+
+
+def _detect_autonomous_tool(question: str) -> str | None:
+    q = question.lower()
+    for keywords, tool_name in _AUTONOMOUS_INTENTS:
+        if any(kw in q for kw in keywords):
+            return tool_name
+    return None
+
+
+def _format_autonomous_answer(tool_name: str, result: dict) -> str:
+    """Convert a tool result dict into a plain-text answer for autonomous mode."""
+
+    if tool_name == "get_people_summary":
+        summary = result.get("summary", {})
+        total = result.get("total_people") or sum(
+            v.get("total", 0) for v in summary.values() if isinstance(v, dict)
+        )
+        if total == 0 and not summary:
+            return "No people records found."
+        lines = [f"**{total} people** in the system."]
+        for pt, counts in summary.items():
+            if isinstance(counts, dict) and counts.get("total", 0) > 0:
+                active = counts.get("active", 0)
+                t = counts.get("total", 0)
+                lines.append(f"- {pt.replace('_', ' ').title()}: {t} total ({active} active)")
+        return "\n".join(lines)
+
+    if tool_name == "get_enterprise_overview":
+        enterprises = result.get("enterprises", [])
+        total = result.get("total") or len(enterprises)
+        if total == 0:
+            return "No enterprise records found."
+        lines = [f"**{total} enterprise(s)** in the system."]
+        for e in enterprises[:10]:
+            name = e.get("name") or e.get("enterprise_name") or "Unnamed"
+            etype = e.get("enterprise_type", "")
+            status = e.get("status", "")
+            lines.append(f"- {name}" + (f" ({etype}, {status})" if etype or status else ""))
+        return "\n".join(lines)
+
+    if tool_name == "get_product_summary":
+        total = result.get("total_products", 0)
+        breakdown = result.get("breakdown", [])
+        if total == 0 and not breakdown:
+            return "No product records found."
+        lines = [f"**{total} product(s)** in the system."]
+        for row in breakdown[:8]:
+            it = (row.get("item_type") or "Unknown").replace("_", " ").title()
+            cnt = row.get("count", 0)
+            lines.append(f"- {it}: {cnt}")
+        return "\n".join(lines)
+
+    if tool_name == "get_task_summary":
+        total = result.get("total_tasks", 0)
+        overdue = result.get("overdue_tasks", 0)
+        rate = result.get("completion_rate_pct", result.get("completion_rate", 0))
+        if total == 0:
+            return "No task records found."
+        return (
+            f"**{total} task(s)** in the system.\n"
+            f"- Completion rate: {rate}%\n"
+            f"- Overdue: {overdue}"
+        )
+
+    if tool_name == "get_transaction_summary":
+        total_rev = result.get("total_revenue", result.get("total_amount", 0))
+        total_tx = result.get("total_transactions", result.get("count", 0))
+        if total_tx == 0 and total_rev == 0:
+            return "No transaction records found."
+        return (
+            f"**{total_tx} transaction(s)** totalling {total_rev}.\n"
+            + (f"- Outstanding: {result.get('total_outstanding', 0)}" if result.get("total_outstanding") else "")
+        )
+
+    if tool_name == "get_overdue_invoices":
+        invoices = result.get("invoices", [])
+        total_due = result.get("total_overdue_amount", 0)
+        return (
+            f"**{len(invoices)} overdue invoice(s)**, total outstanding: {total_due}."
+            if invoices else "No overdue invoices found."
+        )
+
+    if tool_name == "get_person_churn_risk":
+        high = result.get("high_risk_count", result.get("high_risk", 0))
+        medium = result.get("medium_risk_count", result.get("medium_risk", 0))
+        return f"Churn risk: **{high} high-risk**, {medium} medium-risk."
+
+    if tool_name == "get_company_scorecard":
+        sc = result.get("scorecard") or {}
+        if not sc:
+            return "No scorecard data available yet. Run ETL to populate."
+        return (
+            f"**Operational snapshot:**\n"
+            f"- Active people: {sc.get('active_people', 0)}\n"
+            f"- Active clients: {sc.get('active_clients', 0)}\n"
+            f"- Active staff: {sc.get('active_staff', 0)}\n"
+            f"- Overdue tasks: {sc.get('overdue_tasks', 0)}\n"
+            f"- Low-stock items: {sc.get('low_stock_count', 0)}"
+        )
+
+    # Generic fallback — stringify the result
+    return str(result)
+
+
+def _autonomous_answer(question: str, company_id: str) -> str:
+    """
+    Answer a question without an LLM by detecting intent and calling one tool directly.
+    Returns empty string if intent cannot be detected or tool fails.
+    This is Idjwi Autonomous System Mode — no LLM, deterministic tool execution.
+    """
+    tool_name = _detect_autonomous_tool(question)
+    if not tool_name:
+        return ""
+    try:
+        logger.info("_autonomous_answer: no-LLM fallback → %s", tool_name)
+        result = execute_tool(tool_name, {"company_id": company_id}, company_id)
+        answer = _format_autonomous_answer(tool_name, result)
+        if answer:
+            return answer + "\n\n*(Answered in Idjwi Autonomous Mode — LLM service unavailable)*"
+    except Exception as e:
+        logger.warning("_autonomous_answer tool %s failed: %s", tool_name, e)
+    return ""
+
+
 def _run_tool_loop(
     messages: list,
     company_id: str,
@@ -933,6 +1098,16 @@ def _run_tool_loop(
             )
         except Exception as e:
             logger.error("%s API call failed (attempt %d): %s", resolved_spec.provider, attempt + 1, e)
+            # Before returning the error, try Idjwi Autonomous Mode —
+            # deterministic tool execution that needs no LLM.
+            user_text = next(
+                (m["content"] for m in reversed(messages) if m.get("role") == "user"
+                 and isinstance(m.get("content"), str)),
+                "",
+            )
+            autonomous = _autonomous_answer(user_text, company_id)
+            if autonomous:
+                return autonomous
             return (
                 "I encountered an error reaching the AI service. "
                 "Please try again in a moment. "
