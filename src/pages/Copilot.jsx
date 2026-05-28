@@ -5,7 +5,7 @@ import { base44 } from "@/api/base44Client";
 import { useLocation } from "react-router-dom";
 import CopilotChat from "@/components/copilot/copilotchat";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_URL = import.meta.env.VITE_RAILWAY_URL || "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 const COPILOT_BACKEND = import.meta.env.VITE_COPILOT_BACKEND || "anthropic";
 const BACKEND_LABEL = COPILOT_BACKEND === "openai" ? "Powered by GPT-4o" : "Powered by Claude";
