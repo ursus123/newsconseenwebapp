@@ -13,9 +13,8 @@
 
 import { base44 } from "@/api/base44Client";
 import dataService from "@/services/dataService";
+import { RAILWAY_API_KEY, RAILWAY_URL } from "@/config/api";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = /** @type {any} */ (import.meta).env?.VITE_RAILWAY_API_KEY || "";
 
 const apiHeaders = (extra = {}) => ({
   "Content-Type": "application/json",

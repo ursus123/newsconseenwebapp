@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Search, X, Users, Building2, CheckSquare, Receipt, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { DESKTOP_APPS } from "@/desktop/desktopApps";
+import { DESKTOP_APPS, getAppSearchText } from "@/desktop/desktopApps";
 
 const ENTITY_CONFIG = [
   { key: "Task",        label: "Tasks",        icon: CheckSquare, color: "text-violet-400", route: "/Tasks",        titleField: "title",         subField: "status" },
@@ -15,7 +15,7 @@ function getTitle(cfg, record) {
   return record[cfg.titleField] || "(untitled)";
 }
 
-export default function GlobalSearch({ onOpenApp, isLight, companyId }) {
+export default function GlobalSearch({ onOpenApp, isLight, companyId, apps = DESKTOP_APPS }) {
   const [query, setQuery]       = useState("");
   const [results, setResults]   = useState([]);
   const [loading, setLoading]   = useState(false);
@@ -58,10 +58,14 @@ export default function GlobalSearch({ onOpenApp, isLight, companyId }) {
     if (!q.trim() || q.length < 2) { setResults([]); setLoading(false); return; }
     setLoading(true);
     try {
+      const ql = q.toLowerCase();
+      const appResults = apps
+        .filter(app => getAppSearchText(app).includes(ql))
+        .slice(0, 5)
+        .map(app => ({ id: `app-${app.id}`, _entity: "App", _app: app }));
       const searches = ENTITY_CONFIG.map(async (cfg) => {
         const filter = companyId ? { company_id: companyId } : {};
         const items = await base44.entities[cfg.key].filter(filter, "-created_date", 100);
-        const ql = q.toLowerCase();
         const filtered = items.filter(item => {
           const title = getTitle(cfg, item) || "";
           return title.toLowerCase().includes(ql) ||
@@ -69,14 +73,14 @@ export default function GlobalSearch({ onOpenApp, isLight, companyId }) {
         }).slice(0, 3);
         return filtered.map(r => ({ ...r, _entity: cfg.key, _cfg: cfg }));
       });
-      const all = (await Promise.all(searches)).flat();
+      const all = [...appResults, ...(await Promise.all(searches)).flat()];
       setResults(all);
       setFocused(0);
     } catch (e) {
       setResults([]);
     }
     setLoading(false);
-  }, []);
+  }, [apps, companyId]);
 
   useEffect(() => {
     clearTimeout(debounceRef.current);
@@ -86,6 +90,13 @@ export default function GlobalSearch({ onOpenApp, isLight, companyId }) {
   }, [query, runSearch]);
 
   const openResult = useCallback((result) => {
+    if (result._entity === "App") {
+      onOpenApp(result._app);
+      setOpen(false);
+      setQuery("");
+      setResults([]);
+      return;
+    }
     const cfg = result._cfg;
     const app = DESKTOP_APPS.find(a => a.route === cfg.route);
     if (app) onOpenApp(app);
@@ -162,7 +173,7 @@ export default function GlobalSearch({ onOpenApp, isLight, companyId }) {
           ) : (
             <div className="py-1">
               {/* Group by entity */}
-              {ENTITY_CONFIG.map(cfg => {
+              {[{ key: "App", label: "Apps", icon: Search, color: "text-emerald-400" }, ...ENTITY_CONFIG].map(cfg => {
                 const group = results.filter(r => r._entity === cfg.key);
                 if (group.length === 0) return null;
                 const Icon = cfg.icon;
@@ -188,9 +199,13 @@ export default function GlobalSearch({ onOpenApp, isLight, companyId }) {
                           <Icon className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${cfg.color}`} />
                           <div className="min-w-0">
                             <p className={`text-xs font-medium truncate ${isLight ? "text-slate-800" : "text-slate-100"}`}>
-                              {getTitle(cfg, r)}
+                              {r._entity === "App" ? r._app.name : getTitle(cfg, r)}
                             </p>
-                            {r[cfg.subField] && (
+                            {r._entity === "App" ? (
+                              <p className="text-[10px] text-slate-500 truncate">
+                                {r._app.category} · {r._app.description}
+                              </p>
+                            ) : r[cfg.subField] && (
                               <p className="text-[10px] text-slate-500 truncate capitalize">
                                 {String(r[cfg.subField]).replace(/_/g, " ")}
                               </p>

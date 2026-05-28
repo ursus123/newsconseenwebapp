@@ -1,5 +1,10 @@
 import React, { useState, useCallback } from "react";
-import { DESKTOP_APPS } from "./desktopApps";
+import {
+  DEFAULT_DESKTOP_ICONS,
+  DEFAULT_PINNED,
+  getAppSearchText,
+  getVisibleDesktopApps,
+} from "./desktopApps";
 
 const PINNED_KEY = "desktop_pinned_apps";
 const DESKTOP_PINNED_KEY = "desktop_icon_apps";
@@ -7,18 +12,18 @@ const DESKTOP_PINNED_KEY = "desktop_icon_apps";
 function loadPinned() {
   try {
     const raw = localStorage.getItem(PINNED_KEY);
-    return raw ? JSON.parse(raw) : ["attendance", "tasks", "people", "transactions", "settings"];
-  } catch { return ["attendance", "tasks", "people", "transactions", "settings"]; }
+    return raw ? JSON.parse(raw) : DEFAULT_PINNED;
+  } catch { return DEFAULT_PINNED; }
 }
 
 function loadDesktopPinned() {
   try {
     const raw = localStorage.getItem(DESKTOP_PINNED_KEY);
-    return raw ? JSON.parse(raw) : ["attendance", "tasks", "people", "transactions"];
-  } catch { return ["attendance", "tasks", "people", "transactions"]; }
+    return raw ? JSON.parse(raw) : DEFAULT_DESKTOP_ICONS;
+  } catch { return DEFAULT_DESKTOP_ICONS; }
 }
 
-export function useLauncherStore() {
+export function useLauncherStore(user) {
   const [isOpen, setIsOpen]           = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -32,9 +37,10 @@ export function useLauncherStore() {
   const updateSearchQuery   = useCallback((q) => setSearchQuery(q), []);
   const updateCategory      = useCallback((c) => setSelectedCategory(c), []);
 
-  const filteredApps = DESKTOP_APPS.filter(app => {
+  const visibleApps = getVisibleDesktopApps(user);
+  const filteredApps = visibleApps.filter(app => {
     const matchCat = selectedCategory === "All" || app.category === selectedCategory;
-    const matchQ   = !searchQuery || app.name.toLowerCase().includes(searchQuery.toLowerCase()) || app.id.includes(searchQuery.toLowerCase());
+    const matchQ   = !searchQuery || getAppSearchText(app).includes(searchQuery.toLowerCase());
     return matchCat && matchQ;
   });
 
@@ -78,6 +84,7 @@ export function useLauncherStore() {
     openLauncher, closeLauncher, toggleLauncher,
     updateSearchQuery, updateCategory,
     filteredApps,
+    visibleApps,
     pinnedTaskbar, pinnedDesktop,
     pinToTaskbar, unpinFromTaskbar, toggleTaskbarPin, toggleDesktopPin,
   };

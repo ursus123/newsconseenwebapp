@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { X, Send, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { RAILWAY_API_KEY, RAILWAY_URL, apiHeaders } from "@/config/api";
 
 // Simple markdown renderer — no external deps (avoids duplicate React from react-markdown)
 function SimpleMarkdown({ text }) {
@@ -34,11 +35,7 @@ function renderInline(text) {
   });
 }
 
-const RAILWAY_URL   = import.meta.env.VITE_RAILWAY_URL || "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const API_HEADERS   = RAILWAY_API_KEY
-  ? { "Content-Type": "application/json", "x-api-key": RAILWAY_API_KEY }
-  : { "Content-Type": "application/json" };
+const API_HEADERS = apiHeaders();
 
 const idjwiHeaders = (user) => ({
   ...API_HEADERS,

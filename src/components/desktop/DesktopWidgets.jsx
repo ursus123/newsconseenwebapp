@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { X, Cloud, Calendar, Clock, ChevronLeft, ChevronRight, Plus, GripVertical } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { RAILWAY_URL } from "@/config/api";
 
 // ── Live Clock Widget ──────────────────────────────────────────────────────────
 function ClockWidget({ isLight, onRemove, onDragStart }) {
@@ -83,7 +83,6 @@ function WeatherWidget({ isLight, onRemove, onDragStart }) {
   const [error, setError]     = useState(null);
 
   useEffect(() => {
-    const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
     navigator.geolocation?.getCurrentPosition(async (pos) => {
       try {
         const { latitude: lat, longitude: lon } = pos.coords;

@@ -3,7 +3,7 @@ import { useWindowManager } from "@/desktop/windowStore";
 import { useNotifications } from "@/desktop/notificationStore";
 import { useLauncherStore } from "@/desktop/launcherStore";
 import { useProfileStore } from "@/desktop/profileStore";
-import { DESKTOP_APPS } from "@/desktop/desktopApps";
+import { DESKTOP_APPS, QUICK_CREATE_ACTIONS, getDesktopApp, withDesktopAction } from "@/desktop/desktopApps";
 import AppWindow from "@/components/desktop/AppWindow";
 import Taskbar from "@/components/desktop/Taskbar";
 import AppLauncher from "@/components/desktop/AppLauncher";
@@ -22,6 +22,7 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { useLockStore } from "@/desktop/lockStore";
 import LockScreen from "@/components/desktop/LockScreen";
+import { RAILWAY_URL } from "@/config/api";
 
 const WALLPAPERS = [
   { type: "gradient", value: "linear-gradient(135deg, #0a0f1e 0%, #0f172a 35%, #0c2a4a 70%, #0c4a6e 100%)" },
@@ -54,7 +55,7 @@ export default function Desktop() {
 
   const wm          = useWindowManager();
   const notifStore  = useNotifications(user?.company_id);
-  const launcher    = useLauncherStore();
+  const launcher    = useLauncherStore(user);
   const profileMgr  = useProfileStore();
   const pwa         = usePWA();
   const lockStore   = useLockStore();
@@ -62,7 +63,7 @@ export default function Desktop() {
   // Railway warm-up ping — fires once on mount to wake the server before
   // DailyBriefing and the notification store make their data requests.
   useEffect(() => {
-    fetch("https://newsconseenwebapp-production.up.railway.app/health", { method: "GET" })
+    fetch(`${RAILWAY_URL}/health`, { method: "GET" })
       .catch(() => {}); // fire and forget — never block UI
   }, []);
 
@@ -124,6 +125,14 @@ export default function Desktop() {
   const openAppById = useCallback((id) => {
     const app = DESKTOP_APPS.find(a => a.id === id);
     if (app) handleOpenApp(app);
+    setContextMenu(null);
+    setQuickActionsOpen(false);
+  }, [handleOpenApp]);
+
+  const handleQuickAction = useCallback((action) => {
+    const app = getDesktopApp(action.appId);
+    if (!app) return;
+    handleOpenApp(withDesktopAction(app, action.action));
     setContextMenu(null);
     setQuickActionsOpen(false);
   }, [handleOpenApp]);
@@ -221,14 +230,9 @@ export default function Desktop() {
   const textColor = isLight ? "#374151" : "white";
   const mutedColor = isLight ? "#6b7280" : "#94a3b8";
 
-  // Quick actions list
-  const QUICK_ACTIONS = [
-    { label: "✚ New Task",        id: "tasks" },
-    { label: "✚ New Transaction", id: "transactions" },
-    { label: "✚ New Person",      id: "people" },
-    { label: "✚ New Enterprise",  id: "enterprises" },
-  ];
-
+  const QUICK_ACTIONS = QUICK_CREATE_ACTIONS.filter(action =>
+    launcher.visibleApps.some(app => app.id === action.appId)
+  );
   const quickBtnStyle = {
     display: "block", width: "100%", textAlign: "left",
     padding: "9px 16px", background: "none", border: "none",
@@ -237,6 +241,9 @@ export default function Desktop() {
   };
 
   const locked = lockStore.isLocked;
+  const visibleAppIds = new Set(launcher.visibleApps.map(app => app.id));
+  const visibleDesktopIcons = profileMgr.currentProfile.desktopIcons.filter(id => visibleAppIds.has(id));
+  const visiblePinnedApps = profileMgr.currentProfile.pinnedApps.filter(id => visibleAppIds.has(id));
 
   return (
     <div
@@ -405,7 +412,7 @@ export default function Desktop() {
 
         {/* Global Search — centered */}
         <div className="flex-1 flex justify-center px-2">
-          <GlobalSearch onOpenApp={handleOpenApp} isLight={isLight} companyId={user?.company_id} />
+          <GlobalSearch onOpenApp={handleOpenApp} isLight={isLight} companyId={user?.company_id} apps={launcher.visibleApps} />
         </div>
 
         {/* Divider */}
@@ -445,7 +452,7 @@ export default function Desktop() {
                 Quick Create
               </div>
               {QUICK_ACTIONS.map(a => (
-                <button key={a.id} style={quickBtnStyle} onClick={() => openAppById(a.id)}
+                <button key={a.id} style={quickBtnStyle} onClick={() => handleQuickAction(a)}
                   onMouseEnter={ev => ev.currentTarget.style.background = isLight ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.07)"}
                   onMouseLeave={ev => ev.currentTarget.style.background = "none"}
                 >
@@ -509,8 +516,8 @@ export default function Desktop() {
       <div className="absolute top-9 left-0 right-0 bottom-14" style={{ zIndex: 6 }}>
         <DesktopIcons
           onOpenApp={handleOpenApp}
-          pinnedDesktop={profileMgr.currentProfile.desktopIcons}
-          pinnedTaskbar={profileMgr.currentProfile.pinnedApps}
+          pinnedDesktop={visibleDesktopIcons}
+          pinnedTaskbar={visiblePinnedApps}
           onToggleTaskbarPin={(appId) => {
             const next = profileMgr.currentProfile.pinnedApps.includes(appId)
               ? profileMgr.currentProfile.pinnedApps.filter(id => id !== appId)
@@ -597,7 +604,7 @@ export default function Desktop() {
         onToggleCopilot={() => setCopilotOpen(v => !v)}
         copilotOpen={copilotOpen}
         unreadCount={notifStore.unreadCount}
-        pinnedApps={profileMgr.currentProfile.pinnedApps}
+        pinnedApps={visiblePinnedApps}
         launcherOpen={launcher.isOpen}
         onToggleTaskbarPin={(appId) => {
           const next = profileMgr.currentProfile.pinnedApps.includes(appId)
@@ -673,7 +680,7 @@ export default function Desktop() {
           {QUICK_ACTIONS.map(a => (
             <button key={a.id}
               style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 16px", background: "none", border: "none", color: "#cbd5e1", fontSize: 13, cursor: "pointer" }}
-              onClick={() => openAppById(a.id)}
+              onClick={() => handleQuickAction(a)}
               onMouseEnter={ev => ev.currentTarget.style.background = "rgba(255,255,255,0.07)"}
               onMouseLeave={ev => ev.currentTarget.style.background = "none"}
             >

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useContext, createContext } from "react";
+import { DEFAULT_DESKTOP_ICONS, DEFAULT_PINNED } from "@/desktop/desktopApps";
 
 const ProfileContext = createContext(null);
 
@@ -11,8 +12,8 @@ const DEFAULT_PROFILE = {
     wallpaperIdx: 0,
     accentColor: "#10b981",
   },
-  desktopIcons: ["attendance", "tasks", "people", "transactions"],
-  pinnedApps: ["attendance", "tasks", "people", "transactions", "settings"],
+  desktopIcons: DEFAULT_DESKTOP_ICONS,
+  pinnedApps: DEFAULT_PINNED,
 };
 
 function loadProfiles() {

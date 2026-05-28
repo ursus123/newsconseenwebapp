@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { RAILWAY_URL } from "@/config/api";
 
-const RAILWAY_URL   = "https://newsconseenwebapp-production.up.railway.app";
 const AUTO_REFRESH_MS = 90_000; // 90 seconds
 
 function KpiCard({ label, value, sub, color, icon, isLight, loading }) {

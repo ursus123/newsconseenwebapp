@@ -38,7 +38,7 @@ export function useWindowManager() {
         // already open — focus & restore
         return prev.map(w =>
           w.id === existing.id
-            ? { ...w, minimized: false, zIndex: nextZ() }
+            ? { ...w, minimized: false, page: app.route || w.page, zIndex: nextZ() }
             : w
         );
       }

@@ -4,6 +4,8 @@ import { DESKTOP_CATEGORIES } from "@/desktop/desktopApps";
 import { motion, AnimatePresence } from "framer-motion";
 
 const CATEGORY_ICONS = {
+  Autonomy:      "*",
+  "Work Apps":   "+",
   All:           "🌐",
   Operations:    "⚡",
   Inventory:     "📦",
@@ -246,6 +248,7 @@ export default function AppLauncher({
                           <span className="text-[10px] text-slate-400 group-hover:text-slate-200 text-center leading-tight line-clamp-2 transition-colors w-full">
                             {app.name}
                           </span>
+                          <span className="sr-only">{app.description}</span>
 
                           {/* Taskbar pin indicator */}
                           {isTaskbarPinned && (

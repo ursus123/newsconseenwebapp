@@ -16,6 +16,7 @@
 import { base44 } from "@/api/base44Client";
 import { supabaseEntities } from "@/api/supabaseEntityClient";
 import { createWithScope } from "@/components/shared/useDataQuery";
+import { RAILWAY_API_KEY, RAILWAY_URL } from "@/config/api";
 
 /**
  * DATA_LAYER controls which Layer 1 backend is used.
@@ -49,8 +50,6 @@ function addRecordToQueryCache(queryClient, queryKey, record) {
   globalThis.setTimeout?.(apply, 1000);
 }
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = /** @type {any} */ (import.meta).env?.VITE_RAILWAY_API_KEY || "";
 
 // ── Entity registry ────────────────────────────────────────────────
 // thunks prevent initialization-order issues with base44.entities.*

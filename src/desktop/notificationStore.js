@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { RAILWAY_URL } from "@/config/api";
 
-const RAILWAY_URL    = "https://newsconseenwebapp-production.up.railway.app";
 const POLL_INTERVAL  = 3 * 60 * 1000; // 3 minutes
 
 let nextNid = 100;

@@ -5,8 +5,7 @@
  * artifacts, QField-style field sync, and OpenClaw-style channel routing.
  */
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = /** @type {any} */ (import.meta).env?.VITE_RAILWAY_API_KEY || "";
+import { RAILWAY_API_KEY, RAILWAY_URL } from "@/config/api";
 
 const headers = () => ({
   "Content-Type": "application/json",
