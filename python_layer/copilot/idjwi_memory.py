@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS analytics.idjwi_memory (
     key               TEXT NOT NULL,
     value             JSONB NOT NULL,
     confidence        FLOAT DEFAULT 1.0,
+    source            TEXT NOT NULL DEFAULT 'operator_stated',
+    review_status     TEXT NOT NULL DEFAULT 'confirmed',
     observation_count INT DEFAULT 1,
     created_at        TIMESTAMPTZ DEFAULT NOW(),
     updated_at        TIMESTAMPTZ DEFAULT NOW(),
@@ -31,6 +33,12 @@ CREATE TABLE IF NOT EXISTS analytics.idjwi_memory (
 );
 CREATE INDEX IF NOT EXISTS idx_idjwi_memory_company
     ON analytics.idjwi_memory (company_id, scope, owner, memory_type);
+ALTER TABLE analytics.idjwi_memory
+    ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'operator_stated';
+ALTER TABLE analytics.idjwi_memory
+    ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'confirmed';
+CREATE INDEX IF NOT EXISTS idx_idjwi_memory_review
+    ON analytics.idjwi_memory (company_id, review_status, confidence);
 """
 
 
@@ -56,6 +64,8 @@ def remember(
     scope: str = "company",
     owner: str = "idjwi",
     confidence: float = 1.0,
+    source: str = "operator_stated",
+    review_status: str = "confirmed",
     engine=None,
 ) -> dict:
     eng = engine or get_engine_safe()
@@ -68,14 +78,19 @@ def remember(
             conn.execute(text("""
                 INSERT INTO analytics.idjwi_memory
                     (company_id, scope, owner, memory_type, key, value,
-                     confidence, observation_count, updated_at)
+                     confidence, source, review_status, observation_count, updated_at)
                 VALUES
                     (:company_id, :scope, :owner, :memory_type, :key,
-                     :value::jsonb, :confidence, 1, NOW())
+                     :value::jsonb, :confidence, :source, :review_status, 1, NOW())
                 ON CONFLICT (company_id, scope, owner, memory_type, key)
                 DO UPDATE SET
                     value = analytics.idjwi_memory.value || EXCLUDED.value,
                     confidence = GREATEST(analytics.idjwi_memory.confidence, EXCLUDED.confidence),
+                    source = EXCLUDED.source,
+                    review_status = CASE
+                        WHEN analytics.idjwi_memory.review_status = 'confirmed' THEN 'confirmed'
+                        ELSE EXCLUDED.review_status
+                    END,
                     observation_count = analytics.idjwi_memory.observation_count + 1,
                     updated_at = NOW()
             """), {
@@ -86,9 +101,15 @@ def remember(
                 "key": key,
                 "value": json.dumps(payload),
                 "confidence": confidence,
+                "source": source,
+                "review_status": review_status,
             })
             conn.commit()
-        return {"saved": True, "key": key, "memory_type": memory_type, "scope": scope, "owner": owner}
+        return {
+            "saved": True, "key": key, "memory_type": memory_type,
+            "scope": scope, "owner": owner, "source": source,
+            "review_status": review_status,
+        }
     except Exception as e:
         logger.warning("idjwi_memory.remember failed: %s", e)
         return {"saved": False, "reason": str(e)}
@@ -100,6 +121,8 @@ def recall(
     key: Optional[str] = None,
     scope: Optional[str] = None,
     owner: Optional[str] = None,
+    review_status: Optional[str] = None,
+    min_confidence: Optional[float] = None,
     limit: int = 100,
     engine=None,
 ) -> list[dict]:
@@ -121,10 +144,16 @@ def recall(
     if owner:
         filters.append("owner = :owner")
         params["owner"] = owner
+    if review_status:
+        filters.append("review_status = :review_status")
+        params["review_status"] = review_status
+    if min_confidence is not None:
+        filters.append("confidence >= :min_confidence")
+        params["min_confidence"] = min_confidence
 
     sql = f"""
         SELECT id, scope, owner, memory_type, key, value, confidence,
-               observation_count, updated_at
+               source, review_status, observation_count, updated_at
         FROM analytics.idjwi_memory
         WHERE {' AND '.join(filters)}
         ORDER BY observation_count DESC, updated_at DESC
@@ -134,7 +163,8 @@ def recall(
         with eng.connect() as conn:
             rows = conn.execute(text(sql), params).fetchall()
         cols = ["id", "scope", "owner", "memory_type", "key", "value",
-                "confidence", "observation_count", "updated_at"]
+                "confidence", "source", "review_status",
+                "observation_count", "updated_at"]
         return [dict(zip(cols, row)) for row in rows]
     except Exception as e:
         logger.warning("idjwi_memory.recall failed: %s", e)

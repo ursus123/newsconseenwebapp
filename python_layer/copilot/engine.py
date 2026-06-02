@@ -915,6 +915,18 @@ _AUTONOMOUS_INTENTS = [
     (["what is idjwi", "tell me about idjwi", "who are you", "what can you do",
       "your capabilities", "what are you"],
      "__self_describe__"),
+    (["show me overdue tasks", "list overdue tasks", "show overdue tasks",
+      "list tasks for", "show me tasks", "list tasks"],
+     "find_task_records"),
+    (["show me unpaid invoices", "list unpaid invoices", "show transactions",
+      "list transactions", "list invoices"],
+     "find_transaction_records"),
+    (["show me products", "list products", "list items below reorder",
+      "show items below reorder", "show low stock items"],
+     "find_product_records"),
+    (["show me staff", "show staff", "list staff", "list inactive clients",
+      "show me people", "list people", "inactive clients", "who are our"],
+     "find_people_records"),
     (["how many people", "people count", "headcount", "number of people", "staff count",
       "how many staff", "how many client", "how many contact"],
      "get_people_summary"),
@@ -938,6 +950,56 @@ _AUTONOMOUS_INTENTS = [
     (["overview", "scorecard", "how are we doing", "business summary",
       "operational health", "health check"],
      "get_company_scorecard"),
+    (["who is available", "available staff", "staff on duty", "availability"],
+     "get_staff_availability"),
+    (["task outcomes", "outcome breakdown", "what happened with tasks", "task results"],
+     "get_task_outcomes"),
+    (["kpi", "business snapshot", "health score", "how is the business doing"],
+     "get_kpi_snapshot"),
+    (["top clients", "best clients", "biggest clients", "highest value clients", "top customers"],
+     "get_top_clients"),
+    (["top performers", "who is performing", "leaderboard", "staff ranking", "team performance"],
+     "get_staff_leaderboard"),
+    (["accounts receivable", "ar report", "aging", "who owes us"],
+     "get_ar_report"),
+    (["inventory health", "reorder", "stock coverage", "dead stock"],
+     "get_inventory_health"),
+    (["compare branches", "branch performance", "network kpis", "network performance"],
+     "get_network_kpis"),
+    (["concentration risk", "client concentration", "hhi"],
+     "get_concentration_risk"),
+    (["targets", "goals", "are we on track", "kpi goals"],
+     "get_kpi_goals"),
+    (["anomalies", "unusual", "outliers", "what changed", "flagged anything"],
+     "get_anomaly_report"),
+    (["recent alerts", "notifications sent", "alerts fired", "alert history"],
+     "get_alert_history"),
+    (["trends", "month by month", "over time", "trend"],
+     "get_operational_trends"),
+    (["top debtors", "biggest outstanding", "who owes the most"],
+     "get_top_debtors"),
+    (["low stock", "expiring", "products at risk", "reorder urgency"],
+     "get_product_at_risk"),
+    (["attendance", "who clocked in", "who is in today"],
+     "get_attendance_report"),
+    (["hours worked", "time summary", "time this week"],
+     "get_time_summary"),
+    (["utilisation", "utilization", "underutilised", "underutilized", "overloaded staff"],
+     "get_utilisation_report"),
+    (["insights", "recommendations", "what has been found", "saved insights"],
+     "search_intelligence"),
+    (["show me staff", "show staff", "list staff", "list inactive clients",
+      "show me people", "list people", "inactive clients", "who are our"],
+     "find_people_records"),
+    (["show me overdue tasks", "list overdue tasks", "show overdue tasks",
+      "list tasks for", "show me tasks", "list tasks"],
+     "find_task_records"),
+    (["show me unpaid invoices", "list unpaid invoices", "show transactions",
+      "list transactions", "list invoices"],
+     "find_transaction_records"),
+    (["show me products", "list products", "list items below reorder",
+      "show items below reorder", "show low stock items"],
+     "find_product_records"),
     # broad fallbacks — must come after specific ones
     (["people", "person", "staff", "client", "employee", "member", "patient", "student"],
      "get_people_summary"),
@@ -969,6 +1031,51 @@ def _idjwi_self_describe() -> str:
         "Autonomous capabilities (no LLM needed): "
         + ", ".join(c["name"] for c in caps)
     )
+
+
+def _value_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        return f"{value:,.2f}".rstrip("0").rstrip(".")
+    if isinstance(value, int):
+        return f"{value:,}"
+    return str(value)
+
+
+def _first_present(row: dict, keys: list[str], default: str = "") -> str:
+    for key in keys:
+        val = row.get(key)
+        if val not in (None, ""):
+            return _value_text(val)
+    return default
+
+
+def _format_records(title: str, records: list[dict], name_keys: list[str], detail_keys: list[str]) -> str:
+    if not records:
+        return f"No {title.lower()} found."
+    lines = [f"**{len(records)} {title.lower()}**"]
+    for idx, row in enumerate(records[:15], 1):
+        name = _first_present(row, name_keys, "Unnamed")
+        details = [_first_present(row, [key]) for key in detail_keys]
+        details = [d for d in details if d]
+        lines.append(f"{idx}. {name}" + (f" - {' | '.join(details[:4])}" if details else ""))
+    return "\n".join(lines)
+
+
+def _format_rows(title: str, rows: list[dict], name_keys: list[str], metric_keys: list[str]) -> str:
+    if not rows:
+        return f"No {title.lower()} data found."
+    lines = [f"**{title}**"]
+    for idx, row in enumerate(rows[:10], 1):
+        name = _first_present(row, name_keys, f"Row {idx}")
+        metrics = []
+        for key in metric_keys:
+            val = row.get(key)
+            if val not in (None, ""):
+                metrics.append(f"{key.replace('_', ' ')}: {_value_text(val)}")
+        lines.append(f"{idx}. {name}" + (f" - {' | '.join(metrics[:4])}" if metrics else ""))
+    return "\n".join(lines)
 
 
 def _format_autonomous_answer(tool_name: str, result: dict) -> str:
@@ -1063,6 +1170,82 @@ def _format_autonomous_answer(tool_name: str, result: dict) -> str:
         )
 
     # Generic fallback — stringify the result
+    if tool_name == "get_kpi_snapshot":
+        sc = result.get("snapshot") or {}
+        if not sc:
+            return result.get("note") or "No KPI snapshot is available yet."
+        keys = ["health_score", "active_people", "active_clients", "active_staff",
+                "total_revenue", "total_expenses", "net_profit", "task_completion_rate",
+                "open_invoice_count", "dead_stock_count", "churn_risk_count"]
+        lines = ["**KPI snapshot**"]
+        for key in keys:
+            if key in sc and sc.get(key) is not None:
+                lines.append(f"- {key.replace('_', ' ').title()}: {_value_text(sc.get(key))}")
+        if result.get("data_as_of"):
+            lines.append(f"- Data as of: {result.get('data_as_of')}")
+        return "\n".join(lines)
+
+    if tool_name == "find_people_records":
+        return _format_records("People records", result.get("records", []),
+                               ["full_name", "name", "person_name"],
+                               ["person_type", "status", "enterprise_name", "email"])
+
+    if tool_name == "find_task_records":
+        return _format_records("Task records", result.get("records", []),
+                               ["title", "task_type"],
+                               ["status", "assigned_to", "assignee_name", "due_date", "priority"])
+
+    if tool_name == "find_transaction_records":
+        return _format_records("Transaction records", result.get("records", []),
+                               ["counterparty_name", "reference_number", "description", "transaction_type"],
+                               ["transaction_type", "payment_status", "amount", "currency", "transaction_date", "due_date"])
+
+    if tool_name == "find_product_records":
+        return _format_records("Product records", result.get("records", []),
+                               ["name", "item_subtype", "item_type"],
+                               ["item_type", "status", "stock_quantity", "reorder_level", "expiry_date"])
+
+    if tool_name == "get_top_clients":
+        return _format_rows("Top clients", result.get("clients", []),
+                            ["person_name", "name", "full_name"],
+                            ["total_revenue", "transaction_count", "rfm_segment", "churn_risk"])
+
+    if tool_name == "get_staff_leaderboard":
+        metric = result.get("ranked_by", "performance")
+        return _format_rows(f"Staff leaderboard by {metric.replace('_', ' ')}", result.get("staff", []),
+                            ["person_name", "full_name", "name"],
+                            ["tasks_assigned_total", "tasks_completed_total", "completion_rate_pct",
+                             "tasks_overdue", "performance_tier"])
+
+    if tool_name in (
+        "get_ar_report", "get_inventory_health", "get_network_kpis",
+        "get_concentration_risk", "get_kpi_goals", "get_anomaly_report",
+        "get_alert_history", "get_operational_trends", "get_top_debtors",
+        "get_product_at_risk", "get_attendance_report", "get_time_summary",
+        "get_utilisation_report", "get_staff_availability", "get_task_outcomes",
+        "search_intelligence",
+    ):
+        rows = (
+            result.get("records") or result.get("items") or result.get("clients") or
+            result.get("staff") or result.get("products") or result.get("debtors") or
+            result.get("alerts") or result.get("anomalies") or result.get("goals") or
+            result.get("trends") or result.get("branches") or result.get("availability") or
+            result.get("outcomes") or result.get("insights") or []
+        )
+        if isinstance(rows, list) and rows:
+            metric_keys = [k for k in rows[0].keys() if k not in ("id", "company_id")][:6]
+            return _format_rows(tool_name.replace("_", " ").title(), rows,
+                                ["name", "title", "person_name", "product_name",
+                                 "enterprise_name", "action_label", "metric"],
+                                metric_keys)
+        lines = [f"**{tool_name.replace('_', ' ').title()}**"]
+        for key, val in result.items():
+            if key in ("note", "summary") and val:
+                lines.append(str(val))
+            elif isinstance(val, (str, int, float)) and val not in ("", None):
+                lines.append(f"- {key.replace('_', ' ').title()}: {_value_text(val)}")
+        return "\n".join(lines) if len(lines) > 1 else str(result)
+
     return str(result)
 
 
@@ -1099,6 +1282,132 @@ def _autonomous_answer(question: str, company_id: str, principal=None) -> str:
     except Exception as e:
         logger.warning("_autonomous_answer tool %s failed: %s", tool_name, e)
     return ""
+
+
+def _recall_autonomous_memories(question: str, company_id: str) -> list[dict]:
+    try:
+        from .idjwi_memory import recall
+        memories = recall(
+            company_id,
+            review_status="confirmed",
+            min_confidence=0.7,
+            limit=80,
+        )
+    except Exception:
+        return []
+
+    q_terms = {t.strip(".,:;!?()[]{}").lower() for t in question.split() if len(t) > 2}
+    durable_types = {
+        "terminology", "preference", "business_structure", "business_rule",
+        "role_relationship", "recurring_pattern", "domain_context",
+        "context", "note",
+    }
+    relevant = []
+    for memory in memories:
+        if memory.get("memory_type") not in durable_types:
+            continue
+        haystack = f"{memory.get('key', '')} {memory.get('value', '')}".lower()
+        if not q_terms or any(term in haystack for term in q_terms):
+            relevant.append(memory)
+    return relevant[:8]
+
+
+def _memory_context_text(memories: list[dict]) -> str:
+    if not memories:
+        return ""
+    lines = []
+    for memory in memories[:5]:
+        value = memory.get("value")
+        if isinstance(value, dict):
+            value = value.get("value", value)
+        lines.append(f"- {memory.get('key')}: {value}")
+    return "Confirmed Idjwi memory used:\n" + "\n".join(lines)
+
+
+def _autonomous_miss_answer(question: str, company_id: str, principal=None) -> tuple[str, list, dict]:
+    broad = ["overview", "status", "snapshot", "health", "how are we doing", "today"]
+    if any(term in question.lower() for term in broad):
+        result = execute_tool(
+            "get_kpi_snapshot",
+            {"company_id": company_id},
+            company_id,
+            principal=principal,
+            llm_available=False,
+        )
+        answer = _format_autonomous_answer("get_kpi_snapshot", result)
+        return (
+            answer + "\n\nI do not have a more specific autonomous answer for that question yet. Turn Advisor on for deeper analysis.",
+            ["get_kpi_snapshot"],
+            {"get_kpi_snapshot": result},
+        )
+    return (
+        "I do not have an autonomous answer for that question yet.\n\n"
+        "I can answer operational questions about people, staff availability, tasks, transactions, products, inventory, KPIs, alerts, trends, attendance, time, and named records without Advisor.\n\n"
+        "Turn Advisor on for deeper reasoning or open-ended analysis.",
+        [],
+        {},
+    )
+
+
+def _autonomous_answer(question: str, company_id: str, principal=None, return_meta: bool = False):
+    """
+    Idjwi Autonomous Mode: deterministic memory recall plus one tool call.
+    Always returns a useful answer. With return_meta=True, returns
+    (answer, tools_called, data, memory_used).
+    """
+    memories = _recall_autonomous_memories(question, company_id)
+    tool_name = _detect_autonomous_tool(question)
+    if not tool_name:
+        answer, tools, data = _autonomous_miss_answer(question, company_id, principal)
+        if memories:
+            answer = _memory_context_text(memories) + "\n\n" + answer
+        return (answer, tools, data, bool(memories)) if return_meta else answer
+
+    try:
+        logger.info("_autonomous_answer: autonomous -> %s", tool_name)
+        if tool_name == "__self_describe__":
+            answer = _idjwi_self_describe() + "\n\n*(Answered from Idjwi capability registry - no Advisor needed)*"
+            return (answer, [], {}, bool(memories)) if return_meta else answer
+
+        tool_input = {"company_id": company_id}
+        q = question.lower()
+        if tool_name == "find_task_records" and "overdue" in q:
+            tool_input["overdue_only"] = True
+        if tool_name == "find_transaction_records" and ("unpaid" in q or "outstanding" in q):
+            tool_input["payment_status"] = "unpaid"
+        if tool_name == "find_product_records" and ("low stock" in q or "below reorder" in q or "reorder" in q):
+            tool_input["low_stock_only"] = True
+        if tool_name == "find_people_records":
+            if "inactive" in q:
+                tool_input["status"] = "inactive"
+            if "staff" in q:
+                tool_input["person_type"] = "staff"
+            if "client" in q or "patient" in q:
+                tool_input["person_type"] = "client"
+
+        result = execute_tool(
+            tool_name,
+            tool_input,
+            company_id,
+            principal=principal,
+            llm_available=False,
+        )
+        answer = _format_autonomous_answer(tool_name, result)
+        prefix = _memory_context_text(memories) + "\n\n" if memories else ""
+        suffix = "\n\n*(Answered in Idjwi Autonomous Mode - Advisor off)*"
+        if "not found" in answer.lower() or "no " in answer[:30].lower():
+            suffix = (
+                f"\n\n*(Autonomous mode - searched company_id: `{company_id}` - "
+                "if this is wrong, check your user_profiles.company_id in Supabase. "
+                "Advisor is off.)*"
+            )
+        final = prefix + answer + suffix
+        return (final, [tool_name], {tool_name: result}, bool(memories)) if return_meta else final
+    except Exception as e:
+        logger.warning("_autonomous_answer tool %s failed: %s", tool_name, e)
+
+    answer = "I could not complete that autonomous tool call. Turn Advisor on for a reasoning-backed retry."
+    return (answer, [], {}, bool(memories)) if return_meta else answer
 
 
 def _run_tool_loop(
@@ -1229,6 +1538,63 @@ def _run_tool_loop(
     return "I reached the maximum number of tool calls. Here is what I found so far — please ask a more specific question."
 
 
+def _classify_memory_candidate(text_line: str) -> tuple[str, str] | None:
+    line = text_line.strip().strip("-*0123456789. ")
+    lower = line.lower()
+    if len(line) < 18:
+        return None
+    durable_patterns = [
+        ("terminology", ["call clients", "call customers", "called patients", "called clients", "terminology"]),
+        ("preference", ["prefer", "preference", "always lead", "report should", "reports should"]),
+        ("business_structure", ["branches are", "locations are", "departments are", "teams are"]),
+        ("business_rule", ["threshold", "reorder", "rule", "policy", "must be", "should be"]),
+        ("role_relationship", ["reports to", "managed by", "supervised by", "director is"]),
+        ("recurring_pattern", ["spikes every", "every december", "seasonal", "recurs", "recurring"]),
+        ("domain_context", ["serves", "operates as", "business is", "enterprise is"]),
+    ]
+    for memory_type, patterns in durable_patterns:
+        if any(pattern in lower for pattern in patterns):
+            key = lower.split(":", 1)[0][:80].replace(" ", "_")
+            key = "".join(ch for ch in key if ch.isalnum() or ch in ("_", "-")).strip("_")
+            return memory_type, key or memory_type
+    return None
+
+
+def _ingest_advisor_memory_async(company_id: str, question: str, answer: str) -> int:
+    """
+    Store durable-looking Advisor learnings as pending memory.
+    Pending Advisor memory is intentionally not injected into Autonomous answers.
+    """
+    try:
+        from .idjwi_memory import remember
+    except Exception:
+        return 0
+
+    candidates = []
+    for line in (answer or "").splitlines():
+        classified = _classify_memory_candidate(line)
+        if classified:
+            memory_type, key = classified
+            candidates.append((memory_type, key, line.strip()))
+        if len(candidates) >= 5:
+            break
+
+    saved = 0
+    for memory_type, key, value in candidates:
+        result = remember(
+            company_id=company_id,
+            key=key,
+            value={"value": value, "question": question},
+            memory_type=memory_type,
+            owner="idjwi",
+            confidence=0.7,
+            source="advisor_extracted",
+            review_status="pending",
+        )
+        saved += 1 if result.get("saved") else 0
+    return saved
+
+
 # ── Public async interface ───────────────────────────────────────────────────
 
 async def ask(question: str, company_id: str, history: list = None) -> str:
@@ -1328,6 +1694,7 @@ class CopilotEngine:
         history: list = None,
         context: dict = None,
         session_id: str = "",
+        advisor_enabled: bool = False,
     ) -> dict:
         """
         Synchronous call — returns dict with answer, tools_called, data, intent.
@@ -1361,6 +1728,40 @@ class CopilotEngine:
         messages.append({"role": "user", "content": full_question})
 
         try:
+            if not advisor_enabled:
+                answer_text, tools_called, data, memory_used = _autonomous_answer(
+                    full_question,
+                    self.company_id,
+                    principal=self.principal,
+                    return_meta=True,
+                )
+                if session_id:
+                    updated = list(resolved_history)
+                    updated.append({"role": "user", "content": full_question})
+                    updated.append({"role": "assistant", "content": answer_text})
+                    save_session_history(self.company_id, session_id, updated)
+                return {
+                    "answer": answer_text,
+                    "tools_called": tools_called,
+                    "data": data,
+                    "charts": [],
+                    "citations": [],
+                    "data_freshness": {},
+                    "tools_detail": [
+                        {"tool": tool, "params": {"company_id": self.company_id}}
+                        for tool in tools_called
+                    ],
+                    "intent": "",
+                    "company_id": self.company_id,
+                    "backend": self.backend,
+                    "mode": "autonomous",
+                    "advisor_enabled": False,
+                    "memory_used": memory_used,
+                    "memory_candidates_created": 0,
+                    "created_recommendations": [],
+                    "created_insights": [],
+                }
+
             collected: list = []
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 future = pool.submit(
@@ -1379,6 +1780,11 @@ class CopilotEngine:
             charts    = _extract_chart_configs(collected)
             citations = _extract_citations(collected)
             created_recommendations, created_insights = _extract_created_objects(collected)
+            memory_candidates_created = _ingest_advisor_memory_async(
+                self.company_id,
+                full_question,
+                answer_text,
+            )
 
             return {
                 "answer":                   answer_text,
@@ -1391,6 +1797,10 @@ class CopilotEngine:
                 "intent":                   "",
                 "company_id":               self.company_id,
                 "backend":                  self.backend,
+                "mode":                     "advisor",
+                "advisor_enabled":           True,
+                "memory_used":               False,
+                "memory_candidates_created":  memory_candidates_created,
                 "created_recommendations":  created_recommendations,
                 "created_insights":         created_insights,
             }

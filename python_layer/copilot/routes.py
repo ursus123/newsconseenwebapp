@@ -51,6 +51,8 @@ class AskRequest(BaseModel):
     context:              Optional[dict] = {}
     session_id:           Optional[str] = ""   # if set, history persisted in session store
     model:                Optional[str] = None  # LLM model override; defaults to engine default
+    advisor_enabled:      Optional[bool] = False
+    ai_enabled:           Optional[bool] = None  # backward-compatible alias for advisor_enabled
     # Entity-page context — injected when Idjwi is opened from an entity record
     current_page:         Optional[str] = ""
     selected_entity_type: Optional[str] = ""
@@ -217,6 +219,9 @@ def ask(
         history=request.history or [],
         context=ctx,
         session_id=request.session_id or "",
+        advisor_enabled=bool(
+            request.advisor_enabled if request.ai_enabled is None else request.ai_enabled
+        ),
     )
 
     # Never raise 500 for engine errors — return 200 with the error as the

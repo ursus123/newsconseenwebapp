@@ -1003,6 +1003,25 @@ function MessageBubble({ message, onFeedback, companyId, currentUser, onOpenQuer
             <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
               Copilot
             </span>
+            {message.mode && (
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
+                message.mode === "advisor"
+                  ? "bg-violet-50 text-violet-700 border border-violet-100"
+                  : "bg-emerald-50 text-emerald-700 border border-emerald-100"
+              }`}>
+                {message.mode === "advisor" ? "Advisor Active" : "Autonomous"}
+              </span>
+            )}
+            {message.memory_used && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                Memory
+              </span>
+            )}
+            {message.memory_candidates_created > 0 && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-50 text-amber-700 border border-amber-100">
+                {message.memory_candidates_created} Pending Memory
+              </span>
+            )}
             {message.tools_called?.length > 0 && (
               <ToolActivity tools={message.tools_called} />
             )}
@@ -1346,6 +1365,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
   const [error, setError]         = useState(null);
   const [context, setContext]     = useState(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [advisorEnabled, setAdvisorEnabled] = useState(false);
   const messagesEndRef             = useRef(null);
   const inputRef                   = useRef(null);
   const fileInputRef               = useRef(null);
@@ -1494,6 +1514,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           company_id: companyId,
           history,
           model:      selectedModel,
+          advisor_enabled: advisorEnabled,
         }),
       });
       const result = await resp.json();
@@ -1506,6 +1527,10 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
         citations:               [],
         created_recommendations: result.created_recommendations || [],
         created_insights:        result.created_insights        || [],
+        mode:                    result.mode                    || (advisorEnabled ? "advisor" : "autonomous"),
+        advisor_enabled:         result.advisor_enabled         ?? advisorEnabled,
+        memory_used:             result.memory_used             || false,
+        memory_candidates_created: result.memory_candidates_created || 0,
         timestamp:               new Date().toISOString(),
       };
       setMessages(prev => [
@@ -1518,7 +1543,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
     } finally {
       setLoading(false);
     }
-  }, [companyId, messages, currentUser, selectedModel]);
+  }, [companyId, messages, currentUser, selectedModel, advisorEnabled]);
 
   const handleIngestionDismiss = useCallback((planId) => {
     setMessages(prev => prev.filter(m =>
@@ -1538,7 +1563,8 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
     };
     const thinkingMsg = {
       id: Date.now() + 1, role: "assistant", type: "thinking",
-      content: "Analysing your question…", tools: [],
+      content: advisorEnabled ? "Consulting Idjwi Advisor..." : "Answering in Idjwi Autonomous Mode...",
+      tools: [],
     };
 
     setMessages(prev => [...prev, userMsg, thinkingMsg]);
@@ -1558,6 +1584,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           enterprise_name: currentUser?.enterprise_name || "",
           history,
           model:           selectedModel,
+          advisor_enabled: advisorEnabled,
         }),
       });
 
@@ -1583,6 +1610,10 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
         feedback:                null,
         created_recommendations: result.created_recommendations || [],
         created_insights:        result.created_insights        || [],
+        mode:                    result.mode                    || (advisorEnabled ? "advisor" : "autonomous"),
+        advisor_enabled:         result.advisor_enabled         ?? advisorEnabled,
+        memory_used:             result.memory_used             || false,
+        memory_candidates_created: result.memory_candidates_created || 0,
         timestamp:               new Date().toISOString(),
       };
 
@@ -1604,7 +1635,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       setLoading(false);
       inputRef.current?.focus();
     }
-  }, [input, loading, companyId, messages, currentUser, selectedModel]);
+  }, [input, loading, companyId, messages, currentUser, selectedModel, advisorEnabled]);
 
   const handleFeedback = async (messageId, rating) => {
     setMessages(prev =>
@@ -1670,6 +1701,20 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
                 {context.critical_alerts}
               </span>
             )}
+            <button
+              onClick={() => setAdvisorEnabled(v => !v)}
+              title={advisorEnabled ? "Advisor is on" : "Idjwi Autonomous is the default"}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors ${
+                advisorEnabled
+                  ? "border-violet-200 bg-violet-50 text-violet-700"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              {advisorEnabled ? <Brain className="w-3.5 h-3.5" /> : <Activity className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">
+                {advisorEnabled ? "Advisor On" : "Autonomous"}
+              </span>
+            </button>
             {/* History button */}
             <button
               onClick={() => setShowHistory(true)}
