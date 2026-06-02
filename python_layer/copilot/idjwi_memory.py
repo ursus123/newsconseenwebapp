@@ -192,6 +192,56 @@ def forget(company_id: str, key: str, memory_type: Optional[str] = None, engine=
         return {"deleted": False, "reason": str(e)}
 
 
+def review_memory(
+    company_id: str,
+    memory_id: str,
+    action: str,
+    engine=None,
+) -> dict:
+    eng = engine or get_engine_safe()
+    if not eng or not ensure_table(eng):
+        return {"updated": False, "reason": "database unavailable"}
+
+    action = (action or "").lower().strip()
+    status_by_action = {
+        "confirm": "confirmed",
+        "confirmed": "confirmed",
+        "reject": "rejected",
+        "rejected": "rejected",
+        "archive": "archived",
+        "archived": "archived",
+    }
+    review_status = status_by_action.get(action)
+    if not review_status:
+        return {"updated": False, "reason": "action must be confirm, reject, or archive"}
+
+    confidence_sql = ", confidence = GREATEST(confidence, 0.9)" if review_status == "confirmed" else ""
+    try:
+        with eng.connect() as conn:
+            result = conn.execute(text(f"""
+                UPDATE analytics.idjwi_memory
+                SET review_status = :review_status,
+                    updated_at = NOW()
+                    {confidence_sql}
+                WHERE id = :memory_id
+                  AND company_id = :company_id
+                RETURNING id, key, memory_type, review_status, confidence
+            """), {
+                "company_id": company_id,
+                "memory_id": memory_id,
+                "review_status": review_status,
+            })
+            row = result.fetchone()
+            conn.commit()
+        if not row:
+            return {"updated": False, "reason": "memory not found"}
+        cols = ["id", "key", "memory_type", "review_status", "confidence"]
+        return {"updated": True, "memory": dict(zip(cols, row))}
+    except Exception as e:
+        logger.warning("idjwi_memory.review_memory failed: %s", e)
+        return {"updated": False, "reason": str(e)}
+
+
 def summary(company_id: str, engine=None) -> dict:
     memories = recall(company_id, limit=500, engine=engine)
     by_type = {}

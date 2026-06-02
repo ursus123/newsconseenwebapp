@@ -84,6 +84,11 @@ class IdjwiWorkflowRequest(BaseModel):
     payload:    Optional[dict] = None
 
 
+class MemoryReviewRequest(BaseModel):
+    company_id: str
+    action:     str
+
+
 # ----------------------------------------------------------
 # Endpoints
 # ----------------------------------------------------------
@@ -399,6 +404,57 @@ def deterministic_command(
             "approve_action",
         ],
     }
+
+
+@router.get("/idjwi-memory")
+def list_idjwi_memory(
+    company_id: str = Query(...),
+    review_status: Optional[str] = Query(None),
+    limit: int = Query(200),
+    x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+):
+    from copilot.idjwi_memory import recall, summary
+    from copilot.idjwi_security import principal_from_headers, require_api_key
+
+    api_gate = require_api_key(x_idjwi_api_key)
+    if not api_gate.get("allowed"):
+        raise HTTPException(status_code=401, detail=api_gate.get("reason"))
+
+    principal_from_headers(company_id=company_id, user_id=x_idjwi_user, role=x_idjwi_role)
+    entries = recall(
+        company_id,
+        review_status=review_status or None,
+        limit=max(1, min(int(limit or 200), 500)),
+    )
+    return {
+        "company_id": company_id,
+        "entries": entries,
+        "summary": summary(company_id),
+    }
+
+
+@router.post("/idjwi-memory/{memory_id}/review")
+def review_idjwi_memory(
+    memory_id: str,
+    request: MemoryReviewRequest,
+    x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+):
+    from copilot.idjwi_memory import review_memory
+    from copilot.idjwi_security import principal_from_headers, require_api_key
+
+    api_gate = require_api_key(x_idjwi_api_key)
+    if not api_gate.get("allowed"):
+        raise HTTPException(status_code=401, detail=api_gate.get("reason"))
+
+    principal_from_headers(company_id=request.company_id, user_id=x_idjwi_user, role=x_idjwi_role)
+    result = review_memory(request.company_id, memory_id, request.action)
+    if not result.get("updated"):
+        raise HTTPException(status_code=400, detail=result.get("reason", "memory review failed"))
+    return result
 
 
 @router.get("/health/full")

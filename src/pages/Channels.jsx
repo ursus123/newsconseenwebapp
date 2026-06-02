@@ -10,6 +10,7 @@ import BulkActionBar from "@/components/shared/BulkActionBar";
 import SpreadsheetToolbar from "@/components/shared/SpreadsheetToolbar";
 import ExportCSVButton from "@/components/shared/ExportCSVButton";
 import ETLSyncBanner from "@/components/shared/ETLSyncBanner";
+import AutonomousFigureExplainer from "@/components/shared/AutonomousFigureExplainer";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import { usePermissions } from "@/components/shared/usePermissions";
@@ -71,9 +72,9 @@ const columns = [
 
 function StatCard({ icon: Icon, cls, label, value }) {
   return (
-    <div className="bg-white border border-slate-100 rounded-2xl px-4 py-3 flex items-center gap-3">
+    <div className="relative bg-white border border-slate-100 rounded-2xl px-4 py-3 flex items-center gap-3">
       <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${cls}`}><Icon className="w-4 h-4" /></div>
-      <div><p className="text-xs text-slate-400">{label}</p><p className="text-lg font-bold text-slate-800 leading-tight">{value}</p></div>
+      <div><p className="text-xs text-slate-400">{label}</p><p className="text-lg font-bold text-slate-800 leading-tight">{value}</p><AutonomousFigureExplainer entity="Channels" label={label} value={value} /></div>
     </div>
   );
 }

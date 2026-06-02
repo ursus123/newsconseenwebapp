@@ -334,7 +334,7 @@ _CRON_PREFIXES = ("/load/", "/cron/", "/webhook/")
 _CORS_HEADERS = {
     "Access-Control-Allow-Origin":  "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-    "Access-Control-Allow-Headers": "x-api-key, x-cron-secret, Content-Type, Authorization, Accept, X-Requested-With",
+    "Access-Control-Allow-Headers": "x-api-key, x-idjwi-api-key, x-idjwi-role, x-idjwi-user, x-idjwi-plan, x-cron-secret, Content-Type, Authorization, Accept, X-Requested-With",
     "Access-Control-Max-Age":       "86400",
 }
 
@@ -364,7 +364,7 @@ async def cors_and_auth_middleware(request: Request, call_next):
     # Stamp every response with CORS headers so the browser never blocks it.
     response.headers["Access-Control-Allow-Origin"]  = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-    response.headers["Access-Control-Allow-Headers"] = "x-api-key, x-cron-secret, Content-Type, Authorization, Accept, X-Requested-With"
+    response.headers["Access-Control-Allow-Headers"] = "x-api-key, x-idjwi-api-key, x-idjwi-role, x-idjwi-user, x-idjwi-plan, x-cron-secret, Content-Type, Authorization, Accept, X-Requested-With"
     return response
 
 # ----------------------------------------------------------
