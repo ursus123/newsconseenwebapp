@@ -78,7 +78,7 @@ export default function ServicesAnalytics({ services = [], currentUser }) {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <SectionHeader title="Catalogue" icon="🛠️" />
 
-      <ChartCard title="By Status" sql={`SELECT status, COUNT(*) FROM Service GROUP BY status;`} currentUser={currentUser} entity="Services" tableData={d.byStatus}>
+      <ChartCard title="By Status" sql={`SELECT status, COUNT(*) FROM services GROUP BY status;`} currentUser={currentUser} entity="Services" tableData={d.byStatus}>
         <ResponsiveContainer width="100%" height={180}>
           <PieChart>
             <Pie data={d.byStatus} cx="50%" cy="50%" innerRadius={45} outerRadius={70} dataKey="count" nameKey="name"
@@ -90,7 +90,7 @@ export default function ServicesAnalytics({ services = [], currentUser }) {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="By Category" sql={`SELECT category, COUNT(*) FROM Service GROUP BY category ORDER BY 2 DESC;`} currentUser={currentUser} entity="Services" tableData={d.byCategory}>
+      <ChartCard title="By Category" sql={`SELECT category, COUNT(*) FROM services GROUP BY category ORDER BY 2 DESC;`} currentUser={currentUser} entity="Services" tableData={d.byCategory}>
         <ResponsiveContainer width="100%" height={180}>
           <BarChart data={d.byCategory} layout="vertical" margin={{ left: 0, right: 10 }}>
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -102,7 +102,7 @@ export default function ServicesAnalytics({ services = [], currentUser }) {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="By Service Type" sql={`SELECT service_type, COUNT(*) FROM Service GROUP BY service_type;`} currentUser={currentUser} entity="Services" tableData={d.byType}>
+      <ChartCard title="By Service Type" sql={`SELECT service_type, COUNT(*) FROM services GROUP BY service_type;`} currentUser={currentUser} entity="Services" tableData={d.byType}>
         <ResponsiveContainer width="100%" height={180}>
           <BarChart data={d.byType} margin={{ left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -118,7 +118,7 @@ export default function ServicesAnalytics({ services = [], currentUser }) {
 
       <SectionHeader title="Pricing" icon="💰" />
 
-      <ChartCard title="By Pricing Model" sql={`SELECT pricing_model, COUNT(*) FROM Service GROUP BY pricing_model;`} currentUser={currentUser} entity="Services" tableData={d.byPricing}>
+      <ChartCard title="By Pricing Model" sql={`SELECT pricing_model, COUNT(*) FROM services GROUP BY pricing_model;`} currentUser={currentUser} entity="Services" tableData={d.byPricing}>
         <ResponsiveContainer width="100%" height={180}>
           <PieChart>
             <Pie data={d.byPricing} cx="50%" cy="50%" outerRadius={75} dataKey="count" nameKey="name">
@@ -129,7 +129,7 @@ export default function ServicesAnalytics({ services = [], currentUser }) {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Price Range Distribution" sql={`SELECT CASE WHEN price=0 OR price IS NULL THEN 'Free' WHEN price<50 THEN '<$50' WHEN price<200 THEN '$50-200' WHEN price<500 THEN '$200-500' ELSE '$500+' END bucket, COUNT(*) FROM Service GROUP BY bucket;`} currentUser={currentUser} entity="Services" tableData={d.priceBuckets}>
+      <ChartCard title="Price Range Distribution" sql={`SELECT CASE WHEN price=0 OR price IS NULL THEN 'Free' WHEN price<50 THEN '<$50' WHEN price<200 THEN '$50-200' WHEN price<500 THEN '$200-500' ELSE '$500+' END bucket, COUNT(*) FROM services GROUP BY bucket;`} currentUser={currentUser} entity="Services" tableData={d.priceBuckets}>
         <ResponsiveContainer width="100%" height={180}>
           <BarChart data={d.priceBuckets} margin={{ left: -20 }}>
             <XAxis dataKey="range" tick={{ fontSize: 10 }} />
@@ -142,7 +142,7 @@ export default function ServicesAnalytics({ services = [], currentUser }) {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Average Price" description="Across all services" sql={`SELECT AVG(price) FROM Service WHERE price IS NOT NULL;`} currentUser={currentUser} entity="Services" tableData={[{ name: "Avg Price", count: parseFloat(d.avgPrice) }]}>
+      <ChartCard title="Average Price" description="Across all services" sql={`SELECT AVG(price) FROM services WHERE price IS NOT NULL;`} currentUser={currentUser} entity="Services" tableData={[{ name: "Avg Price", count: parseFloat(d.avgPrice) }]}>
         <div className="flex items-center justify-center min-h-[180px]">
           <div className="text-center">
             <p className="text-4xl font-bold text-emerald-600">${parseFloat(d.avgPrice).toLocaleString()}</p>
@@ -153,7 +153,7 @@ export default function ServicesAnalytics({ services = [], currentUser }) {
 
       <SectionHeader title="Delivery" icon="🚀" />
 
-      <ChartCard title="By Delivery Mode" sql={`SELECT delivery_mode, COUNT(*) FROM Service GROUP BY delivery_mode;`} currentUser={currentUser} entity="Services" tableData={d.byDelivery}>
+      <ChartCard title="By Delivery Mode" sql={`SELECT delivery_mode, COUNT(*) FROM services GROUP BY delivery_mode;`} currentUser={currentUser} entity="Services" tableData={d.byDelivery}>
         <ResponsiveContainer width="100%" height={180}>
           <BarChart data={d.byDelivery} layout="vertical" margin={{ left: 0, right: 10 }}>
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -165,7 +165,7 @@ export default function ServicesAnalytics({ services = [], currentUser }) {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Certification Required" sql={`SELECT requires_certification, COUNT(*) FROM Service GROUP BY requires_certification;`} currentUser={currentUser} entity="Services" tableData={[{ name: "Requires Cert", count: d.withCert }, { name: "No Cert", count: d.noCert }]}>
+      <ChartCard title="Certification Required" sql={`SELECT requires_certification, COUNT(*) FROM services GROUP BY requires_certification;`} currentUser={currentUser} entity="Services" tableData={[{ name: "Requires Cert", count: d.withCert }, { name: "No Cert", count: d.noCert }]}>
         <ResponsiveContainer width="100%" height={180}>
           <PieChart>
             <Pie data={[{ name: "Requires Cert", count: d.withCert }, { name: "No Cert", count: d.noCert }]}
@@ -180,7 +180,7 @@ export default function ServicesAnalytics({ services = [], currentUser }) {
 
       <SectionHeader title="Growth" icon="📈" />
 
-      <ChartCard title="New Services by Month" sql={`SELECT DATE_TRUNC('month', created_date) m, COUNT(*) FROM Service GROUP BY 1 ORDER BY 1;`} currentUser={currentUser} entity="Services" tableData={d.newByMonth}>
+      <ChartCard title="New Services by Month" sql={`SELECT DATE_TRUNC('month', created_date) m, COUNT(*) FROM services GROUP BY 1 ORDER BY 1;`} currentUser={currentUser} entity="Services" tableData={d.newByMonth}>
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={d.newByMonth} margin={{ left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -192,7 +192,7 @@ export default function ServicesAnalytics({ services = [], currentUser }) {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Cumulative Service Count" sql={`SELECT DATE_TRUNC('month', created_date) m, COUNT(*) OVER(ORDER BY DATE_TRUNC('month', created_date)) total FROM Service WHERE created_date IS NOT NULL;`} currentUser={currentUser} entity="Services" tableData={d.cumulData}>
+      <ChartCard title="Cumulative Service Count" sql={`SELECT DATE_TRUNC('month', created_date) AS month, COUNT(*) AS count FROM services WHERE created_date IS NOT NULL GROUP BY 1 ORDER BY 1;`} currentUser={currentUser} entity="Services" tableData={d.cumulData}>
         <ResponsiveContainer width="100%" height={180}>
           <AreaChart data={d.cumulData} margin={{ left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -204,7 +204,7 @@ export default function ServicesAnalytics({ services = [], currentUser }) {
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Category Pie" sql={`SELECT category, COUNT(*) FROM Service GROUP BY category ORDER BY 2 DESC LIMIT 8;`} currentUser={currentUser} entity="Services" tableData={d.byCategory.slice(0, 8)}>
+      <ChartCard title="Category Pie" sql={`SELECT category, COUNT(*) FROM services GROUP BY category ORDER BY 2 DESC LIMIT 8;`} currentUser={currentUser} entity="Services" tableData={d.byCategory.slice(0, 8)}>
         <ResponsiveContainer width="100%" height={180}>
           <PieChart>
             <Pie data={d.byCategory.slice(0, 8)} cx="50%" cy="50%" outerRadius={75} dataKey="count" nameKey="name">

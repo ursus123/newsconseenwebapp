@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import TeachIdjwiButton from "@/components/shared/TeachIdjwiButton";
 
 const colorMap = {
   emerald: {
@@ -118,11 +119,20 @@ export default function StatCard({
   insight,
   to,
   onClick,
+  currentUser,
+  companyId,
+  teachKey,
+  teachContext,
+  goal,
 }) {
   if (loading) return <SkeletonCard />;
 
   const colors = colorMap[color] || colorMap.emerald;
   const isClickable = !!(to || onClick);
+  const goalValue = Number(goal?.current ?? value ?? 0);
+  const goalTarget = Number(goal?.target ?? 0);
+  const goalPct = goalTarget > 0 ? Math.max(0, Math.min(100, Math.round((goalValue / goalTarget) * 100))) : null;
+  const goalTone = goalPct == null ? "bg-slate-200" : goalPct >= 90 ? "bg-emerald-500" : goalPct >= 60 ? "bg-amber-500" : "bg-rose-500";
 
   const inner = (
     <motion.div
@@ -160,6 +170,38 @@ export default function StatCard({
             <p className="text-[11px] text-slate-500 italic mt-2 leading-snug border-t border-slate-50 pt-2">
               {insight}
             </p>
+          )}
+          {goalPct !== null && (
+            <div className="mt-3">
+              <div className="mb-1 flex items-center justify-between text-[10px] text-slate-400">
+                <span>{goal?.label || "Goal progress"}</span>
+                <span>{goalPct}%</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className={`h-full rounded-full ${goalTone}`} style={{ width: `${goalPct}%` }} />
+              </div>
+            </div>
+          )}
+          {(currentUser && companyId) && (
+            <div className="mt-3">
+              <TeachIdjwiButton
+                user={currentUser}
+                companyId={companyId}
+                compact
+                label="Teach"
+                defaultType="metric_definition"
+                defaultKey={teachKey || `dashboard_${String(title || "metric").toLowerCase().replace(/[^a-z0-9]+/g, "_")}`}
+                defaultValue={`In our business, ${title} means ${typeof value === "number" ? value.toLocaleString() : value}.`}
+                context={{
+                  surface: "dashboard_stat_card",
+                  title,
+                  value,
+                  subtitle,
+                  route: to,
+                  ...(teachContext || {}),
+                }}
+              />
+            </div>
           )}
         </div>
         <div

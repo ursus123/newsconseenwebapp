@@ -89,6 +89,29 @@ class MemoryReviewRequest(BaseModel):
     action:     str
 
 
+class MemoryCreateRequest(BaseModel):
+    company_id:     str
+    key:            str
+    value:          object
+    memory_type:    Optional[str] = "business_rule"
+    scope:          Optional[str] = "company"
+    owner:          Optional[str] = "idjwi"
+    confidence:     Optional[float] = 1.0
+    source:         Optional[str] = "operator_stated"
+    review_status:  Optional[str] = "confirmed"
+    metadata:       Optional[dict] = None
+    expires_at:     Optional[str] = None
+
+
+class MemoryUpdateRequest(BaseModel):
+    company_id: str
+    patch:      dict
+
+
+class MemoryUsageRequest(BaseModel):
+    company_id: str
+
+
 # ----------------------------------------------------------
 # Endpoints
 # ----------------------------------------------------------
@@ -410,12 +433,14 @@ def deterministic_command(
 def list_idjwi_memory(
     company_id: str = Query(...),
     review_status: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    memory_type: Optional[str] = Query(None),
     limit: int = Query(200),
     x_idjwi_api_key: Optional[str] = Header(None),
     x_idjwi_role: Optional[str] = Header(None),
     x_idjwi_user: Optional[str] = Header(None),
 ):
-    from copilot.idjwi_memory import recall, summary
+    from copilot.idjwi_memory import recall, search, summary
     from copilot.idjwi_security import principal_from_headers, require_api_key
 
     api_gate = require_api_key(x_idjwi_api_key)
@@ -423,16 +448,63 @@ def list_idjwi_memory(
         raise HTTPException(status_code=401, detail=api_gate.get("reason"))
 
     principal_from_headers(company_id=company_id, user_id=x_idjwi_user, role=x_idjwi_role)
-    entries = recall(
-        company_id,
-        review_status=review_status or None,
-        limit=max(1, min(int(limit or 200), 500)),
-    )
+    bounded_limit = max(1, min(int(limit or 200), 500))
+    if q or memory_type:
+        entries = search(
+            company_id,
+            q=q or "",
+            review_status=review_status or None,
+            memory_type=memory_type or None,
+            limit=bounded_limit,
+        )
+    else:
+        entries = recall(
+            company_id,
+            review_status=review_status or None,
+            memory_type=memory_type or None,
+            limit=bounded_limit,
+        )
     return {
         "company_id": company_id,
         "entries": entries,
         "summary": summary(company_id),
     }
+
+
+@router.post("/idjwi-memory")
+def create_idjwi_memory(
+    request: MemoryCreateRequest,
+    x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+):
+    from copilot.idjwi_memory import remember, summary
+    from copilot.idjwi_security import principal_from_headers, require_api_key
+
+    api_gate = require_api_key(x_idjwi_api_key)
+    if not api_gate.get("allowed"):
+        raise HTTPException(status_code=401, detail=api_gate.get("reason"))
+
+    principal_from_headers(company_id=request.company_id, user_id=x_idjwi_user, role=x_idjwi_role)
+    if not request.key.strip():
+        raise HTTPException(status_code=400, detail="key is required")
+
+    result = remember(
+        company_id=request.company_id,
+        key=request.key.strip(),
+        value=request.value,
+        memory_type=request.memory_type or "business_rule",
+        scope=request.scope or "company",
+        owner=request.owner or "idjwi",
+        confidence=float(request.confidence if request.confidence is not None else 1.0),
+        source=request.source or "operator_stated",
+        review_status=request.review_status or "confirmed",
+        metadata=request.metadata or {},
+        expires_at=request.expires_at,
+    )
+    if not result.get("saved"):
+        raise HTTPException(status_code=400, detail=result.get("reason", "memory save failed"))
+    return {**result, "summary": summary(request.company_id)}
 
 
 @router.post("/idjwi-memory/{memory_id}/review")
@@ -455,6 +527,69 @@ def review_idjwi_memory(
     if not result.get("updated"):
         raise HTTPException(status_code=400, detail=result.get("reason", "memory review failed"))
     return result
+
+
+@router.patch("/idjwi-memory/{memory_id}")
+def update_idjwi_memory(
+    memory_id: str,
+    request: MemoryUpdateRequest,
+    x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+):
+    from copilot.idjwi_memory import update_memory
+    from copilot.idjwi_security import principal_from_headers, require_api_key
+
+    api_gate = require_api_key(x_idjwi_api_key)
+    if not api_gate.get("allowed"):
+        raise HTTPException(status_code=401, detail=api_gate.get("reason"))
+
+    principal_from_headers(company_id=request.company_id, user_id=x_idjwi_user, role=x_idjwi_role)
+    result = update_memory(request.company_id, memory_id, request.patch or {})
+    if not result.get("updated"):
+        raise HTTPException(status_code=400, detail=result.get("reason", "memory update failed"))
+    return result
+
+
+@router.post("/idjwi-memory/{memory_id}/usage")
+def mark_idjwi_memory_used(
+    memory_id: str,
+    request: MemoryUsageRequest,
+    x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+):
+    from copilot.idjwi_memory import mark_used
+    from copilot.idjwi_security import principal_from_headers, require_api_key
+
+    api_gate = require_api_key(x_idjwi_api_key)
+    if not api_gate.get("allowed"):
+        raise HTTPException(status_code=401, detail=api_gate.get("reason"))
+
+    principal_from_headers(company_id=request.company_id, user_id=x_idjwi_user, role=x_idjwi_role)
+    result = mark_used(request.company_id, memory_id)
+    if not result.get("updated"):
+        raise HTTPException(status_code=400, detail=result.get("reason", "memory usage update failed"))
+    return result
+
+
+@router.get("/idjwi-memory/conflicts")
+def list_idjwi_memory_conflicts(
+    company_id: str = Query(...),
+    limit: int = Query(100),
+    x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+):
+    from copilot.idjwi_memory import conflicts
+    from copilot.idjwi_security import principal_from_headers, require_api_key
+
+    api_gate = require_api_key(x_idjwi_api_key)
+    if not api_gate.get("allowed"):
+        raise HTTPException(status_code=401, detail=api_gate.get("reason"))
+
+    principal_from_headers(company_id=company_id, user_id=x_idjwi_user, role=x_idjwi_role)
+    return {"company_id": company_id, "conflicts": conflicts(company_id, limit=max(1, min(limit, 500)))}
 
 
 @router.get("/health/full")

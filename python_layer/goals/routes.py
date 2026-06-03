@@ -142,6 +142,27 @@ def delete_goal(goal_id: str, company_id: str = Query(...)):
     return {"status": "deleted" if removed else "not_found", "goal_id": goal_id}
 
 
+@router.get("/{goal_id}/progress")
+def goal_progress(goal_id: str, company_id: str = Query(...)):
+    """Return live progress for a single goal."""
+    raw_goals = _GOALS.get(company_id, [])
+    goal = next((g for g in raw_goals if g.get("id") == goal_id or g.get("metric") == goal_id), None)
+    if not goal:
+        return {"status": "not_found", "goal_id": goal_id, "company_id": company_id}
+
+    evaluated = evaluate_goals(company_id, [goal])
+    result = evaluated[0] if evaluated else goal
+    cached = [g for g in _CACHE.get(company_id, []) if g.get("id") != goal.get("id")]
+    _CACHE[company_id] = [*cached, result]
+    return {
+        "status": "ok",
+        "company_id": company_id,
+        "goal_id": goal.get("id"),
+        "goal": result,
+        "evaluated_at": result.get("evaluated_at"),
+    }
+
+
 # ── Cron hook ─────────────────────────────────────────────────
 def run_goal_tracking(company_ids: list) -> dict:
     """

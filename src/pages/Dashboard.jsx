@@ -778,6 +778,15 @@ function AdminDashboard({ user }) {
 
   const [showPersonalizer, setShowPersonalizer] = useState(false);
   const [visibleCards, setVisibleCards]         = useState(loadVisibleCards);
+  const [dateRange, setDateRange] = useState(() => {
+    const end = new Date();
+    const start = subDays(end, 30);
+    return {
+      from: start.toISOString().slice(0, 10),
+      to: end.toISOString().slice(0, 10),
+      compare: false,
+    };
+  });
 
   const handleVisibleChange = useCallback((next) => {
     setVisibleCards(next);
@@ -1059,6 +1068,29 @@ function AdminDashboard({ user }) {
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Overview</h2>
         <div className="flex items-center gap-2">
+          <div className="hidden lg:flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-1.5">
+            <Calendar className="h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="date"
+              value={dateRange.from}
+              onChange={(e) => setDateRange(r => ({ ...r, from: e.target.value }))}
+              className="w-28 text-xs text-slate-600 outline-none"
+            />
+            <span className="text-xs text-slate-300">to</span>
+            <input
+              type="date"
+              value={dateRange.to}
+              onChange={(e) => setDateRange(r => ({ ...r, to: e.target.value }))}
+              className="w-28 text-xs text-slate-600 outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => setDateRange(r => ({ ...r, compare: !r.compare }))}
+              className={`rounded-lg px-2 py-1 text-[10px] font-bold ${dateRange.compare ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-slate-500"}`}
+            >
+              Compare
+            </button>
+          </div>
           <ExportMenu report="people"       companyId={companyId} label="People"       size="sm" />
           <ExportMenu report="transactions" companyId={companyId} label="Revenue"      size="sm" />
           <ExportMenu report="products"     companyId={companyId} label="Products"     size="sm" />
@@ -1076,7 +1108,12 @@ function AdminDashboard({ user }) {
             loading={loadingPeople && totalPeople === 0}
             trend={trends.people}
             insight={peopleInsight(totalPeople, activeStaff, activeClients)}
-            to={createPageUrl("People")}
+            to={`${createPageUrl("People")}?dashboard_filter=all_people&from=${dateRange.from}&to=${dateRange.to}`}
+            currentUser={user}
+            companyId={companyId}
+            teachKey="dashboard_people_metric"
+            teachContext={{ dateRange, sql: "SELECT * FROM people" }}
+            goal={{ current: totalPeople, target: kpiSnapshot?.people_target, label: "People target" }}
           />
         )}
         {visibleCards.has("enterprises") && (
@@ -1086,7 +1123,12 @@ function AdminDashboard({ user }) {
             icon={Building2}
             color="purple"
             subtitle={`${enterprises.filter(e => e.status === "active").length} active`}
-            to={createPageUrl("Enterprises")}
+            to={`${createPageUrl("Enterprises")}?dashboard_filter=active_enterprises&from=${dateRange.from}&to=${dateRange.to}`}
+            currentUser={user}
+            companyId={companyId}
+            teachKey="dashboard_enterprises_metric"
+            teachContext={{ dateRange, sql: "SELECT * FROM enterprises" }}
+            goal={{ current: enterprises.length, target: kpiSnapshot?.enterprise_target, label: "Enterprise target" }}
           />
         )}
         {visibleCards.has("products") && (
@@ -1100,7 +1142,12 @@ function AdminDashboard({ user }) {
             loading={loadingProducts && totalProducts === 0}
             trend={trends.products}
             insight={productInsight(totalProducts, lowStockCount)}
-            to={createPageUrl("Products")}
+            to={`${createPageUrl("Products")}?dashboard_filter=products&from=${dateRange.from}&to=${dateRange.to}`}
+            currentUser={user}
+            companyId={companyId}
+            teachKey="dashboard_products_metric"
+            teachContext={{ dateRange, sql: "SELECT * FROM products" }}
+            goal={{ current: totalProducts, target: kpiSnapshot?.product_target, label: "Product target" }}
           />
         )}
         {visibleCards.has("services") && (
@@ -1110,7 +1157,12 @@ function AdminDashboard({ user }) {
             icon={Wrench}
             color="teal"
             subtitle={`${services.filter(s => s.status === "active").length} active`}
-            to={createPageUrl("Services")}
+            to={`${createPageUrl("Services")}?dashboard_filter=active_services&from=${dateRange.from}&to=${dateRange.to}`}
+            currentUser={user}
+            companyId={companyId}
+            teachKey="dashboard_services_metric"
+            teachContext={{ dateRange, sql: "SELECT * FROM services" }}
+            goal={{ current: services.length, target: kpiSnapshot?.service_target, label: "Service target" }}
           />
         )}
         {visibleCards.has("tasks") && (
@@ -1125,7 +1177,12 @@ function AdminDashboard({ user }) {
             trend={trends.tasks}
             trendLabel="completions vs prev 30d"
             insight={taskInsight(openTasks, overdueCount, totalTasks)}
-            to={createPageUrl("Tasks")}
+            to={`${createPageUrl("Tasks")}?dashboard_filter=${overdueCount > 0 ? "overdue" : "open"}&from=${dateRange.from}&to=${dateRange.to}`}
+            currentUser={user}
+            companyId={companyId}
+            teachKey="dashboard_tasks_metric"
+            teachContext={{ dateRange, sql: "SELECT * FROM tasks" }}
+            goal={{ current: totalTasks, target: kpiSnapshot?.task_target, label: "Task target" }}
           />
         )}
         {visibleCards.has("transactions") && (
@@ -1140,7 +1197,12 @@ function AdminDashboard({ user }) {
             trend={trends.transactions}
             trendLabel="revenue txns vs prev 30d"
             insight={transactionInsight(totalTransactions, draftTxCount, overdueInvoices)}
-            to={createPageUrl("Transactions")}
+            to={`${createPageUrl("Transactions")}?dashboard_filter=${draftTxCount > 0 ? "draft" : "posted"}&from=${dateRange.from}&to=${dateRange.to}`}
+            currentUser={user}
+            companyId={companyId}
+            teachKey="dashboard_transactions_metric"
+            teachContext={{ dateRange, sql: "SELECT * FROM transactions" }}
+            goal={{ current: totalTransactions, target: kpiSnapshot?.transaction_target, label: "Transaction target" }}
           />
         )}
       </div>

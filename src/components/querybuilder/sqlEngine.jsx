@@ -6,6 +6,17 @@ const RAILWAY_BASE = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 const RAILWAY_HEADERS = { "x-api-key": RAILWAY_API_KEY };
 
+const TABLE_ALIASES = {
+  enterprise: "enterprises",
+  person: "people",
+  product: "products",
+  task: "tasks",
+  transaction: "transactions",
+  relationship: "relationships",
+  address: "addresses",
+  service: "services",
+};
+
 // Entity name → ETL slug for /load/{slug}-summary
 const _ETL_SLUGS = {
   enterprises:   "enterprise",
@@ -1441,12 +1452,34 @@ function evalCaseExpr(expr, row) {
 }
 
 function evalCondition(cond, row) {
+  const dateDiffMatch = cond.match(/^DATEDIFF\s*\(\s*NOW\(\)\s*,\s*(\w+)\s*\)\s*(=|!=|<>|<=|>=|<|>)\s*(\d+)$/i);
+  if (dateDiffMatch) {
+    const [, field, op, rawDays] = dateDiffMatch;
+    const dt = toDate(row[field]);
+    if (!dt) return false;
+    return compareValues(Math.floor((new Date() - dt) / 86400000), op, parseFloat(rawDays));
+  }
+
+  const dateNowMatch = cond.match(/^(\w+)\s*(=|!=|<>|<=|>=|<|>)\s*(NOW\(\)(?:\s*\+\s*INTERVAL\s+\d+\s+DAY)?|DATE_SUB\s*\(\s*NOW\(\)\s*,\s*INTERVAL\s+\d+\s+MONTH\s*\))$/i);
+  if (dateNowMatch) {
+    const [, field, op, rhsExpr] = dateNowMatch;
+    const left = toDate(row[field]);
+    const right = evalDateExpr(rhsExpr);
+    if (!left || !right) return false;
+    return compareValues(left.getTime(), op, right.getTime());
+  }
+
   const m = cond.match(/^(\w+)\s*(=|!=|<>|<=|>=|<|>)\s*'?([^']*)'?$/i);
   if (!m) return false;
   const [, field, op, val] = m;
+  const rightRaw = row[val] !== undefined ? row[val] : val;
+  const leftDate = toDate(row[field]);
+  const rightDate = toDate(rightRaw);
+  if (leftDate && rightDate) return compareValues(leftDate.getTime(), op, rightDate.getTime());
+
   const rowVal = String(row[field] ?? "").toLowerCase();
-  const cmpVal = val.toLowerCase();
-  const numRow = parseFloat(row[field]), numVal = parseFloat(val);
+  const cmpVal = String(rightRaw ?? "").toLowerCase();
+  const numRow = parseFloat(row[field]), numVal = parseFloat(rightRaw);
   switch (op) {
     case "=": return rowVal === cmpVal;
     case "!=": case "<>": return rowVal !== cmpVal;
@@ -1456,6 +1489,48 @@ function evalCondition(cond, row) {
     case ">=": return !isNaN(numRow) && numRow >= numVal;
     default: return false;
   }
+}
+
+function compareValues(left, op, right) {
+  switch (op) {
+    case "=": return left === right;
+    case "!=":
+    case "<>": return left !== right;
+    case "<": return left < right;
+    case ">": return left > right;
+    case "<=": return left <= right;
+    case ">=": return left >= right;
+    default: return false;
+  }
+}
+
+function toDate(value) {
+  if (!value) return null;
+  const dt = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function addMonths(date, months) {
+  const copy = new Date(date);
+  copy.setMonth(copy.getMonth() + months);
+  return copy;
+}
+
+function evalDateExpr(expr) {
+  const e = expr.trim();
+  if (/^NOW\(\)$/i.test(e)) return new Date();
+
+  const plusDays = e.match(/^NOW\(\)\s*\+\s*INTERVAL\s+(\d+)\s+DAY$/i);
+  if (plusDays) {
+    const dt = new Date();
+    dt.setDate(dt.getDate() + parseInt(plusDays[1], 10));
+    return dt;
+  }
+
+  const subMonths = e.match(/^DATE_SUB\s*\(\s*NOW\(\)\s*,\s*INTERVAL\s+(\d+)\s+MONTH\s*\)$/i);
+  if (subMonths) return addMonths(new Date(), -parseInt(subMonths[1], 10));
+
+  return toDate(e.replace(/^'|'$/g, ""));
 }
 
 function evalValue(val, row) {
@@ -1499,6 +1574,9 @@ function applyWhere(rows, sql) {
         return isNullMatch[2] ? !isNull : isNull;
       }
       const m = trimmed.match(/^(\w+(?:\.\w+)?)\s*(=|!=|<>|<=|>=|<|>|LIKE|NOT\s+LIKE)\s*'?([^']*)'?$/i);
+      if (/^(?:DATEDIFF\s*\(|\w+\s*(?:=|!=|<>|<=|>=|<|>)\s*(?:NOW\(\)|DATE_SUB\s*\())/i.test(trimmed)) {
+        return evalCondition(trimmed, row);
+      }
       if (!m) return true;
       let [, field, op, val] = m;
       // Support table.column notation
@@ -1524,6 +1602,33 @@ function applyWhere(rows, sql) {
 function evalExpr(expr, row) {
   const e = expr.trim();
   if (e === "*") return null;
+
+  const dateTrunc = e.match(/^DATE_TRUNC\s*\(\s*'(\w+)'\s*,\s*(\w+(?:\.\w+)?)\s*\)$/i);
+  if (dateTrunc) {
+    const [, part, field] = dateTrunc;
+    const key = field.includes(".") ? field.split(".")[1] : field;
+    const dt = toDate(row[key]);
+    if (!dt) return null;
+    if (part.toLowerCase() === "month") return dt.toISOString().slice(0, 7);
+    if (part.toLowerCase() === "week") {
+      const week = new Date(dt);
+      week.setDate(dt.getDate() - dt.getDay());
+      return week.toISOString().slice(0, 10);
+    }
+    return dt.toISOString().slice(0, 10);
+  }
+
+  const dateFormat = e.match(/^DATE_FORMAT\s*\(\s*(\w+(?:\.\w+)?)\s*,\s*'([^']+)'\s*\)$/i);
+  if (dateFormat) {
+    const [, field, fmt] = dateFormat;
+    const key = field.includes(".") ? field.split(".")[1] : field;
+    const dt = toDate(row[key]);
+    if (!dt) return null;
+    if (fmt === "%Y-%m") return dt.toISOString().slice(0, 7);
+    if (fmt === "%Y-%m-%d") return dt.toISOString().slice(0, 10);
+    return dt.toISOString();
+  }
+
   // CASE expression
   if (/^CASE\s+WHEN/i.test(e)) return evalCaseExpr(e, row);
   // String literal
@@ -1555,10 +1660,15 @@ function evalExpr(expr, row) {
 
 // Apply GROUP BY + aggregates
 function applyGroupBy(rows, colDefs, groupByStr) {
-  const groupKeys = groupByStr.split(",").map((g) => g.trim().replace(/^\w+\./, ""));
+  const groupKeys = groupByStr.split(",").map((g) => {
+    const key = g.trim().replace(/^\w+\./, "");
+    if (/^\d+$/.test(key)) return colDefs[parseInt(key, 10) - 1]?.expr || key;
+    const byAlias = colDefs.find(def => def.alias === key);
+    return byAlias?.expr || key;
+  });
   const groups = {};
   rows.forEach((row) => {
-    const key = groupKeys.map((k) => String(row[k] ?? "")).join("|__|");
+    const key = groupKeys.map((k) => String(evalExpr(k, row) ?? "")).join("|__|");
     if (!groups[key]) groups[key] = { rows: [], repr: row };
     groups[key].rows.push(row);
   });
@@ -1569,14 +1679,15 @@ function applyGroupBy(rows, colDefs, groupByStr) {
       const e = expr.trim();
       const aggMatch = e.match(/^(COUNT|SUM|AVG|MAX|MIN)\s*\(\s*(DISTINCT\s+)?(.+?)\s*\)/i);
       if (aggMatch) {
-        const [, fn, , col] = aggMatch;
+        const [, fn, distinct, col] = aggMatch;
         const vals = gRows.map((r) => col === "*" ? 1 : r[col.includes(".") ? col.split(".")[1] : col]);
+        const cleanVals = distinct ? [...new Set(vals.filter((v) => v != null && v !== ""))] : vals;
         switch (fn.toUpperCase()) {
-          case "COUNT": result[alias] = col === "*" ? gRows.length : vals.filter((v) => v != null && v !== "").length; break;
-          case "SUM":   result[alias] = vals.reduce((acc, v) => acc + (parseFloat(v) || 0), 0); break;
-          case "AVG":   result[alias] = vals.length ? vals.reduce((acc, v) => acc + (parseFloat(v) || 0), 0) / vals.length : 0; break;
-          case "MAX":   result[alias] = Math.max(...vals.map((v) => parseFloat(v) || 0)); break;
-          case "MIN":   result[alias] = Math.min(...vals.map((v) => parseFloat(v) || 0)); break;
+          case "COUNT": result[alias] = col === "*" ? gRows.length : cleanVals.filter((v) => v != null && v !== "").length; break;
+          case "SUM":   result[alias] = cleanVals.reduce((acc, v) => acc + (parseFloat(v) || 0), 0); break;
+          case "AVG":   result[alias] = cleanVals.length ? cleanVals.reduce((acc, v) => acc + (parseFloat(v) || 0), 0) / cleanVals.length : 0; break;
+          case "MAX":   result[alias] = Math.max(...cleanVals.map((v) => parseFloat(v) || 0)); break;
+          case "MIN":   result[alias] = Math.min(...cleanVals.map((v) => parseFloat(v) || 0)); break;
           default: result[alias] = null;
         }
       } else if (/^CASE\s+WHEN/i.test(e)) {
@@ -1620,6 +1731,8 @@ function parseColDefs(colStr) {
     // Handle: SUM(CASE WHEN ... END) AS alias
     const asMatch = seg.match(/^(.+)\s+AS\s+(\w+)$/i);
     if (asMatch) return { expr: asMatch[1].trim(), alias: asMatch[2].trim() };
+    const trailingAliasMatch = seg.match(/^(.+\))\s+(\w+)$/i);
+    if (trailingAliasMatch) return { expr: trailingAliasMatch[1].trim(), alias: trailingAliasMatch[2].trim() };
     // plain field
     return { expr: seg, alias: seg.includes(".") ? seg.split(".")[1] : seg };
   });
@@ -1627,7 +1740,7 @@ function parseColDefs(colStr) {
 
 // Load rows for a table name
 async function loadTable(name, uploadedTables, companyId, masterDataSnapshot = {}) {
-  const lower = name.toLowerCase();
+  const lower = TABLE_ALIASES[name.toLowerCase()] || name.toLowerCase();
   if (uploadedTables && Object.prototype.hasOwnProperty.call(uploadedTables, lower)) {
     return uploadedTables[lower].rows.map((r) => ({ ...r }));
   }
@@ -1799,14 +1912,15 @@ export async function executeSQL(sql, uploadedTables, companyId, masterDataSnaps
           if (caseSum) {
             aggRow[alias] = rows.reduce((acc, r) => acc + (parseFloat(evalCaseExpr(caseSum[1], r)) || 0), 0);
           } else if (aggMatch) {
-            const [, fn, , col] = aggMatch;
+            const [, fn, distinct, col] = aggMatch;
             const vals = rows.map((r) => col === "*" ? 1 : r[col.includes(".") ? col.split(".")[1] : col]);
+            const cleanVals = distinct ? [...new Set(vals.filter((v) => v != null && v !== ""))] : vals;
             switch (fn.toUpperCase()) {
-              case "COUNT": aggRow[alias] = col === "*" ? rows.length : vals.filter((v) => v != null && v !== "").length; break;
-              case "SUM":   aggRow[alias] = vals.reduce((acc, v) => acc + (parseFloat(v) || 0), 0); break;
-              case "AVG":   aggRow[alias] = vals.length ? vals.reduce((acc, v) => acc + (parseFloat(v) || 0), 0) / vals.length : 0; break;
-              case "MAX":   aggRow[alias] = Math.max(...vals.map((v) => parseFloat(v) || 0)); break;
-              case "MIN":   aggRow[alias] = Math.min(...vals.map((v) => parseFloat(v) || 0)); break;
+              case "COUNT": aggRow[alias] = col === "*" ? rows.length : cleanVals.filter((v) => v != null && v !== "").length; break;
+              case "SUM":   aggRow[alias] = cleanVals.reduce((acc, v) => acc + (parseFloat(v) || 0), 0); break;
+              case "AVG":   aggRow[alias] = cleanVals.length ? cleanVals.reduce((acc, v) => acc + (parseFloat(v) || 0), 0) / cleanVals.length : 0; break;
+              case "MAX":   aggRow[alias] = Math.max(...cleanVals.map((v) => parseFloat(v) || 0)); break;
+              case "MIN":   aggRow[alias] = Math.min(...cleanVals.map((v) => parseFloat(v) || 0)); break;
               default: aggRow[alias] = null;
             }
           } else {
@@ -1844,7 +1958,8 @@ export async function executeSQL(sql, uploadedTables, companyId, masterDataSnaps
       });
       rows.sort((a, b) => {
         for (const { col, desc } of parts) {
-          const av = a[col], bv = b[col];
+          const resolvedCol = /^\d+$/.test(col) ? Object.keys(a)[parseInt(col, 10) - 1] : col;
+          const av = a[resolvedCol], bv = b[resolvedCol];
           if (av == null && bv == null) continue;
           if (av == null) return desc ? -1 : 1;
           if (bv == null) return desc ? 1 : -1;

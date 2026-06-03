@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from "react";
-import { Activity, BarChart2, Brain, Check, Code2, Loader2, Pin, Table2, X } from "lucide-react";
+import { Activity, ArrowUpRight, BarChart2, Brain, Check, Code2, Loader2, Pin, Table2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { makeChartDescription, rowCountLabel, sourceMeta } from "@/components/shared/chartUtils";
+import TeachIdjwiButton from "@/components/shared/TeachIdjwiButton";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
@@ -120,7 +121,7 @@ export default function ChartCard({ title, description, sql, currentUser, entity
     () => explainAutonomously({ title, description, entity, rows }),
     [title, description, entity, rows]
   );
-  const meta = sourceMeta({ sql_query: sql, source: "base44" }, { source: sql ? "query" : "base44" });
+  const meta = sourceMeta({ sql_query: sql, source: "local" }, { source: sql ? "query" : "local" });
   const rowLabel = rowCountLabel(rows);
 
   const handlePin = async () => {
@@ -153,6 +154,30 @@ export default function ChartCard({ title, description, sql, currentUser, entity
     sessionStorage.setItem("qb_load_sql", sql);
     sessionStorage.setItem("qb_load_title", title);
     navigate("/QueryBuilder");
+  };
+
+  const handleOpenRecords = () => {
+    const routes = {
+      Addresses: "/Addresses",
+      Animals: "/Animals",
+      Channels: "/Channels",
+      Documents: "/Documents",
+      Enterprises: "/Enterprises",
+      Observations: "/Observations",
+      People: "/People",
+      Plots: "/Plots",
+      Products: "/Products",
+      Relationships: "/Relationships",
+      Schedules: "/Schedules",
+      Services: "/Services",
+      Signals: "/Signals",
+      Tasks: "/Tasks",
+      Territories: "/Territories",
+      Transactions: "/Transactions",
+    };
+    const path = routes[entity] || `/${entity || ""}`;
+    if (!path || path === "/") return;
+    navigate(`${path}?analytics_drilldown=${encodeURIComponent(title)}${sql ? `&sql=${encodeURIComponent(sql)}` : ""}`);
   };
 
   const handleAdvisor = async () => {
@@ -217,6 +242,9 @@ export default function ChartCard({ title, description, sql, currentUser, entity
           <button onClick={handlePin} title={pinned ? "Pinned!" : "Pin to Reports"} className={`p-1.5 rounded-lg transition-all ${pinned ? "bg-emerald-100 text-emerald-600" : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"}`}>
             {pinned ? <Check className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
           </button>
+          <button onClick={handleOpenRecords} title="Open records" className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all">
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 
@@ -274,6 +302,27 @@ export default function ChartCard({ title, description, sql, currentUser, entity
             {advisorLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Brain className="w-3 h-3" />}
             Advisor
           </button>
+          {currentUser?.company_id && (
+            <TeachIdjwiButton
+              user={currentUser}
+              companyId={currentUser.company_id}
+              defaultType="metric_definition"
+              defaultKey={`chart_${(entity || "analytics").toLowerCase()}_${title.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`}
+              defaultValue={{
+                title,
+                description: description || "",
+                sql: sql || "",
+                visible_rows: rows.slice(0, 10),
+              }}
+              context={{
+                surface: "analytics_chart",
+                entity,
+                row_count: rows.length,
+              }}
+              label="Teach"
+              compact
+            />
+          )}
         </div>
         {explainOpen && (
           <button onClick={() => setExplainOpen(false)} className="text-slate-300 hover:text-slate-500 transition-colors">

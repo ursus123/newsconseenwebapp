@@ -18,6 +18,8 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer,
 } from "recharts";
+import TeachIdjwiButton from "@/components/shared/TeachIdjwiButton";
+import { saveIdjwiMemory } from "@/services/idjwiMemoryClient";
 
 const RAILWAY_URL   = import.meta.env.VITE_RAILWAY_URL || "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
@@ -1122,6 +1124,23 @@ function MessageBubble({ message, onFeedback, companyId, currentUser, onOpenQuer
                 {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
               </button>
 
+              {companyId && currentUser && (
+                <TeachIdjwiButton
+                  user={currentUser}
+                  companyId={companyId}
+                  defaultType="domain_context"
+                  defaultKey={`answer_${message.intent || message.mode || "idjwi"}_${message.id}`}
+                  defaultValue={message.content || ""}
+                  context={{
+                    surface: "idjwi_chat",
+                    mode: message.mode || "unknown",
+                    intent: message.intent || null,
+                  }}
+                  label="Teach"
+                  compact
+                />
+              )}
+
               {onFeedback && message.id && (
                 <>
                   <button
@@ -1366,6 +1385,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
   const [context, setContext]     = useState(null);
   const [showHistory, setShowHistory] = useState(false);
   const [advisorEnabled, setAdvisorEnabled] = useState(false);
+  const [teachMode, setTeachMode] = useState(false);
   const messagesEndRef             = useRef(null);
   const inputRef                   = useRef(null);
   const fileInputRef               = useRef(null);
@@ -1561,6 +1581,39 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
     const userMsg = {
       id: Date.now(), role: "user", content: question, timestamp: new Date().toISOString(),
     };
+
+    if (teachMode) {
+      setMessages(prev => [...prev, userMsg]);
+      setLoading(true);
+      try {
+        await saveIdjwiMemory({
+          user: currentUser,
+          companyId,
+          key: `operator_teaching_${Date.now()}`,
+          value: question,
+          memoryType: "domain_context",
+          source: "operator_stated",
+          reviewStatus: "confirmed",
+          confidence: 1,
+          metadata: { surface: "idjwi_chat", mode: "teach" },
+        });
+        setMessages(prev => [...prev, {
+          id: Date.now() + 1,
+          role: "assistant",
+          content: "Saved as confirmed Idjwi Memory. Autonomous Mode can use this knowledge in future answers.",
+          mode: "autonomous",
+          memory_used: true,
+          timestamp: new Date().toISOString(),
+        }]);
+      } catch (err) {
+        setError(err.message || "Could not save this teaching.");
+      } finally {
+        setLoading(false);
+        inputRef.current?.focus();
+      }
+      return;
+    }
+
     const thinkingMsg = {
       id: Date.now() + 1, role: "assistant", type: "thinking",
       content: advisorEnabled ? "Consulting Idjwi Advisor..." : "Answering in Idjwi Autonomous Mode...",
@@ -1635,7 +1688,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       setLoading(false);
       inputRef.current?.focus();
     }
-  }, [input, loading, companyId, messages, currentUser, selectedModel, advisorEnabled]);
+  }, [input, loading, companyId, messages, currentUser, selectedModel, advisorEnabled, teachMode]);
 
   const handleFeedback = async (messageId, rating) => {
     setMessages(prev =>
@@ -1713,6 +1766,20 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
               {advisorEnabled ? <Brain className="w-3.5 h-3.5" /> : <Activity className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">
                 {advisorEnabled ? "Advisor On" : "Autonomous"}
+              </span>
+            </button>
+            <button
+              onClick={() => setTeachMode(v => !v)}
+              title={teachMode ? "Teach Mode is on" : "Save your next message as Idjwi Memory"}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors ${
+                teachMode
+                  ? "border-amber-200 bg-amber-50 text-amber-700"
+                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">
+                {teachMode ? "Teach On" : "Teach"}
               </span>
             </button>
             {/* History button */}
@@ -1861,7 +1928,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
                   sendMessage();
                 }
               }}
-              placeholder="Ask anything — or attach a file 📎 to import data…"
+              placeholder={teachMode ? "Teach Idjwi a durable fact, preference, rule, or terminology..." : "Ask anything - or attach a file to import data..."}
               disabled={loading || uploadingFile}
               rows={1}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm resize-none focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all disabled:opacity-50 bg-slate-50"

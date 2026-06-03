@@ -37,8 +37,18 @@ ALTER TABLE analytics.idjwi_memory
     ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'operator_stated';
 ALTER TABLE analytics.idjwi_memory
     ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'confirmed';
+ALTER TABLE analytics.idjwi_memory
+    ADD COLUMN IF NOT EXISTS usage_count INT DEFAULT 0;
+ALTER TABLE analytics.idjwi_memory
+    ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
+ALTER TABLE analytics.idjwi_memory
+    ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+ALTER TABLE analytics.idjwi_memory
+    ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
 CREATE INDEX IF NOT EXISTS idx_idjwi_memory_review
     ON analytics.idjwi_memory (company_id, review_status, confidence);
+CREATE INDEX IF NOT EXISTS idx_idjwi_memory_search
+    ON analytics.idjwi_memory (company_id, memory_type, key);
 """
 
 
@@ -66,6 +76,8 @@ def remember(
     confidence: float = 1.0,
     source: str = "operator_stated",
     review_status: str = "confirmed",
+    metadata: Optional[dict] = None,
+    expires_at: Optional[str] = None,
     engine=None,
 ) -> dict:
     eng = engine or get_engine_safe()
@@ -78,10 +90,12 @@ def remember(
             conn.execute(text("""
                 INSERT INTO analytics.idjwi_memory
                     (company_id, scope, owner, memory_type, key, value,
-                     confidence, source, review_status, observation_count, updated_at)
+                     confidence, source, review_status, observation_count,
+                     metadata, expires_at, updated_at)
                 VALUES
                     (:company_id, :scope, :owner, :memory_type, :key,
-                     :value::jsonb, :confidence, :source, :review_status, 1, NOW())
+                     CAST(:value AS jsonb), :confidence, :source, :review_status, 1,
+                     CAST(:metadata AS jsonb), CAST(:expires_at AS timestamptz), NOW())
                 ON CONFLICT (company_id, scope, owner, memory_type, key)
                 DO UPDATE SET
                     value = analytics.idjwi_memory.value || EXCLUDED.value,
@@ -91,6 +105,8 @@ def remember(
                         WHEN analytics.idjwi_memory.review_status = 'confirmed' THEN 'confirmed'
                         ELSE EXCLUDED.review_status
                     END,
+                    metadata = COALESCE(analytics.idjwi_memory.metadata, '{}'::jsonb) || EXCLUDED.metadata,
+                    expires_at = COALESCE(EXCLUDED.expires_at, analytics.idjwi_memory.expires_at),
                     observation_count = analytics.idjwi_memory.observation_count + 1,
                     updated_at = NOW()
             """), {
@@ -103,6 +119,8 @@ def remember(
                 "confidence": confidence,
                 "source": source,
                 "review_status": review_status,
+                "metadata": json.dumps(metadata or {}),
+                "expires_at": expires_at,
             })
             conn.commit()
         return {
@@ -153,9 +171,11 @@ def recall(
 
     sql = f"""
         SELECT id, scope, owner, memory_type, key, value, confidence,
-               source, review_status, observation_count, updated_at
+               source, review_status, observation_count, usage_count,
+               last_used_at, expires_at, metadata, updated_at
         FROM analytics.idjwi_memory
         WHERE {' AND '.join(filters)}
+          AND (expires_at IS NULL OR expires_at > NOW() OR review_status = 'archived')
         ORDER BY observation_count DESC, updated_at DESC
         LIMIT :limit
     """
@@ -164,10 +184,156 @@ def recall(
             rows = conn.execute(text(sql), params).fetchall()
         cols = ["id", "scope", "owner", "memory_type", "key", "value",
                 "confidence", "source", "review_status",
-                "observation_count", "updated_at"]
+                "observation_count", "usage_count", "last_used_at",
+                "expires_at", "metadata", "updated_at"]
         return [dict(zip(cols, row)) for row in rows]
     except Exception as e:
         logger.warning("idjwi_memory.recall failed: %s", e)
+        return []
+
+
+def search(
+    company_id: str,
+    q: str = "",
+    review_status: Optional[str] = None,
+    memory_type: Optional[str] = None,
+    limit: int = 100,
+    engine=None,
+) -> list[dict]:
+    eng = engine or get_engine_safe()
+    if not eng or not ensure_table(eng):
+        return []
+
+    filters = ["company_id = :company_id"]
+    params = {"company_id": company_id, "limit": limit, "q": f"%{(q or '').lower()}%"}
+    if review_status and review_status != "all":
+        filters.append("review_status = :review_status")
+        params["review_status"] = review_status
+    if memory_type and memory_type != "all":
+        filters.append("memory_type = :memory_type")
+        params["memory_type"] = memory_type
+    if q:
+        filters.append("(LOWER(key) LIKE :q OR LOWER(value::text) LIKE :q OR LOWER(COALESCE(source,'')) LIKE :q)")
+
+    try:
+        with eng.connect() as conn:
+            rows = conn.execute(text(f"""
+                SELECT id, scope, owner, memory_type, key, value, confidence,
+                       source, review_status, observation_count, usage_count,
+                       last_used_at, expires_at, metadata, updated_at
+                FROM analytics.idjwi_memory
+                WHERE {' AND '.join(filters)}
+                ORDER BY usage_count DESC, observation_count DESC, updated_at DESC
+                LIMIT :limit
+            """), params).fetchall()
+        cols = ["id", "scope", "owner", "memory_type", "key", "value",
+                "confidence", "source", "review_status", "observation_count",
+                "usage_count", "last_used_at", "expires_at", "metadata", "updated_at"]
+        return [dict(zip(cols, row)) for row in rows]
+    except Exception as e:
+        logger.warning("idjwi_memory.search failed: %s", e)
+        return []
+
+
+def update_memory(
+    company_id: str,
+    memory_id: str,
+    patch: dict,
+    engine=None,
+) -> dict:
+    eng = engine or get_engine_safe()
+    if not eng or not ensure_table(eng):
+        return {"updated": False, "reason": "database unavailable"}
+
+    allowed = {
+        "memory_type", "key", "value", "confidence", "source",
+        "review_status", "metadata", "expires_at",
+    }
+    assignments = []
+    params = {"company_id": company_id, "memory_id": memory_id}
+    for field, value in (patch or {}).items():
+        if field not in allowed:
+            continue
+        if field in ("value", "metadata"):
+            assignments.append(f"{field} = CAST(:{field} AS jsonb)")
+            params[field] = json.dumps(value if isinstance(value, dict) else {"value": value})
+        elif field == "expires_at":
+            assignments.append("expires_at = CAST(:expires_at AS timestamptz)")
+            params[field] = value
+        else:
+            assignments.append(f"{field} = :{field}")
+            params[field] = value
+    if not assignments:
+        return {"updated": False, "reason": "no supported fields to update"}
+    assignments.append("updated_at = NOW()")
+
+    try:
+        with eng.connect() as conn:
+            row = conn.execute(text(f"""
+                UPDATE analytics.idjwi_memory
+                SET {', '.join(assignments)}
+                WHERE id = :memory_id AND company_id = :company_id
+                RETURNING id, key, memory_type, value, review_status, confidence
+            """), params).fetchone()
+            conn.commit()
+        if not row:
+            return {"updated": False, "reason": "memory not found"}
+        cols = ["id", "key", "memory_type", "value", "review_status", "confidence"]
+        return {"updated": True, "memory": dict(zip(cols, row))}
+    except Exception as e:
+        logger.warning("idjwi_memory.update_memory failed: %s", e)
+        return {"updated": False, "reason": str(e)}
+
+
+def mark_used(company_id: str, memory_id: str, engine=None) -> dict:
+    eng = engine or get_engine_safe()
+    if not eng or not ensure_table(eng):
+        return {"updated": False, "reason": "database unavailable"}
+    try:
+        with eng.connect() as conn:
+            row = conn.execute(text("""
+                UPDATE analytics.idjwi_memory
+                SET usage_count = COALESCE(usage_count, 0) + 1,
+                    last_used_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = :memory_id AND company_id = :company_id
+                RETURNING id, usage_count, last_used_at
+            """), {"company_id": company_id, "memory_id": memory_id}).fetchone()
+            conn.commit()
+        if not row:
+            return {"updated": False, "reason": "memory not found"}
+        return {"updated": True, "id": row[0], "usage_count": row[1], "last_used_at": row[2]}
+    except Exception as e:
+        logger.warning("idjwi_memory.mark_used failed: %s", e)
+        return {"updated": False, "reason": str(e)}
+
+
+def conflicts(company_id: str, limit: int = 100, engine=None) -> list[dict]:
+    eng = engine or get_engine_safe()
+    if not eng or not ensure_table(eng):
+        return []
+    try:
+        with eng.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT key, memory_type,
+                       jsonb_agg(jsonb_build_object(
+                           'id', id,
+                           'value', value,
+                           'source', source,
+                           'review_status', review_status,
+                           'confidence', confidence,
+                           'updated_at', updated_at
+                       ) ORDER BY confidence DESC, updated_at DESC) AS memories
+                FROM analytics.idjwi_memory
+                WHERE company_id = :company_id
+                  AND review_status <> 'rejected'
+                GROUP BY key, memory_type
+                HAVING COUNT(DISTINCT value::text) > 1
+                LIMIT :limit
+            """), {"company_id": company_id, "limit": limit}).fetchall()
+        return [{"key": row[0], "memory_type": row[1], "memories": row[2]} for row in rows]
+    except Exception as e:
+        logger.warning("idjwi_memory.conflicts failed: %s", e)
         return []
 
 

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import BrandingSection from "@/components/settings/BrandingSection";
 import ErrorLogSection from "@/components/settings/ErrorLogSection";
+import { fetchIdjwiConflicts, updateIdjwiMemory } from "@/services/idjwiMemoryClient";
 
 function passwordStrength(pw) {
   if (!pw) return null;
@@ -207,6 +208,9 @@ function AgentsSection({ user }) {
 function IdjwiMemorySection({ user }) {
   const companyId = user?.company_id;
   const [status, setStatus] = useState("pending");
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [editing, setEditing] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [banner, setBanner] = useState(null);
 
@@ -219,14 +223,19 @@ function IdjwiMemorySection({ user }) {
   };
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["idjwi-memory", companyId, status],
+    queryKey: ["idjwi-memory", companyId, status, search, typeFilter],
     enabled: !!companyId,
     queryFn: async () => {
+      if (status === "conflicts") {
+        return fetchIdjwiConflicts({ user, companyId });
+      }
       const params = new URLSearchParams({
         company_id: companyId,
         limit: "200",
       });
       if (status !== "all") params.set("review_status", status);
+      if (search.trim()) params.set("q", search.trim());
+      if (typeFilter !== "all") params.set("memory_type", typeFilter);
       const res = await fetch(`${RAILWAY_URL}/copilot/idjwi-memory?${params}`, {
         headers: idjwiHeaders,
       });
@@ -239,7 +248,7 @@ function IdjwiMemorySection({ user }) {
     staleTime: 0,
   });
 
-  const entries = data?.entries || [];
+  const entries = status === "conflicts" ? (data?.conflicts || []) : (data?.entries || []);
   const totals = data?.summary?.by_type || {};
 
   const valueText = (value) => {
@@ -275,13 +284,44 @@ function IdjwiMemorySection({ user }) {
     }
   };
 
+  const saveEdit = async () => {
+    if (!editing?.id || !companyId) return;
+    setBusyId(editing.id);
+    setBanner(null);
+    try {
+      await updateIdjwiMemory({
+        user,
+        companyId,
+        memoryId: editing.id,
+        patch: {
+          key: editing.key,
+          value: editing.value,
+          memory_type: editing.memory_type,
+          confidence: Number(editing.confidence || 0.7),
+          review_status: editing.review_status,
+          expires_at: editing.expires_at || null,
+        },
+      });
+      setEditing(null);
+      setBanner({ type: "success", msg: "Memory updated." });
+      refetch();
+    } catch (e) {
+      setBanner({ type: "error", msg: e.message || "Could not save memory." });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const statusTabs = [
     { id: "pending", label: "Pending" },
     { id: "confirmed", label: "Confirmed" },
     { id: "rejected", label: "Rejected" },
     { id: "archived", label: "Archived" },
+    { id: "conflicts", label: "Conflicts" },
     { id: "all", label: "All" },
   ];
+
+  const memoryTypes = ["all", "business_rule", "metric_definition", "terminology", "preference", "structure", "domain_context", "relationship", "pattern"];
 
   return (
     <Card className="p-6 space-y-5">
@@ -320,7 +360,28 @@ function IdjwiMemorySection({ user }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_220px] gap-2">
+        <div className="relative">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search memory key, value, source, or type"
+            className="pl-9"
+          />
+          <Filter className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        </div>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+        >
+          {memoryTypes.map(type => (
+            <option key={type} value={type}>{type === "all" ? "All memory types" : type.replace(/_/g, " ")}</option>
+          ))}
+        </select>
+      </div>
+
+      {status !== "conflicts" && <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {Object.entries(totals).slice(0, 8).map(([type, count]) => (
           <div key={type} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
             <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold truncate">
@@ -329,7 +390,7 @@ function IdjwiMemorySection({ user }) {
             <p className="text-lg font-bold text-slate-800">{count}</p>
           </div>
         ))}
-      </div>
+      </div>}
 
       <div className="space-y-3">
         {isLoading ? (
@@ -345,7 +406,30 @@ function IdjwiMemorySection({ user }) {
               Advisor-learned items appear here as pending until an operator confirms them.
             </p>
           </div>
-        ) : entries.map(memory => (
+        ) : status === "conflicts" ? entries.map(conflict => (
+          <div key={`${conflict.memory_type}_${conflict.key}`} className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">conflict</Badge>
+              <Badge className="bg-white text-slate-600 hover:bg-white">{conflict.memory_type?.replace(/_/g, " ")}</Badge>
+              <p className="text-sm font-semibold text-slate-800">{conflict.key?.replace(/_/g, " ")}</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {(conflict.memories || []).map(item => (
+                <div key={item.id} className="rounded-xl border border-amber-100 bg-white p-3">
+                  <p className="text-xs text-slate-700 leading-relaxed break-words">{valueText(item.value)}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                    <span>{item.source || "unknown source"}</span>
+                    <span>confidence {Number(item.confidence || 0).toFixed(2)}</span>
+                    <span>{item.review_status}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-amber-700">
+              Review the competing memories in Pending or All, then confirm the value Idjwi should use.
+            </p>
+          </div>
+        )) : entries.map(memory => (
           <div key={memory.id} className="rounded-2xl border border-slate-100 bg-white p-4 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
               <div className="min-w-0">
@@ -372,10 +456,31 @@ function IdjwiMemorySection({ user }) {
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed break-words">
                   {valueText(memory.value)}
                 </p>
+                <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-slate-400">
+                  <span>used {memory.usage_count || 0} times</span>
+                  {memory.last_used_at && <span>last used {new Date(memory.last_used_at).toLocaleDateString()}</span>}
+                  {memory.expires_at && <span>expires {new Date(memory.expires_at).toLocaleDateString()}</span>}
+                </div>
               </div>
 
-              {memory.review_status === "pending" && (
-                <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setEditing({
+                    id: memory.id,
+                    key: memory.key || "",
+                    value: valueText(memory.value),
+                    memory_type: memory.memory_type || "business_rule",
+                    confidence: memory.confidence || 0.7,
+                    review_status: memory.review_status || "pending",
+                    expires_at: memory.expires_at ? String(memory.expires_at).slice(0, 10) : "",
+                  })}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-bold"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  Edit
+                </button>
+                {memory.review_status === "pending" && (
+                  <>
                   <button
                     onClick={() => review(memory, "confirm")}
                     disabled={busyId === memory.id}
@@ -392,9 +497,44 @@ function IdjwiMemorySection({ user }) {
                     <X className="w-3.5 h-3.5" />
                     Reject
                   </button>
-                </div>
-              )}
+                  </>
+                )}
+              </div>
             </div>
+
+            {editing?.id === memory.id && (
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input value={editing.key} onChange={(e) => setEditing({ ...editing, key: e.target.value })} placeholder="memory key" />
+                <select
+                  value={editing.memory_type}
+                  onChange={(e) => setEditing({ ...editing, memory_type: e.target.value })}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600"
+                >
+                  {memoryTypes.filter(t => t !== "all").map(type => <option key={type} value={type}>{type.replace(/_/g, " ")}</option>)}
+                </select>
+                <textarea
+                  value={editing.value}
+                  onChange={(e) => setEditing({ ...editing, value: e.target.value })}
+                  rows={3}
+                  className="sm:col-span-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600"
+                />
+                <Input type="number" step="0.05" min="0" max="1" value={editing.confidence} onChange={(e) => setEditing({ ...editing, confidence: e.target.value })} />
+                <Input type="date" value={editing.expires_at || ""} onChange={(e) => setEditing({ ...editing, expires_at: e.target.value })} />
+                <select
+                  value={editing.review_status}
+                  onChange={(e) => setEditing({ ...editing, review_status: e.target.value })}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600"
+                >
+                  {["pending", "confirmed", "rejected", "archived"].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setEditing(null)} className="px-3 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-white">Cancel</button>
+                  <button onClick={saveEdit} disabled={busyId === memory.id} className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50">
+                    Save
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

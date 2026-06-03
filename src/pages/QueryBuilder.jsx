@@ -5,7 +5,7 @@ import {
   Hash, Type, Calendar, ToggleLeft, Layers, Wand2, Code2,
   AlignLeft, GitBranch, AlertCircle, XCircle, Plus, X,
   Save, FolderOpen, BarChart2, Pin, Keyboard, FileText,
-  PenLine, PlusCircle, ShieldAlert,
+  PenLine, PlusCircle, ShieldAlert, Brain, Sparkles, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -32,6 +32,8 @@ import DashboardWidgetsPanel from "../components/querybuilder/DashboardWidgetsPa
 import ExportMenu from "../components/querybuilder/ExportMenu";
 import PinWidgetModal from "../components/querybuilder/PinWidgetModal";
 import ShortcutsModal from "../components/querybuilder/ShortcutsModal";
+import TeachIdjwiButton from "@/components/shared/TeachIdjwiButton";
+import { saveIdjwiMemory } from "@/services/idjwiMemoryClient";
 
 // ── Type helpers ─────────────────────────────────────────────────────────
 function TypeIcon({ type }) {
@@ -94,6 +96,39 @@ const SAMPLES = [
   { label: "Search medication",  query: "SELECT * FROM medications_api WHERE name = 'metformin'" },
   { label: "Check recalls",      query: "SELECT * FROM medications_recalls WHERE name = 'metformin'" },
 ];
+
+function translateNaturalLanguageToSql(prompt) {
+  const text = String(prompt || "").toLowerCase();
+  if (text.includes("low stock") || text.includes("below reorder") || text.includes("reorder")) {
+    return "SELECT name, stock_quantity, min_stock_level FROM products WHERE stock_quantity <= min_stock_level ORDER BY stock_quantity ASC LIMIT 100";
+  }
+  if (text.includes("overdue task") || text.includes("late task")) {
+    return "SELECT title, status, due_date, assigned_to_name FROM tasks WHERE due_date < NOW() AND status NOT IN ('completed', 'cancelled') ORDER BY due_date ASC LIMIT 100";
+  }
+  if (text.includes("unpaid") || text.includes("invoice") || text.includes("who owes")) {
+    return "SELECT counterparty_name, transaction_type, amount, due_date, payment_status FROM transactions WHERE payment_status = 'unpaid' ORDER BY due_date ASC LIMIT 100";
+  }
+  if (text.includes("revenue") && (text.includes("month") || text.includes("trend") || text.includes("over time"))) {
+    return "SELECT DATE_TRUNC('month', date) AS month, SUM(amount) AS revenue FROM transactions WHERE transaction_type IN ('sale_service', 'product_sale', 'service_fee') GROUP BY 1 ORDER BY 1";
+  }
+  if (text.includes("staff") && (text.includes("task") || text.includes("completed"))) {
+    return "SELECT assigned_to_name, COUNT(*) AS completed_tasks FROM tasks WHERE status = 'completed' GROUP BY assigned_to_name ORDER BY completed_tasks ASC LIMIT 100";
+  }
+  if (text.includes("active staff") || text.includes("show me staff") || text.includes("list staff")) {
+    return "SELECT first_name, last_name, email, status FROM people WHERE person_type = 'staff' AND status = 'active' ORDER BY last_name ASC LIMIT 100";
+  }
+  if (text.includes("active client") || text.includes("show me clients") || text.includes("list clients")) {
+    return "SELECT first_name, last_name, email, status FROM people WHERE person_type = 'client' AND status = 'active' ORDER BY last_name ASC LIMIT 100";
+  }
+  if (text.includes("relationship")) {
+    return "SELECT role, COUNT(*) AS count FROM relationships WHERE role IS NOT NULL AND role != '' GROUP BY role ORDER BY count DESC LIMIT 8";
+  }
+  if (text.includes("product")) return "SELECT * FROM products LIMIT 100";
+  if (text.includes("people") || text.includes("person")) return "SELECT * FROM people LIMIT 100";
+  if (text.includes("task")) return "SELECT * FROM tasks LIMIT 100";
+  if (text.includes("transaction")) return "SELECT * FROM transactions LIMIT 100";
+  return "SELECT * FROM enterprises LIMIT 100";
+}
 
 function ResizeDivider({ onMouseDown }) {
   return (
@@ -331,6 +366,10 @@ export default function QueryBuilder() {
   });
   const [confirmState, setConfirmState] = useState(null);
   const [validationErrors, setValidationErrors] = useState([]);
+  const [nlPrompt, setNlPrompt] = useState("");
+  const [nlBusy, setNlBusy] = useState(false);
+  const [verifiedAt, setVerifiedAt] = useState(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
 
   // ── SQL Autocomplete ──────────────────────────────────────────────────
   const textareaRef = useRef(null);
@@ -471,7 +510,7 @@ export default function QueryBuilder() {
     if (preloadSql) {
       setSql(preloadSql);
       setMidTab("script");
-      setMessage("✅ Copilot query loaded — replace [company_id] before running");
+      setMessage("Copilot query loaded - verify or run it here.");
       sessionStorage.removeItem("qb_preload_sql");
       return;
     }
@@ -481,10 +520,21 @@ export default function QueryBuilder() {
       setSql(savedSql);
       if (savedTitle) updateTab(activeTabId, { name: savedTitle + ".sql", sql: savedSql });
       setMidTab("script");
-      setMessage(`✅ Loaded: "${savedTitle || "pinned chart"}"`);
+      setMessage(`Loaded: "${savedTitle || "pinned chart"}"`);
       sessionStorage.removeItem("qb_load_sql");
       sessionStorage.removeItem("qb_load_title");
       sessionStorage.removeItem("qb_source_widget_id");
+    }
+    const params = new URLSearchParams(window.location.search);
+    const urlSql = params.get("sql");
+    const urlTitle = params.get("title");
+    if (urlSql) {
+      const decoded = decodeURIComponent(urlSql);
+      setSql(decoded);
+      if (urlTitle) updateTab(activeTabId, { name: `${urlTitle}.sql`, sql: decoded });
+      setMidTab("script");
+      setMessage(`Loaded from link: "${urlTitle || "query"}"`);
+      if (params.get("run") === "1") setTimeout(() => doExecute(decoded), 0);
     }
   }, []);
 
@@ -502,6 +552,7 @@ export default function QueryBuilder() {
       const result = await executeSQL(runSql, currentUploaded, currentUser?.company_id, masterDataSnapshot);
       if (result.type === "select") { setResults(result.rows); if (result.rows.length > 0) setShowChart(false); }
       setMessage(result.message);
+      setVerifiedAt(new Date().toISOString());
       const entry = { sql: runSql, status: "ok", message: result.message, rows: result.rows?.length ?? 0, ts: new Date().toISOString(), ms: Date.now() - startTime };
       setQueryHistory((prev) => { const next = [entry, ...prev].slice(0, 50); localStorage.setItem("qb_history", JSON.stringify(next)); return next; });
     } catch (e) {
@@ -538,6 +589,51 @@ export default function QueryBuilder() {
     setSql(newSql);
     setMidTab("script");
     setShowChart(false);
+    setVerifiedAt(null);
+  };
+
+  const handleNlToSql = async () => {
+    if (!nlPrompt.trim()) return;
+    setNlBusy(true);
+    try {
+      const generated = translateNaturalLanguageToSql(nlPrompt);
+      loadSql(generated);
+      setMessage("Draft SQL generated locally. Run it to verify the result.");
+    } finally {
+      setNlBusy(false);
+    }
+  };
+
+  const handleSaveVerification = async () => {
+    if (!currentUser?.company_id || !sql.trim()) return;
+    setVerifyBusy(true);
+    try {
+      await saveIdjwiMemory({
+        user: currentUser,
+        companyId: currentUser.company_id,
+        memoryType: "business_rule",
+        key: `verified_query_${(activeTab?.name || "query").replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`,
+        value: {
+          sql,
+          rows: results?.length ?? 0,
+          verified_at: new Date().toISOString(),
+          title: activeTab?.name || "Query Builder verification",
+        },
+        source: "operator_stated",
+        confidence: 1,
+        reviewStatus: "confirmed",
+        metadata: {
+          surface: "query_builder",
+          natural_language_prompt: nlPrompt || null,
+        },
+      });
+      setVerifiedAt(new Date().toISOString());
+      setMessage("Verified query saved to Idjwi Memory.");
+    } catch (e) {
+      setError(e.message || "Could not save verification memory.");
+    } finally {
+      setVerifyBusy(false);
+    }
   };
 
   return (
@@ -717,6 +813,33 @@ export default function QueryBuilder() {
           </button>
         </div>
 
+        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/5 bg-slate-900/80 shrink-0">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-emerald-300 shrink-0">
+            <Brain className="w-3.5 h-3.5" />
+            Ask to SQL
+          </div>
+          <input
+            value={nlPrompt}
+            onChange={(e) => setNlPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleNlToSql();
+              }
+            }}
+            placeholder="Example: show unpaid invoices, low stock items, revenue by month"
+            className="flex-1 min-w-[180px] h-8 rounded-lg border border-white/10 bg-slate-950/70 px-3 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-emerald-400/50"
+          />
+          <button
+            onClick={handleNlToSql}
+            disabled={nlBusy || !nlPrompt.trim()}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600 disabled:opacity-40 disabled:hover:bg-emerald-500"
+          >
+            {nlBusy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+            Draft
+          </button>
+        </div>
+
         {/* Toolbar */}
         <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/5 shrink-0 flex-wrap">
           <Button size="sm" onClick={runQuery} disabled={loading}
@@ -760,6 +883,36 @@ export default function QueryBuilder() {
             <Keyboard className="w-3.5 h-3.5" />
           </button>
           <span className="text-[10px] text-slate-600 font-mono hidden lg:block">Ctrl+Enter to run</span>
+          {verifiedAt && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-mono">
+              <ShieldCheck className="w-3 h-3" />
+              verified {new Date(verifiedAt).toLocaleTimeString()}
+            </span>
+          )}
+          <button
+            onClick={handleSaveVerification}
+            disabled={!currentUser?.company_id || !sql.trim() || verifyBusy}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 transition-colors h-7 disabled:opacity-30"
+            title="Save this verified query to Idjwi Memory"
+          >
+            {verifyBusy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+            Verify
+          </button>
+          {currentUser?.company_id && (
+            <TeachIdjwiButton
+              user={currentUser}
+              companyId={currentUser.company_id}
+              defaultType="business_rule"
+              defaultKey={`query_${(activeTab?.name || "draft").replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`}
+              defaultValue={{
+                sql,
+                rows: results?.length ?? 0,
+                note: "Saved from Query Builder",
+              }}
+              label="Teach"
+              className="h-7 px-2.5 rounded-lg border border-white/10 text-xs text-slate-400 hover:text-emerald-300 hover:bg-white/5"
+            />
+          )}
           <div className="flex-1" />
           <div className="flex items-center gap-1 overflow-x-auto max-w-[400px]">
             {SAMPLES.slice(0, 6).map((s) => (
@@ -918,6 +1071,16 @@ export default function QueryBuilder() {
           onPinWidget={() => setShowPinModal(true)}
           onOpenChart={() => { setMidTab("script"); setShowChart(true); }}
         />
+        {results?.length > 0 && (
+          <div className="shrink-0 h-[340px] border-t border-white/5">
+            <ResultChart
+              results={results}
+              chartType={selectedChartType}
+              onChartTypeChange={setSelectedChartType}
+              onClose={() => {}}
+            />
+          </div>
+        )}
       </aside>
 
       {/* Mutation Confirm */}
