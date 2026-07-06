@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -32,6 +33,68 @@ def _load_docs() -> str:
         return _DOCS_PATH.read_text(encoding="utf-8")
     except Exception:
         return ""
+
+
+# ── No-LLM documentation fallback ─────────────────────────────────────────────
+# Used when the Anthropic API is unreachable/misconfigured, so the demo answers
+# from Idjwi's own product memory (newsconseen_docs.md) instead of failing outright.
+
+_STOPWORDS = {
+    "the", "a", "an", "is", "are", "was", "were", "how", "what", "why", "when",
+    "where", "who", "does", "do", "did", "can", "could", "would", "should", "to",
+    "of", "in", "on", "for", "and", "or", "it", "its", "this", "that", "with",
+    "about", "explain", "tell", "me", "i", "you", "your", "newsconseen", "idjwi",
+}
+
+
+def _split_docs_sections(docs: str) -> list:
+    """Split docs into (title, body) sections on '## ' headers."""
+    sections = []
+    current_title = "Overview"
+    current_body = []
+    for line in docs.splitlines():
+        if line.startswith("## ") and not line.startswith("### "):
+            if current_body:
+                sections.append((current_title, "\n".join(current_body).strip()))
+            current_title = line[3:].strip()
+            current_body = []
+        else:
+            current_body.append(line)
+    if current_body:
+        sections.append((current_title, "\n".join(current_body).strip()))
+    return sections
+
+
+def _keywords(text: str) -> set:
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    return {w for w in words if w not in _STOPWORDS and len(w) > 2}
+
+
+def _docs_fallback_answer(question: str, docs: str) -> str:
+    sections = _split_docs_sections(docs)
+    if not sections:
+        return (
+            "Full AI reasoning is temporarily unavailable, and product documentation "
+            "couldn't be loaded either. Please try again shortly."
+        )
+
+    q_words = _keywords(question)
+    scored = [
+        (len(q_words & _keywords(title)) * 3 + len(q_words & _keywords(body)), title, body)
+        for title, body in sections
+    ]
+    scored.sort(key=lambda x: x[0], reverse=True)
+    best_score, best_title, best_body = scored[0]
+
+    if best_score == 0:
+        best_title, best_body = sections[0]
+
+    excerpt = best_body[:1200].strip()
+    return (
+        f"Full AI reasoning is temporarily unavailable, so here's what I know directly "
+        f"from Newsconseen's documentation on **{best_title}**:\n\n{excerpt}\n\n"
+        f"Ask again shortly for a fully reasoned, tool-connected answer."
+    )
 
 
 # ── Simple in-memory IP rate limiter ─────────────────────────────────────────
@@ -343,7 +406,8 @@ async def ask_idjwi_stream(question: str, history: list = None):
 
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
-        yield {"type": "error", "message": "Service configuration error. Please try again later."}
+        yield {"type": "text_delta", "text": _docs_fallback_answer(question, _load_docs())}
+        yield {"type": "done", "citations": [], "tools_called": [], "tools_detail": []}
         return
 
     from copilot.queries import TOOL_DEFINITIONS
@@ -382,7 +446,8 @@ async def ask_idjwi_stream(question: str, history: list = None):
 
         except Exception as exc:
             logger.error("Idjwi stream round %d error: %s", _round, exc)
-            yield {"type": "error", "message": "Connection error. Please try again."}
+            yield {"type": "text_delta", "text": _docs_fallback_answer(question, _load_docs())}
+            yield {"type": "done", "citations": [], "tools_called": [], "tools_detail": []}
             return
 
         if stop_reason == "end_turn":
@@ -455,7 +520,16 @@ def ask_idjwi(question: str, history: list = None) -> dict:
     """
     from copilot.queries import TOOL_DEFINITIONS, execute_tool
 
-    client = _get_client()
+    docs = _load_docs()
+    try:
+        client = _get_client()
+    except Exception as e:
+        logger.error("Idjwi client init failed: %s", e)
+        return {
+            "answer": _docs_fallback_answer(question, docs),
+            "charts": [], "citations": [], "tools_called": [], "tools_detail": [],
+        }
+
     system = _build_idjwi_system_prompt()
 
     messages = list(history or [])
@@ -475,7 +549,7 @@ def ask_idjwi(question: str, history: list = None) -> dict:
         except Exception as e:
             logger.error("Idjwi API call failed: %s", e)
             return {
-                "answer": "I'm having trouble reaching the AI service right now. Please try again.",
+                "answer": _docs_fallback_answer(question, docs),
                 "charts": [], "citations": [], "tools_called": [], "tools_detail": [],
             }
 
