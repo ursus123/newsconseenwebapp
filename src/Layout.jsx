@@ -72,7 +72,6 @@ const NAV_CONFIG = {
       items: [
         { name: "CompanyGraphHome",  label: "Company Graph",      icon: Network },
         { name: "Dashboard",                                       icon: LayoutDashboard },
-        { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
         { name: "Tasks",             label: "My Tasks",           icon: CheckSquare },
         { name: "alerts",            label: "Alerts",             icon: Bell, badge: "alerts" },
       ],
@@ -156,7 +155,6 @@ const NAV_CONFIG = {
       items: [
         { name: "CompanyGraphHome",  label: "Company Graph",      icon: Network },
         { name: "Dashboard",                                       icon: LayoutDashboard },
-        { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
         { name: "Tasks",             label: "My Tasks",           icon: CheckSquare },
         { name: "alerts",            label: "Alerts",             icon: Bell, badge: "alerts" },
       ],
@@ -236,12 +234,12 @@ const NAV_CONFIG = {
       items: [
         { name: "CompanyGraphHome",  label: "Company Graph",      icon: Network },
         { name: "Dashboard",                                       icon: LayoutDashboard },
-        { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
       ],
     },
     {
       section: "Intelligence",
       items: [
+        { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
         { name: "idjwi",             label: "Idjwi",             icon: Sparkles },
         { name: "agents",            label: "Agents",            icon: Brain },
         { name: "alerts",            label: "Alerts",            icon: Bell, badge: "alerts" },
