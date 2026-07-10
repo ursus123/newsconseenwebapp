@@ -20,14 +20,14 @@ const ANALYTICS_TABLES_LIST = [
 ];
 
 const RAW_TABLES_LIST = [
-  { table: "raw_people",        label: "People (raw)",        desc: "Individual person records from Base44",       sample: "SELECT id, full_name, person_type, status, enterprise_id\nFROM raw_people\nLIMIT 100" },
-  { table: "raw_enterprises",   label: "Enterprises (raw)",   desc: "Individual enterprise records from Base44",   sample: "SELECT id, name, enterprise_type, status, operating_status\nFROM raw_enterprises\nLIMIT 100" },
-  { table: "raw_products",      label: "Products (raw)",      desc: "Individual product records from Base44",      sample: "SELECT id, name, item_type, status, price, stock_quantity\nFROM raw_products\nLIMIT 100" },
-  { table: "raw_tasks",         label: "Tasks (raw)",         desc: "Individual task records from Base44",         sample: "SELECT id, task_type, status, title, enterprise_id, due_date\nFROM raw_tasks\nLIMIT 100" },
-  { table: "raw_transactions",  label: "Transactions (raw)",  desc: "Individual transaction records from Base44",  sample: "SELECT id, transaction_type, status, amount, currency, enterprise_id\nFROM raw_transactions\nLIMIT 100" },
-  { table: "raw_services",      label: "Services (raw)",      desc: "Individual service records from Base44",      sample: "SELECT id, name, service_type, status, rate\nFROM raw_services\nLIMIT 100" },
-  { table: "raw_relationships", label: "Relationships (raw)", desc: "Individual relationship records from Base44", sample: "SELECT id, relationship_type, person_id, enterprise_id, status\nFROM raw_relationships\nLIMIT 100" },
-  { table: "raw_addresses",     label: "Addresses (raw)",     desc: "Individual address records from Base44",      sample: "SELECT id, label, street, city, country, address_type\nFROM raw_addresses\nLIMIT 100" },
+  { table: "raw_people",        label: "People (raw)",        desc: "Individual person records from Supabase",       sample: "SELECT id, full_name, person_type, status, enterprise_id\nFROM raw_people\nLIMIT 100" },
+  { table: "raw_enterprises",   label: "Enterprises (raw)",   desc: "Individual enterprise records from Supabase",   sample: "SELECT id, name, enterprise_type, status, operating_status\nFROM raw_enterprises\nLIMIT 100" },
+  { table: "raw_products",      label: "Products (raw)",      desc: "Individual product records from Supabase",      sample: "SELECT id, name, item_type, status, price, stock_quantity\nFROM raw_products\nLIMIT 100" },
+  { table: "raw_tasks",         label: "Tasks (raw)",         desc: "Individual task records from Supabase",         sample: "SELECT id, task_type, status, title, enterprise_id, due_date\nFROM raw_tasks\nLIMIT 100" },
+  { table: "raw_transactions",  label: "Transactions (raw)",  desc: "Individual transaction records from Supabase",  sample: "SELECT id, transaction_type, status, amount, currency, enterprise_id\nFROM raw_transactions\nLIMIT 100" },
+  { table: "raw_services",      label: "Services (raw)",      desc: "Individual service records from Supabase",      sample: "SELECT id, name, service_type, status, rate\nFROM raw_services\nLIMIT 100" },
+  { table: "raw_relationships", label: "Relationships (raw)", desc: "Individual relationship records from Supabase", sample: "SELECT id, relationship_type, person_id, enterprise_id, status\nFROM raw_relationships\nLIMIT 100" },
+  { table: "raw_addresses",     label: "Addresses (raw)",     desc: "Individual address records from Supabase",      sample: "SELECT id, label, street, city, country, address_type\nFROM raw_addresses\nLIMIT 100" },
   { table: "raw_ml_predictions",label: "ML Predictions",      desc: "Stored ML model results (retention, LTV…)",   sample: "SELECT model, computed_at, result_json\nFROM raw_ml_predictions\nORDER BY computed_at DESC\nLIMIT 10" },
 ];
 

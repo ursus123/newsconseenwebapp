@@ -443,7 +443,7 @@ export default function NetworkMap({ networkId, currentUser, height = 520 }) {
             <MapPin className="w-8 h-8 opacity-30" />
             <p className="text-sm">No locations with coordinates found.</p>
             <p className="text-xs opacity-70">
-              Add latitude/longitude to Address records in Base44.
+              Add latitude/longitude to your Address records.
             </p>
           </div>
         )}

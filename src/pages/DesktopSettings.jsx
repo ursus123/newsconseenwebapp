@@ -708,7 +708,7 @@ function AboutSection({ user }) {
   const rows = [
     { label: "Newsconseen OS",      value: "v3.1.0 (Desktop Shell)" },
     { label: "Build",               value: "2026.03.25" },
-    { label: "Shell",               value: "Base44 Platform v3" },
+    { label: "Shell",               value: "Newsconseen Desktop Shell v3" },
     { label: "Browser",             value: browser },
     { label: "PWA Status",          value: pwaStatus },
     { label: "Platform",            value: navigator.platform },
@@ -743,7 +743,7 @@ function AboutSection({ user }) {
 
       <div className="p-4 rounded-2xl text-center" style={{ background: "rgba(255,255,255,0.04)" }}>
         <p className="text-xs text-slate-600">© 2026 Newsconseen · All rights reserved</p>
-        <p className="text-xs text-slate-700 mt-0.5">Built on Base44 Platform</p>
+        <p className="text-xs text-slate-700 mt-0.5">Powered by Supabase</p>
       </div>
     </div>
   );

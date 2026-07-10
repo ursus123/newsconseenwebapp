@@ -400,7 +400,7 @@ export default function AlertsPage({ currentUser }) {
           <p>🔴 Critical alerts → all configured channels immediately</p>
           <p>🟡 Warnings → preferred channel (email or WhatsApp)</p>
           <p>🔇 Frequency caps prevent duplicate alerts within the cap window</p>
-          <p>📋 Every fired alert is logged to Base44 AlertLog for audit</p>
+          <p>📋 Fired alerts are recorded for audit</p>
         </div>
       </div>
     </div>

@@ -17,12 +17,12 @@ const LOAD_ENDPOINTS = [
 ];
 
 const PIPELINES = [
-  { name: "tasks_etl",        description: "Syncs task summaries from Base44" },
-  { name: "transactions_etl", description: "Syncs transaction summaries from Base44" },
-  { name: "services_etl",     description: "Syncs service summaries from Base44" },
-  { name: "enterprises_etl",  description: "Syncs enterprise summaries from Base44" },
-  { name: "people_etl",       description: "Syncs people summaries from Base44" },
-  { name: "products_etl",     description: "Syncs product summaries from Base44" },
+  { name: "tasks_etl",        description: "Syncs task summaries from Supabase" },
+  { name: "transactions_etl", description: "Syncs transaction summaries from Supabase" },
+  { name: "services_etl",     description: "Syncs service summaries from Supabase" },
+  { name: "enterprises_etl",  description: "Syncs enterprise summaries from Supabase" },
+  { name: "people_etl",       description: "Syncs people summaries from Supabase" },
+  { name: "products_etl",     description: "Syncs product summaries from Supabase" },
   { name: "geospatial_etl",   description: "Geocodes enterprise addresses and clusters locations" },
 ];
 
@@ -78,7 +78,7 @@ export default function AirflowSection() {
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-bold text-blue-900 mb-1">Data Pipeline (Airflow)</h3>
             <p className="text-sm text-blue-700 mb-5">
-              Airflow schedules and runs your ETL pipelines daily, keeping your analytics database fresh with the latest data from Base44.
+              Airflow schedules and runs your ETL pipelines daily, keeping your analytics database fresh with the latest data from Supabase.
             </p>
 
             {/* Buttons */}

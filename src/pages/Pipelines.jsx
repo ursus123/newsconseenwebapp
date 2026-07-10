@@ -176,7 +176,7 @@ export default function Pipelines() {
         <div>
           <h1 className="text-2xl font-black text-slate-800">Data Pipelines</h1>
           <p className="text-slate-500 text-sm mt-1 max-w-2xl">
-            Daily ETL pipelines automatically refresh your analytics database from Base44. Monitor pipeline health, view execution logs, and trigger manual runs to keep your intelligence layer current.
+            Daily ETL pipelines automatically refresh your analytics database from Supabase. Monitor pipeline health, view execution logs, and trigger manual runs to keep your intelligence layer current.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">

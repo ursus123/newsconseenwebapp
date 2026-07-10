@@ -263,7 +263,7 @@ function NewViewModal({ onOntology, onPipeline, onClose }) {
             <h2 className="text-sm font-bold text-slate-800">Choose Pipeline Table</h2>
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
           </div>
-          <p className="text-xs text-slate-500 mb-5">Views from pipeline tables read directly from the analytics layer (with Base44 fallback).</p>
+          <p className="text-xs text-slate-500 mb-5">Views from pipeline tables read directly from the analytics layer (with Supabase fallback).</p>
           <div className="grid grid-cols-1 gap-2">
             {PIPELINE_TABLES.map(t => {
               const TIcon = t.icon;

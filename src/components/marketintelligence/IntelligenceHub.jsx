@@ -1402,7 +1402,7 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
     const entTypeData      = toChartData(demoData.entByType);
     const entStatusData    = toChartData(demoData.entByStatus);
 
-    const tierLabel = { 1: "Analytics (T1)", 2: "Raw DB (T2)", 3: "Base44 Live (T3)" }[demoData.dataTier] || "—";
+    const tierLabel = { 1: "Analytics (T1)", 2: "Raw DB (T2)", 3: "Supabase Live (T3)" }[demoData.dataTier] || "—";
 
     return (
       <div className="space-y-6">

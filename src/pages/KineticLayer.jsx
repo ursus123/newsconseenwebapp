@@ -643,7 +643,7 @@ export default function KineticLayer() {
             <h1 className="text-2xl font-black text-slate-800">Kinetic Layer</h1>
           </div>
           <p className="text-slate-500 text-sm ml-11 max-w-2xl">
-            Define and execute actions that write back through the ontology. Every execution writes to Base44 entities, triggers ETL, and is logged with a full audit trail.
+            Define and execute actions that write back through the ontology. Every execution writes to Supabase entities, triggers ETL, and is logged with a full audit trail.
           </p>
         </div>
         <Button onClick={() => setShowNewAction(true)} className="bg-violet-600 hover:bg-violet-700 rounded-xl">

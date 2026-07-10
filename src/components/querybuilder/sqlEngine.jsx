@@ -406,8 +406,8 @@ export async function fetchAllAnalytics(companyId) {
   return results;
 }
 
-// Maps raw table entity name → Base44 entity key (for fallback)
-const RAW_TO_BASE44 = {
+// Maps raw table entity name → ncClient entity key (for live fallback)
+const RAW_TO_ENTITY = {
   people:        "Person",
   enterprises:   "Enterprise",
   products:      "Product",
@@ -442,8 +442,8 @@ async function fetchRawTable(name, companyId) {
     }
   } catch { /* fall through */ }
 
-  // Tier 2 — Base44 live fallback
-  const entityKey = RAW_TO_BASE44[cfg.entity];
+  // Tier 2 — Supabase live fallback (via ncClient)
+  const entityKey = RAW_TO_ENTITY[cfg.entity];
   if (entityKey && ncClient.entities[entityKey]) {
     try {
       const filter = companyId ? { company_id: companyId } : {};

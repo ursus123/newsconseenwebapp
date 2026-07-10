@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
-import { ZoomIn, ZoomOut, Maximize2, GitBranch, Database, ArrowRight, Download, Search, X, LayoutGrid, Keyboard, Copy, CheckCheck, ChevronRight, Info } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, GitBranch, Database, ArrowRight, Download, Search, X, LayoutGrid, Keyboard, Copy, CheckCheck, ChevronRight, Info, AlertTriangle } from "lucide-react";
 import { NotebookStore } from "@/components/querybuilder/NotebookStore";
 import html2canvas from "html2canvas";
 
@@ -16,6 +16,18 @@ import html2canvas from "html2canvas";
 //   ✗ MedicationProfile  — industry-specific; medications = Product (item_type=physical)
 //   ✗ Service            — not a canonical entity; services = Product (item_type=service_package)
 //   ✗ User / UserAppAccess / ImportLog / Report / SavedDashboardWidget — platform internals
+
+// ─── Platform-internal entities not yet migrated to Supabase ─────────────────
+// These aren't part of the universal ontology (see removal note above) but are
+// real entities the app reads/writes — currently still served by Base44 via
+// ncClient.js's fallback proxy. Remove an entry here once it's added to
+// supabaseEntities in supabaseEntityClient.js.
+const UNMIGRATED_ENTITIES = [
+  "User", "RolePermissions", "UserAppAccess", "PendingInvitation",
+  "Report", "ReportChart", "ReportComment", "ChartFolder", "SavedDashboardWidget",
+  "QueryDefinition", "DataModel", "ConnectorMapping", "ConnectorRun",
+  "FileRecord", "FileShare", "MedicationProfile", "Attendance",
+];
 
 const TABLES = [
   // ── Three Master Entities ──────────────────────────────────────────────────
@@ -235,7 +247,7 @@ const TABLES = [
 
 // ── Layer 2 — Deployable Datamart (Railway PostgreSQL analytics.*) ─────────────
 // One analytics table per canonical entity. Populated by ETL @mutation.
-// Read by QueryBuilder, Copilot, Alerts, Agents. Never read directly from Base44.
+// Read by QueryBuilder, Copilot, Alerts, Agents. Never read directly from Supabase.
 const ANALYTICS_TABLES = [
   {
     id: "analytics_people", label: "analytics.people_summary", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe",
@@ -391,14 +403,14 @@ const API_TABLES = [
   },
 ];
 
-// ─── PostgreSQL Schema View — raw.* tables (verbatim Base44 mirrors) ──────────
+// ─── PostgreSQL Schema View — raw.* tables (verbatim Supabase mirrors) ────────
 // Written by ETL extract phase. company_id = ALL tenants (no filter on extract).
 // NOTE: All joins are name-based string matches, NOT SQL FK constraints.
 const PG_RAW_TABLES = [
   {
     id: "raw_people", label: "raw.people", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
     icon: "📋", layer: "raw.*",
-    description: "Verbatim Person records from Base44. Name-based joins only — no FK constraints.",
+    description: "Verbatim Person records from Supabase. Name-based joins only — no FK constraints.",
     fields: [
       { name: "id", type: "TEXT PK", pk: true },
       { name: "first_name / last_name", type: "TEXT" },
@@ -415,7 +427,7 @@ const PG_RAW_TABLES = [
   {
     id: "raw_enterprises", label: "raw.enterprises", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
     icon: "📋", layer: "raw.*",
-    description: "Verbatim Enterprise records from Base44. Self-ref parent via name-join.",
+    description: "Verbatim Enterprise records from Supabase. Self-ref parent via name-join.",
     fields: [
       { name: "id", type: "TEXT PK", pk: true },
       { name: "enterprise_name", type: "TEXT" },
@@ -495,7 +507,7 @@ const PG_RAW_TABLES = [
   {
     id: "raw_addresses", label: "raw.addresses", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
     icon: "📋", layer: "raw.*",
-    description: "Verbatim Address records from Base44. Geocoded via OSM Nominatim on ETL.",
+    description: "Verbatim Address records from Supabase. Geocoded via OSM Nominatim on ETL.",
     fields: [
       { name: "id", type: "TEXT PK", pk: true },
       { name: "label", type: "TEXT" },
@@ -541,7 +553,7 @@ const PG_RAW_TABLES = [
   {
     id: "raw_documents", label: "raw.documents", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4",
     icon: "📋", layer: "raw.*",
-    description: "Verbatim Document records from Base44. enterprise_id is a string name-join.",
+    description: "Verbatim Document records from Supabase. enterprise_id is a string name-join.",
     fields: [
       { name: "id", type: "TEXT PK", pk: true },
       { name: "title / document_type", type: "TEXT" },
@@ -1637,7 +1649,7 @@ const PG_LAYER_COLORS = {
 const API_CATALOGUE = [
   {
     name: "Core ETL", prefix: "/", color: "#2563eb", bg: "#eff6ff",
-    desc: "ETL pipeline — triggers Base44 → raw.* → analytics.* synchronization",
+    desc: "ETL pipeline — triggers Supabase → raw.* → analytics.* synchronization",
     endpoints: [
       { method: "GET",  path: "/health",                   desc: "Health check + ETL timestamps + table row counts" },
       { method: "POST", path: "/cron/etl-all",             desc: "Full ETL for all entities + all tenants (cron use)" },
@@ -1747,7 +1759,7 @@ const API_CATALOGUE = [
   },
   {
     name: "Ingestion Agent", prefix: "/ingestion", color: "#0f766e", bg: "#f0fdfa",
-    desc: "Phase 12 — Universal AI import pipeline. Analyses any CSV/XLSX/JSON/XML, maps columns to the 15-entity ontology, deduplicates, and loads into Base44. 50k row cap (reports actual count). Dedup defaults to skip-not-update. Memory saved only after successful load. Schema contract validation flags unknown LLM field names. Webhook + scheduled re-ingestion. Copilot generate_import_template tool.",
+    desc: "Phase 12 — Universal AI import pipeline. Analyses any CSV/XLSX/JSON/XML, maps columns to the 15-entity ontology, deduplicates, and loads into Supabase. 50k row cap (reports actual count). Dedup defaults to skip-not-update. Memory saved only after successful load. Schema contract validation flags unknown LLM field names. Webhook + scheduled re-ingestion. Copilot generate_import_template tool.",
     endpoints: [
       { method: "POST",   path: "/ingestion/upload",              desc: "Analyse file → plan with entity_splits + field_map. Caches rows_json so load works without re-upload. Reports row_count (actual) + rows_capped." },
       { method: "GET",    path: "/ingestion/plan/{id}",           desc: "Fetch a plan for operator review (full JSON incl. schema_violations, analyst_notes)" },
@@ -1830,7 +1842,7 @@ const API_CATALOGUE = [
       { method: "GET",  path: "/backup/list",                     desc: "Infra: recent backup log entries from analytics.backup_log. Requires x-cron-secret." },
       { method: "GET",  path: "/admin/tenants",                     desc: "Platform Admin: list all tenants with health signals. Requires x-admin-secret." },
       { method: "GET",  path: "/admin/tenants/{company_id}",        desc: "Platform Admin: single tenant detail — enrichment coverage, onboarding history, audit trail." },
-      { method: "POST", path: "/admin/tenants",                     desc: "Platform Admin: create + provision a new tenant. Writes to Base44, runs onboarding/provision, triggers ETL." },
+      { method: "POST", path: "/admin/tenants",                     desc: "Platform Admin: create + provision a new tenant. Still writes the Enterprise record to Base44 (live migration debt — frontend Onboarding.jsx separately creates it in Supabase, so this is a known duplicate-write risk pending Phase C cleanup), runs onboarding/provision, triggers ETL." },
       { method: "POST", path: "/admin/tenants/{company_id}/etl",    desc: "Platform Admin: trigger full ETL for one tenant in background." },
       { method: "POST", path: "/admin/tenants/{company_id}/suspend",    desc: "Platform Admin: suspend a tenant (writes to analytics.tenant_flags)." },
       { method: "POST", path: "/admin/tenants/{company_id}/reactivate", desc: "Platform Admin: remove suspension flag for a tenant." },
@@ -2318,7 +2330,7 @@ export default function DataModels() {
               Data Models &amp; Architecture
             </h1>
             <p className="text-xs text-slate-500 mt-0.5 max-w-2xl">
-              {view === "ontology" && <>The universal ontology — 3 master entities, 4 supporting entities, MasterDataOption taxonomy.{" "}<span className="text-slate-400">Layer 1 (Base44) → ETL @mutation → Layer 2 (analytics.*), enriched by open data.</span></>}
+              {view === "ontology" && <>The universal ontology — 3 master entities, 4 supporting entities, MasterDataOption taxonomy.{" "}<span className="text-slate-400">Layer 1 (Supabase) → ETL @mutation → Layer 2 (analytics.*), enriched by open data.</span></>}
               {view === "postgresql" && <>Actual PostgreSQL schema — raw.* verbatim mirrors, analytics.* aggregations, intelligence tables (agents/copilot), audit trail. All joins are name-based string matches; no SQL FK constraints.</>}
               {view === "api" && <>python_layer FastAPI endpoint catalogue — all routes grouped by router. Deployed on Railway.</>}
             </p>
@@ -2783,6 +2795,29 @@ export default function DataModels() {
             </div>
           </div>
 
+          {/* Not yet migrated to Supabase */}
+          {!isPGView && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center gap-1.5 mb-1">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">
+                  Base44 Fallback ({UNMIGRATED_ENTITIES.length})
+                </p>
+              </div>
+              <p className="text-[10px] text-amber-700 leading-snug">
+                These entities aren't in Supabase yet — reads/writes still go to Base44
+                (see <code className="font-mono">ncClient.js</code> / <code className="font-mono">supabaseEntityClient.js</code>).
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {UNMIGRATED_ENTITIES.map(name => (
+                  <span key={name} className="text-[10px] px-1.5 py-0.5 rounded-full bg-white border border-amber-200 text-amber-700 font-mono">
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Data Flow Summary */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2">
             <div className="flex items-center gap-1.5 mb-1">
@@ -2793,7 +2828,7 @@ export default function DataModels() {
             </div>
             {(isPGView
               ? [
-                  { step: "1", label: "raw.*",        color: "#0f766e", desc: "Verbatim Base44 mirrors. All joins are string name-matches, not SQL FK constraints." },
+                  { step: "1", label: "raw.*",        color: "#0f766e", desc: "Verbatim Supabase mirrors. All joins are string name-matches, not SQL FK constraints." },
                   { step: "2", label: "analytics.*",  color: "#4338ca", desc: "ETL aggregations. GROUP BY summaries — no row identity. Read by copilot/alerts/dashboard." },
                   { step: "3", label: "Intelligence", color: "#7c3aed", desc: "agent_memory, agent_approvals, agent_runs, copilot_memory — written by agents at runtime." },
                   { step: "4", label: "audit.*",      color: "#b91c1c", desc: "Immutable change_log. Every entity mutation written here by agents + ETL." },
@@ -2804,7 +2839,7 @@ export default function DataModels() {
                   { step: "2", label: "Connect",    color: "#ec4899", desc: "Person↔Enterprise, Item↔Enterprise links established" },
                   { step: "3", label: "Operate",    color: "#f97316", desc: "Tasks assigned per enterprise — work planned and tracked" },
                   { step: "4", label: "Ledger",     color: "#dc2626", desc: "Tasks trigger Transactions — stock moves, revenue recorded" },
-                  { step: "5", label: "ETL",        color: "#2563eb", desc: "Mutation triggers Base44 → raw.* → analytics.* after every form save" },
+                  { step: "5", label: "ETL",        color: "#2563eb", desc: "Mutation triggers Supabase → raw.* → analytics.* after every form save" },
                   { step: "6", label: "Analytics",  color: "#7c3aed", desc: "QueryBuilder & Reports read analytics tables — never the live DB" },
                 ]
             ).map(({ step, label, color, desc }) => (
