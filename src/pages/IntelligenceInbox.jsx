@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import intelligenceService from "@/services/intelligenceService";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -174,6 +174,16 @@ function InsightCard({ insight, onAcknowledge, onDismiss, onCreateRec, onMarkAct
             {expanded ? "Less" : "Evidence"}
           </button>
 
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: {
+              initialMessage: `Tell me more about this ${(insight.insight_type || "insight").replace(/_/g, " ")}: "${insight.title}". What should I do about it?`,
+              context: { entity_type: "insight", entity_id: insight.id, entity_label: insight.title },
+            } }))}
+            className="text-[11px] text-violet-600 hover:text-violet-800 font-medium flex items-center gap-1"
+          >
+            <Sparkles className="w-3 h-3" /> Ask Idjwi
+          </button>
+
           {insight.status === "new" && (
             <>
               <button
@@ -267,6 +277,16 @@ function RecommendationCard({ rec, onApprove, onReject, loading }) {
             <p className="text-xs text-slate-500 mt-1 italic">{rec.estimated_impact}</p>
           )}
 
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: {
+              initialMessage: `Tell me more about this recommendation: "${rec.title}". Is this a good idea?`,
+              context: { entity_type: "recommendation", entity_id: rec.id, entity_label: rec.title },
+            } }))}
+            className="text-[11px] text-violet-600 hover:text-violet-800 font-medium flex items-center gap-1 mt-2"
+          >
+            <Sparkles className="w-3 h-3" /> Ask Idjwi
+          </button>
+
           {rejecting && (
             <div className="mt-3 space-y-2">
               <Textarea
@@ -337,6 +357,15 @@ function RiskCard({ risk, onUpdateStatus, loading }) {
           {risk.mitigation && (
             <p className="text-xs text-emerald-600 mt-1 italic">Mitigation: {risk.mitigation}</p>
           )}
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: {
+              initialMessage: `Tell me more about this risk: "${risk.title}". What's the best way to address it?`,
+              context: { entity_type: "risk", entity_id: risk.id, entity_label: risk.title },
+            } }))}
+            className="text-[11px] text-violet-600 hover:text-violet-800 font-medium flex items-center gap-1 mt-2"
+          >
+            <Sparkles className="w-3 h-3" /> Ask Idjwi
+          </button>
           {(risk.status === "open" || risk.status === "acknowledged") && (
             <div className="flex items-center gap-2 mt-3">
               <Button size="sm" variant="outline" onClick={() => onUpdateStatus(risk, "acknowledged")} disabled={loading || risk.status === "acknowledged"}
@@ -393,6 +422,15 @@ function OpportunityCard({ opp, onUpdateStatus, loading }) {
               Est. value: {typeof opp.estimated_value === "number" ? opp.estimated_value.toLocaleString() : opp.estimated_value}
             </p>
           )}
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: {
+              initialMessage: `Tell me more about this opportunity: "${opp.title}". How should we pursue it?`,
+              context: { entity_type: "opportunity", entity_id: opp.id, entity_label: opp.title },
+            } }))}
+            className="text-[11px] text-violet-600 hover:text-violet-800 font-medium flex items-center gap-1 mt-2"
+          >
+            <Sparkles className="w-3 h-3" /> Ask Idjwi
+          </button>
           {(opp.status === "identified" || opp.status === "evaluating") && (
             <div className="flex items-center gap-2 mt-3">
               <Button size="sm" variant="outline" onClick={() => onUpdateStatus(opp, "pursuing")} disabled={loading}
@@ -530,7 +568,7 @@ export default function IntelligenceInbox() {
 
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn:  () => base44.auth.me(),
+    queryFn:  () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });

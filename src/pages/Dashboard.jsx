@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import dataService from "@/services/dataService";
 import { Link } from "react-router-dom";
@@ -46,7 +46,6 @@ import {
 } from "@/utils/fetchWithFallback";
 import PlottableTransactionTimeline from "../components/dashboard/PlottableTransactionTimeline";
 import MLDashboard from "../components/ml/MLDashboard";
-import GettingStartedChecklist from "../components/dashboard/GettingStartedChecklist";
 import TrendCharts from "../components/dashboard/TrendCharts";
 import GeoMap from "../components/dashboard/GeoMap";
 import SupersetEmbed from "../components/dashboard/SupersetEmbed";
@@ -593,8 +592,8 @@ function WorkerDashboard({ user }) {
   const { data: tasks = [] } = useQuery({
     queryKey: ["tasks", companyId, user?.email],
     queryFn: () => companyId
-      ? base44.entities.Task.filter({ company_id: companyId, assigned_to_email: user.email }, "-created_date")
-      : base44.entities.Task.filter({ assigned_to_email: user?.email }, "-created_date"),
+      ? ncClient.entities.Task.filter({ company_id: companyId, assigned_to_email: user.email }, "-created_date")
+      : ncClient.entities.Task.filter({ assigned_to_email: user?.email }, "-created_date"),
     enabled: !!user,
     staleTime: 0,
     refetchOnMount: "always",
@@ -604,7 +603,7 @@ function WorkerDashboard({ user }) {
     queryKey: ["analytics-tasks-worker", companyId],
     queryFn:  () => fetchTasksFallback(
       companyId,
-      () => base44.entities.Task.filter(
+      () => ncClient.entities.Task.filter(
         companyId
           ? { company_id: companyId, assigned_to_email: user?.email }
           : { assigned_to_email: user?.email },
@@ -617,7 +616,7 @@ function WorkerDashboard({ user }) {
   });
 
 
-  // Aggregate — analytics summaries vs raw/base44 full records
+  // Aggregate — analytics summaries vs raw/ncClient full records
   const isAnalytics    = taskResult.source === "analytics";
   const taskSummary    = isAnalytics ? taskResult.data : [];
   const rawTaskRecords = !isAnalytics ? taskResult.data : tasks;
@@ -807,13 +806,13 @@ function AdminDashboard({ user }) {
   }, [qc, companyId]);
 
   // ── Operational queries ─────────────────────────────────────────────────────
-  const { data: enterprises   = [] } = useQuery({ queryKey: ["enterprises",       companyId], queryFn: () => listFn(base44.entities.Enterprise),  staleTime: 0, refetchOnMount: "always" });
-  const { data: services      = [] } = useQuery({ queryKey: ["services",           companyId], queryFn: () => listFn(base44.entities.Service),      staleTime: 0, refetchOnMount: "always" });
-  const { data: tasks         = [] } = useQuery({ queryKey: ["tasks-dash",         companyId], queryFn: () => listFn(base44.entities.Task),         staleTime: 0, refetchOnMount: "always" });
-  const { data: transactions  = [] } = useQuery({ queryKey: ["transactions-dash",  companyId], queryFn: () => listFn(base44.entities.Transaction),  staleTime: 0, refetchOnMount: "always" });
-  const { data: relationships = [] } = useQuery({ queryKey: ["relationships-dash", companyId], queryFn: () => listFn(base44.entities.Relationship), staleTime: 0, refetchOnMount: "always" });
-  const { data: people        = [] } = useQuery({ queryKey: ["people",             companyId], queryFn: () => listFn(base44.entities.Person),       staleTime: 0, refetchOnMount: "always" });
-  const { data: products      = [] } = useQuery({ queryKey: ["products",           companyId], queryFn: () => listFn(base44.entities.Product),      staleTime: 0, refetchOnMount: "always" });
+  const { data: enterprises   = [] } = useQuery({ queryKey: ["enterprises",       companyId], queryFn: () => listFn(ncClient.entities.Enterprise),  staleTime: 0, refetchOnMount: "always" });
+  const { data: services      = [] } = useQuery({ queryKey: ["services",           companyId], queryFn: () => listFn(ncClient.entities.Service),      staleTime: 0, refetchOnMount: "always" });
+  const { data: tasks         = [] } = useQuery({ queryKey: ["tasks-dash",         companyId], queryFn: () => listFn(ncClient.entities.Task),         staleTime: 0, refetchOnMount: "always" });
+  const { data: transactions  = [] } = useQuery({ queryKey: ["transactions-dash",  companyId], queryFn: () => listFn(ncClient.entities.Transaction),  staleTime: 0, refetchOnMount: "always" });
+  const { data: relationships = [] } = useQuery({ queryKey: ["relationships-dash", companyId], queryFn: () => listFn(ncClient.entities.Relationship), staleTime: 0, refetchOnMount: "always" });
+  const { data: people        = [] } = useQuery({ queryKey: ["people",             companyId], queryFn: () => listFn(ncClient.entities.Person),       staleTime: 0, refetchOnMount: "always" });
+  const { data: products      = [] } = useQuery({ queryKey: ["products",           companyId], queryFn: () => listFn(ncClient.entities.Product),      staleTime: 0, refetchOnMount: "always" });
 
   // ── Analytics queries — 3-tier fallback ────────────────────────────────────
   const analyticsRefetchKeys = ["analytics-people", "analytics-tasks", "analytics-products", "analytics-transactions"];
@@ -823,7 +822,7 @@ function AdminDashboard({ user }) {
   const { data: peopleAnalytics      = _empty, isLoading: loadingPeople }   = useQuery({
     queryKey: ["analytics-people",       companyId],
     queryFn:  () => fetchPeopleFallback(companyId,
-      () => listFn(base44.entities.Person)),
+      () => listFn(ncClient.entities.Person)),
     enabled: !!companyId,
     staleTime: 0,
     refetchOnMount: "always",
@@ -831,7 +830,7 @@ function AdminDashboard({ user }) {
   const { data: taskAnalytics        = _empty, isLoading: loadingTasks }    = useQuery({
     queryKey: ["analytics-tasks",        companyId],
     queryFn:  () => fetchTasksFallback(companyId,
-      () => listFn(base44.entities.Task)),
+      () => listFn(ncClient.entities.Task)),
     enabled: !!companyId,
     staleTime: 0,
     refetchOnMount: "always",
@@ -839,7 +838,7 @@ function AdminDashboard({ user }) {
   const { data: productAnalytics     = _empty, isLoading: loadingProducts } = useQuery({
     queryKey: ["analytics-products",     companyId],
     queryFn:  () => fetchProductsFallback(companyId,
-      () => listFn(base44.entities.Product)),
+      () => listFn(ncClient.entities.Product)),
     enabled: !!companyId,
     staleTime: 0,
     refetchOnMount: "always",
@@ -847,7 +846,7 @@ function AdminDashboard({ user }) {
   const { data: transactionAnalytics = _empty, isLoading: loadingTx }       = useQuery({
     queryKey: ["analytics-transactions", companyId],
     queryFn:  () => fetchTransactionsFallback(companyId,
-      () => listFn(base44.entities.Transaction)),
+      () => listFn(ncClient.entities.Transaction)),
     enabled: !!companyId,
     staleTime: 0,
     refetchOnMount: "always",
@@ -885,7 +884,7 @@ function AdminDashboard({ user }) {
 
   // ── Aggregations — 3-tier aware ─────────────────────────────────────────────
   // Tier 1 (analytics): pre-aggregated summary rows  → use summary-specific fields
-  // Tier 2 (raw) / Tier 3 (base44): full entity records → aggregate client-side
+  // Tier 2 (raw) / Tier 3 (ncClient): full entity records → aggregate client-side
   //
   // NOTE: raw.people and Base44 Person share the same field names, so Tier 2 and
   // Tier 3 use identical aggregation logic — only the source differs.
@@ -1049,7 +1048,6 @@ function AdminDashboard({ user }) {
       />
 
       <OnboardingChecklist done={onboardingDone} />
-      <GettingStartedChecklist />
 
       {/* ── KPI Goals ── */}
       <GoalsWidget companyId={companyId} />
@@ -1336,7 +1334,7 @@ function AdminDashboard({ user }) {
 export default function Dashboard() {
   const { data: user = null, isLoading } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });

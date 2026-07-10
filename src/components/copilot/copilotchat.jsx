@@ -11,7 +11,7 @@ import {
   FileText, Upload, CheckCircle2, Layers,
   Zap, ListTodo, Lightbulb, XCircle,
 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   PieChart, Pie, Cell,
@@ -109,7 +109,7 @@ function PinnableTable({ headers, rows, companyId, toolsDetail, tableIndex }) {
     const toolName  = toolsDetail?.[0]?.tool || "";
     const toolParams = toolsDetail?.[0]?.params || {};
     try {
-      await base44.entities.ReportChart.create({
+      await ncClient.entities.ReportChart.create({
         title,
         sql_query:   "",
         tool_name:   toolName,
@@ -270,7 +270,7 @@ function ChartCard({ config, companyId, currentUser, toolName, toolParams }) {
     if (pinning || pinned || !companyId) return;
     setPinning(true);
     try {
-      await base44.entities.ReportChart.create({
+      await ncClient.entities.ReportChart.create({
         title:           title || "Copilot Chart",
         sql_query:       sql || "",
         tool_name:       toolName || "",
@@ -1376,7 +1376,7 @@ function IngestionPlanCard({ plan, companyId, onConfirm, onDismiss }) {
 }
 
 // ── Main CopilotChat component ───────────────────────────────────────────────
-export default function CopilotChat({ currentUser, className = "", initialMessage = "", selectedModel = "claude-sonnet-4-6" }) {
+export default function CopilotChat({ currentUser, className = "", initialMessage = "", selectedModel = "claude-sonnet-4-6", pageContext = null, autoSend = false }) {
   const navigate = useNavigate();
   const [messages, setMessages]   = useState([]);
   const [input, setInput]         = useState(initialMessage || "");
@@ -1535,6 +1535,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           history,
           model:      selectedModel,
           advisor_enabled: advisorEnabled,
+          context:    pageContext || {},
         }),
       });
       const result = await resp.json();
@@ -1563,7 +1564,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
     } finally {
       setLoading(false);
     }
-  }, [companyId, messages, currentUser, selectedModel, advisorEnabled]);
+  }, [companyId, messages, currentUser, selectedModel, advisorEnabled, pageContext]);
 
   const handleIngestionDismiss = useCallback((planId) => {
     setMessages(prev => prev.filter(m =>
@@ -1638,6 +1639,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           history,
           model:           selectedModel,
           advisor_enabled: advisorEnabled,
+          context:         pageContext || {},
         }),
       });
 
@@ -1688,7 +1690,16 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       setLoading(false);
       inputRef.current?.focus();
     }
-  }, [input, loading, companyId, messages, currentUser, selectedModel, advisorEnabled, teachMode]);
+  }, [input, loading, companyId, messages, currentUser, selectedModel, advisorEnabled, teachMode, pageContext]);
+
+  // Auto-send once when opened with a pre-filled question (e.g. from the docked panel)
+  const autoSentRef = useRef(false);
+  useEffect(() => {
+    if (autoSend && initialMessage && companyId && !autoSentRef.current) {
+      autoSentRef.current = true;
+      sendMessage(initialMessage);
+    }
+  }, [autoSend, initialMessage, companyId, sendMessage]);
 
   const handleFeedback = async (messageId, rating) => {
     setMessages(prev =>

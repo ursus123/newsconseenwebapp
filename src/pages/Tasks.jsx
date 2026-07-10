@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Pencil, Trash2, Calendar, User, Building2, CheckCircle, AlertCircle, Clock, ShieldCheck, Filter, LayoutGrid, List, CalendarDays, X, Upload, Search, Tag, BarChart2 } from "lucide-react";
+import { Pencil, Trash2, Calendar, User, Building2, CheckCircle, AlertCircle, Clock, ShieldCheck, Filter, LayoutGrid, List, CalendarDays, X, Upload, Search, Tag, BarChart2, Sparkles } from "lucide-react";
 import TasksAnalytics from "@/components/tasks/TasksAnalytics";
 import { tagColor } from "@/components/shared/TagInput";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
@@ -135,18 +135,31 @@ function TaskCard({ task, onEdit, onDelete, isAdmin, selectable, selected, onSel
               <p className="text-xs text-slate-400 mt-2 line-clamp-1 italic">{task.outcome_notes}</p>
             )}
           </div>
-          {isAdmin && (
-            <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-emerald-600" onClick={() => onEdit(task)}>
-                <Pencil className="w-3.5 h-3.5" />
-              </Button>
-              {onDelete && (
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-rose-600" onClick={() => onDelete(task)}>
-                  <Trash2 className="w-3.5 h-3.5" />
+          <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-slate-400 hover:text-violet-600"
+              onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: {
+                initialMessage: `Tell me about this task: "${task.title}". Is it on track? What's blocking it?`,
+                context: { entity_type: "task", entity_id: task.id, entity_label: task.title },
+              } }))}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+            </Button>
+            {isAdmin && (
+              <>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-emerald-600" onClick={() => onEdit(task)}>
+                  <Pencil className="w-3.5 h-3.5" />
                 </Button>
-              )}
-            </div>
-          )}
+                {onDelete && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-rose-600" onClick={() => onDelete(task)}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </Card>
     </motion.div>
@@ -620,7 +633,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
         templateFileName="newsconseen_tasks_import_template.xlsx"
         templateExample={TASK_TEMPLATE_EXAMPLE}
         templateInstructions={TASK_TEMPLATE_INSTRUCTIONS}
-        entityFetchFn={() => listFn(base44.entities.Task)}
+        entityFetchFn={() => listFn(ncClient.entities.Task)}
         validateRow={validateTask}
         transformRow={transformTask}
         onImport={(row) => dataService.createRecord("task", { ...row, app_source: "import" }, currentUser, { queryClient: qc })}
@@ -649,7 +662,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
 export default function Tasks() {
   const { data: currentUser = null, isLoading: loadingUser } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -660,16 +673,16 @@ export default function Tasks() {
   const listFn = useEntityListFn(currentUser);
   const qcRoot = useQueryClient();
 
-  const { data: tasks = [], isLoading } = useQuery({ queryKey: ["tasks", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Task), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
-  const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers", companyId], queryFn: () => isSuperAdmin || !companyId ? base44.entities.User.list() : base44.entities.User.filter({ company_id: companyId }), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Enterprise), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
-  const { data: products = [] } = useQuery({ queryKey: ["products", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Product), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
-  const { data: services = [] } = useQuery({ queryKey: ["services", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Service), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
-  const { data: people = [] } = useQuery({ queryKey: ["people", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Person), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
-  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", companyId, currentUser?.email], queryFn: () => listFn(base44.entities.Address), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
+  const { data: tasks = [], isLoading } = useQuery({ queryKey: ["tasks", companyId, currentUser?.email], queryFn: () => listFn(ncClient.entities.Task), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers", companyId], queryFn: () => isSuperAdmin || !companyId ? ncClient.entities.User.list() : ncClient.entities.User.filter({ company_id: companyId }), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", companyId, currentUser?.email], queryFn: () => listFn(ncClient.entities.Enterprise), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
+  const { data: products = [] } = useQuery({ queryKey: ["products", companyId, currentUser?.email], queryFn: () => listFn(ncClient.entities.Product), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
+  const { data: services = [] } = useQuery({ queryKey: ["services", companyId, currentUser?.email], queryFn: () => listFn(ncClient.entities.Service), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
+  const { data: people = [] } = useQuery({ queryKey: ["people", companyId, currentUser?.email], queryFn: () => listFn(ncClient.entities.Person), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
+  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", companyId, currentUser?.email], queryFn: () => listFn(ncClient.entities.Address), enabled: isAdmin, staleTime: 0, refetchOnMount: "always" });
 
   useEffect(() => {
-    const unsub = base44.entities.Enterprise.subscribe(() => qcRoot.invalidateQueries({ queryKey: ["enterprises"] }));
+    const unsub = ncClient.entities.Enterprise.subscribe(() => qcRoot.invalidateQueries({ queryKey: ["enterprises"] }));
     return unsub;
   }, []);
 

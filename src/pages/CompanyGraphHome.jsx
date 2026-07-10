@@ -15,7 +15,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import cytoscape from "cytoscape";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 import { createPageUrl } from "@/utils";
 import {
@@ -192,7 +192,7 @@ function ContextPanel({ selected, onClose, navigate, insights = [], risks = [], 
           ].map(q => (
             <button
               key={q}
-              onClick={() => navigate(createPageUrl("idjwi"), { state: { prefillMessage: q } })}
+              onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: { initialMessage: q, context: null } }))}
               className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 hover:bg-violet-50 hover:border-violet-200 hover:text-violet-700 transition-colors flex items-center gap-2"
             >
               <Sparkles className="w-3.5 h-3.5 shrink-0 text-violet-400" />
@@ -382,7 +382,7 @@ function ContextPanel({ selected, onClose, navigate, insights = [], risks = [], 
             ].map(q => (
               <button
                 key={q}
-                onClick={() => navigate(createPageUrl("idjwi"), { state: { prefillMessage: q } })}
+                onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: { initialMessage: q, context: { entity_type: node.entity_type, entity_id: node.id, entity_label: node.label } } }))}
                 className="w-full text-left px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600 hover:bg-violet-50 hover:border-violet-200 hover:text-violet-700 transition-colors flex items-center gap-1.5"
               >
                 <Sparkles className="w-3 h-3 shrink-0 text-violet-400" />
@@ -406,7 +406,7 @@ function ContextPanel({ selected, onClose, navigate, insights = [], risks = [], 
           </button>
         )}
         <button
-          onClick={() => navigate(createPageUrl("idjwi"), { state: { prefillMessage: copilotQ } })}
+          onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: { initialMessage: copilotQ, context: { entity_type: node.entity_type, entity_id: node.id, entity_label: node.label } } }))}
           className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
         >
           <Sparkles className="w-3.5 h-3.5" />
@@ -546,7 +546,7 @@ export default function CompanyGraphHome() {
 
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn:  () => base44.auth.me(),
+    queryFn:  () => ncClient.auth.me(),
     staleTime: 0, refetchOnMount: "always",
   });
 
@@ -569,19 +569,19 @@ export default function CompanyGraphHome() {
     refetchOnMount: "always",
   });
 
-  const { data: enterprises    = [], isLoading: loadingEnterprises } = useE("g_enterprises",    base44.entities.Enterprise);
-  const { data: people         = [], isLoading: loadingPeople }      = useE("g_people",         base44.entities.Person);
-  const { data: products       = [] }                                = useE("g_products",        base44.entities.Product);
-  const { data: services       = [] }                                = useE("g_services",        base44.entities.Service);
-  const { data: tasks          = [] }                                = useE("g_tasks",           base44.entities.Task);
-  const { data: transactions   = [] }                                = useE("g_transactions",    base44.entities.Transaction);
-  const { data: addresses      = [] }                                = useE("g_addresses",       base44.entities.Address);
-  const { data: relationships  = [] }                                = useE("g_relationships",   base44.entities.Relationship);
-  const { data: territories    = [] }                                = useE("g_territories",     base44.entities.Territory);
-  const { data: insights       = [] }                                = useE("g_insights",        base44.entities.Insight);
-  const { data: risks          = [] }                                = useE("g_risks",           base44.entities.Risk);
-  const { data: opportunities  = [] }                                = useE("g_opportunities",   base44.entities.Opportunity);
-  const { data: recommendations = [] }                               = useE("g_recommendations", base44.entities.Recommendation);
+  const { data: enterprises    = [], isLoading: loadingEnterprises } = useE("g_enterprises",    ncClient.entities.Enterprise);
+  const { data: people         = [], isLoading: loadingPeople }      = useE("g_people",         ncClient.entities.Person);
+  const { data: products       = [] }                                = useE("g_products",        ncClient.entities.Product);
+  const { data: services       = [] }                                = useE("g_services",        ncClient.entities.Service);
+  const { data: tasks          = [] }                                = useE("g_tasks",           ncClient.entities.Task);
+  const { data: transactions   = [] }                                = useE("g_transactions",    ncClient.entities.Transaction);
+  const { data: addresses      = [] }                                = useE("g_addresses",       ncClient.entities.Address);
+  const { data: relationships  = [] }                                = useE("g_relationships",   ncClient.entities.Relationship);
+  const { data: territories    = [] }                                = useE("g_territories",     ncClient.entities.Territory);
+  const { data: insights       = [] }                                = useE("g_insights",        ncClient.entities.Insight);
+  const { data: risks          = [] }                                = useE("g_risks",           ncClient.entities.Risk);
+  const { data: opportunities  = [] }                                = useE("g_opportunities",   ncClient.entities.Opportunity);
+  const { data: recommendations = [] }                               = useE("g_recommendations", ncClient.entities.Recommendation);
 
   const isLoading = loadingEnterprises || loadingPeople;
 

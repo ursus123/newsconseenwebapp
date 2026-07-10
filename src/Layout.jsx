@@ -54,13 +54,14 @@ import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
 import UndoImportButton from "@/components/layout/UndoImportButton";
 import SmartImportButton from "@/components/layout/SmartImportButton";
 import EmptyDatamartButton from "@/components/layout/EmptyDatamartButton";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import TenantGuard from "@/components/shared/TenantGuard";
 import NetworkBanner from "@/components/shared/NetworkBanner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/lib/AuthContext";
 import CommandPalette from "@/components/layout/CommandPalette";
 import QuickAddButton from "@/components/layout/QuickAddButton";
+import IdjwiDockedPanel from "@/components/layout/IdjwiDockedPanel";
 
 // ─── Role-aware nav config ────────────────────────────────────────────────────
 // Sections: Home · Work · Views · Intelligence · Reports · Admin
@@ -71,9 +72,9 @@ const NAV_CONFIG = {
       section: null,
       items: [
         { name: "CompanyGraphHome",  label: "Company Graph",      icon: Network },
-        { name: "Dashboard",                                       icon: LayoutDashboard },
+        { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
         { name: "Tasks",             label: "My Tasks",           icon: CheckSquare },
-        { name: "alerts",            label: "Alerts",             icon: Bell, badge: "alerts" },
+        { name: "IngestionAgent",    label: "Add Data",           icon: Upload },
       ],
     },
     {
@@ -123,6 +124,7 @@ const NAV_CONFIG = {
     {
       section: "Reports",
       items: [
+        { name: "Dashboard",                                icon: LayoutDashboard },
         { name: "Reports",        icon: BarChart2 },
         { name: "QueryBuilder",   label: "Query Builder",   icon: Code2 },
         { name: "ObjectExplorer", label: "Object Explorer", icon: Search },
@@ -140,7 +142,6 @@ const NAV_CONFIG = {
         { name: "TaxonomyAdmin",  label: "Taxonomy Admin",  icon: Tags },
         { name: "Connectors",                               icon: Plug },
         { name: "Workflows",                                icon: Zap },
-        { name: "IngestionAgent", label: "Ingestion Agent", icon: Upload },
         { name: "Pipelines",                                icon: GitBranch },
         { name: "DataRepair",     label: "Data Repair",     icon: Wrench },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },
@@ -154,9 +155,9 @@ const NAV_CONFIG = {
       section: null,
       items: [
         { name: "CompanyGraphHome",  label: "Company Graph",      icon: Network },
-        { name: "Dashboard",                                       icon: LayoutDashboard },
+        { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
         { name: "Tasks",             label: "My Tasks",           icon: CheckSquare },
-        { name: "alerts",            label: "Alerts",             icon: Bell, badge: "alerts" },
+        { name: "IngestionAgent",    label: "Add Data",           icon: Upload },
       ],
     },
     {
@@ -205,6 +206,7 @@ const NAV_CONFIG = {
     {
       section: "Reports",
       items: [
+        { name: "Dashboard",                                icon: LayoutDashboard },
         { name: "Reports",        icon: BarChart2 },
         { name: "QueryBuilder",   label: "Query Builder",   icon: Code2 },
         { name: "ObjectExplorer", label: "Object Explorer", icon: Search },
@@ -220,7 +222,6 @@ const NAV_CONFIG = {
         { name: "TaxonomyAdmin",  label: "Taxonomy Admin",  icon: Tags },
         { name: "Connectors",                               icon: Plug },
         { name: "Workflows",                                icon: Zap },
-        { name: "IngestionAgent", label: "Ingestion Agent", icon: Upload },
         { name: "DataRepair",     label: "Data Repair",     icon: Wrench },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },
         { name: "Billing",                                  icon: CreditCard },
@@ -233,7 +234,7 @@ const NAV_CONFIG = {
       section: null,
       items: [
         { name: "CompanyGraphHome",  label: "Company Graph",      icon: Network },
-        { name: "Dashboard",                                       icon: LayoutDashboard },
+        { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
       ],
     },
     {
@@ -249,6 +250,7 @@ const NAV_CONFIG = {
     {
       section: "Reports",
       items: [
+        { name: "Dashboard",                            icon: LayoutDashboard },
         { name: "Reports",      icon: BarChart2 },
         { name: "QueryBuilder", label: "Query Builder", icon: Code2 },
         { name: "EntityGraph",  label: "Entity Graph",  icon: Network },
@@ -399,7 +401,7 @@ export default function Layout({ children, currentPageName }) {
   const { logout: authLogout } = useAuth();
 
   useEffect(() => {
-    base44.auth.me().then(u => {
+    ncClient.auth.me().then(u => {
       setCurrentUser(u);
       if (u && !u.setup_complete && (u.role === 'admin' || u.role === 'super_admin')) {
         setShowWizard(true);
@@ -427,10 +429,10 @@ export default function Layout({ children, currentPageName }) {
     if (currentUser.role === "super_admin") return;
     if (currentUser.company_id || currentUser.role !== "admin") return;
 
-    base44.entities.Enterprise.filter({ created_by: currentUser.email })
+    ncClient.entities.Enterprise.filter({ created_by: currentUser.email })
       .then(async (enterprises) => {
         if (enterprises.length > 0) {
-          await base44.auth.updateMe({ company_id: enterprises[0].id });
+          await ncClient.auth.updateMe({ company_id: enterprises[0].id });
           window.location.reload();
         }
       })
@@ -446,12 +448,12 @@ export default function Layout({ children, currentPageName }) {
     const fixKey = `fixed_${currentUser.company_id}`;
     if (localStorage.getItem(fixKey)) return;
 
-    base44.entities.Enterprise.filter({ created_by: currentUser.email })
+    ncClient.entities.Enterprise.filter({ created_by: currentUser.email })
       .then(async (enterprises) => {
         let fixed = 0;
         for (const e of enterprises) {
           if (!e.company_id) {
-            await base44.entities.Enterprise.update(e.id, { company_id: currentUser.company_id });
+            await ncClient.entities.Enterprise.update(e.id, { company_id: currentUser.company_id });
             fixed++;
             await new Promise(r => setTimeout(r, 300));
           }
@@ -527,6 +529,7 @@ export default function Layout({ children, currentPageName }) {
       {showWizard && <SetupWizard onComplete={handleWizardComplete} />}
       <CommandPalette currentUser={currentUser} />
       <QuickAddButton currentUser={currentUser} />
+      <IdjwiDockedPanel currentUser={currentUser} />
       <NetworkBanner />
       <TrialBannerWrapper currentUser={currentUser} />
       <div className="flex flex-1 overflow-hidden">

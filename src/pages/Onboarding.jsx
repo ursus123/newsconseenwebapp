@@ -2,8 +2,9 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import dataService from "@/services/dataService";
+import { createPageUrl } from "@/utils";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
@@ -40,7 +41,7 @@ async function provisionTenant(companyId, enterpriseType, enterpriseName, stepsM
     const taxonomy = data.taxonomy || [];
     for (let i = 0; i < taxonomy.length; i++) {
       const item = taxonomy[i];
-      await base44.entities.MasterDataOption.create({
+      await ncClient.entities.MasterDataOption.create({
         entity_type:       item.entity_type,
         field_name:        item.field_name,
         value:             item.value,
@@ -88,7 +89,7 @@ export default function Onboarding() {
   const [completing, setCompleting] = useState(false);
   const { data: currentUser = null, isLoading: userLoading } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -110,7 +111,7 @@ export default function Onboarding() {
   React.useEffect(() => {
     if (userLoading) return; // wait for query to resolve
     if (currentUser === null) {
-      base44.auth.redirectToLogin(window.location.origin + "/onboarding");
+      ncClient.auth.redirectToLogin(window.location.origin + "/onboarding");
     }
   }, [currentUser, userLoading]);
 
@@ -147,7 +148,7 @@ export default function Onboarding() {
       trialEnd.setDate(trialEnd.getDate() + 14);
       const trialEndsAt = trialEnd.toISOString().split("T")[0];
 
-      const enterprise = await base44.entities.Enterprise.create({
+      const enterprise = await ncClient.entities.Enterprise.create({
         enterprise_name: workspaceData.org_name,
         enterprise_type: selectedType,
         description: workspaceData.purpose || "",
@@ -160,8 +161,8 @@ export default function Onboarding() {
         trial_ends_at: trialEndsAt,
       });
 
-      await base44.entities.Enterprise.update(enterprise.id, { company_id: enterprise.id });
-      await base44.auth.updateMe({
+      await ncClient.entities.Enterprise.update(enterprise.id, { company_id: enterprise.id });
+      await ncClient.auth.updateMe({
         company_id: enterprise.id,
         full_name: workspaceData.full_name,
       });
@@ -278,8 +279,8 @@ export default function Onboarding() {
     setSaving(true);
     try {
       await Promise.all(invites.map(async (inv) => {
-        await base44.users.inviteUser(inv.email, inv.role);
-        await base44.integrations.Core.SendEmail({
+        await ncClient.users.inviteUser(inv.email, inv.role);
+        await ncClient.integrations.Core.SendEmail({
           to: inv.email,
           subject: `You've been invited to join ${createdEnterprise?.enterprise_name} on Newsconseen`,
           body: `${workspaceData.full_name} has invited you to join ${createdEnterprise?.enterprise_name} on Newsconseen.\n\nGet started by visiting the app and signing in with this email address.`,
@@ -313,18 +314,18 @@ export default function Onboarding() {
     setCompleting(true);
     try {
       // If user is already logged in, mark onboarding complete and go to dashboard
-      const me = await base44.auth.me().catch(() => null);
+      const me = await ncClient.auth.me().catch(() => null);
       if (me) {
-        await base44.auth.updateMe({ onboarding_complete: true });
+        await ncClient.auth.updateMe({ onboarding_complete: true });
         await refreshUser();
-        navigate("/Dashboard");
+        navigate(createPageUrl("CompanyGraphHome"));
       } else {
         // Not logged in — redirect to sign-up/login
-        base44.auth.redirectToLogin("/Dashboard");
+        ncClient.auth.redirectToLogin(createPageUrl("CompanyGraphHome"));
       }
     } catch (e) {
       console.error(e);
-      base44.auth.redirectToLogin("/Dashboard");
+      ncClient.auth.redirectToLogin(createPageUrl("CompanyGraphHome"));
     } finally {
       setCompleting(false);
     }
@@ -463,7 +464,7 @@ export default function Onboarding() {
 
       <p className="text-center text-xs text-slate-400 pb-6">
         Already have an account?{" "}
-        <button onClick={() => base44.auth.redirectToLogin(window.location.origin + "/onboarding")} className="text-emerald-600 hover:underline font-medium">Sign in</button>
+        <button onClick={() => ncClient.auth.redirectToLogin(window.location.origin + "/onboarding")} className="text-emerald-600 hover:underline font-medium">Sign in</button>
       </p>
     </div>
   );
