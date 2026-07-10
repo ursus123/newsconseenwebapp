@@ -13,7 +13,10 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # ----------------------------------------------------------
-    # Base44 entity URLs — all Optional, no longer used (migrated to Supabase)
+    # Base44 entity URLs — still live. Read by connectors/base.py (all
+    # connector writes), admin/routes.py (tenant provisioning), etl/base.py
+    # (analytics fallback), and autotask/engine.py. Migration to Supabase is
+    # in progress but NOT complete for these write paths — do not remove.
     # ----------------------------------------------------------
     base44_tasks_url:          Optional[str] = None
     base44_transactions_url:   Optional[str] = None

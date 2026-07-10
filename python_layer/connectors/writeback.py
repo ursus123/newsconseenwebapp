@@ -20,7 +20,7 @@ Conflict policy options:
   flag_review      — push AND flag the record in Newsconseen for review
 
 Called by:
-  action_executor.push_to_connected_systems() — after every Base44 mutation
+  action_executor.push_to_connected_systems() — after every entity mutation
   POST /connectors/writeback/test             — manual test push
 """
 

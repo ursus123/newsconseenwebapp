@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------------
 # Relationship type classification
-# Mirrors the relationship_type values defined in Base44
+# Mirrors the relationship_type values defined in Supabase
 # and the Relationships.jsx page TYPE_CONFIG.
 # ----------------------------------------------------------
 
@@ -99,9 +99,9 @@ def transform_relationships(df: pd.DataFrame) -> pd.DataFrame:
         - People Distribution Dashboard
 
     Produces one row per relationship with:
-        id                      — Base44 relationship ID (join key)
+        id                      — Supabase relationship ID (join key)
         company_id              — tenant identifier
-        relationship_type       — raw type from Base44
+        relationship_type       — raw type from Supabase
         relationship_category   — normalised: person_enterprise,
                                   item_enterprise, item_person,
                                   service, address, or other
@@ -111,7 +111,7 @@ def transform_relationships(df: pd.DataFrame) -> pd.DataFrame:
         service_name            — linked service (if any)
         address_label           — linked address label (if any)
         role                    — role within this relationship
-        status                  — raw status from Base44
+        status                  — raw status from Supabase
         is_active               — True if status is an active status
         is_ended                — True if status is an ended status
         start_date              — when the relationship began
@@ -220,9 +220,9 @@ def transform_relationships(df: pd.DataFrame) -> pd.DataFrame:
 
     # ----------------------------------------------------------
     # Normalise linked entity name fields
-    # Base44 may use different field names for the linked entities.
+    # Callers may use different field names for the linked entities.
     # We resolve aliases so the output is consistent regardless of
-    # how the Base44 schema is named.
+    # how the source schema is named.
     # ----------------------------------------------------------
     field_aliases = {
         "person_name":    ["person_name", "primary_person", "staff_name", "client_name"],
@@ -306,7 +306,7 @@ def transform_relationships(df: pd.DataFrame) -> pd.DataFrame:
         logger.warning(
             "transform_relationships: zero relationships found — "
             "cross-entity dashboards will have no data. "
-            "Confirm the Base44 Relationship entity is populated."
+            "Confirm the Supabase relationships table is populated."
         )
 
     return summary

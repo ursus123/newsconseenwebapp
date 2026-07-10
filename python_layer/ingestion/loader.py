@@ -360,9 +360,6 @@ def execute(
     engine=None,
     plan_id: str | None = None,
     duplicate_action: str = "skip",
-    # Legacy aliases kept for callers that haven't migrated yet
-    base44_api_url: str | None = None,
-    api_key: str | None = None,
 ) -> dict[str, Any]:
     """
     Execute an approved ingestion plan.

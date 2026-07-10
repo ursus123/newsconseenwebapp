@@ -3,7 +3,7 @@
 # ==============================================================
 # All tools available to agents. Wraps existing python_layer
 # capabilities: analytics queries, ML models, PostGIS, pgvector,
-# alerts, Base44 write-back, ETL triggers.
+# alerts, entity write-back, ETL triggers.
 #
 # Each tool:
 #   definition  — Anthropic tool schema (name, description, input_schema)
@@ -116,9 +116,9 @@ def _get_competitor_density(lat: float, lng: float,
 
 
 # ── Phase 13: Write-back tool executors ──────────────────────────────────────
-# These tools allow agents to propose Base44 mutations.
+# These tools allow agents to propose entity mutations.
 # They route through the approval gate (base_agent._execute_tools_parallel).
-# Actual Base44 writes happen only after approval via action_executor.
+# Actual writes happen only after approval via action_executor.
 
 def _create_task(company_id: str, title: str, task_type: str = "follow_up",
                  description: str = "", priority: str = "medium",
@@ -446,7 +446,7 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "company_id":  {"type": "string"},
                 "entity_type": {"type": "string", "description": "person | enterprise | product | task"},
-                "record_id":   {"type": "string", "description": "Base44 entity ID"},
+                "record_id":   {"type": "string", "description": "Entity record ID"},
                 "reason":      {"type": "string", "description": "Why this record is being flagged"},
             },
             "required": ["company_id", "entity_type", "record_id", "reason"],

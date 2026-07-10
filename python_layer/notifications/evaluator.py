@@ -10,7 +10,7 @@
 #   2. Load alert config (defaults + operator overrides)
 #   3. Evaluate all alert rules
 #   4. Route fired alerts to recipients via channels
-#   5. Log results to Base44 AlertLog entity
+#   5. Log results to AlertLog (currently dead — see notifications/router.py)
 # ==============================================================
 
 import logging

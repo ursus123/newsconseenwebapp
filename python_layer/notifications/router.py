@@ -159,7 +159,7 @@ class NotificationRouter:
                             "status":     "failed",
                         })
 
-                # Log to AlertLog entity in Base44
+                # Log to AlertLog (currently a no-op — see _log_alert, base44_alert_log_url is unset)
                 if sent_any and not dry_run:
                     self._log_alert(alert, channels, recipients)
 
@@ -235,9 +235,11 @@ class NotificationRouter:
 
     def _load_recent_alert_log(self) -> dict:
         """
-        Load AlertLog from Base44 to check frequency caps.
+        Load AlertLog to check frequency caps.
         Returns dict of {company:type:enterprise → hours_since_last_fire}.
-        Falls back to empty dict if entity not configured yet.
+        Currently always returns {} — base44_alert_log_url is not a configured
+        setting, so this is a dead read path (see _log_alert for the matching
+        dead write path). Frequency caps are effectively disabled today.
         """
         try:
             alert_log_url = getattr(settings, "base44_alert_log_url", None)
@@ -281,7 +283,9 @@ class NotificationRouter:
             return {}
 
     def _log_alert(self, alert: Alert, channels: list, recipients: list):
-        """Save fired alert to Base44 AlertLog entity."""
+        """Save fired alert to Base44 AlertLog entity. Currently a no-op —
+        base44_alert_log_url is not a configured setting, so this always
+        returns early. Needs a real Supabase-backed audit table."""
         try:
             alert_log_url = getattr(settings, "base44_alert_log_url", None)
             if not alert_log_url:
