@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useMutation } from "@tanstack/react-query";
 import { createRecord, updateRecord } from "@/services/dataService";
 import { format } from "date-fns";

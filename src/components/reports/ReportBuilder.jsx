@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -184,8 +184,8 @@ export default function ReportBuilder({ report, folders, charts, currentUser, on
 
   const saveMut = useMutation({
     mutationFn: (data) => report
-      ? base44.entities.Report.update(report.id, data)
-      : base44.entities.Report.create(data),
+      ? ncClient.entities.Report.update(report.id, data)
+      : ncClient.entities.Report.create(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["reports"] });
       onClose();

@@ -1,6 +1,6 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { TRANSACTION_SOURCES } from "@/utils/createTransaction";
 import { REVENUE_TYPES, EXPENSE_TYPES } from "@/config/transactionTypes";
 
@@ -27,7 +27,7 @@ export default function TransactionsSummary({
 }) {
   const { data: fetchedUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
     enabled: !currentUser,
@@ -40,7 +40,7 @@ export default function TransactionsSummary({
       const filter = { company_id: user.company_id };
       if (source)     filter.source     = source;
       if (enterprise) filter.enterprise = enterprise;
-      return base44.entities.Transaction.filter(filter, "-created_date", maxRows * 3);
+      return ncClient.entities.Transaction.filter(filter, "-created_date", maxRows * 3);
     },
     enabled: !!user?.company_id,
     staleTime: 0,

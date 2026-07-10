@@ -2,7 +2,7 @@ import { createContext, useState, useContext, useEffect } from 'react';
 import { appParams } from '@/lib/app-params';
 
 // Lazy getter — avoids pulling @base44/sdk into the React module init chain
-const getBase44 = () => import('@/api/base44Client').then(m => m.base44);
+const getNcClient = () => import('@/api/ncClient').then(m => m.ncClient);
 
 const DATA_LAYER = import.meta.env.VITE_DATA_LAYER || 'base44';
 
@@ -156,8 +156,8 @@ export const AuthProvider = ({ children }) => {
     try {
       // Now check if the user is authenticated
       setIsLoadingAuth(true);
-      const base44 = await getBase44();
-      const currentUser = await base44.auth.me();
+      const ncClient = await getNcClient();
+      const currentUser = await ncClient.auth.me();
       setUser(currentUser);
       setIsAuthenticated(true);
       setIsLoadingAuth(false);
@@ -179,24 +179,24 @@ export const AuthProvider = ({ children }) => {
   const logout = async (shouldRedirect = true) => {
     setUser(null);
     setIsAuthenticated(false);
-    const base44 = await getBase44();
+    const ncClient = await getNcClient();
     if (shouldRedirect) {
-      base44.auth.logout(window.location.href);
+      ncClient.auth.logout(window.location.href);
     } else {
-      base44.auth.logout();
+      ncClient.auth.logout();
     }
   };
 
   const navigateToLogin = async () => {
-    const base44 = await getBase44();
-    base44.auth.redirectToLogin(window.location.origin + "/Dashboard");
+    const ncClient = await getNcClient();
+    ncClient.auth.redirectToLogin(window.location.origin + "/Dashboard");
   };
 
   // Refresh user data (e.g. after onboarding_complete is set)
   const refreshUser = async () => {
     try {
-      const base44 = await getBase44();
-      const u = await base44.auth.me();
+      const ncClient = await getNcClient();
+      const u = await ncClient.auth.me();
       setUser(u);
     } catch (_) {}
   };

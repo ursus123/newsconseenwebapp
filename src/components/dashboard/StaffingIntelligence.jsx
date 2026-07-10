@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { TYPE_ALIASES } from "@/utils/typeAliases";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
@@ -88,7 +88,7 @@ function CertificationAlerts({ people, currentUser }) {
     .sort((a, b) => a.daysLeft - b.daysLeft);
 
   const createTaskMut = useMutation({
-    mutationFn: (person) => base44.entities.Task.create({
+    mutationFn: (person) => ncClient.entities.Task.create({
       task_type: "certification_renewal",
       title: `Renew certification: ${person.certification_name || "License"} — ${person.first_name} ${person.last_name}`,
       status: "open",

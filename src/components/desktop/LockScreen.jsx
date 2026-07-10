@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Lock, Eye, EyeOff, User } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery } from "@tanstack/react-query";
 
 // ── Clock for lock screen ──────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ function LockClock() {
 export default function LockScreen({ onUnlock, wallpaperValue, profileName }) {
   const { data: user = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -63,7 +63,7 @@ export default function LockScreen({ onUnlock, wallpaperValue, profileName }) {
     }
     setLoading(true);
     try {
-      await base44.auth.verifyPassword({ password: pin });
+      await ncClient.auth.verifyPassword({ password: pin });
       onUnlock();
     } catch {
       // verifyPassword not available on this platform — use a stored desktop PIN

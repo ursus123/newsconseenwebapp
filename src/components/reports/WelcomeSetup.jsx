@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { BarChart2, Loader2 } from "lucide-react";
@@ -104,7 +104,7 @@ export default function WelcomeSetup({ currentUser, onComplete }) {
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["setup_enterprises", currentUser?.company_id],
-    queryFn: () => base44.entities.Enterprise.filter({ company_id: currentUser.company_id }),
+    queryFn: () => ncClient.entities.Enterprise.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser?.company_id,
   });
 
@@ -121,14 +121,14 @@ export default function WelcomeSetup({ currentUser, onComplete }) {
       // Create folders
       const folderMap = {};
       for (const rootDef of HEALTHCARE_FOLDERS) {
-        const root = await base44.entities.ChartFolder.create({
+        const root = await ncClient.entities.ChartFolder.create({
           name: rootDef.name, icon: rootDef.icon,
           company_id: companyId, status: "active",
           shared_with_roles: ["admin", "executive"],
         });
         folderMap[rootDef.name] = root.id;
         for (const childDef of rootDef.children) {
-          const child = await base44.entities.ChartFolder.create({
+          const child = await ncClient.entities.ChartFolder.create({
             name: childDef.name, icon: childDef.icon,
             parent_folder_id: root.id,
             company_id: companyId, status: "active",
@@ -142,12 +142,12 @@ export default function WelcomeSetup({ currentUser, onComplete }) {
       const chartDefs = DEFAULT_CHARTS(folderMap, companyId);
       const createdCharts = [];
       for (const chartData of chartDefs) {
-        const c = await base44.entities.ReportChart.create(chartData);
+        const c = await ncClient.entities.ReportChart.create(chartData);
         createdCharts.push(c);
       }
 
       // Create default report
-      await base44.entities.Report.create({
+      await ncClient.entities.Report.create({
         title: `${orgName} — Operations Overview`,
         status: "published",
         folder_id: folderMap["Revenue"] || null,
@@ -179,7 +179,7 @@ export default function WelcomeSetup({ currentUser, onComplete }) {
       });
     } else {
       // For other templates just create a root folder
-      await base44.entities.ChartFolder.create({
+      await ncClient.entities.ChartFolder.create({
         name: TEMPLATES.find((t) => t.id === templateId)?.label || "My Workspace",
         icon: TEMPLATES.find((t) => t.id === templateId)?.icon || "📁",
         company_id: companyId, status: "active",
@@ -189,7 +189,7 @@ export default function WelcomeSetup({ currentUser, onComplete }) {
 
     // Archive any previously created fake/demo charts
     if (companyId) {
-      const existingCharts = await base44.entities.ReportChart.filter({ company_id: companyId });
+      const existingCharts = await ncClient.entities.ReportChart.filter({ company_id: companyId });
       for (const chart of existingCharts) {
         if (
           chart.title?.includes("Enterprise A") ||
@@ -198,7 +198,7 @@ export default function WelcomeSetup({ currentUser, onComplete }) {
           chart.title?.includes("Sample") ||
           chart.source === "welcome_setup_demo"
         ) {
-          await base44.entities.ReportChart.update(chart.id, { status: "archived" });
+          await ncClient.entities.ReportChart.update(chart.id, { status: "archived" });
         }
       }
     }

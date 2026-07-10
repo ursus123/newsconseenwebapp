@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   User, Lock, Building2, Shield, Palette, RefreshCw, Key, Info,
@@ -139,7 +139,7 @@ function ProfileSection({ user, onUpdate }) {
   const saveProfile = async () => {
     setSaving(true);
     try {
-      await base44.auth.updateMe({ full_name: name });
+      await ncClient.auth.updateMe({ full_name: name });
       onUpdate({ ...user, full_name: name });
       setToast({ type: "success", msg: "Profile updated." });
     } catch { setToast({ type: "error", msg: "Failed to update profile." }); }
@@ -151,8 +151,8 @@ function ProfileSection({ user, onUpdate }) {
     if (newPw !== confPw || newPw.length < 8) return;
     setPwSaving(true);
     try {
-      const me = await base44.auth.me();
-      await base44.auth.changePassword({ userId: me.id, currentPassword: curPw, newPassword: newPw });
+      const me = await ncClient.auth.me();
+      await ncClient.auth.changePassword({ userId: me.id, currentPassword: curPw, newPassword: newPw });
       setToast({ type: "success", msg: "Password changed." });
       setCurPw(""); setNewPw(""); setConfPw("");
     } catch { setToast({ type: "error", msg: "Incorrect current password." }); }
@@ -220,7 +220,7 @@ function ProfileSection({ user, onUpdate }) {
 function EnterpriseSection({ user }) {
   const { data: enterprises = [] } = useQuery({
     queryKey: ["ent-settings"],
-    queryFn: () => base44.entities.Enterprise.list(),
+    queryFn: () => ncClient.entities.Enterprise.list(),
     enabled: !!user,
   });
   const ent = enterprises.find(e => e.id === user?.company_id) || enterprises[0];
@@ -755,7 +755,7 @@ export default function DesktopSettings() {
   const [active, setActive] = useState("profile");
   const { data: user = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });

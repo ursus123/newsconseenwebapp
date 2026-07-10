@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { ArrowLeft, Plus, History, ClipboardList, BarChart2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CountSheet from "@/components/stockcounter/CountSheet";
@@ -28,7 +28,7 @@ export default function StockCounter() {
   const { toast } = useToast();
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -66,7 +66,7 @@ export default function StockCounter() {
 
   const { data: products = [] } = useQuery({
     queryKey: ["sc_products", currentUser?.company_id],
-    queryFn: () => base44.entities.Product.filter({ company_id: currentUser.company_id, status: "active" }),
+    queryFn: () => ncClient.entities.Product.filter({ company_id: currentUser.company_id, status: "active" }),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -74,7 +74,7 @@ export default function StockCounter() {
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["sc_enterprises", currentUser?.company_id],
-    queryFn: () => base44.entities.Enterprise.filter({ company_id: currentUser.company_id, status: "active" }),
+    queryFn: () => ncClient.entities.Enterprise.filter({ company_id: currentUser.company_id, status: "active" }),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -82,7 +82,7 @@ export default function StockCounter() {
 
   const { data: addresses = [] } = useQuery({
     queryKey: ["sc_addresses", currentUser?.company_id],
-    queryFn: () => base44.entities.Address.filter({ company_id: currentUser.company_id }),
+    queryFn: () => ncClient.entities.Address.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -90,7 +90,7 @@ export default function StockCounter() {
 
   const { data: relationships = [] } = useQuery({
     queryKey: ["sc_relationships", currentUser?.company_id],
-    queryFn: () => base44.entities.Relationship.filter({ company_id: currentUser.company_id, relationship_type: "item_enterprise" }),
+    queryFn: () => ncClient.entities.Relationship.filter({ company_id: currentUser.company_id, relationship_type: "item_enterprise" }),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -98,7 +98,7 @@ export default function StockCounter() {
 
   const { data: countHistory = [] } = useQuery({
     queryKey: ["sc_history", currentUser?.company_id],
-    queryFn: () => base44.entities.Task.filter({ company_id: currentUser.company_id, task_type: "stock_count", status: "completed" }),
+    queryFn: () => ncClient.entities.Task.filter({ company_id: currentUser.company_id, task_type: "stock_count", status: "completed" }),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
     refetchOnMount: "always",

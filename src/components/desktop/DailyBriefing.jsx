@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { RAILWAY_URL } from "@/config/api";
 
 const AUTO_REFRESH_MS = 90_000; // 90 seconds
@@ -65,11 +65,11 @@ async function fetchBriefingData(companyId) {
   // Fallback: Base44 live
   const today = new Date().toISOString().split("T")[0];
   const [tasks, people, enterprises, products, transactions] = await Promise.all([
-    base44.entities.Task.filter({ company_id: companyId }, "-created_date", 500),
-    base44.entities.Person.filter({ status: "active", company_id: companyId }),
-    base44.entities.Enterprise.filter({ status: "active", company_id: companyId }),
-    base44.entities.Product.filter({ status: "active", company_id: companyId }),
-    base44.entities.Transaction.filter({ company_id: companyId }, "-created_date", 500),
+    ncClient.entities.Task.filter({ company_id: companyId }, "-created_date", 500),
+    ncClient.entities.Person.filter({ status: "active", company_id: companyId }),
+    ncClient.entities.Enterprise.filter({ status: "active", company_id: companyId }),
+    ncClient.entities.Product.filter({ status: "active", company_id: companyId }),
+    ncClient.entities.Transaction.filter({ company_id: companyId }, "-created_date", 500),
   ]);
   const overdueTasks = tasks.filter(t =>
     t.due_date && t.due_date < today && t.status !== "completed" && t.status !== "cancelled"

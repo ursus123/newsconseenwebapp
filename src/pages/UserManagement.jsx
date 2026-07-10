@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import dataService from "@/services/dataService";
 import { Card } from "@/components/ui/card";
@@ -310,9 +310,9 @@ function InviteForm({ enterprises, isSuperAdmin, currentUser, onSuccess }) {
     setStatus("loading");
     setErrorMsg("");
     try {
-      await base44.users.inviteUser(form.email, form.role);
+      await ncClient.users.inviteUser(form.email, form.role);
       if (effectiveCompanyId) {
-        await base44.entities.PendingInvitation.create({
+        await ncClient.entities.PendingInvitation.create({
           email: form.email,
           company_id: effectiveCompanyId,
           role: form.role,
@@ -423,7 +423,7 @@ function InviteForm({ enterprises, isSuperAdmin, currentUser, onSuccess }) {
 export default function UserManagement() {
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -440,8 +440,8 @@ export default function UserManagement() {
   const { data: appUsers = [] } = useQuery({
     queryKey: ["appUsers", currentUser?.company_id],
     queryFn: () => isSuperAdmin
-      ? base44.entities.User.list()
-      : base44.entities.User.filter({ company_id: currentUser.company_id }),
+      ? ncClient.entities.User.list()
+      : ncClient.entities.User.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser && isAdmin,
     staleTime: 0,
     refetchOnMount: "always",
@@ -450,8 +450,8 @@ export default function UserManagement() {
   const { data: accessRecords = [] } = useQuery({
     queryKey: ["userAppAccess", currentUser?.company_id],
     queryFn: () => isSuperAdmin
-      ? base44.entities.UserAppAccess.list()
-      : base44.entities.UserAppAccess.filter({ company_id: currentUser.company_id }),
+      ? ncClient.entities.UserAppAccess.list()
+      : ncClient.entities.UserAppAccess.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser && isAdmin,
     staleTime: 0,
     refetchOnMount: "always",
@@ -460,8 +460,8 @@ export default function UserManagement() {
   const { data: allReports = [] } = useQuery({
     queryKey: ["reports_mgmt", currentUser?.company_id],
     queryFn: () => isSuperAdmin
-      ? base44.entities.Report.list("-created_date")
-      : base44.entities.Report.filter({ company_id: currentUser.company_id }),
+      ? ncClient.entities.Report.list("-created_date")
+      : ncClient.entities.Report.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser && isAdmin,
     staleTime: 0,
     refetchOnMount: "always",
@@ -470,8 +470,8 @@ export default function UserManagement() {
   const { data: enterprises = [] } = useQuery({
     queryKey: ["enterprises-usermgmt", currentUser?.company_id],
     queryFn: () => isSuperAdmin
-      ? base44.entities.Enterprise.list()
-      : base44.entities.Enterprise.filter({ company_id: currentUser.company_id }),
+      ? ncClient.entities.Enterprise.list()
+      : ncClient.entities.Enterprise.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser && isAdmin,
     staleTime: 0,
     refetchOnMount: "always",
@@ -486,8 +486,8 @@ export default function UserManagement() {
         allowed_reports: selectedReports,
         company_id: user.company_id || currentUser?.company_id,
       };
-      if (record) return base44.entities.UserAppAccess.update(record.id, payload);
-      return base44.entities.UserAppAccess.create(payload);
+      if (record) return ncClient.entities.UserAppAccess.update(record.id, payload);
+      return ncClient.entities.UserAppAccess.create(payload);
     },
     onSuccess: (_, { user }) => {
       qc.invalidateQueries({ queryKey: ["userAppAccess"] });
@@ -498,7 +498,7 @@ export default function UserManagement() {
   });
 
   const deactivateMut = useMutation({
-    mutationFn: ({ userId, status }) => base44.entities.User.update(userId, { status }),
+    mutationFn: ({ userId, status }) => ncClient.entities.User.update(userId, { status }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["appUsers"] }),
   });
 
@@ -509,7 +509,7 @@ export default function UserManagement() {
 
   const handleAssignCompany = async (user, companyId) => {
     const val = companyId === "none" ? null : companyId || null;
-    await base44.entities.User.update(user.id, { company_id: val });
+    await ncClient.entities.User.update(user.id, { company_id: val });
     qc.invalidateQueries({ queryKey: ["appUsers"] });
   };
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { CheckCircle2, Building2, Users, Target, ChevronRight, ChevronLeft } from "lucide-react";
@@ -38,7 +38,7 @@ export default function SetupWizard({ onComplete }) {
   const handleFinish = async () => {
     setSaving(true);
     try {
-      await base44.auth.updateMe({
+      await ncClient.auth.updateMe({
         setup_complete: true,
         industry_mode: industry,
         people_label: peopleLabel || "People",
@@ -147,7 +147,7 @@ export default function SetupWizard({ onComplete }) {
               <ChevronLeft className="w-4 h-4 mr-1" /> Back
             </Button>
           ) : (
-            <Button variant="ghost" onClick={() => { base44.auth.updateMe({ setup_complete: true }); onComplete({}); }} className="text-slate-400 text-xs">
+            <Button variant="ghost" onClick={() => { ncClient.auth.updateMe({ setup_complete: true }); onComplete({}); }} className="text-slate-400 text-xs">
               Skip setup
             </Button>
           )}

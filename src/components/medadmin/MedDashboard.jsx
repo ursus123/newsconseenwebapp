@@ -7,7 +7,7 @@ import AdministerModal from "./AdministerModal";
 import QuickStats from "./QuickStats";
 import FDARecallBanner from "./FDARecallBanner";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 const FILTERS = ["All", "Due", "Overdue", "PRN", "Administered", "Missed"];
 
@@ -47,7 +47,7 @@ export default function MedDashboard({ user, people, products = [], selectedClie
   const clientId = selectedClient?.id;
   const { data: medProfiles = [] } = useQuery({
     queryKey: ["med-profiles-dash", clientId],
-    queryFn: () => base44.entities.MedicationProfile.filter({ client_id: clientId }),
+    queryFn: () => ncClient.entities.MedicationProfile.filter({ client_id: clientId }),
     enabled: !!clientId,
   });
 

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,11 +103,11 @@ export default function FolderTree({
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
 
   const updateFolderMut = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.ChartFolder.update(id, data),
+    mutationFn: ({ id, data }) => ncClient.entities.ChartFolder.update(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["chartFolders"] }),
   });
   const deleteFolderMut = useMutation({
-    mutationFn: (id) => base44.entities.ChartFolder.delete(id),
+    mutationFn: (id) => ncClient.entities.ChartFolder.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["chartFolders"] }),
   });
 

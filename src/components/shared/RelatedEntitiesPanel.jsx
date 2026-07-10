@@ -1,6 +1,6 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { Badge } from "@/components/ui/badge";
 import { Users, Building2, Package, Link2, ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -71,7 +71,7 @@ function RelCard({ rel, entityType }) {
 export default function RelatedEntitiesPanel({ entityType, entityName }) {
   const { data: relationships = [], isLoading } = useQuery({
     queryKey: ["relationships"],
-    queryFn: () => base44.entities.Relationship.list(),
+    queryFn: () => ncClient.entities.Relationship.list(),
     enabled: !!entityName,
   });
 

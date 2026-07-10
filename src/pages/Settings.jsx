@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -572,7 +572,7 @@ export default function Settings() {
   const qc = useQueryClient();
   const { data: user = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -583,7 +583,7 @@ export default function Settings() {
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["enterprises-settings"],
-    queryFn: () => base44.entities.Enterprise.list(),
+    queryFn: () => ncClient.entities.Enterprise.list(),
     enabled: !!user,
     staleTime: 0,
     refetchOnMount: "always",
@@ -675,10 +675,10 @@ function ProfileSection({ user, myEnterprise, onUserUpdated }) {
     onUserUpdated({ ...user, full_name: name.trim() });
     // Also attempt server-side update (may or may not be supported by SDK)
     try {
-      if (typeof base44.auth.updateMe === "function") {
-        await base44.auth.updateMe({ full_name: name.trim() });
-      } else if (typeof base44.auth.updateProfile === "function") {
-        await base44.auth.updateProfile({ full_name: name.trim() });
+      if (typeof ncClient.auth.updateMe === "function") {
+        await ncClient.auth.updateMe({ full_name: name.trim() });
+      } else if (typeof ncClient.auth.updateProfile === "function") {
+        await ncClient.auth.updateProfile({ full_name: name.trim() });
       }
     } catch { /* ignore — local update already applied */ }
     setBanner({ type: "success", msg: "Profile updated successfully." });
@@ -765,14 +765,14 @@ function PasswordSection() {
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      const me = await base44.auth.me();
+      const me = await ncClient.auth.me();
       // Try the most common SDK method names for password change
-      if (typeof base44.auth.changePassword === "function") {
-        await base44.auth.changePassword({ userId: me.id, currentPassword: current, newPassword: next });
-      } else if (typeof base44.auth.updatePassword === "function") {
-        await base44.auth.updatePassword({ currentPassword: current, newPassword: next });
-      } else if (typeof base44.auth.updateMe === "function") {
-        await base44.auth.updateMe({ password: next, currentPassword: current });
+      if (typeof ncClient.auth.changePassword === "function") {
+        await ncClient.auth.changePassword({ userId: me.id, currentPassword: current, newPassword: next });
+      } else if (typeof ncClient.auth.updatePassword === "function") {
+        await ncClient.auth.updatePassword({ currentPassword: current, newPassword: next });
+      } else if (typeof ncClient.auth.updateMe === "function") {
+        await ncClient.auth.updateMe({ password: next, currentPassword: current });
       } else {
         // SDK doesn't expose password change — guide user
         throw new Error("password_change_unsupported");
@@ -1725,7 +1725,7 @@ function DangerSection({ user }) {
     if (confirmText !== "DELETE") return;
     setSubmitting(true);
     try {
-      await base44.entities.Task.create({
+      await ncClient.entities.Task.create({
         title: `Account deletion request: ${user.email}`,
         task_type: "other",
         priority: "high",

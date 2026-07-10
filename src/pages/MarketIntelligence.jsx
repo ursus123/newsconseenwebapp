@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import IntelligenceHub from "@/components/marketintelligence/IntelligenceHub";
 
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery } from "@tanstack/react-query";
 import ResearchInputBar from "@/components/marketintelligence/ResearchInputBar";
 import ResearchHistory from "@/components/marketintelligence/ResearchHistory";
@@ -585,7 +585,7 @@ function AnalysisProgressBar({ sections, results }) {
 export default function MarketIntelligence() {
   const { data: currentUser = null }           = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -615,7 +615,7 @@ export default function MarketIntelligence() {
 
   const { data: myEnterprises = [] } = useQuery({
     queryKey: ["mi_enterprises", currentUser?.company_id],
-    queryFn: () => listFn(base44.entities.Enterprise),
+    queryFn: () => listFn(ncClient.entities.Enterprise),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -623,7 +623,7 @@ export default function MarketIntelligence() {
 
   const { data: allRelationships = [] } = useQuery({
     queryKey: ["mi_relationships", currentUser?.company_id],
-    queryFn: () => listFn(base44.entities.Relationship),
+    queryFn: () => listFn(ncClient.entities.Relationship),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -631,7 +631,7 @@ export default function MarketIntelligence() {
 
   const { data: allAddresses = [] } = useQuery({
     queryKey: ["mi_addresses", currentUser?.company_id],
-    queryFn: () => listFn(base44.entities.Address),
+    queryFn: () => listFn(ncClient.entities.Address),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -887,10 +887,10 @@ export default function MarketIntelligence() {
     if (!results || !currentUser) return;
     setSaving(true);
     try {
-      let folders = await base44.entities.ChartFolder.filter({ name: "Market Research", company_id: currentUser.company_id });
+      let folders = await ncClient.entities.ChartFolder.filter({ name: "Market Research", company_id: currentUser.company_id });
       let folderId;
       if (folders.length === 0) {
-        const f = await base44.entities.ChartFolder.create({ name: "Market Research", icon: "🌍", color: "#10b981", company_id: currentUser.company_id });
+        const f = await ncClient.entities.ChartFolder.create({ name: "Market Research", icon: "🌍", color: "#10b981", company_id: currentUser.company_id });
         folderId = f.id;
       } else {
         folderId = folders[0].id;
@@ -899,7 +899,7 @@ export default function MarketIntelligence() {
       const resultsWithRadar = forecastBlock
         ? { ...results, _forecastRadar: forecastBlock.radarData }
         : results;
-      await base44.entities.Report.create({
+      await ncClient.entities.Report.create({
         title: `Market Analysis: ${results.businessType?.replace(/_/g, " ")} in ${results.location}`,
         description: `Market intelligence report. Opportunity score: ${results.market?.[0]?.opportunity_score ?? "N/A"}/100`,
         status: "published", folder_id: folderId, company_id: currentUser.company_id,
@@ -1003,9 +1003,9 @@ export default function MarketIntelligence() {
     (async () => {
       try {
         const [peopleResult, taskResult, txnResult] = await Promise.all([
-          fetchPeopleFallback(cid, () => base44.entities.Person.filter({ company_id: cid })),
-          fetchTasksFallback(cid, () => base44.entities.Task.filter({ company_id: cid })),
-          fetchTransactionsFallback(cid, () => base44.entities.Transaction.filter({ company_id: cid })),
+          fetchPeopleFallback(cid, () => ncClient.entities.Person.filter({ company_id: cid })),
+          fetchTasksFallback(cid, () => ncClient.entities.Task.filter({ company_id: cid })),
+          fetchTransactionsFallback(cid, () => ncClient.entities.Transaction.filter({ company_id: cid })),
         ]);
 
         // Tier-aware aggregation

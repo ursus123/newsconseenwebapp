@@ -4,7 +4,7 @@
  * this creates the appropriate Transaction record automatically.
  */
 
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { createTransaction } from "@/utils/createTransaction";
 
 function todayStr() {
@@ -86,7 +86,7 @@ export async function triggerTaskTransaction(task, performingUser) {
 
   // Route through the master engine
   if (!performingUser?.company_id) {
-    return base44.entities.Transaction.create({ ...payload, company_id: payload.company_id || null });
+    return ncClient.entities.Transaction.create({ ...payload, company_id: payload.company_id || null });
   }
   return createTransaction(
     { ...payload, source: "task_complete", amount: payload.amount || 0 },

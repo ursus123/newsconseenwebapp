@@ -7,7 +7,7 @@
 
 import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import AgentDashboard from "@/components/agents/AgentDashboard";
 import ApprovalGate   from "@/components/agents/ApprovalGate";
 import {
@@ -197,7 +197,7 @@ const TABS = [
 export default function Agents() {
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });

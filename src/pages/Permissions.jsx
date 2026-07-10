@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -255,7 +255,7 @@ function PermissionCard({ title, subtitle, icon: Icon, roleKey, perm, onSave, av
 export default function Permissions() {
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -269,8 +269,8 @@ export default function Permissions() {
   const { data: perms = [] } = useQuery({
     queryKey: ["permissions", companyId],
     queryFn: () => isSuperAdmin
-      ? base44.entities.RolePermissions.list()
-      : base44.entities.RolePermissions.filter({ company_id: companyId }),
+      ? ncClient.entities.RolePermissions.list()
+      : ncClient.entities.RolePermissions.filter({ company_id: companyId }),
     enabled: !!currentUser && isAdmin,
     staleTime: 0,
     refetchOnMount: "always",
@@ -291,8 +291,8 @@ export default function Permissions() {
         set_by: currentUser.email,
         company_id: isSuperAdmin ? null : companyId,
       };
-      if (existing) return base44.entities.RolePermissions.update(existing.id, payload);
-      return base44.entities.RolePermissions.create(payload);
+      if (existing) return ncClient.entities.RolePermissions.update(existing.id, payload);
+      return ncClient.entities.RolePermissions.create(payload);
     },
     onSuccess: (_, { target_role }) => {
       qc.invalidateQueries({ queryKey: ["permissions"] });
@@ -405,14 +405,14 @@ export default function Permissions() {
 }
 
 const REPAIRABLE_ENTITIES = [
-  { key: "Enterprise", entity: () => base44.entities.Enterprise },
-  { key: "Person",     entity: () => base44.entities.Person },
-  { key: "Product",    entity: () => base44.entities.Product },
-  { key: "Service",    entity: () => base44.entities.Service },
-  { key: "Address",    entity: () => base44.entities.Address },
-  { key: "Relationship", entity: () => base44.entities.Relationship },
-  { key: "Task",       entity: () => base44.entities.Task },
-  { key: "Transaction", entity: () => base44.entities.Transaction },
+  { key: "Enterprise", entity: () => ncClient.entities.Enterprise },
+  { key: "Person",     entity: () => ncClient.entities.Person },
+  { key: "Product",    entity: () => ncClient.entities.Product },
+  { key: "Service",    entity: () => ncClient.entities.Service },
+  { key: "Address",    entity: () => ncClient.entities.Address },
+  { key: "Relationship", entity: () => ncClient.entities.Relationship },
+  { key: "Task",       entity: () => ncClient.entities.Task },
+  { key: "Transaction", entity: () => ncClient.entities.Transaction },
 ];
 
 function RepairTool({ currentUser }) {

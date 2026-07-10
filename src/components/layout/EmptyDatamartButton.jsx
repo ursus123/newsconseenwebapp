@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Trash2, Loader2, Undo2, RotateCcw, X, AlertTriangle } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 // ── Entity order ───────────────────────────────────────────────────────────
 const DELETE_ORDER  = ["Relationship", "Transaction", "Task", "Address", "Service", "Product", "Person", "Enterprise"];
@@ -121,7 +121,7 @@ export default function EmptyDatamartButton({ currentUser }) {
     const records    = {};
     for (const entity of DELETE_ORDER) {
       try {
-        const ent = base44.entities[entity];
+        const ent = ncClient.entities[entity];
         if (!ent) { records[entity] = []; continue; }
         let rows;
         if (superAdmin) {
@@ -154,7 +154,7 @@ export default function EmptyDatamartButton({ currentUser }) {
       let done = 0;
 
       for (const entity of DELETE_ORDER) {
-        const ent  = base44.entities[entity];
+        const ent  = ncClient.entities[entity];
         if (!ent) continue;
         const rows = records[entity] || [];
         for (const row of rows) {
@@ -182,7 +182,7 @@ export default function EmptyDatamartButton({ currentUser }) {
       let done = 0;
 
       for (const entity of RESTORE_ORDER) {
-        const ent  = base44.entities[entity];
+        const ent  = ncClient.entities[entity];
         if (!ent) continue;
         const rows = b.records[entity] || [];
         for (const row of rows) {

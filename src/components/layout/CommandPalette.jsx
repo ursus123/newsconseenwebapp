@@ -15,7 +15,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import {
   Search, X, LayoutDashboard, Users, Building2, Package, Wrench,
   CheckSquare, Receipt, BarChart2, Sparkles, Bell, Plug, Brain,
@@ -152,10 +152,10 @@ export default function CommandPalette({ currentUser }) {
       setLoading(true);
       const scope = currentUser.company_id ? { company_id: currentUser.company_id } : {};
       Promise.all([
-        base44.entities.Person.filter(scope, undefined, 30).catch(() => []),
-        base44.entities.Enterprise.filter(scope, undefined, 30).catch(() => []),
-        base44.entities.Task.filter(scope, undefined, 30).catch(() => []),
-        base44.entities.Product.filter(scope, undefined, 30).catch(() => []),
+        ncClient.entities.Person.filter(scope, undefined, 30).catch(() => []),
+        ncClient.entities.Enterprise.filter(scope, undefined, 30).catch(() => []),
+        ncClient.entities.Task.filter(scope, undefined, 30).catch(() => []),
+        ncClient.entities.Product.filter(scope, undefined, 30).catch(() => []),
       ]).then(([people, enterprises, tasks, products]) => {
         const records = [
           ...people

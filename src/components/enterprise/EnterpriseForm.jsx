@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Save, X, Plus, Trash2, Upload, Building2, Tag, MapPin, Users, Activity, Shield, FileText, Link2, Loader2, Search, UserPlus, Landmark } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
 import OrgManagementTab from "@/components/enterprise/OrgManagementTab";
 import { useQuery } from "@tanstack/react-query";
@@ -71,7 +71,7 @@ function PersonPicker({ onSelect, excludeNames = [], companyId = null }) {
 
   const { data: people = [] } = useQuery({
     queryKey: ["people-picker", companyId],
-    queryFn: () => base44.entities.Person.filter(companyId ? { company_id: companyId } : {}),
+    queryFn: () => ncClient.entities.Person.filter(companyId ? { company_id: companyId } : {}),
   });
 
   const filtered = people.filter((p) => {
@@ -157,7 +157,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
     const file = e.target.files[0];
     if (!file) return;
     setUploading(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    const { file_url } = await ncClient.integrations.Core.UploadFile({ file });
     set("attachment_urls", [...(form.attachment_urls || []), file_url]);
     setUploading(false);
   };
@@ -192,7 +192,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
     if (selection.isNew && selection.name) {
       // Create a new Person record with type staff, role owner
       const nameParts = selection.name.trim().split(" ");
-      const newPerson = await createWithScope(base44.entities.Person, {
+      const newPerson = await createWithScope(ncClient.entities.Person, {
         first_name: nameParts[0] || selection.name,
         last_name: nameParts.slice(1).join(" ") || "",
         person_type: "staff",
@@ -207,7 +207,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
 
     // Create Relationship
     if (form.enterprise_name) {
-      await createWithScope(base44.entities.Relationship, {
+      await createWithScope(ncClient.entities.Relationship, {
         relationship_type: "person_enterprise",
         person_name: personName,
         enterprise_name: form.enterprise_name,
@@ -226,7 +226,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
 
     if (selection.isNew && selection.name) {
       const nameParts = selection.name.trim().split(" ");
-      const newPerson = await createWithScope(base44.entities.Person, {
+      const newPerson = await createWithScope(ncClient.entities.Person, {
         first_name: nameParts[0] || selection.name,
         last_name: nameParts.slice(1).join(" ") || "",
         person_type: "staff",
@@ -239,7 +239,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
     addItem("management_roles", { role: roleTitle || "", assigned_person: personName });
 
     if (form.enterprise_name) {
-      await createWithScope(base44.entities.Relationship, {
+      await createWithScope(ncClient.entities.Relationship, {
         relationship_type: "person_enterprise",
         person_name: personName,
         enterprise_name: form.enterprise_name,
@@ -266,7 +266,7 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
     // Create Address record if address data was entered
     if (form.primary_address || form.city || form.country) {
       try {
-        await createWithScope(base44.entities.Address, {
+        await createWithScope(ncClient.entities.Address, {
           label: `${form.enterprise_name} – Primary`,
           status: "active",
           address_line1: form.primary_address || "",

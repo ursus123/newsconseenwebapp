@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "@/components/shared/PageHeader";
 import DataTable from "@/components/shared/DataTable";
@@ -137,7 +137,7 @@ export default function Channels() {
   const { toast } = useToast();
   const { syncState, notifyTaxonomyChange } = useTaxonomySync();
 
-  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 0 });
+  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(), staleTime: 0 });
   const companyId  = currentUser?.company_id;
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
@@ -150,7 +150,7 @@ export default function Channels() {
 
   const { data: channels = [], isLoading } = useQuery({
     queryKey: ["channels", companyId],
-    queryFn:  () => listFn(base44.entities.Channel),
+    queryFn:  () => listFn(ncClient.entities.Channel),
     enabled:  currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -272,7 +272,7 @@ export default function Channels() {
         onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["channels"] }); qc.refetchQueries({ queryKey: ["channels"] }); }}
         entityName="Channels" fields={CHANNEL_FIELDS} mappingRules={CHANNEL_MAPPING_RULES}
         templateExample={CHANNEL_TEMPLATE_EXAMPLE} templateInstructions={CHANNEL_TEMPLATE_INSTRUCTIONS}
-        entityFetchFn={() => listFn(base44.entities.Channel)}
+        entityFetchFn={() => listFn(ncClient.entities.Channel)}
         validateRow={validateChannel} transformRow={transformChannel}
         onImport={(row) => dataService.createRecord("channel", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} requiredField="name" />

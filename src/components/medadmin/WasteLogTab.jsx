@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createRecord, updateRecord } from "@/services/dataService";
 import { format } from "date-fns";
@@ -60,7 +60,7 @@ function WasteForm({ products, user, selectedClient, onSuccess, onClose, darkMod
       }, user);
 
       // Decrement stock
-      const prods = await base44.entities.Product.filter({ name: medName });
+      const prods = await ncClient.entities.Product.filter({ name: medName });
       if (prods.length > 0) {
         const p = prods[0];
         await updateRecord("product", p.id, { stock_quantity: Math.max(0, (p.stock_quantity || 0) - qty) }, user);
@@ -168,7 +168,7 @@ export default function WasteLogTab({ products, user, selectedClient, enterprise
 
   const { data: wasteTasks = [] } = useQuery({
     queryKey: ["waste-tasks"],
-    queryFn: () => base44.entities.Task.filter({ internal_notes: "WASTE_LOG" }, "-scheduled_date", 100),
+    queryFn: () => ncClient.entities.Task.filter({ internal_notes: "WASTE_LOG" }, "-scheduled_date", 100),
     enabled: !!user,
   });
 

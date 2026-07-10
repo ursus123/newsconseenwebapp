@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { triggerAttendanceTransaction } from "@/components/shared/triggerTaskTransaction";
 import { queryEnterprises } from "@/components/shared/masterDataQuery";
@@ -160,7 +160,7 @@ function TransferModal({ enterprises, onConfirm, onClose }) {
 export default function ClockInOut() {
   const { data: user = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -210,7 +210,7 @@ export default function ClockInOut() {
 
   const { data: todayTasks = [], isLoading } = useQuery({
     queryKey: ["clock-tasks", user?.email, todayStr()],
-    queryFn: () => base44.entities.Task.filter({ assigned_to_email: user.email, scheduled_date: todayStr() }, "-created_date"),
+    queryFn: () => ncClient.entities.Task.filter({ assigned_to_email: user.email, scheduled_date: todayStr() }, "-created_date"),
     enabled: !!user?.email,
     staleTime: 0,
     refetchOnMount: "always",
@@ -219,7 +219,7 @@ export default function ClockInOut() {
   // All tasks for history/week tabs
   const { data: allTasks = [] } = useQuery({
     queryKey: ["clock-tasks-all", user?.email],
-    queryFn: () => base44.entities.Task.filter({ assigned_to_email: user.email }, "-scheduled_date", 200),
+    queryFn: () => ncClient.entities.Task.filter({ assigned_to_email: user.email }, "-scheduled_date", 200),
     enabled: !!user?.email && (activeTab === "week" || activeTab === "history"),
     staleTime: 0,
     refetchOnMount: "always",

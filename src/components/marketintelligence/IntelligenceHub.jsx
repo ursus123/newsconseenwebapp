@@ -19,7 +19,7 @@
  *   Address      → geocoding, service gap detection
  */
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { MapContainer, TileLayer, Marker, Popup, Circle } from "react-leaflet";
 import L from "leaflet";
 import {
@@ -150,7 +150,7 @@ function MLPanel({ title, description, endpoint, body, onResult, resultRenderer,
     if (!companyId) return;
     setActing(true);
     try {
-      await base44.entities.Task.create({
+      await ncClient.entities.Task.create({
         title:       `Action: ${title}`,
         description: prompt,
         task_type:   "strategic_review",
@@ -320,7 +320,7 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
           // so merge with Base44 to catch the ones it dropped
           let all = [...ents];
           try {
-            const b44 = await listFn(base44.entities.Enterprise);
+            const b44 = await listFn(ncClient.entities.Enterprise);
             b44.forEach(e => {
               if (!all.find(a => a.id === e.id)) all.push(normalizeEnterprise(e));
             });
@@ -331,7 +331,7 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
       } catch (_) {}
       // Full Base44 fallback
       try {
-        const b44 = await listFn(base44.entities.Enterprise);
+        const b44 = await listFn(ncClient.entities.Enterprise);
         setMyEnterprises(b44.map(normalizeEnterprise));
       } catch (_) {}
     })();
@@ -346,8 +346,8 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
       try {
         // Fetch enterprise_address relationships + addresses in parallel
         const [rels, addrs] = await Promise.all([
-          listFn(base44.entities.Relationship),
-          listFn(base44.entities.Address),
+          listFn(ncClient.entities.Relationship),
+          listFn(ncClient.entities.Address),
         ]);
 
         // Build address lookup by label AND address_line1 (Relationships store location as text, not ID)
@@ -501,8 +501,8 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
     (async () => {
       try {
         const [peopleResult, entResult] = await Promise.all([
-          fetchPeopleFallback(companyId, () => base44.entities.Person.filter({ company_id: companyId })),
-          fetchEnterprisesFallback(companyId, () => base44.entities.Enterprise.filter({ company_id: companyId })),
+          fetchPeopleFallback(companyId, () => ncClient.entities.Person.filter({ company_id: companyId })),
+          fetchEnterprisesFallback(companyId, () => ncClient.entities.Enterprise.filter({ company_id: companyId })),
         ]);
 
         const people = peopleResult.data;

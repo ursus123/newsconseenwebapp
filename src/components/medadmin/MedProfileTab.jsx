@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -171,12 +171,12 @@ export default function MedProfileTab({ selectedClient, isAdmin }) {
 
   const { data: profiles = [], isLoading } = useQuery({
     queryKey: ["med-profiles", clientId],
-    queryFn: () => base44.entities.MedicationProfile.filter({ client_id: clientId }),
+    queryFn: () => ncClient.entities.MedicationProfile.filter({ client_id: clientId }),
     enabled: !!clientId,
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.MedicationProfile.update(id, data),
+    mutationFn: ({ id, data }) => ncClient.entities.MedicationProfile.update(id, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["med-profiles", clientId] }),
   });
 

@@ -7,7 +7,7 @@ import {
   Clock, Activity, Building2, Users, Package, Wrench,
   CheckSquare, Receipt, MapPin, Loader2, Info, Link2, Globe,
 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import PipelineBuilder from "@/components/pipelines/PipelineBuilder";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
@@ -32,7 +32,7 @@ export default function Pipelines() {
   const [lastTriggered, setLastTriggered] = useState(null);
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });

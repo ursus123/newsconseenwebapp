@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Users, MousePointerClick, Eye, Clock, Settings } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -31,7 +31,7 @@ export default function AnalyticsEngagement() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["ga-engagement", propertyId],
-    queryFn: () => base44.functions.invoke("getAnalyticsEngagement", { propertyId }).then((r) => r.data),
+    queryFn: () => ncClient.functions.invoke("getAnalyticsEngagement", { propertyId }).then((r) => r.data),
     enabled: !!propertyId,
     staleTime: 1000 * 60 * 15, // 15 min cache
   });

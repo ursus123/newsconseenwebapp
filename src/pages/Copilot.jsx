@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sparkles, AlertTriangle, CheckCircle2 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useLocation } from "react-router-dom";
 import CopilotChat from "@/components/copilot/copilotchat";
 
@@ -15,7 +15,7 @@ export default function Copilot() {
   const prefillMessage = location.state?.prefillMessage || "";
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });

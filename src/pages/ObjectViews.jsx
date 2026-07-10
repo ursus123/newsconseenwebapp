@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import {
   Layers, Plus, Trash2, Eye, Save, Users, Building2, Package,
   CheckSquare, Receipt, Link2, MapPin, Search, X, Play,
@@ -385,7 +385,7 @@ function ViewEditor({ view, onSave, onClose, currentUser }) {
         if (draft.filterField && draft.filterValue) {
           filter[draft.filterField] = draft.filterValue;
         }
-        rows = await base44.entities[typeDef.entity].filter(filter);
+        rows = await ncClient.entities[typeDef.entity].filter(filter);
       }
 
       let sorted = rows;
@@ -781,7 +781,7 @@ function ViewCard({ view, onEdit, onDelete, onRun }) {
 export default function ObjectViews() {
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });

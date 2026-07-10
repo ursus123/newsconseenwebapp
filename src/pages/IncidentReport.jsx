@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -40,13 +40,13 @@ const EMPTY = {
 export default function IncidentReport() {
   const qc = useQueryClient();
   const { data: currentUser = null } = useQuery({
-    queryKey: ["currentUser"], queryFn: () => base44.auth.me(),
+    queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(),
     staleTime: 0, refetchOnMount: "always",
   });
 
   const { data: reports = [], isLoading } = useQuery({
     queryKey: ["incident-reports", currentUser?.company_id],
-    queryFn: () => base44.entities.Task.filter(
+    queryFn: () => ncClient.entities.Task.filter(
       { company_id: currentUser.company_id, task_type: "incident_report" }, "-created_date", 100,
     ),
     enabled: !!currentUser?.company_id,

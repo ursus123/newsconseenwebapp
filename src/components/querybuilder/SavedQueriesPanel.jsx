@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { FolderOpen, Folder, Search, Play, Trash2, ChevronDown, ChevronRight, Clock } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 function timeAgo(ts) {
   if (!ts) return "";
@@ -67,11 +67,11 @@ export default function SavedQueriesPanel({ onLoadQuery }) {
 
   const { data: queries = [], isLoading } = useQuery({
     queryKey: ["savedQueries"],
-    queryFn: () => base44.entities.QueryDefinition.list("-updated_date", 200),
+    queryFn: () => ncClient.entities.QueryDefinition.list("-updated_date", 200),
   });
 
   const handleDelete = async (id) => {
-    await base44.entities.QueryDefinition.delete(id);
+    await ncClient.entities.QueryDefinition.delete(id);
     qc.invalidateQueries({ queryKey: ["savedQueries"] });
   };
 

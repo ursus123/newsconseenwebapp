@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { TYPE_ALIASES } from "@/utils/typeAliases";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
@@ -200,7 +200,7 @@ export default function People() {
   const [activeTypeTab, setActiveTypeTab] = useState("all");
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -225,7 +225,7 @@ export default function People() {
 
   const { data: people = [], isLoading } = useQuery({
     queryKey: ["people", companyId, currentUser?.email],
-    queryFn: () => listFn(base44.entities.Person),
+    queryFn: () => listFn(ncClient.entities.Person),
     enabled: currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -490,7 +490,7 @@ export default function People() {
         templateFileName="newsconseen_people_import_template.xlsx"
         templateExample={PEOPLE_TEMPLATE_EXAMPLE}
         templateInstructions={PEOPLE_TEMPLATE_INSTRUCTIONS}
-        entityFetchFn={() => listFn(base44.entities.Person)}
+        entityFetchFn={() => listFn(ncClient.entities.Person)}
         validateRow={validatePerson}
         transformRow={transformPerson}
         onImport={(row) => dataService.createRecord("person", row, currentUser, { queryClient: qc })}

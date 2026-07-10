@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import SmartImportButton from "@/components/shared/SmartImportButton";
 import {
@@ -2523,7 +2523,7 @@ function WritebackSection({ currentUser }) {
 export default function Connectors() {
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -2602,7 +2602,7 @@ export default function Connectors() {
       } catch {}
       // Fallback: Base44 ConnectorRun entity
       try {
-        return await base44.entities.ConnectorRun.filter({ company_id: currentUser.company_id });
+        return await ncClient.entities.ConnectorRun.filter({ company_id: currentUser.company_id });
       } catch {
         return [];
       }
@@ -2649,23 +2649,23 @@ export default function Connectors() {
 
   const { data: masterData = [] } = useQuery({
     queryKey: ["master-data-options"],
-    queryFn: () => base44.entities.MasterDataOption.list(),
+    queryFn: () => ncClient.entities.MasterDataOption.list(),
     staleTime: 0,
     refetchOnMount: "always",
   });
 
   const saveMappingMutation = useMutation({
     mutationFn: async ({ companyId, connectorId, fieldName, sourceValue, taxonomyValue, parentValue }) => {
-      const existing = await base44.entities.ConnectorMapping.filter({
+      const existing = await ncClient.entities.ConnectorMapping.filter({
         company_id: companyId, connector_id: connectorId,
         field_name: fieldName, source_value: sourceValue,
       });
       if (existing.length > 0) {
-        return base44.entities.ConnectorMapping.update(existing[0].id, {
+        return ncClient.entities.ConnectorMapping.update(existing[0].id, {
           taxonomy_value: taxonomyValue, is_confirmed: true, confirmed_by: currentUser.email,
         });
       }
-      return base44.entities.ConnectorMapping.create({
+      return ncClient.entities.ConnectorMapping.create({
         company_id: companyId, connector_id: connectorId, field_name: fieldName,
         source_value: sourceValue, taxonomy_value: taxonomyValue,
         parent_value: parentValue, is_confirmed: true, confirmed_by: currentUser.email,

@@ -10,7 +10,7 @@
  *   Action Definition (this page) → Execution (Base44 SDK write-back) → Audit Log (python_layer)
  */
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,7 +72,7 @@ const SYSTEM_ACTIONS = [
       { key: "enterprise_name", label: "Enroll into Enterprise",  type: "text",   required: false },
     ],
     execute: async (params, currentUser, listFn, withScope) => {
-      const person = await base44.entities.Person.create(withScope({
+      const person = await ncClient.entities.Person.create(withScope({
         full_name: params.full_name,
         email: params.email || undefined,
         phone: params.phone || undefined,
@@ -80,10 +80,10 @@ const SYSTEM_ACTIONS = [
         status: "active",
       }));
       if (params.enterprise_name) {
-        const enterprises = await listFn(base44.entities.Enterprise);
+        const enterprises = await listFn(ncClient.entities.Enterprise);
         const ent = enterprises.find(e => e.enterprise_name?.toLowerCase() === params.enterprise_name.toLowerCase());
         if (ent) {
-          await base44.entities.Relationship.create(withScope({
+          await ncClient.entities.Relationship.create(withScope({
             relationship_type: "person_enterprise",
             person_name: person.full_name,
             enterprise_name: ent.enterprise_name,
@@ -115,7 +115,7 @@ const SYSTEM_ACTIONS = [
       { key: "priority",         label: "Priority",    type: "select", options: ["low","medium","high","critical"], required: false },
     ],
     execute: async (params, currentUser, listFn, withScope) => {
-      const task = await base44.entities.Task.create(withScope({
+      const task = await ncClient.entities.Task.create(withScope({
         title: params.title,
         assigned_to_name: params.assigned_to_name || undefined,
         due_date: params.due_date || undefined,
@@ -147,7 +147,7 @@ const SYSTEM_ACTIONS = [
       { key: "due_date",    label: "Due Date",            type: "date",   required: false },
     ],
     execute: async (params, currentUser, listFn, withScope) => {
-      const tx = await base44.entities.Transaction.create(withScope({
+      const tx = await ncClient.entities.Transaction.create(withScope({
         enterprise: params.enterprise,
         description: params.description,
         amount: parseFloat(params.amount),
@@ -181,7 +181,7 @@ const SYSTEM_ACTIONS = [
       { key: "enterprise_name",  label: "Enterprise",       type: "text",   required: false },
     ],
     execute: async (params, currentUser, listFn, withScope) => {
-      const person = await base44.entities.Person.create(withScope({
+      const person = await ncClient.entities.Person.create(withScope({
         full_name: params.full_name,
         email: params.email || undefined,
         phone: params.phone || undefined,
@@ -191,10 +191,10 @@ const SYSTEM_ACTIONS = [
         status: "active",
       }));
       if (params.enterprise_name) {
-        const enterprises = await listFn(base44.entities.Enterprise);
+        const enterprises = await listFn(ncClient.entities.Enterprise);
         const ent = enterprises.find(e => e.enterprise_name?.toLowerCase() === params.enterprise_name.toLowerCase());
         if (ent) {
-          await base44.entities.Relationship.create(withScope({
+          await ncClient.entities.Relationship.create(withScope({
             relationship_type: "person_enterprise",
             person_name: person.full_name,
             enterprise_name: ent.enterprise_name,
@@ -228,7 +228,7 @@ const SYSTEM_ACTIONS = [
       { key: "parent_enterprise", label: "Parent Enterprise", type: "text",   required: false },
     ],
     execute: async (params, currentUser, listFn, withScope) => {
-      const ent = await base44.entities.Enterprise.create(withScope({
+      const ent = await ncClient.entities.Enterprise.create(withScope({
         enterprise_name: params.enterprise_name,
         enterprise_type: params.enterprise_type || "commercial",
         enterprise_tier: params.enterprise_tier || "branch",
@@ -238,10 +238,10 @@ const SYSTEM_ACTIONS = [
         operating_status: "open",
       }));
       if (params.parent_enterprise) {
-        const enterprises = await listFn(base44.entities.Enterprise);
+        const enterprises = await listFn(ncClient.entities.Enterprise);
         const parent = enterprises.find(e => e.enterprise_name?.toLowerCase() === params.parent_enterprise.toLowerCase());
         if (parent) {
-          await base44.entities.Relationship.create(withScope({
+          await ncClient.entities.Relationship.create(withScope({
             relationship_type: "enterprise_enterprise",
             enterprise_name: parent.enterprise_name,
             secondary_enterprise: ent.enterprise_name,
@@ -559,7 +559,7 @@ export default function KineticLayer() {
   // currentUser via React Query — staleTime:0 + refetchOnMount ensures fresh data on tab switch
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import {
   Search, X, Users, Building2, ClipboardList, ArrowLeftRight,
   FileText, Calendar, Activity, MessageSquare, Map, Package,
@@ -18,7 +18,7 @@ const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 const ENTITY_CONFIG = [
   {
     key: "person", entity: "Person", page: "People", icon: Users, color: "text-violet-500",
-    fetch: (s) => base44.entities.Person.filter(s, undefined, 100),
+    fetch: (s) => ncClient.entities.Person.filter(s, undefined, 100),
     match: (r, q) => [r.first_name, r.last_name, r.email].some(v => v?.toLowerCase().includes(q)),
     title: (r) => `${r.first_name || ""} ${r.last_name || ""}`.trim() || r.email,
     subtitle: (r) => r.email || r.person_type || "Person",
@@ -26,7 +26,7 @@ const ENTITY_CONFIG = [
   },
   {
     key: "enterprise", entity: "Enterprise", page: "Enterprises", icon: Building2, color: "text-blue-500",
-    fetch: (s) => base44.entities.Enterprise.filter(s, undefined, 100),
+    fetch: (s) => ncClient.entities.Enterprise.filter(s, undefined, 100),
     match: (r, q) => [r.enterprise_name, r.short_name, r.city].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.enterprise_name,
     subtitle: (r) => r.short_name || r.city || "Enterprise",
@@ -34,7 +34,7 @@ const ENTITY_CONFIG = [
   },
   {
     key: "product", entity: "Product", page: "Products", icon: Package, color: "text-orange-500",
-    fetch: (s) => base44.entities.Product.filter(s, undefined, 100),
+    fetch: (s) => ncClient.entities.Product.filter(s, undefined, 100),
     match: (r, q) => [r.name, r.sku, r.brand].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.name,
     subtitle: (r) => r.sku ? `SKU: ${r.sku}` : r.item_type || "Product",
@@ -42,7 +42,7 @@ const ENTITY_CONFIG = [
   },
   {
     key: "service", entity: "Service", page: "Services", icon: Wrench, color: "text-teal-500",
-    fetch: (s) => base44.entities.Service.filter(s, undefined, 100),
+    fetch: (s) => ncClient.entities.Service.filter(s, undefined, 100),
     match: (r, q) => [r.name, r.description].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.name,
     subtitle: (r) => r.service_type || "Service",
@@ -50,7 +50,7 @@ const ENTITY_CONFIG = [
   },
   {
     key: "address", entity: "Address", page: "Addresses", icon: MapPin, color: "text-rose-500",
-    fetch: (s) => base44.entities.Address.filter(s, undefined, 100),
+    fetch: (s) => ncClient.entities.Address.filter(s, undefined, 100),
     match: (r, q) => [r.label, r.street, r.city].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.label || r.street || "Address",
     subtitle: (r) => [r.city, r.region, r.country].filter(Boolean).join(", ") || "Address",
@@ -58,7 +58,7 @@ const ENTITY_CONFIG = [
   },
   {
     key: "task", entity: "Task", page: "Tasks", icon: ClipboardList, color: "text-amber-500",
-    fetch: (s) => base44.entities.Task.filter(s, undefined, 100),
+    fetch: (s) => ncClient.entities.Task.filter(s, undefined, 100),
     match: (r, q) => [r.title, r.task_type].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.title,
     subtitle: (r) => `${r.task_type?.replace(/_/g, " ") || "Task"} • ${r.status || ""}`,
@@ -66,7 +66,7 @@ const ENTITY_CONFIG = [
   },
   {
     key: "transaction", entity: "Transaction", page: "Transactions", icon: ArrowLeftRight, color: "text-green-500",
-    fetch: (s) => base44.entities.Transaction.filter(s, undefined, 100),
+    fetch: (s) => ncClient.entities.Transaction.filter(s, undefined, 100),
     match: (r, q) => [r.description, r.invoice_number].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.description || r.invoice_number || "Transaction",
     subtitle: (r) => `${r.transaction_type?.replace(/_/g, " ") || ""} • ${r.currency || ""}`.trim().replace(/^•|•$/, "").trim(),
@@ -74,7 +74,7 @@ const ENTITY_CONFIG = [
   },
   {
     key: "document", entity: "Document", page: "Documents", icon: FileText, color: "text-indigo-500",
-    fetch: (s) => base44.entities.Document.filter(s, undefined, 100),
+    fetch: (s) => ncClient.entities.Document.filter(s, undefined, 100),
     match: (r, q) => [r.title, r.document_type].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.title,
     subtitle: (r) => r.document_type || "Document",
@@ -82,7 +82,7 @@ const ENTITY_CONFIG = [
   },
   {
     key: "schedule", entity: "Schedule", page: "Schedules", icon: Calendar, color: "text-cyan-500",
-    fetch: (s) => base44.entities.Schedule.filter(s, undefined, 100),
+    fetch: (s) => ncClient.entities.Schedule.filter(s, undefined, 100),
     match: (r, q) => [r.title, r.schedule_type].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.title,
     subtitle: (r) => `${r.schedule_type || "Schedule"} • ${r.frequency || ""}`.trim().replace(/•\s*$/, "").trim(),
@@ -90,7 +90,7 @@ const ENTITY_CONFIG = [
   },
   {
     key: "signal", entity: "Signal", page: "Signals", icon: Activity, color: "text-red-500",
-    fetch: (s) => base44.entities.Signal.filter(s, undefined, 100),
+    fetch: (s) => ncClient.entities.Signal.filter(s, undefined, 100),
     match: (r, q) => [r.name, r.signal_type, r.source].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.name,
     subtitle: (r) => r.signal_type || "Signal",
@@ -98,7 +98,7 @@ const ENTITY_CONFIG = [
   },
   {
     key: "channel", entity: "Channel", page: "Channels", icon: MessageSquare, color: "text-pink-500",
-    fetch: (s) => base44.entities.Channel.filter(s, undefined, 100),
+    fetch: (s) => ncClient.entities.Channel.filter(s, undefined, 100),
     match: (r, q) => [r.name, r.channel_type].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.name,
     subtitle: (r) => r.channel_type || "Channel",
@@ -106,7 +106,7 @@ const ENTITY_CONFIG = [
   },
   {
     key: "territory", entity: "Territory", page: "Territories", icon: Map, color: "text-lime-600",
-    fetch: (s) => base44.entities.Territory.filter(s, undefined, 100),
+    fetch: (s) => ncClient.entities.Territory.filter(s, undefined, 100),
     match: (r, q) => [r.name, r.territory_type, r.region].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.name,
     subtitle: (r) => [r.territory_type, r.region, r.country].filter(Boolean).join(" • ") || "Territory",
@@ -114,7 +114,7 @@ const ENTITY_CONFIG = [
   },
   {
     key: "relationship", entity: "Relationship", page: "Relationships", icon: Link2, color: "text-slate-500",
-    fetch: (s) => base44.entities.Relationship.filter(s, undefined, 100),
+    fetch: (s) => ncClient.entities.Relationship.filter(s, undefined, 100),
     match: (r, q) => [r.from_name, r.to_name, r.relationship_type].some(v => v?.toLowerCase().includes(q)),
     title: (r) => r.from_name && r.to_name ? `${r.from_name} → ${r.to_name}` : r.relationship_type || "Relationship",
     subtitle: (r) => r.relationship_type?.replace(/_/g, " ") || "Relationship",

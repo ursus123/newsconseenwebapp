@@ -27,7 +27,7 @@
  *   const result = await fetchWithFallback({
  *     analyticsEndpoint: "/people-summary",
  *     rawEntity:         "people",
- *     base44Fn:          () => base44.entities.Person.filter({ company_id }),
+ *     base44Fn:          () => ncClient.entities.Person.filter({ company_id }),
  *     companyId,
  *   });
  *   // result.source === "analytics" → use pre-aggregated summary fields

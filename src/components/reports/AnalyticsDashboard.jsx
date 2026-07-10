@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Building2, Users, ClipboardList, ArrowLeftRight, ExternalLink, RefreshCw, Zap, Database, Server } from "lucide-react";
 import { fetchWithFallback } from "@/utils/fetchWithFallback";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 const SUPERSET_URL = "http://localhost:8089";
 
@@ -51,7 +51,7 @@ function KpiCard({ icon: Icon, label, value, loading, color, tier }) {
   );
 }
 
-// ── Aggregation helpers (analytics → raw/base44 field-name differences) ───────
+// ── Aggregation helpers (analytics → raw/ncClient field-name differences) ───────
 const sumF = (arr, field) => (arr || []).reduce((acc, r) => acc + (Number(r[field]) || 0), 0);
 
 function aggregateEnterprise(result) {
@@ -89,25 +89,25 @@ export default function AnalyticsDashboard({ companyId }) {
         fetchWithFallback({
           analyticsEndpoint: "/enterprise-summary",
           rawEntity:         "enterprises",
-          base44Fn:          () => base44.entities.Enterprise.filter(companyId ? { company_id: companyId } : {}),
+          base44Fn:          () => ncClient.entities.Enterprise.filter(companyId ? { company_id: companyId } : {}),
           companyId,
         }),
         fetchWithFallback({
           analyticsEndpoint: "/people-summary",
           rawEntity:         "people",
-          base44Fn:          () => base44.entities.Person.filter(companyId ? { company_id: companyId } : {}),
+          base44Fn:          () => ncClient.entities.Person.filter(companyId ? { company_id: companyId } : {}),
           companyId,
         }),
         fetchWithFallback({
           analyticsEndpoint: "/task-summary",
           rawEntity:         "tasks",
-          base44Fn:          () => base44.entities.Task.filter(companyId ? { company_id: companyId } : {}),
+          base44Fn:          () => ncClient.entities.Task.filter(companyId ? { company_id: companyId } : {}),
           companyId,
         }),
         fetchWithFallback({
           analyticsEndpoint: "/transaction-summary",
           rawEntity:         "transactions",
-          base44Fn:          () => base44.entities.Transaction.filter(companyId ? { company_id: companyId } : {}),
+          base44Fn:          () => ncClient.entities.Transaction.filter(companyId ? { company_id: companyId } : {}),
           companyId,
         }),
       ]);

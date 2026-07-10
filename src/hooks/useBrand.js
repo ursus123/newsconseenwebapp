@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 const DEFAULTS = {
   brand_name:             "Newsconseen",
@@ -21,7 +21,7 @@ export function useBrand(currentUser) {
   useEffect(() => {
     if (!currentUser?.company_id) { setLoading(false); return; }
 
-    base44.entities.Enterprise.get(currentUser.company_id)
+    ncClient.entities.Enterprise.get(currentUser.company_id)
       .then(enterprise => {
         const merged = { ...DEFAULTS };
         Object.keys(DEFAULTS).forEach(key => {

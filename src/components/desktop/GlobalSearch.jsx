@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Search, X, Users, Building2, CheckSquare, Receipt, Loader2 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { DESKTOP_APPS, getAppSearchText } from "@/desktop/desktopApps";
 
 const ENTITY_CONFIG = [
@@ -65,7 +65,7 @@ export default function GlobalSearch({ onOpenApp, isLight, companyId, apps = DES
         .map(app => ({ id: `app-${app.id}`, _entity: "App", _app: app }));
       const searches = ENTITY_CONFIG.map(async (cfg) => {
         const filter = companyId ? { company_id: companyId } : {};
-        const items = await base44.entities[cfg.key].filter(filter, "-created_date", 100);
+        const items = await ncClient.entities[cfg.key].filter(filter, "-created_date", 100);
         const filtered = items.filter(item => {
           const title = getTitle(cfg, item) || "";
           return title.toLowerCase().includes(ql) ||

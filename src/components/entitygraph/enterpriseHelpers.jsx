@@ -21,7 +21,7 @@ export function isAgricultural(enterprise) {
 }
 
 // Legacy: reads livestock from Products (item_type = 'living').
-// Phase 10+: individual animal records live in base44.entities.Animal.
+// Phase 10+: individual animal records live in ncClient.entities.Animal.
 // This helper is retained for any pre-Phase-10 data still in Products.
 export function getLivestock(products, entName) {
   return products.filter(p =>

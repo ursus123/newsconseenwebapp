@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
@@ -79,7 +79,7 @@ export default function ClientRetentionRisk({ people, tasks, currentUser }) {
     .slice(0, 5);
 
   const createTaskMut = useMutation({
-    mutationFn: (client) => base44.entities.Task.create({
+    mutationFn: (client) => ncClient.entities.Task.create({
       task_type: "service_visit",
       title: `Check-in with ${client.first_name} ${client.last_name}`,
       status: "open",

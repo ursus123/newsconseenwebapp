@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { BarChart2, FileText, LayoutGrid, List, Clock, Trash2, Edit2, Eye, Pin, ArrowUpRight } from "lucide-react";
@@ -239,12 +239,12 @@ export default function FolderContents({
                   widget={widget}
                   isAdmin={isAdmin}
                   onDelete={async () => {
-                    await base44.entities.SavedDashboardWidget.delete(widget.id);
+                    await ncClient.entities.SavedDashboardWidget.delete(widget.id);
                     qc.invalidateQueries({ queryKey: ["pinnedWidgets"] });
                     if (onPinnedWidgetsChange) onPinnedWidgetsChange();
                   }}
                   onPromote={async () => {
-                    await base44.entities.ReportChart.create({
+                    await ncClient.entities.ReportChart.create({
                       title: widget.title,
                       sql_query: widget.sql,
                       chart_type: widget.chart_type || "bar",
@@ -253,7 +253,7 @@ export default function FolderContents({
                       is_public: false,
                       shared_with_roles: ["admin"],
                     });
-                    await base44.entities.SavedDashboardWidget.delete(widget.id);
+                    await ncClient.entities.SavedDashboardWidget.delete(widget.id);
                     qc.invalidateQueries({ queryKey: ["pinnedWidgets"] });
                     qc.invalidateQueries({ queryKey: ["reportCharts"] });
                     if (onPinnedWidgetsChange) onPinnedWidgetsChange();

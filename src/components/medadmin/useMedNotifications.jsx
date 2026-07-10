@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { format, differenceInMinutes } from "date-fns";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { createRecord } from "@/services/dataService";
 
 /**
@@ -26,7 +26,7 @@ export function useMedNotifications(user, enabled = true) {
     const today = format(new Date(), "yyyy-MM-dd");
     const now = new Date();
 
-    const tasks = await base44.entities.Task.filter({
+    const tasks = await ncClient.entities.Task.filter({
       task_type: "medication_admin",
       status: "open",
       scheduled_date: today,

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dataService from "@/services/dataService";
 import { Link } from "react-router-dom";
@@ -52,13 +52,13 @@ const EMPTY = { doc_name: "", doc_type: "License", entity: "", expiry_date: "", 
 export default function DocumentExpiry() {
   const qc = useQueryClient();
   const { data: currentUser = null } = useQuery({
-    queryKey: ["currentUser"], queryFn: () => base44.auth.me(),
+    queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(),
     staleTime: 0, refetchOnMount: "always",
   });
 
   const { data: docs = [], isLoading } = useQuery({
     queryKey: ["document-expiry", currentUser?.company_id],
-    queryFn: () => base44.entities.Task.filter(
+    queryFn: () => ncClient.entities.Task.filter(
       { company_id: currentUser.company_id, task_type: "document_expiry" }, "due_date", 200,
     ),
     enabled: !!currentUser?.company_id,

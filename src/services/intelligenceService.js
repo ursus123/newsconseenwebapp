@@ -11,7 +11,7 @@
  *  - All writes stamp company_id + created_by
  */
 
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import dataService from "@/services/dataService";
 import { RAILWAY_API_KEY, RAILWAY_URL } from "@/config/api";
 
@@ -72,13 +72,13 @@ export async function createInsight(data, currentUser) {
     },
     currentUser,
   );
-  const created = await base44.entities.Insight.create(payload);
+  const created = await ncClient.entities.Insight.create(payload);
   _ffETL("insight");
   return created;
 }
 
 export async function acknowledgeInsight(id, currentUser) {
-  const updated = await base44.entities.Insight.update(id, {
+  const updated = await ncClient.entities.Insight.update(id, {
     status: "acknowledged",
     acknowledged_by: currentUser?.email,
     acknowledged_at: _now(),
@@ -88,7 +88,7 @@ export async function acknowledgeInsight(id, currentUser) {
 }
 
 export async function dismissInsight(id, currentUser) {
-  const updated = await base44.entities.Insight.update(id, {
+  const updated = await ncClient.entities.Insight.update(id, {
     status: "dismissed",
     dismissed_by:  currentUser?.email,
     dismissed_at:  _now(),
@@ -100,13 +100,13 @@ export async function dismissInsight(id, currentUser) {
 export async function resolveInsight(id, currentUser, notes) {
   const payload = { status: "resolved", resolved_by: currentUser?.email, resolved_at: _now() };
   if (notes) payload.resolution_notes = notes;
-  const updated = await base44.entities.Insight.update(id, payload);
+  const updated = await ncClient.entities.Insight.update(id, payload);
   _ffETL("insight");
   return updated;
 }
 
 export async function markInsightActioned(id, currentUser) {
-  const updated = await base44.entities.Insight.update(id, {
+  const updated = await ncClient.entities.Insight.update(id, {
     status: "actioned",
     actioned_by: currentUser?.email,
     actioned_at: _now(),
@@ -135,8 +135,8 @@ export async function listInsights(currentUser, filters = {}) {
 
   // Fallback to Base44 live
   try {
-    if (isSuperAdmin) return base44.entities.Insight.list("-detected_at");
-    return base44.entities.Insight.filter(
+    if (isSuperAdmin) return ncClient.entities.Insight.list("-detected_at");
+    return ncClient.entities.Insight.filter(
       { company_id: currentUser.company_id, ...filters },
       "-detected_at",
     );
@@ -183,7 +183,7 @@ export async function createRecommendation(data, currentUser) {
     },
     currentUser,
   );
-  const created = await base44.entities.Recommendation.create(payload);
+  const created = await ncClient.entities.Recommendation.create(payload);
   _ffETL("recommendation");
   return created;
 }
@@ -191,7 +191,7 @@ export async function createRecommendation(data, currentUser) {
 export async function approveRecommendation(id, recommendation, currentUser, opts = {}) {
   const { notes, createTask } = opts;
 
-  await base44.entities.Recommendation.update(id, {
+  await ncClient.entities.Recommendation.update(id, {
     status:       "approved",
     approved_by:  currentUser?.email,
     approved_at:  _now(),
@@ -229,7 +229,7 @@ export async function approveRecommendation(id, recommendation, currentUser, opt
     }, currentUser, {});
 
     if (createdTask?.id) {
-      await base44.entities.Recommendation.update(id, { created_task_id: createdTask.id }).catch(() => {});
+      await ncClient.entities.Recommendation.update(id, { created_task_id: createdTask.id }).catch(() => {});
     }
   }
 
@@ -237,7 +237,7 @@ export async function approveRecommendation(id, recommendation, currentUser, opt
 }
 
 export async function rejectRecommendation(id, recommendation, currentUser, reason) {
-  await base44.entities.Recommendation.update(id, {
+  await ncClient.entities.Recommendation.update(id, {
     status:           "rejected",
     rejected_by:      currentUser?.email,
     rejected_at:      _now(),
@@ -272,8 +272,8 @@ export async function listRecommendations(currentUser, filters = {}) {
     }
   } catch (_) {}
   try {
-    if (currentUser.role === "super_admin") return base44.entities.Recommendation.list("-created_date");
-    return base44.entities.Recommendation.filter(
+    if (currentUser.role === "super_admin") return ncClient.entities.Recommendation.list("-created_date");
+    return ncClient.entities.Recommendation.filter(
       { company_id: currentUser.company_id, ...filters },
       "-created_date",
     );
@@ -295,7 +295,7 @@ export async function createDecision(data, currentUser) {
     },
     currentUser,
   );
-  const created = await base44.entities.Decision.create(payload);
+  const created = await ncClient.entities.Decision.create(payload);
   _ffETL("decision");
   return created;
 }
@@ -311,7 +311,7 @@ export async function createRisk(data, currentUser) {
     },
     currentUser,
   );
-  const created = await base44.entities.Risk.create(payload);
+  const created = await ncClient.entities.Risk.create(payload);
   _ffETL("risk");
   return created;
 }
@@ -320,7 +320,7 @@ export async function updateRiskStatus(id, status, currentUser, notes) {
   const payload = { status };
   if (notes) payload.mitigation = notes;
   if (status === "resolved" || status === "closed") payload.resolved_at = _now();
-  const updated = await base44.entities.Risk.update(id, payload);
+  const updated = await ncClient.entities.Risk.update(id, payload);
   _ffETL("risk");
   return updated;
 }
@@ -338,8 +338,8 @@ export async function listRisks(currentUser, filters = {}) {
     }
   } catch (_) {}
   try {
-    if (currentUser.role === "super_admin") return base44.entities.Risk.list("-opened_at");
-    return base44.entities.Risk.filter(
+    if (currentUser.role === "super_admin") return ncClient.entities.Risk.list("-opened_at");
+    return ncClient.entities.Risk.filter(
       { company_id: currentUser.company_id, ...filters }, "-opened_at",
     );
   } catch (_) { return []; }
@@ -358,7 +358,7 @@ export async function createOpportunity(data, currentUser) {
     },
     currentUser,
   );
-  const created = await base44.entities.Opportunity.create(payload);
+  const created = await ncClient.entities.Opportunity.create(payload);
   _ffETL("opportunity");
   return created;
 }
@@ -366,7 +366,7 @@ export async function createOpportunity(data, currentUser) {
 export async function updateOpportunityStatus(id, status, currentUser, opts = {}) {
   const payload = { status, ...opts };
   if (status === "won" || status === "lost") payload.closed_at = _now();
-  const updated = await base44.entities.Opportunity.update(id, payload);
+  const updated = await ncClient.entities.Opportunity.update(id, payload);
   _ffETL("opportunity");
   return updated;
 }
@@ -385,8 +385,8 @@ export async function listOpportunities(currentUser, filters = {}) {
     }
   } catch (_) {}
   try {
-    if (currentUser.role === "super_admin") return base44.entities.Opportunity.list("-created_date");
-    return base44.entities.Opportunity.filter(
+    if (currentUser.role === "super_admin") return ncClient.entities.Opportunity.list("-created_date");
+    return ncClient.entities.Opportunity.filter(
       { company_id: currentUser.company_id, ...filters }, "-created_date",
     );
   } catch (_) { return []; }

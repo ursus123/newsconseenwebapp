@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import PageHeader from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -180,7 +180,7 @@ export default function IngestionAgent() {
 
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
   });
 

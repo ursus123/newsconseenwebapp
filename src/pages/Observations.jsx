@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "@/components/shared/PageHeader";
 import DataTable from "@/components/shared/DataTable";
@@ -149,7 +149,7 @@ export default function Observations() {
   const { toast } = useToast();
   const { syncState, notifyTaxonomyChange } = useTaxonomySync();
 
-  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 0 });
+  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(), staleTime: 0 });
   const companyId = currentUser?.company_id;
   const perms     = usePermissions(currentUser);
   const listFn    = useEntityListFn(currentUser);
@@ -162,7 +162,7 @@ export default function Observations() {
 
   const { data: observations = [], isLoading } = useQuery({
     queryKey: ["observations", companyId],
-    queryFn:  () => listFn(base44.entities.Observation),
+    queryFn:  () => listFn(ncClient.entities.Observation),
     enabled:  currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -292,7 +292,7 @@ export default function Observations() {
         onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["observations"] }); qc.refetchQueries({ queryKey: ["observations"] }); }}
         entityName="Observations" fields={OBSERVATION_FIELDS} mappingRules={OBSERVATION_MAPPING_RULES}
         templateExample={OBSERVATION_TEMPLATE_EXAMPLE}
-        entityFetchFn={() => listFn(base44.entities.Observation)}
+        entityFetchFn={() => listFn(ncClient.entities.Observation)}
         validateRow={validateObservation} transformRow={transformObservation}
         onImport={(row) => dataService.createRecord("observation", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} requiredField="observation_type" />

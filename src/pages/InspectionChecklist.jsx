@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -42,13 +42,13 @@ const today = () => new Date().toISOString().slice(0, 10);
 export default function InspectionChecklist() {
   const qc = useQueryClient();
   const { data: currentUser = null } = useQuery({
-    queryKey: ["currentUser"], queryFn: () => base44.auth.me(),
+    queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(),
     staleTime: 0, refetchOnMount: "always",
   });
 
   const { data: inspections = [], isLoading } = useQuery({
     queryKey: ["inspections", currentUser?.company_id],
-    queryFn: () => base44.entities.Task.filter(
+    queryFn: () => ncClient.entities.Task.filter(
       { company_id: currentUser.company_id, task_type: "inspection" }, "-created_date", 100,
     ),
     enabled: !!currentUser?.company_id,
@@ -57,7 +57,7 @@ export default function InspectionChecklist() {
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["enterprises-app", currentUser?.company_id],
-    queryFn:  () => base44.entities.Enterprise.filter({ company_id: currentUser.company_id }, "enterprise_name", 200),
+    queryFn:  () => ncClient.entities.Enterprise.filter({ company_id: currentUser.company_id }, "enterprise_name", 200),
     enabled:  !!currentUser?.company_id,
     staleTime: 60_000,
   });

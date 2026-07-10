@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { Plus, X, Check } from "lucide-react";
 
 export default function ProfileSwitcher({
@@ -18,7 +18,7 @@ export default function ProfileSwitcher({
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["enterprises_for_profile"],
-    queryFn: () => base44.entities.Enterprise.list(undefined, 100).catch(() => []),
+    queryFn: () => ncClient.entities.Enterprise.list(undefined, 100).catch(() => []),
   });
 
   const handleAdd = () => {

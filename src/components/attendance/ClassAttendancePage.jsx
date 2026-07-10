@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { ArrowLeft, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -53,7 +53,7 @@ export default function ClassAttendancePage({ classObj, currentUser, onBack, onO
 
   const { data: relationships = [] } = useQuery({
     queryKey: ["class_relationships", classObj?.id],
-    queryFn: () => base44.entities.Relationship.filter({ 
+    queryFn: () => ncClient.entities.Relationship.filter({ 
       company_id: currentUser?.company_id,
       enterprise_id: classObj.id,
       relationship_type: "person_enterprise",
@@ -63,7 +63,7 @@ export default function ClassAttendancePage({ classObj, currentUser, onBack, onO
 
   const { data: people = [] } = useQuery({
     queryKey: ["class_people", currentUser?.company_id],
-    queryFn: () => base44.entities.Person.filter({ company_id: currentUser?.company_id }),
+    queryFn: () => ncClient.entities.Person.filter({ company_id: currentUser?.company_id }),
     enabled: !!currentUser?.company_id,
   });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "@/components/shared/PageHeader";
 import DataTable from "@/components/shared/DataTable";
@@ -138,7 +138,7 @@ export default function Documents() {
   const { toast } = useToast();
   const { syncState, notifyTaxonomyChange } = useTaxonomySync();
 
-  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 0 });
+  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(), staleTime: 0 });
   const companyId  = currentUser?.company_id;
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
@@ -151,7 +151,7 @@ export default function Documents() {
 
   const { data: docs = [], isLoading } = useQuery({
     queryKey: ["documents", companyId],
-    queryFn:  () => listFn(base44.entities.Document),
+    queryFn:  () => listFn(ncClient.entities.Document),
     enabled:  currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -301,7 +301,7 @@ export default function Documents() {
         mappingRules={DOCUMENT_MAPPING_RULES}
         templateExample={DOCUMENT_TEMPLATE_EXAMPLE}
         templateInstructions={DOCUMENT_TEMPLATE_INSTRUCTIONS}
-        entityFetchFn={() => listFn(base44.entities.Document)}
+        entityFetchFn={() => listFn(ncClient.entities.Document)}
         validateRow={validateDocument}
         transformRow={transformDocument}
         onImport={(row) => dataService.createRecord("document", row, currentUser, { queryClient: qc })}

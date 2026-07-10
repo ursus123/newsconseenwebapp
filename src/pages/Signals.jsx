@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "@/components/shared/PageHeader";
 import DataTable from "@/components/shared/DataTable";
@@ -139,7 +139,7 @@ export default function Signals() {
   const { toast } = useToast();
   const { syncState, notifyTaxonomyChange } = useTaxonomySync();
 
-  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 0 });
+  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(), staleTime: 0 });
   const companyId  = currentUser?.company_id;
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
@@ -152,7 +152,7 @@ export default function Signals() {
 
   const { data: signals = [], isLoading } = useQuery({
     queryKey: ["signals", companyId],
-    queryFn:  () => listFn(base44.entities.Signal),
+    queryFn:  () => listFn(ncClient.entities.Signal),
     enabled:  currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -281,7 +281,7 @@ export default function Signals() {
         onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["signals"] }); qc.refetchQueries({ queryKey: ["signals"] }); }}
         entityName="Signals" fields={SIGNAL_FIELDS} mappingRules={SIGNAL_MAPPING_RULES}
         templateExample={SIGNAL_TEMPLATE_EXAMPLE} templateInstructions={SIGNAL_TEMPLATE_INSTRUCTIONS}
-        entityFetchFn={() => listFn(base44.entities.Signal)}
+        entityFetchFn={() => listFn(ncClient.entities.Signal)}
         validateRow={validateSignal} transformRow={transformSignal}
         onImport={(row) => dataService.createRecord("signal", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} requiredField="name" />

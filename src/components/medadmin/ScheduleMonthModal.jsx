@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths } from "date-fns";
 import { X, Plus, Trash2, CalendarDays, Loader2, CheckCircle2, Search } from "lucide-react";
@@ -149,7 +149,7 @@ export default function ScheduleMonthModal({ client, products, user, onClose, on
       const tasks = buildTasks({ client, med, month, createdByName: user?.full_name || user?.email });
       // Bulk create in batches of 50
       for (let i = 0; i < tasks.length; i += 50) {
-        await base44.entities.Task.bulkCreate(tasks.slice(i, i + 50));
+        await ncClient.entities.Task.bulkCreate(tasks.slice(i, i + 50));
       }
       total += tasks.length;
     }

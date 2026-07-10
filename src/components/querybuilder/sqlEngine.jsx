@@ -1,4 +1,4 @@
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { UploadedDataStore } from "./UploadedDataStore";
 import { fetchOpenDataTable, OPEN_DATA_TABLES } from "./openDataAPIs";
 
@@ -444,10 +444,10 @@ async function fetchRawTable(name, companyId) {
 
   // Tier 2 — Base44 live fallback
   const entityKey = RAW_TO_BASE44[cfg.entity];
-  if (entityKey && base44.entities[entityKey]) {
+  if (entityKey && ncClient.entities[entityKey]) {
     try {
       const filter = companyId ? { company_id: companyId } : {};
-      const rows = await base44.entities[entityKey].filter(filter);
+      const rows = await ncClient.entities[entityKey].filter(filter);
       if (rows.length > 0) {
         rawCache[cacheKey] = rows;
         return rows;
@@ -1751,7 +1751,7 @@ async function loadTable(name, uploadedTables, companyId, masterDataSnapshot = {
     }
     // Fallback: fetch live from Base44 scoped to this tenant
     const filter = companyId ? { company_id: companyId } : {};
-    return base44.entities[MASTER_TABLES[lower].entity].filter(filter);
+    return ncClient.entities[MASTER_TABLES[lower].entity].filter(filter);
   }
   if (ANALYTICS_TABLES[lower]) {
     return fetchAnalyticsTable(lower, companyId);
@@ -2006,7 +2006,7 @@ export async function executeSQL(sql, uploadedTables, companyId, masterDataSnaps
       if (colAs) return { type: "column", field: colAs[1], alias: colAs[2] };
       return { type: "column", field: t, alias: (destCols && destCols[i]) ? destCols[i] : t };
     });
-    const entity = base44.entities[MASTER_TABLES[dest].entity];
+    const entity = ncClient.entities[MASTER_TABLES[dest].entity];
     let inserted = 0;
     for (const row of srcRows) {
       const payload = {};
@@ -2032,7 +2032,7 @@ export async function executeSQL(sql, uploadedTables, companyId, masterDataSnaps
     const payload = {}; cols.forEach((c, i) => { payload[c] = vals[i] ?? ""; });
     if (MASTER_TABLES[dest]) {
       if (companyId) payload.company_id = companyId;
-      const created = await base44.entities[MASTER_TABLES[dest].entity].create(payload);
+      const created = await ncClient.entities[MASTER_TABLES[dest].entity].create(payload);
       _triggerETL(dest);
       return { type: "mutation", rows: [created], message: `✓ Inserted 1 row into ${dest}.` };
     } else {
@@ -2053,7 +2053,7 @@ export async function executeSQL(sql, uploadedTables, companyId, masterDataSnaps
       if (eq) updates[eq[1].trim()] = eq[2].trim();
     });
     if (MASTER_TABLES[tbl]) {
-      const entity = base44.entities[MASTER_TABLES[tbl].entity];
+      const entity = ncClient.entities[MASTER_TABLES[tbl].entity];
       // Scope fetch to this tenant — never touch other companies' records
       const filter = companyId ? { company_id: companyId } : {};
       const allRows = await entity.filter(filter);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "@/components/shared/PageHeader";
 import DataTable from "@/components/shared/DataTable";
@@ -158,7 +158,7 @@ export default function Animals() {
   const { toast } = useToast();
   const { syncState, notifyTaxonomyChange } = useTaxonomySync();
 
-  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 0 });
+  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(), staleTime: 0 });
   const companyId  = currentUser?.company_id;
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
@@ -171,7 +171,7 @@ export default function Animals() {
 
   const { data: animals = [], isLoading } = useQuery({
     queryKey: ["animals", companyId],
-    queryFn:  () => listFn(base44.entities.Animal),
+    queryFn:  () => listFn(ncClient.entities.Animal),
     enabled:  currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -296,7 +296,7 @@ export default function Animals() {
         onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["animals"] }); qc.refetchQueries({ queryKey: ["animals"] }); }}
         entityName="Animals" fields={ANIMAL_FIELDS} mappingRules={ANIMAL_MAPPING_RULES}
         templateExample={ANIMAL_TEMPLATE_EXAMPLE}
-        entityFetchFn={() => listFn(base44.entities.Animal)}
+        entityFetchFn={() => listFn(ncClient.entities.Animal)}
         validateRow={validateAnimal} transformRow={transformAnimal}
         onImport={(row) => dataService.createRecord("animal", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} requiredField="name" />

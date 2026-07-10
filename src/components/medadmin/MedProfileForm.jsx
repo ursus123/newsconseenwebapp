@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery } from "@tanstack/react-query";
 import { createRecord } from "@/services/dataService";
 import { format } from "date-fns";
@@ -34,7 +34,7 @@ function MedSearchInput({ value, onChange }) {
 
   const { data: products = [] } = useQuery({
     queryKey: ["products-med"],
-    queryFn: () => base44.entities.Product.list(),
+    queryFn: () => ncClient.entities.Product.list(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -162,7 +162,7 @@ export default function MedProfileForm({ client, existing, onClose, onSuccess })
   const [loading, setLoading] = useState(false);
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -184,13 +184,13 @@ export default function MedProfileForm({ client, existing, onClose, onSuccess })
     };
 
     if (existing) {
-      await base44.entities.MedicationProfile.update(existing.id, payload);
+      await ncClient.entities.MedicationProfile.update(existing.id, payload);
     } else {
       // 1. Save MedicationProfile
-      await base44.entities.MedicationProfile.create(payload);
+      await ncClient.entities.MedicationProfile.create(payload);
 
       // 2. Upsert into Products table (only if not already there)
-      const existingProducts = await base44.entities.Product.filter({ name: form.medication_name });
+      const existingProducts = await ncClient.entities.Product.filter({ name: form.medication_name });
       let productRecord = existingProducts[0];
       if (!productRecord) {
         productRecord = await createRecord("product", {

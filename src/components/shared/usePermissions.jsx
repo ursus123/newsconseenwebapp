@@ -1,6 +1,6 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 export const ALL_ADMIN_PAGES = [
   "Dashboard", "Tasks", "Enterprises", "People", "Products",
@@ -127,7 +127,7 @@ export function usePermissions(user) {
       // FIX: always scope permission lookup to company_id
       // Never query by role alone — this could match another tenant's permissions
       if (companyId) {
-        return base44.entities.RolePermissions.filter({
+        return ncClient.entities.RolePermissions.filter({
           company_id: companyId,
           target_role: role,
         });

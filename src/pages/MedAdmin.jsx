@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -37,7 +37,7 @@ const DARK_KEY = (email) => `medadmin_dark_mode_${email}`;
 export default function MedAdmin() {
   const { data: user = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -106,7 +106,7 @@ export default function MedAdmin() {
 
   const { data: allTasks = [], refetch } = useQuery({
     queryKey: ["med-tasks", selectedClient?.id, user?.company_id],
-    queryFn: () => base44.entities.Task.filter({
+    queryFn: () => ncClient.entities.Task.filter({
       related_person: selectedClient ? `${selectedClient.first_name} ${selectedClient.last_name}` : undefined,
       task_type: "medication_admin",
       company_id: user?.company_id,
@@ -119,7 +119,7 @@ export default function MedAdmin() {
   // All tasks for client switcher stats (broader query)
   const { data: allClientTasks = [] } = useQuery({
     queryKey: ["med-tasks-all-clients", user?.company_id],
-    queryFn: () => base44.entities.Task.filter({ task_type: "medication_admin", scheduled_date: format(new Date(), "yyyy-MM-dd"), company_id: user?.company_id }, "-created_date", 200),
+    queryFn: () => ncClient.entities.Task.filter({ task_type: "medication_admin", scheduled_date: format(new Date(), "yyyy-MM-dd"), company_id: user?.company_id }, "-created_date", 200),
     enabled: !!user,
     staleTime: 0,
     refetchOnMount: "always",

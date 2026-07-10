@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "@/components/shared/PageHeader";
 import DataTable from "@/components/shared/DataTable";
@@ -152,7 +152,7 @@ export default function Plots() {
   const { toast } = useToast();
   const { syncState, notifyTaxonomyChange } = useTaxonomySync();
 
-  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 0 });
+  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(), staleTime: 0 });
   const companyId = currentUser?.company_id;
   const perms     = usePermissions(currentUser);
   const listFn    = useEntityListFn(currentUser);
@@ -165,7 +165,7 @@ export default function Plots() {
 
   const { data: plots = [], isLoading } = useQuery({
     queryKey: ["plots", companyId],
-    queryFn:  () => listFn(base44.entities.Plot),
+    queryFn:  () => listFn(ncClient.entities.Plot),
     enabled:  currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -289,7 +289,7 @@ export default function Plots() {
         onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["plots"] }); qc.refetchQueries({ queryKey: ["plots"] }); }}
         entityName="Plots" fields={PLOT_FIELDS} mappingRules={PLOT_MAPPING_RULES}
         templateExample={PLOT_TEMPLATE_EXAMPLE}
-        entityFetchFn={() => listFn(base44.entities.Plot)}
+        entityFetchFn={() => listFn(ncClient.entities.Plot)}
         validateRow={validatePlot} transformRow={transformPlot}
         onImport={(row) => dataService.createRecord("plot", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} requiredField="name" />

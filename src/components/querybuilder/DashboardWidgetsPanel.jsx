@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Pin, RefreshCw, Edit2, Trash2, BarChart2, Table2, PieChart, TrendingUp, Hash, AlertCircle } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { executeSQL } from "./sqlEngine";
 import { UploadedDataStore } from "./UploadedDataStore";
 import { BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -116,11 +116,11 @@ export default function DashboardWidgetsPanel({ onEditWidget }) {
   const qc = useQueryClient();
   const { data: widgets = [], isLoading } = useQuery({
     queryKey: ["dashboardWidgets"],
-    queryFn: () => base44.entities.SavedDashboardWidget.list("-created_date", 100),
+    queryFn: () => ncClient.entities.SavedDashboardWidget.list("-created_date", 100),
   });
 
   const handleUnpin = async (id) => {
-    await base44.entities.SavedDashboardWidget.delete(id);
+    await ncClient.entities.SavedDashboardWidget.delete(id);
     qc.invalidateQueries({ queryKey: ["dashboardWidgets"] });
   };
 

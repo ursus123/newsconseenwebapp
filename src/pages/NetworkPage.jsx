@@ -1,14 +1,14 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import NetworkDashboard from "@/components/network/NetworkDashboard";
 import NetworkMap from "@/components/network/NetworkMap";
 
 export default function NetworkPage() {
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });

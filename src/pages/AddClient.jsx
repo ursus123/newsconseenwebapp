@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import dataService from "@/services/dataService";
 
@@ -206,7 +206,7 @@ function ExistingPicker({ items, labelKey, type, onSelect, selected }) {
 async function extractDataFromFile(file) {
   try {
     // Upload file
-    const uploadResp = await base44.integrations.Core.UploadFile({ file });
+    const uploadResp = await ncClient.integrations.Core.UploadFile({ file });
     const fileUrl = uploadResp.file_url;
     
     // Determine file type
@@ -237,7 +237,7 @@ async function extractDataFromFile(file) {
       }
     };
     
-    const result = await base44.integrations.Core.ExtractDataFromUploadedFile({
+    const result = await ncClient.integrations.Core.ExtractDataFromUploadedFile({
       file_url: fileUrl,
       json_schema: schema
     });
@@ -260,7 +260,7 @@ export default function AddClient() {
   const [step, setStep] = useState(0);
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -291,9 +291,9 @@ export default function AddClient() {
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
 
-  const { data: people = [] } = useQuery({ queryKey: ["people", currentUser?.company_id], queryFn: () => base44.entities.Person.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser, staleTime: 0, refetchOnMount: "always" });
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", currentUser?.company_id], queryFn: () => base44.entities.Enterprise.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser, staleTime: 0, refetchOnMount: "always" });
-  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", currentUser?.company_id], queryFn: () => base44.entities.Address.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser, staleTime: 0, refetchOnMount: "always" });
+  const { data: people = [] } = useQuery({ queryKey: ["people", currentUser?.company_id], queryFn: () => ncClient.entities.Person.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser, staleTime: 0, refetchOnMount: "always" });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", currentUser?.company_id], queryFn: () => ncClient.entities.Enterprise.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser, staleTime: 0, refetchOnMount: "always" });
+  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", currentUser?.company_id], queryFn: () => ncClient.entities.Address.filter({ company_id: currentUser?.company_id }), enabled: !!currentUser, staleTime: 0, refetchOnMount: "always" });
 
   const needsPerson = clientType === "individual" || clientType === "both";
   const needsEnterprise = clientType === "business" || clientType === "both";

@@ -5,7 +5,7 @@ import {
   Activity, ChevronDown, Shield, RefreshCw,
   Database, GitBranch, Bell,
 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useLocation } from "react-router-dom";
 import CopilotChat from "@/components/copilot/copilotchat";
 
@@ -320,7 +320,7 @@ export default function Idjwi() {
 
   const { data: currentUser = null } = useQuery({
     queryKey:       ["currentUser"],
-    queryFn:        () => base44.auth.me(),
+    queryFn:        () => ncClient.auth.me(),
     staleTime:      0,
     refetchOnMount: "always",
   });

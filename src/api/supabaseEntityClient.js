@@ -1,7 +1,7 @@
 /**
  * supabaseEntityClient.js
  *
- * Drop-in replacement for base44.entities.* usage inside dataService.js.
+ * Drop-in replacement for ncClient.entities.* usage inside dataService.js.
  * Every entity wrapper exposes the same four methods Base44 does:
  *   .create(data)              → supabase insert
  *   .filter(filters, sort)     → supabase select + eq filters
@@ -15,7 +15,7 @@
  * callers that read those fields still work without change.
  *
  * Auth shim:
- *   supabaseAuth.me()  →  mirrors base44.auth.me()
+ *   supabaseAuth.me()  →  mirrors ncClient.auth.me()
  *   supabaseAuth.logout() → signs out of Supabase session
  *
  * Env vars required in .env.local:
@@ -28,7 +28,7 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL     || "";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
-// Guard: if env vars are absent (e.g. VITE_DATA_LAYER=base44), create a no-op
+// Guard: if env vars are absent (e.g. VITE_DATA_LAYER=ncClient), create a no-op
 // client so the import itself never crashes the Base44 build path.
 export const supabase = (supabaseUrl && supabaseAnonKey)
   ? createClient(supabaseUrl, supabaseAnonKey)
@@ -344,7 +344,7 @@ function entityWrapper(table) {
 }
 
 // ── Entity registry — mirrors every entity in Base44 ─────────────────────────
-// Key: the name used on base44.entities.* (PascalCase)
+// Key: the name used on ncClient.entities.* (PascalCase)
 // Value: the Supabase table name (snake_case, plural)
 
 export const supabaseEntities = {
@@ -384,10 +384,10 @@ export const supabaseEntities = {
   MetricDefinition: entityWrapper("metric_definitions"),
 };
 
-// ── Auth shim — mirrors base44.auth.me() ─────────────────────────────────────
+// ── Auth shim — mirrors ncClient.auth.me() ─────────────────────────────────────
 export const supabaseAuth = {
   /**
-   * me() — returns a user object with the same shape that base44.auth.me() returns.
+   * me() — returns a user object with the same shape that ncClient.auth.me() returns.
    * company_id and role are read from app_metadata (set server-side on provisioning).
    */
   async me() {
@@ -409,7 +409,7 @@ export const supabaseAuth = {
   },
 
   /**
-   * onAuthStateChange — mirrors base44 session listener pattern.
+   * onAuthStateChange — mirrors ncClient session listener pattern.
    * Returns an unsubscribe function.
    */
   onAuthStateChange(callback) {

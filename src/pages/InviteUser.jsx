@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dataService from "@/services/dataService";
 import { Card } from "@/components/ui/card";
@@ -25,7 +25,7 @@ export default function InviteUser() {
   const qc = useQueryClient();
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -34,8 +34,8 @@ export default function InviteUser() {
   const [form, setForm] = useState({ first_name: "", last_name: "", email: "", phone: "", enterprise_name: "", company_id: "", role: "user" });
   const [status, setStatus] = useState(null); // null | "loading" | "success" | "error"
   const [errorMsg, setErrorMsg] = useState("");
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises"], queryFn: () => base44.entities.Enterprise.list(), staleTime: 0, refetchOnMount: "always" });
-  const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers"], queryFn: () => base44.entities.User.list(), staleTime: 0, refetchOnMount: "always" });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises"], queryFn: () => ncClient.entities.Enterprise.list(), staleTime: 0, refetchOnMount: "always" });
+  const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers"], queryFn: () => ncClient.entities.User.list(), staleTime: 0, refetchOnMount: "always" });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -46,7 +46,7 @@ export default function InviteUser() {
     setErrorMsg("");
     try {
       // Send the platform invitation (email + role)
-      await base44.users.inviteUser(form.email, form.role);
+      await ncClient.users.inviteUser(form.email, form.role);
 
       // Also create a Person record to store the full profile
       await dataService.createRecord("person", {

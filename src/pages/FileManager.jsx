@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery } from "@tanstack/react-query";
 import {
   Folder, FileText, BarChart2, Download, Trash2, Upload,
@@ -47,7 +47,7 @@ const MAX_STORAGE_MB = 500;
 export default function FileManager() {
   const { data: user = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -74,9 +74,9 @@ export default function FileManager() {
 
   useEffect(() => {
     // Load all users for sharing
-    base44.entities.User.list(undefined, 100).then(setUsers).catch(() => {});
+    ncClient.entities.User.list(undefined, 100).then(setUsers).catch(() => {});
     // Load file shares
-    base44.entities.FileShare.list(undefined, 500).then(setShares).catch(() => {});
+    ncClient.entities.FileShare.list(undefined, 500).then(setShares).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -91,7 +91,7 @@ export default function FileManager() {
     if (section !== "trash" && section !== "shared") query.company_id = user?.company_id || null;
     if (currentFolderId) query.folder_id = currentFolderId;
     else if (section !== "trash") query.folder_id = null; // root only
-    const data = await base44.entities.FileRecord.filter(query, "-created_date", 200);
+    const data = await ncClient.entities.FileRecord.filter(query, "-created_date", 200);
     setFiles(data);
     setLoading(false);
   }
@@ -99,7 +99,7 @@ export default function FileManager() {
   async function handleNewFolder() {
     const name = window.prompt("Folder name:");
     if (!name?.trim()) return;
-    await base44.entities.FileRecord.create({
+    await ncClient.entities.FileRecord.create({
       name: name.trim(),
       file_type: "folder",
       folder_id: currentFolderId,
@@ -122,8 +122,8 @@ export default function FileManager() {
       return;
     }
     setUploading(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    await base44.entities.FileRecord.create({
+    const { file_url } = await ncClient.integrations.Core.UploadFile({ file });
+    await ncClient.entities.FileRecord.create({
       name: file.name,
       file_type: "attachment",
       file_url,
@@ -167,8 +167,8 @@ export default function FileManager() {
         return;
       }
       setUploading(true);
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      await base44.entities.FileRecord.create({
+      const { file_url } = await ncClient.integrations.Core.UploadFile({ file });
+      await ncClient.entities.FileRecord.create({
         name: file.name,
         file_type: "attachment",
         file_url,
@@ -197,7 +197,7 @@ export default function FileManager() {
     }
     const f = files.find(x => x.id === draggedFile.id);
     if (f) {
-      await base44.entities.FileRecord.update(f.id, { folder_id: targetFolder.id });
+      await ncClient.entities.FileRecord.update(f.id, { folder_id: targetFolder.id });
       setDraggedFile(null);
       load();
     }
@@ -228,7 +228,7 @@ export default function FileManager() {
     if (!email) return;
     const recipient = users.find(u => u.email === email);
     if (!recipient) return;
-    await base44.entities.FileShare.create({
+    await ncClient.entities.FileShare.create({
       file_id: file.id,
       file_name: file.name,
       shared_by_email: user?.email,
@@ -237,13 +237,13 @@ export default function FileManager() {
       access_level: accessLevel,
       company_id: user?.company_id,
     });
-    const updated = await base44.entities.FileShare.list(undefined, 500);
+    const updated = await ncClient.entities.FileShare.list(undefined, 500);
     setShares(updated);
   }
 
   async function removeShare(shareId) {
-    await base44.entities.FileShare.delete(shareId);
-    const updated = await base44.entities.FileShare.list(undefined, 500);
+    await ncClient.entities.FileShare.delete(shareId);
+    const updated = await ncClient.entities.FileShare.list(undefined, 500);
     setShares(updated);
   }
 
@@ -253,15 +253,15 @@ export default function FileManager() {
     if (!selected.size) return;
     if (section === "trash") {
       if (!window.confirm(`Permanently delete ${selected.size} item(s)?`)) return;
-      for (const id of selected) await base44.entities.FileRecord.delete(id);
+      for (const id of selected) await ncClient.entities.FileRecord.delete(id);
     } else {
-      for (const id of selected) await base44.entities.FileRecord.update(id, { is_trashed: true });
+      for (const id of selected) await ncClient.entities.FileRecord.update(id, { is_trashed: true });
     }
     load();
   }
 
   async function handleRestore(id) {
-    await base44.entities.FileRecord.update(id, { is_trashed: false });
+    await ncClient.entities.FileRecord.update(id, { is_trashed: false });
     load();
   }
 
@@ -279,7 +279,7 @@ export default function FileManager() {
 
   async function commitRename() {
     if (!renaming || !renameValue.trim()) { setRenaming(null); return; }
-    await base44.entities.FileRecord.update(renaming, { name: renameValue.trim() });
+    await ncClient.entities.FileRecord.update(renaming, { name: renameValue.trim() });
     setRenaming(null);
     load();
   }

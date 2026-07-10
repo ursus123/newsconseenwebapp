@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
@@ -188,7 +188,7 @@ export default function Products() {
   const [deleting, setDeleting] = useState(null);
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -214,7 +214,7 @@ export default function Products() {
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products", companyId, currentUser?.email],
-    queryFn: () => listFn(base44.entities.Product),
+    queryFn: () => listFn(ncClient.entities.Product),
     enabled: currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -435,7 +435,7 @@ export default function Products() {
         templateInstructions={PRODUCT_TEMPLATE_INSTRUCTIONS}
         validateRow={validateProduct}
         transformRow={(row) => transformProduct(row, currentUser)}
-        entityFetchFn={() => listFn(base44.entities.Product)}
+        entityFetchFn={() => listFn(ncClient.entities.Product)}
         onImport={(row) => dataService.createRecord("product", row, currentUser, { queryClient: qc })}
         currentUser={currentUser}
         previewColumns={[

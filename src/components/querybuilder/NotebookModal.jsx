@@ -6,7 +6,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { NotebookStore } from "./NotebookStore";
 import { UploadedDataStore } from "./UploadedDataStore";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 const DEFAULT_API_CONFIG = `{
   "url": "https://api.example.com/endpoint",
@@ -206,7 +206,7 @@ Execute this script using the real data above. Return a JSON with:
 
 Return ONLY valid JSON, no explanation.`;
 
-        const result = await base44.integrations.Core.InvokeLLM({
+        const result = await ncClient.integrations.Core.InvokeLLM({
           prompt,
           response_json_schema: {
             type: "object",

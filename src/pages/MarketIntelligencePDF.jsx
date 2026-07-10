@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { FileText, Download, Loader2, BookmarkPlus, ArrowLeft, CheckCircle2 } from "lucide-react";
@@ -47,7 +47,7 @@ function MetricGrid({ items }) {
 export default function MarketIntelligencePDF() {
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -59,7 +59,7 @@ export default function MarketIntelligencePDF() {
 
   const { data: folders = [] } = useQuery({
     queryKey: ["mi_pdf_folders", currentUser?.company_id],
-    queryFn: () => base44.entities.ChartFolder.filter({ company_id: currentUser.company_id }),
+    queryFn: () => ncClient.entities.ChartFolder.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -69,7 +69,7 @@ export default function MarketIntelligencePDF() {
 
   const { data: reports = [], isLoading } = useQuery({
     queryKey: ["mi_pdf_reports", marketFolder?.id],
-    queryFn: () => base44.entities.Report.filter({ folder_id: marketFolder.id }),
+    queryFn: () => ncClient.entities.Report.filter({ folder_id: marketFolder.id }),
     enabled: !!marketFolder?.id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -136,7 +136,7 @@ export default function MarketIntelligencePDF() {
     setSaving(true);
     try {
       // Update the existing report status to ensure it's published
-      await base44.entities.Report.update(selectedReport.id, { status: "published" });
+      await ncClient.entities.Report.update(selectedReport.id, { status: "published" });
       toast({ title: "Report confirmed in Reports page", description: "View it under Market Research folder in Reports." });
     } catch (e) {
       toast({ title: "Failed", description: e.message, variant: "destructive" });

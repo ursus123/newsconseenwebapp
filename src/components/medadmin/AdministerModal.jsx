@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useMutation } from "@tanstack/react-query";
 import { createRecord, updateRecord } from "@/services/dataService";
 import { createRisk } from "@/services/intelligenceService";
@@ -54,7 +54,7 @@ export default function AdministerModal({ task, user, products = [], onClose, on
     if (!task.related_item && !task.title) return;
     const medName = task.related_item || task.title;
     setStockLoading(true);
-    base44.entities.Product.filter({ name: medName }).then((prods) => {
+    ncClient.entities.Product.filter({ name: medName }).then((prods) => {
       if (prods.length > 0) {
         setProductRecord(prods[0]);
         if ((prods[0].stock_quantity || 0) <= 0) setStockBlocked(true);

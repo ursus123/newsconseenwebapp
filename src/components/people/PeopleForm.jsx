@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Save, X, User, Briefcase, Phone, MapPin, Calendar, Clock, Star, FileText, Upload, Link2, Search, Loader2, Building2 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery } from "@tanstack/react-query";
 import { createWithScope } from "@/components/shared/useDataQuery";
 import RelatedEntitiesPanel from "@/components/shared/RelatedEntitiesPanel";
@@ -138,8 +138,8 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
   const { data: enterprises = [] } = useQuery({
     queryKey: ["enterprises-list", currentUser?.company_id],
     queryFn: () => currentUser?.company_id
-      ? base44.entities.Enterprise.filter({ company_id: currentUser.company_id })
-      : base44.entities.Enterprise.list(),
+      ? ncClient.entities.Enterprise.filter({ company_id: currentUser.company_id })
+      : ncClient.entities.Enterprise.list(),
     enabled: open,
   });
 
@@ -148,7 +148,7 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
     queryKey: ["primary-roles", form.person_type],
     queryFn: async () => {
       if (!form.person_type) return [];
-      const options = await base44.entities.MasterDataOption.filter({
+      const options = await ncClient.entities.MasterDataOption.filter({
         entity_type: 'person',
         field_name: 'person_subtype',
         parent_value: form.person_type,
@@ -198,7 +198,7 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
     const file = e.target.files[0];
     if (!file) return;
     setUploading(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    const { file_url } = await ncClient.integrations.Core.UploadFile({ file });
     set("attachment_url", file_url);
     setUploading(false);
   };
@@ -216,7 +216,7 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
 
       // 2. If address data, create Address record with linked person
       if (form.country || form.address || form.city) {
-        await createWithScope(base44.entities.Address, {
+        await createWithScope(ncClient.entities.Address, {
           label: `${personName} – Home`,
           status: "active",
           address_line1: form.address || "",
@@ -232,7 +232,7 @@ export default function PeopleForm({ open, onClose, onSubmit, initialData, curre
 
       // 3. If enterprise selected, create Relationship
       if (_enterprise_name && _enterprise_name !== "__none__") {
-        await createWithScope(base44.entities.Relationship, {
+        await createWithScope(ncClient.entities.Relationship, {
           relationship_type: "person_enterprise",
           status: "active",
           person_name: personName,

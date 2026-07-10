@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dataService from "@/services/dataService";
 import { Link } from "react-router-dom";
@@ -33,13 +33,13 @@ const EMPTY = { product_id: "", product_name: "", qty_ordered: "", qty_received:
 export default function GoodsReceived() {
   const qc = useQueryClient();
   const { data: currentUser = null } = useQuery({
-    queryKey: ["currentUser"], queryFn: () => base44.auth.me(),
+    queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(),
     staleTime: 0, refetchOnMount: "always",
   });
 
   const { data: receipts = [], isLoading } = useQuery({
     queryKey: ["goods-received", currentUser?.company_id],
-    queryFn: () => base44.entities.Transaction.filter(
+    queryFn: () => ncClient.entities.Transaction.filter(
       { company_id: currentUser.company_id, transaction_type: "goods_received" }, "-created_date", 100,
     ),
     enabled: !!currentUser?.company_id,
@@ -48,7 +48,7 @@ export default function GoodsReceived() {
 
   const { data: products = [] } = useQuery({
     queryKey: ["products-app", currentUser?.company_id],
-    queryFn:  () => base44.entities.Product.filter({ company_id: currentUser.company_id, status: "active" }, "item_name", 200),
+    queryFn:  () => ncClient.entities.Product.filter({ company_id: currentUser.company_id, status: "active" }, "item_name", 200),
     enabled:  !!currentUser?.company_id,
     staleTime: 60_000,
   });

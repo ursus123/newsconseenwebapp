@@ -1,5 +1,5 @@
 import { useCurrentProfile } from "@/lib/ProfileContext";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 /**
  * Hook to query entities scoped to the current profile's enterprise context.
@@ -12,10 +12,10 @@ import { base44 } from "@/api/base44Client";
  */
 export function useProfileEntity(entityName) {
   const currentProfile = useCurrentProfile();
-  const entityClass = base44.entities[entityName];
+  const entityClass = ncClient.entities[entityName];
 
   if (!entityClass) {
-    throw new Error(`Entity "${entityName}" not found in base44.entities`);
+    throw new Error(`Entity "${entityName}" not found in ncClient.entities`);
   }
 
   return {

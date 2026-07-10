@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import FolderTree from "@/components/reports/FolderTree";
 import FolderContents from "@/components/reports/FolderContents";
@@ -47,7 +47,7 @@ function MarketAnalysisTemplate({ currentUser, onBack, onSaveReport }) {
   // Auto-populate location from operator's Enterprise record
   useEffect(() => {
     if (!companyId) return;
-    base44.entities.Enterprise.filter({ company_id: companyId }).then(ents => {
+    ncClient.entities.Enterprise.filter({ company_id: companyId }).then(ents => {
       const ent = ents[0];
       if (!ent) return;
       const location = [ent.city, ent.country].filter(Boolean).join(", ");
@@ -77,7 +77,7 @@ function MarketAnalysisTemplate({ currentUser, onBack, onSaveReport }) {
       }
 
       else if (sectionId === "competitor_database") {
-        const enterprises = await base44.entities.Enterprise.filter({ company_id: companyId });
+        const enterprises = await ncClient.entities.Enterprise.filter({ company_id: companyId });
         data = { enterprises: enterprises.slice(0, 50), total: enterprises.length };
       }
 
@@ -92,7 +92,7 @@ function MarketAnalysisTemplate({ currentUser, onBack, onSaveReport }) {
       }
 
       else if (sectionId === "capacity_forecast") {
-        const enterprises = await base44.entities.Enterprise.filter({ company_id: companyId });
+        const enterprises = await ncClient.entities.Enterprise.filter({ company_id: companyId });
         const entId = enterprises[0]?.id || "unknown";
         const r = await fetch(`${RAILWAY_URL}/ml/staffing-forecast?enterprise_id=${entId}&company_id=${companyId}&research_mode=true`, { method: "POST", headers: RAIL_HEADERS });
         data = r.ok ? await r.json() : { status: "unavailable" };
@@ -173,14 +173,14 @@ function MarketAnalysisTemplate({ currentUser, onBack, onSaveReport }) {
       }).join("\n---\n\n");
 
       // Find or create Market Research folder
-      let folders = await base44.entities.ChartFolder.filter({ name: "Market Research", company_id: companyId });
+      let folders = await ncClient.entities.ChartFolder.filter({ name: "Market Research", company_id: companyId });
       let folderId = folders[0]?.id;
       if (!folderId) {
-        const f = await base44.entities.ChartFolder.create({ name: "Market Research", icon: "🌍", color: "#10b981", company_id: companyId });
+        const f = await ncClient.entities.ChartFolder.create({ name: "Market Research", icon: "🌍", color: "#10b981", company_id: companyId });
         folderId = f.id;
       }
 
-      const report = await base44.entities.Report.create({
+      const report = await ncClient.entities.Report.create({
         name: `${config.location} ${config.industry} Market Analysis`,
         content,
         status: "published",
@@ -381,11 +381,11 @@ function MLInsightsPanel({ currentUser, onBack }) {
       // Base44 fallback — derive counts from live entities
       try {
         const [people, enterprises, products, transactions, tasks] = await Promise.allSettled([
-          base44.entities.Person.filter({ company_id: companyId }),
-          base44.entities.Enterprise.filter({ company_id: companyId }),
-          base44.entities.Product.filter({ company_id: companyId }),
-          base44.entities.Transaction.filter({ company_id: companyId }),
-          base44.entities.Task.filter({ company_id: companyId }),
+          ncClient.entities.Person.filter({ company_id: companyId }),
+          ncClient.entities.Enterprise.filter({ company_id: companyId }),
+          ncClient.entities.Product.filter({ company_id: companyId }),
+          ncClient.entities.Transaction.filter({ company_id: companyId }),
+          ncClient.entities.Task.filter({ company_id: companyId }),
         ]);
         return {
           tables: {
@@ -541,7 +541,7 @@ function MLInsightsPanel({ currentUser, onBack }) {
                     )}
                   </div>
                   <p className="text-[10px] mt-2 opacity-60 font-mono">
-                    POST {RAILWAY_URL}/ml/push-to-base44?company_id={companyId}&model={pred.model}
+                    POST {RAILWAY_URL}/ml/push-to-ncClient?company_id={companyId}&model={pred.model}
                   </p>
                 </div>
               );
@@ -687,7 +687,7 @@ function canUserSee(item, currentUser) {
 export default function Reports() {
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -710,8 +710,8 @@ export default function Reports() {
   const { data: folders = [] } = useQuery({
     queryKey: ["chartFolders", currentUser?.company_id],
     queryFn: () => currentUser?.role === "super_admin"
-      ? base44.entities.ChartFolder.filter({ status: "active" })
-      : base44.entities.ChartFolder.filter({ status: "active", company_id: currentUser.company_id }),
+      ? ncClient.entities.ChartFolder.filter({ status: "active" })
+      : ncClient.entities.ChartFolder.filter({ status: "active", company_id: currentUser.company_id }),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -720,8 +720,8 @@ export default function Reports() {
   const { data: allCharts = [] } = useQuery({
     queryKey: ["reportCharts", currentUser?.company_id],
     queryFn: () => currentUser?.role === "super_admin"
-      ? base44.entities.ReportChart.filter({ status: "active" })
-      : base44.entities.ReportChart.filter({ status: "active", company_id: currentUser.company_id }),
+      ? ncClient.entities.ReportChart.filter({ status: "active" })
+      : ncClient.entities.ReportChart.filter({ status: "active", company_id: currentUser.company_id }),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -730,8 +730,8 @@ export default function Reports() {
   const { data: allReports = [] } = useQuery({
     queryKey: ["reports", currentUser?.company_id],
     queryFn: () => currentUser?.role === "super_admin"
-      ? base44.entities.Report.list()
-      : base44.entities.Report.filter({ company_id: currentUser.company_id }),
+      ? ncClient.entities.Report.list()
+      : ncClient.entities.Report.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser,
     staleTime: 0,
     refetchOnMount: "always",
@@ -739,14 +739,14 @@ export default function Reports() {
 
   const { data: pinnedWidgets = [] } = useQuery({
     queryKey: ["pinnedWidgets", currentUser?.company_id],
-    queryFn: () => base44.entities.SavedDashboardWidget.filter({ company_id: currentUser.company_id }),
+    queryFn: () => ncClient.entities.SavedDashboardWidget.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser?.company_id,
     staleTime: 0,
     refetchOnMount: "always",
   });
 
   const createFolderMut = useMutation({
-    mutationFn: (data) => base44.entities.ChartFolder.create(data),
+    mutationFn: (data) => ncClient.entities.ChartFolder.create(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["chartFolders"] });
       setShowNewFolderModal(false);
@@ -755,12 +755,12 @@ export default function Reports() {
   });
 
   const deleteChartMut = useMutation({
-    mutationFn: (id) => base44.entities.ReportChart.update(id, { status: "archived" }),
+    mutationFn: (id) => ncClient.entities.ReportChart.update(id, { status: "archived" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reportCharts"] }),
   });
 
   const deleteReportMut = useMutation({
-    mutationFn: (id) => base44.entities.Report.delete(id),
+    mutationFn: (id) => ncClient.entities.Report.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reports"] }),
   });
 
@@ -797,7 +797,7 @@ export default function Reports() {
 
     const creates = [];
     if (!hasQBFolder) {
-      creates.push(base44.entities.ChartFolder.create({
+      creates.push(ncClient.entities.ChartFolder.create({
         name: "From QueryBuilder",
         company_id: currentUser.company_id,
         status: "active",
@@ -806,7 +806,7 @@ export default function Reports() {
       }));
     }
     if (!hasCopilotFolder) {
-      creates.push(base44.entities.ChartFolder.create({
+      creates.push(ncClient.entities.ChartFolder.create({
         name: "From Copilot",
         company_id: currentUser.company_id,
         status: "active",

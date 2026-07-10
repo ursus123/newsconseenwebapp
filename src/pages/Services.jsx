@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
@@ -112,7 +112,7 @@ export default function Services() {
   const [deleting, setDeleting] = useState(null);
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -135,7 +135,7 @@ export default function Services() {
 
   const { data: services = [], isLoading, isError } = useQuery({
     queryKey: ["services", currentUser?.company_id, currentUser?.email],
-    queryFn: () => listFn(base44.entities.Service),
+    queryFn: () => listFn(ncClient.entities.Service),
     enabled: currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -367,7 +367,7 @@ export default function Services() {
         templateInstructions={SERVICE_TEMPLATE_INSTRUCTIONS}
         validateRow={validateService}
         transformRow={transformService}
-        entityFetchFn={() => listFn(base44.entities.Service)}
+        entityFetchFn={() => listFn(ncClient.entities.Service)}
         onImport={(row) => dataService.createRecord("service", row, currentUser, { queryClient: qc })}
         currentUser={currentUser}
         previewColumns={SVC_PREVIEW_COLS}

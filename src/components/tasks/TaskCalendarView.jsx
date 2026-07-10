@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQueryClient } from "@tanstack/react-query";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
@@ -74,7 +74,7 @@ export default function TaskCalendarView({ tasks }) {
     const task = tasks.find((t) => t.id === taskId);
     if (!task || task.due_date?.slice(0, 10) === dateStr) return;
     try {
-      await base44.entities.Task.update(taskId, { ...task, due_date: dateStr });
+      await ncClient.entities.Task.update(taskId, { ...task, due_date: dateStr });
       triggerETL("task");
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.refetchQueries({ queryKey: ["tasks"] });

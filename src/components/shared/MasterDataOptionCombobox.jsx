@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ export default function MasterDataOptionCombobox({
   const [customInput, setCustomInput] = useState("");
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -33,7 +33,7 @@ export default function MasterDataOptionCombobox({
     const loadOptions = async () => {
       setLoading(true);
       try {
-        const result = await base44.entities.MasterDataOption.filter({
+        const result = await ncClient.entities.MasterDataOption.filter({
           entity_type: entityType,
           field_name: fieldName,
           parent_value: parentValue || undefined,
@@ -66,7 +66,7 @@ export default function MasterDataOptionCombobox({
     if (!customInput.trim() || !currentUser) return;
 
     try {
-      const newOption = await base44.entities.MasterDataOption.create({
+      const newOption = await ncClient.entities.MasterDataOption.create({
         entity_type: entityType,
         field_name: fieldName,
         value: customInput.toLowerCase().replace(/\s+/g, "_"),

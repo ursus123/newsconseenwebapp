@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 export function useBranding(currentUser) {
   const { data: enterprise } = useQuery({
@@ -7,7 +7,7 @@ export function useBranding(currentUser) {
     queryFn: () =>
       currentUser?.role === "super_admin"
         ? Promise.resolve(null)
-        : base44.entities.Enterprise.filter({ enterprise_name: currentUser.company_id })
+        : ncClient.entities.Enterprise.filter({ enterprise_name: currentUser.company_id })
             .then((results) => results[0] || null),
     enabled: !!currentUser?.company_id,
     staleTime: 5 * 60 * 1000,

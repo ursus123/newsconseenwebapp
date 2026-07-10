@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 const STORAGE_KEY = "active_enterprise_id";
 
@@ -13,7 +13,7 @@ export default function EnterpriseContextSwitcher({ isLight, currentUser }) {
     if (!currentUser) return;
     const filters = { status: "active" };
     if (currentUser.company_id) filters.company_id = currentUser.company_id;
-    base44.entities.Enterprise.filter(filters)
+    ncClient.entities.Enterprise.filter(filters)
       .then(list => {
         setEnterprises(list);
         // If no active enterprise is set yet, default to first

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dataService from "@/services/dataService";
 import { Card } from "@/components/ui/card";
@@ -80,7 +80,7 @@ export default function Billing() {
   const qc = useQueryClient();
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -91,7 +91,7 @@ export default function Billing() {
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["enterprises_billing", companyId],
-    queryFn: () => base44.entities.Enterprise.filter({ enterprise_name: companyId }),
+    queryFn: () => ncClient.entities.Enterprise.filter({ enterprise_name: companyId }),
     enabled: !!companyId,
     staleTime: 0,
     refetchOnMount: "always",
@@ -99,7 +99,7 @@ export default function Billing() {
 
   const { data: users = [] } = useQuery({
     queryKey: ["users_billing", companyId],
-    queryFn: () => base44.entities.User.filter({ company_id: companyId }),
+    queryFn: () => ncClient.entities.User.filter({ company_id: companyId }),
     enabled: !!companyId,
     staleTime: 0,
     refetchOnMount: "always",
@@ -107,7 +107,7 @@ export default function Billing() {
 
   const { data: people = [] } = useQuery({
     queryKey: ["people_billing", companyId],
-    queryFn: () => base44.entities.Person.filter({ company_id: companyId }),
+    queryFn: () => ncClient.entities.Person.filter({ company_id: companyId }),
     enabled: !!companyId,
     staleTime: 0,
     refetchOnMount: "always",
@@ -115,7 +115,7 @@ export default function Billing() {
 
   const { data: products = [] } = useQuery({
     queryKey: ["products_billing", companyId],
-    queryFn: () => base44.entities.Product.filter({ company_id: companyId }),
+    queryFn: () => ncClient.entities.Product.filter({ company_id: companyId }),
     enabled: !!companyId,
     staleTime: 0,
     refetchOnMount: "always",
@@ -123,7 +123,7 @@ export default function Billing() {
 
   const { data: transactions = [] } = useQuery({
     queryKey: ["transactions_billing", companyId],
-    queryFn: () => base44.entities.Transaction.filter({ company_id: companyId }),
+    queryFn: () => ncClient.entities.Transaction.filter({ company_id: companyId }),
     enabled: !!companyId,
     staleTime: 0,
     refetchOnMount: "always",
@@ -131,7 +131,7 @@ export default function Billing() {
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["tasks_billing", companyId],
-    queryFn: () => base44.entities.Task.filter({ company_id: companyId }),
+    queryFn: () => ncClient.entities.Task.filter({ company_id: companyId }),
     enabled: !!companyId,
     staleTime: 0,
     refetchOnMount: "always",

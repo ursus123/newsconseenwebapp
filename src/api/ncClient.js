@@ -21,7 +21,7 @@ const _real = createClient({
 // Leave unset (or set to "base44") to use Base44 as before.
 const DATA_LAYER = import.meta.env.VITE_DATA_LAYER || 'base44';
 
-// ── Supabase auth shim — full base44.auth.* surface ───────────────────────────
+// ── Supabase auth shim — full ncClient.auth.* surface ─────────────────────────
 const _supabaseAuth = {
   // Most-used call — get current user from Supabase session + user_profiles
   async me() {
@@ -120,7 +120,7 @@ const _supabaseAuth = {
   },
 };
 
-// ── Entity Proxy — intercepts every base44.entities.Xyz access ───────────────
+// ── Entity Proxy — intercepts every ncClient.entities.Xyz access ─────────────
 // Unknown entity names fall back to the real Base44 entity so nothing breaks
 // while the migration is in progress.
 const _entityProxy = new Proxy({}, {
@@ -131,7 +131,7 @@ const _entityProxy = new Proxy({}, {
     // These entities are intentionally staying on Base44 until their Supabase tables
     // are created and mapped. Check MIGRATION_STATUS in supabaseEntityClient.js.
     console.warn(
-      `[base44→supabase] "${name}" has no Supabase table yet — reads/writes go to Base44. ` +
+      `[ncClient→supabase] "${name}" has no Supabase table yet — reads/writes go to Base44. ` +
       `Data written here will NOT appear in Supabase analytics or RLS-scoped queries.`
     );
     return _real.entities?.[name];
@@ -140,13 +140,13 @@ const _entityProxy = new Proxy({}, {
 
 // ── Final export ──────────────────────────────────────────────────────────────
 // When DATA_LAYER=supabase:
-//   base44.entities.*     → Supabase (all 23 entities via _entityProxy)
-//   base44.auth.*         → Supabase (_supabaseAuth shim)
-//   base44.integrations.* → Base44 real client (UploadFile / InvokeLLM / SendEmail)
+//   ncClient.entities.*     → Supabase (all 23 entities via _entityProxy)
+//   ncClient.auth.*         → Supabase (_supabaseAuth shim)
+//   ncClient.integrations.* → Base44 real client (UploadFile / InvokeLLM / SendEmail)
 //
 // When DATA_LAYER=base44 (default):
 //   Everything routes to the real Base44 client — zero behaviour change.
-export const base44 = DATA_LAYER === 'supabase'
+export const ncClient = DATA_LAYER === 'supabase'
   ? {
       entities:     _entityProxy,
       auth:         _supabaseAuth,

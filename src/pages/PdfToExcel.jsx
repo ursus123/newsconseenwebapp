@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import {
   Upload, Download, Database, Loader2, AlertCircle, CheckCircle2,
   FileText, Table2, X, ArrowRight, ChevronLeft, ChevronRight, ZoomIn, ZoomOut
@@ -235,11 +235,11 @@ export default function PdfToExcel() {
     setLoading(true); setError(null); setTables(null);
     try {
       setLoadingStep("Uploading PDF…");
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await ncClient.integrations.Core.UploadFile({ file });
       setFileUrl(file_url);
 
       setLoadingStep("Extracting tables with AI…");
-      const result = await base44.integrations.Core.InvokeLLM({
+      const result = await ncClient.integrations.Core.InvokeLLM({
         prompt: `You are a data extraction assistant. Analyze this PDF document carefully and extract ALL tabular data you find.
 For each table found:
 - Give it a short descriptive snake_case name (e.g. sales_summary, employee_list)

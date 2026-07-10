@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -632,7 +632,7 @@ function ResultsView({ data, modelId, onPushToBase44, pushing }) {
 export default function MLModels() {
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -726,7 +726,7 @@ export default function MLModels() {
     const cid = currentUser?.company_id || "";
     setPushing(prev => ({ ...prev, [modelId]: true }));
     try {
-      const res = await fetch(`${RAILWAY_URL}/ml/push-to-base44?company_id=${cid}&model=${modelId}`, {
+      const res = await fetch(`${RAILWAY_URL}/ml/push-to-ncClient?company_id=${cid}&model=${modelId}`, {
         method: "POST",
         headers: API_HEADERS,
       });

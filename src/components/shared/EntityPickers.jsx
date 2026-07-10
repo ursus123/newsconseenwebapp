@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { ChevronDown, Search, X, User, Building2, Package, MapPin } from "lucide-react";
 
 // ── Shared dropdown shell (not exported) ───────────────────────────────────────
@@ -95,7 +95,7 @@ export function PersonPicker({ value, onChange, currentUser, placeholder = "Sele
 
   const { data: persons = [] } = useQuery({
     queryKey: ["picker_persons", currentUser?.company_id],
-    queryFn: () => base44.entities.Person.filter({ company_id: currentUser.company_id }),
+    queryFn: () => ncClient.entities.Person.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser?.company_id,
     staleTime: 60000,
   });
@@ -177,7 +177,7 @@ export function EnterprisePicker({ value, onChange, currentUser, placeholder = "
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["picker_enterprises", currentUser?.company_id],
-    queryFn: () => base44.entities.Enterprise.filter({ company_id: currentUser.company_id, status: "active" }),
+    queryFn: () => ncClient.entities.Enterprise.filter({ company_id: currentUser.company_id, status: "active" }),
     enabled: !!currentUser?.company_id,
     staleTime: 60000,
   });
@@ -254,7 +254,7 @@ export function ProductPicker({ value, onChange, currentUser, placeholder = "Sel
 
   const { data: products = [] } = useQuery({
     queryKey: ["picker_products", currentUser?.company_id],
-    queryFn: () => base44.entities.Product.filter({ company_id: currentUser.company_id, status: "active" }),
+    queryFn: () => ncClient.entities.Product.filter({ company_id: currentUser.company_id, status: "active" }),
     enabled: !!currentUser?.company_id,
     staleTime: 60000,
   });
@@ -335,7 +335,7 @@ export function AddressPicker({ value, onChange, currentUser, placeholder = "Sel
 
   const { data: addresses = [] } = useQuery({
     queryKey: ["picker_addresses", currentUser?.company_id],
-    queryFn: () => base44.entities.Address.filter({ company_id: currentUser.company_id }),
+    queryFn: () => ncClient.entities.Address.filter({ company_id: currentUser.company_id }),
     enabled: !!currentUser?.company_id,
     staleTime: 60000,
   });

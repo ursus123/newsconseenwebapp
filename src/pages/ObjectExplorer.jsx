@@ -11,7 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import cytoscape from "cytoscape";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { createPageUrl } from "@/utils";
 import { useNavigate } from "react-router-dom";
 import {
@@ -1269,7 +1269,7 @@ export default function ObjectExplorer() {
 
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -1299,7 +1299,7 @@ export default function ObjectExplorer() {
       const results = {};
       await Promise.allSettled(
         OBJECT_TYPES.map(async t => {
-          try { results[t.key] = (await listFn(base44.entities[t.entity])) || []; }
+          try { results[t.key] = (await listFn(ncClient.entities[t.entity])) || []; }
           catch { results[t.key] = []; }
         })
       );

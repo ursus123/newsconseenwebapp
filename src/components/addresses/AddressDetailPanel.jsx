@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { X, Building2, User, Navigation, ExternalLink, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
@@ -40,12 +40,12 @@ export default function AddressDetailPanel({ address, currentUser, onClose, onGe
     const addressLabel = address.label || address.address_line1 || "";
 
     // Query Relationship entity for enterprise_address and person_address links
-    base44.entities.Relationship.filter({ relationship_type: "enterprise_address" })
+    ncClient.entities.Relationship.filter({ relationship_type: "enterprise_address" })
       .then((rels) => {
         const linked = rels.filter((r) => r.location === addressLabel || r.location === address.id);
         const enterpriseNames = linked.map((r) => r.enterprise_name).filter(Boolean);
         if (enterpriseNames.length > 0) {
-          base44.entities.Enterprise.filter(scope).then((all) => {
+          ncClient.entities.Enterprise.filter(scope).then((all) => {
             const fromRels = all.filter((e) => enterpriseNames.includes(e.enterprise_name));
             const fromLegacy = all.filter((e) =>
               (e.primary_address && address.address_line1 && e.primary_address.includes(address.address_line1)) ||
@@ -55,7 +55,7 @@ export default function AddressDetailPanel({ address, currentUser, onClose, onGe
             setEnterprises(merged);
           }).catch(() => {});
         } else {
-          base44.entities.Enterprise.filter(scope).then((all) => {
+          ncClient.entities.Enterprise.filter(scope).then((all) => {
             setEnterprises(all.filter((e) =>
               (e.primary_address && address.address_line1 && e.primary_address.includes(address.address_line1)) ||
               (e.linked_addresses || []).includes(address.id)
@@ -64,12 +64,12 @@ export default function AddressDetailPanel({ address, currentUser, onClose, onGe
         }
       }).catch(() => {});
 
-    base44.entities.Relationship.filter({ relationship_type: "person_address" })
+    ncClient.entities.Relationship.filter({ relationship_type: "person_address" })
       .then((rels) => {
         const linked = rels.filter((r) => r.location === addressLabel || r.location === address.id);
         const personNames = linked.map((r) => r.person_name).filter(Boolean);
         if (personNames.length > 0) {
-          base44.entities.Person.filter(scope).then((all) => {
+          ncClient.entities.Person.filter(scope).then((all) => {
             const fromRels = all.filter((p) => {
               const name = p.preferred_name || `${p.first_name} ${p.last_name}`.trim();
               return personNames.includes(name);
@@ -82,7 +82,7 @@ export default function AddressDetailPanel({ address, currentUser, onClose, onGe
             setPeople(merged);
           }).catch(() => {});
         } else {
-          base44.entities.Person.filter(scope).then((all) => {
+          ncClient.entities.Person.filter(scope).then((all) => {
             setPeople(all.filter((p) =>
               (p.address && address.address_line1 && p.address.includes(address.address_line1)) ||
               (p.linked_addresses || []).includes(address.id)
@@ -96,7 +96,7 @@ export default function AddressDetailPanel({ address, currentUser, onClose, onGe
     setGeocoding(true);
     const coords = await geocodeAddress(address);
     if (coords) {
-      await base44.entities.Address.update(address.id, { ...address, ...coords });
+      await ncClient.entities.Address.update(address.id, { ...address, ...coords });
       triggerETL("address");
       onGeocoded?.({ ...address, ...coords });
     }

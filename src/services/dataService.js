@@ -13,7 +13,7 @@
  *  - Taxonomy sync (when provided by caller)
  */
 
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { supabaseEntities } from "@/api/supabaseEntityClient";
 import { createWithScope } from "@/components/shared/useDataQuery";
 import { RAILWAY_API_KEY, RAILWAY_URL } from "@/config/api";
@@ -34,7 +34,7 @@ function _ent(base44Name) {
     if (!e) throw new Error(`[dataService] No Supabase entity for "${base44Name}"`);
     return e;
   }
-  return base44.entities[base44Name];
+  return ncClient.entities[base44Name];
 }
 
 /** @param {any} queryClient @param {any} queryKey @param {any} record */
@@ -52,7 +52,7 @@ function addRecordToQueryCache(queryClient, queryKey, record) {
 
 
 // ── Entity registry ────────────────────────────────────────────────
-// thunks prevent initialization-order issues with base44.entities.*
+// thunks prevent initialization-order issues with ncClient.entities.*
 
 export const ENTITY_REGISTRY = {
   person: {

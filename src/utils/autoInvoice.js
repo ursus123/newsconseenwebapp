@@ -1,11 +1,11 @@
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 export async function createInvoiceFromTask(task, service, currentUser) {
   if (task.status !== "completed") return null;
   if (!service?.rate) return null;
 
   // Check if invoice already exists for this task
-  const existing = await base44.entities.Transaction.filter({
+  const existing = await ncClient.entities.Transaction.filter({
     task_id: task.id,
     company_id: currentUser.company_id,
   });
@@ -30,7 +30,7 @@ export async function createInvoiceFromTask(task, service, currentUser) {
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + 30);
 
-  return await base44.entities.Transaction.create({
+  return await ncClient.entities.Transaction.create({
     company_id:       currentUser.company_id,
     enterprise:       task.enterprise,
     created_by:       currentUser.email,

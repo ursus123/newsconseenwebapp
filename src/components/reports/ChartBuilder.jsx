@@ -21,7 +21,7 @@ function safeChartData(rawData) {
     return safeRow;
   });
 }
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -441,7 +441,7 @@ export default function ChartBuilder({ chart, folders, currentUser, onClose, rea
     setAiInsight("");
     try {
       const sample = previewData.slice(0, 20);
-      const result = await base44.integrations.Core.InvokeLLM({
+      const result = await ncClient.integrations.Core.InvokeLLM({
         prompt: `You are a data analyst. Analyze this chart data and write ONE concise insight (2-3 sentences max). Focus on the most notable trend, pattern, or outlier. Be specific and mention actual values.
 
 Chart title: "${title || "Untitled chart"}"
@@ -473,8 +473,8 @@ Respond with just the insight text, no headers or bullet points.`,
 
   const saveMut = useMutation({
     mutationFn: (data) => chart
-      ? base44.entities.ReportChart.update(chart.id, data)
-      : base44.entities.ReportChart.create(data),
+      ? ncClient.entities.ReportChart.update(chart.id, data)
+      : ncClient.entities.ReportChart.create(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["reportCharts"] });
       onClose();

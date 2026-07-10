@@ -237,7 +237,7 @@ performance for both. The ETL separates the concerns cleanly.
 
 ```
 Supabase (Layer 1)
-   │  forms write master data here (via base44Client proxy → supabaseEntityClient)
+   │  forms write master data here (via ncClient proxy → supabaseEntityClient)
    │  ETL pulls from here on every mutation
    ▼
 python_layer (Layer 2)
@@ -272,7 +272,7 @@ Query Builder tables (`analytics_*`).
 ```
 Tier 1: Try python_layer endpoint
          ↓ if empty or unreachable
-Tier 2: Fall back to Supabase entities directly (via base44Client proxy)
+Tier 2: Fall back to Supabase entities directly (via ncClient proxy)
          ↓ (never show 0 if Supabase has data)
 Tier 3: Show empty state only if Supabase also returns nothing
 ```
@@ -286,7 +286,7 @@ const totalPeople = peopleSummary.reduce((sum, r) => sum + (r.total_count || 0),
 // CORRECT — falls back to already-loaded Supabase entities when summary is empty
 const totalPeople = peopleSummary.length > 0
   ? peopleSummary.reduce((sum, r) => sum + (r.total_count || 0), 0)
-  : people.length;  // people = base44.entities.Person (proxied to Supabase)
+  : people.length;  // people = ncClient.entities.Person (proxied to Supabase)
 ```
 
 ### Query Builder rule
@@ -295,8 +295,8 @@ When `analytics_*` or `raw_*` table returns empty from python_layer, fall back t
 the equivalent Supabase entity query:
 
 ```javascript
-// analytics_people / raw_people empty → base44.entities.Person.list()   (→ Supabase)
-// analytics_enterprises / raw_enterprises empty → base44.entities.Enterprise.list()
+// analytics_people / raw_people empty → ncClient.entities.Person.list()   (→ Supabase)
+// analytics_enterprises / raw_enterprises empty → ncClient.entities.Enterprise.list()
 // etc.
 ```
 

@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import dataService from "@/services/dataService";
 import TeachIdjwiButton from "@/components/shared/TeachIdjwiButton";
 import { Badge } from "@/components/ui/badge";
@@ -117,8 +117,8 @@ async function fetchPins(companyId, layers) {
   } catch (_) {}
   try {
     const [enterprises, plots] = await Promise.all([
-      layers.includes("enterprises") ? base44.entities.Enterprise.filter({ company_id: companyId }).catch(() => []) : Promise.resolve([]),
-      layers.includes("plots") && base44.entities.Plot ? base44.entities.Plot.filter({ company_id: companyId }).catch(() => []) : Promise.resolve([]),
+      layers.includes("enterprises") ? ncClient.entities.Enterprise.filter({ company_id: companyId }).catch(() => []) : Promise.resolve([]),
+      layers.includes("plots") && ncClient.entities.Plot ? ncClient.entities.Plot.filter({ company_id: companyId }).catch(() => []) : Promise.resolve([]),
     ]);
     const pins = [];
     enterprises.forEach(e => {
@@ -213,13 +213,13 @@ export default function MapView() {
 
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
   });
   const companyId = currentUser?.company_id;
 
   const { data: addresses = [], isLoading: addressesLoading } = useQuery({
     queryKey: ["spatial-addresses", companyId],
-    queryFn: () => base44.entities.Address.filter({ company_id: companyId }).catch(() => []),
+    queryFn: () => ncClient.entities.Address.filter({ company_id: companyId }).catch(() => []),
     enabled: !!companyId,
     staleTime: 30000,
   });

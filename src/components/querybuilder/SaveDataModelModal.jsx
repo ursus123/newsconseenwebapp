@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { X, Layers } from "lucide-react";
 import { inferType } from "./sqlEngine";
 
@@ -19,7 +19,7 @@ export default function SaveDataModelModal({ sql, results, onClose, onSaved }) {
   const save = async () => {
     if (!name.trim()) return;
     setSaving(true);
-    await base44.entities.DataModel.create({
+    await ncClient.entities.DataModel.create({
       name: name.trim(),
       description: description.trim(),
       fields,

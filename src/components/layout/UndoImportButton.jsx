@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Undo2, Loader2 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 const ENTITY_MAP = {
   People: "Person", Person: "Person",
@@ -39,7 +39,7 @@ export default function UndoImportButton() {
 
   const hasImport = !!lastImport;
   const entityKey = lastImport ? ENTITY_MAP[lastImport.entityName] : null;
-  const entity = entityKey ? base44.entities[entityKey] : null;
+  const entity = entityKey ? ncClient.entities[entityKey] : null;
 
   const handleUndo = async () => {
     if (!lastImport) return;

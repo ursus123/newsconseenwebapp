@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { Upload, Loader2, X, CheckCircle, AlertCircle, ChevronDown } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { Button } from "@/components/ui/button";
 
 const ENTITY_SCHEMAS = {
@@ -158,8 +158,8 @@ export default function SmartImportButton({ currentUser }) {
 
       if (result.isPdf) {
         // Use LLM to extract from PDF
-        const { file_url } = await base44.integrations.Core.UploadFile({ file });
-        const extracted = await base44.integrations.Core.InvokeLLM({
+        const { file_url } = await ncClient.integrations.Core.UploadFile({ file });
+        const extracted = await ncClient.integrations.Core.InvokeLLM({
           prompt: `Extract all tabular/structured data from this document as a JSON array of objects. Return the raw data rows. Each object should have consistent keys (field names). Return JSON only.`,
           file_urls: [file_url],
           response_json_schema: { type: "object", properties: { rows: { type: "array", items: { type: "object" } } } },
@@ -223,7 +223,7 @@ export default function SmartImportButton({ currentUser }) {
       // Add company_id scope
       if (currentUser?.company_id) mapped.company_id = currentUser.company_id;
 
-      const created = await base44.entities[selectedEntity].create(mapped);
+      const created = await ncClient.entities[selectedEntity].create(mapped);
       importedIds.push(created.id);
       imported++;
       setProgress({ done: imported, total: rows.length });

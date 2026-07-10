@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { ncClient } from '@/api/ncClient';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -17,7 +17,7 @@ export default function ClientStep3ClassAssignment({ formData, onChange }) {
   useEffect(() => {
     const fetchEnterprises = async () => {
       try {
-        const data = await base44.entities.Enterprise.filter({
+        const data = await ncClient.entities.Enterprise.filter({
           status: 'active',
         });
         setEnterprises(data);

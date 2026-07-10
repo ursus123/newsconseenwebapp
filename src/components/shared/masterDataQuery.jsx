@@ -12,7 +12,7 @@
  *   Tier 3 — Restricted: never exposed to apps (cost, internal notes, compliance)
  */
 
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 // ─── PEOPLE ──────────────────────────────────────────────────────────────────
 
@@ -52,7 +52,7 @@ export async function queryPeople({ enterpriseName = null, personType = null, ti
   if (personType) filters.person_type = personType;
   if (companyId) filters.company_id = companyId;
 
-  const records = await base44.entities.Person.filter(filters, "first_name", 200);
+  const records = await ncClient.entities.Person.filter(filters, "first_name", 200);
   return records.map((p) => stripPersonFields(p, tier));
 }
 
@@ -63,11 +63,11 @@ export async function queryPeople({ enterpriseName = null, personType = null, ti
 export async function queryPatients(companyId = null) {
   const baseFilters = { status: "active", person_type: "client" };
   if (companyId) baseFilters.company_id = companyId;
-  const patients = await base44.entities.Person.filter(baseFilters, "first_name");
+  const patients = await ncClient.entities.Person.filter(baseFilters, "first_name");
   if (patients.length > 0) return patients.map((p) => stripPersonFields(p, 2)); // Tier 2 for med app
   const fallbackFilters = { status: "active" };
   if (companyId) fallbackFilters.company_id = companyId;
-  const all = await base44.entities.Person.filter(fallbackFilters, "first_name");
+  const all = await ncClient.entities.Person.filter(fallbackFilters, "first_name");
   return all.map((p) => stripPersonFields(p, 1));
 }
 
@@ -100,7 +100,7 @@ function stripEnterpriseFields(enterprise) {
 export async function queryEnterprises({ status = "active", companyId = null } = {}) {
   const filters = { status };
   if (companyId) filters.company_id = companyId;
-  const records = await base44.entities.Enterprise.filter(filters, "enterprise_name");
+  const records = await ncClient.entities.Enterprise.filter(filters, "enterprise_name");
   return records.map(stripEnterpriseFields);
 }
 
@@ -145,7 +145,7 @@ export async function queryProducts({ itemType = null, tier = 1, companyId = nul
   const filters = { status: "active" };
   if (itemType) filters.item_type = itemType;
   if (companyId) filters.company_id = companyId;
-  const records = await base44.entities.Product.filter(filters, "name");
+  const records = await ncClient.entities.Product.filter(filters, "name");
   return records.map((p) => stripProductFields(p, tier));
 }
 
@@ -173,7 +173,7 @@ function stripServiceFields(service) {
 export async function queryServices(companyId = null) {
   const filters = { status: "active" };
   if (companyId) filters.company_id = companyId;
-  const records = await base44.entities.Service.filter(filters, "name");
+  const records = await ncClient.entities.Service.filter(filters, "name");
   return records.map(stripServiceFields);
 }
 
@@ -200,6 +200,6 @@ function stripAddressFields(address) {
 export async function queryAddresses(companyId = null) {
   const filters = { status: "active" };
   if (companyId) filters.company_id = companyId;
-  const records = await base44.entities.Address.filter(filters, "label");
+  const records = await ncClient.entities.Address.filter(filters, "label");
   return records.map(stripAddressFields);
 }

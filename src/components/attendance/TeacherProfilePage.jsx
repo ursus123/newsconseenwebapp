@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { ArrowLeft, Mail, Phone, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function TeacherProfilePage({ person, onBack, onOpenClass }) {
   const { data: relationships = [] } = useQuery({
     queryKey: ["teacher_classes", person?.id],
-    queryFn: () => base44.entities.Relationship.filter({
+    queryFn: () => ncClient.entities.Relationship.filter({
       relationship_type: "person_enterprise",
       person_name: person?.id,
       status: "active",
@@ -17,7 +17,7 @@ export default function TeacherProfilePage({ person, onBack, onOpenClass }) {
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["teacher_enterprises"],
-    queryFn: () => base44.entities.Enterprise.list(),
+    queryFn: () => ncClient.entities.Enterprise.list(),
   });
 
   const assignedClasses = relationships

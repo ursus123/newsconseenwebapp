@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery } from "@tanstack/react-query";
 import { Network, RefreshCw, Search, X, Download, ChevronDown, Target } from "lucide-react";
 import { buildGraph, NODE_CONFIG, VIEW_PRESETS } from "@/components/entitygraph/graphConfig";
@@ -118,7 +118,7 @@ export default function EntityGraph() {
   // Current user (for tenant isolation)
   const { data: currentUser } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -171,10 +171,10 @@ export default function EntityGraph() {
     const loadCore = async () => {
       setLoad("core", LOAD_STATES.loading);
       const [ents, ppl, svcs, rels] = await Promise.all([
-        listFn(base44.entities.Enterprise),
-        listFn(base44.entities.Person),
-        listFn(base44.entities.Service),
-        listFn(base44.entities.Relationship),
+        listFn(ncClient.entities.Enterprise),
+        listFn(ncClient.entities.Person),
+        listFn(ncClient.entities.Service),
+        listFn(ncClient.entities.Relationship),
       ]);
       setEnterprises(ents);
       setPeople(ppl);
@@ -190,12 +190,12 @@ export default function EntityGraph() {
     if (loadStates.core !== LOAD_STATES.loaded || !currentUser) return;
     const loadSecondary = async () => {
       setLoad("products", LOAD_STATES.loading);
-      const prds = await listFn(base44.entities.Product);
+      const prds = await listFn(ncClient.entities.Product);
       setProducts(prds);
       setLoad("products", LOAD_STATES.loaded);
 
       setLoad("addresses", LOAD_STATES.loading);
-      const adrs = await listFn(base44.entities.Address);
+      const adrs = await listFn(ncClient.entities.Address);
       setAddresses(adrs);
       setLoad("addresses", LOAD_STATES.loaded);
     };
@@ -207,12 +207,12 @@ export default function EntityGraph() {
     if (loadStates.products !== LOAD_STATES.loaded || !currentUser) return;
     const loadHeavy = async () => {
       setLoad("tasks", LOAD_STATES.loading);
-      const tsks = await listFn(base44.entities.Task);
+      const tsks = await listFn(ncClient.entities.Task);
       setTasks(tsks);
       setLoad("tasks", LOAD_STATES.loaded);
 
       setLoad("transactions", LOAD_STATES.loading);
-      const txns = await listFn(base44.entities.Transaction);
+      const txns = await listFn(ncClient.entities.Transaction);
       setTransactions(txns);
       setLoad("transactions", LOAD_STATES.loaded);
     };

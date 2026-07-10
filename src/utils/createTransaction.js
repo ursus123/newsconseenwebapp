@@ -4,7 +4,7 @@
  * This is the SINGLE entry point for all transaction
  * creation across every app in the Newsconseen platform.
  *
- * NO app should call base44.entities.Transaction.create()
+ * NO app should call ncClient.entities.Transaction.create()
  * directly. Every financial or inventory event flows
  * through this file.
  *
@@ -75,7 +75,7 @@
  *   type: "grant", source: "grants"
  */
 
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { generateInvoiceNumber } from "./autoInvoice";
 import { REVENUE_TYPES, EXPENSE_TYPES, INVENTORY_TYPES } from "@/config/transactionTypes";
 
@@ -106,11 +106,11 @@ export const TRANSACTION_SOURCES = {
 // ─── Master Creator ────────────────────────────────────────────────────────────
 /**
  * createTransaction — all apps call this.
- * Never call base44.entities.Transaction.create() directly.
+ * Never call ncClient.entities.Transaction.create() directly.
  *
  * @param {object} fields        — transaction field values
  * @param {object} options       — behaviour options
- * @param {object} currentUser   — from base44.auth.me()
+ * @param {object} currentUser   — from ncClient.auth.me()
  * @returns {object} created transaction record
  */
 export async function createTransaction(fields, options = {}, currentUser) {
@@ -133,7 +133,7 @@ export async function createTransaction(fields, options = {}, currentUser) {
 
   // Duplicate guard — same source + sourceRef = same event
   if (!skipDupeCheck && sourceRef && fields.source) {
-    const existing = await base44.entities.Transaction.filter({
+    const existing = await ncClient.entities.Transaction.filter({
       company_id: currentUser.company_id,
       source:     fields.source,
       source_ref: sourceRef,
@@ -198,9 +198,9 @@ export async function createTransaction(fields, options = {}, currentUser) {
     period_end:       fields.period_end       || null,
   };
 
-  let created = await base44.entities.Transaction.create(record);
+  let created = await ncClient.entities.Transaction.create(record);
   if (created?.id && created.company_id !== currentUser.company_id) {
-    await base44.entities.Transaction.update(created.id, { company_id: currentUser.company_id });
+    await ncClient.entities.Transaction.update(created.id, { company_id: currentUser.company_id });
     created = { ...created, company_id: currentUser.company_id };
   }
 
@@ -260,7 +260,7 @@ export async function createStockTransaction(type, product, quantity, enterprise
   // Low stock check after stock_out
   if (type === "stock_out" && options.toast) {
     try {
-      const updated = await base44.entities.Product.get(product.id);
+      const updated = await ncClient.entities.Product.get(product.id);
       checkStockLevel(updated, quantity, options.toast);
     } catch {} // silent fail — never block the main flow
   }

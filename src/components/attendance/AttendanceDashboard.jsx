@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { Users, BookOpen, Award, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -54,25 +54,25 @@ export default function AttendanceDashboard({ currentUser, onOpenClass, onOpenPe
 
   const { data: people = [] } = useQuery({
     queryKey: ["attendance_people", currentUser?.company_id],
-    queryFn: () => base44.entities.Person.filter({ company_id: currentUser?.company_id }),
+    queryFn: () => ncClient.entities.Person.filter({ company_id: currentUser?.company_id }),
     enabled: !!currentUser?.company_id,
   });
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["attendance_enterprises", currentUser?.company_id],
-    queryFn: () => base44.entities.Enterprise.filter({ company_id: currentUser?.company_id }),
+    queryFn: () => ncClient.entities.Enterprise.filter({ company_id: currentUser?.company_id }),
     enabled: !!currentUser?.company_id,
   });
 
   const { data: relationships = [] } = useQuery({
     queryKey: ["attendance_relationships", currentUser?.company_id],
-    queryFn: () => base44.entities.Relationship.filter({ company_id: currentUser?.company_id }),
+    queryFn: () => ncClient.entities.Relationship.filter({ company_id: currentUser?.company_id }),
     enabled: !!currentUser?.company_id,
   });
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["attendance_tasks", currentUser?.company_id],
-    queryFn: () => base44.entities.Task.filter({ 
+    queryFn: () => ncClient.entities.Task.filter({ 
       company_id: currentUser?.company_id,
       task_type: "attendance",
     }),

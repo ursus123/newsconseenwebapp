@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 
 import { UploadedDataStore } from "../components/querybuilder/UploadedDataStore";
@@ -432,7 +432,7 @@ export default function QueryBuilder() {
   // ── Current user (for tenant isolation) ───────────────────────────────
   const { data: currentUser } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
   });
   
   const listFn = useEntityListFn(currentUser);
@@ -440,49 +440,49 @@ export default function QueryBuilder() {
   // ── Data Models ───────────────────────────────────────────────────────
   const { data: dataModels = [] } = useQuery({
     queryKey: ["dataModels_qb", currentUser?.company_id],
-    queryFn: () => listFn(base44.entities.DataModel),
+    queryFn: () => listFn(ncClient.entities.DataModel),
     enabled: !!currentUser,
   });
 
   // ── Master data snapshot ─ SCOPED TO TENANT ─────────────────────────
   const { data: enterprisesSnap = [] } = useQuery({
     queryKey: ["snap_enterprises", currentUser?.company_id],
-    queryFn: () => listFn(base44.entities.Enterprise),
+    queryFn: () => listFn(ncClient.entities.Enterprise),
     enabled: !!currentUser,
     staleTime: 0,
     refetchOnMount: "always",
   });
   const { data: peopleSnap = [] } = useQuery({
     queryKey: ["snap_people", currentUser?.company_id],
-    queryFn: () => listFn(base44.entities.Person),
+    queryFn: () => listFn(ncClient.entities.Person),
     enabled: !!currentUser,
     staleTime: 0,
     refetchOnMount: "always",
   });
   const { data: productsSnap = [] } = useQuery({
     queryKey: ["snap_products", currentUser?.company_id],
-    queryFn: () => listFn(base44.entities.Product),
+    queryFn: () => listFn(ncClient.entities.Product),
     enabled: !!currentUser,
     staleTime: 0,
     refetchOnMount: "always",
   });
   const { data: tasksSnap = [] } = useQuery({
     queryKey: ["snap_tasks", currentUser?.company_id],
-    queryFn: () => listFn(base44.entities.Task),
+    queryFn: () => listFn(ncClient.entities.Task),
     enabled: !!currentUser,
     staleTime: 0,
     refetchOnMount: "always",
   });
   const { data: transactionsSnap = [] } = useQuery({
     queryKey: ["snap_transactions", currentUser?.company_id],
-    queryFn: () => listFn(base44.entities.Transaction),
+    queryFn: () => listFn(ncClient.entities.Transaction),
     enabled: !!currentUser,
     staleTime: 0,
     refetchOnMount: "always",
   });
   const { data: addressesSnap = [] } = useQuery({
     queryKey: ["snap_addresses", currentUser?.company_id],
-    queryFn: () => listFn(base44.entities.Address),
+    queryFn: () => listFn(ncClient.entities.Address),
     enabled: !!currentUser,
     staleTime: 0,
     refetchOnMount: "always",

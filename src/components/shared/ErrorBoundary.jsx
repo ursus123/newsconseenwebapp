@@ -1,5 +1,5 @@
 import React from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 function ErrorFallback({ error, resetErrorBoundary }) {
   return (
@@ -53,7 +53,7 @@ class ErrorBoundary extends React.Component {
   async reportError(error, errorInfo) {
     this.setState({ reporting: true });
     try {
-      await base44.entities.Task.create({
+      await ncClient.entities.Task.create({
         task_type: "other",
         title: `App Error: ${error?.message?.slice(0, 80) || "Unknown error"}`,
         priority: "high",

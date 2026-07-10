@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
@@ -35,7 +35,7 @@ export function playBeep(error = false) {
 export default function BarcodeScanner() {
   const { data: user = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -65,8 +65,8 @@ export default function BarcodeScanner() {
   useEffect(() => {
     if (!user) return;
     Promise.all([
-      base44.entities.Product.filter({ status: "active", company_id: user.company_id }, "name", 500),
-      base44.entities.Enterprise.filter({ status: "active", company_id: user.company_id }),
+      ncClient.entities.Product.filter({ status: "active", company_id: user.company_id }, "name", 500),
+      ncClient.entities.Enterprise.filter({ status: "active", company_id: user.company_id }),
     ]).then(([prods, ents]) => {
       setProducts(prods);
       setEnterprises(ents);

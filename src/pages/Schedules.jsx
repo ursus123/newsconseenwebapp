@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "@/components/shared/PageHeader";
 import DataTable from "@/components/shared/DataTable";
@@ -135,7 +135,7 @@ export default function Schedules() {
   const { toast } = useToast();
   const { syncState, notifyTaxonomyChange } = useTaxonomySync();
 
-  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 0 });
+  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(), staleTime: 0 });
   const companyId  = currentUser?.company_id;
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
@@ -148,7 +148,7 @@ export default function Schedules() {
 
   const { data: schedules = [], isLoading } = useQuery({
     queryKey: ["schedules", companyId],
-    queryFn:  () => listFn(base44.entities.Schedule),
+    queryFn:  () => listFn(ncClient.entities.Schedule),
     enabled:  currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -273,7 +273,7 @@ export default function Schedules() {
         onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["schedules"] }); qc.refetchQueries({ queryKey: ["schedules"] }); }}
         entityName="Schedules" fields={SCHEDULE_FIELDS} mappingRules={SCHEDULE_MAPPING_RULES}
         templateExample={SCHEDULE_TEMPLATE_EXAMPLE} templateInstructions={SCHEDULE_TEMPLATE_INSTRUCTIONS}
-        entityFetchFn={() => listFn(base44.entities.Schedule)}
+        entityFetchFn={() => listFn(ncClient.entities.Schedule)}
         validateRow={validateSchedule} transformRow={transformSchedule}
         onImport={(row) => dataService.createRecord("schedule", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} requiredField="title" />

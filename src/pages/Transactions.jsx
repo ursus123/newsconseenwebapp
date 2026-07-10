@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
 import TransactionForm from "../components/transactions/TransactionForm";
@@ -351,7 +351,7 @@ export default function Transactions() {
   const [expanded, setExpanded]           = useState(null);
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -381,7 +381,7 @@ export default function Transactions() {
 
   const { data: transactions = [] } = useQuery({
     queryKey: ["transactions", companyId, currentUser?.email],
-    queryFn: () => listFn(base44.entities.Transaction, "-date"),
+    queryFn: () => listFn(ncClient.entities.Transaction, "-date"),
     enabled: currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -389,7 +389,7 @@ export default function Transactions() {
 
   const { data: enterprises = [] } = useQuery({
     queryKey: ["enterprises", companyId],
-    queryFn: () => listFn(base44.entities.Enterprise),
+    queryFn: () => listFn(ncClient.entities.Enterprise),
     enabled: currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -397,7 +397,7 @@ export default function Transactions() {
 
   const { data: people = [] } = useQuery({
     queryKey: ["people-tx", companyId],
-    queryFn: () => listFn(base44.entities.Person),
+    queryFn: () => listFn(ncClient.entities.Person),
     enabled: currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -405,7 +405,7 @@ export default function Transactions() {
 
   const { data: services = [] } = useQuery({
     queryKey: ["services-tx", companyId],
-    queryFn: () => listFn(base44.entities.Service),
+    queryFn: () => listFn(ncClient.entities.Service),
     enabled: currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -413,7 +413,7 @@ export default function Transactions() {
 
   const { data: products = [] } = useQuery({
     queryKey: ["tx-products-page", companyId],
-    queryFn: () => listFn(base44.entities.Product),
+    queryFn: () => listFn(ncClient.entities.Product),
     enabled: currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -482,7 +482,7 @@ export default function Transactions() {
   const fmt = (n) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const handlePost = async (tx) => {
-    const existing = await base44.entities.Transaction.filter({ company_id: currentUser.company_id, enterprise: tx.enterprise }).catch(() => []);
+    const existing = await ncClient.entities.Transaction.filter({ company_id: currentUser.company_id, enterprise: tx.enterprise }).catch(() => []);
     const enterprise = enterprises.find(e => e.enterprise_name === tx.enterprise);
     const invoiceNumber = generateInvoiceNumber(enterprise, existing);
     await dataService.updateRecord("transaction", tx.id, { status: "posted", invoice_number: invoiceNumber, posted_by: currentUser?.email, posted_date: new Date().toISOString() }, currentUser, { queryClient: qc });
@@ -912,7 +912,7 @@ export default function Transactions() {
         templateFileName="newsconseen_transactions_import_template.xlsx"
         templateExample={TRANSACTION_TEMPLATE_EXAMPLE}
         templateInstructions={TRANSACTION_TEMPLATE_INSTRUCTIONS}
-        entityFetchFn={() => listFn(base44.entities.Transaction)}
+        entityFetchFn={() => listFn(ncClient.entities.Transaction)}
         validateRow={validateTransaction}
         transformRow={transformTransaction}
         onImport={(row) => dataService.createRecord("transaction", row, currentUser, { queryClient: qc })}

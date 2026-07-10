@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Activity, ArrowUpRight, BarChart2, Brain, Check, Code2, Loader2, Pin, Table2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { makeChartDescription, rowCountLabel, sourceMeta } from "@/components/shared/chartUtils";
 import TeachIdjwiButton from "@/components/shared/TeachIdjwiButton";
 
@@ -128,7 +128,7 @@ export default function ChartCard({ title, description, sql, currentUser, entity
     if (pinning || pinned) return;
     setPinning(true);
     try {
-      await base44.entities.ReportChart.create({
+      await ncClient.entities.ReportChart.create({
         title,
         sql_query: sql || "",
         chart_type: "bar",

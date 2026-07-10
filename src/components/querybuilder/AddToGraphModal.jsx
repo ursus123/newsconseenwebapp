@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { X, Network } from "lucide-react";
 
 const NODE_TYPES = ["Enterprise", "Person", "Product", "Service", "Address", "Task", "Transaction", "Custom"];
@@ -26,8 +26,8 @@ export default function AddToGraphModal({ results, sql, onClose, onSaved }) {
     }));
 
     // Try to save into existing EntityGraph record or create a new one
-    const existing = await base44.entities.Enterprise.list("-created_date", 1).catch(() => []);
-    await base44.entities.DataModel.create({
+    const existing = await ncClient.entities.Enterprise.list("-created_date", 1).catch(() => []);
+    await ncClient.entities.DataModel.create({
       name: `Graph Snapshot – ${new Date().toLocaleDateString()}`,
       description: `Auto-generated from query: ${sql.slice(0, 80)}`,
       source_script: sql,

@@ -174,8 +174,8 @@ function ReportModal({ sql, onClose }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const { base44 } = await import("@/api/base44Client");
-      await base44.entities.Report.create({
+      const { ncClient } = await import("@/api/ncClient");
+      await ncClient.entities.Report.create({
         title: sql.slice(0, 50).trim(),
         type: "custom",
         content: sql,

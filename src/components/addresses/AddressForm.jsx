@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Save, X, Archive, Trash2, Upload, MapPin, Link2, StickyNote, Loader2, Search, ExternalLink } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 const TABS = [
   { id: "details", label: "Address Details", icon: MapPin },
@@ -108,7 +108,7 @@ export default function AddressForm({ open, onClose, onSubmit, onArchive, initia
     const file = e.target.files[0];
     if (!file) return;
     setUploading(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    const { file_url } = await ncClient.integrations.Core.UploadFile({ file });
     set("attachment_urls", [...(form.attachment_urls || []), file_url]);
     setUploading(false);
   };

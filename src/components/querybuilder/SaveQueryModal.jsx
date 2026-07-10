@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { X, Save } from "lucide-react";
 
 export default function SaveQueryModal({ sql, results, onClose, onSaved }) {
@@ -14,7 +14,7 @@ export default function SaveQueryModal({ sql, results, onClose, onSaved }) {
     const outputSchema = results?.length
       ? Object.keys(results[0]).map((k) => ({ name: k, type: "string" }))
       : [];
-    await base44.entities.QueryDefinition.create({
+    await ncClient.entities.QueryDefinition.create({
       name: name.trim(),
       description: description.trim(),
       script: sql,

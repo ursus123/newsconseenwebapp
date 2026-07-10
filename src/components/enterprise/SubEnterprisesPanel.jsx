@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { Building2, Plus, ChevronRight } from "lucide-react";
 import { getTermsFromEnterpriseType } from "@/config/enterpriseTerminology";
 
@@ -14,7 +14,7 @@ const TYPE_EMOJI = {
 export default function SubEnterprisesPanel({ enterprise, allEnterprises, currentUser, onAddChild }) {
   const { data: fetchedChildren = [] } = useQuery({
     queryKey: ["sub_enterprises", enterprise.id],
-    queryFn: () => base44.entities.Enterprise.filter({ parent_enterprise_id: enterprise.id }),
+    queryFn: () => ncClient.entities.Enterprise.filter({ parent_enterprise_id: enterprise.id }),
     enabled: !!enterprise.id && !allEnterprises,
   });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "@/components/shared/PageHeader";
 import DataTable from "@/components/shared/DataTable";
@@ -144,7 +144,7 @@ export default function Territories() {
   const { toast } = useToast();
   const { syncState, notifyTaxonomyChange } = useTaxonomySync();
 
-  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => base44.auth.me(), staleTime: 0 });
+  const { data: currentUser = null } = useQuery({ queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(), staleTime: 0 });
   const companyId  = currentUser?.company_id;
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
@@ -157,7 +157,7 @@ export default function Territories() {
 
   const { data: territories = [], isLoading } = useQuery({
     queryKey: ["territories", companyId],
-    queryFn:  () => listFn(base44.entities.Territory),
+    queryFn:  () => listFn(ncClient.entities.Territory),
     enabled:  currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -278,7 +278,7 @@ export default function Territories() {
         onClose={() => { setImportOpen(false); qc.invalidateQueries({ queryKey: ["territories"] }); qc.refetchQueries({ queryKey: ["territories"] }); }}
         entityName="Territories" fields={TERRITORY_FIELDS} mappingRules={TERRITORY_MAPPING_RULES}
         templateExample={TERRITORY_TEMPLATE_EXAMPLE} templateInstructions={TERRITORY_TEMPLATE_INSTRUCTIONS}
-        entityFetchFn={() => listFn(base44.entities.Territory)}
+        entityFetchFn={() => listFn(ncClient.entities.Territory)}
         validateRow={validateTerritory} transformRow={transformTerritory}
         onImport={(row) => dataService.createRecord("territory", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} requiredField="name" />

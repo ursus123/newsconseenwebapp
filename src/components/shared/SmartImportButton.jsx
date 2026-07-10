@@ -15,7 +15,7 @@
  */
 import React, { useState, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import {
   Brain, Upload, FileText, Layers, X, Loader2,
   CheckCircle2, AlertTriangle, RefreshCw,
@@ -216,7 +216,7 @@ export default function SmartImportButton({
   const qc = useQueryClient();
   const { data: currentUser } = useQuery({
     queryKey: ["currentUser"],
-    queryFn:  () => base44.auth.me(),
+    queryFn:  () => ncClient.auth.me(),
     staleTime: 0,
   });
   const companyId = currentUser?.company_id;

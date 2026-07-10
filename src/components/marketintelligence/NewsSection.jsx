@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { ExternalLink, Loader2, Bell, CheckCircle2, AlertCircle } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import SectionSkeleton from "./SectionSkeleton";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
@@ -35,7 +35,7 @@ export default function NewsSection({ data, location, businessType, loading, cur
     setTracking(index);
     setFailed(prev => { const s = new Set(prev); s.delete(index); return s; });
     try {
-      await base44.entities.Signal.create({
+      await ncClient.entities.Signal.create({
         name:            article.title.slice(0, 100),
         signal_type:     "automated",
         signal_subtype:  "market_news",

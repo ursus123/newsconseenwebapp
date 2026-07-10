@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 // System default role options by person_type
 const SYSTEM_ROLES = {
@@ -50,7 +50,7 @@ export function useMasterDataOptions(entityType, fieldName) {
   const { data: dbOptions = [] } = useQuery({
     queryKey: ["masterDataOptions", entityType, fieldName],
     queryFn: () =>
-      base44.entities.MasterDataOption.filter({
+      ncClient.entities.MasterDataOption.filter({
         entity_type: entityType,
         field_name: fieldName,
         is_active: true
@@ -397,10 +397,10 @@ export function getSystemItemClasses() {
 }
 
 export async function createCustomOption(entityType, fieldName, value, label = null) {
-  const user = await base44.auth.me();
+  const user = await ncClient.auth.me();
   const company = user?.company_id || null;
 
-  const existing = await base44.entities.MasterDataOption.filter({
+  const existing = await ncClient.entities.MasterDataOption.filter({
     entity_type: entityType,
     field_name: fieldName,
     value: value.toLowerCase(),
@@ -411,7 +411,7 @@ export async function createCustomOption(entityType, fieldName, value, label = n
     return existing[0];
   }
 
-  return base44.entities.MasterDataOption.create({
+  return ncClient.entities.MasterDataOption.create({
     entity_type: entityType,
     field_name: fieldName,
     value: value,

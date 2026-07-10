@@ -9,7 +9,7 @@
 // ==============================================================
 
 import React, { useState, useCallback } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 import {
@@ -35,7 +35,7 @@ const ENTITY_CONFIG = [
     icon: Users,
     color: "text-blue-600",
     bg: "bg-blue-50",
-    entity: () => base44.entities.Person,
+    entity: () => ncClient.entities.Person,
     requiredFields: ["first_name", "last_name", "person_type", "email", "phone", "primary_role"],
     displayName: (r) => `${r.first_name || ""} ${r.last_name || ""}`.trim() || r.id,
     etl: "people",
@@ -46,7 +46,7 @@ const ENTITY_CONFIG = [
     icon: Building2,
     color: "text-purple-600",
     bg: "bg-purple-50",
-    entity: () => base44.entities.Enterprise,
+    entity: () => ncClient.entities.Enterprise,
     requiredFields: ["enterprise_name", "enterprise_type", "status", "email", "phone"],
     displayName: (r) => r.enterprise_name || r.id,
     etl: "enterprise",
@@ -57,7 +57,7 @@ const ENTITY_CONFIG = [
     icon: Package,
     color: "text-amber-600",
     bg: "bg-amber-50",
-    entity: () => base44.entities.Product,
+    entity: () => ncClient.entities.Product,
     requiredFields: ["name", "item_type", "status", "unit_of_measure"],
     displayName: (r) => r.name || r.id,
     etl: "product",
@@ -68,7 +68,7 @@ const ENTITY_CONFIG = [
     icon: CheckSquare,
     color: "text-emerald-600",
     bg: "bg-emerald-50",
-    entity: () => base44.entities.Task,
+    entity: () => ncClient.entities.Task,
     requiredFields: ["title", "task_type", "status"],
     displayName: (r) => r.title || r.id,
     etl: "task",
@@ -79,7 +79,7 @@ const ENTITY_CONFIG = [
     icon: Receipt,
     color: "text-rose-600",
     bg: "bg-rose-50",
-    entity: () => base44.entities.Transaction,
+    entity: () => ncClient.entities.Transaction,
     requiredFields: ["transaction_type", "amount", "status"],
     displayName: (r) => r.description || r.invoice_number || r.id,
     etl: "transaction",
@@ -90,7 +90,7 @@ const ENTITY_CONFIG = [
     icon: MapPin,
     color: "text-teal-600",
     bg: "bg-teal-50",
-    entity: () => base44.entities.Address,
+    entity: () => ncClient.entities.Address,
     requiredFields: ["address_line1", "city", "country"],
     displayName: (r) => [r.address_line1, r.city].filter(Boolean).join(", ") || r.id,
     etl: "address",
@@ -101,7 +101,7 @@ const ENTITY_CONFIG = [
     icon: Link2,
     color: "text-indigo-600",
     bg: "bg-indigo-50",
-    entity: () => base44.entities.Relationship,
+    entity: () => ncClient.entities.Relationship,
     requiredFields: ["relationship_type", "status"],
     displayName: (r) => `${r.relationship_type} — ${r.person_name || r.enterprise_name || r.id}`,
     etl: "relationship",
@@ -285,7 +285,7 @@ function EntityCard({ cfg, companyId, onRepair }) {
 export default function DataRepair() {
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });

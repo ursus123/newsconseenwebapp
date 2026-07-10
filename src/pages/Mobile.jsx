@@ -15,7 +15,7 @@
 // ==============================================================
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dataService from "@/services/dataService";
 import { format, isToday, parseISO } from "date-fns";
@@ -247,7 +247,7 @@ function TodayTab({ user, isOnline }) {
     if (!user) return;
     setLoading(true);
     try {
-      const all = await base44.entities.Task.filter({ assigned_to: user.email });
+      const all = await ncClient.entities.Task.filter({ assigned_to: user.email });
       setTasks(all.filter(t => t.status !== "completed" && t.status !== "cancelled"));
     } catch {
       setTasks([]);
@@ -612,7 +612,7 @@ const TABS = [
 export default function Mobile() {
   const { data: user = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });

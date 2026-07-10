@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { ArrowLeft, Mail, Phone, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -10,13 +10,13 @@ export default function StudentProfilePage({ person, onBack }) {
     queryFn: async () => {
       const fullName = [person?.preferred_name || person?.first_name, person?.last_name]
         .filter(Boolean).join(" ");
-      const byFullName = await base44.entities.Task.filter({
+      const byFullName = await ncClient.entities.Task.filter({
         task_type: "attendance",
         assigned_to_name: fullName,
       });
       if (byFullName.length > 0) return byFullName;
       // fallback: filter by first name only
-      const byFirst = await base44.entities.Task.filter({
+      const byFirst = await ncClient.entities.Task.filter({
         task_type: "attendance",
         assigned_to_name: person?.preferred_name || person?.first_name,
       });

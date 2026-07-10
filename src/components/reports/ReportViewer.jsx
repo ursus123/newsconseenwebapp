@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer, MessageSquare, Send } from "lucide-react";
@@ -141,12 +141,12 @@ export default function ReportViewer({ report, charts, currentUser, onClose, onE
 
   const { data: comments = [] } = useQuery({
     queryKey: ["reportComments", report?.id],
-    queryFn: () => base44.entities.ReportComment.filter({ report_id: report.id }),
+    queryFn: () => ncClient.entities.ReportComment.filter({ report_id: report.id }),
     enabled: !!report?.id && !!report?.allow_comments,
   });
 
   const addCommentMut = useMutation({
-    mutationFn: (data) => base44.entities.ReportComment.create(data),
+    mutationFn: (data) => ncClient.entities.ReportComment.create(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["reportComments", report.id] });
       setComment("");

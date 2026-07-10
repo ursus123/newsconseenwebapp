@@ -3,7 +3,7 @@ import ReactDOM from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -286,10 +286,10 @@ export default function EntityQuickViewDrawer({ result, onClose, currentUser }) 
     if (!result) { setRecord(null); return; }
 
     const className = ENTITY_CLASS_MAP[result.type];
-    if (!className || !base44.entities[className]) return;
+    if (!className || !ncClient.entities[className]) return;
 
     setFetching(true);
-    base44.entities[className]
+    ncClient.entities[className]
       .filter({ id: result.id }, undefined, 1)
       .then(res => {
         const rec = res[0] || null;
@@ -316,7 +316,7 @@ export default function EntityQuickViewDrawer({ result, onClose, currentUser }) 
     setSaveError(null);
     const className = ENTITY_CLASS_MAP[result.type];
     try {
-      await base44.entities[className].update(result.id, form);
+      await ncClient.entities[className].update(result.id, form);
       const slug = ETL_SLUG[result.type];
       const qKey = QUERY_KEY[result.type];
       if (slug) triggerETL(slug);

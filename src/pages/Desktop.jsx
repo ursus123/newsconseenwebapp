@@ -18,7 +18,7 @@ import DailyBriefing from "@/components/desktop/DailyBriefing";
 import CopilotWidget from "@/components/desktop/CopilotWidget";
 import EnterpriseContextSwitcher from "@/components/desktop/EnterpriseContextSwitcher";
 import { usePWA } from "@/hooks/usePWA";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery } from "@tanstack/react-query";
 import { useLockStore } from "@/desktop/lockStore";
 import LockScreen from "@/components/desktop/LockScreen";
@@ -37,7 +37,7 @@ const WALLPAPERS = [
 export default function Desktop() {
   const { data: user = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -383,7 +383,7 @@ export default function Desktop() {
             {/* Footer */}
             <div style={{ height: 1, background: isLight ? "rgba(0,0,0,0.07)" : "rgba(255,255,255,0.07)", margin: "6px 0" }} />
             <button
-              onClick={() => { base44.auth.logout(); }}
+              onClick={() => { ncClient.auth.logout(); }}
               style={{
                 display: "flex", alignItems: "center", gap: 10,
                 width: "100%", padding: "9px 16px 12px",

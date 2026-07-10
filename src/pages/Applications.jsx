@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Search, LayoutGrid, Layers, ChevronRight } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   APP_REGISTRY, CATEGORIES, PLAN_ORDER, APPS_BY_ENTERPRISE_CATEGORY,
@@ -41,7 +41,7 @@ export default function Applications() {
 
   const { data: user = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -51,7 +51,7 @@ export default function Applications() {
   // Load enterprise to determine industry
   const { data: enterprises = [] } = useQuery({
     queryKey: ["enterprise_for_apps", user?.company_id],
-    queryFn: () => base44.entities.Enterprise.filter({ company_id: user.company_id }),
+    queryFn: () => ncClient.entities.Enterprise.filter({ company_id: user.company_id }),
     enabled: !!user?.company_id && user?.role !== "super_admin",
     staleTime: 0,
     refetchOnMount: "always",
@@ -64,19 +64,19 @@ export default function Applications() {
   // Lightweight entity counts for app readiness badges (stale for 2 min — not critical)
   const { data: staffCount = 0 } = useQuery({
     queryKey: ["readiness_staff", user?.company_id],
-    queryFn: () => base44.entities.Person.filter({ company_id: user.company_id, person_type: "staff" }).then((r) => r.length),
+    queryFn: () => ncClient.entities.Person.filter({ company_id: user.company_id, person_type: "staff" }).then((r) => r.length),
     enabled: !!user?.company_id,
     staleTime: 120000,
   });
   const { data: clientsCount = 0 } = useQuery({
     queryKey: ["readiness_clients", user?.company_id],
-    queryFn: () => base44.entities.Person.filter({ company_id: user.company_id, person_type: "client" }).then((r) => r.length),
+    queryFn: () => ncClient.entities.Person.filter({ company_id: user.company_id, person_type: "client" }).then((r) => r.length),
     enabled: !!user?.company_id,
     staleTime: 120000,
   });
   const { data: productsCount = 0 } = useQuery({
     queryKey: ["readiness_products", user?.company_id],
-    queryFn: () => base44.entities.Product.filter({ company_id: user.company_id, status: "active" }).then((r) => r.length),
+    queryFn: () => ncClient.entities.Product.filter({ company_id: user.company_id, status: "active" }).then((r) => r.length),
     enabled: !!user?.company_id,
     staleTime: 120000,
   });

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ export default function Attendance() {
   const [tab, setTab] = useState("mark"); // "mark" | "register"
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -43,7 +43,7 @@ export default function Attendance() {
   // Fetch people
   const { data: people = [] } = useQuery({
     queryKey: ["people-list"],
-    queryFn: () => base44.entities.Person.list(),
+    queryFn: () => ncClient.entities.Person.list(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -55,7 +55,7 @@ export default function Attendance() {
       let query = filterDate ? { date: filterDate } : {};
       if (filterPerson) query.person_name = filterPerson;
       if (filterType) query.person_type = filterType;
-      return await base44.entities.Attendance.filter(query);
+      return await ncClient.entities.Attendance.filter(query);
     },
     staleTime: 0,
     refetchOnMount: "always",
@@ -71,10 +71,10 @@ export default function Attendance() {
         ? calculateHours(formData.check_in_time, formData.check_out_time)
         : null;
 
-      await base44.entities.Attendance.create({
+      await ncClient.entities.Attendance.create({
         ...formData,
         hours_worked: hours,
-        marked_by: (await base44.auth.me()).email,
+        marked_by: (await ncClient.auth.me()).email,
       });
 
       setFormData({});

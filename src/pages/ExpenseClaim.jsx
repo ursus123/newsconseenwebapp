@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dataService from "@/services/dataService";
 import { Link } from "react-router-dom";
@@ -32,13 +32,13 @@ const EMPTY = { category: "Travel", amount: "", currency: "USD", date: new Date(
 export default function ExpenseClaim() {
   const qc = useQueryClient();
   const { data: currentUser = null } = useQuery({
-    queryKey: ["currentUser"], queryFn: () => base44.auth.me(),
+    queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(),
     staleTime: 0, refetchOnMount: "always",
   });
 
   const { data: claims = [], isLoading } = useQuery({
     queryKey: ["expense-claims", currentUser?.company_id],
-    queryFn: () => base44.entities.Transaction.filter(
+    queryFn: () => ncClient.entities.Transaction.filter(
       { company_id: currentUser.company_id, transaction_type: "expense" }, "-created_date", 100,
     ),
     enabled: !!currentUser?.company_id,

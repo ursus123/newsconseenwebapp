@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { format, parseISO } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { todayStr, fmtDuration, buildDayRecords, getWeekDays } from "./clockUtils";
 import { CheckCircle2, XCircle, Coffee, Clock, Download } from "lucide-react";
 
@@ -42,13 +42,13 @@ export function TeamTodayView({ companyId }) {
 
   const { data: todayTasks = [] } = useQuery({
     queryKey: ["team-today-tasks", companyId, today],
-    queryFn: () => base44.entities.Task.filter({ scheduled_date: today }),
+    queryFn: () => ncClient.entities.Task.filter({ scheduled_date: today }),
     enabled: !!companyId,
   });
 
   const { data: people = [] } = useQuery({
     queryKey: ["people-list", companyId],
-    queryFn: () => base44.entities.Person.filter({ status: "active" }),
+    queryFn: () => ncClient.entities.Person.filter({ status: "active" }),
     enabled: !!companyId,
   });
 
@@ -181,7 +181,7 @@ export function TeamWeekView({ companyId }) {
 
   const { data: weekTasks = [] } = useQuery({
     queryKey: ["team-week-tasks", companyId],
-    queryFn: () => base44.entities.Task.filter({
+    queryFn: () => ncClient.entities.Task.filter({
       scheduled_date: { $gte: format(weekDays[0], "yyyy-MM-dd"), $lte: format(weekDays[6], "yyyy-MM-dd") }
     }),
     enabled: !!companyId,
@@ -189,7 +189,7 @@ export function TeamWeekView({ companyId }) {
 
   const { data: people = [] } = useQuery({
     queryKey: ["people-list", companyId],
-    queryFn: () => base44.entities.Person.filter({ status: "active" }),
+    queryFn: () => ncClient.entities.Person.filter({ status: "active" }),
     enabled: !!companyId,
   });
 

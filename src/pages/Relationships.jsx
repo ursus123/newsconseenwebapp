@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
@@ -117,7 +117,7 @@ export default function Relationships() {
   const [viewMode, setViewMode] = useState("table");
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -133,14 +133,14 @@ export default function Relationships() {
   const perms = usePermissions(currentUser);
   const listFn = useEntityListFn(currentUser);
 
-  const { data: relationships = [] } = useQuery({ queryKey: ["relationships", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Relationship), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
-  const { data: people = [] } = useQuery({ queryKey: ["people", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Person), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
-  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Enterprise), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
-  const { data: products = [] } = useQuery({ queryKey: ["products", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Product), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
-  const { data: services = [] } = useQuery({ queryKey: ["services", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Service), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
-  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Address), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
-  const { data: tasks = [] } = useQuery({ queryKey: ["tasks", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Task), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
-  const { data: transactions = [] } = useQuery({ queryKey: ["transactions", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(base44.entities.Transaction), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: relationships = [] } = useQuery({ queryKey: ["relationships", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(ncClient.entities.Relationship), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: people = [] } = useQuery({ queryKey: ["people", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(ncClient.entities.Person), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: enterprises = [] } = useQuery({ queryKey: ["enterprises", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(ncClient.entities.Enterprise), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: products = [] } = useQuery({ queryKey: ["products", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(ncClient.entities.Product), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: services = [] } = useQuery({ queryKey: ["services", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(ncClient.entities.Service), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: addresses = [] } = useQuery({ queryKey: ["addresses", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(ncClient.entities.Address), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: tasks = [] } = useQuery({ queryKey: ["tasks", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(ncClient.entities.Task), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
+  const { data: transactions = [] } = useQuery({ queryKey: ["transactions", currentUser?.company_id, currentUser?.email], queryFn: () => listFn(ncClient.entities.Transaction), enabled: currentUser !== null, staleTime: 0, refetchOnMount: "always" });
 
 
   const updateMut = useMutation({
@@ -374,7 +374,7 @@ export default function Relationships() {
         entityName="Relationships" fields={RELATIONSHIP_FIELDS} mappingRules={RELATIONSHIP_MAPPING_RULES}
         templateFileName="newsconseen_relationships_import_template.xlsx"
         templateExample={RELATIONSHIP_TEMPLATE_EXAMPLE} templateInstructions={RELATIONSHIP_TEMPLATE_INSTRUCTIONS}
-        entityFetchFn={() => listFn(base44.entities.Relationship)}
+        entityFetchFn={() => listFn(ncClient.entities.Relationship)}
         validateRow={(row) => validateRelationship(row, { people, enterprises, products, services })}
         onImport={(row) => dataService.createRecord("relationship", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} previewColumns={REL_PREVIEW_COLS} requiredField="relationship_type"

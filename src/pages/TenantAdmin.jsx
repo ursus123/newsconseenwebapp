@@ -13,7 +13,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import {
   Building2, Users, RefreshCw, Plus, Search, Shield, ShieldOff,
   Zap, CheckCircle2, AlertCircle, Clock, ChevronRight, X,
@@ -512,7 +512,7 @@ export default function TenantAdmin() {
   // Guard: super_admin only
   const { data: currentUser } = useAuthQuery({
     queryKey: ["currentUser"],
-    queryFn:  () => base44.auth.me(),
+    queryFn:  () => ncClient.auth.me(),
     staleTime: 60000,
   });
 

@@ -9,7 +9,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, RefreshCw, Pin, Trash2, Pencil, GripVertical, BarChart2, PieChart as PieIcon, TrendingUp, Table2, Hash } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQueryClient } from "@tanstack/react-query";
 
 const COLORS = [
@@ -57,7 +57,7 @@ function WidgetCard({ widget, refreshKey }) {
   useEffect(() => { runQuery(); }, [runQuery, refreshKey]);
 
   const handleDelete = async () => {
-    await base44.entities.SavedDashboardWidget.delete(widget.id);
+    await ncClient.entities.SavedDashboardWidget.delete(widget.id);
     qc.invalidateQueries({ queryKey: ["dashboardWidgets"] });
   };
 

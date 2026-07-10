@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
@@ -202,7 +202,7 @@ export default function BrandingSection({ user, enterprise }) {
     if (file.size > 2 * 1024 * 1024) { setBanner({ type: "error", msg: "File too large. Max 2MB." }); return; }
     setUploading(true);
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_url } = await ncClient.integrations.Core.UploadFile({ file });
       if (type === "logo") setLogoUrl(file_url);
       else setFaviconUrl(file_url);
     } catch {
@@ -233,7 +233,7 @@ export default function BrandingSection({ user, enterprise }) {
         setSaving(false);
         return;
       }
-      await base44.entities.Enterprise.update(enterprise.id, {
+      await ncClient.entities.Enterprise.update(enterprise.id, {
         brand_name: appName,
         brand_tagline: tagline,
         brand_logo_url: logoUrl,

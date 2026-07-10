@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { ncClient } from '@/api/ncClient';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -19,7 +19,7 @@ export default function ClientStep2TypeRole({ formData, onChange }) {
   useEffect(() => {
     const fetchPersonTypes = async () => {
       try {
-        const options = await base44.entities.MasterDataOption.filter({
+        const options = await ncClient.entities.MasterDataOption.filter({
           entity_type: 'person',
           field_name: 'person_type',
           is_active: true,
@@ -41,7 +41,7 @@ export default function ClientStep2TypeRole({ formData, onChange }) {
 
       setLoadingRoles(true);
       try {
-        const options = await base44.entities.MasterDataOption.filter({
+        const options = await ncClient.entities.MasterDataOption.filter({
           entity_type: 'person',
           field_name: 'primary_role',
           parent_value: formData.person_type,

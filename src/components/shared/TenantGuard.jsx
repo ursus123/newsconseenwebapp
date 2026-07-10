@@ -1,5 +1,5 @@
 import React from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { ShieldAlert, LogOut, Building2 } from "lucide-react";
 import { useIsTenantScoped } from "@/components/shared/useDataQuery";
 
@@ -74,7 +74,7 @@ export default function TenantGuard({ currentUser, children }) {
 
           {/* Sign out button */}
           <button
-            onClick={() => base44.auth.logout()}
+            onClick={() => ncClient.auth.logout()}
             className="flex items-center gap-2 px-4 py-2.5 w-full justify-center rounded-xl border border-slate-200 text-sm text-slate-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all"
           >
             <LogOut className="w-4 h-4" />

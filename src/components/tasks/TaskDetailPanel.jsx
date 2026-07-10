@@ -7,7 +7,7 @@ import { format, parseISO } from "date-fns";
 import { createPageUrl } from "@/utils";
 import { taskTypeLabel } from "./TaskForm";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 const PRIORITY_COLOR = {
   low: "bg-slate-100 text-slate-500",
@@ -50,7 +50,7 @@ export default function TaskDetailPanel({ task, open, onClose, products, service
   const { data: linkedTransaction } = useQuery({
     queryKey: ["linked-tx", task?.id],
     queryFn: async () => {
-      const txs = await base44.entities.Transaction.filter({ source_task_id: task.id });
+      const txs = await ncClient.entities.Transaction.filter({ source_task_id: task.id });
       return txs[0] || null;
     },
     enabled: !!task?.id && open,

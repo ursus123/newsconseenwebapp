@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, Upload, Search } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery } from "@tanstack/react-query";
 import OrgChartBuilder from "@/components/enterprise/OrgChartBuilder";
 import { TYPE_ALIASES } from "@/utils/typeAliases";
@@ -79,12 +79,12 @@ export default function OrgManagementTab({ form, set, addItem, removeItem, updat
 
   const { data: allPeople = [] } = useQuery({
     queryKey: ["people-org", companyId],
-    queryFn: () => base44.entities.Person.filter(companyId ? { company_id: companyId } : {}),
+    queryFn: () => ncClient.entities.Person.filter(companyId ? { company_id: companyId } : {}),
   });
 
   const { data: allServices = [] } = useQuery({
     queryKey: ["services-org", companyId],
-    queryFn: () => base44.entities.Service.filter(companyId ? { company_id: companyId } : {}),
+    queryFn: () => ncClient.entities.Service.filter(companyId ? { company_id: companyId } : {}),
   });
 
   const linkedServiceIds = (form.linked_service_ids || []);
@@ -298,7 +298,7 @@ export default function OrgManagementTab({ form, set, addItem, removeItem, updat
                   <input type="file" className="hidden" onChange={async (e) => {
                     const file = e.target.files[0];
                     if (!file) return;
-                    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+                    const { file_url } = await ncClient.integrations.Core.UploadFile({ file });
                     updateItem("employee_docs", i, "resume_url", file_url);
                   }} />
                 </label>

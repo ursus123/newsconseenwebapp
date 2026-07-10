@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -81,7 +81,7 @@ export default function ErrorLogSection({ user }) {
   const { data: allTasks = [], isLoading, refetch } = useQuery({
     queryKey: ["error-log-tasks", user?.company_id],
     queryFn: async () => {
-      const tasks = await base44.entities.Task.filter({ task_type: "other" });
+      const tasks = await ncClient.entities.Task.filter({ task_type: "other" });
       return tasks.filter((t) => t.title?.startsWith("App Error:"));
     },
     enabled: !!user,
@@ -92,14 +92,14 @@ export default function ErrorLogSection({ user }) {
   const openErrors = allTasks.filter((t) => t.status !== "completed");
 
   const handleResolve = async (id) => {
-    await base44.entities.Task.update(id, { status: "completed" });
+    await ncClient.entities.Task.update(id, { status: "completed" });
     queryClient.invalidateQueries({ queryKey: ["error-log-tasks"] });
   };
 
   const handleClearResolved = async () => {
     setClearing(true);
     const resolved = allTasks.filter((t) => t.status === "completed");
-    await Promise.all(resolved.map((t) => base44.entities.Task.delete(t.id)));
+    await Promise.all(resolved.map((t) => ncClient.entities.Task.delete(t.id)));
     queryClient.invalidateQueries({ queryKey: ["error-log-tasks"] });
     setClearing(false);
   };

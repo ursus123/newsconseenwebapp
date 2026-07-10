@@ -7,7 +7,7 @@ import { createPageUrl } from "@/utils";
 import { Users, Building2, Package, Calendar, Clock, ExternalLink } from "lucide-react";
 import { differenceInMonths, differenceInDays, format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 const TYPE_CONFIG = {
   person_enterprise: { label: "Person → Enterprise", color: "bg-blue-50 text-blue-700" },
@@ -43,13 +43,13 @@ function Row({ label, value, children }) {
 export default function RelationshipDetailPanel({ rel, open, onClose }) {
   const { data: relatedTasks = [] } = useQuery({
     queryKey: ["rel-tasks", rel?.id],
-    queryFn: () => base44.entities.Task.filter({ enterprise: rel.enterprise_name }),
+    queryFn: () => ncClient.entities.Task.filter({ enterprise: rel.enterprise_name }),
     enabled: !!rel?.enterprise_name && open,
   });
 
   const { data: relatedTx = [] } = useQuery({
     queryKey: ["rel-tx", rel?.id],
-    queryFn: () => base44.entities.Transaction.filter({ enterprise: rel.enterprise_name }),
+    queryFn: () => ncClient.entities.Transaction.filter({ enterprise: rel.enterprise_name }),
     enabled: !!rel?.enterprise_name && open,
   });
 

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { Upload, Trash2, Table2, Loader2, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UploadedDataStore } from "./UploadedDataStore";

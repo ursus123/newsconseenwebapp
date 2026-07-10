@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 
 // ── Session-level cache ───────────────────────────────────────────────────────
 // Key: "entityType:fieldName:parentValue:companyId"
@@ -176,7 +176,7 @@ export function useTaxonomy(entityType, fieldName, parentValue, companyId) {
     }
 
     setLoading(true);
-    base44.entities.MasterDataOption.filter({
+    ncClient.entities.MasterDataOption.filter({
       entity_type:       entityType,
       field_name:        fieldName,
       parent_value:      parentValue,
@@ -216,7 +216,7 @@ export function useTaxonomy(entityType, fieldName, parentValue, companyId) {
   const addCustomOption = async (value) => {
     if (!value || !companyId) return;
     try {
-      const created = await base44.entities.MasterDataOption.create({
+      const created = await ncClient.entities.MasterDataOption.create({
         entity_type:       entityType,
         field_name:        fieldName,
         value,
@@ -253,7 +253,7 @@ export function useTaxonomy(entityType, fieldName, parentValue, companyId) {
     setCustomObjects(updated);
     // Persist asynchronously — UI is never blocked
     try {
-      await base44.entities.MasterDataOption.update(obj.id, { usage_count: newCount });
+      await ncClient.entities.MasterDataOption.update(obj.id, { usage_count: newCount });
     } catch (_) { /* silent — count is best-effort */ }
   };
 

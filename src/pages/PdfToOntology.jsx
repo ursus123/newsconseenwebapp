@@ -4,7 +4,7 @@
  * PDF → AI entity extraction → Ingestion Agent → Base44 ontology
  *
  * Pipeline:
- *  1. Upload PDF → base44 file storage
+ *  1. Upload PDF → ncClient file storage
  *  2. LLM extracts structured records (people, enterprises, products, etc.)
  *  3. Records serialised to JSON → POST to /ingestion/upload
  *  4. Ingestion Agent returns field-map plan → user reviews
@@ -12,7 +12,7 @@
  */
 import React, { useState, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -180,7 +180,7 @@ function ResultCard({ stats, onReset }) {
 export default function PdfToOntology() {
   const qc = useQueryClient();
   const { data: currentUser = null } = useQuery({
-    queryKey: ["currentUser"], queryFn: () => base44.auth.me(),
+    queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(),
     staleTime: 0, refetchOnMount: "always",
   });
   const companyId = currentUser?.company_id;
@@ -209,15 +209,15 @@ export default function PdfToOntology() {
     setStep("extracting");
 
     try {
-      // 1 — Upload PDF to base44 storage for LLM access
-      const { file_url } = await base44.integrations.Core.UploadFile({ file: f });
+      // 1 — Upload PDF to ncClient storage for LLM access
+      const { file_url } = await ncClient.integrations.Core.UploadFile({ file: f });
 
       // 2 — LLM entity extraction
       const hintInstruction = entityHint !== "auto"
         ? `Focus on extracting ${entityHint} records. `
         : "";
 
-      const result = await base44.integrations.Core.InvokeLLM({
+      const result = await ncClient.integrations.Core.InvokeLLM({
         prompt: `${hintInstruction}Extract ALL structured entity records from this PDF document.
 
 Rules:

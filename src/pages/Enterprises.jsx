@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
@@ -124,7 +124,7 @@ export default function Enterprises() {
   const [deleting, setDeleting]     = useState(null);
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -152,7 +152,7 @@ export default function Enterprises() {
 
   const { data: enterprises = [], isLoading } = useQuery({
     queryKey: ["enterprises", companyId, currentUser?.email],
-    queryFn: () => listFn(base44.entities.Enterprise),
+    queryFn: () => listFn(ncClient.entities.Enterprise),
     enabled: currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -166,14 +166,14 @@ export default function Enterprises() {
         return dataService.createRecord("enterprise", cleanData, currentUser, { queryClient: qc });
       }
 
-      const created = await base44.entities.Enterprise.create({
+      const created = await ncClient.entities.Enterprise.create({
         ...cleanData,
         created_by: currentUser?.email,
       });
       const workspaceId = created.id;
-      await base44.entities.Enterprise.update(created.id, { company_id: workspaceId });
+      await ncClient.entities.Enterprise.update(created.id, { company_id: workspaceId });
       if (!currentUser?.company_id) {
-        await base44.auth.updateMe({ company_id: workspaceId });
+        await ncClient.auth.updateMe({ company_id: workspaceId });
         setTimeout(() => window.location.reload(), 500);
       }
       return { ...created, company_id: workspaceId };
@@ -405,7 +405,7 @@ export default function Enterprises() {
         templateFileName="newsconseen_enterprises_import_template.xlsx"
         templateExample={ENTERPRISE_TEMPLATE_EXAMPLE}
         templateInstructions={ENTERPRISE_TEMPLATE_INSTRUCTIONS}
-        entityFetchFn={() => listFn(base44.entities.Enterprise)}
+        entityFetchFn={() => listFn(ncClient.entities.Enterprise)}
         validateRow={validateEnterprise}
         transformRow={transformEnterprise}
         onImport={async (row) => {
@@ -413,7 +413,7 @@ export default function Enterprises() {
           if (currentUser?.company_id) {
             return dataService.createRecord("enterprise", cleanRow, currentUser, { queryClient: qc });
           }
-          return base44.entities.Enterprise.create({
+          return ncClient.entities.Enterprise.create({
             ...cleanRow,
             created_by: currentUser?.email,
           });

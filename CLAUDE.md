@@ -43,7 +43,7 @@ No competitor can replicate this without the history.
 │  System of record. Master data. Forms create reality.   │
 │  Entities: Person, Enterprise, Product,                 │
 │            Relationship, Task, Transaction, Address     │
-│  Frontend: React — all entity access via base44Client   │
+│  Frontend: React — all entity access via ncClient        │
 │            proxy which routes to Supabase               │
 └──────────────────────┬──────────────────────────────────┘
                        │ ETL trigger after every mutation
@@ -67,7 +67,7 @@ Golden rule: Forms create reality → Databases store reality → Intelligence e
 Layer violation example:
 ```javascript
 // WRONG — Supabase entity queried directly for a stat card
-const count = await base44.entities.Person.filter({}).then(p => p.length);
+const count = await ncClient.entities.Person.filter({}).then(p => p.length);
 
 // CORRECT — Layer 2 analytics endpoint
 const { data } = useQuery({ queryFn: () => fetchSummary("/people-summary", companyId) });
@@ -190,7 +190,7 @@ async function fetchWithFallback(endpoint, entityFn, companyId) {
 ```
 newsconseenwebapp/
 ├── CLAUDE.md
-├── src/                              React frontend (Supabase-backed via base44Client proxy)
+├── src/                              React frontend (Supabase-backed via ncClient proxy)
 │   ├── pages/
 │   │   ├── Enterprises.jsx
 │   │   ├── People.jsx
@@ -499,7 +499,7 @@ const qc = useQueryClient();
 
 const { data = [], isLoading } = useQuery({
   queryKey:       ["entity-key", companyId],
-  queryFn:        () => listFn(base44.entities.EntityName),
+  queryFn:        () => listFn(ncClient.entities.EntityName),
   enabled:        currentUser !== null,
   staleTime:      0,
   refetchOnMount: "always",
@@ -518,7 +518,7 @@ useEffect(() => {
 
 ### Tenant scoping
 ```javascript
-base44.entities.Person.create({
+ncClient.entities.Person.create({
   ...data,
   company_id: currentUser?.company_id,
 });
@@ -555,8 +555,8 @@ Step 4  Import    → chunked (10 rows), 200ms delay, ETL every 100 rows
   mappingRules={PEOPLE_MAPPING_RULES}
   validateRow={validatePerson}
   transformRow={transformPerson}
-  entityFetchFn={() => listFn(base44.entities.Person)}
-  onImport={async (row) => base44.entities.Person.create({
+  entityFetchFn={() => listFn(ncClient.entities.Person)}
+  onImport={async (row) => ncClient.entities.Person.create({
     ...row, company_id: currentUser?.company_id
   })}
   onClose={() => {
@@ -783,7 +783,7 @@ external API, or bespoke backend:
 
 | Backend | Layer | When to use | Data path |
 |---------|-------|-------------|-----------|
-| `ontology` | Layer 1 — Supabase entities | Write-heavy apps: forms, intake, data entry, mutations | Reads/writes via base44Client proxy (Supabase) with company_id stamped on every record |
+| `ontology` | Layer 1 — Supabase entities | Write-heavy apps: forms, intake, data entry, mutations | Reads/writes via ncClient proxy (Supabase) with company_id stamped on every record |
 | `datamart` | Layer 2 — python_layer | Read-heavy apps: dashboards, reports, analytics views | Reads python_layer endpoints with three-tier fallback (analytics → raw → Supabase live) |
 
 **Rules:**

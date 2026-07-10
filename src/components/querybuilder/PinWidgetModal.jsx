@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { X, Pin, BarChart2, PieChart, TrendingUp, Table2, Hash, Map } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import MapChart from "./MapChart";
 
 const CHART_TYPES = [
@@ -25,10 +25,10 @@ export default function PinWidgetModal({ sql, chartType: initialChartType, data,
     if (!title.trim()) return;
     setSaving(true);
     try {
-      const user = await base44.auth.me().catch(() => null);
+      const user = await ncClient.auth.me().catch(() => null);
       const companyId = user?.company_id || "";
 
-      await base44.entities.SavedDashboardWidget.create({
+      await ncClient.entities.SavedDashboardWidget.create({
         title: title.trim(),
         sql,
         chart_type: chartType,
@@ -37,13 +37,13 @@ export default function PinWidgetModal({ sql, chartType: initialChartType, data,
       });
 
       if (companyId) {
-        const folders = await base44.entities.ChartFolder.filter({
+        const folders = await ncClient.entities.ChartFolder.filter({
           company_id: companyId,
           name: "From QueryBuilder",
         });
         let folderId = folders[0]?.id;
         if (!folderId) {
-          const newFolder = await base44.entities.ChartFolder.create({
+          const newFolder = await ncClient.entities.ChartFolder.create({
             name: "From QueryBuilder",
             company_id: companyId,
             status: "active",
@@ -51,7 +51,7 @@ export default function PinWidgetModal({ sql, chartType: initialChartType, data,
           });
           folderId = newFolder.id;
         }
-        await base44.entities.ReportChart.create({
+        await ncClient.entities.ReportChart.create({
           title: title.trim(),
           sql_query: sql,
           chart_type: chartType,

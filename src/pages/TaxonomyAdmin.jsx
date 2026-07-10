@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Tags, Trash2, Merge, AlertTriangle, CheckCircle2,
@@ -18,7 +18,7 @@ const TAXONOMY_FIELDS = [
 // ── Fetch all MasterDataOption rows for a company ────────────────────────────
 async function fetchAllOptions(companyId) {
   if (!companyId) return [];
-  return base44.entities.MasterDataOption.filter({
+  return ncClient.entities.MasterDataOption.filter({
     company_id:        companyId,
     is_system_default: false,
   });
@@ -262,7 +262,7 @@ export default function TaxonomyAdmin({ currentUser }) {
   // ── Deactivate / reactivate mutation ───────────────────────────────────────
   const toggleActive = useMutation({
     mutationFn: ({ id, is_active }) =>
-      base44.entities.MasterDataOption.update(id, { is_active }),
+      ncClient.entities.MasterDataOption.update(id, { is_active }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["taxonomy-admin", companyId] });
       showToast("Option updated");
@@ -283,7 +283,7 @@ export default function TaxonomyAdmin({ currentUser }) {
 
       // Deactivate all selected (they are superseded by target)
       await Promise.all(
-        ids.map(id => base44.entities.MasterDataOption.update(id, {
+        ids.map(id => ncClient.entities.MasterDataOption.update(id, {
           is_active: false,
           value:     targetValue,   // rename so future increments go to canonical
         }))
@@ -293,7 +293,7 @@ export default function TaxonomyAdmin({ currentUser }) {
       if (!existing) {
         const firstOpt = options.find(o => ids.includes(o.id));
         if (firstOpt) {
-          await base44.entities.MasterDataOption.create({
+          await ncClient.entities.MasterDataOption.create({
             entity_type:       firstOpt.entity_type,
             field_name:        firstOpt.field_name,
             parent_value:      firstOpt.parent_value,

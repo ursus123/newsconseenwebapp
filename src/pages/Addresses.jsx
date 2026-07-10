@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
 import DataTable from "../components/shared/DataTable";
@@ -78,7 +78,7 @@ export default function Addresses() {
   const [detailAddress, setDetailAddress] = useState(null);
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
-    queryFn: () => base44.auth.me(),
+    queryFn: () => ncClient.auth.me(),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -105,7 +105,7 @@ export default function Addresses() {
 
   const { data: addresses = [] } = useQuery({
     queryKey: ["addresses", currentUser?.company_id, currentUser?.email],
-    queryFn: () => listFn(base44.entities.Address),
+    queryFn: () => listFn(ncClient.entities.Address),
     enabled: currentUser !== null,
     staleTime: 0,
     refetchOnMount: "always",
@@ -368,7 +368,7 @@ export default function Addresses() {
         entityName="Addresses" fields={ADDRESS_FIELDS} mappingRules={ADDRESS_MAPPING_RULES}
         templateFileName="newsconseen_addresses_import_template.xlsx"
         templateExample={ADDRESS_TEMPLATE_EXAMPLE} templateInstructions={ADDRESS_TEMPLATE_INSTRUCTIONS}
-        entityFetchFn={() => listFn(base44.entities.Address)}
+        entityFetchFn={() => listFn(ncClient.entities.Address)}
         validateRow={validateAddress} transformRow={transformAddress}
         onImport={(row) => dataService.createRecord("address", row, currentUser, { queryClient: qc })}
         currentUser={currentUser} previewColumns={ADDR_PREVIEW_COLS} requiredField="address_line1"
