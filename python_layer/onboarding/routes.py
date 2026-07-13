@@ -20,8 +20,13 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+import requests
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
+
+from config.settings import settings
+from data_sources import supabase_source
+from onboarding.auth import verify_supabase_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
@@ -777,3 +782,154 @@ def get_onboarding_status(company_id: str):
         logger.debug("onboarding status: DB lookup failed — %s", exc)
 
     raise HTTPException(status_code=404, detail="No onboarding record found for this company")
+
+
+# ── Company linking + invite flow ───────────────────────────────────────────────
+# Fixes the root cause behind an unset user_profiles.company_id: ncClient.js
+# deliberately strips company_id/role from client-side updateMe() calls (a
+# correct security measure, since every RLS policy gates on company_id), but
+# nothing provided the legitimate server-side path to set it. These two
+# endpoints are that path — both require a verified Supabase session token.
+
+class LinkCompanyRequest(BaseModel):
+    enterprise_id: Optional[str] = None  # founder-claim mode; omit for invited-teammate mode
+
+
+@router.post("/link-company")
+def link_company(req: LinkCompanyRequest, authorization: Optional[str] = Header(None)):
+    """
+    Set user_profiles.company_id (+role) for the calling, verified user.
+
+    Founder-claim mode (enterprise_id given): the caller must be the creator
+    of that Enterprise record; becomes "admin" of it.
+
+    Invited-teammate mode (no enterprise_id): company_id/role are read off
+    the caller's own app_metadata, set at invite time by /invite-user.
+    """
+    user = verify_supabase_user(authorization)
+
+    if req.enterprise_id:
+        try:
+            resp = supabase_source._request(
+                "GET", "enterprises",
+                headers=supabase_source._headers(),
+                params={"id": f"eq.{req.enterprise_id}", "select": "id,created_by"},
+            )
+            rows = resp.json()
+        except Exception as exc:
+            logger.error("link-company: enterprise lookup failed — %s", exc)
+            raise HTTPException(status_code=502, detail="Could not verify enterprise ownership")
+
+        if not rows:
+            raise HTTPException(status_code=404, detail="Enterprise not found")
+
+        created_by = (rows[0].get("created_by") or "").strip().lower()
+        caller_email = (user.get("email") or "").strip().lower()
+        if not created_by or created_by != caller_email:
+            raise HTTPException(status_code=403, detail="You are not the creator of this enterprise")
+
+        company_id, role = req.enterprise_id, "admin"
+    else:
+        meta = user.get("app_metadata") or {}
+        company_id, role = meta.get("company_id"), meta.get("role", "user")
+        if not company_id:
+            raise HTTPException(status_code=400, detail="No invite metadata found for this account")
+
+    try:
+        updated = supabase_source.update_record("user_profiles", user["id"], {
+            "company_id": company_id,
+            "role": role,
+        })
+    except Exception as exc:
+        logger.error("link-company: user_profiles update failed — %s", exc)
+        raise HTTPException(status_code=502, detail="Could not update your account")
+
+    logger.info("onboarding: linked user=%s to company=%s role=%s", user["id"], company_id, role)
+    return {"status": "linked", "company_id": company_id, "role": role, "user_profile": updated}
+
+
+class InviteUserRequest(BaseModel):
+    email: str
+    role: str = "user"
+    redirect_to: Optional[str] = None
+    company_id: Optional[str] = None  # only honored if the caller is super_admin
+
+
+@router.post("/invite-user", status_code=201)
+def invite_user(req: InviteUserRequest, authorization: Optional[str] = Header(None)):
+    """
+    Invite a new teammate via Supabase's Admin invite API. The invited user's
+    company_id/role are derived from the *inviter's own* user_profiles row
+    (never trusted from the request body) and stamped into the invitee's
+    app_metadata, so /link-company can materialise their profile on first login.
+    Exception: a verified super_admin may pass company_id to invite into a
+    different tenant (e.g. from Tenant Admin tooling) — still server-verified,
+    never a bare client claim.
+    """
+    inviter = verify_supabase_user(authorization)
+
+    try:
+        resp = supabase_source._request(
+            "GET", "user_profiles",
+            headers=supabase_source._headers(),
+            params={"id": f"eq.{inviter['id']}", "select": "company_id,role"},
+        )
+        rows = resp.json()
+    except Exception as exc:
+        logger.error("invite-user: inviter profile lookup failed — %s", exc)
+        raise HTTPException(status_code=502, detail="Could not verify your account")
+
+    if not rows:
+        raise HTTPException(status_code=403, detail="Your account has no company to invite into")
+
+    inviter_profile = rows[0]
+    if req.company_id and inviter_profile.get("role") == "super_admin":
+        company_id = req.company_id
+    elif inviter_profile.get("company_id"):
+        company_id = inviter_profile["company_id"]
+    else:
+        raise HTTPException(status_code=403, detail="Your account has no company to invite into")
+
+    if not settings.supabase_url or not settings.supabase_service_role_key:
+        raise HTTPException(status_code=500, detail="Supabase is not configured")
+
+    params = {}
+    if req.redirect_to:
+        params["redirect_to"] = req.redirect_to
+
+    try:
+        resp = requests.post(
+            f"{settings.supabase_url.rstrip('/')}/auth/v1/invite",
+            headers={
+                "apikey": settings.supabase_service_role_key,
+                "Authorization": f"Bearer {settings.supabase_service_role_key}",
+                "Content-Type": "application/json",
+            },
+            params=params,
+            json={"email": req.email, "data": {"company_id": company_id, "role": req.role}},
+            timeout=15,
+        )
+    except requests.RequestException as exc:
+        logger.error("invite-user: Supabase invite call failed — %s", exc)
+        raise HTTPException(status_code=502, detail="Could not send invitation") from exc
+
+    if not resp.ok:
+        detail = "Failed to send invitation. The user may already exist."
+        try:
+            detail = resp.json().get("msg") or resp.json().get("message") or detail
+        except Exception:
+            pass
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+
+    try:
+        supabase_source.create_record("pending_invitations", {
+            "email": req.email,
+            "company_id": company_id,
+            "role": req.role,
+            "invited_by": inviter.get("email"),
+        }, company_id=company_id)
+    except Exception as exc:
+        logger.warning("invite-user: PendingInvitation record failed — %s", exc)
+
+    logger.info("onboarding: invited %s to company=%s role=%s", req.email, company_id, req.role)
+    return {"status": "invited", "email": req.email, "company_id": company_id, "role": req.role}

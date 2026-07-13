@@ -75,6 +75,7 @@ const NAV_CONFIG = {
         { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
         { name: "Tasks",             label: "My Tasks",           icon: CheckSquare },
         { name: "IngestionAgent",    label: "Add Data",           icon: Upload },
+        { name: "DataReadiness",     label: "Data Readiness",     icon: ShieldCheck },
       ],
     },
     {
@@ -143,7 +144,6 @@ const NAV_CONFIG = {
         { name: "Connectors",                               icon: Plug },
         { name: "Workflows",                                icon: Zap },
         { name: "Pipelines",                                icon: GitBranch },
-        { name: "DataRepair",     label: "Data Repair",     icon: Wrench },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },
         { name: "Billing",                                  icon: CreditCard },
       ],
@@ -158,6 +158,7 @@ const NAV_CONFIG = {
         { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
         { name: "Tasks",             label: "My Tasks",           icon: CheckSquare },
         { name: "IngestionAgent",    label: "Add Data",           icon: Upload },
+        { name: "DataReadiness",     label: "Data Readiness",     icon: ShieldCheck },
       ],
     },
     {
@@ -222,7 +223,6 @@ const NAV_CONFIG = {
         { name: "TaxonomyAdmin",  label: "Taxonomy Admin",  icon: Tags },
         { name: "Connectors",                               icon: Plug },
         { name: "Workflows",                                icon: Zap },
-        { name: "DataRepair",     label: "Data Repair",     icon: Wrench },
         { name: "DataModels",     label: "Data Models",     icon: GitBranch },
         { name: "Billing",                                  icon: CreditCard },
       ],

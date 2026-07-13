@@ -1,6 +1,13 @@
-import React, { useEffect, useRef } from "react";
-import { CheckCircle2, ArrowRight, Zap, Plug, Bot } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { CheckCircle2, ArrowRight, Zap, Plug, Bot, RefreshCw } from "lucide-react";
 import { getTermsFromEnterpriseType } from "@/config/enterpriseTerminology";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const API_HEADERS = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
+
+const triggerETL = (entity) =>
+  fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST", headers: API_HEADERS }).catch(() => {});
 
 const NEXT_STEPS_BY_CATEGORY = {
   healthcare: [
@@ -130,6 +137,19 @@ export default function StepDone({ summary, provisionResult, onComplete, complet
   const recommendedConnectors = provisionResult?.recommended_connectors ?? [];
   const recommendedAgents   = provisionResult?.recommended_agents ?? [];
 
+  const [activating, setActivating] = useState(true);
+
+  // Fire ETL for whatever got seeded during the wizard so the operator
+  // lands on a populated Company Graph instead of a silent, empty one.
+  useEffect(() => {
+    const entities = ["enterprise"];
+    if (people > 0) entities.push("people");
+    if (items > 0)  entities.push("product", "service");
+    if (tasks > 0)  entities.push("task");
+
+    Promise.all(entities.map(triggerETL)).finally(() => setActivating(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="space-y-5 relative">
       <Confetti />
@@ -184,6 +204,13 @@ export default function StepDone({ summary, provisionResult, onComplete, complet
           </div>
         )}
       </div>
+
+      {activating && (
+        <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
+          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+          Activating your workspace…
+        </div>
+      )}
 
       {/* AI Readiness Score */}
       {aiScore !== null && <ReadinessGauge score={aiScore} />}

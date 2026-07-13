@@ -27,6 +27,60 @@ from .agent_memory  import recall, remember, update_baseline
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_LOOPS = 6
+READINESS_THRESHOLD = 40  # matches onboarding's Data Readiness "D" grade cutoff
+
+
+def _tenant_has_any_data(engine, company_id: str) -> bool:
+    """
+    True if the tenant has any real data at all. Used for the hard early-exit
+    that skips agent runs entirely on a brand-new, still-empty tenant.
+    Fails open (True) if the DB is unreachable — agents should not be silently
+    starved by an infra hiccup.
+    """
+    if not engine or not company_id:
+        return True
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            for table in ("people_summary", "enterprise_summary", "product_summary", "task_summary"):
+                count = conn.execute(
+                    text(f"SELECT COUNT(*) FROM analytics.{table} WHERE company_id = :cid"),
+                    {"cid": company_id},
+                ).scalar()
+                if (count or 0) > 0:
+                    return True
+        return False
+    except Exception as exc:
+        logger.debug("_tenant_has_any_data check failed for %s — %s", company_id, exc)
+        return True
+
+
+def is_tenant_ready(engine, company_id: str) -> bool:
+    """
+    True once a tenant has cleared a minimum readiness bar. Used to force
+    write-risk agent actions through human approval on tenants that have
+    some data but aren't ready for unsupervised autonomous action yet.
+    Fails open (True) if the DB is unreachable or checks error out.
+    """
+    if not engine or not company_id:
+        return True
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            row = conn.execute(text("""
+                SELECT ai_readiness_score FROM analytics.onboarding_log
+                WHERE company_id = :cid
+                ORDER BY provisioned_at DESC LIMIT 1
+            """), {"cid": company_id}).fetchone()
+            if row is not None:
+                return (row[0] or 0) >= READINESS_THRESHOLD
+
+            # No onboarding record (e.g. tenant provisioned outside the wizard)
+            # — fall back to "has any data" as a proxy for readiness.
+            return _tenant_has_any_data(engine, company_id)
+    except Exception as exc:
+        logger.debug("is_tenant_ready check failed for %s — %s", company_id, exc)
+        return True
 
 
 class BaseAgent(ABC):
@@ -67,6 +121,19 @@ class BaseAgent(ABC):
         """
         logger.info("Agent %s starting for company %s (trigger=%s)",
                     self.name, company_id, trigger)
+
+        # Hard early-exit — skip entirely for tenants with no data at all,
+        # so a brand-new, near-empty tenant never gets noisy/nonsensical
+        # agent output.
+        if not _tenant_has_any_data(self.engine, company_id):
+            logger.info("Agent %s skipping run for company %s — tenant has no data yet",
+                        self.name, company_id)
+            return {
+                "summary":  f"{self.name} skipped — tenant has no data yet.",
+                "findings": [],
+                "actions":  [],
+                "skipped":  True,
+            }
 
         # 1. Observe
         try:
@@ -203,6 +270,12 @@ class BaseAgent(ABC):
             # Check if this action needs approval
             action_type = _map_tool_to_action(tool_name)
             risk = get_risk_level(action_type)
+
+            # Tenant has some data but hasn't cleared the readiness bar yet —
+            # force write-risk actions through human approval. Read-only
+            # observe/think still runs; nothing writes unsupervised.
+            if risk in (RiskLevel.AUTO, RiskLevel.NOTIFY) and not is_tenant_ready(self.engine, company_id):
+                risk = RiskLevel.CRITICAL
 
             if risk in (RiskLevel.APPROVE, RiskLevel.CRITICAL):
                 # Route through approval gate — do NOT execute

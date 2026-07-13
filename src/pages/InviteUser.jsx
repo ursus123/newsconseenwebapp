@@ -1,7 +1,27 @@
 import React, { useState } from "react";
 import { ncClient } from "@/api/ncClient";
+import { supabase } from "@/api/supabaseEntityClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dataService from "@/services/dataService";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const API_HEADERS = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
+
+async function inviteUser(email, role, companyId) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  const res = await fetch(`${RAILWAY_URL}/onboarding/invite-user`, {
+    method: "POST",
+    headers: { ...API_HEADERS, "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ email, role, company_id: companyId || undefined, redirect_to: `${window.location.origin}/AcceptInvite` }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to send invitation. The user may already exist.");
+  }
+  return res.json();
+}
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,7 +66,7 @@ export default function InviteUser() {
     setErrorMsg("");
     try {
       // Send the platform invitation (email + role)
-      await ncClient.users.inviteUser(form.email, form.role);
+      await inviteUser(form.email, form.role, isSuperAdmin ? form.company_id : undefined);
 
       // Also create a Person record to store the full profile
       await dataService.createRecord("person", {

@@ -1,7 +1,27 @@
 import React, { useState, useEffect } from "react";
 import { ncClient } from "@/api/ncClient";
+import { supabase } from "@/api/supabaseEntityClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import dataService from "@/services/dataService";
+
+const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
+const API_HEADERS = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
+
+async function inviteUser(email, role, companyId) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  const res = await fetch(`${RAILWAY_URL}/onboarding/invite-user`, {
+    method: "POST",
+    headers: { ...API_HEADERS, "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ email, role, company_id: companyId || undefined, redirect_to: `${window.location.origin}/AcceptInvite` }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to send invitation. The user may already exist.");
+  }
+  return res.json();
+}
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -310,15 +330,9 @@ function InviteForm({ enterprises, isSuperAdmin, currentUser, onSuccess }) {
     setStatus("loading");
     setErrorMsg("");
     try {
-      await ncClient.users.inviteUser(form.email, form.role);
-      if (effectiveCompanyId) {
-        await ncClient.entities.PendingInvitation.create({
-          email: form.email,
-          company_id: effectiveCompanyId,
-          role: form.role,
-          invited_by: currentUser?.email,
-        });
-      }
+      // invite-user (server-side) already creates the PendingInvitation row —
+      // it derives company_id from the inviter's own verified session.
+      await inviteUser(form.email, form.role, isSuperAdmin ? form.company_id : undefined);
       await dataService.createRecord("person", {
         first_name: form.first_name, last_name: form.last_name, email: form.email,
         phone: form.phone || undefined, person_type: "staff", status: "active",

@@ -71,6 +71,9 @@ ENTITY_TABLES = {
     "risks": "risks",
     "opportunity": "opportunities",
     "opportunities": "opportunities",
+    "user_profiles": "user_profiles",
+    "user": "user_profiles",
+    "users": "user_profiles",
 }
 
 BASE44_TO_SUPABASE_COLUMNS = {

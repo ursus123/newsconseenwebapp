@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { ncClient } from "@/api/ncClient";
+import { supabase } from "@/api/supabaseEntityClient";
 import dataService from "@/services/dataService";
 import { createPageUrl } from "@/utils";
 
@@ -15,6 +16,14 @@ const triggerETL = (entity) =>
     method: "POST",
     headers: API_HEADERS,
   }).catch(() => {});
+
+// Current Supabase session's access token — required by privileged
+// python_layer/onboarding endpoints (link-company, invite-user) which
+// verify the caller server-side rather than trusting client-supplied ids.
+async function getAccessToken() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token || null;
+}
 
 // Provision taxonomy + workflows for a new tenant.
 // Returns the full provision response (ai_readiness_score, recommended_connectors, etc.)
@@ -68,18 +77,20 @@ import StepOfferings from "@/components/onboarding/StepOfferings";
 import StepTask from "@/components/onboarding/StepTask";
 import StepInvite from "@/components/onboarding/StepInvite";
 import StepDone from "@/components/onboarding/StepDone";
+import SmartImportButton from "@/components/shared/SmartImportButton";
 
 const STEPS = [
   { label: "Type",     time: "~1 min" },
   { label: "Details",  time: "~2 min" },
   { label: "People",   time: "~2 min" },
   { label: "Offerings",time: "~1 min" },
+  { label: "Import",   time: "~1 min" },
   { label: "Tasks",    time: "~1 min" },
   { label: "Invite",   time: "~1 min" },
   { label: "Done",     time: "" },
 ];
 
-const OPTIONAL_STEPS = [2, 3, 4, 5]; // 0-indexed
+const OPTIONAL_STEPS = [2, 3, 4, 5, 6]; // 0-indexed
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -103,6 +114,7 @@ export default function Onboarding() {
   const [taskData, setTaskData] = useState({});
   const [taskErrors, setTaskErrors] = useState({});
   const [invites, setInvites] = useState([]);
+  const [importedCount, setImportedCount] = useState(0);
   const [createdEnterprise, setCreatedEnterprise] = useState(null);
   const [provisionResult, setProvisionResult]     = useState(null);
   const [provisioning, setProvisioning]           = useState(false);
@@ -159,13 +171,23 @@ export default function Onboarding() {
         subscription_tier: "professional",
         subscription_status: "trial",
         trial_ends_at: trialEndsAt,
+        created_by: currentUser?.email,
       });
 
       await ncClient.entities.Enterprise.update(enterprise.id, { company_id: enterprise.id });
-      await ncClient.auth.updateMe({
-        company_id: enterprise.id,
-        full_name: workspaceData.full_name,
+
+      // company_id/role are server-only (ncClient.auth.updateMe strips them) —
+      // link this founder to their new Enterprise via the verified backend endpoint.
+      const token = await getAccessToken();
+      const linkRes = await fetch(`${RAILWAY_URL}/onboarding/link-company`, {
+        method: "POST",
+        headers: { ...API_HEADERS, "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ enterprise_id: enterprise.id }),
       });
+      if (!linkRes.ok) throw new Error("Failed to link your account to this workspace");
+
+      await ncClient.auth.updateMe({ full_name: workspaceData.full_name });
+      await refreshUser();
 
       setCreatedEnterprise({ ...enterprise, company_id: enterprise.id });
       triggerETL("enterprise");
@@ -278,14 +300,19 @@ export default function Onboarding() {
     if (invites.length === 0) return true;
     setSaving(true);
     try {
-      await Promise.all(invites.map(async (inv) => {
-        await ncClient.users.inviteUser(inv.email, inv.role);
-        await ncClient.integrations.Core.SendEmail({
-          to: inv.email,
-          subject: `You've been invited to join ${createdEnterprise?.enterprise_name} on Newsconseen`,
-          body: `${workspaceData.full_name} has invited you to join ${createdEnterprise?.enterprise_name} on Newsconseen.\n\nGet started by visiting the app and signing in with this email address.`,
-        });
-      }));
+      const token = await getAccessToken();
+      await Promise.all(invites.map((inv) =>
+        fetch(`${RAILWAY_URL}/onboarding/invite-user`, {
+          method: "POST",
+          headers: { ...API_HEADERS, "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({
+            email: inv.email,
+            role: inv.role,
+            redirect_to: `${window.location.origin}/AcceptInvite`,
+          }),
+        }).catch(() => {})
+      ));
+      // Supabase's own invite email covers notification — no separate SendEmail needed.
       return true;
     } catch (e) {
       console.error(e);
@@ -302,8 +329,9 @@ export default function Onboarding() {
     if (step === 1) ok = await saveWorkspace();
     if (step === 2) ok = await saveTeam();
     if (step === 3) ok = await saveOfferings();
-    if (step === 4) ok = await saveTask();
-    if (step === 5) ok = await saveInvites();
+    if (step === 4) ok = true; // import step — data already saved via SmartImportButton
+    if (step === 5) ok = await saveTask();
+    if (step === 6) ok = await saveInvites();
     if (ok) setStep((s) => s + 1);
   };
 
@@ -332,7 +360,7 @@ export default function Onboarding() {
   };
 
   const progress = (step / (STEPS.length - 1)) * 100;
-  const timeRemaining = step === 0 ? "~1 min remaining" : step <= 2 ? "~2 min remaining" : step <= 5 ? "~1 min remaining" : "";
+  const timeRemaining = step === 0 ? "~1 min remaining" : step <= 2 ? "~2 min remaining" : step <= 6 ? "~1 min remaining" : "";
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -391,12 +419,31 @@ export default function Onboarding() {
             <StepOfferings items={items} onChange={setItems} />
           )}
           {step === 4 && (
-            <StepTask data={taskData} onChange={setTaskData} errors={taskErrors} people={people} />
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">Import your data</h2>
+                <p className="text-sm text-slate-400 mt-1">
+                  Bring in a spreadsheet of people, products, or transactions — Idjwi maps the columns for you.
+                </p>
+              </div>
+              <SmartImportButton
+                label="Import a file"
+                variant="button"
+                className="w-full justify-center"
+                onComplete={(stats) => setImportedCount((c) => c + (stats?.rows_loaded || stats?.loaded || 0))}
+              />
+              {importedCount > 0 && (
+                <p className="text-xs text-emerald-600 font-medium text-center">{importedCount} records imported</p>
+              )}
+            </div>
           )}
           {step === 5 && (
-            <StepInvite invites={invites} onChange={setInvites} />
+            <StepTask data={taskData} onChange={setTaskData} errors={taskErrors} people={people} />
           )}
           {step === 6 && (
+            <StepInvite invites={invites} onChange={setInvites} />
+          )}
+          {step === 7 && (
             <StepDone
               summary={{
                 enterprise: createdEnterprise ? { name: createdEnterprise.enterprise_name, industry: selectedType, country: workspaceData.country } : null,
@@ -413,7 +460,7 @@ export default function Onboarding() {
           )}
 
           {/* Navigation buttons */}
-          {step < 6 && (
+          {step < 7 && (
             <div className="mt-8 flex flex-col gap-3">
               <div className="flex items-center gap-3">
                 <button
@@ -438,7 +485,7 @@ export default function Onboarding() {
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      {step === 5 ? "Send & Continue" : "Continue"}
+                      {step === 6 ? "Send & Continue" : "Continue"}
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
@@ -453,7 +500,8 @@ export default function Onboarding() {
                 >
                   {step === 2 ? "I'll add people later →" :
                    step === 3 ? "I'll add these later →" :
-                   step === 4 ? "I'll create tasks later →" :
+                   step === 4 ? "I'll import data later →" :
+                   step === 5 ? "I'll create tasks later →" :
                    "I'll invite people later →"}
                 </button>
               )}

@@ -12,7 +12,12 @@ from typing import Optional
 
 from fastapi import APIRouter, Query, BackgroundTasks
 
-from dataquality.engine import evaluate
+from dataquality.engine import (
+    evaluate,
+    check_broken_relationships,
+    check_sync_freshness,
+    get_degraded_features,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dataquality", tags=["Data Quality"])
@@ -81,6 +86,47 @@ def get_quality_report(
         return {**cached, "cached": True}
 
     return {**_run_and_cache(company_id), "cached": False}
+
+
+_READINESS_CACHE: dict[str, dict] = {}
+
+
+def _run_readiness(company_id: str) -> dict:
+    """
+    Combines the existing quality report with the two new checks
+    (broken relationships, per-table sync freshness) and a degraded-features
+    list derived from the quality report's record_counts. This is the
+    consolidated "why is my dashboard empty" answer — see DataReadiness.jsx.
+    """
+    report = _run_and_cache(company_id)
+    readiness = {
+        **report,
+        "broken_relationships": check_broken_relationships(company_id),
+        "sync_freshness":       check_sync_freshness(company_id),
+        "degraded_features":    get_degraded_features(report.get("record_counts", {})),
+    }
+    _READINESS_CACHE[company_id] = readiness
+    return readiness
+
+
+@router.get("/readiness")
+def get_readiness_report(
+    company_id: str = Query(...),
+    force:      bool = Query(False, description="Bypass cache and re-evaluate"),
+):
+    """
+    Consolidated data-readiness report for a company: field completeness/
+    duplicates/invalid values (from the existing quality engine), broken
+    relationship references, per-raw-table sync freshness, and which
+    features degrade when an entity has 0 records.
+
+    Same 1hr cache convention as /report.
+    """
+    cached = _READINESS_CACHE.get(company_id)
+    if cached and not force and not _is_stale(cached):
+        return {**cached, "cached": True}
+
+    return {**_run_readiness(company_id), "cached": False}
 
 
 @router.post("/evaluate", status_code=202)

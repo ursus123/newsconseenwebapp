@@ -370,3 +370,180 @@ def evaluate(company_id: str) -> dict:
         "evaluated_at":    _now_iso(),
         "company_id":      company_id,
     }
+
+
+# ── Broken relationship detection ───────────────────────────────────────────
+# relationships has bare UUID reference columns with no SQL FK constraints
+# (by design — this codebase uses name-based joins, see ARCHITECTURE.md).
+# Nothing else validates person_id/enterprise_id actually point at real
+# records, so a dangling reference is invisible everywhere else today.
+# Scoped to person/enterprise refs only (the two dominant relationship
+# categories) rather than also checking item_id/service_id, to keep this
+# check fast and simple — extend if item/service relationships turn out to
+# need the same treatment.
+
+def check_broken_relationships(company_id: str) -> dict:
+    """
+    Find Relationship records whose person_id/enterprise_id (or their
+    secondary_* counterparts) point at an id that doesn't exist in
+    raw.people / raw.enterprises for this company.
+    """
+    try:
+        rel_df = _load_from_pg("raw.relationships", company_id)
+        if rel_df is None or rel_df.empty:
+            return {"broken_count": 0, "total": 0, "examples": []}
+
+        people_df = _load_from_pg("raw.people", company_id)
+        ent_df    = _load_from_pg("raw.enterprises", company_id)
+        people_ids = set(people_df["id"].astype(str)) if people_df is not None and "id" in people_df.columns else set()
+        ent_ids    = set(ent_df["id"].astype(str))    if ent_df is not None    and "id" in ent_df.columns    else set()
+
+        ref_fields = [
+            ("person_id",              people_ids),
+            ("secondary_person_id",    people_ids),
+            ("enterprise_id",          ent_ids),
+            ("secondary_enterprise_id",ent_ids),
+        ]
+
+        examples = []
+        broken = 0
+        for _, row in rel_df.iterrows():
+            reasons = []
+            for field, valid_ids in ref_fields:
+                val = row.get(field)
+                if val and str(val) not in valid_ids:
+                    reasons.append(f"{field} {val} not found")
+            if reasons:
+                broken += 1
+                if len(examples) < 5:
+                    examples.append({
+                        "id":                str(row.get("id")),
+                        "relationship_type": row.get("relationship_type"),
+                        "reasons":           reasons,
+                    })
+
+        return {"broken_count": broken, "total": len(rel_df), "examples": examples}
+    except Exception as exc:
+        logger.warning("dataquality: broken-relationship check failed — %s", exc)
+        return {"broken_count": 0, "total": 0, "examples": [], "error": str(exc)}
+
+
+# ── Per-table sync freshness ────────────────────────────────────────────────
+# raw.* tables are a full REPLACE on every ETL run (etl/load.py load_raw),
+# stamped with a _loaded_at column at write time. No per-table freshness was
+# exposed anywhere before this — /health only has one aggregate last_etl_at
+# timestamp sourced from analytics.people_summary.
+
+_RAW_TABLES = [
+    "people", "enterprises", "products", "tasks", "transactions",
+    "relationships", "addresses", "services",
+    "documents", "schedules", "signals", "channels", "territories",
+    "animals", "plots", "observations",
+]
+
+_STALE_HOURS = 24
+
+
+def check_sync_freshness(company_id: str) -> dict:
+    """MAX(_loaded_at) per raw.* table for this company — answers "which
+    tables are synced to the datamart, and how recently."""
+    try:
+        from datetime import datetime, timezone
+        from database import get_engine_safe
+        from sqlalchemy import text
+
+        engine = get_engine_safe()
+        if not engine:
+            return {}
+
+        result = {}
+        with engine.connect() as conn:
+            for table in _RAW_TABLES:
+                try:
+                    exists = conn.execute(
+                        text(
+                            "SELECT 1 FROM information_schema.tables "
+                            "WHERE table_schema = 'raw' AND table_name = :t LIMIT 1"
+                        ),
+                        {"t": table},
+                    ).fetchone()
+                    if not exists:
+                        result[table] = {"last_synced": None, "is_stale": True, "status": "not_created"}
+                        continue
+
+                    ts = conn.execute(
+                        text(f"SELECT MAX(_loaded_at) FROM raw.{table} WHERE company_id = :cid"),  # noqa: S608
+                        {"cid": company_id},
+                    ).scalar()
+                    if not ts:
+                        result[table] = {"last_synced": None, "is_stale": True, "status": "no_data_for_company"}
+                        continue
+
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    age_hours = (datetime.now(timezone.utc) - ts).total_seconds() / 3600
+                    result[table] = {
+                        "last_synced": ts.isoformat(),
+                        "is_stale":    age_hours > _STALE_HOURS,
+                        "status":      "synced",
+                    }
+                except Exception as exc:
+                    logger.debug("dataquality: sync-freshness %s failed — %s", table, exc)
+                    result[table] = {"last_synced": None, "is_stale": True, "status": "error"}
+        return result
+    except Exception as exc:
+        logger.warning("dataquality: sync freshness check failed — %s", exc)
+        return {}
+
+
+# ── Degraded features — entity emptiness → downstream feature impact ───────
+# Template-driven rather than hand-built per company: cross-referenced
+# against record_counts at report time, so any entity with 0 records
+# automatically surfaces its mapped features as degraded.
+
+DEGRADED_FEATURES = {
+    "people": [
+        {"feature": "Dashboard headcount card",     "page": "Dashboard"},
+        {"feature": "People page",                  "page": "People"},
+        {"feature": "Attendance tracking",           "page": "Attendance"},
+        {"feature": "Person-linked relationships",   "page": "Relationships"},
+    ],
+    "enterprises": [
+        {"feature": "Dashboard enterprise card",     "page": "Dashboard"},
+        {"feature": "Enterprises page",              "page": "Enterprises"},
+        {"feature": "Company Graph",                 "page": "CompanyGraphHome"},
+    ],
+    "transactions": [
+        {"feature": "Dashboard revenue card",        "page": "Dashboard"},
+        {"feature": "AR aging report",               "page": "Reports"},
+        {"feature": "Revenue KPI goals",              "page": "Dashboard"},
+        {"feature": "Reports revenue charts",         "page": "Reports"},
+    ],
+    "tasks": [
+        {"feature": "Dashboard task card",           "page": "Dashboard"},
+        {"feature": "Tasks page",                    "page": "Tasks"},
+        {"feature": "Staff utilisation report",       "page": "Reports"},
+    ],
+    "products": [
+        {"feature": "Dashboard inventory card",      "page": "Dashboard"},
+        {"feature": "Products page",                 "page": "Products"},
+        {"feature": "Inventory health / at-risk stock","page": "Products"},
+    ],
+    "relationships": [
+        {"feature": "Relationships page",            "page": "Relationships"},
+        {"feature": "Cross-entity dashboards (Enterprise People, Item Assignment, Role Gaps, Accountability)", "page": "Reports"},
+    ],
+    "addresses": [
+        {"feature": "Addresses page",                "page": "Addresses"},
+        {"feature": "Map / spatial views",            "page": "MapExplorer"},
+    ],
+}
+
+
+def get_degraded_features(record_counts: dict) -> list:
+    """Any entity with 0 records surfaces its mapped downstream features."""
+    degraded = []
+    for entity, count in record_counts.items():
+        if count == 0 and entity in DEGRADED_FEATURES:
+            degraded.append({"entity": entity, "features": DEGRADED_FEATURES[entity]})
+    return degraded

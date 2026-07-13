@@ -15,6 +15,7 @@ import Pricing from './pages/Pricing';
 import Billing from './pages/Billing';
 import Settings from './pages/Settings';
 import DataRepair from './pages/DataRepair';
+import DataReadiness from './pages/DataReadiness';
 import StockCounter from './pages/StockCounter';
 import MarketIntelligence from './pages/MarketIntelligence';
 import MarketIntelligencePDF from './pages/MarketIntelligencePDF';
@@ -36,6 +37,7 @@ import KineticLayer from './pages/KineticLayer';
 import ObjectViews from './pages/ObjectViews';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
+import AcceptInvite from './pages/AcceptInvite';
 import QueryPublic from './pages/QueryPublic';
 import ExplorePublic from './pages/ExplorePublic';
 import Agents from './pages/Agents';
@@ -127,6 +129,7 @@ const AuthenticatedApp = () => {
       <Route path="/Billing" element={<LayoutWrapper currentPageName="Billing"><Billing /></LayoutWrapper>} />
       <Route path="/Settings" element={<LayoutWrapper currentPageName="Settings"><Settings /></LayoutWrapper>} />
       <Route path="/DataRepair" element={<LayoutWrapper currentPageName="Data Repair"><DataRepair /></LayoutWrapper>} />
+      <Route path="/DataReadiness" element={<LayoutWrapper currentPageName="Data Readiness"><DataReadiness /></LayoutWrapper>} />
       <Route path="/StockCounter" element={<LayoutWrapper currentPageName="StockCounter"><StockCounter /></LayoutWrapper>} />
       <Route path="/MarketIntelligence" element={<LayoutWrapper currentPageName="Market Intelligence"><MarketIntelligence /></LayoutWrapper>} />
       <Route path="/MarketIntelligencePDF" element={<LayoutWrapper currentPageName="Market Intelligence PDF"><MarketIntelligencePDF /></LayoutWrapper>} />
@@ -177,6 +180,7 @@ function App() {
             <Routes>
               {/* Public routes — no auth required */}
               <Route path="/login" element={<Login />} />
+              <Route path="/AcceptInvite" element={<AcceptInvite />} />
               <Route path="/" element={<Landing />} />
               <Route path="/query" element={<QueryPublic />} />
               <Route path="/explore" element={<ExplorePublic />} />
