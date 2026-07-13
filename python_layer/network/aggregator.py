@@ -119,6 +119,8 @@ class NetworkAggregator:
                 continue
 
             health = self._compute_health_score(data)
+            freshness = data.get("_freshness", {})
+            stale_tables = [t for t, f in freshness.items() if f.get("is_stale")]
             summaries.append({
                 **member,
                 "health_score":     health["score"],
@@ -133,6 +135,8 @@ class NetworkAggregator:
                 "revenue_30d":      self._sum_revenue(data.get("transaction_summary", [])),
                 "expense_30d":      self._sum_expenses(data.get("transaction_summary", [])),
                 "status":           "active",
+                "is_stale":         len(stale_tables) > 0,
+                "stale_tables":     stale_tables,
             })
 
         # Sort by health score descending (best performers first)
@@ -269,6 +273,22 @@ class NetworkAggregator:
                     "NetworkAggregator: %s failed for %s — %s", table, company_id, e
                 )
                 data[table] = []
+
+        # Freshness parity: without this, a stale branch's numbers look
+        # identical to a genuinely underperforming one in outlier detection.
+        # Bounded to the 4 raw tables this method already fetches summaries
+        # for — not the full 15+-table dataquality scan.
+        try:
+            from dataquality.engine import check_sync_freshness
+            data["_freshness"] = check_sync_freshness(
+                company_id, tables=["people", "products", "tasks", "transactions"]
+            )
+        except Exception as e:
+            logger.debug(
+                "NetworkAggregator: freshness check failed for %s — %s", company_id, e
+            )
+            data["_freshness"] = {}
+
         return data
 
     # ----------------------------------------------------------

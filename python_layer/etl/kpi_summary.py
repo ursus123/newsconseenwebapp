@@ -59,32 +59,15 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
+from config.taxonomy import PERSON_TYPE_SETS
+from etl.transactions import REVENUE_TYPES, EXPENSE_TYPES
+
 logger = logging.getLogger(__name__)
 
-REVENUE_TYPES = {
-    "service_fee", "tuition", "membership_fee", "donation",
-    "tithe", "event_income", "grant", "sponsorship",
-    "livestock_sale", "crop_sale", "product_sale",
-    "rental_income", "interest_income", "refund_received",
-}
-EXPENSE_TYPES = {
-    "payroll", "contractor_payment", "rent_expense",
-    "utility_expense", "supply_purchase", "equipment_purchase",
-    "feed_purchase", "vet_expense", "medication_purchase",
-    "insurance_expense", "tax_payment", "refund_issued",
-    "ministry_expense", "travel_expense", "marketing_expense",
-    "other_expense",
-}
-
-_STAFF_TYPES = {
-    "staff", "employee", "contractor", "freelancer",
-    "driver", "teacher", "nurse", "agent",
-}
-_CLIENT_TYPES = {
-    "client", "patient", "student", "member", "beneficiary",
-    "enrollee", "participant", "subscriber", "attendee",
-    "learner", "trainee", "resident", "customer", "applicant",
-}
+# Canonical staff/client classification — single source of truth is
+# config/taxonomy.py's PERSON_TYPE_SETS (also used by etl/people.py).
+_STAFF_TYPES = PERSON_TYPE_SETS["staff"]
+_CLIENT_TYPES = PERSON_TYPE_SETS["client"]
 
 
 def transform_kpi_summary(

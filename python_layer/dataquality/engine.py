@@ -444,9 +444,17 @@ _RAW_TABLES = [
 _STALE_HOURS = 24
 
 
-def check_sync_freshness(company_id: str) -> dict:
+def check_sync_freshness(company_id: str, tables: list[str] | None = None) -> dict:
     """MAX(_loaded_at) per raw.* table for this company — answers "which
-    tables are synced to the datamart, and how recently."""
+    tables are synced to the datamart, and how recently."
+
+    Args:
+        tables: restrict the scan to this subset of raw.* table names
+            (e.g. the 4 tables a network rollup already fetches per member)
+            instead of the full _RAW_TABLES list — callers that only need
+            a cheap proxy check should pass a small subset rather than
+            paying for all 15+ tables per call.
+    """
     try:
         from datetime import datetime, timezone
         from database import get_engine_safe
@@ -456,9 +464,11 @@ def check_sync_freshness(company_id: str) -> dict:
         if not engine:
             return {}
 
+        scan_tables = tables if tables is not None else _RAW_TABLES
+
         result = {}
         with engine.connect() as conn:
-            for table in _RAW_TABLES:
+            for table in scan_tables:
                 try:
                     exists = conn.execute(
                         text(

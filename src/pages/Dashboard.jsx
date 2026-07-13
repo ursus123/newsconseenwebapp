@@ -35,6 +35,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 import { useTerminology } from "@/hooks/useTerminology";
 import { REVENUE_TYPES } from "@/config/transactionTypes";
+import { isPersonType } from "@/utils/typeAliases";
 import {
   fetchPeopleFallback,
   fetchTasksFallback,
@@ -910,10 +911,10 @@ function AdminDashboard({ user }) {
     : peopleRecords.length;
   const activeStaff   = isPeopleAnalytics
     ? peopleSummary.filter(r => r.person_type === "staff").reduce((s, r) => s + (r.active_count || 0), 0)
-    : peopleRecords.filter(p => p.person_type === "staff"   && p.status === "active").length;
+    : peopleRecords.filter(p => isPersonType(p.person_type, "staff")   && p.status === "active").length;
   const activeClients = isPeopleAnalytics
     ? peopleSummary.filter(r => r.person_type === "client").reduce((s, r) => s + (r.active_count || 0), 0)
-    : peopleRecords.filter(p => p.person_type === "client"  && p.status === "active").length;
+    : peopleRecords.filter(p => isPersonType(p.person_type, "client")  && p.status === "active").length;
 
   // Products
   const totalProducts  = isProdAnalytics
@@ -956,7 +957,7 @@ function AdminDashboard({ user }) {
 
   // ── Trend calculations (30-day vs previous 30-day from Base44 entities) ─────
   const trends = useMemo(() => {
-    const isRevenue = t => REVENUE_TYPES.includes(t.transaction_type);
+    const isRevenue = t => REVENUE_TYPES.includes(t.transaction_type) && t.status === "posted";
     const isCompleted = t => t.status === "completed";
 
     const txCurr = txCountInWindow(transactions, isRevenue, 30, 0);

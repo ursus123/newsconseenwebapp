@@ -14,10 +14,25 @@
  */
 
 export const TYPE_ALIASES = {
-  staff:     ["staff", "employee", "contractor", "freelancer"],
-  client:    ["client", "patient", "student", "member"],
-  contact:   ["contact", "vendor", "supplier", "external_partner"],
-  volunteer: ["volunteer"],
+  staff: [
+    "staff", "employee", "contractor", "freelancer", "consultant", "temp",
+    "caregiver", "nurse", "doctor", "therapist", "pharmacist",
+    "teacher", "instructor", "tutor", "coach", "trainer",
+    "manager", "supervisor", "admin", "coordinator", "director", "intern",
+    "locum", "secondee", "relief", "retiree",
+  ],
+  client: [
+    "client", "patient", "student", "member", "customer", "resident",
+    "learner", "trainee", "attendee", "beneficiary", "enrollee",
+    "subscriber", "participant", "alumni", "pensioner",
+  ],
+  contact: [
+    "contact", "vendor", "supplier", "external_partner", "partner",
+    "donor", "sponsor", "board_member", "trustee", "investor",
+    "guarantor", "next_of_kin", "emergency_contact", "guardian",
+    "referral", "prospect", "lead",
+  ],
+  volunteer: ["volunteer", "community_worker", "unpaid_contributor"],
 };
 
 /**

@@ -120,6 +120,14 @@ class NetworkBenchmarks:
                         "z_score":   round(z_score, 2),
                         "value":     value,
                         "network_mean": round(stats["mean"], 2),
+                        # This member's underlying data may be stale — the
+                        # outlier reading could reflect a lagging sync, not
+                        # a genuine performance signal. See is_stale/
+                        # stale_tables (NetworkAggregator.aggregate_members).
+                        "caveat": (
+                            "Member data may be stale — outlier reading is unverified"
+                            if member.get("is_stale") else None
+                        ),
                     })
 
             enriched_members.append(enriched)
@@ -143,6 +151,11 @@ class NetworkBenchmarks:
         top_performers    = scored[:3]
         needs_attention   = list(reversed(scored[-3:])) if len(scored) >= 3 else []
 
+        stale_members = [
+            {"company_id": m.get("company_id"), "name": m.get("name", m.get("company_id")), "stale_tables": m.get("stale_tables", [])}
+            for m in enriched_members if m.get("is_stale")
+        ]
+
         return {
             "sufficient_data":   True,
             "member_count":      len(self.members),
@@ -152,6 +165,7 @@ class NetworkBenchmarks:
             "top_performers":    [self._summarise(m) for m in top_performers],
             "needs_attention":   [self._summarise(m) for m in needs_attention],
             "network_grade":     self._network_grade(metric_stats),
+            "stale_members":     stale_members,
         }
 
     def compare_member(self, company_id: str) -> dict:

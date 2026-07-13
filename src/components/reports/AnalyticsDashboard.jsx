@@ -5,9 +5,10 @@ import { Loader2, Building2, Users, ClipboardList, ArrowLeftRight, ExternalLink,
 import { fetchWithFallback } from "@/utils/fetchWithFallback";
 import { ncClient } from "@/api/ncClient";
 
-const SUPERSET_URL = "http://localhost:8089";
+const SUPERSET_URL = import.meta.env.VITE_SUPERSET_URL || "";
 
 // ── Tier badge ────────────────────────────────────────────────────────────────
+// Same tier meaning/labels as DashboardSyncBanner.jsx's TIER_META — keep in sync.
 const TIER_LABELS = { 1: "Analytics", 2: "Raw DB", 3: "Live" };
 const TIER_ICONS  = { 1: Zap, 2: Database, 3: Server };
 const TIER_COLORS = {
@@ -145,10 +146,12 @@ export default function AnalyticsDashboard({ companyId }) {
             <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button size="sm" onClick={() => window.open(SUPERSET_URL, "_blank")}>
-            <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-            Open Advanced Analytics
-          </Button>
+          {SUPERSET_URL && (
+            <Button size="sm" onClick={() => window.open(SUPERSET_URL, "_blank")}>
+              <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+              Open Advanced Analytics
+            </Button>
+          )}
         </div>
       </div>
 

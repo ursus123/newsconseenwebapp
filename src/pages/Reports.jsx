@@ -10,6 +10,7 @@ import WelcomeSetup from "@/components/reports/WelcomeSetup";
 import ChartViewer from "@/components/reports/ChartViewer.jsx";
 import { Loader2, RefreshCw, Sparkles, TrendingUp, Users, AlertCircle, ChevronRight, Database, FileText, Download, CheckCircle2, Circle, Play, Globe, Building2, BarChart2, Brain, Pin, Code2 } from "lucide-react";
 import SupersetEmbed from "@/components/reports/SupersetEmbed";
+import AnalyticsDashboard from "@/components/reports/AnalyticsDashboard";
 import { RAILWAY_URL, authHeaders } from "@/config/api";
 
 const RAILWAY_API_KEY = typeof import.meta !== "undefined" ? (import.meta.env?.VITE_RAILWAY_API_KEY || "") : "";
@@ -450,12 +451,15 @@ function MLInsightsPanel({ currentUser, onBack }) {
         </div>
       </div>
 
+      {/* Analytics tier-1-first KPI overview — real 3-tier fallback, unlike the raw-stats panel below */}
+      <AnalyticsDashboard companyId={companyId} />
+
       {/* Raw Data Inventory */}
       {rawStats.tables && (
         <div>
           <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
             <Database className="w-4 h-4 text-slate-400" />
-            {rawStats.source === "base44" ? "Live Data (Base44)" : "Data in python_layer"}
+            {rawStats.source === "base44" ? "Live data" : "Data in python_layer"}
           </h3>
           <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
             {Object.entries(rawStats.tables || {}).map(([table, count]) => (

@@ -25,10 +25,14 @@ function TierBadge({ tier }) {
  *
  * Props:
  *   sources  { [key]: { label, tier, source, loading } }
- *     tier   1 = analytics, 2 = raw DB, 3 = Base44 live, 0 = pending
+ *     tier   1 = analytics, 2 = raw DB, 3 = live, 0 = pending
  *     source "analytics" | "raw" | "base44" | "none"
  *   onRefresh    () => void
  *   isRefreshing bool
+ *
+ * Summary sentence uses product-facing terms ("Live data," "Analytics
+ * cache," "Unavailable — degraded"); the expandable breakdown below keeps
+ * the T1/T2/T3 technical tier badges for anyone who wants the detail.
  */
 export default function DashboardSyncBanner({ sources = {}, onRefresh, isRefreshing }) {
   const [expanded, setExpanded] = useState(false);
@@ -41,14 +45,16 @@ export default function DashboardSyncBanner({ sources = {}, onRefresh, isRefresh
     return s.tier > min ? s.tier : min;
   }, 0);
 
-  const anyLoading = entries.some(s => s.loading) || isRefreshing;
-  const allTier1   = entries.every(s => s.tier === 1);
-  const anyTier3   = entries.some(s => s.tier === 3);
-  const anyPending = entries.some(s => !s.tier || s.tier === 0);
+  const anyLoading  = entries.some(s => s.loading) || isRefreshing;
+  const allTier1    = entries.every(s => s.tier === 1);
+  const anyTier3    = entries.some(s => s.tier === 3);
+  const allPending  = entries.every(s => !s.tier || s.tier === 0);
 
   // Banner style
   const bannerCls = anyLoading
     ? "bg-slate-50 border-slate-200 text-slate-600"
+    : allPending
+    ? "bg-rose-50 border-rose-200 text-rose-700"
     : allTier1
     ? "bg-emerald-50 border-emerald-200 text-emerald-700"
     : anyTier3
@@ -57,6 +63,8 @@ export default function DashboardSyncBanner({ sources = {}, onRefresh, isRefresh
 
   const SummaryIcon = anyLoading
     ? RefreshCw
+    : allPending
+    ? WifiOff
     : allTier1
     ? CheckCircle2
     : anyTier3
@@ -65,11 +73,13 @@ export default function DashboardSyncBanner({ sources = {}, onRefresh, isRefresh
 
   const summaryText = anyLoading
     ? "Loading analytics data…"
+    : allPending
+    ? "Unavailable — degraded, showing last known state"
     : allTier1
-    ? "All metrics served from analytics engine (Tier 1)"
+    ? "All metrics from analytics cache (fully synced)"
     : anyTier3
-    ? "Some metrics using live Base44 data — analytics not yet synced"
-    : "Metrics from raw database snapshot (Tier 2)";
+    ? "Some metrics using live data — analytics cache not yet synced"
+    : "All metrics from analytics cache (partial sync)";
 
   return (
     <div className={`rounded-xl border px-3 py-2 text-xs ${bannerCls}`}>

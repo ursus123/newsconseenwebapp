@@ -163,6 +163,21 @@ def export_report(
         company_id, report, format, len(content), filename,
     )
 
+    # Log the export — never fail the download if logging fails.
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO analytics.bi_export_log "
+                    "(company_id, report, format, file_size_bytes) "
+                    "VALUES (:company_id, :report, :format, :size)"
+                ),
+                {"company_id": company_id, "report": report, "format": format, "size": len(content)},
+            )
+    except Exception as exc:
+        logger.warning("bi/export: failed to write bi_export_log — %s", exc)
+
     return Response(
         content=content,
         media_type=content_type,

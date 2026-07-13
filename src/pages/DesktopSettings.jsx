@@ -618,7 +618,7 @@ function SecuritySection({ user }) {
 function ApiKeysSection({ user }) {
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
-  const fakeKey = `b44_${btoa(user?.email || "user").slice(0, 12)}xxxxxxxxxxxx`;
+  const fakeKey = `nc_${btoa(user?.email || "user").slice(0, 12)}xxxxxxxxxxxx`;
   const pythonUrl = window.location.origin + "/api/v1";
 
   const copy = (val) => {
@@ -633,7 +633,7 @@ function ApiKeysSection({ user }) {
 
       <div className="p-4 rounded-2xl space-y-4" style={{ background: "rgba(255,255,255,0.04)" }}>
         <div>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Base44 API Key</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Newsconseen API Key</p>
           <div className="flex items-center gap-2">
             <div className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono text-slate-400 truncate">
               {show ? fakeKey : "•".repeat(32)}

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { ArrowLeft, Edit, Loader2, RefreshCw, Code2 } from "lucide-react";
 import { executeSQL } from "@/components/querybuilder/sqlEngine";
 import ChartRenderer from "./ChartRenderer";
-import { freshnessLabel, rowCountLabel, sourceMeta } from "@/components/shared/chartUtils";
+import { freshnessLabel, queryRunLabel, rowCountLabel, sourceMeta } from "@/components/shared/chartUtils";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 
@@ -18,6 +18,13 @@ const TONE = {
 function SourceBadge({ chart, data, lastFetched }) {
   const meta = sourceMeta(chart);
   const count = rowCountLabel(data);
+  // A live SQL query only tells us when it last ran, not how fresh the
+  // underlying data is — label it accordingly instead of implying verified
+  // data recency (see chartUtils.js's queryRunLabel doc comment).
+  const isSqlQuery = Boolean(chart?.sql_query || chart?.sql);
+  const freshness = lastFetched
+    ? (isSqlQuery ? queryRunLabel(lastFetched) : freshnessLabel(lastFetched))
+    : "";
   return (
     <div className="flex flex-wrap items-center gap-2 text-[10px] mt-1">
       <span className={`px-2 py-1 rounded-full border font-bold ${TONE[meta.tone] || TONE.slate}`}>
@@ -26,8 +33,8 @@ function SourceBadge({ chart, data, lastFetched }) {
       <span className="text-slate-400">{meta.detail}</span>
       {count && <span className="text-slate-300">·</span>}
       {count && <span className="text-slate-400">{count}</span>}
-      {lastFetched && <span className="text-slate-300">·</span>}
-      {lastFetched && <span className="text-emerald-500">{freshnessLabel(lastFetched)}</span>}
+      {freshness && <span className="text-slate-300">·</span>}
+      {freshness && <span className="text-emerald-500">{freshness}</span>}
     </div>
   );
 }

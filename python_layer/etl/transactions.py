@@ -18,6 +18,7 @@ REVENUE_TYPES = {
     "tithe", "event_income", "grant", "sponsorship",
     "livestock_sale", "crop_sale", "product_sale",
     "rental_income", "interest_income", "refund_received",
+    "sale_service",
 }
 
 EXPENSE_TYPES = {

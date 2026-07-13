@@ -95,6 +95,22 @@ export function freshnessLabel(date) {
   return `refreshed ${d.toLocaleDateString()}`;
 }
 
+// Live SQL queries only know when the browser last *executed* the query, not
+// how fresh the underlying analytics/raw data actually is — this label makes
+// that distinction explicit instead of implying verified data recency.
+export function queryRunLabel(date) {
+  if (!date) return "";
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
+  const diff = Date.now() - d.getTime();
+  const minutes = Math.max(0, Math.round(diff / 60000));
+  if (minutes < 1) return "query run just now";
+  if (minutes < 60) return `query run ${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `query run ${hours}h ago`;
+  return `query run ${d.toLocaleDateString()}`;
+}
+
 export function rowCountLabel(rows) {
   if (!Array.isArray(rows)) return "";
   return `${rows.length.toLocaleString()} row${rows.length === 1 ? "" : "s"}`;

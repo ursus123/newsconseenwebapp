@@ -29,6 +29,25 @@ const UNMIGRATED_ENTITIES = [
   "FileRecord", "FileShare", "MedicationProfile", "Attendance",
 ];
 
+// ─── Canonical Metric Registry ────────────────────────────────────────────────
+// Mirrors python_layer/config/metric_registry.py's METRIC_REGISTRY (also served
+// live at GET /config/metric-registry). Single source of truth for "which
+// metrics are canonical" and "which endpoint powers each KPI" — keep this list
+// in sync with metric_registry.py when a new canonical KPI is added.
+const CANONICAL_METRICS = [
+  { key: "revenue_30d",             label: "Revenue (30d)",          endpoint: "/kpi-summary",     entity: "Transaction", unit: "currency" },
+  { key: "expense_30d",             label: "Expenses (30d)",         endpoint: "/kpi-summary",     entity: "Transaction", unit: "currency" },
+  { key: "net_profit_30d",          label: "Net profit (30d)",       endpoint: "/kpi-summary",     entity: "Transaction", unit: "currency" },
+  { key: "active_staff",            label: "Active staff",           endpoint: "/people-summary",  entity: "Person",      unit: "count" },
+  { key: "active_clients",          label: "Active clients",         endpoint: "/people-summary",  entity: "Person",      unit: "count" },
+  { key: "task_completion_rate_pct",label: "Task completion rate",   endpoint: "/kpi-summary",     entity: "Task",        unit: "percent" },
+  { key: "overdue_tasks",           label: "Overdue tasks",          endpoint: "/kpi-summary",     entity: "Task",        unit: "count" },
+  { key: "overdue_invoice_total",   label: "Overdue invoices",       endpoint: "/kpi-summary",     entity: "Transaction", unit: "currency" },
+  { key: "low_stock_count",         label: "Low stock items",        endpoint: "/product-summary", entity: "Product",     unit: "count" },
+  { key: "out_of_stock_count",      label: "Out of stock items",     endpoint: "/product-summary", entity: "Product",     unit: "count" },
+  { key: "churn_risk_count",        label: "Clients at churn risk",  endpoint: "/kpi-summary",     entity: "Person",      unit: "count" },
+];
+
 const TABLES = [
   // ── Three Master Entities ──────────────────────────────────────────────────
   {
@@ -2794,6 +2813,31 @@ export default function DataModels() {
               ))}
             </div>
           </div>
+
+          {/* Canonical Metrics — single source of truth for which endpoint powers each KPI */}
+          {!isPGView && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Info className="w-3.5 h-3.5 text-slate-400" />
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Canonical Metrics ({CANONICAL_METRICS.length})
+                </p>
+              </div>
+              <p className="text-[10px] text-slate-400 leading-snug">
+                Also served live at <code className="font-mono">GET /config/metric-registry</code>.
+                Pinned charts saved with a <code className="font-mono">table_snapshot</code> are the
+                one place in the product that is genuinely reproducible today.
+              </p>
+              <div className="space-y-1">
+                {CANONICAL_METRICS.map(m => (
+                  <div key={m.key} className="flex items-center justify-between text-[10px] px-2 py-1 rounded-lg bg-slate-50">
+                    <span className="font-mono text-slate-600">{m.key}</span>
+                    <span className="text-slate-400">{m.endpoint}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Not yet migrated to Supabase */}
           {!isPGView && (

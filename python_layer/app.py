@@ -525,6 +525,14 @@ try:
 except Exception as _bi_err:
     logger.warning("BI export router failed to load — %s", _bi_err)
 
+# Config — canonical metric registry
+try:
+    from config.routes import router as config_router
+    app.include_router(config_router)
+    logger.info("Config router loaded")
+except Exception as _cfg_err:
+    logger.warning("Config router failed to load — %s", _cfg_err)
+
 # Platform Admin — multi-tenant management
 try:
     from admin.routes import router as admin_router
