@@ -75,6 +75,14 @@ def get_max_tokens(model: str) -> int:
     return _registry_max_tokens(model)
 
 
+def is_llm_available() -> bool:
+    """True if the configured default LLM provider has its API key set."""
+    spec = get_model(DEFAULT_MODEL)
+    if spec.provider != "anthropic":
+        return False
+    return bool(os.getenv(spec.env_key, ""))
+
+
 def get_client():
     """Lazy provider client shared across all agents.
 

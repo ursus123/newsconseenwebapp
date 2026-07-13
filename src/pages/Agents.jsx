@@ -151,12 +151,19 @@ function RunLog({ companyId }) {
             <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
               run.status === "completed" ? "bg-emerald-500" :
               run.status === "error"     ? "bg-rose-500" :
-              "bg-amber-500"
+              run.status === "degraded"  ? "bg-amber-500" :
+              "bg-slate-400"
             }`} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-xs font-bold text-slate-700 capitalize">{run.agent_name}</p>
                 <span className="text-[9px] text-slate-500 bg-slate-200 px-1.5 py-0.5 rounded-full">{run.trigger}</span>
+                {run.status === "degraded" && (
+                  <span className="text-[9px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full"
+                        title="Reasoning engine unavailable — check ANTHROPIC_API_KEY">
+                    degraded
+                  </span>
+                )}
                 {run.actions_taken > 0 && (
                   <span className="text-[9px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">
                     {run.actions_taken} actions

@@ -19,15 +19,19 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
-from .llm_router   import get_client, route, get_max_tokens
+from .llm_router   import get_client, route, get_max_tokens, is_llm_available
 from .tool_registry import TOOL_DEFINITIONS, execute_tool
-from .approval_gate import submit_action, log_run, get_risk_level, RiskLevel
+from .approval_gate import submit_action, log_run, log_executed_action, get_risk_level, RiskLevel
 from .agent_memory  import recall, remember, update_baseline
 
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_LOOPS = 6
 READINESS_THRESHOLD = 40  # matches onboarding's Data Readiness "D" grade cutoff
+
+# Action types that never mutate tenant data — excluded from the executed-
+# action audit log so read-only lookups don't drown out real writes.
+_READ_ONLY_ACTION_TYPES = {"read_data", "generate_report", "trigger_etl"}
 
 
 def _tenant_has_any_data(engine, company_id: str) -> bool:
@@ -135,6 +139,21 @@ class BaseAgent(ABC):
                 "skipped":  True,
             }
 
+        # Explicit degraded state — distinguish "no LLM configured" from a
+        # generic run failure so the operator sees why, not just that
+        # something broke.
+        if not is_llm_available():
+            summary = f"{self.name} is degraded — the reasoning engine (LLM) is not configured. Set ANTHROPIC_API_KEY."
+            logger.warning("Agent %s degraded for company %s — LLM not configured", self.name, company_id)
+            log_run(
+                self.engine, company_id, self.name, trigger,
+                status="degraded", summary=summary,
+                actions_taken=0, actions_pending=0, findings=[],
+                error="llm_unavailable",
+            )
+            return {"summary": summary, "findings": [], "actions": [],
+                    "degraded": True, "error_type": "llm_unavailable"}
+
         # 1. Observe
         try:
             context = self.observe(company_id)
@@ -148,24 +167,37 @@ class BaseAgent(ABC):
             context["agent_memory"] = memories[:10]  # top 10 strongest memories
 
         # 2. Think + Act loop
+        error_type = None
         try:
             findings = self._think_act_loop(company_id, context)
         except Exception as e:
+            error_str = str(e)
+            error_type = "llm_unavailable" if (
+                "ANTHROPIC_API_KEY" in error_str or "authentication" in error_str.lower()
+            ) else "run_error"
             logger.error("Agent %s think/act failed: %s", self.name, e)
-            findings = {"error": str(e), "actions": []}
+            findings = {"error": error_str, "actions": [], "error_type": error_type}
 
         # 3. Report
         actions_taken   = len([a for a in findings.get("actions", []) if a.get("status") == "executed"])
         actions_pending = len([a for a in findings.get("actions", []) if a.get("status") == "pending"])
         summary = findings.get("summary", f"{self.name} completed run.")
 
+        if "error" not in findings:
+            run_status = "completed"
+        elif findings.get("error_type") == "llm_unavailable":
+            run_status = "degraded"
+        else:
+            run_status = "error"
+
         log_run(
             self.engine, company_id, self.name, trigger,
-            status="completed" if "error" not in findings else "error",
+            status=run_status,
             summary=summary,
             actions_taken=actions_taken,
             actions_pending=actions_pending,
             findings=findings.get("findings", []),
+            error=findings.get("error"),
         )
 
         # Store key observations as memory
@@ -206,15 +238,23 @@ class BaseAgent(ABC):
                 messages=messages,
             )
 
-            # Extract text blocks
+            # Extract text blocks — capture the model's own stated reasoning
+            # (free text or a summary field in structured JSON) so it can be
+            # attached to whatever tool calls follow in this same turn,
+            # instead of a generic placeholder.
+            loop_reasoning_parts = []
             for block in response.content:
                 if hasattr(block, "text") and block.text:
-                    # Try to parse JSON findings from the response
                     text = block.text.strip()
                     parsed = _try_parse_json(text)
                     if parsed and isinstance(parsed, dict):
                         last_parsed = parsed  # capture full JSON for agent-specific use
                         findings = parsed.get("findings", findings)
+                        if parsed.get("summary"):
+                            loop_reasoning_parts.append(str(parsed["summary"]))
+                    elif text:
+                        loop_reasoning_parts.append(text)
+            loop_reasoning = " ".join(loop_reasoning_parts).strip()[:500] or None
 
             if response.stop_reason == "end_turn":
                 break
@@ -227,7 +267,7 @@ class BaseAgent(ABC):
                            if hasattr(b, "type") and b.type == "tool_use"]
 
             tool_results = self._execute_tools_parallel(
-                company_id, tool_blocks, actions
+                company_id, tool_blocks, actions, loop_reasoning
             )
 
             messages.append({"role": "assistant", "content": response.content})
@@ -257,9 +297,11 @@ class BaseAgent(ABC):
 
     def _execute_tools_parallel(self, company_id: str,
                                  tool_blocks: list,
-                                 actions: list) -> list[dict]:
+                                 actions: list,
+                                 reasoning: Optional[str] = None) -> list[dict]:
         """Execute tool calls in parallel, routing through approval gate."""
         result_map: dict[str, dict] = {}
+        action_reasoning = reasoning or f"Agent {self.name} requested this action."
 
         def _run_one(block):
             tool_name = block.name
@@ -277,14 +319,16 @@ class BaseAgent(ABC):
             if risk in (RiskLevel.AUTO, RiskLevel.NOTIFY) and not is_tenant_ready(self.engine, company_id):
                 risk = RiskLevel.CRITICAL
 
+            action_label = f"{tool_name}: {json.dumps(inputs)[:100]}"
+
             if risk in (RiskLevel.APPROVE, RiskLevel.CRITICAL):
                 # Route through approval gate — do NOT execute
                 gate_result = submit_action(
                     self.engine, company_id, self.name,
                     action_type=action_type,
-                    action_label=f"{tool_name}: {json.dumps(inputs)[:100]}",
+                    action_label=action_label,
                     action_payload={"tool": tool_name, "inputs": inputs},
-                    reasoning=f"Agent {self.name} requested this action.",
+                    reasoning=action_reasoning,
                 )
                 actions.append({**gate_result, "tool": tool_name})
                 return block.id, {"status": "pending_approval",
@@ -306,10 +350,31 @@ class BaseAgent(ABC):
                 )
                 actions.append({"tool": tool_name, "status": "executed",
                                  "risk": risk.value, "execution": exec_result})
+                exec_action_type = result.get("action_type", action_type)
+                if exec_action_type not in _READ_ONLY_ACTION_TYPES:
+                    log_executed_action(
+                        self.engine, company_id, self.name,
+                        action_type=exec_action_type,
+                        action_label=action_label,
+                        action_payload=result.get("inputs", inputs),
+                        risk_level=risk, reasoning=action_reasoning,
+                        execution_result=exec_result,
+                    )
                 return block.id, exec_result
 
             actions.append({"tool": tool_name, "status": "executed",
                              "risk": risk.value})
+            # Record every data-mutating AUTO/NOTIFY-tier execution —
+            # previously these left zero durable record, invisible to any
+            # later review. Read-only lookups are excluded (nothing to review).
+            if action_type not in _READ_ONLY_ACTION_TYPES:
+                log_executed_action(
+                    self.engine, company_id, self.name,
+                    action_type=action_type, action_label=action_label,
+                    action_payload={"tool": tool_name, "inputs": inputs},
+                    risk_level=risk, reasoning=action_reasoning,
+                    execution_result=result if isinstance(result, dict) else {"result": str(result)},
+                )
             return block.id, result
 
         with ThreadPoolExecutor(max_workers=min(len(tool_blocks), 6),

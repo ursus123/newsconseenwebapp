@@ -231,8 +231,10 @@ export default function AgentDashboard({ companyId, onSelectAgent }) {
                 <div className="flex items-center gap-1 shrink-0">
                   {lastRun && (
                     <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-white/60 ${
-                      lastRun.status === "completed" ? "text-emerald-700" : "text-rose-700"
-                    }`}>
+                      lastRun.status === "completed" ? "text-emerald-700" :
+                      lastRun.status === "degraded"  ? "text-amber-700"   :
+                                                        "text-rose-700"
+                    }`} title={lastRun.status === "degraded" ? "Reasoning engine unavailable — check ANTHROPIC_API_KEY" : undefined}>
                       {lastRun.status}
                     </span>
                   )}

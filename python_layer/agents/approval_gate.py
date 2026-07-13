@@ -214,6 +214,47 @@ def submit_action(engine, company_id: str, agent_name: str,
     return {"status": "pending", "approval_id": approval_id, "risk_level": risk}
 
 
+def log_executed_action(engine, company_id: str, agent_name: str,
+                        action_type: str, action_label: str,
+                        action_payload: dict, risk_level: RiskLevel,
+                        reasoning: str, execution_result: dict) -> Optional[str]:
+    """
+    Record an AUTO/NOTIFY-tier action that executed immediately, so it's
+    still visible in the audit trail even though it never paused for
+    approval. Without this, AUTO actions left zero record anywhere.
+    Best-effort — never raises, never blocks the calling agent run.
+    """
+    approval_id = str(uuid.uuid4())
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("""
+                INSERT INTO analytics.agent_approvals
+                    (id, company_id, agent_name, action_type, action_label,
+                     action_payload, risk_level, reasoning, status,
+                     executed_at, execution_result)
+                VALUES
+                    (:id, :company_id, :agent_name, :action_type, :action_label,
+                     :action_payload::jsonb, :risk_level, :reasoning, 'executed',
+                     NOW(), :execution_result::jsonb)
+            """), {
+                "id":               approval_id,
+                "company_id":       company_id,
+                "agent_name":       agent_name,
+                "action_type":      action_type,
+                "action_label":     action_label,
+                "action_payload":   json.dumps(action_payload, default=str),
+                "risk_level":       risk_level.value if hasattr(risk_level, "value") else str(risk_level),
+                "reasoning":        reasoning,
+                "execution_result": json.dumps(execution_result, default=str),
+            })
+            conn.commit()
+        return approval_id
+    except Exception as e:
+        logger.warning("ApprovalGate: log_executed_action failed: %s", e)
+        return None
+
+
 def resolve(engine, approval_id: str, decision: str,
             resolved_by: str = "operator",
             note: str = "") -> dict:
@@ -279,15 +320,26 @@ def get_recent_runs(engine, company_id: str, limit: int = 20) -> list[dict]:
         with engine.connect() as conn:
             rows = conn.execute(text("""
                 SELECT id, agent_name, trigger, status, started_at,
-                       finished_at, actions_taken, actions_pending, summary
+                       finished_at, actions_taken, actions_pending, summary,
+                       findings, error
                 FROM analytics.agent_runs
                 WHERE company_id = :company_id
                 ORDER BY started_at DESC
                 LIMIT :limit
             """), {"company_id": company_id, "limit": limit}).fetchall()
             cols = ["id", "agent_name", "trigger", "status", "started_at",
-                    "finished_at", "actions_taken", "actions_pending", "summary"]
-            return [dict(zip(cols, r)) for r in rows]
+                    "finished_at", "actions_taken", "actions_pending", "summary",
+                    "findings", "error"]
+            result = []
+            for r in rows:
+                row = dict(zip(cols, r))
+                if isinstance(row.get("findings"), str):
+                    try:
+                        row["findings"] = json.loads(row["findings"])
+                    except Exception:
+                        pass
+                result.append(row)
+            return result
     except Exception as e:
         logger.warning("ApprovalGate: get_recent_runs failed: %s", e)
         return []
@@ -413,7 +465,7 @@ def get_actions_this_week(engine, company_id: str) -> dict:
 def log_run(engine, company_id: str, agent_name: str,
             trigger: str, status: str, summary: str,
             actions_taken: int = 0, actions_pending: int = 0,
-            findings: list = None) -> None:
+            findings: list = None, error: str = None) -> None:
     """Record an agent run in the audit log."""
     try:
         from sqlalchemy import text
@@ -422,11 +474,11 @@ def log_run(engine, company_id: str, agent_name: str,
                 INSERT INTO analytics.agent_runs
                     (company_id, agent_name, trigger, status,
                      finished_at, actions_taken, actions_pending,
-                     summary, findings)
+                     summary, findings, error)
                 VALUES
                     (:company_id, :agent_name, :trigger, :status,
                      NOW(), :actions_taken, :actions_pending,
-                     :summary, :findings::jsonb)
+                     :summary, :findings::jsonb, :error)
             """), {
                 "company_id":      company_id,
                 "agent_name":      agent_name,
@@ -436,6 +488,7 @@ def log_run(engine, company_id: str, agent_name: str,
                 "actions_pending": actions_pending,
                 "summary":         summary,
                 "findings":        json.dumps(findings or []),
+                "error":           error,
             })
             conn.commit()
     except Exception as e:
