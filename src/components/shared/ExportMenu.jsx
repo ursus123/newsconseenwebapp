@@ -16,8 +16,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Download, FileSpreadsheet, BarChart2, FileText, Loader2, ChevronDown, CheckCircle } from "lucide-react";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 
 const FORMATS = [
   {
@@ -70,7 +69,7 @@ export default function ExportMenu({ report, companyId, label = "Export", size =
 
     try {
       const url = `${RAILWAY_URL}/bi/export?report=${encodeURIComponent(report)}&format=${fmt.id}&company_id=${encodeURIComponent(companyId)}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: await authHeaders() });
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

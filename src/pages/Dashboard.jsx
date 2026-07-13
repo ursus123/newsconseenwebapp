@@ -51,8 +51,7 @@ import GeoMap from "../components/dashboard/GeoMap";
 import SupersetEmbed from "../components/dashboard/SupersetEmbed";
 import N8nEmbed from "../components/dashboard/N8nEmbed";
 import ExportMenu from "@/components/shared/ExportMenu";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 
 // ── Automation Feed ───────────────────────────────────────────────────────────
 // Shows recent workflow runs + audit events as a unified activity feed.
@@ -262,7 +261,7 @@ function AgentInsightStrip({ companyId }) {
   const { data: statusData } = useQuery({
     queryKey: ["dash-agent-status", companyId],
     queryFn: async () => {
-      const r = await fetch(`${RAILWAY_URL}/agents/status?company_id=${companyId}`);
+      const r = await fetch(`${RAILWAY_URL}/agents/status?company_id=${companyId}`, { headers: await authHeaders() });
       if (!r.ok) return null;
       return r.json();
     },
@@ -275,7 +274,7 @@ function AgentInsightStrip({ companyId }) {
   const { data: runsData } = useQuery({
     queryKey: ["dash-agent-runs", companyId],
     queryFn: async () => {
-      const r = await fetch(`${RAILWAY_URL}/agents/runs?company_id=${companyId}&limit=5`);
+      const r = await fetch(`${RAILWAY_URL}/agents/runs?company_id=${companyId}&limit=5`, { headers: await authHeaders() });
       if (!r.ok) return { runs: [] };
       return r.json();
     },

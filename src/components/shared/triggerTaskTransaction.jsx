@@ -4,7 +4,6 @@
  * this creates the appropriate Transaction record automatically.
  */
 
-import { ncClient } from "@/api/ncClient";
 import { createTransaction } from "@/utils/createTransaction";
 
 function todayStr() {
@@ -86,7 +85,7 @@ export async function triggerTaskTransaction(task, performingUser) {
 
   // Route through the master engine
   if (!performingUser?.company_id) {
-    return ncClient.entities.Transaction.create({ ...payload, company_id: payload.company_id || null });
+    throw new Error("Cannot create a transaction without a workspace company_id.");
   }
   return createTransaction(
     { ...payload, source: "task_complete", amount: payload.amount || 0 },

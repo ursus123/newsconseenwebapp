@@ -60,8 +60,10 @@ def evaluate_all(
     Evaluate alerts for all active companies.
     Protected by x-cron-secret header when called from Airflow.
     """
-    cron_secret = os.getenv("CRON_SECRET", "")
-    if cron_secret and x_cron_secret != cron_secret:
+    from config.settings import settings
+    if not settings.cron_secret:
+        raise HTTPException(status_code=503, detail="Cron endpoints disabled — set CRON_SECRET env var")
+    if x_cron_secret != settings.cron_secret:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
     return run_all_companies(dry_run=dry_run)

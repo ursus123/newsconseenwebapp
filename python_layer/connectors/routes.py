@@ -378,6 +378,12 @@ def run_scheduled_connectors(x_cron_secret: Optional[str] = Header(None)):
     Schedules and credentials are loaded from PostgreSQL connectors.schedules
     so this works correctly after Railway redeploys.
     """
+    from config.settings import settings
+    if not settings.cron_secret:
+        raise HTTPException(status_code=503, detail="Cron endpoints disabled — set CRON_SECRET env var")
+    if x_cron_secret != settings.cron_secret:
+        raise HTTPException(status_code=401, detail="Invalid x-cron-secret")
+
     _ensure_schedule_tables()
     store = _get_schedule_store()
     triggered = []

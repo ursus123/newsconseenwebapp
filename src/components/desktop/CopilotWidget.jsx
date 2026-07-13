@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { X, Send, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { RAILWAY_API_KEY, RAILWAY_URL, apiHeaders } from "@/config/api";
+import { RAILWAY_API_KEY, RAILWAY_URL, authHeaders } from "@/config/api";
 
 // Simple markdown renderer — no external deps (avoids duplicate React from react-markdown)
 function SimpleMarkdown({ text }) {
@@ -35,10 +35,8 @@ function renderInline(text) {
   });
 }
 
-const API_HEADERS = apiHeaders();
-
-const idjwiHeaders = (user) => ({
-  ...API_HEADERS,
+const idjwiHeaders = async (user) => ({
+  ...(await authHeaders()),
   ...(RAILWAY_API_KEY ? { "x-idjwi-api-key": RAILWAY_API_KEY } : {}),
   ...(user?.email ? { "x-idjwi-user": user.email } : {}),
   ...(user?.role ? { "x-idjwi-role": user.role } : {}),
@@ -106,7 +104,7 @@ export default function CopilotWidget({ open, onClose, user }) {
     try {
       const res = await fetch(`${RAILWAY_URL}/copilot/ask`, {
         method: "POST",
-        headers: idjwiHeaders(user),
+        headers: await idjwiHeaders(user),
         body: JSON.stringify({
           question:   q,
           company_id: user?.company_id || "",

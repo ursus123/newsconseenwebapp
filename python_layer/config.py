@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # Railway calls POST /cron/etl-all with this in the
     # X-Cron-Secret header. Prevents unauthorized ETL triggers.
     # ----------------------------------------------------------
-    cron_secret: str = ""
+    cron_secret: Optional[str] = None
 
     # ----------------------------------------------------------
     # Nominatim contact email

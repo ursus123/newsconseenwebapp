@@ -2,15 +2,10 @@ import React, { useState, useRef, useEffect } from "react";
 import { Sparkles, X, Send, Loader2, CheckCircle, Clock, AlertCircle, ChevronRight } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { useNavigate } from "react-router-dom";
+import { RAILWAY_URL, RAILWAY_API_KEY, authHeaders } from "@/config/api";
 
-const RAILWAY_URL   = import.meta.env.VITE_RAILWAY_URL || "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const API_HEADERS   = RAILWAY_API_KEY
-  ? { "Content-Type": "application/json", "x-api-key": RAILWAY_API_KEY }
-  : { "Content-Type": "application/json" };
-
-const idjwiHeaders = (user) => ({
-  ...API_HEADERS,
+const idjwiHeaders = async (user) => ({
+  ...(await authHeaders()),
   ...(RAILWAY_API_KEY ? { "x-idjwi-api-key": RAILWAY_API_KEY } : {}),
   ...(user?.email ? { "x-idjwi-user": user.email } : {}),
   ...(user?.role ? { "x-idjwi-role": user.role } : {}),
@@ -94,7 +89,7 @@ export default function QuickAddButton({ currentUser }) {
     try {
       const resp = await fetch(`${RAILWAY_URL}/copilot/ask`, {
         method:  "POST",
-        headers: idjwiHeaders(currentUser),
+        headers: await idjwiHeaders(currentUser),
         body: JSON.stringify({
           question:        `Please add the following record: ${question}`,
           company_id:      currentUser.company_id,

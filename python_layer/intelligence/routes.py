@@ -6,16 +6,18 @@ REST endpoints for the Newsconseen Intelligence Layer.
 Serves Insight, Recommendation, Risk, and Opportunity objects with
 three-tier fallback: analytics.* → raw.* → Supabase live.
 
-All reads are company_id-scoped. No writes from python_layer —
+All reads are company_id-scoped and require a verified Supabase session
+that either owns company_id or is super_admin. No writes from python_layer —
 writes happen through the Supabase on the frontend.
 """
 
 import logging
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Header
 from typing import Optional
 import pandas as pd
 from database import get_engine_safe
 from data_sources import supabase_source
+from onboarding.auth import verify_tenant_access
 from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
@@ -23,20 +25,20 @@ router = APIRouter(prefix="/intelligence", tags=["intelligence"])
 
 # ── Shared helpers ─────────────────────────────────────────────────
 
-def _load_analytics(table: str, company_id: Optional[str], extra_where: str = "") -> list:
+def _load_analytics(table: str, company_id: str, extra_filters: Optional[dict] = None) -> list:
     engine = get_engine_safe()
     if not engine:
         return []
     try:
         with engine.connect() as conn:
-            where_parts = []
-            params = {}
-            if company_id:
-                where_parts.append("company_id = :company_id")
-                params["company_id"] = company_id
-            if extra_where:
-                where_parts.append(extra_where)
-            where = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
+            where_parts = ["company_id = :company_id"]
+            params = {"company_id": company_id}
+            for col, val in (extra_filters or {}).items():
+                if val is None:
+                    continue
+                where_parts.append(f"{col} = :{col}")
+                params[col] = val
+            where = "WHERE " + " AND ".join(where_parts)
             rows = conn.execute(
                 text(f"SELECT * FROM analytics.{table} {where} ORDER BY loaded_at DESC"),
                 params,
@@ -47,7 +49,7 @@ def _load_analytics(table: str, company_id: Optional[str], extra_where: str = ""
         return []
 
 
-def _fetch_supabase_entity(entity: str, company_id: Optional[str]) -> list:
+def _fetch_supabase_entity(entity: str, company_id: str) -> list:
     try:
         return supabase_source.list_records(entity, company_id=company_id, limit=1000)
     except Exception as exc:
@@ -57,23 +59,22 @@ def _fetch_supabase_entity(entity: str, company_id: Optional[str]) -> list:
 
 @router.get("/insights")
 def get_insights(
-    company_id:   Optional[str] = Query(None),
+    company_id:   str           = Query(...),
     status:       Optional[str] = Query(None),
     insight_type: Optional[str] = Query(None),
     subject_type: Optional[str] = Query(None),
     subject_id:   Optional[str] = Query(None),
     severity:     Optional[str] = Query(None),
     limit:        int           = Query(100),
+    authorization: Optional[str] = Header(None),
 ):
     """List insights for a company with optional filters. Three-tier fallback."""
-    extra_parts = []
-    if status:       extra_parts.append(f"status = '{status}'")
-    if insight_type: extra_parts.append(f"insight_type = '{insight_type}'")
-    if subject_type: extra_parts.append(f"subject_type = '{subject_type}'")
-    if subject_id:   extra_parts.append(f"subject_id = '{subject_id}'")
-    if severity:     extra_parts.append(f"severity = '{severity}'")
+    verify_tenant_access(authorization, company_id)
 
-    rows = _load_analytics("insight_summary", company_id, " AND ".join(extra_parts))
+    rows = _load_analytics("insight_summary", company_id, {
+        "status": status, "insight_type": insight_type,
+        "subject_type": subject_type, "subject_id": subject_id, "severity": severity,
+    })
 
     # Fallback to Supabase live
     if not rows:
@@ -88,8 +89,10 @@ def get_insights(
 
 
 @router.get("/insights/summary")
-def get_insights_summary(company_id: Optional[str] = Query(None)):
+def get_insights_summary(company_id: str = Query(...), authorization: Optional[str] = Header(None)):
     """Counts by status and insight_type — powers the Inbox tab badges."""
+    verify_tenant_access(authorization, company_id)
+
     rows = _load_analytics("insight_summary", company_id)
     if not rows:
         rows = _fetch_supabase_entity("insight", company_id)
@@ -121,18 +124,18 @@ def get_insights_summary(company_id: Optional[str] = Query(None)):
 
 @router.get("/recommendations")
 def get_recommendations(
-    company_id:  Optional[str] = Query(None),
+    company_id:  str           = Query(...),
     status:      Optional[str] = Query(None),
     action_type: Optional[str] = Query(None),
     insight_id:  Optional[str] = Query(None),
     limit:       int           = Query(100),
+    authorization: Optional[str] = Header(None),
 ):
-    extra_parts = []
-    if status:      extra_parts.append(f"status = '{status}'")
-    if action_type: extra_parts.append(f"action_type = '{action_type}'")
-    if insight_id:  extra_parts.append(f"insight_id = '{insight_id}'")
+    verify_tenant_access(authorization, company_id)
 
-    rows = _load_analytics("recommendation_summary", company_id, " AND ".join(extra_parts))
+    rows = _load_analytics("recommendation_summary", company_id, {
+        "status": status, "action_type": action_type, "insight_id": insight_id,
+    })
 
     if not rows:
         rows = _fetch_supabase_entity("recommendation", company_id)
@@ -147,18 +150,18 @@ def get_recommendations(
 
 @router.get("/risks")
 def get_risks(
-    company_id:   Optional[str] = Query(None),
+    company_id:   str           = Query(...),
     status:       Optional[str] = Query(None),
     severity:     Optional[str] = Query(None),
     subject_type: Optional[str] = Query(None),
     limit:        int           = Query(100),
+    authorization: Optional[str] = Header(None),
 ):
-    extra_parts = []
-    if status:       extra_parts.append(f"status = '{status}'")
-    if severity:     extra_parts.append(f"severity = '{severity}'")
-    if subject_type: extra_parts.append(f"subject_type = '{subject_type}'")
+    verify_tenant_access(authorization, company_id)
 
-    rows = _load_analytics("risk_summary", company_id, " AND ".join(extra_parts))
+    rows = _load_analytics("risk_summary", company_id, {
+        "status": status, "severity": severity, "subject_type": subject_type,
+    })
 
     if not rows:
         rows = _fetch_supabase_entity("risk", company_id)
@@ -173,18 +176,18 @@ def get_risks(
 
 @router.get("/opportunities")
 def get_opportunities(
-    company_id:   Optional[str] = Query(None),
+    company_id:   str           = Query(...),
     status:       Optional[str] = Query(None),
     type_filter:  Optional[str] = Query(None, alias="type"),
     subject_type: Optional[str] = Query(None),
     limit:        int           = Query(100),
+    authorization: Optional[str] = Header(None),
 ):
-    extra_parts = []
-    if status:       extra_parts.append(f"status = '{status}'")
-    if type_filter:  extra_parts.append(f"type = '{type_filter}'")
-    if subject_type: extra_parts.append(f"subject_type = '{subject_type}'")
+    verify_tenant_access(authorization, company_id)
 
-    rows = _load_analytics("opportunity_summary", company_id, " AND ".join(extra_parts))
+    rows = _load_analytics("opportunity_summary", company_id, {
+        "status": status, "type": type_filter, "subject_type": subject_type,
+    })
 
     if not rows:
         rows = _fetch_supabase_entity("opportunity", company_id)
@@ -199,13 +202,16 @@ def get_opportunities(
 
 @router.get("/inbox")
 def get_inbox(
-    company_id: Optional[str] = Query(None),
-    limit:      int           = Query(200),
+    company_id: str = Query(...),
+    limit:      int = Query(200),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Combined payload for the Intelligence Inbox page.
     Fetches insights, recommendations, risks, and opportunities in one call.
     """
+    verify_tenant_access(authorization, company_id)
+
     insights        = _load_analytics("insight_summary", company_id) or _fetch_supabase_entity("insight", company_id)
     recommendations = _load_analytics("recommendation_summary", company_id) or _fetch_supabase_entity("recommendation", company_id)
     risks           = _load_analytics("risk_summary", company_id) or _fetch_supabase_entity("risk", company_id)

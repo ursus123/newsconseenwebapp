@@ -7,10 +7,7 @@ import {
   Receipt, Link2, MapPin,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const API_HEADERS = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 
 const ENTITY_ICONS = {
   people:        Users,
@@ -56,7 +53,7 @@ export default function DataQualityWidget({ companyId }) {
     force ? setRefreshing(true) : setLoading(true);
     try {
       const url = `${RAILWAY_URL}/dataquality/report?company_id=${companyId}${force ? "&force=true" : ""}`;
-      const res = await fetch(url, { headers: API_HEADERS });
+      const res = await fetch(url, { headers: await authHeaders() });
       if (res.ok) setReport(await res.json());
     } catch (_) {
       // silently fail — widget is non-critical

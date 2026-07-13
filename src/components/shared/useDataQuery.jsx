@@ -84,19 +84,18 @@ export function useWithScope(currentUser) {
       return data;
     }
 
-    // Always stamp created_by
-    const scoped = {
-      ...data,
-      created_by: currentUser.email,
-    };
-
-    // Only stamp company_id if it exists —
-    // first enterprise creation won't have it yet; createMut handles that case
-    if (currentUser.company_id) {
-      scoped.company_id = currentUser.company_id;
+    // Non-super_admin users must have a company_id — otherwise the record
+    // would be created unscoped, invisible to RLS-gated reads. Consistent
+    // with createWithScope's stricter guard below.
+    if (!currentUser.company_id) {
+      throw new Error("Cannot create record without a workspace company_id.");
     }
 
-    return scoped;
+    return {
+      ...data,
+      created_by: currentUser.email,
+      company_id: currentUser.company_id,
+    };
   };
 }
 

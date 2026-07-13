@@ -12,10 +12,7 @@ import {
   RefreshCw, Activity, Brain, TrendingUp, Users, Package,
   UserPlus, Shield, Globe, Network, ChevronRight, Zap,
 } from "lucide-react";
-
-const RAILWAY_URL     = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = /** @type {any} */ (import.meta).env?.VITE_RAILWAY_API_KEY || "";
-const apiHeaders = (extra = {}) => ({ "x-api-key": RAILWAY_API_KEY, ...extra });
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 
 const AGENT_META = {
   operations:      { icon: Activity,   color: "blue",   label: "Operations Monitor",    phase: "4B", schedule: "Every 15 min" },
@@ -47,14 +44,14 @@ const ICON_COLOR = {
 
 async function fetchStatus(companyId) {
   const r = await fetch(`${RAILWAY_URL}/agents/status?company_id=${companyId}`,
-    { headers: apiHeaders() });
+    { headers: await authHeaders() });
   if (!r.ok) throw new Error("Agents status unavailable");
   return r.json();
 }
 
 async function fetchRuns(companyId) {
   const r = await fetch(`${RAILWAY_URL}/agents/runs?company_id=${companyId}&limit=20`,
-    { headers: apiHeaders() });
+    { headers: await authHeaders() });
   if (!r.ok) return { runs: [] };
   return r.json();
 }
@@ -62,7 +59,7 @@ async function fetchRuns(companyId) {
 async function runAgent(agentName, companyId) {
   const r = await fetch(`${RAILWAY_URL}/agents/run/${agentName}`, {
     method:  "POST",
-    headers: apiHeaders({ "Content-Type": "application/json" }),
+    headers: await authHeaders(),
     body:    JSON.stringify({ company_id: companyId, trigger: "manual" }),
   });
   if (!r.ok) throw new Error("Agent run failed");
@@ -92,7 +89,7 @@ export default function AgentDashboard({ companyId, onSelectAgent }) {
   const { data: actionStats = { total: 0, by_agent: {} } } = useQuery({
     queryKey: ["agents-action-stats", companyId],
     queryFn:  async () => {
-      const r = await fetch(`${RAILWAY_URL}/agents/actions/stats?company_id=${companyId}`);
+      const r = await fetch(`${RAILWAY_URL}/agents/actions/stats?company_id=${companyId}`, { headers: await authHeaders() });
       if (!r.ok) return { total: 0, by_agent: {} };
       return r.json();
     },

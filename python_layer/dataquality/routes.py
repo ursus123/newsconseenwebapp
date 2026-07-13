@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Query, BackgroundTasks
+from fastapi import APIRouter, Header, Query, BackgroundTasks
 
 from dataquality.engine import (
     evaluate,
@@ -18,6 +18,7 @@ from dataquality.engine import (
     check_sync_freshness,
     get_degraded_features,
 )
+from onboarding.auth import verify_tenant_access
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dataquality", tags=["Data Quality"])
@@ -74,6 +75,7 @@ def _run_and_cache(company_id: str) -> dict:
 def get_quality_report(
     company_id: str           = Query(...),
     force:      bool          = Query(False, description="Bypass cache and re-evaluate"),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Return the latest data quality report for a company.
@@ -81,6 +83,7 @@ def get_quality_report(
     Returns cached result if available and <1 hour old.
     Pass ?force=true to trigger a fresh evaluation synchronously.
     """
+    verify_tenant_access(authorization, company_id)
     cached = _CACHE.get(company_id)
     if cached and not force and not _is_stale(cached):
         return {**cached, "cached": True}
@@ -113,6 +116,7 @@ def _run_readiness(company_id: str) -> dict:
 def get_readiness_report(
     company_id: str = Query(...),
     force:      bool = Query(False, description="Bypass cache and re-evaluate"),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Consolidated data-readiness report for a company: field completeness/
@@ -122,6 +126,7 @@ def get_readiness_report(
 
     Same 1hr cache convention as /report.
     """
+    verify_tenant_access(authorization, company_id)
     cached = _READINESS_CACHE.get(company_id)
     if cached and not force and not _is_stale(cached):
         return {**cached, "cached": True}
@@ -133,12 +138,14 @@ def get_readiness_report(
 def trigger_evaluation(
     company_id:       str              = Query(...),
     background_tasks: BackgroundTasks  = None,
+    authorization:    Optional[str]    = Header(None),
 ):
     """
     Trigger a fresh data quality evaluation in the background.
     Returns immediately with 202 Accepted.
     The result is stored in cache and available via GET /dataquality/report.
     """
+    verify_tenant_access(authorization, company_id)
     if background_tasks:
         background_tasks.add_task(_run_and_cache, company_id)
     else:

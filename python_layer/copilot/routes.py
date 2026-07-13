@@ -25,6 +25,7 @@ from copilot.llm_registry import (
     list_models,
     provider_status,
 )
+from onboarding.auth import verify_tenant_access
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +188,7 @@ def ask(
     x_idjwi_role: Optional[str] = Header(None),
     x_idjwi_user: Optional[str] = Header(None),
     x_idjwi_plan: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Ask the copilot a question about your enterprise data.
@@ -210,6 +212,8 @@ def ask(
         raise HTTPException(status_code=400, detail="company_id is required")
 
     logger.info("copilot/ask: company_id=%s question=%r", request.company_id, request.question[:80])
+
+    verify_tenant_access(authorization, request.company_id)
 
     from copilot.idjwi_security import principal_from_headers, require_api_key
 
@@ -283,6 +287,7 @@ def deterministic_command(
     x_idjwi_api_key: Optional[str] = Header(None),
     x_idjwi_role: Optional[str] = Header(None),
     x_idjwi_user: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Deterministic Idjwi command endpoint.
@@ -292,6 +297,8 @@ def deterministic_command(
     """
     if not request.company_id:
         raise HTTPException(status_code=400, detail="company_id is required")
+
+    verify_tenant_access(authorization, request.company_id)
 
     command = (request.command or "").strip().lower()
     payload = request.payload or {}
@@ -410,7 +417,7 @@ def deterministic_command(
         approval_id = payload.get("approval_id")
         if not approval_id:
             raise HTTPException(status_code=400, detail="payload.approval_id is required")
-        return approve_recommendation(approval_id, request.company_id)
+        return _approve_recommendation_core(approval_id, request.company_id)
 
     return {
         "error": "Unknown deterministic command.",
@@ -439,7 +446,9 @@ def list_idjwi_memory(
     x_idjwi_api_key: Optional[str] = Header(None),
     x_idjwi_role: Optional[str] = Header(None),
     x_idjwi_user: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
+    verify_tenant_access(authorization, company_id)
     from copilot.idjwi_memory import recall, search, summary
     from copilot.idjwi_security import principal_from_headers, require_api_key
 
@@ -477,7 +486,9 @@ def create_idjwi_memory(
     x_idjwi_api_key: Optional[str] = Header(None),
     x_idjwi_role: Optional[str] = Header(None),
     x_idjwi_user: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
+    verify_tenant_access(authorization, request.company_id)
     from copilot.idjwi_memory import remember, summary
     from copilot.idjwi_security import principal_from_headers, require_api_key
 
@@ -514,7 +525,9 @@ def review_idjwi_memory(
     x_idjwi_api_key: Optional[str] = Header(None),
     x_idjwi_role: Optional[str] = Header(None),
     x_idjwi_user: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
+    verify_tenant_access(authorization, request.company_id)
     from copilot.idjwi_memory import review_memory
     from copilot.idjwi_security import principal_from_headers, require_api_key
 
@@ -536,7 +549,9 @@ def update_idjwi_memory(
     x_idjwi_api_key: Optional[str] = Header(None),
     x_idjwi_role: Optional[str] = Header(None),
     x_idjwi_user: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
+    verify_tenant_access(authorization, request.company_id)
     from copilot.idjwi_memory import update_memory
     from copilot.idjwi_security import principal_from_headers, require_api_key
 
@@ -558,7 +573,9 @@ def mark_idjwi_memory_used(
     x_idjwi_api_key: Optional[str] = Header(None),
     x_idjwi_role: Optional[str] = Header(None),
     x_idjwi_user: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
+    verify_tenant_access(authorization, request.company_id)
     from copilot.idjwi_memory import mark_used
     from copilot.idjwi_security import principal_from_headers, require_api_key
 
@@ -580,7 +597,9 @@ def list_idjwi_memory_conflicts(
     x_idjwi_api_key: Optional[str] = Header(None),
     x_idjwi_role: Optional[str] = Header(None),
     x_idjwi_user: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
+    verify_tenant_access(authorization, company_id)
     from copilot.idjwi_memory import conflicts
     from copilot.idjwi_security import principal_from_headers, require_api_key
 
@@ -617,8 +636,10 @@ def idjwi_run_workflow(
     x_idjwi_api_key: Optional[str] = Header(None),
     x_idjwi_role: Optional[str] = Header(None),
     x_idjwi_user: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
     """Run a deterministic Idjwi workflow without requiring an LLM."""
+    verify_tenant_access(authorization, request.company_id)
     from copilot.idjwi_workflows import run_workflow
 
     def command_runner(command: str, payload: dict):
@@ -627,6 +648,7 @@ def idjwi_run_workflow(
             x_idjwi_api_key=x_idjwi_api_key,
             x_idjwi_role=x_idjwi_role,
             x_idjwi_user=x_idjwi_user,
+            authorization=authorization,
         )
 
     return run_workflow(
@@ -644,6 +666,7 @@ def idjwi_workflow_by_name(
     x_idjwi_api_key: Optional[str] = Header(None),
     x_idjwi_role: Optional[str] = Header(None),
     x_idjwi_user: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
     """Run a no-LLM Idjwi workflow by name, suitable for Railway cron calls."""
     return idjwi_run_workflow(
@@ -651,20 +674,23 @@ def idjwi_workflow_by_name(
         x_idjwi_api_key=x_idjwi_api_key,
         x_idjwi_role=x_idjwi_role,
         x_idjwi_user=x_idjwi_user,
+        authorization=authorization,
     )
 
 
 @idjwi_router.get("/events")
 def idjwi_events(
-    company_id: Optional[str] = Query(None),
+    company_id: str = Query(...),
     event_type: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     limit: int = Query(100, le=500),
     x_idjwi_api_key: Optional[str] = Header(None),
     x_idjwi_role: Optional[str] = Header(None),
     x_idjwi_user: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
     """Read Idjwi observability events."""
+    verify_tenant_access(authorization, company_id)
     from copilot.idjwi_security import authorize_capability, principal_from_headers, require_api_key
     from copilot.idjwi_observability import list_events
 
@@ -688,8 +714,9 @@ def idjwi_evals():
 
 
 @router.post("/memory/migrate")
-def idjwi_migrate_memory(company_id: str = Query(...)):
+def idjwi_migrate_memory(company_id: str = Query(...), authorization: Optional[str] = Header(None)):
     """Copy legacy copilot/agent memory into unified Idjwi memory."""
+    verify_tenant_access(authorization, company_id)
     from copilot.idjwi_memory import migrate_legacy, summary
     result = migrate_legacy(company_id)
     return {**result, "summary": summary(company_id)}
@@ -701,6 +728,7 @@ async def ask_stream(
     x_idjwi_api_key: Optional[str] = Header(None),
     x_idjwi_role: Optional[str] = Header(None),
     x_idjwi_user: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Real SSE streaming version of /copilot/ask.
@@ -718,6 +746,8 @@ async def ask_stream(
     """
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    verify_tenant_access(authorization, request.company_id)
 
     from copilot.idjwi_security import principal_from_headers, require_api_key
     api_gate = require_api_key(x_idjwi_api_key)
@@ -755,11 +785,12 @@ async def ask_stream(
 
 
 @router.get("/context")
-def get_context(company_id: str = Query(...)):
+def get_context(company_id: str = Query(...), authorization: Optional[str] = Header(None)):
     """
     Returns what the copilot knows about this tenant's data.
     Used by the chat UI to show data freshness and scope.
     """
+    verify_tenant_access(authorization, company_id)
     engine = CopilotEngine(
         company_id=company_id,
         backend=COPILOT_BACKEND,
@@ -795,12 +826,13 @@ def get_context(company_id: str = Query(...)):
 
 
 @router.post("/feedback")
-def submit_feedback(request: FeedbackRequest):
+def submit_feedback(request: FeedbackRequest, authorization: Optional[str] = Header(None)):
     """
     Submit feedback on a copilot answer.
     Thumbs up (1) or down (-1) with optional comment.
     Used to improve answer quality over time.
     """
+    verify_tenant_access(authorization, request.company_id)
     # Log feedback for analysis
     logger.info(
         "copilot.feedback: company_id=%s rating=%d question='%s'",
@@ -817,7 +849,7 @@ def submit_feedback(request: FeedbackRequest):
 
 
 @router.get("/diagnose")
-def diagnose(company_id: str = Query(...)):
+def diagnose(company_id: str = Query(...), authorization: Optional[str] = Header(None)):
     """
     Runs all 10 copilot query tools for the given company_id and reports
     how many rows each tool returned.  Use this to confirm the analytics
@@ -828,6 +860,7 @@ def diagnose(company_id: str = Query(...)):
       - The ETL ran with company_id=NULL (check Cron: company_id log lines)
       - The Base44 entity has no records yet (create some data first)
     """
+    verify_tenant_access(authorization, company_id)
     from copilot.queries import (
         get_operator_context, get_people_summary, get_person_churn_risk,
         get_staff_availability, get_transaction_summary, get_overdue_invoices,
@@ -943,11 +976,13 @@ def diagnose(company_id: str = Query(...)):
 
 
 @router.get("/recommendations")
-def list_recommendations(company_id: str = Query(...), status: Optional[str] = Query(None)):
+def list_recommendations(company_id: str = Query(...), status: Optional[str] = Query(None),
+                         authorization: Optional[str] = Header(None)):
     """
     List copilot-proposed recommendations (from analytics.agent_approvals where agent_name='copilot').
     Supports filtering by status: pending | approved | rejected | executed.
     """
+    verify_tenant_access(authorization, company_id)
     from database import get_engine_safe
     from sqlalchemy import text as _text
 
@@ -984,8 +1019,20 @@ def list_recommendations(company_id: str = Query(...), status: Optional[str] = Q
 
 
 @router.post("/recommendations/{approval_id}/approve")
-def approve_recommendation(approval_id: str, company_id: str = Query(...)):
+def approve_recommendation(approval_id: str, company_id: str = Query(...),
+                           authorization: Optional[str] = Header(None)):
     """Approve a copilot-proposed recommendation and queue it for execution."""
+    verify_tenant_access(authorization, company_id)
+    return _approve_recommendation_core(approval_id, company_id)
+
+
+def _approve_recommendation_core(approval_id: str, company_id: str):
+    """
+    Core of approve_recommendation, with no auth check of its own — used both
+    by the HTTP route above (which verifies the caller first) and by
+    deterministic_command's "approve_action" branch, which has already
+    verified the caller for this company_id at its own entry point.
+    """
     from database import get_engine_safe
     from sqlalchemy import text as _text
 
@@ -1031,8 +1078,10 @@ def reject_recommendation(
     approval_id: str,
     company_id: str = Query(...),
     reason: Optional[str] = Query(""),
+    authorization: Optional[str] = Header(None),
 ):
     """Reject a copilot-proposed recommendation."""
+    verify_tenant_access(authorization, company_id)
     from database import get_engine_safe
     from sqlalchemy import text as _text
 

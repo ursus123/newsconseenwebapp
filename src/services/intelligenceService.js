@@ -13,14 +13,10 @@
 
 import { ncClient } from "@/api/ncClient";
 import dataService from "@/services/dataService";
-import { RAILWAY_API_KEY, RAILWAY_URL } from "@/config/api";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 
 
-const apiHeaders = (extra = {}) => ({
-  "Content-Type": "application/json",
-  ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}),
-  ...extra,
-});
+const apiHeaders = async (extra = {}) => authHeaders(extra);
 
 // ── Internal helpers ───────────────────────────────────────────────
 
@@ -125,7 +121,7 @@ export async function listInsights(currentUser, filters = {}) {
       ...filters,
     });
     const res = await fetch(`${RAILWAY_URL}/intelligence/insights?${params}`, {
-      headers: apiHeaders({ "Content-Type": undefined }),
+      headers: await apiHeaders({ "Content-Type": undefined }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -263,7 +259,7 @@ export async function listRecommendations(currentUser, filters = {}) {
       ...filters,
     });
     const res = await fetch(`${RAILWAY_URL}/intelligence/recommendations?${params}`, {
-      headers: apiHeaders({ "Content-Type": undefined }),
+      headers: await apiHeaders({ "Content-Type": undefined }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -330,7 +326,7 @@ export async function listRisks(currentUser, filters = {}) {
   try {
     const params = new URLSearchParams({ company_id: currentUser.company_id || "", ...filters });
     const res = await fetch(`${RAILWAY_URL}/intelligence/risks?${params}`, {
-      headers: apiHeaders({ "Content-Type": undefined }),
+      headers: await apiHeaders({ "Content-Type": undefined }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -376,7 +372,7 @@ export async function listOpportunities(currentUser, filters = {}) {
   try {
     const params = new URLSearchParams({ company_id: currentUser.company_id || "", ...filters });
     const res = await fetch(`${RAILWAY_URL}/intelligence/opportunities?${params}`, {
-      headers: apiHeaders({ "Content-Type": undefined }),
+      headers: await apiHeaders({ "Content-Type": undefined }),
     });
     if (res.ok) {
       const data = await res.json();

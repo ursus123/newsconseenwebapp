@@ -3,10 +3,13 @@ admin/routes.py
 ----------------
 Platform-level multi-tenant administration endpoints.
 
-All routes require:
-  Header: x-admin-secret: <ADMIN_SECRET env var>
+All routes require EITHER:
+  Header: Authorization: Bearer <verified Supabase session, role=super_admin>  (browser path)
+  Header: x-admin-secret: <ADMIN_SECRET env var>  (server-side automation fallback)
 
-If ADMIN_SECRET is not set, all admin endpoints return 503 (disabled).
+The Authorization path is checked first and is the only path the frontend
+uses today — x-admin-secret exists solely for future non-browser callers and
+is never sent by the client bundle.
 
 Endpoints
 ---------
@@ -35,7 +38,11 @@ router = APIRouter(prefix="/admin", tags=["Platform Admin"])
 
 # ── Auth helper ───────────────────────────────────────────────────────────────
 
-def _check_auth(x_admin_secret: Optional[str]) -> None:
+def _check_auth(x_admin_secret: Optional[str], authorization: Optional[str] = None) -> None:
+    if authorization:
+        from onboarding.auth import verify_super_admin
+        verify_super_admin(authorization)  # raises 401/403 on failure
+        return
     from config.settings import settings
     secret = settings.admin_secret
     if not secret:
@@ -143,9 +150,10 @@ class UpdateTenantRequest(BaseModel):
 @router.get("/health")
 def admin_platform_health(
     x_admin_secret: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
 ):
     """Platform-wide health: tenant count, total ETL coverage, last backup."""
-    _check_auth(x_admin_secret)
+    _check_auth(x_admin_secret, authorization)
     engine = _get_engine()
 
     result = {
@@ -196,12 +204,13 @@ def admin_platform_health(
 @router.get("/tenants")
 def list_tenants(
     x_admin_secret: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
     search: str = Query(default=""),
     status: str = Query(default=""),
     limit:  int = Query(default=100, le=500),
 ):
     """List all tenants with health signals. Supports search + status filter."""
-    _check_auth(x_admin_secret)
+    _check_auth(x_admin_secret, authorization)
     engine = _get_engine()
 
     tenants = _fetch_all_tenants(engine)
@@ -243,9 +252,10 @@ def list_tenants(
 def get_tenant(
     company_id: str,
     x_admin_secret: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
 ):
     """Full detail view for a single tenant including enrichment coverage."""
-    _check_auth(x_admin_secret)
+    _check_auth(x_admin_secret, authorization)
     engine = _get_engine()
 
     tenants = _fetch_all_tenants(engine)
@@ -324,6 +334,7 @@ def get_tenant(
 def create_tenant(
     req: CreateTenantRequest,
     x_admin_secret: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
 ):
     """
     Manually provision a new tenant from the admin UI.
@@ -332,7 +343,7 @@ def create_tenant(
     calls /onboarding/provision for taxonomy + workflows,
     and records the action in admin_audit_log.
     """
-    _check_auth(x_admin_secret)
+    _check_auth(x_admin_secret, authorization)
     engine = _get_engine()
 
     from config.settings import settings, HEADERS
@@ -421,10 +432,11 @@ def create_tenant(
 def trigger_tenant_etl(
     company_id: str,
     x_admin_secret: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
     performed_by: str = Query(default="platform_admin"),
 ):
     """Trigger a full ETL run for a specific tenant."""
-    _check_auth(x_admin_secret)
+    _check_auth(x_admin_secret, authorization)
     engine = _get_engine()
 
     # Fire ETL for all entities in background
@@ -463,11 +475,12 @@ def trigger_tenant_etl(
 def suspend_tenant(
     company_id: str,
     x_admin_secret: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
     performed_by: str = Query(default="platform_admin"),
     reason: str = Query(default=""),
 ):
     """Mark a tenant as suspended in the admin_audit_log."""
-    _check_auth(x_admin_secret)
+    _check_auth(x_admin_secret, authorization)
     engine = _get_engine()
 
     _log_admin_action(
@@ -494,10 +507,11 @@ def suspend_tenant(
 def reactivate_tenant(
     company_id: str,
     x_admin_secret: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
     performed_by: str = Query(default="platform_admin"),
 ):
     """Remove suspension flag for a tenant."""
-    _check_auth(x_admin_secret)
+    _check_auth(x_admin_secret, authorization)
     engine = _get_engine()
 
     _log_admin_action(engine, "reactivate_tenant", company_id, performed_by)
@@ -517,10 +531,11 @@ def reactivate_tenant(
 @router.get("/audit")
 def get_admin_audit(
     x_admin_secret: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
     limit: int = Query(default=50, le=200),
 ):
     """Recent platform admin actions across all tenants."""
-    _check_auth(x_admin_secret)
+    _check_auth(x_admin_secret, authorization)
     engine = _get_engine()
 
     try:

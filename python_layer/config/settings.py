@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------
     # Cron protection
     # ----------------------------------------------------------
-    cron_secret: str = ""
+    cron_secret: Optional[str] = None
 
     # ----------------------------------------------------------
     # Nominatim contact email

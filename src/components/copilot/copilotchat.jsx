@@ -20,15 +20,10 @@ import {
 } from "recharts";
 import TeachIdjwiButton from "@/components/shared/TeachIdjwiButton";
 import { saveIdjwiMemory } from "@/services/idjwiMemoryClient";
+import { RAILWAY_URL, RAILWAY_API_KEY, apiHeaders, authHeaders } from "@/config/api";
 
-const RAILWAY_URL   = import.meta.env.VITE_RAILWAY_URL || "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const API_HEADERS   = RAILWAY_API_KEY
-  ? { "Content-Type": "application/json", "x-api-key": RAILWAY_API_KEY }
-  : { "Content-Type": "application/json" };
-
-const idjwiHeaders = (user) => ({
-  ...API_HEADERS,
+const idjwiHeaders = async (user) => ({
+  ...(await authHeaders()),
   ...(RAILWAY_API_KEY ? { "x-idjwi-api-key": RAILWAY_API_KEY } : {}),
   ...(user?.email ? { "x-idjwi-user": user.email } : {}),
   ...(user?.role ? { "x-idjwi-role": user.role } : {}),
@@ -663,17 +658,13 @@ function ProposedActionsPanel({ recommendations, insights, companyId }) {
   if ((!recommendations || recommendations.length === 0) &&
       (!insights || insights.length === 0)) return null;
 
-  const RAIL_HEADERS = RAILWAY_API_KEY
-    ? { "Content-Type": "application/json", "x-api-key": RAILWAY_API_KEY }
-    : { "Content-Type": "application/json" };
-
   const approve = async (rec) => {
     const id = rec.approval_id;
     setStates(s => ({ ...s, [id]: "approving" }));
     try {
       const r = await fetch(
         `${RAILWAY_URL}/copilot/recommendations/${id}/approve?company_id=${encodeURIComponent(companyId)}`,
-        { method: "POST", headers: RAIL_HEADERS }
+        { method: "POST", headers: await authHeaders() }
       );
       setStates(s => ({ ...s, [id]: r.ok ? "approved" : "error" }));
     } catch {
@@ -687,7 +678,7 @@ function ProposedActionsPanel({ recommendations, insights, companyId }) {
     try {
       const r = await fetch(
         `${RAILWAY_URL}/copilot/recommendations/${id}/reject?company_id=${encodeURIComponent(companyId)}`,
-        { method: "POST", headers: RAIL_HEADERS }
+        { method: "POST", headers: await authHeaders() }
       );
       setStates(s => ({ ...s, [id]: r.ok ? "rejected" : "error" }));
     } catch {
@@ -936,7 +927,7 @@ function SaveButton({ message, companyId }) {
     try {
       await fetch(`${RAILWAY_URL}/reports/save-chat`, {
         method: "POST",
-        headers: API_HEADERS,
+        headers: apiHeaders(),
         body: JSON.stringify({
           company_id: companyId,
           title:      message.content.split("\n")[0].replace(/^#+\s*/, "").slice(0, 80) || "Copilot Report",
@@ -1398,12 +1389,15 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
   // Load context
   useEffect(() => {
     if (!companyId) return;
-    fetch(`${RAILWAY_URL}/copilot/context?company_id=${companyId}`, {
-      headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
-    })
-      .then(r => r.json())
-      .then(setContext)
-      .catch(() => setContext(null));
+    (async () => {
+      try {
+        const headers = await authHeaders();
+        const r = await fetch(`${RAILWAY_URL}/copilot/context?company_id=${companyId}`, { headers });
+        setContext(await r.json());
+      } catch {
+        setContext(null);
+      }
+    })();
   }, [companyId]);
 
   // Auto-scroll
@@ -1528,7 +1522,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
 
       const resp = await fetch(`${RAILWAY_URL}/copilot/ask`, {
         method: "POST",
-        headers: idjwiHeaders(currentUser),
+        headers: await idjwiHeaders(currentUser),
         body: JSON.stringify({
           question:   confirmMsg.content,
           company_id: companyId,
@@ -1631,7 +1625,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
 
       const resp = await fetch(`${RAILWAY_URL}/copilot/ask`, {
         method:  "POST",
-        headers: idjwiHeaders(currentUser),
+        headers: await idjwiHeaders(currentUser),
         body: JSON.stringify({
           question:        question,
           company_id:      companyId,
@@ -1710,7 +1704,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
     try {
       await fetch(`${RAILWAY_URL}/copilot/feedback`, {
         method: "POST",
-        headers: API_HEADERS,
+        headers: await authHeaders(),
         body: JSON.stringify({ question, answer: msg?.content || "", company_id: companyId, rating }),
       });
     } catch { /* non-critical */ }

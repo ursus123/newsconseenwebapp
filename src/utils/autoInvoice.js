@@ -3,6 +3,7 @@ import { ncClient } from "@/api/ncClient";
 export async function createInvoiceFromTask(task, service, currentUser) {
   if (task.status !== "completed") return null;
   if (!service?.rate) return null;
+  if (!currentUser?.company_id) throw new Error("Cannot create an invoice without a workspace company_id.");
 
   // Check if invoice already exists for this task
   const existing = await ncClient.entities.Transaction.filter({

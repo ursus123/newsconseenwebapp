@@ -61,3 +61,38 @@ def verify_supabase_user(authorization: Optional[str]) -> dict:
         "email": data.get("email"),
         "app_metadata": data.get("app_metadata") or {},
     }
+
+
+def _get_profile(user_id: str) -> dict:
+    """Look up {company_id, role} for a verified user id from user_profiles."""
+    from data_sources import supabase_source
+    resp = supabase_source._request(
+        "GET", "user_profiles",
+        headers=supabase_source._headers(),
+        params={"id": f"eq.{user_id}", "select": "company_id,role"},
+    )
+    rows = resp.json()
+    return rows[0] if rows else {}
+
+
+def verify_tenant_access(authorization: Optional[str], company_id: str) -> dict:
+    """
+    Verify the caller's Supabase session and confirm they may access
+    `company_id`: either it's their own company_id, or they're super_admin
+    (cross-tenant allowed). Raises HTTPException(401/403) otherwise.
+    Returns the verified user dict merged with their profile.
+    """
+    user = verify_supabase_user(authorization)
+    profile = _get_profile(user["id"])
+    if profile.get("role") == "super_admin" or profile.get("company_id") == company_id:
+        return {**user, **profile}
+    raise HTTPException(status_code=403, detail="Not authorized for this company")
+
+
+def verify_super_admin(authorization: Optional[str]) -> dict:
+    """Verify caller session and require role == 'super_admin'."""
+    user = verify_supabase_user(authorization)
+    profile = _get_profile(user["id"])
+    if profile.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin required")
+    return {**user, **profile}

@@ -7,13 +7,15 @@
 //   Add Tenant — form to manually provision a new operator
 //   Audit Log  — platform-wide admin action history
 //
-// All calls go through /admin/* endpoints which require x-admin-secret.
-// The admin secret is stored in VITE_ADMIN_SECRET env var (never user-facing).
+// All calls go through /admin/* endpoints, authenticated by the caller's own
+// verified Supabase session (must resolve to role=super_admin server-side) —
+// no shared secret is shipped to the client bundle.
 // ==============================================================
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ncClient } from "@/api/ncClient";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 import {
   Building2, Users, RefreshCw, Plus, Search, Shield, ShieldOff,
   Zap, CheckCircle2, AlertCircle, Clock, ChevronRight, X,
@@ -26,19 +28,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useQuery as useAuthQuery } from "@tanstack/react-query";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const ADMIN_SECRET = (import.meta["env"] || {})["VITE_ADMIN_SECRET"] || "";
-
-const ADMIN_HEADERS = {
-  "Content-Type":   "application/json",
-  "x-admin-secret": ADMIN_SECRET,
-};
-
 async function adminFetch(path, opts = {}) {
-  const res = await fetch(`${RAILWAY_URL}/admin${path}`, {
-    ...opts,
-    headers: { ...ADMIN_HEADERS, ...(opts.headers || {}) },
-  });
+  const headers = await authHeaders(opts.headers || {});
+  const res = await fetch(`${RAILWAY_URL}/admin${path}`, { ...opts, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.detail || `${res.status} ${res.statusText}`);
@@ -516,10 +508,13 @@ export default function TenantAdmin() {
     staleTime: 60000,
   });
 
+  const isSuperAdmin = currentUser?.role === "super_admin";
+
   // Platform health
   const { data: health } = useQuery({
     queryKey: ["admin-health"],
     queryFn:  () => adminFetch("/health"),
+    enabled:  isSuperAdmin,
     staleTime: 30000,
     retry: false,
   });
@@ -528,6 +523,7 @@ export default function TenantAdmin() {
   const { data: tenantsData, isLoading: loadingTenants, refetch: refetchTenants } = useQuery({
     queryKey: ["admin-tenants", search],
     queryFn:  () => adminFetch(`/tenants?search=${encodeURIComponent(search)}&limit=200`),
+    enabled:  isSuperAdmin,
     staleTime: 30000,
     retry: false,
   });
@@ -536,7 +532,7 @@ export default function TenantAdmin() {
   const { data: auditData } = useQuery({
     queryKey: ["admin-audit"],
     queryFn:  () => adminFetch("/audit?limit=50"),
-    enabled:  tab === "audit",
+    enabled:  isSuperAdmin && tab === "audit",
     staleTime: 30000,
     retry: false,
   });

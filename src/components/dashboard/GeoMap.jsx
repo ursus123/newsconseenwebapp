@@ -9,6 +9,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MapPin, Layers, Loader2, AlertCircle } from "lucide-react";
 import { RAILWAY_URL } from "@/utils/fetchWithFallback";
+import { authHeaders } from "@/config/api";
 
 // Lazy-load Leaflet to avoid SSR issues
 let L;
@@ -38,7 +39,8 @@ async function loadLeaflet() {
 async function fetchDensity(companyId, gridDegrees = 0.3) {
   try {
     const res = await fetch(
-      `${RAILWAY_URL}/postgis/density?company_id=${encodeURIComponent(companyId)}&grid_degrees=${gridDegrees}`
+      `${RAILWAY_URL}/postgis/density?company_id=${encodeURIComponent(companyId)}&grid_degrees=${gridDegrees}`,
+      { headers: await authHeaders() }
     );
     if (!res.ok) return null;
     return res.json();
@@ -50,7 +52,8 @@ async function fetchDensity(companyId, gridDegrees = 0.3) {
 async function fetchClusters(companyId) {
   try {
     const res = await fetch(
-      `${RAILWAY_URL}/postgis/clusters?company_id=${encodeURIComponent(companyId)}`
+      `${RAILWAY_URL}/postgis/clusters?company_id=${encodeURIComponent(companyId)}`,
+      { headers: await authHeaders() }
     );
     if (!res.ok) return null;
     return res.json();

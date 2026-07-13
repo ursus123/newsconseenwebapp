@@ -13,9 +13,7 @@ import {
   ThumbsUp, ThumbsDown, Plus, Zap, BarChart2,
   ShieldAlert, Target, Brain, Sparkles, Activity,
 } from "lucide-react";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = /** @type {any} */ (import.meta).env?.VITE_RAILWAY_API_KEY || "";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 
 // ── Tab config ─────────────────────────────────────────────────────
 
@@ -582,7 +580,7 @@ export default function IntelligenceInbox() {
       try {
         const params = new URLSearchParams({ company_id: companyId || "", limit: "200" });
         const res = await fetch(`${RAILWAY_URL}/intelligence/inbox?${params}`, {
-          headers: { ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}) },
+          headers: await authHeaders(),
         });
         if (res.ok) {
           const data = await res.json();

@@ -22,12 +22,7 @@ import {
   FileText, Calendar, Zap, MessageSquare, Map,
 } from "lucide-react";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
-
-const RAILWAY_URL    = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-const API_HEADERS    = RAILWAY_API_KEY
-  ? { "x-api-key": RAILWAY_API_KEY }
-  : {};
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 
 // Map ObjectExplorer type keys → dataquality report entity keys
 const DQ_KEY_MAP = {
@@ -1314,7 +1309,7 @@ export default function ObjectExplorer() {
   useEffect(() => {
     const companyId = currentUser?.company_id;
     if (!companyId) return;
-    fetch(`${RAILWAY_URL}/dataquality/report?company_id=${companyId}`, { headers: API_HEADERS })
+    authHeaders().then(headers => fetch(`${RAILWAY_URL}/dataquality/report?company_id=${companyId}`, { headers }))
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data) return;

@@ -24,8 +24,10 @@ router = APIRouter(tags=["Backup"])
 # ---------------------------------------------------------------------------
 
 def _require_cron_secret(x_cron_secret: str = Header(default="")):
-    cron_secret = os.getenv("CRON_SECRET", "")
-    if cron_secret and x_cron_secret != cron_secret:
+    from config.settings import settings
+    if not settings.cron_secret:
+        raise HTTPException(status_code=503, detail="Cron endpoints disabled — set CRON_SECRET env var")
+    if x_cron_secret != settings.cron_secret:
         raise HTTPException(status_code=403, detail="Invalid cron secret")
 
 

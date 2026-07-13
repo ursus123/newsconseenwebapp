@@ -16,17 +16,19 @@ from .approval_gate import (
 from .agent_memory import summarise_memory, ensure_tables as ensure_memory_tables
 from .agents.market_research import MarketResearchAgent, ensure_market_tables
 from database import get_engine_safe
+from onboarding.auth import verify_tenant_access
+from config.settings import settings
 
 import os
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents", tags=["Agents — Phase 4"])
 
-CRON_SECRET = os.getenv("CRON_SECRET", "")
-
 
 def _auth(secret: str):
-    if CRON_SECRET and secret != CRON_SECRET:
+    if not settings.cron_secret:
+        raise HTTPException(status_code=503, detail="Cron endpoints disabled — set CRON_SECRET env var")
+    if secret != settings.cron_secret:
         raise HTTPException(status_code=401, detail="Invalid x-cron-secret")
 
 
@@ -62,7 +64,8 @@ def agents_list():
 
 @router.post("/run/{agent_name}")
 def run_one_agent(agent_name: str, req: RunRequest,
-                  x_api_key: str = Header(default="")):
+                  authorization: Optional[str] = Header(default=None)):
+    verify_tenant_access(authorization, req.company_id)
     engine = get_engine_safe()
     result = run_agent(agent_name, req.company_id, req.trigger, engine)
     return result
@@ -107,8 +110,9 @@ def trigger_onboarding(req: OnboardingTrigger):
 # ── Approval gate ─────────────────────────────────────────────────────────────
 
 @router.get("/approvals/pending")
-def get_pending_approvals(company_id: str = Query(...)):
+def get_pending_approvals(company_id: str = Query(...), authorization: Optional[str] = Header(default=None)):
     """Get all pending agent actions awaiting human approval."""
+    verify_tenant_access(authorization, company_id)
     engine = get_engine_safe()
     if not engine:
         return {"pending": []}
@@ -116,7 +120,7 @@ def get_pending_approvals(company_id: str = Query(...)):
 
 
 @router.post("/approvals/{approval_id}/resolve")
-def resolve_approval(approval_id: str, req: ResolveRequest):
+def resolve_approval(approval_id: str, req: ResolveRequest, authorization: Optional[str] = Header(default=None)):
     """
     Approve or reject a pending agent action.
     Phase 13: when approved, immediately executes the Base44 mutation.
@@ -126,10 +130,8 @@ def resolve_approval(approval_id: str, req: ResolveRequest):
     if not engine:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
-    # First resolve (flip status in DB)
-    resolution = resolve(engine, approval_id, req.decision, req.resolved_by, req.note)
-
-    # Fetch company_id, agent_name, action_type from the approval record (needed for all paths)
+    # Fetch company_id, agent_name, action_type from the approval record first —
+    # needed to verify the caller actually owns this approval before resolving it.
     company_id = None
     agent_name = None
     action_type = None
@@ -144,6 +146,13 @@ def resolve_approval(approval_id: str, req: ResolveRequest):
             company_id, agent_name, action_type = row[0], row[1], row[2]
     except Exception:
         pass
+
+    if not company_id:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    verify_tenant_access(authorization, company_id)
+
+    # Resolve (flip status in DB)
+    resolution = resolve(engine, approval_id, req.decision, req.resolved_by, req.note)
 
     # Phase 13: if approved, execute immediately
     execution = None
@@ -196,12 +205,14 @@ def resolve_approval(approval_id: str, req: ResolveRequest):
 # ── Executed actions (Phase 13) ───────────────────────────────────────────────
 
 @router.get("/actions/executed")
-def get_executed_actions(company_id: str = Query(...), limit: int = Query(30, le=100)):
+def get_executed_actions(company_id: str = Query(...), limit: int = Query(30, le=100),
+                         authorization: Optional[str] = Header(default=None)):
     """
     Phase 13: List recently executed agent actions for a company.
     Each entry includes entity_type, entity_id, audit_id and executed_at.
     Used by the Approval Gate 'Executed Actions' section.
     """
+    verify_tenant_access(authorization, company_id)
     engine = get_engine_safe()
     if not engine:
         return {"executed": []}
@@ -209,11 +220,12 @@ def get_executed_actions(company_id: str = Query(...), limit: int = Query(30, le
 
 
 @router.get("/actions/stats")
-def get_action_stats(company_id: str = Query(...)):
+def get_action_stats(company_id: str = Query(...), authorization: Optional[str] = Header(default=None)):
     """
     Phase 13: Return count of executed actions in the last 7 days, broken down by agent.
     Used by AgentDashboard to show 'Actions taken this week' per card.
     """
+    verify_tenant_access(authorization, company_id)
     engine = get_engine_safe()
     if not engine:
         return {"total": 0, "by_agent": {}}
@@ -223,8 +235,10 @@ def get_action_stats(company_id: str = Query(...)):
 # ── Agent run history ─────────────────────────────────────────────────────────
 
 @router.get("/runs")
-def agent_runs(company_id: str = Query(...), limit: int = 20):
+def agent_runs(company_id: str = Query(...), limit: int = 20,
+               authorization: Optional[str] = Header(default=None)):
     """Get recent agent run records for a company."""
+    verify_tenant_access(authorization, company_id)
     engine = get_engine_safe()
     if not engine:
         return {"runs": []}
@@ -234,7 +248,9 @@ def agent_runs(company_id: str = Query(...), limit: int = 20):
 # ── Agent memory summary ──────────────────────────────────────────────────────
 
 @router.get("/memory/{agent_name}")
-def agent_memory_summary(agent_name: str, company_id: str = Query(...)):
+def agent_memory_summary(agent_name: str, company_id: str = Query(...),
+                         authorization: Optional[str] = Header(default=None)):
+    verify_tenant_access(authorization, company_id)
     engine = get_engine_safe()
     if not engine:
         return {"memory": {}}
@@ -244,8 +260,10 @@ def agent_memory_summary(agent_name: str, company_id: str = Query(...)):
 # ── Market intelligence ───────────────────────────────────────────────────────
 
 @router.get("/market/briefings")
-def market_briefings(company_id: str = Query(...), limit: int = 4):
+def market_briefings(company_id: str = Query(...), limit: int = 4,
+                     authorization: Optional[str] = Header(default=None)):
     """Get recent weekly market intelligence briefings."""
+    verify_tenant_access(authorization, company_id)
     engine = get_engine_safe()
     if not engine:
         return {"briefings": []}
@@ -256,8 +274,9 @@ def market_briefings(company_id: str = Query(...), limit: int = 4):
 # ── Status ────────────────────────────────────────────────────────────────────
 
 @router.get("/status")
-def agents_status(company_id: str = Query(...)):
+def agents_status(company_id: str = Query(...), authorization: Optional[str] = Header(default=None)):
     """Get agent framework status and recent run summary for a company."""
+    verify_tenant_access(authorization, company_id)
     engine = get_engine_safe()
     db_ok = engine is not None
 

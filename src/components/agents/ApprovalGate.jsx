@@ -12,8 +12,7 @@ import {
   ChevronDown, ChevronUp, Clock, Shield, Zap,
   FileText, Bot,
 } from "lucide-react";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 
 const RISK_STYLE = {
   approve:  "bg-amber-50  border-amber-200  text-amber-800",
@@ -28,7 +27,7 @@ const RISK_BADGE = {
 };
 
 async function fetchPending(companyId) {
-  const r = await fetch(`${RAILWAY_URL}/agents/approvals/pending?company_id=${companyId}`);
+  const r = await fetch(`${RAILWAY_URL}/agents/approvals/pending?company_id=${companyId}`, { headers: await authHeaders() });
   if (!r.ok) return { pending: [] };
   return r.json();
 }
@@ -36,7 +35,7 @@ async function fetchPending(companyId) {
 async function resolveApproval(approvalId, decision, note = "") {
   const r = await fetch(`${RAILWAY_URL}/agents/approvals/${approvalId}/resolve`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: await authHeaders(),
     body: JSON.stringify({ decision, resolved_by: "operator", note }),
   });
   if (!r.ok) throw new Error("Resolve failed");
@@ -44,7 +43,7 @@ async function resolveApproval(approvalId, decision, note = "") {
 }
 
 async function fetchExecuted(companyId) {
-  const r = await fetch(`${RAILWAY_URL}/agents/actions/executed?company_id=${companyId}&limit=20`);
+  const r = await fetch(`${RAILWAY_URL}/agents/actions/executed?company_id=${companyId}&limit=20`, { headers: await authHeaders() });
   if (!r.ok) return { executed: [] };
   return r.json();
 }

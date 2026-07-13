@@ -18,14 +18,16 @@ GET /bi/reports
 
 import logging
 from datetime import date
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import Response
 
 from bi.generators import REPORT_GENERATORS
 from bi.formats.excel     import build_excel
 from bi.formats.tableau   import build_tableau
 from bi.formats.csv_export import build_csv
+from onboarding.auth import verify_tenant_access
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bi", tags=["BI Export"])
@@ -79,6 +81,7 @@ def export_report(
     report:     str = Query(..., description="Report ID: people|transactions|products|tasks|enterprises|scores"),
     format:     str = Query(..., description="Format: excel|tableau|csv"),
     company_id: str = Query(..., description="Operator company_id"),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Download a report in the requested BI format.
@@ -86,6 +89,7 @@ def export_report(
     Scoped to company_id — only the requesting operator's data is included.
     Data sourced from analytics.* tables (three-tier fallback in generators).
     """
+    verify_tenant_access(authorization, company_id)
     # Validate report
     if report not in REPORT_GENERATORS:
         raise HTTPException(

@@ -4,9 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { ncClient } from "@/api/ncClient";
 import { makeChartDescription, rowCountLabel, sourceMeta } from "@/components/shared/chartUtils";
 import TeachIdjwiButton from "@/components/shared/TeachIdjwiButton";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
+import { RAILWAY_URL, RAILWAY_API_KEY, authHeaders } from "@/config/api";
 
 const SOURCE_TONE = {
   emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -189,8 +187,8 @@ export default function ChartCard({ title, description, sql, currentUser, entity
       const resp = await fetch(`${RAILWAY_URL}/copilot/ask`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY, "x-idjwi-api-key": RAILWAY_API_KEY } : {}),
+          ...(await authHeaders()),
+          ...(RAILWAY_API_KEY ? { "x-idjwi-api-key": RAILWAY_API_KEY } : {}),
           ...(currentUser?.email ? { "x-idjwi-user": currentUser.email } : {}),
           ...(currentUser?.role ? { "x-idjwi-role": currentUser.role } : {}),
         },

@@ -15,6 +15,7 @@ import {
 import BrandingSection from "@/components/settings/BrandingSection";
 import ErrorLogSection from "@/components/settings/ErrorLogSection";
 import { fetchIdjwiConflicts, updateIdjwiMemory } from "@/services/idjwiMemoryClient";
+import { authHeaders } from "@/config/api";
 
 function passwordStrength(pw) {
   if (!pw) return null;
@@ -214,13 +215,12 @@ function IdjwiMemorySection({ user }) {
   const [busyId, setBusyId] = useState(null);
   const [banner, setBanner] = useState(null);
 
-  const idjwiHeaders = {
-    ...API_HEADERS,
-    "Content-Type": "application/json",
+  const getIdjwiHeaders = async () => ({
+    ...(await authHeaders()),
     ...(RAILWAY_API_KEY ? { "x-idjwi-api-key": RAILWAY_API_KEY } : {}),
     ...(user?.email ? { "x-idjwi-user": user.email } : {}),
     ...(user?.role ? { "x-idjwi-role": user.role } : {}),
-  };
+  });
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["idjwi-memory", companyId, status, search, typeFilter],
@@ -237,7 +237,7 @@ function IdjwiMemorySection({ user }) {
       if (search.trim()) params.set("q", search.trim());
       if (typeFilter !== "all") params.set("memory_type", typeFilter);
       const res = await fetch(`${RAILWAY_URL}/copilot/idjwi-memory?${params}`, {
-        headers: idjwiHeaders,
+        headers: await getIdjwiHeaders(),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -265,7 +265,7 @@ function IdjwiMemorySection({ user }) {
     try {
       const res = await fetch(`${RAILWAY_URL}/copilot/idjwi-memory/${memory.id}/review`, {
         method: "POST",
-        headers: idjwiHeaders,
+        headers: await getIdjwiHeaders(),
         body: JSON.stringify({ company_id: companyId, action }),
       });
       if (!res.ok) {

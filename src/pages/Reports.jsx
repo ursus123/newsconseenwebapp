@@ -10,8 +10,8 @@ import WelcomeSetup from "@/components/reports/WelcomeSetup";
 import ChartViewer from "@/components/reports/ChartViewer.jsx";
 import { Loader2, RefreshCw, Sparkles, TrendingUp, Users, AlertCircle, ChevronRight, Database, FileText, Download, CheckCircle2, Circle, Play, Globe, Building2, BarChart2, Brain, Pin, Code2 } from "lucide-react";
 import SupersetEmbed from "@/components/reports/SupersetEmbed";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = typeof import.meta !== "undefined" ? (import.meta.env?.VITE_RAILWAY_API_KEY || "") : "";
 const RAIL_HEADERS = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
 
@@ -126,7 +126,7 @@ function MarketAnalysisTemplate({ currentUser, onBack, onSaveReport }) {
 
         const r = await fetch(`${RAILWAY_URL}/copilot/ask`, {
           method: "POST",
-          headers: { ...RAIL_HEADERS, "Content-Type": "application/json" },
+          headers: await authHeaders(),
           body: JSON.stringify({ question, company_id: companyId }),
         });
         if (r.ok) {

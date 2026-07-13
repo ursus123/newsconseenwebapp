@@ -30,11 +30,11 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 
 // ─── Print styles ────────────────────────────────────────────────────────────
 const PRINT_STYLES = `@media print { .no-print { display: none !important; } body { font-size: 12px; } }`;
 
-const RAILWAY_URL     = "https://newsconseenwebapp-production.up.railway.app";
 /* eslint-disable-next-line */
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
 const RAIL_HEADERS    = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
@@ -640,8 +640,8 @@ export default function MarketIntelligence() {
   // ── Enrichment Command Center data ────────────────────────────────────────
   const cid = currentUser?.company_id;
 
-  const _railFetch = (url) =>
-    fetch(url, RAILWAY_API_KEY ? { headers: { "x-api-key": String(RAILWAY_API_KEY) } } : {});
+  const _railFetch = async (url) =>
+    fetch(url, { headers: await authHeaders() });
 
   const { data: enrichCoverage = {}, refetch: refetchCoverage } = useQuery({
     queryKey: ["enrich_coverage", cid],

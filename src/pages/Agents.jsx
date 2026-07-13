@@ -15,8 +15,7 @@ import {
   CheckCircle2, XCircle, Clock, AlertCircle, TrendingUp,
 } from "lucide-react";
 
-const RAILWAY_URL     = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = /** @type {any} */ (import.meta).env?.VITE_RAILWAY_API_KEY || "";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 
 // ── Market Briefings panel ────────────────────────────────────────────────────
 function MarketBriefings({ companyId }) {
@@ -25,7 +24,7 @@ function MarketBriefings({ companyId }) {
     queryFn:  async () => {
       const r = await fetch(
         `${RAILWAY_URL}/agents/market/briefings?company_id=${companyId}&limit=4`,
-        { headers: { "x-api-key": RAILWAY_API_KEY } },
+        { headers: await authHeaders() },
       );
       if (!r.ok) return { briefings: [] };
       return r.json();
@@ -111,7 +110,7 @@ function RunLog({ companyId }) {
   const { data, isLoading } = useQuery({
     queryKey: ["agents-runs-full", companyId],
     queryFn:  async () => {
-      const r = await fetch(`${RAILWAY_URL}/agents/runs?company_id=${companyId}&limit=50`);
+      const r = await fetch(`${RAILWAY_URL}/agents/runs?company_id=${companyId}&limit=50`, { headers: await authHeaders() });
       if (!r.ok) return { runs: [] };
       return r.json();
     },
@@ -211,7 +210,7 @@ export default function Agents() {
   const { data: pendingData } = useQuery({
     queryKey: ["agents-pending", companyId],
     queryFn:  async () => {
-      const r = await fetch(`${RAILWAY_URL}/agents/approvals/pending?company_id=${companyId}`);
+      const r = await fetch(`${RAILWAY_URL}/agents/approvals/pending?company_id=${companyId}`, { headers: await authHeaders() });
       if (!r.ok) return { pending: [] };
       return r.json();
     },

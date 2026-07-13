@@ -14,8 +14,7 @@ import {
   Map, MapPin, Navigation, Pin, Ruler, Save, Search, ShieldCheck, Target,
   Tractor, X,
 } from "lucide-react";
-
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 
 const MODES = [
   { value: "pins", label: "Pins", Icon: MapPin },
@@ -109,7 +108,7 @@ function addressSql(where = "latitude IS NOT NULL AND longitude IS NOT NULL") {
 
 async function fetchPins(companyId, layers) {
   try {
-    const r = await fetch(`${RAILWAY_URL}/postgis/spatial-pins?company_id=${companyId}&entity_layers=${layers.join(",")}&limit=1000`);
+    const r = await fetch(`${RAILWAY_URL}/postgis/spatial-pins?company_id=${companyId}&entity_layers=${layers.join(",")}&limit=1000`, { headers: await authHeaders() });
     if (r.ok) {
       const d = await r.json();
       if (d.pins?.length > 0) return d.pins;
@@ -149,7 +148,7 @@ async function fetchPins(companyId, layers) {
 
 async function fetchClusters(companyId) {
   try {
-    const r = await fetch(`${RAILWAY_URL}/postgis/clusters?company_id=${companyId}`);
+    const r = await fetch(`${RAILWAY_URL}/postgis/clusters?company_id=${companyId}`, { headers: await authHeaders() });
     if (r.ok) return r.json();
   } catch (_) {}
   return null;
@@ -157,7 +156,7 @@ async function fetchClusters(companyId) {
 
 async function fetchDensity(companyId, layers, gridDegrees) {
   try {
-    const r = await fetch(`${RAILWAY_URL}/postgis/spatial-density?company_id=${companyId}&entity_layers=${layers.join(",")}&grid_degrees=${gridDegrees}`);
+    const r = await fetch(`${RAILWAY_URL}/postgis/spatial-density?company_id=${companyId}&entity_layers=${layers.join(",")}&grid_degrees=${gridDegrees}`, { headers: await authHeaders() });
     if (r.ok) return r.json();
   } catch (_) {}
   return null;
@@ -165,7 +164,7 @@ async function fetchDensity(companyId, layers, gridDegrees) {
 
 async function fetchBoundaries(companyId) {
   try {
-    const r = await fetch(`${RAILWAY_URL}/postgis/boundaries?company_id=${companyId}`);
+    const r = await fetch(`${RAILWAY_URL}/postgis/boundaries?company_id=${companyId}`, { headers: await authHeaders() });
     if (r.ok) return r.json();
   } catch (_) {}
   return null;

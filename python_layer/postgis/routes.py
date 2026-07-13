@@ -16,8 +16,10 @@
 import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
+
+from onboarding.auth import verify_tenant_access
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +112,7 @@ def find_nearby(
     company_id:    str   = Query(...),
     entity_type:   Optional[str] = Query(None, description="Filter by enterprise_type"),
     limit:         int   = Query(50, le=500),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Find all records within a radius of a point.
@@ -124,6 +127,7 @@ def find_nearby(
       /postgis/nearby?lat=0.347&lng=32.582&radius_meters=10000&company_id=abc&entity_type=General+Hospital
         → hospitals within 10km of Kampala centre
     """
+    verify_tenant_access(authorization, company_id)
     from database import get_engine_safe
     from postgis.queries import find_nearby as _find_nearby
 
@@ -158,6 +162,7 @@ def find_nearest(
     company_id:  str   = Query(...),
     entity_type: Optional[str] = Query(None),
     limit:       int   = Query(5, le=50),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Find the N nearest records to a point.
@@ -170,6 +175,7 @@ def find_nearest(
       - Nearest branch to a new prospect
       - Closest field agent to an emergency task
     """
+    verify_tenant_access(authorization, company_id)
     from database import get_engine_safe
     from postgis.queries import find_nearest as _find_nearest
 
@@ -208,6 +214,7 @@ def density_grid(
         ge=0.01, le=5.0,
     ),
     entity_type:  Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Density grid for heatmap rendering.
@@ -221,6 +228,7 @@ def density_grid(
       - Branch coverage gaps (low-density areas with many clients)
       - Farmer distribution across districts
     """
+    verify_tenant_access(authorization, company_id)
     from database import get_engine_safe
     from postgis.queries import get_density_grid
 
@@ -254,6 +262,7 @@ def density_grid(
 @router.get("/clusters")
 def cluster_summary(
     company_id: str = Query(...),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Return DBSCAN spatial cluster summaries.
@@ -264,6 +273,7 @@ def cluster_summary(
     Returns one entry per cluster with centroid coordinates and member list.
     Useful for map bubble layers where bubble size = member_count.
     """
+    verify_tenant_access(authorization, company_id)
     from database import get_engine_safe
     from postgis.queries import get_cluster_summary
 
@@ -287,6 +297,7 @@ def coverage_check(
     company_id:  str   = Query(...),
     entity_type: Optional[str] = Query(None),
     limit:       int   = Query(500, le=2000),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Find all records inside a stored boundary polygon.
@@ -298,6 +309,7 @@ def coverage_check(
 
     Upload boundary polygons first with POST /postgis/boundaries.
     """
+    verify_tenant_access(authorization, company_id)
     from database import get_engine_safe
     from postgis.queries import find_within_boundary
 
@@ -323,7 +335,7 @@ def coverage_check(
 
 
 @router.post("/boundaries")
-def upload_boundary(request: BoundaryRequest):
+def upload_boundary(request: BoundaryRequest, authorization: Optional[str] = Header(None)):
     """
     Upload a GeoJSON boundary polygon (district, region, zone, catchment area).
 
@@ -345,6 +357,7 @@ def upload_boundary(request: BoundaryRequest):
       "properties": {"population": 450000, "area_km2": 12000}
     }
     """
+    verify_tenant_access(authorization, request.company_id)
     from database import get_engine_safe
     from postgis.queries import upsert_boundary
 
@@ -386,6 +399,7 @@ def spatial_pins(
         description="Comma-separated layers: enterprises, addresses, plots",
     ),
     limit:          int   = Query(1000, le=5000),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Unified pin feed across entity layers.
@@ -398,6 +412,7 @@ def spatial_pins(
     Returns a flat list of pins each with:
       entity_layer, name, entity_type, status, latitude, longitude, cluster_id
     """
+    verify_tenant_access(authorization, company_id)
     from database import get_engine_safe
     from postgis.queries import get_entity_pins
 
@@ -434,6 +449,7 @@ def spatial_density(
         description="Grid cell size in degrees (0.1≈11km, 0.5≈55km)",
         ge=0.01, le=5.0,
     ),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Multi-layer density grid for heatmap rendering.
@@ -445,6 +461,7 @@ def spatial_density(
       - Show density of clients + enterprises on a combined heatmap
       - Identify coverage gaps where plots exist but no enterprises
     """
+    verify_tenant_access(authorization, company_id)
     from database import get_engine_safe
     from postgis.queries import get_multi_layer_density
 
@@ -475,6 +492,7 @@ def coverage_analysis(
         description="Comma-separated layers: enterprises, addresses, plots",
     ),
     limit:         int   = Query(500, le=2000),
+    authorization: Optional[str] = Header(None),
 ):
     """
     Multi-layer coverage analysis against a stored boundary polygon.
@@ -485,6 +503,7 @@ def coverage_analysis(
       - What % of farms are within the irrigation catchment?
       - How many clients are inside the Northern district?
     """
+    verify_tenant_access(authorization, company_id)
     from database import get_engine_safe
     from postgis.queries import get_coverage_analysis
 
@@ -505,10 +524,12 @@ def coverage_analysis(
 @router.get("/boundaries")
 def list_boundaries(
     company_id: str = Query(...),
+    authorization: Optional[str] = Header(None),
 ):
     """
     List all stored boundary polygons for a company.
     """
+    verify_tenant_access(authorization, company_id)
     from database import get_engine_safe
     from sqlalchemy import text
 
