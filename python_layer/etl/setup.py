@@ -773,6 +773,21 @@ _OTHER_DDL = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_bi_export_log_company ON analytics.bi_export_log (company_id, exported_at DESC)",
 
+    # ── Backup restore drills — proves a backup can actually be restored ─────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.restore_drill_log (
+        id          SERIAL PRIMARY KEY,
+        backup_id   TEXT,
+        method      TEXT,
+        verified    BOOLEAN,
+        detail      TEXT,
+        started_at  TIMESTAMPTZ,
+        ended_at    TIMESTAMPTZ,
+        duration_s  FLOAT
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_restore_drill_log_started ON analytics.restore_drill_log (started_at DESC)",
+
     # ── Platform admin: audit log + tenant flags ──────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS analytics.admin_audit_log (

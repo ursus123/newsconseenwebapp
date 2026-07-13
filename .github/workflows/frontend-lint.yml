@@ -55,3 +55,17 @@ jobs:
           echo "  no-select-for-taxonomy-field → replace <select> with <TaxonomySelect>"
           echo ""
           echo "Reference: src/ARCHITECTURE.md § 13 — Taxonomy Governance"
+
+      - name: Typecheck
+        # continue-on-error: there is a pre-existing backlog of ~30 type
+        # errors across files unrelated to any single change (dataService.js,
+        # intelligenceService.js, autoInvoice.js, createTransaction.js,
+        # fetchWithFallback.js). Visible here so it doesn't silently regress
+        # further, but not yet blocking — flip to blocking once that backlog
+        # is cleared. Same advisory-vs-blocking pattern already used above
+        # for ESLint warnings.
+        continue-on-error: true
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build

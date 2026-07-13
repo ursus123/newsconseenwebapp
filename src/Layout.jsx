@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import * as Sentry from "@sentry/react";
 import { createPageUrl } from "@/utils";
 import {
   LayoutDashboard,
@@ -405,6 +406,18 @@ export default function Layout({ children, currentPageName }) {
       }
     }).catch(() => {});
   }, []);
+
+  // Sentry context — no-op if Sentry wasn't initialized (VITE_SENTRY_DSN unset)
+  useEffect(() => {
+    if (!currentUser) return;
+    Sentry.setUser({ id: currentUser.email || currentUser.id, email: currentUser.email });
+    Sentry.setTag("company_id", currentUser.company_id);
+    Sentry.setTag("role", currentUser.role);
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentPageName) Sentry.setTag("page", currentPageName);
+  }, [currentPageName]);
 
   const handleWizardComplete = (prefs) => {
     setShowWizard(false);

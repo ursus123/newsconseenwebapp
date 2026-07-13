@@ -4,9 +4,11 @@ backup/routes.py
 FastAPI router for the backup system.
 
 Endpoints:
-  POST /backup/run      — trigger a database backup (cron-secret protected)
-  GET  /backup/status   — last backup result + success rate
-  GET  /backup/list     — recent backup log entries
+  POST /backup/run            — trigger a database backup (cron-secret protected)
+  GET  /backup/status         — last backup result + success rate
+  GET  /backup/list           — recent backup log entries
+  POST /backup/restore-drill  — prove the latest backup is actually restorable
+                                 (cron-secret protected)
 """
 
 import logging
@@ -70,6 +72,29 @@ def backup_status():
     except Exception as exc:
         logger.warning("backup/status failed — %s", exc)
         return {"status": "unavailable", "error": str(exc)[:200]}
+
+
+@router.post("/backup/restore-drill")
+def restore_drill(_auth=Depends(_require_cron_secret)):
+    """
+    Prove the most recent backup is actually restorable.
+
+    Full restore-and-verify if RESTORE_TEST_DATABASE_URL is set; otherwise a
+    structural integrity check only (see backup/engine.py:restore_drill).
+
+    Requires header: x-cron-secret
+    """
+    try:
+        from backup.engine import restore_drill as _drill
+        result = _drill()
+        if not result.get("verified"):
+            raise HTTPException(status_code=500, detail=result.get("detail", "Restore drill failed"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("backup/restore-drill endpoint failed")
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/backup/list")

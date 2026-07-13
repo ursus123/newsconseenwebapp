@@ -9,7 +9,6 @@ pydantic-settings
 # Database
 sqlalchemy
 psycopg2-binary
-alembic
 
 # External database connectors (Database Connector feature)
 pymysql
@@ -55,3 +54,6 @@ qrcode[pil]
 # Utilities
 tenacity
 orjson
+
+# Error monitoring
+sentry-sdk[fastapi]

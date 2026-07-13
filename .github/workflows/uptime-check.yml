@@ -1,0 +1,42 @@
+name: Uptime Check
+
+# Continuous monitoring for the Railway-hosted python_layer — the /health
+# endpoint (app.py) is detailed (DB connectivity, row counts, last ETL, last
+# backup) but was previously only ever polled once, right after a deploy to
+# main (see python-app.yml's health-check job). This runs on a schedule so a
+# DB outage or degraded state between deploys actually gets noticed: a
+# failure here fails the job, which GitHub surfaces to repo watchers via its
+# built-in failure notification.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *" # every 15 minutes
+  workflow_dispatch: {}
+
+jobs:
+  ping-health:
+    name: Ping /health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check /health status
+        env:
+          RAILWAY_URL: ${{ secrets.RAILWAY_URL }}
+        run: |
+          if [ -z "$RAILWAY_URL" ]; then
+            echo "::error::RAILWAY_URL secret not set — cannot check uptime"
+            exit 1
+          fi
+          BODY=$(curl -s -w "\n%{http_code}" "${RAILWAY_URL}/health")
+          HTTP_STATUS=$(echo "$BODY" | tail -n 1)
+          RESPONSE=$(echo "$BODY" | head -n -1)
+          echo "$RESPONSE"
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "::error::/health returned HTTP $HTTP_STATUS"
+            exit 1
+          fi
+          APP_STATUS=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))")
+          if [ "$APP_STATUS" != "ok" ]; then
+            echo "::error::/health reports status=$APP_STATUS"
+            exit 1
+          fi
+          echo "Healthy"

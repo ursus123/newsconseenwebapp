@@ -21,6 +21,10 @@ POST /admin/tenants/{company_id}/suspend    Suspend a tenant
 POST /admin/tenants/{company_id}/reactivate Reactivate a suspended tenant
 GET  /admin/health                     Platform-wide health summary
 GET  /admin/audit                      Recent admin actions log
+POST /admin/seed-demo-tenant           Seed (idempotent) a demo tenant with
+                                        realistic sample data across all 7
+                                        core entities, for sales demos and
+                                        manual QA
 """
 
 import logging
@@ -557,3 +561,116 @@ def get_admin_audit(
     except Exception as exc:
         logger.debug("admin: audit fetch failed — %s", exc)
         return {"entries": [], "count": 0}
+
+
+# ── Demo tenant seeding ─────────────────────────────────────────────────────
+
+_DEMO_COMPANY_ID = "demo-tenant"
+
+
+@router.post("/seed-demo-tenant")
+def seed_demo_tenant(
+    x_admin_secret: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+):
+    """
+    Seed (idempotently) a demo tenant with realistic sample data across all 7
+    core entities, for sales demos and manual QA. Safe to call repeatedly —
+    checks for existing demo People before creating anything.
+    """
+    _check_auth(x_admin_secret, authorization)
+
+    from data_sources import supabase_source
+
+    existing = supabase_source.list_records("person", company_id=_DEMO_COMPANY_ID, limit=1)
+    if existing:
+        return {"status": "already_seeded", "company_id": _DEMO_COMPANY_ID}
+
+    def _create(entity: str, payload: dict) -> dict:
+        payload = {**payload, "company_id": _DEMO_COMPANY_ID}
+        result = supabase_source.create_record(entity, payload, company_id=_DEMO_COMPANY_ID)
+        if result.get("error"):
+            raise RuntimeError(f"seed-demo-tenant: {entity} create failed — {result['error']}")
+        return result
+
+    created = {"enterprises": 0, "people": 0, "products": 0, "tasks": 0, "transactions": 0, "relationships": 0, "addresses": 0}
+
+    enterprises = [
+        _create("enterprise", {
+            "enterprise_name": "Sunrise Family Clinic", "enterprise_type": "commercial",
+            "enterprise_tier": "headquarters", "operating_status": "open", "status": "active",
+            "city": "Nairobi", "country": "Kenya",
+        }),
+        _create("enterprise", {
+            "enterprise_name": "Sunrise Family Clinic — Westlands Branch", "enterprise_type": "commercial",
+            "enterprise_tier": "branch", "operating_status": "open", "status": "active",
+            "city": "Nairobi", "country": "Kenya",
+        }),
+    ]
+    created["enterprises"] = len(enterprises)
+    hq_id, branch_id = enterprises[0]["id"], enterprises[1]["id"]
+
+    people = [
+        _create("person", {"first_name": "Amina", "last_name": "Kimani", "person_type": "staff", "engagement_model": "employed", "status": "active", "email": "amina.kimani@demo.newsconseen.com"}),
+        _create("person", {"first_name": "David", "last_name": "Otieno", "person_type": "staff", "engagement_model": "employed", "status": "active", "email": "david.otieno@demo.newsconseen.com"}),
+        _create("person", {"first_name": "Grace", "last_name": "Wanjiru", "person_type": "client", "engagement_model": "enrolled", "status": "active", "email": "grace.wanjiru@demo.newsconseen.com"}),
+        _create("person", {"first_name": "Peter", "last_name": "Mwangi", "person_type": "client", "engagement_model": "enrolled", "status": "active", "email": "peter.mwangi@demo.newsconseen.com"}),
+        _create("person", {"first_name": "Sarah", "last_name": "Njoroge", "person_type": "client", "engagement_model": "enrolled", "status": "active", "email": "sarah.njoroge@demo.newsconseen.com"}),
+        _create("person", {"first_name": "James", "last_name": "Kariuki", "person_type": "contact", "engagement_model": "contracted", "status": "active", "email": "james.kariuki@demo.newsconseen.com"}),
+    ]
+    created["people"] = len(people)
+    staff_id, client_id = people[0]["id"], people[2]["id"]
+
+    products = [
+        _create("product", {"name": "General Consultation", "item_type": "service_package", "item_class": "unrestricted", "unit_of_measure": "session", "status": "active"}),
+        _create("product", {"name": "Amoxicillin 500mg", "item_type": "physical", "item_class": "controlled", "unit_of_measure": "box", "status": "active", "stock_quantity": 40, "min_stock_level": 10}),
+        _create("product", {"name": "Blood Pressure Monitor", "item_type": "physical", "item_class": "reusable", "unit_of_measure": "piece", "status": "active", "stock_quantity": 5, "min_stock_level": 2}),
+        _create("product", {"name": "Annual Wellness Package", "item_type": "service_package", "item_class": "unrestricted", "unit_of_measure": "kit", "status": "active"}),
+    ]
+    created["products"] = len(products)
+
+    tasks = [
+        _create("task", {"title": "Follow-up appointment — Grace Wanjiru", "task_type": "visit", "status": "open", "enterprise": hq_id, "assigned_to_name": "Amina Kimani"}),
+        _create("task", {"title": "Restock Amoxicillin", "task_type": "procurement", "status": "open", "enterprise": hq_id, "assigned_to_name": "David Otieno"}),
+        _create("task", {"title": "Annual wellness check — Peter Mwangi", "task_type": "visit", "status": "completed", "enterprise": branch_id, "assigned_to_name": "Amina Kimani"}),
+        _create("task", {"title": "Equipment maintenance — BP monitor", "task_type": "maintenance", "status": "open", "enterprise": hq_id, "assigned_to_name": "David Otieno"}),
+    ]
+    created["tasks"] = len(tasks)
+
+    transactions = [
+        _create("transaction", {"transaction_type": "service_fee", "amount": 45.00, "status": "posted", "enterprise": hq_id, "description": "General consultation — Grace Wanjiru"}),
+        _create("transaction", {"transaction_type": "service_fee", "amount": 120.00, "status": "posted", "enterprise": branch_id, "description": "Wellness package — Peter Mwangi"}),
+        _create("transaction", {"transaction_type": "supply_purchase", "amount": 300.00, "status": "posted", "enterprise": hq_id, "description": "Amoxicillin restock"}),
+        _create("transaction", {"transaction_type": "service_fee", "amount": 45.00, "status": "draft", "enterprise": hq_id, "description": "Consultation — Sarah Njoroge (pending)"}),
+    ]
+    created["transactions"] = len(transactions)
+
+    relationships = [
+        _create("relationship", {"relationship_type": "employment", "person_name": "Amina Kimani", "enterprise_name": "Sunrise Family Clinic", "role": "Registered Nurse"}),
+    ]
+    created["relationships"] = len(relationships)
+
+    addresses = [
+        _create("address", {"label": "Headquarters", "address_line1": "123 Kenyatta Ave", "city": "Nairobi", "country": "Kenya", "enterprise_id": hq_id}),
+    ]
+    created["addresses"] = len(addresses)
+
+    # Fire-and-forget ETL refresh for the demo tenant
+    try:
+        import os
+        import threading
+        import requests as req
+        railway_url = os.getenv("RAILWAY_URL", "https://newsconseenwebapp-production.up.railway.app")
+
+        def _fire_etl():
+            for slug in ("people", "enterprise", "product", "task", "transaction", "relationship", "address"):
+                try:
+                    req.post(f"{railway_url}/load/{slug}-summary", timeout=15)
+                except Exception:
+                    pass
+
+        threading.Thread(target=_fire_etl, daemon=True).start()
+    except Exception as exc:
+        logger.debug("admin: seed-demo-tenant ETL trigger skipped — %s", exc)
+
+    return {"status": "seeded", "company_id": _DEMO_COMPANY_ID, "created": created}

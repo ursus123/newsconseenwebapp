@@ -277,6 +277,27 @@ async def lifespan(app: FastAPI):
 
 
 # ----------------------------------------------------------
+# Error monitoring — Sentry, no-op if SENTRY_DSN is not set
+# ----------------------------------------------------------
+_sentry_enabled = False
+if settings.sentry_dsn:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            integrations=[StarletteIntegration(), FastApiIntegration()],
+            traces_sample_rate=0.1,
+            send_default_pii=False,
+        )
+        _sentry_enabled = True
+        logger.info("Startup: Sentry error monitoring enabled")
+    except Exception as _sentry_err:
+        logger.warning("Sentry init failed — %s", _sentry_err)
+
+# ----------------------------------------------------------
 # FastAPI App — v4.1.0
 # ----------------------------------------------------------
 app = FastAPI(
@@ -317,6 +338,26 @@ try:
     logger.info("Startup: rate limit middleware enabled")
 except Exception as _rl_err:
     logger.warning("Rate limit middleware not loaded — %s", _rl_err)
+
+# Sentry request tagging — company_id/page context on every error, no-op if
+# Sentry isn't enabled. company_id arrives as a query param on nearly every
+# endpoint in this API (same convention RateLimitMiddleware's IP extraction
+# and every other route already assumes).
+if _sentry_enabled:
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    class SentryContextMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):
+            with sentry_sdk.configure_scope() as scope:
+                scope.set_tag("path", request.url.path)
+                company_id = request.query_params.get("company_id")
+                if company_id:
+                    scope.set_tag("company_id", company_id)
+                    scope.set_user({"id": company_id})
+            return await call_next(request)
+
+    app.add_middleware(SentryContextMiddleware)
+    logger.info("Startup: Sentry context tagging middleware enabled")
 
 # ----------------------------------------------------------
 # API Key middleware — enforced only when API_KEY is set

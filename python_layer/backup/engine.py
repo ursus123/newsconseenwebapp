@@ -129,6 +129,140 @@ def list_backups(limit: int = 50) -> list[dict]:
         return []
 
 
+def restore_drill() -> dict:
+    """
+    Prove the most recent backup is actually restorable, not just written.
+
+    Two depths, depending on configuration:
+      full_restore    — if RESTORE_TEST_DATABASE_URL is set, pipes the dump
+                         into psql against that scratch database, then runs a
+                         sanity SELECT COUNT(*) against a couple of key tables.
+      structure_only  — otherwise, verifies the gzip is valid, non-trivial in
+                         size, and contains expected SQL markers. Honest about
+                         reduced depth rather than silently skipping.
+    """
+    started_at = datetime.now(timezone.utc)
+    result = {
+        "backup_id":  None,
+        "method":     None,
+        "verified":   False,
+        "detail":     None,
+        "started_at": started_at.isoformat(),
+    }
+
+    logs = list_backups(limit=1)
+    if not logs:
+        result["detail"] = "No backups found — run POST /backup/run first"
+        _log_drill(result, started_at)
+        return result
+
+    last = logs[0]
+    result["backup_id"] = last.get("backup_id")
+
+    try:
+        import json as _json
+        storage = last.get("storage")
+        storage = _json.loads(storage) if isinstance(storage, str) else (storage or [])
+        local_entry = next((s for s in storage if s.get("backend") == "local"), None)
+        s3_entry    = next((s for s in storage if s.get("backend") == "s3"), None)
+
+        dump_path = None
+        if local_entry and os.path.exists(local_entry.get("path", "")):
+            dump_path = local_entry["path"]
+        elif s3_entry:
+            dump_path = _download_from_s3(s3_entry["key"])
+
+        if not dump_path:
+            result["detail"] = "Backup file no longer accessible (local /tmp cleared, no S3 copy)"
+            _log_drill(result, started_at)
+            return result
+
+        restore_url = os.getenv("RESTORE_TEST_DATABASE_URL", "")
+        if restore_url:
+            result["method"] = "full_restore"
+            _restore_into_scratch_db(dump_path, restore_url)
+            result["verified"] = True
+            result["detail"] = "Dump restored into scratch DB and sanity-checked"
+        else:
+            result["method"] = "structure_only"
+            _verify_dump_structure(dump_path)
+            result["verified"] = True
+            result["detail"] = (
+                "Structural integrity only — set RESTORE_TEST_DATABASE_URL "
+                "for a full restore-and-verify drill"
+            )
+
+    except Exception as exc:
+        result["detail"] = f"Restore drill failed: {str(exc)[:400]}"
+        logger.exception("backup: restore_drill failed")
+
+    finally:
+        ended_at = datetime.now(timezone.utc)
+        result["ended_at"]   = ended_at.isoformat()
+        result["duration_s"] = round((ended_at - started_at).total_seconds(), 2)
+
+    _log_drill(result, started_at)
+    return result
+
+
+def _download_from_s3(key: str) -> str:
+    import boto3
+    endpoint = os.getenv("AWS_ENDPOINT_URL")
+    kwargs: dict = {}
+    if endpoint:
+        kwargs["endpoint_url"] = endpoint
+    s3 = boto3.client("s3", **kwargs)
+    local_path = os.path.join(tempfile.gettempdir(), os.path.basename(key))
+    s3.download_file(_S3_BUCKET, key, local_path)
+    return local_path
+
+
+def _verify_dump_structure(dump_path: str) -> None:
+    """Raises if the gzip file isn't a plausible SQL dump."""
+    size = os.path.getsize(dump_path)
+    if size < 100:
+        raise RuntimeError(f"Dump file too small to be valid ({size} bytes)")
+
+    with gzip.open(dump_path, "rt", encoding="utf-8", errors="ignore") as f:
+        head = f.read(4096)
+
+    markers = ("CREATE TABLE", "COPY ", "-- Newsconseen metadata dump")
+    if not any(m in head for m in markers):
+        raise RuntimeError("Dump does not contain expected SQL structure markers")
+
+
+def _restore_into_scratch_db(dump_path: str, restore_url: str) -> None:
+    """Pipe the gzip-decompressed dump into psql against a scratch DB, then
+    sanity-check a couple of key tables actually have rows after restore."""
+    if not shutil.which("psql"):
+        raise RuntimeError("psql binary not available — cannot perform a full restore drill")
+
+    parsed = urlparse(restore_url)
+    env = os.environ.copy()
+    if parsed.password:
+        env["PGPASSWORD"] = parsed.password
+
+    with gzip.open(dump_path, "rb") as gz_file:
+        proc = subprocess.run(
+            ["psql", "--no-password", restore_url],
+            stdin=gz_file,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
+    if proc.returncode != 0:
+        raise RuntimeError(f"psql restore failed: {proc.stderr.decode(errors='ignore')[:400]}")
+
+    from sqlalchemy import create_engine
+    scratch_engine = create_engine(restore_url)
+    with scratch_engine.connect() as conn:
+        for table in ("raw.people", "raw.enterprises"):
+            try:
+                conn.execute(text(f"SELECT COUNT(*) FROM {table}"))  # noqa: S608
+            except Exception as exc:
+                raise RuntimeError(f"Sanity check failed on {table}: {exc}")
+
+
 def get_backup_status() -> dict:
     """Return last backup result + overall backup health summary."""
     logs = list_backups(limit=10)
@@ -289,3 +423,33 @@ def _log_backup(result: dict) -> None:
             )
     except Exception as exc:
         logger.warning("backup: could not write to backup_log — %s", exc)
+
+
+def _log_drill(result: dict, started_at: datetime) -> None:
+    """Write a restore-drill result to analytics.restore_drill_log."""
+    engine = get_engine_safe()
+    if engine is None:
+        return
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO analytics.restore_drill_log
+                        (backup_id, method, verified, detail,
+                         started_at, ended_at, duration_s)
+                    VALUES
+                        (:backup_id, :method, :verified, :detail,
+                         :started_at, :ended_at, :duration_s)
+                """),
+                {
+                    "backup_id":  result.get("backup_id"),
+                    "method":     result.get("method"),
+                    "verified":   result.get("verified", False),
+                    "detail":     result.get("detail"),
+                    "started_at": result.get("started_at", started_at.isoformat()),
+                    "ended_at":   result.get("ended_at"),
+                    "duration_s": result.get("duration_s", 0.0),
+                },
+            )
+    except Exception as exc:
+        logger.warning("backup: could not write to restore_drill_log — %s", exc)

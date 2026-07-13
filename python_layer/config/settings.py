@@ -122,6 +122,19 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------
     admin_secret: Optional[str] = None
 
+    # ----------------------------------------------------------
+    # Error monitoring — Sentry (backend). Frontend uses VITE_SENTRY_DSN,
+    # a separate Vite-side env var, not this one.
+    # ----------------------------------------------------------
+    sentry_dsn: Optional[str] = None
+
+    # ----------------------------------------------------------
+    # Backup restore drill — scratch database to actually restore into.
+    # If unset, restore_drill() falls back to a structural integrity
+    # check only (see backup/engine.py).
+    # ----------------------------------------------------------
+    restore_test_database_url: Optional[str] = None
+
     class Config:
         env_file       = ".env"
         case_sensitive = False

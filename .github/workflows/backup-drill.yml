@@ -1,0 +1,39 @@
+name: Backup Restore Drill
+
+# Proves the most recent database backup is actually restorable, not just
+# written. Runs monthly and can be triggered manually to verify it works
+# before its first scheduled fire. A failure here means CRON_SECRET or
+# RAILWAY_URL secrets are missing/wrong, or the drill itself failed —
+# either way it fails the job, which GitHub surfaces to repo watchers via
+# its built-in failure notification (no separate alerting service needed).
+
+on:
+  schedule:
+    - cron: "0 6 1 * *" # 06:00 UTC on the 1st of every month
+  workflow_dispatch: {}
+
+jobs:
+  restore-drill:
+    name: Run restore drill
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger restore drill
+        env:
+          RAILWAY_URL:  ${{ secrets.RAILWAY_URL }}
+          CRON_SECRET:  ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$RAILWAY_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::error::RAILWAY_URL or CRON_SECRET secret not set — cannot run drill"
+            exit 1
+          fi
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "x-cron-secret: $CRON_SECRET" \
+            "${RAILWAY_URL}/backup/restore-drill")
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          STATUS=$(echo "$RESPONSE" | tail -n 1)
+          echo "$BODY"
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Restore drill failed with HTTP $STATUS"
+            exit 1
+          fi
+          echo "Restore drill passed"
