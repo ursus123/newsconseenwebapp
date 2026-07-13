@@ -1124,6 +1124,40 @@ _INGESTION_DDL = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_ingestion_schedules_company ON analytics.ingestion_schedules (company_id)",
+
+    # ── Failed-row quarantine — shared by the ingestion pipeline and
+    # connector loads. Replaces the old ingestion_runs.errors_json[:50] cap:
+    # every failure is stored in full here, uncapped, and retryable. ──────────
+    """
+    CREATE TABLE IF NOT EXISTS analytics.ingestion_failed_rows (
+        id            SERIAL PRIMARY KEY,
+        company_id    TEXT NOT NULL,
+        source        TEXT NOT NULL,
+        entity_type   TEXT NOT NULL,
+        row_index     INT,
+        row_payload   JSONB NOT NULL,
+        error_message TEXT NOT NULL,
+        failed_at     TIMESTAMPTZ DEFAULT NOW(),
+        retried_at    TIMESTAMPTZ,
+        resolved_at   TIMESTAMPTZ
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ingestion_failed_company ON analytics.ingestion_failed_rows (company_id, resolved_at)",
+
+    # ── Field-mapping version history — append-only log alongside the
+    # existing ingestion_memory/ConnectorMapping "current mapping" upserts. ──
+    """
+    CREATE TABLE IF NOT EXISTS analytics.ingestion_mapping_history (
+        id                 SERIAL PRIMARY KEY,
+        company_id         TEXT NOT NULL,
+        source_fingerprint TEXT NOT NULL,
+        source_name        TEXT,
+        mapping_json       TEXT NOT NULL,
+        changed_by         TEXT,
+        created_at         TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ingestion_mapping_history ON analytics.ingestion_mapping_history (company_id, source_fingerprint, created_at DESC)",
 ]
 
 

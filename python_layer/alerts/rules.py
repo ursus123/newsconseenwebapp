@@ -52,6 +52,8 @@ class AlertRuleEngine:
         people       = analytics.get("people_summary", [])
         tasks        = analytics.get("task_summary", [])
         transactions = analytics.get("transaction_summary", [])
+        connector_runs      = analytics.get("connector_runs", [])
+        connector_schedules = analytics.get("connector_schedules", [])
 
         if ok("expiry_critical"): alerts += self._expiry(products, config.get("expiry_critical_days", 7), "critical")
         if ok("expiry_warning"):  alerts += self._expiry(products, config.get("expiry_warning_days", 30), "warning")
@@ -63,6 +65,7 @@ class AlertRuleEngine:
         if ok("overdue_spike"):   alerts += self._overdue_spike(tasks, config.get("overdue_spike_threshold", 5))
         if ok("negative_cashflow"):alerts += self._negative_cashflow(transactions)
         if ok("revenue_drop"):    alerts += self._revenue_drop(transactions, config.get("revenue_drop_pct", 20))
+        if ok("connector_sync_failed"): alerts += self._connector_sync_failed(connector_runs, connector_schedules)
 
         logger.info("AlertRuleEngine: %d alerts for %s", len(alerts), self.company_id)
         return alerts
@@ -237,4 +240,64 @@ class AlertRuleEngine:
                 data={"revenue_7d": last_7d, "expected_weekly": round(expected, 2), "drop_pct": round(drop, 1)},
                 suggested_action="Check for missing transactions or reduced sales activity.",
             ))
+        return alerts
+
+    # ── Frequency (hours) used to detect a stale/dead connector ──────────────
+    _FREQUENCY_HOURS = {"hourly": 1, "daily": 24, "weekly": 24 * 7, "monthly": 24 * 30}
+
+    def _connector_sync_failed(self, connector_runs, connector_schedules):
+        """
+        critical — the most recent run for an active scheduled connector failed.
+        warning  — an active scheduled connector hasn't run in > 2x its own
+                   interval (next_run_at is well overdue — likely dead/broken).
+        """
+        alerts = []
+
+        # Most recent run per connector_id (connector_runs is already
+        # ordered DESC by started_at from GET /connectors/runs).
+        latest_run_by_connector = {}
+        for run in connector_runs:
+            cid = run.get("connector_id")
+            if cid and cid not in latest_run_by_connector:
+                latest_run_by_connector[cid] = run
+
+        now = datetime.now(timezone.utc)
+
+        for sched in connector_schedules:
+            if not sched.get("is_active") or sched.get("frequency") == "manual":
+                continue
+            connector_id = sched.get("connector_id")
+            label        = sched.get("connector_name") or connector_id
+
+            latest = latest_run_by_connector.get(connector_id)
+            if latest and latest.get("status") == "failed":
+                alerts.append(self._a(
+                    alert_type="connector_sync_failed", severity="critical",
+                    title=f"{label} sync failed",
+                    message=f"The last sync for {label} failed: {(latest.get('error') or 'no error detail')[:200]}",
+                    data={"connector_id": connector_id, "error": latest.get("error")},
+                    suggested_action="Check the connector's credentials and retry the sync.",
+                ))
+                continue  # don't also fire the stale check for a connector that just failed
+
+            next_run_at = sched.get("next_run_at")
+            interval_h  = self._FREQUENCY_HOURS.get(sched.get("frequency"), 24)
+            if not next_run_at:
+                continue
+            try:
+                next_dt = datetime.fromisoformat(next_run_at)
+                if next_dt.tzinfo is None:
+                    next_dt = next_dt.replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            overdue_hours = (now - next_dt).total_seconds() / 3600
+            if overdue_hours > interval_h * 2:
+                alerts.append(self._a(
+                    alert_type="connector_sync_failed", severity="warning",
+                    title=f"{label} hasn't synced in a while",
+                    message=f"{label} was due to sync {int(overdue_hours)}h ago and hasn't run — it may be broken.",
+                    data={"connector_id": connector_id, "overdue_hours": int(overdue_hours)},
+                    suggested_action="Check the connector schedule and Railway cron logs.",
+                ))
+
         return alerts

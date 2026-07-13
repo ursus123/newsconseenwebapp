@@ -500,6 +500,131 @@ def list_runs(company_id: str, limit: int = 50):
         return []
 
 
+@router.get("/failed-rows")
+def list_failed_rows(company_id: str, limit: int = 100):
+    """
+    List unresolved failed rows (from either the ingestion pipeline or a
+    connector sync) for a company — the quarantine store that replaced the
+    old capped-at-50 errors_json summary.
+    """
+    engine = get_engine_safe()
+    if engine is None:
+        return {"failed_rows": []}
+    try:
+        rows = engine.connect().execute(text("""
+            SELECT id, company_id, source, entity_type, row_index, row_payload,
+                   error_message, failed_at::text, retried_at::text, resolved_at::text
+            FROM analytics.ingestion_failed_rows
+            WHERE company_id = :cid AND resolved_at IS NULL
+            ORDER BY failed_at DESC LIMIT :lim
+        """), {"cid": company_id, "lim": limit}).fetchall()
+        cols = ["id", "company_id", "source", "entity_type", "row_index", "row_payload",
+                "error_message", "failed_at", "retried_at", "resolved_at"]
+        entries = []
+        for r in rows:
+            entry = dict(zip(cols, r))
+            if isinstance(entry.get("row_payload"), str):
+                try:
+                    entry["row_payload"] = json.loads(entry["row_payload"])
+                except Exception:
+                    pass
+            entries.append(entry)
+        return {"failed_rows": entries, "total": len(entries)}
+    except Exception as e:
+        logger.warning("list_failed_rows: %s", e)
+        return {"failed_rows": []}
+
+
+@router.post("/failed-rows/{row_id}/retry")
+def retry_failed_row(row_id: int):
+    """
+    Re-attempt the single stored payload through the same create/update path
+    it originally failed on. Marks retried_at always; resolved_at only on
+    success (so the row drops out of the unresolved list).
+    """
+    engine = get_engine_safe()
+    if engine is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    try:
+        row = engine.connect().execute(text("""
+            SELECT company_id, source, entity_type, row_payload
+            FROM analytics.ingestion_failed_rows WHERE id = :id
+        """), {"id": row_id}).fetchone()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Failed row not found")
+
+    company_id, source, entity_type, payload = row
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+
+    try:
+        if source.startswith("connector:"):
+            # Connector-sourced rows go through Base44, not Supabase.
+            from config.settings import settings, HEADERS
+            import requests as _req
+            entity_url_map = {
+                "people":       settings.base44_people_url,
+                "enterprises":  settings.base44_enterprises_url,
+                "products":     settings.base44_products_url,
+                "transactions": getattr(settings, "base44_transactions_url", None),
+                "relationships": settings.base44_relationships_url,
+            }
+            url = entity_url_map.get(entity_type)
+            if not url:
+                raise RuntimeError(f"No Base44 URL configured for entity '{entity_type}'")
+            resp = _req.post(url, json=payload, headers=HEADERS, timeout=30)
+            resp.raise_for_status()
+        else:
+            from data_sources import supabase_source
+            supabase_source.create_record(entity_type, payload, company_id=company_id)
+        with engine.begin() as conn:
+            conn.execute(text("""
+                UPDATE analytics.ingestion_failed_rows
+                SET retried_at = NOW(), resolved_at = NOW()
+                WHERE id = :id
+            """), {"id": row_id})
+        return {"status": "resolved", "id": row_id}
+    except Exception as e:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                UPDATE analytics.ingestion_failed_rows SET retried_at = NOW() WHERE id = :id
+            """), {"id": row_id})
+        return {"status": "still_failing", "id": row_id, "error": str(e)}
+
+
+@router.get("/mapping-history")
+def get_mapping_history(company_id: str, source_fingerprint: str, limit: int = 20):
+    """List the change history for a source's field mapping."""
+    engine = get_engine_safe()
+    if engine is None:
+        return {"history": []}
+    try:
+        rows = engine.connect().execute(text("""
+            SELECT id, source_name, mapping_json, changed_by, created_at::text
+            FROM analytics.ingestion_mapping_history
+            WHERE company_id = :cid AND source_fingerprint = :fp
+            ORDER BY created_at DESC LIMIT :lim
+        """), {"cid": company_id, "fp": source_fingerprint, "lim": limit}).fetchall()
+        cols = ["id", "source_name", "mapping_json", "changed_by", "created_at"]
+        entries = []
+        for r in rows:
+            entry = dict(zip(cols, r))
+            if isinstance(entry.get("mapping_json"), str):
+                try:
+                    entry["mapping_json"] = json.loads(entry["mapping_json"])
+                except Exception:
+                    pass
+            entries.append(entry)
+        return {"history": entries, "total": len(entries)}
+    except Exception as e:
+        logger.warning("get_mapping_history: %s", e)
+        return {"history": []}
+
+
 @router.get("/memory")
 def list_memory(company_id: str):
     """List remembered source schemas for a company."""

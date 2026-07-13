@@ -1292,7 +1292,7 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
                 >
                   {syncing
                     ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Syncing…</>
-                    : <><Play className="w-3.5 h-3.5 mr-1.5" /> Sync to Base44</>}
+                    : <><Play className="w-3.5 h-3.5 mr-1.5" /> Sync to Newsconseen</>}
                 </Button>
               </>
             )}
@@ -1402,7 +1402,7 @@ function FileConnectModal({ connector, companyId, onClose }) {
             </div>
             <div>
               <p className="text-sm font-bold text-slate-800">{connector?.name}</p>
-              <p className="text-xs text-slate-400">Import file into Base44</p>
+              <p className="text-xs text-slate-400">Import file into Newsconseen</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
@@ -1544,6 +1544,17 @@ function FileConnectModal({ connector, companyId, onClose }) {
                 {runResult.updated      != null && <div><span className="text-slate-500">Updated:</span> <strong>{runResult.updated}</strong></div>}
                 {runResult.skipped      != null && <div><span className="text-slate-500">Skipped:</span> <strong>{runResult.skipped}</strong></div>}
               </div>
+              {runResult.changes && Object.keys(runResult.changes).length > 0 && (
+                <div className="mt-2 text-[11px] text-slate-600">
+                  <span className="font-semibold">What changed since last sync:</span>{" "}
+                  {Object.entries(runResult.changes).map(([entity, c], i) => (
+                    <span key={entity}>
+                      {i > 0 && " · "}
+                      {entity}: +{c.added_count} new, {c.updated_count} updated, -{c.removed_count} removed
+                    </span>
+                  ))}
+                </div>
+              )}
               {runResult.detail && <p className="mt-2 text-xs text-rose-700">{runResult.detail}</p>}
             </div>
           )}
@@ -1572,7 +1583,7 @@ function FileConnectModal({ connector, companyId, onClose }) {
                   className="bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs">
                   {running
                     ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Importing…</>
-                    : <><Play className="w-3.5 h-3.5 mr-1.5" /> Import to Base44</>}
+                    : <><Play className="w-3.5 h-3.5 mr-1.5" /> Import to Newsconseen</>}
                 </Button>
               </>
             )}
@@ -1825,7 +1836,7 @@ function GoogleSheetsModal({ connector, companyId, onClose }) {
                   className="bg-emerald-600 hover:bg-emerald-700 rounded-xl text-xs">
                   {running
                     ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Importing…</>
-                    : <><Play className="w-3.5 h-3.5 mr-1.5" /> Import to Base44</>}
+                    : <><Play className="w-3.5 h-3.5 mr-1.5" /> Import to Newsconseen</>}
                 </Button>
               </>
             )}
@@ -2085,7 +2096,7 @@ function WebhookSection({ currentUser }) {
           <li>Create a feed — choose source name and which entity type to receive (People, Products, etc.)</li>
           <li>Copy the ingest URL and secret to your external system (POS, LIMS, ERP, mobile app)</li>
           <li>Your system POSTs JSON to the URL with <code className="bg-slate-200 px-1 rounded">X-Webhook-Secret</code> header</li>
-          <li>Newsconseen auto-maps fields, writes to Base44, and triggers ETL immediately</li>
+          <li>Newsconseen auto-maps fields, stores the record, and triggers ETL immediately</li>
         </ol>
         <p className="text-slate-500">Body can be a single JSON object or an array of objects. Unknown fields are silently ignored.</p>
       </div>
@@ -2613,6 +2624,57 @@ export default function Connectors() {
     refetchInterval: 30_000,
   });
 
+  const { data: failedRowsData = { failed_rows: [] }, refetch: refetchFailedRows } = useQuery({
+    queryKey: ["ingestion-failed-rows", currentUser?.company_id],
+    queryFn: async () => {
+      if (!currentUser?.company_id) return { failed_rows: [] };
+      try {
+        const res = await fetch(
+          `${RAILWAY_URL}/ingestion/failed-rows?company_id=${currentUser.company_id}&limit=100`,
+          { headers: API_HEADERS }
+        );
+        return res.ok ? res.json() : { failed_rows: [] };
+      } catch {
+        return { failed_rows: [] };
+      }
+    },
+    enabled: !!currentUser?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+  const failedRows = failedRowsData.failed_rows || [];
+
+  const { data: conflictsData = { conflicts: [] } } = useQuery({
+    queryKey: ["connector-conflicts", currentUser?.company_id],
+    queryFn: async () => {
+      if (!currentUser?.company_id) return { conflicts: [] };
+      try {
+        const res = await fetch(
+          `${RAILWAY_URL}/connectors/conflicts?company_id=${currentUser.company_id}&limit=50`,
+          { headers: API_HEADERS }
+        );
+        return res.ok ? res.json() : { conflicts: [] };
+      } catch {
+        return { conflicts: [] };
+      }
+    },
+    enabled: !!currentUser?.company_id,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+  const conflicts = conflictsData.conflicts || [];
+
+  const retryFailedRowMutation = useMutation({
+    mutationFn: async (rowId) => {
+      const res = await fetch(`${RAILWAY_URL}/ingestion/failed-rows/${rowId}/retry`, {
+        method: "POST",
+        headers: API_HEADERS,
+      });
+      return res.json();
+    },
+    onSuccess: () => refetchFailedRows(),
+  });
+
   const { data: schedulesData = { schedules: [] }, refetch: refetchSchedules } = useQuery({
     queryKey: ["connector-schedules", currentUser?.company_id],
     queryFn: async () => {
@@ -3005,6 +3067,14 @@ export default function Connectors() {
                         <div className="flex items-center gap-2">
                           {Icon && <Icon className={`w-4 h-4 text-${color}-600 ${run.status === "running" ? "animate-spin" : ""}`} />}
                           <span className={`text-${color}-700 font-medium capitalize`}>{run.status}</span>
+                          {run.status === "failed" && run.error && (
+                            <span
+                              className="text-rose-600 cursor-help"
+                              title={run.error}
+                            >
+                              <AlertCircle className="w-3.5 h-3.5" />
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">{run.records_extracted || 0}</td>
@@ -3022,6 +3092,87 @@ export default function Connectors() {
           </div>
         )}
       </div>
+
+      {/* Section 4: Failed Rows quarantine */}
+      {failedRows.length > 0 && (
+        <div className="mt-10">
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Failed Rows</h2>
+          <p className="text-sm text-slate-500 mb-6">
+            Rows that failed to write during an import or connector sync. Fix the underlying issue, then retry.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  {["Source", "Entity", "Error", "Failed At", ""].map(h => (
+                    <th key={h} className="px-4 py-3 text-left font-semibold text-slate-700">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {failedRows.map(row => (
+                  <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-4 py-3 text-slate-800 font-medium">{row.source}</td>
+                    <td className="px-4 py-3">{row.entity_type}</td>
+                    <td className="px-4 py-3 text-rose-700 max-w-md truncate" title={row.error_message}>{row.error_message}</td>
+                    <td className="px-4 py-3">{new Date(row.failed_at).toLocaleString()}</td>
+                    <td className="px-4 py-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={retryFailedRowMutation.isPending}
+                        onClick={() => retryFailedRowMutation.mutate(row.id)}
+                      >
+                        {retryFailedRowMutation.isPending && retryFailedRowMutation.variables === row.id
+                          ? "Retrying…" : "Retry"}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Section 4b: Inbound conflicts (connector sync vs. manual edit) */}
+      {conflicts.length > 0 && (
+        <div className="mt-10">
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Sync Conflicts</h2>
+          <p className="text-sm text-slate-500 mb-6">
+            Records touched by an operator since the last sync. Policy applied is shown per event —
+            change a connector's schedule to adjust the policy.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  {["Connector", "Entity", "External ID", "Policy Applied", "Detected At"].map(h => (
+                    <th key={h} className="px-4 py-3 text-left font-semibold text-slate-700">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {conflicts.map(c => (
+                  <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-4 py-3 text-slate-800 font-medium">{c.connector_id}</td>
+                    <td className="px-4 py-3">{c.entity_type}</td>
+                    <td className="px-4 py-3 font-mono">{c.external_id}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                        c.policy_applied === "manual_wins" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                      }`}>
+                        {c.policy_applied}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">{new Date(c.detected_at).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Section 4: Unmapped Values Review */}
       {needsReviewRuns.length > 0 && (

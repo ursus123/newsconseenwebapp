@@ -81,11 +81,35 @@ CREATE TABLE IF NOT EXISTS connectors.run_log (
     started_at   TIMESTAMPTZ DEFAULT NOW(),
     completed_at TIMESTAMPTZ
 );
+
+CREATE TABLE IF NOT EXISTS connectors.conflict_log (
+    id             SERIAL PRIMARY KEY,
+    company_id     TEXT NOT NULL,
+    connector_id   TEXT NOT NULL,
+    entity_type    TEXT NOT NULL,
+    external_id    TEXT,
+    policy_applied TEXT NOT NULL,
+    detected_at    TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_connectors_conflict_log_company
+    ON connectors.conflict_log (company_id, detected_at DESC);
+"""
+
+# Migration: add new columns to existing tables (idempotent). Same convention
+# as the CREATE-TABLE block above — this table pre-dates these columns on
+# live deployments, so ADD COLUMN IF NOT EXISTS is required, not just CREATE.
+_RUN_LOG_MIGRATIONS = """
+ALTER TABLE connectors.run_log
+    ADD COLUMN IF NOT EXISTS records_skipped INT DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS records_failed  INT DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS unmapped_count  INT DEFAULT 0;
+ALTER TABLE connectors.schedules
+    ADD COLUMN IF NOT EXISTS inbound_conflict_policy TEXT DEFAULT 'connector_wins';
 """
 
 
 def _ensure_schedule_tables() -> bool:
-    """Create connectors.schedules and connectors.run_log if not present. Returns True on success."""
+    """Create connectors.schedules/run_log/conflict_log if not present. Returns True on success."""
     from database import get_engine_safe
     from sqlalchemy import text
     engine = get_engine_safe()
@@ -95,10 +119,16 @@ def _ensure_schedule_tables() -> bool:
         with engine.connect() as conn:
             conn.execute(text(_SCHEDULES_DDL))
             conn.commit()
-        return True
     except Exception as e:
         logger.debug("schedule tables setup skipped — %s", e)
         return False
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(_RUN_LOG_MIGRATIONS))
+            conn.commit()
+    except Exception as e:
+        logger.debug("schedule tables migration skipped — %s", e)
+    return True
 
 
 def _db_load_schedules() -> dict[str, dict]:
@@ -155,11 +185,11 @@ def _db_save_schedule(key: str, entry: dict) -> bool:
                 INSERT INTO connectors.schedules
                     (key, company_id, connector_id, connector_name, frequency,
                      run_at_hour, run_at_day, entity_type, is_active, credentials_enc,
-                     next_run_at, last_run_at, updated_at)
+                     next_run_at, last_run_at, inbound_conflict_policy, updated_at)
                 VALUES
                     (:key, :company_id, :connector_id, :connector_name, :frequency,
                      :run_at_hour, :run_at_day, :entity_type, :is_active, :creds,
-                     :next_run_at, :last_run_at, NOW())
+                     :next_run_at, :last_run_at, :inbound_conflict_policy, NOW())
                 ON CONFLICT (key) DO UPDATE SET
                     connector_name   = EXCLUDED.connector_name,
                     frequency        = EXCLUDED.frequency,
@@ -170,6 +200,7 @@ def _db_save_schedule(key: str, entry: dict) -> bool:
                     credentials_enc  = COALESCE(EXCLUDED.credentials_enc, connectors.schedules.credentials_enc),
                     next_run_at      = EXCLUDED.next_run_at,
                     last_run_at      = EXCLUDED.last_run_at,
+                    inbound_conflict_policy = EXCLUDED.inbound_conflict_policy,
                     updated_at       = NOW()
             """), {
                 "key":            key,
@@ -184,6 +215,7 @@ def _db_save_schedule(key: str, entry: dict) -> bool:
                 "creds":          creds_enc,
                 "next_run_at":    _parse_ts(entry.get("next_run_at")),
                 "last_run_at":    _parse_ts(entry.get("last_run_at")),
+                "inbound_conflict_policy": entry.get("inbound_conflict_policy", "connector_wins"),
             })
             conn.commit()
         return True
@@ -227,10 +259,12 @@ def _db_append_run_log(entry: dict) -> None:
                 INSERT INTO connectors.run_log
                     (company_id, connector_id, triggered_by, status,
                      records_extracted, records_created, records_updated,
+                     records_skipped, records_failed, unmapped_count,
                      error, started_at, completed_at)
                 VALUES
                     (:company_id, :connector_id, :triggered_by, :status,
                      :extracted, :created, :updated,
+                     :skipped, :failed, :unmapped,
                      :error, :started_at, :completed_at)
             """), {
                 "company_id":   entry.get("company_id", ""),
@@ -240,7 +274,10 @@ def _db_append_run_log(entry: dict) -> None:
                 "extracted":    entry.get("records_extracted", 0),
                 "created":      entry.get("records_created", 0),
                 "updated":      entry.get("records_updated", 0),
-                "error":        entry.get("error"),
+                "skipped":      entry.get("records_skipped", 0),
+                "failed":       entry.get("records_failed", 0),
+                "unmapped":     len(entry.get("unmapped_values") or []),
+                "error":        entry.get("error") or entry.get("error_message"),
                 "started_at":   _parse_ts(entry.get("started_at")),
                 "completed_at": _parse_ts(entry.get("completed_at")),
             })
@@ -308,6 +345,7 @@ class ConnectorScheduleConfig(BaseModel):
     entity_type:    Optional[str] = "people"
     is_active:      bool = True
     credentials:    Optional[dict] = None  # stored in-memory, never logged
+    inbound_conflict_policy: str = "connector_wins"  # connector_wins | manual_wins | flag_review
 
 
 @router.get("/schedule")
@@ -424,27 +462,37 @@ def run_scheduled_connectors(x_cron_secret: Optional[str] = Header(None)):
             connector_class = get_connector(connector_id)
             if connector_class:
                 engine = MappingEngine(company_id=company_id)
-                # Merge stored credentials with the entity_type hint
+                # Merge stored credentials with the entity_type hint + inbound
+                # conflict awareness — lets _upsert_record know whether a
+                # record was touched by someone else since our last sync.
                 stored_creds = sched.get("credentials") or {}
-                runtime_creds = {**stored_creds, "entity_type": entity_type}
+                runtime_creds = {
+                    **stored_creds,
+                    "entity_type": entity_type,
+                    "_inbound_conflict_policy": sched.get("inbound_conflict_policy", "connector_wins"),
+                    "_last_sync_at": sched.get("last_run_at"),
+                }
                 connector = connector_class(
                     company_id=company_id,
                     credentials=runtime_creds,
                     mappings=engine._mappings,
                 )
-                raw = connector.extract()
-                if raw:
-                    transformed = connector.transform(raw)
-                    result = connector.load(transformed)
-                    run_entry.update({
-                        "status":            "completed",
-                        "records_extracted": len(raw),
-                        "records_created":   result.get("created", 0),
-                        "records_updated":   result.get("updated", 0),
-                        "completed_at":      _now_iso(),
-                    })
-                else:
-                    run_entry.update({"status": "skipped", "completed_at": _now_iso()})
+                # connector.run() does extract→transform→load AND mirrors
+                # into raw.* + triggers ETL — previously this endpoint only
+                # called extract/transform/load directly, so scheduled syncs
+                # never reached raw.*/analytics until the next cron ETL cycle.
+                result = connector.run()
+                run_entry.update({
+                    "status":            "completed" if result.get("status") in ("completed", "needs_review") else result.get("status", "failed"),
+                    "records_extracted": result.get("records_extracted", 0),
+                    "records_created":   result.get("records_created", 0),
+                    "records_updated":   result.get("records_updated", 0),
+                    "records_skipped":   result.get("records_skipped", 0),
+                    "records_failed":    result.get("records_failed", 0),
+                    "unmapped_values":   result.get("unmapped_values", []),
+                    "error":             result.get("error_message"),
+                    "completed_at":      _now_iso(),
+                })
             else:
                 run_entry.update({"status": "skipped", "completed_at": _now_iso(),
                                   "error": f"connector class not found: {connector_id}"})
@@ -492,8 +540,9 @@ def connector_runs(
     if engine:
         try:
             sql = """
-                SELECT company_id, connector_id, triggered_by, status,
+                SELECT id, company_id, connector_id, triggered_by, status,
                        records_extracted, records_created, records_updated,
+                       records_skipped, records_failed, unmapped_count,
                        error,
                        started_at::text  AS started_at,
                        completed_at::text AS completed_at
@@ -508,8 +557,9 @@ def connector_runs(
             params["lim"] = limit
             with engine.connect() as conn:
                 rows = conn.execute(text(sql), params).fetchall()
-                cols = ["company_id", "connector_id", "triggered_by", "status",
+                cols = ["id", "company_id", "connector_id", "triggered_by", "status",
                         "records_extracted", "records_created", "records_updated",
+                        "records_skipped", "records_failed", "unmapped_count",
                         "error", "started_at", "completed_at"]
                 entries = [dict(zip(cols, row)) for row in rows]
             return {"runs": entries, "total": len(entries), "source": "postgresql"}
@@ -522,6 +572,32 @@ def connector_runs(
         entries = [r for r in entries if r.get("connector_id") == connector_id]
     entries.sort(key=lambda r: r.get("started_at", ""), reverse=True)
     return {"runs": entries[:limit], "total": len(entries), "source": "memory"}
+
+
+@router.get("/conflicts")
+def list_conflicts(company_id: str = Query(...), limit: int = Query(50, le=200)):
+    """List recent inbound-conflict events (connector sync vs. manual edit)."""
+    from database import get_engine_safe
+    from sqlalchemy import text
+
+    engine = get_engine_safe()
+    if not engine:
+        return {"conflicts": []}
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT id, connector_id, entity_type, external_id, policy_applied,
+                       detected_at::text
+                FROM connectors.conflict_log
+                WHERE company_id = :cid
+                ORDER BY detected_at DESC LIMIT :lim
+            """), {"cid": company_id, "lim": limit}).fetchall()
+            cols = ["id", "connector_id", "entity_type", "external_id", "policy_applied", "detected_at"]
+            entries = [dict(zip(cols, r)) for r in rows]
+        return {"conflicts": entries, "total": len(entries)}
+    except Exception as e:
+        logger.debug("list_conflicts: %s", e)
+        return {"conflicts": []}
 
 
 @router.get("/catalog")
@@ -667,6 +743,15 @@ async def run_connector(
 
     credentials = {"entity_type": entity_type}
 
+    # If a schedule exists for this connector, reuse its inbound conflict
+    # policy + last sync time so manual "Run Now" clicks get the same
+    # conflict awareness as scheduled runs. A one-off run with no schedule
+    # has nothing to compare against, so the check is simply skipped.
+    existing_sched = _get_schedule_store().get(f"{company_id}:{connector_id}")
+    if existing_sched:
+        credentials["_inbound_conflict_policy"] = existing_sched.get("inbound_conflict_policy", "connector_wins")
+        credentials["_last_sync_at"] = existing_sched.get("last_run_at")
+
     # API connector credentials (JSON-encoded from the Connect modal)
     if credentials_json:
         try:
@@ -716,9 +801,8 @@ async def run_connector(
                 "company_id": company_id,
             }
 
-        transformed = connector.transform(raw)
-
         if dry_run:
+            transformed = connector.transform(raw)
             total = sum(len(v) for v in transformed.values())
             return {
                 "status":        "dry_run",
@@ -732,13 +816,45 @@ async def run_connector(
                 },
             }
 
-        result = connector.load(transformed)
+        # connector.run() does extract→transform→load, mirrors into raw.*,
+        # and triggers ETL — same full pipeline the scheduler uses. Manual
+        # "Run Now" clicks previously called load() directly and left zero
+        # record in run_log, invisible to the health dashboard.
+        result = connector.run()
 
+        try:
+            _ensure_schedule_tables()
+            _db_append_run_log({
+                "company_id":        company_id,
+                "connector_id":      connector_id,
+                "triggered_by":      "manual",
+                "status":            result.get("status", "unknown"),
+                "records_extracted": result.get("records_extracted", 0),
+                "records_created":   result.get("records_created", 0),
+                "records_updated":   result.get("records_updated", 0),
+                "records_skipped":   result.get("records_skipped", 0),
+                "records_failed":    result.get("records_failed", 0),
+                "unmapped_values":   result.get("unmapped_values", []),
+                "error":             result.get("error_message"),
+                "started_at":        result.get("started_at"),
+                "completed_at":      result.get("completed_at"),
+            })
+        except Exception as e:
+            logger.debug("run_connector: run_log persist skipped — %s", e)
+
+        response_status = "error" if result.get("status") == "failed" else result.get("status", "completed")
         return {
             **result,
             "connector":  connector_id,
             "company_id": company_id,
-            "unmapped":   connector.run_stats.get("unmapped", []),
+            "status":     response_status,
+            "extracted":  result.get("records_extracted", 0),
+            "created":    result.get("records_created", 0),
+            "updated":    result.get("records_updated", 0),
+            "skipped":    result.get("records_skipped", 0),
+            "failed":     result.get("records_failed", 0),
+            "unmapped":   result.get("unmapped_values", []),
+            "detail":     result.get("error_message"),
         }
 
     except Exception as e:

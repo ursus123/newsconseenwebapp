@@ -31,6 +31,8 @@ from typing import Optional
 
 import requests
 
+from connectors.retry import request_with_retry
+
 logger = logging.getLogger(__name__)
 
 # ── In-memory stores ──────────────────────────────────────────────────────────
@@ -98,14 +100,13 @@ def _push_google_sheets(config: dict, payload: dict, entity_type: str) -> dict:
         f"?valueInputOption=USER_ENTERED"
     )
     try:
-        resp = requests.post(
-            url,
+        request_with_retry(
+            "POST", url,
             json={"values": values},
             headers={"Authorization": f"Bearer {token}",
                      "Content-Type": "application/json"},
             timeout=15,
         )
-        resp.raise_for_status()
         return {"pushed": True, "rows_appended": 1,
                 "spreadsheet_id": spreadsheet_id}
     except Exception as e:
@@ -160,8 +161,7 @@ def _push_quickbooks(config: dict, payload: dict, entity_type: str) -> dict:
             }
             url = f"{base_url}/v3/company/{realm_id}/customer"
 
-        resp = requests.post(url, json=body, headers=headers, timeout=20)
-        resp.raise_for_status()
+        resp = request_with_retry("POST", url, json=body, headers=headers, timeout=20)
         return {"pushed": True, "qbo_id": resp.json().get("Id")}
     except Exception as e:
         return {"pushed": False, "error": str(e)}
@@ -204,8 +204,7 @@ def _push_xero(config: dict, payload: dict, entity_type: str) -> dict:
                                    "EmailAddress": payload.get("email", "")}]}
             url = "https://api.xero.com/api.xro/2.0/Contacts"
 
-        resp = requests.post(url, json=body, headers=headers, timeout=20)
-        resp.raise_for_status()
+        request_with_retry("POST", url, json=body, headers=headers, timeout=20)
         return {"pushed": True}
     except Exception as e:
         return {"pushed": False, "error": str(e)}
@@ -225,8 +224,7 @@ def _push_outbound_webhook(config: dict, payload: dict, entity_type: str) -> dic
     body = {**payload, "entity_type": entity_type, "source": "newsconseen"}
 
     try:
-        fn   = getattr(requests, method.lower(), requests.post)
-        resp = fn(url, json=body, headers=headers, timeout=15)
+        resp = request_with_retry(method, url, json=body, headers=headers, timeout=15)
         return {"pushed": True, "status_code": resp.status_code,
                 "ok": resp.ok}
     except Exception as e:
@@ -251,7 +249,7 @@ def _push_slack(config: dict, payload: dict, entity_type: str) -> dict:
         text += f" · Status: {payload['status']}"
 
     try:
-        resp = requests.post(webhook_url, json={"text": text}, timeout=10)
+        resp = request_with_retry("POST", webhook_url, json={"text": text}, timeout=10)
         return {"pushed": True, "status_code": resp.status_code}
     except Exception as e:
         return {"pushed": False, "error": str(e)}

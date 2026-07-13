@@ -122,6 +122,18 @@ class MappingEngine:
         Returns True on success, False on failure.
         """
         try:
+            from database import get_engine_safe
+            from ingestion.quarantine import record_mapping_history
+            record_mapping_history(
+                get_engine_safe(), self.company_id, source_fingerprint=field_name,
+                source_name=f"taxonomy:{field_name}",
+                mapping={"source_value": source_value, "taxonomy_value": taxonomy_value, "parent_value": parent_value},
+                changed_by="operator",
+            )
+        except Exception as e:
+            logger.debug("mapping: history skipped — %s", e)
+
+        try:
             connector_mapping_url = getattr(
                 settings, "base44_connector_mappings_url", None
             )

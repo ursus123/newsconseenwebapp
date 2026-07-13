@@ -138,10 +138,16 @@ def save(
     fingerprint: str,
     source_name: str,
     mapping: dict[str, Any],
+    changed_by: str = "system:fuzzy_match",
 ) -> None:
     """Upsert the mapping into ingestion_memory, incrementing use_count."""
     if engine is None:
         return
+    try:
+        from ingestion.quarantine import record_mapping_history
+        record_mapping_history(engine, company_id, fingerprint, source_name, mapping, changed_by)
+    except Exception as e:
+        logger.debug("Ingestion mapping history skipped: %s", e)
     try:
         mapping_json = json.dumps(mapping, default=str)
         now = datetime.now(timezone.utc)

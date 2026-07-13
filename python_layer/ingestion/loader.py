@@ -30,6 +30,7 @@ from sqlalchemy import text
 
 from data_sources import supabase_source
 from ingestion.deduplicator import deduplicate
+from ingestion.quarantine import record_failed_row
 
 logger = logging.getLogger(__name__)
 
@@ -468,6 +469,11 @@ def execute(
                 stats["entities_failed"] += 1
                 stats["errors"].append({"entity": entity_type, "row": row_idx, "error": str(e)})
                 logger.warning("Load error [%s row %d]: %s", entity_type, row_idx, e)
+                record_failed_row(
+                    engine, company_id, source=f"ingestion:{run_id}",
+                    entity_type=entity_type, row_payload=record,
+                    error_message=str(e), row_index=row_idx,
+                )
 
             if entity_id:
                 row_entity_ids[entity_type][row_idx] = entity_id

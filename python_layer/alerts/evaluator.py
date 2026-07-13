@@ -150,6 +150,31 @@ class AlertEvaluator:
                 )
                 analytics[table] = []
 
+        # Connector sync health — powers the connector_sync_failed alert type
+        try:
+            resp = requests.get(
+                f"{self.railway_url}/connectors/runs",
+                params={"company_id": self.company_id, "limit": 100},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            analytics["connector_runs"] = resp.json().get("runs", [])
+        except Exception as e:
+            logger.debug("AlertEvaluator: could not fetch connector_runs — %s", e)
+            analytics["connector_runs"] = []
+
+        try:
+            resp = requests.get(
+                f"{self.railway_url}/connectors/schedule",
+                params={"company_id": self.company_id},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            analytics["connector_schedules"] = resp.json().get("schedules", [])
+        except Exception as e:
+            logger.debug("AlertEvaluator: could not fetch connector_schedules — %s", e)
+            analytics["connector_schedules"] = []
+
         return analytics
 
     def _load_recipients(self, config: dict) -> list:

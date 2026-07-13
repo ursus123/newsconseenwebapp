@@ -29,6 +29,7 @@ from config.taxonomy import (
     normalize_enterprise_type,
     normalize_item_type,
 )
+from connectors.retry import request_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,7 @@ class BaseConnector(ABC):
             "relationships": settings.base44_relationships_url,
         }
 
-        totals = {"created": 0, "updated": 0, "failed": 0}
+        totals = {"created": 0, "updated": 0, "failed": 0, "skipped_conflict": 0}
 
         for entity_name, records in transformed.items():
             if not records:
@@ -162,16 +163,20 @@ class BaseConnector(ABC):
                         totals["created"] += 1
                     elif result == "updated":
                         totals["updated"] += 1
+                    elif result == "skipped_conflict":
+                        totals["skipped_conflict"] += 1
                 except Exception as e:
                     totals["failed"] += 1
                     logger.error(
                         "connector.load: failed to upsert %s record — %s",
                         entity_name, e,
                     )
+                    self._record_failed_row(entity_name, record, str(e))
 
         self.run_stats["created"] += totals["created"]
         self.run_stats["updated"] += totals["updated"]
         self.run_stats["failed"]  += totals["failed"]
+        self.run_stats["skipped"] += totals["skipped_conflict"]
 
         return totals
 
@@ -239,6 +244,7 @@ class BaseConnector(ABC):
             "records_skipped":    self.run_stats["skipped"],
             "records_failed":     self.run_stats["failed"],
             "unmapped_values":    self.run_stats.get("unmapped", []),
+            "changes":            self.run_stats.get("changes", {}),
             "started_at":         started_at.isoformat(),
             "completed_at":       completed_at.isoformat(),
             "error_message":      self.run_stats.get("error"),
@@ -328,7 +334,15 @@ class BaseConnector(ABC):
           - If a record with the same external_id exists → update it
           - If not → create it
 
-        Returns "created" or "updated".
+        Inbound conflict check: if this schedule's inbound_conflict_policy is
+        not the default 'connector_wins', and the existing record's
+        updated_date is newer than this connector's last sync (i.e. a human
+        or another process touched it since we last synced), apply the
+        configured policy instead of blindly overwriting. Only runs when
+        self.credentials carries '_last_sync_at' — a one-off manual run with
+        no prior schedule skips this check entirely (nothing to compare to).
+
+        Returns "created", "updated", or "skipped_conflict".
         """
         external_id = record.get("external_id")
 
@@ -337,30 +351,131 @@ class BaseConnector(ABC):
             existing = self._find_by_external_id(url, external_id)
             if existing:
                 record_id = existing.get("id")
-                resp = requests.put(
-                    f"{url}/{record_id}",
-                    json=record,
-                    headers=HEADERS,
-                    timeout=30,
+
+                policy = self.credentials.get("_inbound_conflict_policy", "connector_wins")
+                last_sync_at = self.credentials.get("_last_sync_at")
+                if policy != "connector_wins" and last_sync_at and self._touched_since(existing, last_sync_at):
+                    if policy == "manual_wins":
+                        self._record_conflict(entity_name, external_id, policy)
+                        logger.info(
+                            "connector: skipped %s external_id=%s — touched since last sync, policy=manual_wins",
+                            entity_name, external_id,
+                        )
+                        return "skipped_conflict"
+                    if policy == "flag_review":
+                        self._record_conflict(entity_name, external_id, policy)
+                        # fall through — still writes, just flagged
+
+                request_with_retry(
+                    "PUT", f"{url}/{record_id}",
+                    json=record, headers=HEADERS, timeout=30,
                 )
-                resp.raise_for_status()
                 logger.debug(
                     "connector: updated %s external_id=%s", entity_name, external_id
                 )
                 return "updated"
 
         # Create new record
-        resp = requests.post(
-            url,
-            json=record,
-            headers=HEADERS,
-            timeout=30,
+        request_with_retry(
+            "POST", url,
+            json=record, headers=HEADERS, timeout=30,
         )
-        resp.raise_for_status()
         logger.debug(
             "connector: created %s external_id=%s", entity_name, external_id
         )
         return "created"
+
+    @staticmethod
+    def _touched_since(existing: dict, last_sync_at: str) -> bool:
+        """True if existing record's updated_date is after last_sync_at."""
+        try:
+            updated = existing.get("updated_date") or existing.get("updated_at")
+            if not updated:
+                return False
+            u_dt = datetime.fromisoformat(str(updated).replace("Z", "+00:00"))
+            s_dt = datetime.fromisoformat(str(last_sync_at).replace("Z", "+00:00"))
+            if u_dt.tzinfo is None:
+                u_dt = u_dt.replace(tzinfo=timezone.utc)
+            if s_dt.tzinfo is None:
+                s_dt = s_dt.replace(tzinfo=timezone.utc)
+            return u_dt > s_dt
+        except Exception:
+            return False
+
+    def _record_conflict(self, entity_name: str, external_id: str, policy: str) -> None:
+        """Log an inbound conflict for operator visibility. Best-effort."""
+        try:
+            from database import get_engine_safe
+            from sqlalchemy import text
+            engine = get_engine_safe()
+            if not engine:
+                return
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    INSERT INTO connectors.conflict_log
+                        (company_id, connector_id, entity_type, external_id, policy_applied)
+                    VALUES (:cid, :conn_id, :entity, :ext_id, :policy)
+                """), {
+                    "cid": self.company_id,
+                    "conn_id": self.__class__.__name__.lower().replace("connector", ""),
+                    "entity": entity_name, "ext_id": external_id, "policy": policy,
+                })
+        except Exception as exc:
+            logger.debug("connector: conflict_log write skipped — %s", exc)
+
+    def _record_failed_row(self, entity_name: str, record: dict, error_message: str) -> None:
+        """
+        Persist a failed upsert to the shared failed-row quarantine so it's
+        reviewable/retryable instead of just a log line. Best-effort.
+        """
+        try:
+            from database import get_engine_safe
+            from ingestion.quarantine import record_failed_row
+            record_failed_row(
+                get_engine_safe(), self.company_id,
+                source=f"connector:{self.__class__.__name__.lower().replace('connector', '')}",
+                entity_type=entity_name, row_payload=record, error_message=error_message,
+            )
+        except Exception as exc:
+            logger.debug("connector: failed-row quarantine skipped — %s", exc)
+
+    def _diff_since_last_sync(self, entities_written: dict[str, list]) -> dict:
+        """
+        Compare incoming external_ids against what's currently in raw.* for
+        this company, per entity. Best-effort, read-only — never raises.
+        """
+        diff = {}
+        try:
+            from database import get_engine_safe
+            from sqlalchemy import text
+            engine = get_engine_safe()
+            if not engine:
+                return diff
+            with engine.connect() as conn:
+                for entity, records in entities_written.items():
+                    incoming_ids = {r.get("external_id") for r in records if r.get("external_id")}
+                    if not incoming_ids:
+                        continue
+                    try:
+                        rows = conn.execute(
+                            text(f"SELECT DISTINCT external_id FROM raw.{entity} WHERE company_id = :cid"),
+                            {"cid": self.company_id},
+                        ).fetchall()
+                        existing_ids = {r[0] for r in rows if r[0]}
+                    except Exception:
+                        existing_ids = set()  # table may not exist yet — treat as all-new
+
+                    added   = incoming_ids - existing_ids
+                    removed = existing_ids - incoming_ids
+                    updated = incoming_ids & existing_ids
+                    diff[entity] = {
+                        "added_count":   len(added),
+                        "removed_count": len(removed),
+                        "updated_count": len(updated),
+                    }
+        except Exception as exc:
+            logger.debug("connector: change diff skipped — %s", exc)
+        return diff
 
     def _write_raw_records(self, transformed: dict[str, list]) -> None:
         """
@@ -395,6 +510,14 @@ class BaseConnector(ABC):
             return
 
         company_id = self.company_id
+
+        # "What changed since last sync" — coarse id-set diff, computed
+        # synchronously (fast SELECT) before the delete+append happens in
+        # the background thread below. Not a true field-level diff (doesn't
+        # say *which* fields changed on updated records) — just added vs
+        # removed vs updated-or-unchanged external_ids, compared against
+        # what's already in raw.* for this company from the last sync.
+        self.run_stats["changes"] = self._diff_since_last_sync(entities_written)
 
         def _write():
             try:
