@@ -2,17 +2,11 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { FileText } from "lucide-react";
-import { REVENUE_TYPES } from "@/config/transactionTypes";
+import { getDraftTransactions, getOverdueInvoices } from "@/utils/attentionSignals";
 
 export default function PendingTransactionsAlert({ transactions, draftCount = null, overdueTransactionCount = null }) {
-  const drafts = transactions.filter(t => t.status === "draft" || !t.status);
-  const overdue = transactions.filter(t =>
-    t.payment_status === "unpaid" &&
-    t.status === "posted" &&
-    t.due_date &&
-    new Date(t.due_date) < new Date() &&
-    REVENUE_TYPES.includes(t.transaction_type)
-  );
+  const drafts = getDraftTransactions(transactions);
+  const overdue = getOverdueInvoices(transactions);
 
   const overdueTotal = overdue.reduce((s, t) => s + (t.amount || 0), 0);
   const headlineDraftCount = draftCount !== null ? draftCount : drafts.length;

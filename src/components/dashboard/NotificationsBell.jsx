@@ -5,7 +5,8 @@ import {
   Bell, AlertCircle, FileText, Package, ChevronRight, X,
   Zap, CheckCircle2, ScrollText, GitBranch,
 } from "lucide-react";
-import { isPast, parseISO, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import { getAttentionSignals } from "@/utils/attentionSignals";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
@@ -15,35 +16,18 @@ function timeAgo(iso) {
   catch { return ""; }
 }
 
+const SIGNAL_ICONS = {
+  "overdue-tasks":    { icon: AlertCircle, iconColor: "text-rose-500",   bg: "bg-rose-50" },
+  "overdue-invoices": { icon: FileText,    iconColor: "text-rose-600",   bg: "bg-rose-50" },
+  "draft-tx":         { icon: FileText,    iconColor: "text-amber-600", bg: "bg-amber-50" },
+  "low-stock":        { icon: Package,     iconColor: "text-orange-600", bg: "bg-orange-50" },
+};
+
 function buildLocalNotifs(tasks, transactions, products) {
-  const notifs = [];
-
-  const overdueTasks = tasks.filter(
-    t => t.due_date && t.status !== "completed" && t.status !== "cancelled" && isPast(parseISO(t.due_date))
-  );
-  if (overdueTasks.length > 0) notifs.push({
-    id: "overdue-tasks", icon: AlertCircle, iconColor: "text-rose-500", bg: "bg-rose-50",
-    label: `${overdueTasks.length} overdue task${overdueTasks.length !== 1 ? "s" : ""} need attention`,
-    page: "Tasks", priority: 10,
-  });
-
-  const draftTx = transactions.filter(t => !t.status || t.status === "draft");
-  if (draftTx.length > 0) notifs.push({
-    id: "draft-tx", icon: FileText, iconColor: "text-amber-600", bg: "bg-amber-50",
-    label: `${draftTx.length} transaction${draftTx.length !== 1 ? "s" : ""} pending posting`,
-    page: "Transactions", priority: 8,
-  });
-
-  const lowStock = products.filter(
-    p => p.min_stock_level != null && p.stock_quantity != null && p.stock_quantity < p.min_stock_level
-  );
-  if (lowStock.length > 0) notifs.push({
-    id: "low-stock", icon: Package, iconColor: "text-orange-600", bg: "bg-orange-50",
-    label: `${lowStock.length} product${lowStock.length !== 1 ? "s" : ""} below minimum stock`,
-    page: "Products", priority: 7,
-  });
-
-  return notifs;
+  return getAttentionSignals(tasks, transactions, products).map(s => ({
+    ...s,
+    ...(SIGNAL_ICONS[s.id] || { icon: AlertCircle, iconColor: "text-slate-500", bg: "bg-slate-50" }),
+  }));
 }
 
 export default function NotificationsBell({ tasks = [], transactions = [], products = [], currentUser }) {

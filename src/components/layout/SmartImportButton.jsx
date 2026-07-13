@@ -135,7 +135,7 @@ async function parseFile(file) {
 
 const STEPS = { IDLE: "idle", PARSING: "parsing", MAPPING: "mapping", IMPORTING: "importing", DONE: "done", ERROR: "error" };
 
-export default function SmartImportButton({ currentUser }) {
+export default function QuickImportButton({ currentUser }) {
   const [step, setStep] = useState(STEPS.IDLE);
   const [open, setOpen] = useState(false);
   const [parsed, setParsed] = useState(null);

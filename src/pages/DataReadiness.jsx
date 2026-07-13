@@ -2,8 +2,8 @@
 // DataReadiness — consolidated "why is my dashboard empty" screen
 // ==============================================================
 // Consolidates three previously-scattered diagnostics into one operator-
-// visible page (not admin-only, unlike DataRepair which this page's
-// entity cards absorb):
+// visible page (not admin-only — the now-deleted DataRepair.jsx was;
+// this page's entity cards absorbed its scan/fix functionality):
 //   · Field completeness / duplicates / invalid values — dataquality engine
 //   · Broken relationships + per-table sync freshness — new checks
 //   · Degraded features — which pages/cards go empty when an entity is 0

@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ncClient } from "@/api/ncClient";
 import intelligenceService from "@/services/intelligenceService";
@@ -14,6 +16,7 @@ import {
   ShieldAlert, Target, Brain, Sparkles, Activity,
 } from "lucide-react";
 import { RAILWAY_URL, authHeaders } from "@/config/api";
+import SharedEmptyState from "@/components/shared/EmptyState";
 
 // ── Tab config ─────────────────────────────────────────────────────
 
@@ -542,18 +545,8 @@ function SummaryStrip({ summary }) {
 }
 
 // ── Empty state ────────────────────────────────────────────────────
-
-function EmptyState({ icon: Icon, message, sub }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
-      <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center">
-        <Icon className="w-7 h-7 text-slate-300" />
-      </div>
-      <p className="text-sm font-semibold text-slate-500">{message}</p>
-      {sub && <p className="text-xs text-slate-400 max-w-sm">{sub}</p>}
-    </div>
-  );
-}
+// Uses the shared EmptyState component (src/components/shared/EmptyState.jsx),
+// imported above as SharedEmptyState.
 
 // ── Main page ──────────────────────────────────────────────────────
 
@@ -759,7 +752,7 @@ export default function IntelligenceInbox() {
             {activeTab === "new" && (
               <div className="space-y-3">
                 {tabData.new.length === 0 ? (
-                  <EmptyState icon={Lightbulb} message="No new insights"
+                  <SharedEmptyState icon={Lightbulb} message="No new insights"
                     sub="Insights are written automatically by ML models, agents, enrichment, and reports." />
                 ) : tabData.new.map(insight => (
                   <InsightCard key={insight.id} insight={insight}
@@ -777,7 +770,7 @@ export default function IntelligenceInbox() {
             {activeTab === "risks" && (
               <div className="space-y-3">
                 {risks.length === 0 ? (
-                  <EmptyState icon={ShieldAlert} message="No risks tracked"
+                  <SharedEmptyState icon={ShieldAlert} message="No risks tracked"
                     sub="Risks are created automatically from high-severity insights or can be added manually." />
                 ) : risks.map(risk => (
                   <RiskCard key={risk.id} risk={risk} loading={anyLoading}
@@ -790,7 +783,7 @@ export default function IntelligenceInbox() {
             {activeTab === "opportunities" && (
               <div className="space-y-3">
                 {opportunities.length === 0 ? (
-                  <EmptyState icon={Target} message="No opportunities identified"
+                  <SharedEmptyState icon={Target} message="No opportunities identified"
                     sub="Opportunities are written by Market Intelligence, agents, and ML models." />
                 ) : opportunities.map(opp => (
                   <OpportunityCard key={opp.id} opp={opp} loading={anyLoading}
@@ -802,8 +795,11 @@ export default function IntelligenceInbox() {
             {/* Recommendations tab */}
             {activeTab === "recommendations" && (
               <div className="space-y-3">
+                <Link to={createPageUrl("agents")} className="flex items-center gap-2 text-xs text-slate-500 hover:text-indigo-600 px-1">
+                  <Brain className="w-3.5 h-3.5" /> Agent actions also await approval →
+                </Link>
                 {tabData.recommendations.length === 0 ? (
-                  <EmptyState icon={Zap} message="No pending recommendations"
+                  <SharedEmptyState icon={Zap} message="No pending recommendations"
                     sub="Recommendations are proposed by agents or created from insights." />
                 ) : tabData.recommendations.map(rec => (
                   <RecommendationCard key={rec.id} rec={rec} loading={anyLoading}
@@ -818,7 +814,7 @@ export default function IntelligenceInbox() {
             {activeTab === "actioned" && (
               <div className="space-y-3">
                 {tabData.actioned.length === 0 ? (
-                  <EmptyState icon={CheckCircle2} message="No actioned insights yet" />
+                  <SharedEmptyState icon={CheckCircle2} message="No actioned insights yet" />
                 ) : tabData.actioned.map(insight => (
                   <InsightCard key={insight.id} insight={insight}
                     loading={anyLoading}
@@ -835,7 +831,7 @@ export default function IntelligenceInbox() {
             {activeTab === "dismissed" && (
               <div className="space-y-3">
                 {tabData.dismissed.length === 0 ? (
-                  <EmptyState icon={XCircle} message="No dismissed insights" />
+                  <SharedEmptyState icon={XCircle} message="No dismissed insights" />
                 ) : tabData.dismissed.map(insight => (
                   <div key={insight.id} className="opacity-60">
                     <InsightCard insight={insight}

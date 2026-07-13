@@ -52,7 +52,7 @@ import TrialBannerWrapper from "@/components/shared/TrialBannerWrapper";
 import SetupWizard from "@/components/shared/SetupWizard";
 import GlobalSearchBar from "@/components/layout/GlobalSearchBar";
 import UndoImportButton from "@/components/layout/UndoImportButton";
-import SmartImportButton from "@/components/layout/SmartImportButton";
+import QuickImportButton from "@/components/layout/SmartImportButton";
 import EmptyDatamartButton from "@/components/layout/EmptyDatamartButton";
 import { ncClient } from "@/api/ncClient";
 import TenantGuard from "@/components/shared/TenantGuard";
@@ -71,7 +71,7 @@ const NAV_CONFIG = {
     {
       section: null,
       items: [
-        { name: "CompanyGraphHome",  label: "Company Graph",      icon: Network },
+        { name: "CompanyGraphHome",  label: "Home",      icon: Network },
         { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
         { name: "Tasks",             label: "My Tasks",           icon: CheckSquare },
         { name: "IngestionAgent",    label: "Add Data",           icon: Upload },
@@ -111,21 +111,19 @@ const NAV_CONFIG = {
     {
       section: "Intelligence",
       items: [
-        { name: "IntelligenceInbox",  label: "Intelligence Inbox",   icon: Lightbulb },
         { name: "idjwi",              label: "Idjwi",                icon: Sparkles },
-        { name: "agents",             label: "Agents",               icon: Brain },
+        { name: "agents",             label: "Agents",               icon: Brain, badge: "approvals" },
         { name: "alerts",             label: "Alerts",               icon: Bell, badge: "alerts" },
         { name: "MarketIntelligence", label: "Market Intelligence",  icon: TrendingUp },
         { name: "MapExplorer",        label: "Spatial Intelligence", icon: Map },
         { name: "network",            label: "Network Intelligence", icon: Globe, requiresNetwork: true },
-        { name: "MLModels",           label: "ML Models",            icon: Activity },
         { name: "KineticLayer",       label: "Kinetic Layer",        icon: Zap },
       ],
     },
     {
       section: "Reports",
       items: [
-        { name: "Dashboard",                                icon: LayoutDashboard },
+        { name: "Dashboard",       label: "KPI Dashboard",  icon: LayoutDashboard },
         { name: "Reports",        icon: BarChart2 },
         { name: "QueryBuilder",   label: "Query Builder",   icon: Code2 },
         { name: "ObjectExplorer", label: "Object Explorer", icon: Search },
@@ -154,7 +152,7 @@ const NAV_CONFIG = {
     {
       section: null,
       items: [
-        { name: "CompanyGraphHome",  label: "Company Graph",      icon: Network },
+        { name: "CompanyGraphHome",  label: "Home",      icon: Network },
         { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
         { name: "Tasks",             label: "My Tasks",           icon: CheckSquare },
         { name: "IngestionAgent",    label: "Add Data",           icon: Upload },
@@ -194,9 +192,8 @@ const NAV_CONFIG = {
     {
       section: "Intelligence",
       items: [
-        { name: "IntelligenceInbox",  label: "Intelligence Inbox",   icon: Lightbulb },
         { name: "idjwi",              label: "Idjwi",                icon: Sparkles },
-        { name: "agents",             label: "Agents",               icon: Brain },
+        { name: "agents",             label: "Agents",               icon: Brain, badge: "approvals" },
         { name: "alerts",             label: "Alerts",               icon: Bell, badge: "alerts" },
         { name: "MarketIntelligence", label: "Market Intelligence",  icon: TrendingUp },
         { name: "MapExplorer",        label: "Spatial Intelligence", icon: Map },
@@ -207,7 +204,7 @@ const NAV_CONFIG = {
     {
       section: "Reports",
       items: [
-        { name: "Dashboard",                                icon: LayoutDashboard },
+        { name: "Dashboard",       label: "KPI Dashboard",  icon: LayoutDashboard },
         { name: "Reports",        icon: BarChart2 },
         { name: "QueryBuilder",   label: "Query Builder",   icon: Code2 },
         { name: "ObjectExplorer", label: "Object Explorer", icon: Search },
@@ -233,16 +230,15 @@ const NAV_CONFIG = {
     {
       section: null,
       items: [
-        { name: "CompanyGraphHome",  label: "Company Graph",      icon: Network },
+        { name: "CompanyGraphHome",  label: "Home",      icon: Network },
         { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
       ],
     },
     {
       section: "Intelligence",
       items: [
-        { name: "IntelligenceInbox", label: "Intelligence Inbox", icon: Lightbulb },
         { name: "idjwi",             label: "Idjwi",             icon: Sparkles },
-        { name: "agents",            label: "Agents",            icon: Brain },
+        { name: "agents",            label: "Agents",            icon: Brain, badge: "approvals" },
         { name: "alerts",            label: "Alerts",            icon: Bell, badge: "alerts" },
         { name: "MarketIntelligence",label: "Market Intelligence",icon: TrendingUp },
       ],
@@ -250,7 +246,7 @@ const NAV_CONFIG = {
     {
       section: "Reports",
       items: [
-        { name: "Dashboard",                            icon: LayoutDashboard },
+        { name: "Dashboard",     label: "KPI Dashboard", icon: LayoutDashboard },
         { name: "Reports",      icon: BarChart2 },
         { name: "QueryBuilder", label: "Query Builder", icon: Code2 },
         { name: "EntityGraph",  label: "Entity Graph",  icon: Network },
@@ -367,6 +363,7 @@ export default function Layout({ children, currentPageName }) {
   const [showWizard, setShowWizard] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [criticalAlerts, setCriticalAlerts] = useState(0);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
   const [expandedSections, setExpandedSections] = useState(/** @type {Record<string,boolean>} */ ({}));
   const toggleSection = (/** @type {string} */ key) => setExpandedSections((/** @type {Record<string,boolean>} */ p) => ({ ...p, [key]: !p[key] }));
   const [sidebarWidth, setSidebarWidth] = useState(256);
@@ -422,6 +419,23 @@ export default function Layout({ children, currentPageName }) {
       .then(data => setCriticalAlerts(data?.critical_count || 0))
       .catch(() => {});
   }, []);
+
+  // Combined "needs approval" signal — agent approvals + Intelligence Inbox
+  // recommendations — one badge instead of two silent counts (see ApprovalGate.jsx
+  // and IntelligenceInbox.jsx, which remain separate queues under the hood).
+  useEffect(() => {
+    const companyId = currentUser?.company_id;
+    if (!companyId) return;
+    const base = "https://newsconseenwebapp-production.up.railway.app";
+    Promise.all([
+      fetch(`${base}/agents/approvals/pending?company_id=${companyId}`).then(r => r.ok ? r.json() : { pending: [] }).catch(() => ({ pending: [] })),
+      fetch(`${base}/intelligence/inbox?company_id=${companyId}&limit=200`).then(r => r.ok ? r.json() : {}).catch(() => ({})),
+    ]).then(([approvals, inbox]) => {
+      const pendingApprovalCount = (approvals?.pending || []).length;
+      const pendingRecCount = (inbox?.recommendations || []).filter(r => r.status === "proposed").length;
+      setPendingApprovals(pendingApprovalCount + pendingRecCount);
+    }).catch(() => {});
+  }, [currentUser?.company_id]);
 
   // Auto-assign admin to their enterprise if company_id is missing
   useEffect(() => {
@@ -613,7 +627,10 @@ export default function Layout({ children, currentPageName }) {
                         isActive={currentPageName === item.name}
                         primaryColor={branding.primaryColor}
                         onClick={() => handleNavClick(item.name)}
-                        showRedDot={item.badge === "alerts" && criticalAlerts > 0}
+                        showRedDot={
+                          (item.badge === "alerts" && criticalAlerts > 0) ||
+                          (item.badge === "approvals" && pendingApprovals > 0)
+                        }
                       />
                     ))}
                     {needsExpand && (
@@ -702,7 +719,7 @@ export default function Layout({ children, currentPageName }) {
             {/* Empty Datamart + Smart Import + Undo */}
             <div className="hidden sm:flex items-center gap-1.5 shrink-0">
               <EmptyDatamartButton currentUser={currentUser} />
-              <SmartImportButton currentUser={currentUser} />
+              <QuickImportButton currentUser={currentUser} />
               <UndoImportButton />
             </div>
 

@@ -5,7 +5,8 @@
  *   1. Quick navigation  — all main pages
  *   2. Ask Copilot       — type a question, opens /copilot with pre-fill
  *   3. Actions           — trigger ETL, run workflows, open settings
- *   4. Record search     — live Base44 search across 4 entity types
+ *   4. Record search     — delegates to GlobalSearchBar (the real search),
+ *                          not reimplemented here
  *
  * Invoked:
  *   - Keyboard: Cmd/Ctrl + K
@@ -15,12 +16,11 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { ncClient } from "@/api/ncClient";
 import {
   Search, X, LayoutDashboard, Users, Building2, Package, Wrench,
   CheckSquare, Receipt, BarChart2, Sparkles, Bell, Plug, Brain,
   GitBranch, Settings, Zap, RefreshCw, ArrowLeftRight, MapPin, Link2,
-  ChevronRight, Loader2, Command,
+  ChevronRight, Command, Plus,
 } from "lucide-react";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
@@ -43,6 +43,18 @@ const NAV_COMMANDS = [
   { id: "nav-connectors",   label: "Connectors",          page: "Connectors",  icon: Plug,            section: "Navigate" },
   { id: "nav-reports",      label: "Reports",             page: "Reports",     icon: BarChart2,       section: "Navigate" },
   { id: "nav-settings",     label: "Settings",            page: "Settings",    icon: Settings,        section: "Navigate" },
+];
+
+// ── Create commands ────────────────────────────────────────────────────────────
+// Reuses each entity page's existing create form (PageHeader's onAdd pattern) —
+// navigates to the page with ?create=1, which the page reads on mount to open
+// its own form. No new global modal host; the 5 core entities only.
+const CREATE_COMMANDS = [
+  { id: "create-person",      label: "Create Person",      page: "People",       icon: Plus, section: "Create", create: true },
+  { id: "create-enterprise",  label: "Create Enterprise",  page: "Enterprises",  icon: Plus, section: "Create", create: true },
+  { id: "create-product",     label: "Create Product",     page: "Products",     icon: Plus, section: "Create", create: true },
+  { id: "create-task",        label: "Create Task",        page: "Tasks",        icon: Plus, section: "Create", create: true },
+  { id: "create-transaction", label: "Create Transaction", page: "Transactions", icon: Plus, section: "Create", create: true },
 ];
 
 // ── Action commands ───────────────────────────────────────────────────────────
@@ -80,7 +92,6 @@ export default function CommandPalette({ currentUser }) {
   const [open,      setOpen]      = useState(false);
   const [query,     setQuery]     = useState("");
   const [results,   setResults]   = useState([]);
-  const [loading,   setLoading]   = useState(false);
   const [selected,  setSelected]  = useState(0);
   const [feedback,  setFeedback]  = useState(null);
   const inputRef  = useRef(null);
@@ -140,57 +151,23 @@ export default function CommandPalette({ currentUser }) {
         section: "Idjwi",
         _query:  query,
       }] : []),
+      ...CREATE_COMMANDS.filter(c => c.label.toLowerCase().includes(q)),
       ...ACTION_COMMANDS.filter(c => c.label.toLowerCase().includes(q)),
       ...NAV_COMMANDS.filter(c => c.label.toLowerCase().includes(q)),
     ];
 
-    setResults(filtered);
-    setSelected(0);
+    // Record search is owned by GlobalSearchBar (real server-side /search,
+    // unlimited results) — delegate to it instead of re-fetching records here.
+    const searchDelegate = q.length >= 2 ? [{
+      id:      "search-records",
+      label:   `Search records for "${query}" →`,
+      icon:    Search,
+      section: "Search",
+      _query:  query,
+    }] : [];
 
-    // Live record search (debounced in the effect)
-    if (q.length >= 2 && currentUser) {
-      setLoading(true);
-      const scope = currentUser.company_id ? { company_id: currentUser.company_id } : {};
-      Promise.all([
-        ncClient.entities.Person.filter(scope, undefined, 30).catch(() => []),
-        ncClient.entities.Enterprise.filter(scope, undefined, 30).catch(() => []),
-        ncClient.entities.Task.filter(scope, undefined, 30).catch(() => []),
-        ncClient.entities.Product.filter(scope, undefined, 30).catch(() => []),
-      ]).then(([people, enterprises, tasks, products]) => {
-        const records = [
-          ...people
-            .filter(p => (`${p.first_name} ${p.last_name} ${p.email}`).toLowerCase().includes(q))
-            .slice(0, 4)
-            .map(p => ({
-              id: `rec-person-${p.id}`, label: `${p.first_name || ""} ${p.last_name || ""}`.trim() || p.email,
-              sub: p.email, icon: Users, section: "Records", page: "People",
-            })),
-          ...enterprises
-            .filter(e => (e.enterprise_name || "").toLowerCase().includes(q))
-            .slice(0, 3)
-            .map(e => ({
-              id: `rec-ent-${e.id}`, label: e.enterprise_name, sub: e.city || "Enterprise",
-              icon: Building2, section: "Records", page: "Enterprises",
-            })),
-          ...tasks
-            .filter(t => (t.title || "").toLowerCase().includes(q))
-            .slice(0, 3)
-            .map(t => ({
-              id: `rec-task-${t.id}`, label: t.title, sub: t.status,
-              icon: CheckSquare, section: "Records", page: "Tasks",
-            })),
-          ...products
-            .filter(p => (p.name || "").toLowerCase().includes(q))
-            .slice(0, 3)
-            .map(p => ({
-              id: `rec-prod-${p.id}`, label: p.name, sub: p.status,
-              icon: Package, section: "Records", page: "Products",
-            })),
-        ];
-        setResults(prev => [...prev, ...records]);
-        setLoading(false);
-      }).catch(() => setLoading(false));
-    }
+    setResults([...filtered, ...searchDelegate]);
+    setSelected(0);
   }, [query, currentUser]);
 
   // Keyboard navigation
@@ -212,6 +189,18 @@ export default function CommandPalette({ currentUser }) {
     // Ask copilot
     if (item.id === "ask-idjwi") {
       navigate(createPageUrl("idjwi") + `?q=${encodeURIComponent(item._query)}`);
+      setOpen(false);
+      return;
+    }
+    // Delegate to GlobalSearchBar — the real record search
+    if (item.id === "search-records") {
+      window.dispatchEvent(new CustomEvent("focus-global-search", { detail: { query: item._query } }));
+      setOpen(false);
+      return;
+    }
+    // Create — navigate to the entity page with its existing create form pre-opened
+    if (item.create && item.page) {
+      navigate(`${createPageUrl(item.page)}?create=1`);
       setOpen(false);
       return;
     }
@@ -260,7 +249,6 @@ export default function CommandPalette({ currentUser }) {
             placeholder="Navigate, search records, or ask a question…"
             className="flex-1 text-sm text-slate-800 placeholder-slate-400 focus:outline-none bg-transparent"
           />
-          {loading && <Loader2 className="w-4 h-4 text-slate-400 animate-spin shrink-0" />}
           <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono shrink-0">
             <kbd className="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200">⌘K</kbd>
             <span>to close</span>
@@ -276,7 +264,7 @@ export default function CommandPalette({ currentUser }) {
 
         {/* Results */}
         <div ref={listRef} className="max-h-[60vh] overflow-y-auto py-2">
-          {results.length === 0 && !loading && (
+          {results.length === 0 && (
             <p className="text-xs text-slate-400 text-center py-8">No results — try a different query</p>
           )}
 

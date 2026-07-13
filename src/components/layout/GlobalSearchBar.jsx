@@ -175,6 +175,17 @@ export default function GlobalSearchBar({ currentUser }) {
   const debounceRef = useRef(null);
   const navigate   = useNavigate();
 
+  // CommandPalette delegates record search here instead of reimplementing it.
+  useEffect(() => {
+    function onFocusSearch(e) {
+      const q = e.detail?.query || "";
+      setInput(q);
+      inputRef.current?.focus();
+    }
+    window.addEventListener("focus-global-search", onFocusSearch);
+    return () => window.removeEventListener("focus-global-search", onFocusSearch);
+  }, []);
+
   useEffect(() => {
     if (!input.trim()) {
       setResults([]);

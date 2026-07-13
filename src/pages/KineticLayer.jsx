@@ -10,6 +10,8 @@
  *   Action Definition (this page) → Execution (Base44 SDK write-back) → Audit Log (python_layer)
  */
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import { ncClient } from "@/api/ncClient";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
@@ -331,6 +333,14 @@ function ExecuteActionModal({ action, currentUser, listFn, withScope, onClose, o
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {action.requiresApproval && (
+          <div className="px-5 pt-2">
+            <Link to={createPageUrl("agents")} className="text-[10px] text-slate-400 hover:text-indigo-600">
+              This and other pending approvals are tracked in Agents →
+            </Link>
+          </div>
+        )}
 
         {/* Object types */}
         <div className="px-5 pt-3 pb-1 flex items-center gap-2 flex-wrap">

@@ -28,6 +28,7 @@ import {
   buildGraphData, toCytoscapeElements, filterForMode,
   NODE_COLORS, GRAPH_MODES,
 } from "@/services/companyGraphService";
+import { getAttentionSignals } from "@/utils/attentionSignals";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 
@@ -615,6 +616,12 @@ export default function CompanyGraphHome() {
     [filteredNodes, filteredEdges],
   );
 
+  // ── What needs attention today — ranked, shared with NotificationsBell ──────
+  const attentionSignals = useMemo(
+    () => getAttentionSignals(tasks, transactions, products),
+    [tasks, transactions, products]
+  );
+
   // ── Pulse bar highlight ──────────────────────────────────────────────────────
   const pulseHighlight = useMemo(() => {
     if (!activeFilter) return null;
@@ -704,6 +711,33 @@ export default function CompanyGraphHome() {
 
           {isLoading && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
         </div>
+      </div>
+
+      {/* ── What needs attention today ──────────────────────────────────────── */}
+      <div className="flex items-center gap-2 flex-wrap shrink-0">
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mr-1">Needs attention</span>
+        {attentionSignals.length === 0 ? (
+          <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+            <Circle className="w-2 h-2 fill-emerald-400 text-emerald-400" /> All clear
+          </span>
+        ) : (
+          attentionSignals.map(s => (
+            <button
+              key={s.id}
+              onClick={() => navigate(createPageUrl(s.page))}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 transition-colors"
+            >
+              <AlertCircle className="w-3.5 h-3.5" />
+              {s.label}
+            </button>
+          ))
+        )}
+        <button
+          onClick={() => navigate(createPageUrl("Dashboard"))}
+          className="ml-auto text-xs text-slate-400 hover:text-indigo-600 flex items-center gap-1"
+        >
+          <BarChart3 className="w-3.5 h-3.5" /> View detailed KPIs →
+        </button>
       </div>
 
       {/* ── Type filter toggles ─────────────────────────────────────────────── */}

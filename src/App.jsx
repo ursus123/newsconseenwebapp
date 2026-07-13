@@ -14,7 +14,6 @@ import Onboarding from './pages/Onboarding';
 import Pricing from './pages/Pricing';
 import Billing from './pages/Billing';
 import Settings from './pages/Settings';
-import DataRepair from './pages/DataRepair';
 import DataReadiness from './pages/DataReadiness';
 import StockCounter from './pages/StockCounter';
 import MarketIntelligence from './pages/MarketIntelligence';
@@ -26,7 +25,6 @@ import DesktopSettings from './pages/DesktopSettings';
 import FileManager from './pages/FileManager';
 import Attendance from './pages/Attendance';
 import MapExplorer from './pages/MapExplorer';
-import Copilot from './pages/Copilot';
 import Idjwi from './pages/Idjwi';
 import AlertsPageWrapper from './pages/AlertsPageWrapper';
 import NetworkPage from './pages/NetworkPage';
@@ -44,14 +42,6 @@ import Agents from './pages/Agents';
 import Workflows from './pages/Workflows';
 import TenantAdmin from './pages/TenantAdmin';
 import Mobile from './pages/Mobile';
-import Documents from './pages/Documents';
-import Schedules from './pages/Schedules';
-import Signals from './pages/Signals';
-import Channels from './pages/Channels';
-import Territories from './pages/Territories';
-import Animals from './pages/Animals';
-import Plots from './pages/Plots';
-import Observations from './pages/Observations';
 import IngestionAgent from './pages/IngestionAgent';
 import Layout from './Layout.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
@@ -128,7 +118,6 @@ const AuthenticatedApp = () => {
       <Route path="/Pipelines" element={<LayoutWrapper currentPageName="Pipelines"><Pipelines /></LayoutWrapper>} />
       <Route path="/Billing" element={<LayoutWrapper currentPageName="Billing"><Billing /></LayoutWrapper>} />
       <Route path="/Settings" element={<LayoutWrapper currentPageName="Settings"><Settings /></LayoutWrapper>} />
-      <Route path="/DataRepair" element={<LayoutWrapper currentPageName="Data Repair"><DataRepair /></LayoutWrapper>} />
       <Route path="/DataReadiness" element={<LayoutWrapper currentPageName="Data Readiness"><DataReadiness /></LayoutWrapper>} />
       <Route path="/StockCounter" element={<LayoutWrapper currentPageName="StockCounter"><StockCounter /></LayoutWrapper>} />
       <Route path="/MarketIntelligence" element={<LayoutWrapper currentPageName="Market Intelligence"><MarketIntelligence /></LayoutWrapper>} />
@@ -137,7 +126,6 @@ const AuthenticatedApp = () => {
       <Route path="/ClientOnboarding" element={<LayoutWrapper currentPageName="Enroll Student/Client"><ClientOnboarding /></LayoutWrapper>} />
       <Route path="/Attendance" element={<LayoutWrapper currentPageName="Attendance"><Attendance /></LayoutWrapper>} />
       <Route path="/MapExplorer" element={<LayoutWrapper currentPageName="Map Explorer"><MapExplorer /></LayoutWrapper>} />
-      <Route path="/idjwi"   element={<LayoutWrapper currentPageName="Idjwi"><Idjwi /></LayoutWrapper>} />
       <Route path="/copilot" element={<LayoutWrapper currentPageName="Idjwi"><Idjwi /></LayoutWrapper>} />
       <Route path="/alerts" element={<LayoutWrapper currentPageName="Operational Alerts"><AlertsPageWrapper /></LayoutWrapper>} />
       <Route path="/network" element={<LayoutWrapper currentPageName="Network"><NetworkPage /></LayoutWrapper>} />
@@ -149,14 +137,6 @@ const AuthenticatedApp = () => {
       <Route path="/Workflows" element={<LayoutWrapper currentPageName="Workflows"><Workflows /></LayoutWrapper>} />
       <Route path="/ObjectViews" element={<LayoutWrapper currentPageName="Object Views"><ObjectViews /></LayoutWrapper>} />
       <Route path="/TenantAdmin" element={<LayoutWrapper currentPageName="Tenant Admin"><TenantAdmin /></LayoutWrapper>} />
-      <Route path="/Documents" element={<LayoutWrapper currentPageName="Documents"><Documents /></LayoutWrapper>} />
-      <Route path="/Schedules" element={<LayoutWrapper currentPageName="Schedules"><Schedules /></LayoutWrapper>} />
-      <Route path="/Signals" element={<LayoutWrapper currentPageName="Signals"><Signals /></LayoutWrapper>} />
-      <Route path="/Channels" element={<LayoutWrapper currentPageName="Channels"><Channels /></LayoutWrapper>} />
-      <Route path="/Territories" element={<LayoutWrapper currentPageName="Territories"><Territories /></LayoutWrapper>} />
-      <Route path="/Animals" element={<LayoutWrapper currentPageName="Animals"><Animals /></LayoutWrapper>} />
-      <Route path="/Plots" element={<LayoutWrapper currentPageName="Plots"><Plots /></LayoutWrapper>} />
-      <Route path="/Observations" element={<LayoutWrapper currentPageName="Observations"><Observations /></LayoutWrapper>} />
       <Route path="/IngestionAgent" element={<LayoutWrapper currentPageName="Ingestion Agent"><IngestionAgent /></LayoutWrapper>} />
       {/* Desktop Shell — NO layout wrapper, full screen */}
       <Route path="/Desktop" element={<Desktop />} />

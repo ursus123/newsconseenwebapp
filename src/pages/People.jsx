@@ -14,6 +14,7 @@ import dataService from "@/services/dataService";
 import { Badge } from "@/components/ui/badge";
 import { fuzzyFilter } from "@/components/shared/fuzzySearch";
 import BulkImportDialog from "../components/shared/BulkImportDialog";
+import EmptyState from "../components/shared/EmptyState";
 import SearchFilterBar from "../components/shared/SearchFilterBar";
 import BulkActionBar from "../components/shared/BulkActionBar";
 import { Upload, Users, CheckCircle, Clock, Heart, ShieldAlert, Search, BarChart2, X } from "lucide-react";
@@ -219,6 +220,16 @@ export default function People() {
     return () => document.removeEventListener("visibilitychange", fn);
   }, [qc]);
 
+  // Global create flow — CommandPalette's "Create Person" navigates here with
+  // ?create=1, which auto-opens the same form the page's own Add button uses.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("create") === "1") {
+      setEditing(null);
+      setFormOpen(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+
   const companyId  = currentUser?.company_id;
   const perms      = usePermissions(currentUser);
   const listFn     = useEntityListFn(currentUser);
@@ -422,19 +433,15 @@ export default function People() {
 
       {/* Empty state */}
       {!isLoading && people.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
-          <Users className="w-10 h-10 text-slate-200 mb-3" />
-          <p className="text-slate-400 font-medium mb-1">No people yet</p>
-          <p className="text-slate-300 text-sm mb-4">Add your staff, clients and contractors</p>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">
-              Add Person
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="rounded-xl">
-              Import from Excel
-            </Button>
-          </div>
-        </div>
+        <EmptyState
+          icon={Users}
+          title="No people yet"
+          subtitle="Add your staff, clients and contractors"
+          actions={[
+            { label: "Add Person", onClick: () => { setEditing(null); setFormOpen(true); } },
+            { label: "Import from Excel", onClick: () => setImportOpen(true), variant: "outline" },
+          ]}
+        />
       ) : groupBy !== "none" ? (
         <PeopleGroupedView
           people={processedPeople}

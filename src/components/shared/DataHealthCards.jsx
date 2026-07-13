@@ -1,10 +1,9 @@
 // ==============================================================
 // DataHealthCards — shared entity scan/repair UI
 // ==============================================================
-// Extracted from DataRepair.jsx so both DataRepair.jsx (legacy,
-// unchanged behavior) and DataReadiness.jsx (new, read-only for
-// non-admins) can render the same per-entity scan cards without
-// duplicating the fetch/compute logic.
+// Originally extracted from the now-deleted DataRepair.jsx (superseded by
+// DataReadiness.jsx, which absorbed its scan/fix UI — see DataReadiness.jsx's
+// header) so the per-entity scan cards have a single implementation.
 // ==============================================================
 
 import React, { useState } from "react";

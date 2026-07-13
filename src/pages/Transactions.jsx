@@ -374,6 +374,16 @@ export default function Transactions() {
     return () => document.removeEventListener("visibilitychange", fn);
   }, [qc]);
 
+  // Global create flow — CommandPalette's "Create Transaction" navigates here
+  // with ?create=1, which auto-opens the same form the page's own Add button uses.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("create") === "1") {
+      setEditing(null);
+      setFormOpen(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+
   const isAdmin   = currentUser?.role === "admin" || currentUser?.role === "super_admin";
   const companyId = currentUser?.company_id;
   const perms     = usePermissions(currentUser);

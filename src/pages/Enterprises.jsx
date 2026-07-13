@@ -145,6 +145,16 @@ export default function Enterprises() {
     return () => document.removeEventListener("visibilitychange", fn);
   }, [qc]);
 
+  // Global create flow — CommandPalette's "Create Enterprise" navigates here
+  // with ?create=1, which auto-opens the same form the page's own Add button uses.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("create") === "1") {
+      setEditing(null);
+      setFormOpen(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+
   const companyId  = currentUser?.company_id;
   const { t } = useTerminology(currentUser);
   const perms      = usePermissions(currentUser);

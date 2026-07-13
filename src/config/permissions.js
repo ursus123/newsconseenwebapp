@@ -82,7 +82,6 @@ export const ROLE_PERMISSIONS = {
       "UserManagement",
       "TaxonomyAdmin",
       "DataModels",
-      "DataRepair",
       "DataReadiness",
       "Pipelines",
       "network",

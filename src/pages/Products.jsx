@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageHeader from "../components/shared/PageHeader";
+import EmptyState from "../components/shared/EmptyState";
 import DataTable from "../components/shared/DataTable";
 import DeleteDialog from "../components/shared/DeleteDialog";
 import ProductForm from "../components/products/ProductForm";
@@ -208,6 +209,16 @@ export default function Products() {
     return () => document.removeEventListener("visibilitychange", fn);
   }, [qc]);
 
+  // Global create flow — CommandPalette's "Create Product" navigates here
+  // with ?create=1, which auto-opens the same form the page's own Add button uses.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("create") === "1") {
+      setEditing(null);
+      setFormOpen(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+
   const companyId = currentUser?.company_id;
   const perms = usePermissions(currentUser);
   const listFn = useEntityListFn(currentUser);
@@ -394,15 +405,15 @@ export default function Products() {
       />
 
       {!isLoading && products.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
-          <Package className="w-10 h-10 text-slate-200 mb-3" />
-          <p className="text-slate-400 font-medium mb-1">No products or items yet</p>
-          <p className="text-slate-300 text-sm mb-4">Add medications, equipment and supplies to track inventory</p>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">Add First Item</Button>
-            <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="rounded-xl">Import from Excel</Button>
-          </div>
-        </div>
+        <EmptyState
+          icon={Package}
+          title="No products or items yet"
+          subtitle="Add medications, equipment and supplies to track inventory"
+          actions={[
+            { label: "Add First Item", onClick: () => { setEditing(null); setFormOpen(true); } },
+            { label: "Import from Excel", onClick: () => setImportOpen(true), variant: "outline" },
+          ]}
+        />
       ) : (
         <DataTable
           {...ss.tableProps}

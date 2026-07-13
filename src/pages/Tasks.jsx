@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import PageHeader from "../components/shared/PageHeader";
+import EmptyState from "../components/shared/EmptyState";
 import { usePermissions } from "@/components/shared/usePermissions";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 import dataService from "@/services/dataService";
@@ -195,10 +196,7 @@ function MyTasksList({ tasks }) {
       </div>
       <div className="space-y-3">
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
-            <CheckCircle className="w-8 h-8 text-emerald-200 mb-2" />
-            <p className="text-sm text-slate-400 font-medium">All clear! No tasks here.</p>
-          </div>
+          <EmptyState icon={CheckCircle} title="All clear! No tasks here." />
         ) : filtered.map((task) => <TaskCard key={task.id} task={task} isAdmin={false} />)}
       </div>
     </div>
@@ -233,6 +231,16 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
   const qc = useQueryClient();
   const perms = usePermissions(currentUser);
   const { toast } = useToast();
+
+  // Global create flow — CommandPalette's "Create Task" navigates here with
+  // ?create=1, which auto-opens the same form the page's own Add button uses.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("create") === "1") {
+      setEditing(null);
+      setFormOpen(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   const invalidate = () => { qc.invalidateQueries({ queryKey: ["tasks"] }); qc.refetchQueries({ queryKey: ["tasks"] }); };
 
@@ -564,10 +572,7 @@ function AdminTasksView({ tasks, appUsers, enterprises, products, services, peop
       {viewMode === "list" && (
         <div className="space-y-3">
           {ss.processedData.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-100 rounded-2xl">
-              <Clock className="w-8 h-8 text-slate-200 mb-2" />
-              <p className="text-sm text-slate-300">No tasks match this filter</p>
-            </div>
+            <EmptyState icon={Clock} title="No tasks match this filter" />
           ) : ss.processedData.map((task) => renderCard(task, true))}
         </div>
       )}

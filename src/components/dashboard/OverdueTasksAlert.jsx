@@ -3,14 +3,16 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { AlertCircle } from "lucide-react";
 import { differenceInDays, parseISO } from "date-fns";
+import { getOverdueTasks } from "@/utils/attentionSignals";
 
 export default function OverdueTasksAlert({ tasks, overdueCount = null }) {
-  const overdue = tasks
-    .filter((t) => t.due_date && t.status !== "completed" && t.status !== "cancelled" && new Date() > parseISO(t.due_date))
+  const allOverdue = getOverdueTasks(tasks);
+  const overdue = allOverdue
+    .slice()
     .sort((a, b) => parseISO(a.due_date) - parseISO(b.due_date))
     .slice(0, 5);
 
-  const headlineCount = overdueCount !== null ? overdueCount : tasks.filter((t) => t.due_date && t.status !== "completed" && t.status !== "cancelled" && new Date() > parseISO(t.due_date)).length;
+  const headlineCount = overdueCount !== null ? overdueCount : allOverdue.length;
   if (headlineCount === 0) return null;
 
   return (

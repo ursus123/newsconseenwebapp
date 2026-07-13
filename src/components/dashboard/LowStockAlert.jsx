@@ -2,11 +2,10 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Package } from "lucide-react";
+import { getLowStockProducts } from "@/utils/attentionSignals";
 
 export default function LowStockAlert({ products, lowStockCount = null }) {
-  const lowStock = products.filter(
-    (p) => p.min_stock_level != null && p.stock_quantity != null && p.stock_quantity < p.min_stock_level
-  );
+  const lowStock = getLowStockProducts(products);
 
   const headlineCount = lowStockCount !== null ? lowStockCount : lowStock.length;
   if (headlineCount === 0) return null;
