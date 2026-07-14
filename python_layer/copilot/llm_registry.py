@@ -105,6 +105,18 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
 
 IDJWI_CAPABILITIES = [
     {
+        "id": "read_default_brain",
+        "name": "Read Default Brain",
+        "description": "Answer from Newsconseen product knowledge, ontology, source registry, and public-safe defaults.",
+        "requires_llm": False,
+    },
+    {
+        "id": "read_public_data",
+        "name": "Read Public Data",
+        "description": "Use public APIs and web-accessible sources without touching tenant records.",
+        "requires_llm": False,
+    },
+    {
         "id": "read_company_data",
         "name": "Read Company Data",
         "description": "Query live operational, financial, people, product, and task data.",
@@ -177,8 +189,9 @@ TOOL_CAPABILITIES = {
     "get_entity_join": "read_company_data",
     "get_company_graph_context": "read_company_data",
     "get_enrichment_context": "read_company_data",
-    "recommend_enrichment_sources": "read_company_data",
-    "get_ontology_schema": "read_company_data",
+    # Recommends sources by entity_type/industry/risk — no tenant records read.
+    "recommend_enrichment_sources": "read_default_brain",
+    "get_ontology_schema": "read_default_brain",
     "search_intelligence": "search_intelligence",
     "save_copilot_memory": "save_memory",
     "list_copilot_memory": "save_memory",
@@ -193,8 +206,8 @@ TOOL_CAPABILITIES = {
     "get_agent_status": "run_agents",
     "execute_ingestion_plan": "create_task",
     "import_records": "create_task",
-    "web_search": "read_company_data",
-    "search_public_data": "read_company_data",
+    "web_search": "read_public_data",
+    "search_public_data": "read_public_data",
 }
 
 ACTION_CAPABILITIES = {

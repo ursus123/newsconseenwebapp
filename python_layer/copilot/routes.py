@@ -25,7 +25,7 @@ from copilot.llm_registry import (
     list_models,
     provider_status,
 )
-from onboarding.auth import verify_tenant_access
+from onboarding.auth import try_tenant_access, verify_tenant_access
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,10 @@ COPILOT_BACKEND = os.getenv("COPILOT_BACKEND", "anthropic")
 
 class AskRequest(BaseModel):
     question:             str
-    company_id:           str
+    # Optional — a caller with no company yet (anonymous, demo, or a signed-in
+    # user not authorized for this company) still gets Idjwi's default brain.
+    # Only tenant-scoped tools require a verified company_id.
+    company_id:           Optional[str] = ""
     enterprise_name:      Optional[str] = ""
     history:              Optional[list[dict]] = []
     context:              Optional[dict] = {}
@@ -208,25 +211,34 @@ def ask(
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    if not request.company_id:
-        raise HTTPException(status_code=400, detail="company_id is required")
-
     logger.info("copilot/ask: company_id=%s question=%r", request.company_id, request.question[:80])
 
-    verify_tenant_access(authorization, request.company_id)
-
-    from copilot.idjwi_security import principal_from_headers, require_api_key
+    from copilot.idjwi_security import default_brain_principal, principal_from_headers, require_api_key
 
     api_gate = require_api_key(x_idjwi_api_key)
     if not api_gate.get("allowed"):
         raise HTTPException(status_code=401, detail=api_gate.get("reason"))
 
-    principal = principal_from_headers(
-        company_id=request.company_id,
-        user_id=x_idjwi_user,
-        role=x_idjwi_role,
-        plan=x_idjwi_plan,
-    )
+    # Tenant auth is no longer a gate on the whole request — Idjwi's default
+    # brain (product knowledge, ontology, source registry, public data) needs
+    # no company_id at all. Only tools that touch this company's records
+    # require tenant access; that's enforced per-tool by authorize_capability()
+    # via principal.tenant_authorized, not here.
+    access = try_tenant_access(authorization, request.company_id)
+    if access["authorized"]:
+        principal = principal_from_headers(
+            company_id=request.company_id,
+            user_id=x_idjwi_user,
+            role=x_idjwi_role,
+            plan=x_idjwi_plan,
+            tenant_authorized=True,
+        )
+    else:
+        logger.info(
+            "copilot/ask: no tenant access for company_id=%s (%s) — answering from default brain only",
+            request.company_id, access["reason"],
+        )
+        principal = default_brain_principal(company_id=request.company_id, user_id=x_idjwi_user)
 
     engine = CopilotEngine(
         company_id=request.company_id,
@@ -753,17 +765,22 @@ async def ask_stream(
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    verify_tenant_access(authorization, request.company_id)
-
-    from copilot.idjwi_security import principal_from_headers, require_api_key
+    from copilot.idjwi_security import default_brain_principal, principal_from_headers, require_api_key
     api_gate = require_api_key(x_idjwi_api_key)
     if not api_gate.get("allowed"):
         raise HTTPException(status_code=401, detail=api_gate.get("reason"))
-    principal = principal_from_headers(
-        company_id=request.company_id,
-        user_id=x_idjwi_user,
-        role=x_idjwi_role,
-    )
+
+    # Same soft tenant-auth as /copilot/ask — see the comment there.
+    access = try_tenant_access(authorization, request.company_id)
+    if access["authorized"]:
+        principal = principal_from_headers(
+            company_id=request.company_id,
+            user_id=x_idjwi_user,
+            role=x_idjwi_role,
+            tenant_authorized=True,
+        )
+    else:
+        principal = default_brain_principal(company_id=request.company_id, user_id=x_idjwi_user)
 
     async def generate():
         try:

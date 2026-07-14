@@ -8098,24 +8098,32 @@ def execute_tool(
             "message": f"The tool '{tool_name}' is not available. I cannot retrieve this data.",
         }
 
+    from copilot.llm_registry import capability_for_tool
+    capability_id = capability_for_tool(tool_name)
     try:
-        from copilot.llm_registry import capability_for_tool
         from copilot.idjwi_security import authorize_capability
-        capability_id = capability_for_tool(tool_name)
         gate = authorize_capability(
             capability_id,
             principal=principal,
             llm_available=llm_available,
         )
-        if not gate.get("allowed"):
-            return {
-                "error": "Capability denied",
-                "capability": capability_id,
-                "unable_to_fetch": True,
-                "message": gate.get("reason", "This Idjwi capability is not available."),
-            }
-    except Exception:
-        pass
+    except Exception as e:
+        # Fail CLOSED, not open: a broken gate check must never fall through
+        # to running a possibly tenant-scoped tool unchecked.
+        logger.error("Tool %s: capability gate raised, denying by default: %s", tool_name, e)
+        return {
+            "error": "Capability check failed",
+            "capability": capability_id,
+            "unable_to_fetch": True,
+            "message": "I could not verify access for this action, so I did not run it. Please try again.",
+        }
+    if not gate.get("allowed"):
+        return {
+            "error": "Capability denied",
+            "capability": capability_id,
+            "unable_to_fetch": True,
+            "message": gate.get("reason", "This Idjwi capability is not available."),
+        }
 
     started = time.perf_counter()
     token = _CURRENT_PRINCIPAL.set(principal)

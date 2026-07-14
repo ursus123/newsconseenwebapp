@@ -89,6 +89,24 @@ def verify_tenant_access(authorization: Optional[str], company_id: str) -> dict:
     raise HTTPException(status_code=403, detail="Not authorized for this company")
 
 
+def try_tenant_access(authorization: Optional[str], company_id: Optional[str]) -> dict:
+    """
+    Like verify_tenant_access but never raises. Used by endpoints that must
+    still answer from Idjwi's default brain (product knowledge, ontology,
+    public data — no tenant records) when the caller isn't authorized for
+    company_id, instead of blocking the whole request with a 403.
+
+    Returns {"authorized": bool, "user": dict|None, "reason": str|None}.
+    """
+    if not company_id:
+        return {"authorized": False, "user": None, "reason": "No company_id supplied."}
+    try:
+        user = verify_tenant_access(authorization, company_id)
+        return {"authorized": True, "user": user, "reason": None}
+    except HTTPException as exc:
+        return {"authorized": False, "user": None, "reason": exc.detail}
+
+
 def verify_super_admin(authorization: Optional[str]) -> dict:
     """Verify caller session and require role == 'super_admin'."""
     user = verify_supabase_user(authorization)

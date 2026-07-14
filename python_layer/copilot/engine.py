@@ -23,7 +23,8 @@ from .queries import (
     TOOL_DEFINITIONS, execute_tool, get_operator_context, QueryEngine,
 )
 from .llm_adapters import get_adapter
-from .llm_registry import IDJWI_CAPABILITIES, resolve_model
+from .llm_registry import IDJWI_CAPABILITIES, capability_for_tool, resolve_model
+from .idjwi_security import authorize_capability
 
 # ── Documentation loader ─────────────────────────────────────────────────────
 # Loaded at request time so docs updates are reflected immediately without
@@ -357,16 +358,40 @@ def _get_readiness_note(company_id: str) -> str:
         return ""
 
 
-def build_system_prompt(company_id: str) -> str:
+_TENANT_ACCESS_DENIED_BLOCK = """\
+TENANT ACCESS
+=============
+You do NOT currently have authorized access to any company's private data —
+either nobody is signed in, or the signed-in account is not authorized for
+this company_id.
+
+You can still fully answer from Newsconseen's default brain: what Newsconseen
+and Idjwi are, the ontology, the source registry and enrichment guidance, the
+risk framework, and general statistical/graph reasoning concepts. None of
+that requires company data — answer it directly and completely.
+
+Do NOT attempt any tool that reads or writes company records (people,
+enterprises, products, transactions, tasks, documents, company graph,
+company memory, reports, or private analytics) — those calls will be
+denied. If the operator asks for any of that, do not silently fail: tell
+them plainly that you cannot access this company's private data because the
+account is not authorized for this company, then offer to explain how that
+feature works once access is available, or offer to demonstrate it from the
+default brain instead."""
+
+
+def build_system_prompt(company_id: str, tenant_authorized: bool = True) -> str:
     """
     Build the runtime system prompt.
     Layers:
       1. Newsconseen product documentation (loaded from docs/newsconseen_docs.md at request time)
          Rule: edit newsconseen_docs.md → change is live on the very next copilot request.
-      2. Operator identity (who THIS operator is)
-      3. Persistent memory — operator preferences/context from prior sessions
+      2. Operator identity (who THIS operator is) — only when tenant_authorized;
+         otherwise a tenant-access notice so the model never fabricates a company.
+      3. Persistent memory — global/source/industry brain always; company-scoped
+         memory only when tenant_authorized.
       4. Tool instructions (how to use the tools)
-      5. Data quality note (only when score < 80 or critical issues exist)
+      5. Data quality note (only when score < 80 or critical issues exist; tenant only)
     """
     from datetime import date as _date
     today_str = _date.today().isoformat()
@@ -375,24 +400,28 @@ def build_system_prompt(company_id: str) -> str:
     # immediately reflected without redeploy.
     docs = _load_docs() or _SELF_KNOWLEDGE_FALLBACK
 
-    ctx    = get_operator_context(company_id)
-    name   = ctx.get("name", "this organisation")
-    etype  = ctx.get("enterprise_type", "commercial")
-    status = ctx.get("operating_status", "active")
+    if tenant_authorized:
+        ctx    = get_operator_context(company_id)
+        name   = ctx.get("name", "this organisation")
+        etype  = ctx.get("enterprise_type", "commercial")
+        status = ctx.get("operating_status", "active")
 
-    operator_identity = (
-        f"CURRENT OPERATOR\n"
-        f"================\n"
-        f"TODAY: {today_str}\n"
-        f"You are answering for: {name}\n"
-        f"Enterprise type: {etype}\n"
-        f"Operating status: {status}\n"
-        + (f"Phone: {ctx['phone']}\n"   if ctx.get("phone")   else "")
-        + (f"Email: {ctx['email']}\n"   if ctx.get("email")   else "")
-        + (f"Website: {ctx['website']}\n" if ctx.get("website") else "")
-    )
+        operator_identity = (
+            f"CURRENT OPERATOR\n"
+            f"================\n"
+            f"TODAY: {today_str}\n"
+            f"You are answering for: {name}\n"
+            f"Enterprise type: {etype}\n"
+            f"Operating status: {status}\n"
+            + (f"Phone: {ctx['phone']}\n"   if ctx.get("phone")   else "")
+            + (f"Email: {ctx['email']}\n"   if ctx.get("email")   else "")
+            + (f"Website: {ctx['website']}\n" if ctx.get("website") else "")
+        )
+    else:
+        operator_identity = f"TODAY: {today_str}\n\n" + _TENANT_ACCESS_DENIED_BLOCK
 
-    # ── Persistent memory — inject what the operator has told us before ───────
+    # ── Idjwi's default brain — product/ontology/source knowledge. Not
+    # tenant data, so this loads regardless of tenant_authorized. ─────────────
     brain_section = ""
     try:
         from .idjwi_brain import build_prompt_section
@@ -408,13 +437,14 @@ def build_system_prompt(company_id: str) -> str:
             INDUSTRY_MEMORY_COMPANY_ID,
             SOURCE_MEMORY_COMPANY_ID,
         )
+        # Global/source/industry memory is shared product knowledge, not
+        # tenant data — always loaded. Company-scoped memory is private and
+        # only loaded once the caller is authorized for this company_id.
+        scopes = [GLOBAL_MEMORY_COMPANY_ID, SOURCE_MEMORY_COMPANY_ID, INDUSTRY_MEMORY_COMPANY_ID]
+        if tenant_authorized:
+            scopes.append(company_id)
         memories = []
-        for cid in (
-            GLOBAL_MEMORY_COMPANY_ID,
-            SOURCE_MEMORY_COMPANY_ID,
-            INDUSTRY_MEMORY_COMPANY_ID,
-            company_id,
-        ):
+        for cid in scopes:
             memories.extend(recall(cid, limit=80))
         if memories:
             lines = ["OPERATOR MEMORY (from prior conversations — apply these always)"]
@@ -430,7 +460,7 @@ def build_system_prompt(company_id: str) -> str:
     except Exception:
         pass
 
-    readiness_note = _get_readiness_note(company_id)
+    readiness_note = _get_readiness_note(company_id) if tenant_authorized else ""
 
     parts = [docs, operator_identity]
     if brain_section:
@@ -1433,8 +1463,12 @@ def _memory_context_text(memories: list[dict]) -> str:
 
 
 def _autonomous_miss_answer(question: str, company_id: str, principal=None) -> tuple[str, list, dict]:
+    tenant_authorized = principal.tenant_authorized if principal is not None else True
     broad = ["overview", "status", "snapshot", "health", "how are we doing", "today"]
     if any(term in question.lower() for term in broad):
+        if not tenant_authorized:
+            from .idjwi_security import TENANT_DENIED_REASON
+            return (TENANT_DENIED_REASON, [], {})
         result = execute_tool(
             "get_kpi_snapshot",
             {"company_id": company_id},
@@ -1475,6 +1509,19 @@ def _autonomous_answer(question: str, company_id: str, principal=None, return_me
         logger.info("_autonomous_answer: autonomous -> %s", tool_name)
         if tool_name == "__self_describe__":
             answer = _idjwi_self_describe() + "\n\n*(Answered from Idjwi capability registry - no Advisor needed)*"
+            return (answer, [], {}, bool(memories)) if return_meta else answer
+
+        # Tenant gate — checked here (not just inside execute_tool) so a
+        # denial reads as a clear, on-topic answer instead of being forced
+        # through _format_autonomous_answer's tool-shaped formatting, which
+        # would otherwise render a denial as a misleading "no records found."
+        gate = authorize_capability(
+            capability_for_tool(tool_name), principal=principal, llm_available=False,
+        )
+        if not gate.get("allowed"):
+            answer = gate.get("reason", "I cannot access that right now.")
+            if memories:
+                answer = _memory_context_text(memories) + "\n\n" + answer
             return (answer, [], {}, bool(memories)) if return_meta else answer
 
         tool_input = {"company_id": company_id}
@@ -1535,7 +1582,8 @@ def _run_tool_loop(
     """
     resolved_spec = resolve_model(model)
     adapter = get_adapter(resolved_spec)
-    system = build_system_prompt(company_id)
+    tenant_authorized = principal.tenant_authorized if principal is not None else True
+    system = build_system_prompt(company_id, tenant_authorized=tenant_authorized)
     for attempt in range(6):
         try:
             response = adapter.create(
