@@ -7,6 +7,8 @@ and IDJWI_API_KEY in production to enforce API access at the route layer.
 
 import hmac
 import os
+import time
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Optional
 
@@ -71,6 +73,24 @@ class IdjwiPrincipal:
     # principal after verify_tenant_access already succeeded) keeps working
     # unchanged.
     tenant_authorized: bool = True
+
+
+# Simple in-memory per-IP rate limiter for public, unauthenticated Idjwi
+# endpoints (the marketing-page demo). 20 requests per IP per hour.
+_demo_rate_store: dict = defaultdict(lambda: {"count": 0, "window": 0})
+DEMO_RATE_LIMIT_PER_HOUR = 20
+
+
+def check_demo_rate_limit(ip: str) -> bool:
+    window = int(time.time()) // 3600
+    rec = _demo_rate_store[ip]
+    if rec["window"] != window:
+        rec["count"] = 0
+        rec["window"] = window
+    if rec["count"] >= DEMO_RATE_LIMIT_PER_HOUR:
+        return False
+    rec["count"] += 1
+    return True
 
 
 def require_api_key(header_value: Optional[str]) -> dict:

@@ -1765,10 +1765,11 @@ async def ask_stream_events(question: str, company_id: str, history: list = None
     Real SSE generator — yields JSON event strings as the tool loop progresses.
 
     Events:
-      {"event": "thinking",  "content": "..."}       — initial acknowledgement
-      {"event": "tool_call", "tool": "...", "input": {...}}  — before each tool
-      {"event": "answer",    "content": "..."}        — final answer
-      {"event": "done"}                               — stream end
+      {"event": "thinking",  "content": "..."}                — initial acknowledgement
+      {"event": "tool_call", "tool": "...", "input": {...}}    — before each tool
+      {"event": "chart",     "config": {...}}                  — one per chart extracted from tool results
+      {"event": "answer",    "content": "..."}                  — final answer
+      {"event": "done", "citations": [...], "tools_called": [...]}  — stream end
     """
     messages = list(history or [])
     messages.append({"role": "user", "content": question})
@@ -1784,9 +1785,10 @@ async def ask_stream_events(question: str, company_id: str, history: list = None
     # Run synchronously in this coroutine (tool loop is CPU/IO bound, not async)
     import concurrent.futures
     loop_messages = list(messages)  # copy so we can report intermediate tools
+    collected: list = []  # populated with {"tool", "input", "result"} per call for chart/citation extraction
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_run_tool_loop, loop_messages, company_id, _on_tool, None, None, principal)
+        future = pool.submit(_run_tool_loop, loop_messages, company_id, _on_tool, collected, None, principal)
 
         # Yield accumulated tool events while waiting
         prev_len = 0
@@ -1802,8 +1804,15 @@ async def ask_stream_events(question: str, company_id: str, history: list = None
 
         answer = future.result()
 
+    for cfg in _extract_chart_configs(collected):
+        yield json.dumps({"event": "chart", "config": cfg}, default=str)
+
     yield json.dumps({"event": "answer", "content": answer})
-    yield json.dumps({"event": "done"})
+    yield json.dumps({
+        "event": "done",
+        "citations": _extract_citations(collected),
+        "tools_called": [c["tool"] for c in collected],
+    }, default=str)
 
 
 async def _async_sleep(seconds: float):

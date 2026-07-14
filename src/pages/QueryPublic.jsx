@@ -255,7 +255,10 @@ export default function QueryPublic() {
       const resp = await fetch(`${RAILWAY_URL}/copilot/demo-ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: nlQuery, history: [] }),
+        // Free-form NL-to-chart needs LLM reasoning — Idjwi's default brain
+        // has no way to parse arbitrary query parameters. Using this page
+        // at all is the visitor's explicit choice to invoke Claude.
+        body: JSON.stringify({ question: nlQuery, history: [], advisor_enabled: true }),
       });
       if (!resp.ok) throw new Error(`${resp.status}`);
       const data = await resp.json();

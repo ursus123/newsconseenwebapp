@@ -655,32 +655,50 @@ class _DemoMessage(_BaseModel):
 class _DemoAskRequest(_BaseModel):
     question: str
     history:  _List[_Dict[str, _Any]] = []
+    # Idjwi's default brain (deterministic, no LLM call) answers by default.
+    # Anthropic-backed reasoning is opt-in, not automatic — set this true only
+    # when the visitor explicitly asks for a deeper, reasoned answer.
+    advisor_enabled: bool = False
 
 
 @app.post("/copilot/demo-ask", tags=["idjwi"])
 def idjwi_demo_ask(req: _DemoAskRequest, request: _Request):
     """
-    Public endpoint — no API key required.
-    Runs Idjwi with product knowledge + public data tools only.
+    Public endpoint — no API key or company required.
+    Runs Idjwi's default brain: product knowledge, ontology, the source
+    registry, and public-data tools — the exact same default_brain_principal
+    used for any signed-in caller without tenant access (see
+    copilot/idjwi_security.py). No separate demo engine, no reduced
+    knowledge: tenant-scoped tools are simply unavailable because there is
+    no company connected, same as everywhere else in the product.
+
+    Idjwi's own default brain (deterministic, no LLM dependency) answers by
+    default. Anthropic-backed Advisor reasoning only runs when the caller
+    sets advisor_enabled=true — a visitor's explicit choice, never automatic.
+
     Rate-limited to 20 requests per IP per hour.
     """
+    from copilot.idjwi_security import check_demo_rate_limit, default_brain_principal
+
     ip = request.client.host if request.client else "unknown"
+    if not check_demo_rate_limit(ip):
+        return {
+            "answer": (
+                "You've reached the demo limit for this hour. "
+                "Sign up to get unlimited access to Idjwi with your own data."
+            ),
+            "rate_limited": True,
+            "citations": [],
+            "tools_called": [],
+            "charts": [],
+        }
     try:
-        from copilot.demo_engine import ask_idjwi, _check_rate_limit
-        if not _check_rate_limit(ip):
-            return {
-                "answer": (
-                    "You've reached the demo limit for this hour. "
-                    "Sign up to get unlimited access to Idjwi with your own data."
-                ),
-                "rate_limited": True,
-                "citations": [],
-                "tools_called": [],
-            }
-        result = ask_idjwi(
-            question=req.question,
-            history=req.history,
-        )
+        import os
+        from copilot.engine import CopilotEngine
+
+        engine = CopilotEngine(company_id="", backend=os.getenv("COPILOT_BACKEND", "anthropic"))
+        engine.principal = default_brain_principal()
+        result = engine.ask(question=req.question, history=req.history, advisor_enabled=req.advisor_enabled)
         result["rate_limited"] = False
         return result
     except Exception as e:
@@ -693,27 +711,32 @@ def idjwi_demo_ask(req: _DemoAskRequest, request: _Request):
             "rate_limited": False,
             "citations": [],
             "tools_called": [],
+            "charts": [],
         }
 
 
 @app.post("/copilot/demo-stream", tags=["idjwi"])
 async def idjwi_demo_stream(req: _DemoAskRequest, request: _Request):
     """
-    Streaming SSE endpoint for the Idjwi demo.
-    Emits newline-delimited JSON events: tool_start, tool_done, text_delta, chart, done, error.
+    Streaming SSE endpoint for Idjwi's default brain (no company connected).
+
+    Idjwi's own default brain answers by default — deterministic, no
+    Anthropic call, so it works even if the LLM is down or misconfigured.
+    Anthropic-backed Advisor reasoning (real tool-loop streaming via
+    ask_stream_events) only runs when the caller sets advisor_enabled=true.
+
     No auth required — IP rate-limited.
     """
     import time as _time
     import json as _json
     from fastapi.responses import StreamingResponse as _SR
+    from copilot.idjwi_security import check_demo_rate_limit, default_brain_principal
 
     ip = request.client.host if request.client else "unknown"
     t0 = _time.time()
 
     try:
-        from copilot.demo_engine import ask_idjwi_stream, _check_rate_limit
-
-        if not _check_rate_limit(ip):
+        if not check_demo_rate_limit(ip):
             async def _rl():
                 yield f"data: {_json.dumps({'type': 'rate_limited'})}\n\n"
             logger.info("Idjwi stream rate-limited ip=%s", ip)
@@ -725,23 +748,51 @@ async def idjwi_demo_stream(req: _DemoAskRequest, request: _Request):
         async def generate():
             nonlocal tools_used, error_count
             try:
-                async for event in ask_idjwi_stream(
+                if not req.advisor_enabled:
+                    # Default brain — deterministic, answered in one shot
+                    # (no token-by-token generation to stream, so it's sent
+                    # as a single text_delta immediately followed by done).
+                    import os
+                    from copilot.engine import CopilotEngine
+
+                    engine = CopilotEngine(company_id="", backend=os.getenv("COPILOT_BACKEND", "anthropic"))
+                    engine.principal = default_brain_principal()
+                    result = engine.ask(question=req.question, history=req.history, advisor_enabled=False)
+                    tools_used = list(result.get("tools_called") or [])
+                    for cfg in result.get("charts") or []:
+                        yield f"data: {_json.dumps({'type': 'chart', 'config': cfg}, default=str)}\n\n"
+                    yield f"data: {_json.dumps({'type': 'text_delta', 'text': result.get('answer', '')})}\n\n"
+                    yield f"data: {_json.dumps({'type': 'done', 'citations': result.get('citations') or [], 'mode': result.get('mode', 'autonomous'), 'rate_limited': False})}\n\n"
+                    return
+
+                from copilot.engine import ask_stream_events
+                async for event_json in ask_stream_events(
                     question=req.question,
+                    company_id="",
                     history=req.history,
+                    principal=default_brain_principal(),
                 ):
-                    t = event.get("type", "")
-                    if t in ("tool_start", "tool_done"):
-                        tools_used.append(event.get("tool", ""))
-                    if t == "error":
-                        error_count += 1
-                    yield f"data: {_json.dumps(event, default=str)}\n\n"
+                    event = _json.loads(event_json)
+                    kind = event.get("event")
+                    if kind == "tool_call":
+                        tool = event.get("tool", "")
+                        tools_used.append(tool)
+                        yield f"data: {_json.dumps({'type': 'tool_start', 'tool': tool})}\n\n"
+                        yield f"data: {_json.dumps({'type': 'tool_done', 'tool': tool})}\n\n"
+                    elif kind == "chart":
+                        yield f"data: {_json.dumps({'type': 'chart', 'config': event.get('config')})}\n\n"
+                    elif kind == "answer":
+                        yield f"data: {_json.dumps({'type': 'text_delta', 'text': event.get('content', '')})}\n\n"
+                    elif kind == "done":
+                        yield f"data: {_json.dumps({'type': 'done', 'citations': event.get('citations', []), 'mode': 'advisor', 'rate_limited': False})}\n\n"
             except Exception as exc:
-                logger.error("Idjwi stream error: %s", exc)
+                error_count += 1
+                logger.error("Idjwi demo stream error: %s", exc)
                 yield f"data: {_json.dumps({'type': 'error', 'message': 'Stream interrupted.'})}\n\n"
             finally:
                 elapsed = round(_time.time() - t0, 2)
                 logger.info(
-                    "Idjwi stream done ip=%s elapsed=%.2fs tools=%s errors=%d",
+                    "Idjwi demo stream done ip=%s elapsed=%.2fs tools=%s errors=%d",
                     ip, elapsed, list(dict.fromkeys(tools_used)), error_count,
                 )
 
