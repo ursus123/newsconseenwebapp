@@ -1,5 +1,6 @@
 """
-Seed three deterministic Newsconseen demo companies.
+Seed five deterministic Newsconseen demo companies (clinic, farm, retail,
+school, ngo).
 
 Usage from the repository root:
     python python_layer/demo_seed.py --dry-run
@@ -259,13 +260,14 @@ def polygon(lat: float, lon: float, delta: float = 0.025) -> dict[str, Any]:
 
 
 def common_company(slug: str, name: str, subtype: str, sector_id: int, sector: str,
-                   city: str, region: str, lat: float, lon: float) -> dict[str, list[dict[str, Any]]]:
+                   city: str, region: str, lat: float, lon: float,
+                   enterprise_type: str = "commercial") -> dict[str, list[dict[str, Any]]]:
     hq_id = company_id(slug)
     records: dict[str, list[dict[str, Any]]] = defaultdict(list)
     records["enterprises"].append(row(
         "enterprises", slug, "hq",
         enterprise_name=name,
-        enterprise_type="commercial",
+        enterprise_type=enterprise_type,
         enterprise_subtype=subtype,
         sic_sector_id=sector_id,
         sic_sector_name=sector,
@@ -760,8 +762,219 @@ def build_retail() -> dict[str, list[dict[str, Any]]]:
     return records
 
 
+def build_school() -> dict[str, list[dict[str, Any]]]:
+    slug = "school"
+    records = common_company(
+        slug, "Newsconseen Demo School", "private_school", 82,
+        "Educational Services", "Denver", "CO", 39.7392, -104.9903,
+        enterprise_type="nonprofit",
+    )
+    records["enterprises"].append(row(
+        "enterprises", slug, "district-partner", enterprise_name="Front Range Education Foundation",
+        enterprise_type="nonprofit", enterprise_subtype="grant_maker", sic_sector_id=83,
+        sic_sector_name="Social Services", enterprise_tier="unit", status="active",
+        operating_status="open", city="Denver", region="CO", country="USA",
+        latitude=39.7450, longitude=-104.9820, notes="Demo grant and scholarship funding partner."))
+    add_people(records, slug, [
+        {"key": "priya-nair", "first_name": "Priya", "last_name": "Nair",
+         "preferred_name": "Dr. Nair", "person_type": "staff", "person_subtype": "principal",
+         "primary_role": "Head of School", "engagement_model": "employed", "status": "active",
+         "availability_status": "available", "start_date": today(-1100), "phone": "+1-555-0141",
+         "email": "priya.nair@demo.newsconseen.com", "city": "Denver", "region": "CO",
+         "country": "USA", "latitude": 39.7401, "longitude": -104.9895,
+         "notes": "Owns enrollment, staffing, and accreditation decisions."},
+        {"key": "owen-fisher", "first_name": "Owen", "last_name": "Fisher",
+         "person_type": "staff", "person_subtype": "teacher", "primary_role": "Grade 5 Teacher",
+         "engagement_model": "employed", "status": "active", "availability_status": "busy",
+         "start_date": today(-360), "phone": "+1-555-0142", "email": "owen.fisher@demo.newsconseen.com",
+         "city": "Denver", "region": "CO", "country": "USA", "latitude": 39.7380,
+         "longitude": -104.9910, "notes": "Homeroom teacher tracking attendance and grading tasks."},
+        {"key": "ivy-morgan", "first_name": "Ivy", "last_name": "Morgan",
+         "person_type": "client", "person_subtype": "student", "primary_role": "Student",
+         "engagement_model": "enrolled", "status": "active", "availability_status": "available",
+         "start_date": today(-200), "email": "guardian.morgan@example.com", "city": "Denver",
+         "region": "CO", "country": "USA", "notes": "Demo student with a tuition and attendance record."},
+    ])
+    records["products"].extend([
+        row("products", slug, "uniform-set", product_name="School Uniform Set", item_type="physical",
+            item_subtype="apparel", item_class="non_perishable", unit_of_measure="set",
+            stock_quantity=22, reorder_level=15, price=64, cost=38, sku="SCH-UNI-01",
+            enterprise_id=company_id(slug)),
+        row("products", slug, "loaner-laptop", product_name="Loaner Laptop", item_type="physical",
+            item_subtype="equipment", item_class="serialized", unit_of_measure="unit",
+            stock_quantity=5, reorder_level=3, price=0, cost=420, sku="SCH-LAP-01",
+            enterprise_id=company_id(slug), description="Low stock for the 1:1 device loan program."),
+    ])
+    records["services"].extend([
+        row("services", slug, "tuition-annual", name="Annual Tuition", service_name="Annual Tuition",
+            service_type="academic", service_subtype="enrollment", price=9800, unit_of_measure="year",
+            is_active=True, enterprise_id=company_id(slug)),
+        row("services", slug, "after-school", name="After-School Program", service_name="After-School Program",
+            service_type="enrichment", service_subtype="tutoring", price=180, unit_of_measure="month",
+            duration_minutes=90, is_active=True, enterprise_id=company_id(slug)),
+    ])
+    records["tasks"].extend([
+        row("tasks", slug, "attendance-follow-up", title="Follow up on attendance drop",
+            description="Ivy Morgan has three unexcused absences this month.", task_type="student_follow_up",
+            status="open", priority="high", due_date=today(0), assigned_to_email="owen.fisher@demo.newsconseen.com",
+            assigned_to_name="Owen Fisher", enterprise_id=company_id(slug), enterprise="Newsconseen Demo School",
+            related_person="Ivy Morgan", related_person_id=did(slug, "persons", "ivy-morgan")),
+        row("tasks", slug, "tuition-followup", title="Follow up on overdue tuition balance",
+            description="Autumn term tuition balance is unpaid past due date.", task_type="billing_follow_up",
+            status="pending", priority="high", due_date=today(2), assigned_to_name="Priya Nair",
+            enterprise_id=company_id(slug), enterprise="Newsconseen Demo School"),
+    ])
+    add_financials(records, slug, [
+        {"key": "tuition-invoice", "reference_number": "SCH-INV-3001",
+         "description": "Autumn term tuition — Ivy Morgan", "transaction_type": "tuition",
+         "payment_status": "unpaid", "amount": 3200, "amount_paid": 0, "net_amount": 3200,
+         "due_date": today(-3), "person_id": did(slug, "persons", "ivy-morgan"),
+         "person_name": "Ivy Morgan"},
+        {"key": "supply-purchase", "reference_number": "SCH-BILL-1102",
+         "description": "Classroom and uniform supply order", "transaction_type": "supply_purchase",
+         "payment_status": "paid", "amount": 1450, "net_amount": -1450,
+         "product_id": did(slug, "products", "uniform-set"), "product_name": "School Uniform Set"},
+    ])
+    records["documents"].extend([
+        row("documents", slug, "accreditation", title="School Accreditation Certificate",
+            document_type="certification", entity_ref_type="enterprise", entity_ref_id=company_id(slug),
+            issue_date=today(-500), expiry_date=today(40), status="active",
+            notes="Renewal window approaching for compliance-risk testing."),
+        row("documents", slug, "grant-agreement", title="Foundation Grant Agreement",
+            document_type="contract", entity_ref_type="enterprise",
+            entity_ref_id=did(slug, "enterprises", "district-partner"),
+            issue_date=today(-150), expiry_date=today(215), status="active"),
+    ])
+    records["schedules"].append(row("schedules", slug, "parent-conferences", name="Parent-Teacher Conferences",
+        title="Parent-Teacher Conferences", schedule_type="academic_ops", frequency="monthly",
+        day_of_month=15, start_time="15:00", end_time="18:00", start_date=today(-60),
+        is_active=True, entity_ref_type="enterprise", entity_ref_id=company_id(slug)))
+    records["signals"].append(row("signals", slug, "attendance-rate", name="Weekly Attendance Rate",
+        signal_type="attendance", numeric_value=88.4, unit="percent", source="demo_attendance_system",
+        entity_ref_type="enterprise", entity_ref_id=company_id(slug), is_anomaly=True,
+        recorded_at=now_iso(), notes="Below the 95% target threshold."))
+    records["risks"].append(row("risks", slug, "attendance-decline", title="Declining attendance risk",
+        description="Weekly attendance rate has dropped below the accreditation-safe threshold.",
+        risk_type="operational", severity="medium", likelihood="medium", impact="high",
+        status="open", mitigation_notes="Contact guardians and log follow-up outcomes.",
+        entity_ref_type="enterprise", entity_ref_id=company_id(slug)))
+    records["opportunities"].append(row("opportunities", slug, "after-school-growth",
+        title="Expand after-school program enrollment", description="Waitlist demand supports a second cohort.",
+        opportunity_type="revenue_growth", estimated_value=14400, confidence=70, status="open",
+        entity_ref_type="enterprise", entity_ref_id=company_id(slug)))
+    add_intelligence(records, slug, "School")
+    return records
+
+
+def build_ngo() -> dict[str, list[dict[str, Any]]]:
+    slug = "ngo"
+    records = common_company(
+        slug, "Newsconseen Demo NGO", "community_nonprofit", 83,
+        "Social Services", "Nairobi", "Nairobi County", -1.2921, 36.8219,
+        enterprise_type="nonprofit",
+    )
+    records["enterprises"].append(row(
+        "enterprises", slug, "funding-partner", enterprise_name="Global Relief Fund",
+        enterprise_type="nonprofit", enterprise_subtype="donor_organization", sic_sector_id=83,
+        sic_sector_name="Social Services", enterprise_tier="unit", status="active",
+        operating_status="open", city="Nairobi", region="Nairobi County", country="Kenya",
+        latitude=-1.2833, longitude=36.8172, notes="Demo institutional donor and grant partner."))
+    add_people(records, slug, [
+        {"key": "daniel-otieno", "first_name": "Daniel", "last_name": "Otieno",
+         "person_type": "staff", "person_subtype": "program_director", "primary_role": "Program Director",
+         "engagement_model": "employed", "status": "active", "availability_status": "available",
+         "start_date": today(-800), "phone": "+254-700-100200", "email": "daniel.otieno@demo.newsconseen.com",
+         "city": "Nairobi", "region": "Nairobi County", "country": "Kenya", "latitude": -1.2900,
+         "longitude": 36.8200, "notes": "Owns program delivery and grant compliance."},
+        {"key": "wanjiku-field", "first_name": "Wanjiku", "last_name": "Kamau",
+         "person_type": "volunteer", "person_subtype": "field_officer", "primary_role": "Field Officer",
+         "engagement_model": "volunteer", "status": "active", "availability_status": "available",
+         "start_date": today(-90), "email": "wanjiku.kamau@demo.newsconseen.com",
+         "city": "Nairobi", "region": "Nairobi County", "country": "Kenya",
+         "notes": "Coordinates distribution and beneficiary intake in the field."},
+        {"key": "amara-beneficiary", "first_name": "Amara", "last_name": "Njoroge",
+         "person_type": "client", "person_subtype": "beneficiary", "primary_role": "Beneficiary",
+         "engagement_model": "enrolled", "status": "active", "availability_status": "available",
+         "start_date": today(-45), "city": "Nairobi", "region": "Nairobi County", "country": "Kenya",
+         "notes": "Demo beneficiary enrolled in the relief distribution program."},
+    ])
+    records["products"].extend([
+        row("products", slug, "relief-kit", product_name="Relief Supplies Kit", item_type="physical",
+            item_subtype="relief_supplies", item_class="consumable", unit_of_measure="kit",
+            stock_quantity=32, reorder_level=25, price=0, cost=18, sku="NGO-KIT-01",
+            enterprise_id=company_id(slug), description="Below the safety stock threshold for this month's distribution."),
+        row("products", slug, "water-filter", product_name="Household Water Filter", item_type="physical",
+            item_subtype="water_sanitation", item_class="reusable", unit_of_measure="unit",
+            stock_quantity=12, reorder_level=10, price=0, cost=22, sku="NGO-WF-01",
+            enterprise_id=company_id(slug)),
+    ])
+    records["services"].append(row("services", slug, "health-training", name="Community Health Training",
+        service_name="Community Health Training", service_type="community_program",
+        service_subtype="training", price=0, unit_of_measure="session", duration_minutes=120,
+        is_active=True, enterprise_id=company_id(slug)))
+    records["tasks"].extend([
+        row("tasks", slug, "distribution-ward4", title="Distribute relief supplies to Ward 4",
+            description="Monthly distribution is scheduled and stock is nearing the reorder threshold.",
+            task_type="field_work", status="open", priority="urgent", due_date=today(1),
+            assigned_to_email="wanjiku.kamau@demo.newsconseen.com", assigned_to_name="Wanjiku Kamau",
+            enterprise_id=company_id(slug), enterprise="Newsconseen Demo NGO"),
+        row("tasks", slug, "intake-followup", title="Follow up on new beneficiary intake",
+            description="Complete household assessment for Amara Njoroge.", task_type="beneficiary_follow_up",
+            status="pending", priority="normal", due_date=today(3), assigned_to_name="Daniel Otieno",
+            enterprise_id=company_id(slug), enterprise="Newsconseen Demo NGO",
+            related_person="Amara Njoroge", related_person_id=did(slug, "persons", "amara-beneficiary")),
+    ])
+    add_financials(records, slug, [
+        {"key": "grant-received", "reference_number": "NGO-GRT-5001",
+         "description": "Quarterly program grant — Global Relief Fund", "transaction_type": "grant",
+         "payment_status": "paid", "amount": 22000, "amount_paid": 22000, "net_amount": 22000,
+         "date": today(-10)},
+        {"key": "individual-donation", "reference_number": "NGO-DON-5002",
+         "description": "Individual donor contribution", "transaction_type": "donation",
+         "payment_status": "paid", "amount": 500, "amount_paid": 500, "net_amount": 500,
+         "date": today(-4)},
+        {"key": "relief-supply-purchase", "reference_number": "NGO-BILL-6003",
+         "description": "Relief kit restock order", "transaction_type": "supply_purchase",
+         "payment_status": "unpaid", "amount": 3600, "amount_paid": 0, "net_amount": -3600,
+         "due_date": today(6), "product_id": did(slug, "products", "relief-kit"),
+         "product_name": "Relief Supplies Kit"},
+    ])
+    records["documents"].extend([
+        row("documents", slug, "ngo-registration", title="NGO Registration Certificate",
+            document_type="license", entity_ref_type="enterprise", entity_ref_id=company_id(slug),
+            issue_date=today(-900), expiry_date=today(260), status="active"),
+        row("documents", slug, "grant-compliance-report", title="Grant Compliance Report Q3",
+            document_type="report", entity_ref_type="enterprise",
+            entity_ref_id=did(slug, "enterprises", "funding-partner"),
+            issue_date=today(-20), expiry_date=today(70), status="active",
+            notes="Due for renewal submission for donor compliance testing."),
+    ])
+    records["schedules"].append(row("schedules", slug, "monthly-distribution", name="Monthly Distribution Day",
+        title="Monthly Distribution Day", schedule_type="field_ops", frequency="monthly",
+        day_of_month=1, start_time="08:00", end_time="14:00", start_date=today(-90),
+        is_active=True, entity_ref_type="enterprise", entity_ref_id=company_id(slug)))
+    records["signals"].append(row("signals", slug, "kit-stock-level", name="Relief Kit Stock Level",
+        signal_type="inventory_level", numeric_value=32, unit="kits", source="demo_field_report",
+        entity_ref_type="product", entity_ref_id=did(slug, "products", "relief-kit"),
+        is_anomaly=True, recorded_at=now_iso(), notes="Approaching reorder threshold before distribution day."))
+    records["risks"].append(row("risks", slug, "supply-stockout", title="Relief supply stockout risk",
+        description="Kit stock is close to the reorder threshold ahead of the scheduled distribution.",
+        risk_type="inventory", severity="high", likelihood="medium", impact="high",
+        status="open", mitigation_notes="Expedite the pending relief-kit restock order.",
+        entity_ref_type="product", entity_ref_id=did(slug, "products", "relief-kit")))
+    records["opportunities"].append(row("opportunities", slug, "donor-expansion",
+        title="Expand recurring individual donor program", description="Recent one-time donors show repeat-giving potential.",
+        opportunity_type="fundraising_growth", estimated_value=12000, confidence=65, status="open",
+        entity_ref_type="enterprise", entity_ref_id=company_id(slug)))
+    add_intelligence(records, slug, "NGO")
+    return records
+
+
 def merge_records(selected: list[str]) -> dict[str, list[dict[str, Any]]]:
-    builders = {"clinic": build_clinic, "farm": build_farm, "retail": build_retail}
+    builders = {
+        "clinic": build_clinic, "farm": build_farm, "retail": build_retail,
+        "school": build_school, "ngo": build_ngo,
+    }
     merged: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for slug in selected:
         for table, rows in builders[slug]().items():
@@ -827,7 +1040,13 @@ def seed_idjwi_memory(records: dict[str, list[dict[str, Any]]], dry_run: bool) -
     company_names = {e["company_id"]: e["enterprise_name"] for e in records["enterprises"] if e["id"] == e["company_id"]}
     memories = []
     for cid, name in company_names.items():
-        slug = "clinic" if "Clinic" in name else "farm" if "Farm" in name else "retail"
+        slug = (
+            "clinic" if "Clinic" in name else
+            "farm" if "Farm" in name else
+            "school" if "School" in name else
+            "ngo" if "NGO" in name else
+            "retail"
+        )
         memories.extend([
             {
                 "company_id": cid,
@@ -927,7 +1146,7 @@ def trigger_etl(company_ids: list[str]) -> tuple[int, int]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Seed Newsconseen demo company data.")
-    parser.add_argument("--only", choices=["clinic", "farm", "retail"], action="append",
+    parser.add_argument("--only", choices=["clinic", "farm", "retail", "school", "ngo"], action="append",
                         help="Seed only one company. Can be repeated.")
     parser.add_argument("--dry-run", action="store_true", help="Print counts without writing data.")
     parser.add_argument("--skip-etl", action="store_true",
@@ -938,7 +1157,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     load_env()
     args = parse_args()
-    selected = args.only or ["clinic", "farm", "retail"]
+    selected = args.only or ["clinic", "farm", "retail", "school", "ngo"]
     records = merge_records(selected)
     counts = {table: len(rows) for table, rows in records.items() if rows}
 

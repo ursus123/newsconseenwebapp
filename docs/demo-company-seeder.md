@@ -8,16 +8,21 @@ npm run seed:demo -- --dry-run
 npm run seed:demo
 ```
 
-It creates three deterministic demo tenants:
+It creates five deterministic demo tenants:
 
 - Newsconseen Demo Clinic
 - Newsconseen Demo Farm
 - Newsconseen Demo Retail Shop
+- Newsconseen Demo School
+- Newsconseen Demo NGO
 
 Each tenant gets connected ontology data across enterprises, people, products,
 services, addresses, relationships, tasks, transactions, documents, schedules,
 signals, territories, risks, opportunities, recommendations, insights, and metric
-definitions. The farm also gets plots, animals, and observations.
+definitions. The farm also gets plots, animals, and observations. The school
+uses tuition/supply_purchase transactions and a nonprofit enterprise_type; the
+NGO uses grant/donation transactions, a volunteer-type person, and a Kenya-based
+location to exercise those parts of the ontology.
 
 Required environment:
 
@@ -36,6 +41,8 @@ Useful variants:
 npm run seed:demo -- --only clinic
 npm run seed:demo -- --only farm
 npm run seed:demo -- --only retail
+npm run seed:demo -- --only school
+npm run seed:demo -- --only ngo
 npm run seed:demo -- --skip-etl
 ```
 
