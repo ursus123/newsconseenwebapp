@@ -5959,6 +5959,40 @@ TOOL_DEFINITIONS = [
     },
     # ── Intelligence entity search ────────────────────────────────────────────
     {
+        "name": "recommend_enrichment_sources",
+        "description": (
+            "Recommend public APIs, connectors, and external data sources Idjwi can use for "
+            "company data enrichment before or alongside customer data. Use when asked what "
+            "Idjwi can know, which public APIs are available, how to enrich an entity, what "
+            "inputs are missing, or what sources support a risk or score."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity_type": {
+                    "type": "string",
+                    "description": "Optional ontology entity type to enrich, such as enterprise, person, product, address, plot, animal, transaction.",
+                },
+                "industry": {
+                    "type": "string",
+                    "description": "Optional industry context such as clinic, farm, retail, education, logistics, nonprofit.",
+                },
+                "risk_category": {
+                    "type": "string",
+                    "description": "Optional risk theme, such as compliance, weather, stockout, fraud, geography, supplier concentration.",
+                },
+                "source_type": {
+                    "type": "string",
+                    "description": "Optional source class such as public_api, connector, government, geospatial, standards, reference_data.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum sources to return. Default 8.",
+                },
+            },
+        },
+    },
+    {
         "name": "search_intelligence",
         "description": (
             "Search insights, risks, opportunities, or recommendations in the intelligence layer. "
@@ -8045,6 +8079,7 @@ def execute_tool(
         # ─── Ontology-native read tools ───────────────────────────────────────
         "get_company_graph_context":    _dispatch_graph_context,
         "get_enrichment_context":       _dispatch_enrichment_context,
+        "recommend_enrichment_sources": _dispatch_recommend_enrichment_sources,
         "search_intelligence":          _dispatch_search_intelligence,
         "get_ontology_schema":          _dispatch_ontology_schema,
         # ── Propose tools (approval gate write-back) ──────────────────────────
@@ -8240,6 +8275,28 @@ def _dispatch_enrichment_context(company_id: str, entity_type: str, entity_id: s
                                   enrichment_types=None) -> dict:
     from copilot.ontology_tools import get_enrichment_context
     return get_enrichment_context(company_id, entity_type, entity_id, enrichment_types)
+
+
+def _dispatch_recommend_enrichment_sources(
+    company_id: str,
+    entity_type=None,
+    industry=None,
+    risk_category=None,
+    source_type=None,
+    limit: int = 8,
+) -> dict:
+    from copilot.idjwi_brain import recommend_sources
+    result = recommend_sources(
+        entity_type=entity_type,
+        industry=industry,
+        risk_category=risk_category,
+        source_type=source_type,
+        limit=limit,
+    )
+    result["company_id"] = company_id
+    result["data_source"] = "idjwi_source_registry"
+    result["data_as_of"] = "static registry"
+    return result
 
 
 def _dispatch_search_intelligence(company_id: str, intelligence_type: str = "insight",

@@ -652,6 +652,53 @@ function SourcesPanel({ toolsDetail, onOpenQueryBuilder }) {
 }
 
 // ── Proposed actions panel (approve / reject) ────────────────────────────────
+function EvidenceSummaryPanel({ confidence, caveats }) {
+  const hasConfidence = confidence && typeof confidence === "object";
+  const hasCaveats = Array.isArray(caveats) && caveats.length > 0;
+  if (!hasConfidence && !hasCaveats) return null;
+
+  const score = Number(confidence?.score ?? 0);
+  const tone =
+    score >= 0.8
+      ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+      : score >= 0.6
+        ? "bg-amber-50 text-amber-700 border-amber-100"
+        : "bg-slate-50 text-slate-600 border-slate-100";
+
+  return (
+    <div className="w-full rounded-xl border border-slate-100 bg-white px-3 py-2 text-xs">
+      {hasConfidence && (
+        <div className="flex items-start gap-2">
+          <Brain className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold border ${tone}`}>
+                {confidence.label || "Confidence"} {score ? `${Math.round(score * 100)}%` : ""}
+              </span>
+              {confidence.reason && (
+                <span className="text-[10px] text-slate-400">{confidence.reason}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {hasCaveats && (
+        <div className={`${hasConfidence ? "mt-2 pt-2 border-t border-slate-50" : ""} flex items-start gap-2`}>
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Data caveats</p>
+            <ul className="mt-1 space-y-0.5">
+              {caveats.slice(0, 4).map((c, i) => (
+                <li key={i} className="text-[11px] text-slate-500 leading-snug">{c}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProposedActionsPanel({ recommendations, insights, companyId }) {
   const [states, setStates] = useState({}); // approval_id → "approving"|"rejecting"|"approved"|"rejected"
 
@@ -892,6 +939,7 @@ const TOOL_LABELS = {
   // Ontology-native tools
   get_company_graph_context:  "Company graph",
   get_enrichment_context:     "Enrichment",
+  recommend_enrichment_sources: "Source registry",
   search_intelligence:        "Intelligence",
   get_ontology_schema:        "Schema",
   // Propose tools
@@ -1035,6 +1083,13 @@ function MessageBubble({ message, onFeedback, companyId, currentUser, onOpenQuer
             </div>
           )}
         </div>
+
+        {!isUser && (message.confidence || message.missing_data_caveats?.length > 0) && (
+          <EvidenceSummaryPanel
+            confidence={message.confidence}
+            caveats={message.missing_data_caveats}
+          />
+        )}
 
         {/* Charts */}
         {!isUser && message.charts?.length > 0 && (
@@ -1530,6 +1585,9 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           model:      selectedModel,
           advisor_enabled: advisorEnabled,
           context:    pageContext || {},
+          current_page: pageContext?.current_page || "",
+          selected_entity_type: pageContext?.selected_entity_type || pageContext?.entity_type || "",
+          selected_entity_id: pageContext?.selected_entity_id || pageContext?.entity_id || "",
         }),
       });
       const result = await resp.json();
@@ -1546,6 +1604,8 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
         advisor_enabled:         result.advisor_enabled         ?? advisorEnabled,
         memory_used:             result.memory_used             || false,
         memory_candidates_created: result.memory_candidates_created || 0,
+        confidence:              result.confidence              || null,
+        missing_data_caveats:    result.missing_data_caveats    || [],
         timestamp:               new Date().toISOString(),
       };
       setMessages(prev => [
@@ -1634,6 +1694,9 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           model:           selectedModel,
           advisor_enabled: advisorEnabled,
           context:         pageContext || {},
+          current_page:     pageContext?.current_page || "",
+          selected_entity_type: pageContext?.selected_entity_type || pageContext?.entity_type || "",
+          selected_entity_id:   pageContext?.selected_entity_id || pageContext?.entity_id || "",
         }),
       });
 
@@ -1663,6 +1726,8 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
         advisor_enabled:         result.advisor_enabled         ?? advisorEnabled,
         memory_used:             result.memory_used             || false,
         memory_candidates_created: result.memory_candidates_created || 0,
+        confidence:              result.confidence              || null,
+        missing_data_caveats:    result.missing_data_caveats    || [],
         timestamp:               new Date().toISOString(),
       };
 

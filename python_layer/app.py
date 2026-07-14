@@ -195,6 +195,16 @@ async def lifespan(app: FastAPI):
             for company_id in company_ids:
                 result = migrate_legacy(company_id, engine=engine)
                 migrated += int(result.get("migrated", 0) or 0)
+            try:
+                from copilot.idjwi_brain import seed_bootstrap_memory
+                seeded = seed_bootstrap_memory(engine=engine)
+                logger.info(
+                    "Startup: Idjwi brain bootstrap ready; saved %d/%d memories",
+                    seeded.get("saved", 0),
+                    seeded.get("attempted", 0),
+                )
+            except Exception as e:
+                logger.warning("Startup: Idjwi brain bootstrap skipped - %s", e)
             logger.info("Startup: Idjwi memory/events ready; migrated %d legacy memories", migrated)
         except Exception as e:
             logger.warning("Startup: Idjwi memory setup skipped - %s", e)

@@ -239,6 +239,12 @@ def ask(
 
     # Merge entity-page context into the context dict so Claude knows the viewport
     ctx = dict(request.context or {})
+    if ctx.get("entity_type") and not request.selected_entity_type:
+        ctx["selected_entity_type"] = ctx.get("entity_type")
+    if ctx.get("entity_id") and not request.selected_entity_id:
+        ctx["selected_entity_id"] = ctx.get("entity_id")
+    if ctx.get("entity_label"):
+        ctx["selected_entity_label"] = ctx.get("entity_label")
     if request.current_page:
         ctx["current_page"] = request.current_page
     if request.selected_entity_type:

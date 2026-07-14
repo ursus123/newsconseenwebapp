@@ -433,6 +433,8 @@ def build_system_prompt(company_id: str) -> str:
     readiness_note = _get_readiness_note(company_id)
 
     parts = [docs, operator_identity]
+    if brain_section:
+        parts.append(brain_section)
     if memory_section:
         parts.append(memory_section)
     parts.append(_BASE_INSTRUCTIONS)
@@ -924,6 +926,93 @@ def _extract_citations(collected_tools: list) -> list:
                         "source":  item["tool"].replace("_", " ").title(),
                     })
     return citations[:8]
+
+
+def _extract_missing_data_caveats(collected_tools: list) -> list:
+    """Return structured caveats about unavailable, empty, or incomplete data."""
+    caveats: list[str] = []
+    seen: set[str] = set()
+
+    def _add(text: str) -> None:
+        text = (text or "").strip()
+        if text and text not in seen:
+            seen.add(text)
+            caveats.append(text)
+
+    for item in collected_tools:
+        tool = item.get("tool", "tool")
+        result = item.get("result") or {}
+
+        if result.get("unable_to_fetch") or result.get("error"):
+            _add(f"{tool} could not fetch all requested data.")
+
+        row_count = _count_rows(result)
+        if row_count == 0 and tool not in ("propose_task", "propose_chart", "propose_record_update", "write_insight"):
+            _add(f"{tool} returned no matching rows for this question.")
+
+        missing_inputs = result.get("missing_inputs") or []
+        if missing_inputs:
+            _add(
+                "Source recommendations need these inputs before enrichment can run: "
+                + ", ".join(str(x) for x in missing_inputs[:8])
+            )
+
+        for key in ("missing_data", "missing_fields", "limitations", "caveats"):
+            values = result.get(key)
+            if isinstance(values, str):
+                _add(values)
+            elif isinstance(values, list):
+                for value in values[:5]:
+                    _add(str(value))
+
+    return caveats[:8]
+
+
+def _extract_answer_confidence(collected_tools: list) -> dict:
+    """Estimate answer confidence from tool coverage and explicit failures."""
+    if not collected_tools:
+        return {
+            "score": 0.45,
+            "label": "Limited",
+            "reason": "No data tools were used, so the answer is based on general context.",
+        }
+
+    failed = 0
+    empty = 0
+    source_count = 0
+    for item in collected_tools:
+        result = item.get("result") or {}
+        source_count += 1
+        if result.get("unable_to_fetch") or result.get("error"):
+            failed += 1
+        elif _count_rows(result) == 0:
+            empty += 1
+
+    score = 0.84
+    score -= min(failed * 0.22, 0.45)
+    score -= min(empty * 0.08, 0.24)
+    if any(item.get("tool") in ("web_search", "search_public_data", "recommend_enrichment_sources") for item in collected_tools):
+        score += 0.04
+    score = max(0.2, min(round(score, 2), 0.97))
+
+    if score >= 0.8:
+        label = "High"
+    elif score >= 0.6:
+        label = "Medium"
+    else:
+        label = "Limited"
+
+    reason_parts = [f"{source_count} source{'s' if source_count != 1 else ''} checked"]
+    if failed:
+        reason_parts.append(f"{failed} fetch issue{'s' if failed != 1 else ''}")
+    if empty:
+        reason_parts.append(f"{empty} empty result{'s' if empty != 1 else ''}")
+
+    return {
+        "score": score,
+        "label": label,
+        "reason": "; ".join(reason_parts) + ".",
+    }
 
 
 # ── Autonomous mode (no LLM) ─────────────────────────────────────────────────
@@ -1759,6 +1848,10 @@ class CopilotEngine:
                     updated.append({"role": "user", "content": full_question})
                     updated.append({"role": "assistant", "content": answer_text})
                     save_session_history(self.company_id, session_id, updated)
+                autonomous_collected = [
+                    {"tool": tool, "input": {"company_id": self.company_id}, "result": data.get(tool, {})}
+                    for tool in tools_called
+                ]
                 return {
                     "answer": answer_text,
                     "tools_called": tools_called,
@@ -1770,6 +1863,8 @@ class CopilotEngine:
                         {"tool": tool, "params": {"company_id": self.company_id}}
                         for tool in tools_called
                     ],
+                    "confidence": _extract_answer_confidence(autonomous_collected),
+                    "missing_data_caveats": _extract_missing_data_caveats(autonomous_collected),
                     "intent": "",
                     "company_id": self.company_id,
                     "backend": self.backend,
@@ -1813,6 +1908,8 @@ class CopilotEngine:
                 "citations":                citations,
                 "data_freshness":           _extract_data_freshness(collected),
                 "tools_detail":             _build_tools_detail(collected),
+                "confidence":               _extract_answer_confidence(collected),
+                "missing_data_caveats":      _extract_missing_data_caveats(collected),
                 "intent":                   "",
                 "company_id":               self.company_id,
                 "backend":                  self.backend,

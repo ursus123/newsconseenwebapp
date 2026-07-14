@@ -177,6 +177,7 @@ TOOL_CAPABILITIES = {
     "get_entity_join": "read_company_data",
     "get_company_graph_context": "read_company_data",
     "get_enrichment_context": "read_company_data",
+    "recommend_enrichment_sources": "read_company_data",
     "get_ontology_schema": "read_company_data",
     "search_intelligence": "search_intelligence",
     "save_copilot_memory": "save_memory",
