@@ -1861,7 +1861,19 @@ def _recall_autonomous_memories(question: str, company_id: str) -> list[dict]:
     except Exception:
         return []
 
-    q_terms = {t.strip(".,:;!?()[]{}").lower() for t in question.split() if len(t) > 2}
+    stopwords = {
+        "about", "again", "also", "and", "are", "can", "could", "for", "from",
+        "have", "how", "into", "most", "our", "show", "that", "the", "their",
+        "this", "what", "when", "where", "which", "who", "why", "with", "you",
+        "your",
+    }
+    q_terms = {
+        token
+        for token in re.findall(r"[a-z0-9_]+", question.lower())
+        if len(token) > 2 and token not in stopwords
+    }
+    if not q_terms:
+        return []
     durable_types = {
         "terminology", "preference", "business_structure", "business_rule",
         "role_relationship", "recurring_pattern", "domain_context",
@@ -1872,7 +1884,15 @@ def _recall_autonomous_memories(question: str, company_id: str) -> list[dict]:
         if memory.get("memory_type") not in durable_types:
             continue
         haystack = f"{memory.get('key', '')} {memory.get('value', '')}".lower()
-        if not q_terms or any(term in haystack for term in q_terms):
+        hay_terms = {
+            token
+            for token in re.findall(r"[a-z0-9_]+", haystack)
+            if len(token) > 2 and token not in stopwords
+        }
+        overlap = q_terms & hay_terms
+        key = str(memory.get("key", "")).lower()
+        strong_key_hit = any(term in key for term in q_terms)
+        if len(overlap) >= 2 or (len(overlap) == 1 and strong_key_hit):
             relevant.append(memory)
     return relevant[:8]
 
@@ -1962,7 +1982,8 @@ def _autonomous_answer(question: str, company_id: str, principal=None, return_me
     Always returns a useful answer. With return_meta=True, returns
     (answer, tools_called, data, memory_used).
     """
-    memories = _recall_autonomous_memories(question, company_id)
+    tenant_authorized = principal.tenant_authorized if principal is not None else True
+    memories = _recall_autonomous_memories(question, company_id) if tenant_authorized else []
     tool_name = _detect_autonomous_tool(question)
     if not tool_name:
         answer, tools, data = _autonomous_miss_answer(question, company_id, principal)

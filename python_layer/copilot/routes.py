@@ -226,19 +226,26 @@ def ask(
     # via principal.tenant_authorized, not here.
     access = try_tenant_access(authorization, request.company_id)
     if access["authorized"]:
+        verified_user = access.get("user") or {}
         principal = principal_from_headers(
             company_id=request.company_id,
-            user_id=x_idjwi_user,
-            role=x_idjwi_role,
+            user_id=x_idjwi_user or verified_user.get("id"),
+            role=verified_user.get("role") or x_idjwi_role,
             plan=x_idjwi_plan,
             tenant_authorized=True,
+            auth_diagnostics=access.get("diagnostics"),
         )
     else:
         logger.info(
             "copilot/ask: no tenant access for company_id=%s (%s) — answering from default brain only",
             request.company_id, access["reason"],
         )
-        principal = default_brain_principal(company_id=request.company_id, user_id=x_idjwi_user)
+        principal = default_brain_principal(
+            company_id=request.company_id,
+            user_id=x_idjwi_user,
+            auth_reason=access.get("reason"),
+            auth_diagnostics=access.get("diagnostics"),
+        )
 
     engine = CopilotEngine(
         company_id=request.company_id,
@@ -295,6 +302,9 @@ def ask(
             )
 
         result["answer"] = friendly
+
+    result["tenant_authorized"] = bool(access.get("authorized"))
+    result["tenant_auth_diagnostics"] = access.get("diagnostics")
 
     return result
 
@@ -773,14 +783,21 @@ async def ask_stream(
     # Same soft tenant-auth as /copilot/ask — see the comment there.
     access = try_tenant_access(authorization, request.company_id)
     if access["authorized"]:
+        verified_user = access.get("user") or {}
         principal = principal_from_headers(
             company_id=request.company_id,
-            user_id=x_idjwi_user,
-            role=x_idjwi_role,
+            user_id=x_idjwi_user or verified_user.get("id"),
+            role=verified_user.get("role") or x_idjwi_role,
             tenant_authorized=True,
+            auth_diagnostics=access.get("diagnostics"),
         )
     else:
-        principal = default_brain_principal(company_id=request.company_id, user_id=x_idjwi_user)
+        principal = default_brain_principal(
+            company_id=request.company_id,
+            user_id=x_idjwi_user,
+            auth_reason=access.get("reason"),
+            auth_diagnostics=access.get("diagnostics"),
+        )
 
     async def generate():
         try:

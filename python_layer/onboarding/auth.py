@@ -84,9 +84,37 @@ def verify_tenant_access(authorization: Optional[str], company_id: str) -> dict:
     """
     user = verify_supabase_user(authorization)
     profile = _get_profile(user["id"])
-    if profile.get("role") == "super_admin" or profile.get("company_id") == company_id:
-        return {**user, **profile}
-    raise HTTPException(status_code=403, detail="Not authorized for this company")
+    app_meta = user.get("app_metadata") or {}
+    profile_company_id = profile.get("company_id")
+    metadata_company_id = app_meta.get("company_id")
+    role = profile.get("role") or app_meta.get("role") or "user"
+
+    if role == "super_admin":
+        return {**user, **profile, "role": role, "tenant_auth_source": "super_admin"}
+    if profile_company_id == company_id:
+        return {**user, **profile, "role": role, "tenant_auth_source": "user_profiles"}
+
+    # Supabase app_metadata is server/admin controlled. Use it as a safe
+    # fallback for newly linked or invited users whose user_profiles row has
+    # not materialised yet, but make the source explicit for debugging.
+    if metadata_company_id == company_id:
+        return {
+            **user,
+            **profile,
+            "company_id": metadata_company_id,
+            "role": role,
+            "tenant_auth_source": "app_metadata",
+            "profile_company_id": profile_company_id,
+        }
+
+    raise HTTPException(status_code=403, detail={
+        "code": "tenant_mismatch",
+        "message": "Not authorized for this company",
+        "requested_company_id": company_id,
+        "profile_company_id": profile_company_id,
+        "metadata_company_id": metadata_company_id,
+        "profile_found": bool(profile),
+    })
 
 
 def try_tenant_access(authorization: Optional[str], company_id: Optional[str]) -> dict:
@@ -99,12 +127,42 @@ def try_tenant_access(authorization: Optional[str], company_id: Optional[str]) -
     Returns {"authorized": bool, "user": dict|None, "reason": str|None}.
     """
     if not company_id:
-        return {"authorized": False, "user": None, "reason": "No company_id supplied."}
+        return {
+            "authorized": False,
+            "user": None,
+            "reason": "No company_id supplied.",
+            "diagnostics": {"code": "missing_company_id"},
+        }
     try:
         user = verify_tenant_access(authorization, company_id)
-        return {"authorized": True, "user": user, "reason": None}
+        return {
+            "authorized": True,
+            "user": user,
+            "reason": None,
+            "diagnostics": {
+                "code": "authorized",
+                "source": user.get("tenant_auth_source", "unknown"),
+                "role": user.get("role"),
+            },
+        }
     except HTTPException as exc:
-        return {"authorized": False, "user": None, "reason": exc.detail}
+        detail = exc.detail
+        if isinstance(detail, dict):
+            reason = detail.get("message") or detail.get("code") or "Tenant authorization failed."
+            diagnostics = detail
+        else:
+            reason = str(detail)
+            code = {
+                401: "missing_or_invalid_session",
+                403: "tenant_forbidden",
+            }.get(exc.status_code, "tenant_auth_failed")
+            diagnostics = {"code": code, "message": reason}
+        return {
+            "authorized": False,
+            "user": None,
+            "reason": reason,
+            "diagnostics": diagnostics,
+        }
 
 
 def verify_super_admin(authorization: Optional[str]) -> dict:

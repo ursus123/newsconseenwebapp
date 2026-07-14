@@ -73,6 +73,8 @@ class IdjwiPrincipal:
     # principal after verify_tenant_access already succeeded) keeps working
     # unchanged.
     tenant_authorized: bool = True
+    auth_reason: Optional[str] = None
+    auth_diagnostics: Optional[dict] = None
 
 
 # Simple in-memory per-IP rate limiter for public, unauthenticated Idjwi
@@ -109,6 +111,8 @@ def principal_from_headers(
     role: Optional[str] = None,
     plan: Optional[str] = None,
     tenant_authorized: bool = True,
+    auth_reason: Optional[str] = None,
+    auth_diagnostics: Optional[dict] = None,
 ) -> IdjwiPrincipal:
     return IdjwiPrincipal(
         user_id=user_id or "system",
@@ -116,10 +120,17 @@ def principal_from_headers(
         company_id=company_id,
         plan=(plan or "standard").lower(),
         tenant_authorized=tenant_authorized,
+        auth_reason=auth_reason,
+        auth_diagnostics=auth_diagnostics or {},
     )
 
 
-def default_brain_principal(company_id: Optional[str] = None, user_id: Optional[str] = None) -> IdjwiPrincipal:
+def default_brain_principal(
+    company_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    auth_reason: Optional[str] = None,
+    auth_diagnostics: Optional[dict] = None,
+) -> IdjwiPrincipal:
     """
     Principal for a caller who is not (or not yet) authorized for company_id.
     Can still use every PUBLIC_CAPABILITIES tool — Idjwi's own product,
@@ -132,7 +143,37 @@ def default_brain_principal(company_id: Optional[str] = None, user_id: Optional[
         company_id=company_id,
         plan="standard",
         tenant_authorized=False,
+        auth_reason=auth_reason,
+        auth_diagnostics=auth_diagnostics or {},
     )
+
+
+def _tenant_denied_reason(principal: IdjwiPrincipal) -> str:
+    reason = principal.auth_reason or ""
+    diagnostics = principal.auth_diagnostics or {}
+    if not reason and not diagnostics:
+        return TENANT_DENIED_REASON
+
+    parts = [TENANT_DENIED_REASON]
+    if reason:
+        parts.append(f"Tenant auth diagnostic: {reason}.")
+
+    requested = diagnostics.get("requested_company_id") or principal.company_id
+    profile_cid = diagnostics.get("profile_company_id")
+    metadata_cid = diagnostics.get("metadata_company_id")
+    code = diagnostics.get("code")
+    details = []
+    if code:
+        details.append(f"code: `{code}`")
+    if requested:
+        details.append(f"requested company_id: `{requested}`")
+    if profile_cid is not None:
+        details.append(f"profile company_id: `{profile_cid}`")
+    if metadata_cid is not None:
+        details.append(f"metadata company_id: `{metadata_cid}`")
+    if details:
+        parts.append("Auth details: " + "; ".join(details) + ".")
+    return "\n\n".join(parts)
 
 
 def authorize_capability(
@@ -165,7 +206,8 @@ def authorize_capability(
             "allowed": False,
             "capability": capability_id,
             "role": principal.role,
-            "reason": TENANT_DENIED_REASON,
+            "reason": _tenant_denied_reason(principal),
+            "diagnostics": principal.auth_diagnostics or {},
         }
 
     allowed = ROLE_CAPABILITIES.get(principal.role, ROLE_CAPABILITIES["viewer"])
