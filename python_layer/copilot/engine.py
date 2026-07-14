@@ -393,10 +393,29 @@ def build_system_prompt(company_id: str) -> str:
     )
 
     # ── Persistent memory — inject what the operator has told us before ───────
+    brain_section = ""
+    try:
+        from .idjwi_brain import build_prompt_section
+        brain_section = build_prompt_section(company_id)
+    except Exception:
+        brain_section = ""
+
     memory_section = ""
     try:
         from .idjwi_memory import recall
-        memories = recall(company_id, limit=100)
+        from .idjwi_brain import (
+            GLOBAL_MEMORY_COMPANY_ID,
+            INDUSTRY_MEMORY_COMPANY_ID,
+            SOURCE_MEMORY_COMPANY_ID,
+        )
+        memories = []
+        for cid in (
+            GLOBAL_MEMORY_COMPANY_ID,
+            SOURCE_MEMORY_COMPANY_ID,
+            INDUSTRY_MEMORY_COMPANY_ID,
+            company_id,
+        ):
+            memories.extend(recall(cid, limit=80))
         if memories:
             lines = ["OPERATOR MEMORY (from prior conversations — apply these always)"]
             lines.append("=" * 60)
