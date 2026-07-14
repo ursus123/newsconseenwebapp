@@ -15,6 +15,7 @@ Fixes applied:
 import json
 import logging
 import os
+import re
 import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -1053,6 +1054,28 @@ _AUTONOMOUS_INTENTS = [
     (["what is idjwi", "tell me about idjwi", "who are you", "what can you do",
       "your capabilities", "what are you"],
      "__self_describe__"),
+    # ── Product-knowledge intents — Idjwi's default brain. Checked before
+    # every tenant-data intent below so a product question never gets
+    # mistaken for an operational one. Answered from idjwi_brain.py's
+    # structured knowledge and newsconseen_docs.md — no LLM, no tenant data.
+    (["what is newsconseen", "what does newsconseen do", "tell me about newsconseen",
+      "what is this product", "what is this platform", "what is this app",
+      "what is this system"],
+     "__what_is_newsconseen__"),
+    (["ontology", "what entities", "entity types", "canonical entities",
+      "data model", "what objects", "universal entities"],
+     "__ontology__"),
+    (["public api", "public apis", "data source", "data sources", "source registry",
+      "enrich", "enrichment", "external data", "what should i connect",
+      "what data should i connect", "what can you connect"],
+     "__sources__"),
+    (["risk framework", "how do you calculate risk", "risk formula", "risk categories",
+      "how do you assess risk", "how is risk scored"],
+     "__risk_framework__"),
+    (["what charts", "what statistics", "what analysis", "analysis capabilities",
+      "graph methods", "statistical methods", "what can you visualize",
+      "what can you visualise", "what kind of charts"],
+     "__analysis_capabilities__"),
     (["show me overdue tasks", "list overdue tasks", "show overdue tasks",
       "list tasks for", "show me tasks", "list tasks"],
      "find_task_records"),
@@ -1169,6 +1192,138 @@ def _idjwi_self_describe() -> str:
         "Autonomous capabilities (no LLM needed): "
         + ", ".join(c["name"] for c in caps)
     )
+
+
+# ── Deterministic product-knowledge answers — Idjwi's default brain ─────────
+# Sourced from idjwi_brain.py (structured) and newsconseen_docs.md (prose).
+# No Anthropic call anywhere in this section — this is what lets Idjwi
+# explain the product, ontology, sources, risk framework, and analysis
+# capabilities before any company has connected data, with no LLM dependency.
+
+_DOC_STOPWORDS = {
+    "the", "a", "an", "is", "are", "was", "were", "how", "what", "why", "when",
+    "where", "who", "does", "do", "did", "can", "could", "would", "should", "to",
+    "of", "in", "on", "for", "and", "or", "it", "its", "this", "that", "with",
+    "about", "explain", "tell", "me", "i", "you", "your", "newsconseen", "idjwi",
+}
+
+
+def _split_docs_sections(docs: str) -> list[tuple[str, str]]:
+    """Split newsconseen_docs.md into (title, body) sections on '## ' headers."""
+    sections: list[tuple[str, str]] = []
+    current_title = "Overview"
+    current_body: list[str] = []
+    for line in docs.splitlines():
+        if line.startswith("## ") and not line.startswith("### "):
+            if current_body:
+                sections.append((current_title, "\n".join(current_body).strip()))
+            current_title = line[3:].strip()
+            current_body = []
+        else:
+            current_body.append(line)
+    if current_body:
+        sections.append((current_title, "\n".join(current_body).strip()))
+    return sections
+
+
+def _doc_keywords(text: str) -> set[str]:
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    return {w for w in words if w not in _DOC_STOPWORDS and len(w) > 2}
+
+
+def _docs_answer(question: str) -> str | None:
+    """
+    Best-effort deterministic answer from newsconseen_docs.md section
+    titles/bodies — a keyword/title match, not a generative answer. Returns
+    None if the docs can't be loaded or nothing scores above zero.
+    """
+    docs = _load_docs()
+    sections = _split_docs_sections(docs)
+    if not sections:
+        return None
+    q_words = _doc_keywords(question)
+    if not q_words:
+        return None
+    scored = [
+        (len(q_words & _doc_keywords(title)) * 3 + len(q_words & _doc_keywords(body)), title, body)
+        for title, body in sections
+    ]
+    scored.sort(key=lambda x: x[0], reverse=True)
+    best_score, best_title, best_body = scored[0]
+    if best_score == 0:
+        return None
+    return f"**{best_title}**\n\n{best_body[:1200].strip()}"
+
+
+def _what_is_newsconseen_answer() -> str:
+    docs_hit = _docs_answer("what is newsconseen overview autonomous sme operating system")
+    if docs_hit:
+        return docs_hit
+    from .idjwi_brain import PRODUCT_BRAIN
+    return (
+        f"{PRODUCT_BRAIN['north_star']}\n\n"
+        "How it fits together:\n"
+        + "\n".join(f"- {line}" for line in PRODUCT_BRAIN["system_model"])
+    )
+
+
+def _ontology_answer() -> str:
+    from .idjwi_brain import ONTOLOGY_BRAIN
+    entities = ", ".join(ONTOLOGY_BRAIN["entities"])
+    connections = "\n".join(f"- {c}" for c in ONTOLOGY_BRAIN["connections"])
+    return (
+        "**Newsconseen's universal ontology**\n\n"
+        f"Entities: {entities}\n\n"
+        f"How they connect:\n{connections}"
+    )
+
+
+def _sources_answer(question: str) -> str:
+    from .idjwi_brain import recommend_sources, INDUSTRY_MEMORY
+    q = question.lower()
+    industry = next((name for name in INDUSTRY_MEMORY if name in q), None)
+    result = recommend_sources(industry=industry, limit=8)
+    sources = result.get("sources", [])
+    if not sources:
+        return (
+            "I don't have a matching source in the registry for that yet — ask about a "
+            "specific entity type (person, product, enterprise) or industry (clinic, "
+            "farm, retail) and I can recommend enrichment sources for it."
+        )
+    heading = f"**Sources Idjwi can use{' for a ' + industry if industry else ''}**"
+    lines = [heading]
+    for src in sources[:8]:
+        entities = ", ".join(src.get("entities_enriched", [])[:4]) or "general records"
+        requires = ", ".join(src.get("requires", []) or []) or "nothing extra"
+        lines.append(
+            f"- **{src.get('source_id')}** ({src.get('source_type')}): enriches "
+            f"{entities}; needs {requires}; confidence {src.get('confidence', 'unknown')}"
+        )
+    return "\n".join(lines)
+
+
+def _risk_framework_answer() -> str:
+    from .idjwi_brain import RISK_BRAIN
+    return (
+        "**Idjwi's risk framework**\n\n"
+        f"Formula: {RISK_BRAIN['formula']}\n\n"
+        f"Categories tracked: {', '.join(RISK_BRAIN['categories'])}\n\n"
+        f"Every risk answer explains: {', '.join(RISK_BRAIN['required_explanation'])}"
+    )
+
+
+def _analysis_capabilities_answer() -> str:
+    from .idjwi_brain import ANALYSIS_BRAIN
+    chart_rules = "; ".join(f"{k} -> {v}" for k, v in ANALYSIS_BRAIN["chart_rules"].items())
+    return (
+        "**What Idjwi can analyse and chart**\n\n"
+        f"Statistics: {', '.join(ANALYSIS_BRAIN['statistics'])}\n\n"
+        f"Graph methods: {', '.join(ANALYSIS_BRAIN['graph_methods'])}\n\n"
+        f"Chart type by use case: {chart_rules}"
+    )
+
+
+_PRODUCT_BRAIN_SUFFIX = "\n\n*(Answered from Idjwi's default brain — no LLM needed)*"
 
 
 def _value_text(value) -> str:
@@ -1464,6 +1619,14 @@ def _memory_context_text(memories: list[dict]) -> str:
 
 def _autonomous_miss_answer(question: str, company_id: str, principal=None) -> tuple[str, list, dict]:
     tenant_authorized = principal.tenant_authorized if principal is not None else True
+
+    # Try Idjwi's default brain (product/ontology/source/risk knowledge)
+    # before assuming this is an operational question the tenant tools
+    # can't reach. No LLM, no tenant data — safe for any caller.
+    docs_hit = _docs_answer(question)
+    if docs_hit:
+        return (docs_hit + _PRODUCT_BRAIN_SUFFIX, [], {})
+
     broad = ["overview", "status", "snapshot", "health", "how are we doing", "today"]
     if any(term in question.lower() for term in broad):
         if not tenant_authorized:
@@ -1482,10 +1645,19 @@ def _autonomous_miss_answer(question: str, company_id: str, principal=None) -> t
             ["get_kpi_snapshot"],
             {"get_kpi_snapshot": result},
         )
+
+    if tenant_authorized:
+        return (
+            "I do not have an autonomous answer for that question yet.\n\n"
+            "I can answer operational questions about people, staff availability, tasks, transactions, products, inventory, KPIs, alerts, trends, attendance, time, and named records without Advisor.\n\n"
+            "Turn Advisor on for deeper reasoning or open-ended analysis.",
+            [],
+            {},
+        )
     return (
-        "I do not have an autonomous answer for that question yet.\n\n"
-        "I can answer operational questions about people, staff availability, tasks, transactions, products, inventory, KPIs, alerts, trends, attendance, time, and named records without Advisor.\n\n"
-        "Turn Advisor on for deeper reasoning or open-ended analysis.",
+        "I don't have a specific answer for that yet. Ask me what Newsconseen or Idjwi "
+        "is, about the ontology, data sources and enrichment, the risk framework, or "
+        "what kind of analysis and charts Idjwi can produce.",
         [],
         {},
     )
@@ -1509,6 +1681,23 @@ def _autonomous_answer(question: str, company_id: str, principal=None, return_me
         logger.info("_autonomous_answer: autonomous -> %s", tool_name)
         if tool_name == "__self_describe__":
             answer = _idjwi_self_describe() + "\n\n*(Answered from Idjwi capability registry - no Advisor needed)*"
+            return (answer, [], {}, bool(memories)) if return_meta else answer
+
+        # Product-knowledge sentinels — Idjwi's default brain. No tenant
+        # gate needed: these read idjwi_brain.py / newsconseen_docs.md only,
+        # never company data, so they're safe for any caller including
+        # default_brain_principal (no company connected).
+        _PRODUCT_ANSWERS = {
+            "__what_is_newsconseen__": _what_is_newsconseen_answer,
+            "__ontology__": _ontology_answer,
+            "__risk_framework__": _risk_framework_answer,
+            "__analysis_capabilities__": _analysis_capabilities_answer,
+        }
+        if tool_name in _PRODUCT_ANSWERS:
+            answer = _PRODUCT_ANSWERS[tool_name]() + _PRODUCT_BRAIN_SUFFIX
+            return (answer, [], {}, bool(memories)) if return_meta else answer
+        if tool_name == "__sources__":
+            answer = _sources_answer(question) + _PRODUCT_BRAIN_SUFFIX
             return (answer, [], {}, bool(memories)) if return_meta else answer
 
         # Tenant gate — checked here (not just inside execute_tool) so a

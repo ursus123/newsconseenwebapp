@@ -246,7 +246,7 @@ function ProgressLabel({ label }) {
 }
 
 // ── Message ───────────────────────────────────────────────────────────────────
-function Message({ role, content, charts, citations, toolsCalled, streaming, mode, question, onAskIdjwi, onDeepen }) {
+function Message({ role, content, charts, citations, toolsCalled, streaming, onAskIdjwi }) {
   const isUser = role === "user";
   const showDots = !isUser && streaming && !content;
 
@@ -296,16 +296,6 @@ function Message({ role, content, charts, citations, toolsCalled, streaming, mod
             ))}
           </div>
         )}
-        {/* Idjwi's default brain answered above with no Anthropic call.
-            Claude-backed reasoning is opt-in — only runs if asked for here. */}
-        {!isUser && !streaming && mode === "autonomous" && question && onDeepen && (
-          <button
-            onClick={() => onDeepen(question)}
-            className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-violet-400 hover:text-violet-300 border border-violet-500/30 hover:border-violet-500/50 bg-violet-500/5 hover:bg-violet-500/10 rounded-full px-3 py-1 transition-all"
-          >
-            <Brain className="w-3 h-3" /> Get a deeper, reasoned answer (uses Claude)
-          </button>
-        )}
       </div>
     </div>
   );
@@ -335,16 +325,12 @@ function IdjwiChat() {
     setMessages(prev => prev.map(m => m._id === id ? { ...m, ...patch } : m));
   }, []);
 
-  // advisorEnabled: false (default) = Idjwi's own default brain answers —
-  // deterministic, no Anthropic call. true = the visitor explicitly asked
-  // for a deeper, Claude-reasoned answer (via the "Get a deeper answer"
-  // button on an autonomous-mode reply). Anthropic is opt-in, never automatic.
-  const send = async (text, advisorEnabled = false) => {
+  const send = async (text) => {
     const q = (text || input).trim();
     if (!q || loading || rateLimited) return;
     setInput("");
     setStarted(true);
-    trackEvent("prompt_sent", { is_starter: !!text, length: q.length, advisor_enabled: advisorEnabled });
+    trackEvent("prompt_sent", { is_starter: !!text, length: q.length });
 
     const msgId = `msg-${Date.now()}`;
     const userHistory = historyRef.current.map(m => ({ role: m.role, content: m.content }));
@@ -352,7 +338,7 @@ function IdjwiChat() {
     setMessages(prev => [
       ...prev,
       { _id: `u-${msgId}`, role: "user", content: q },
-      { _id: msgId, role: "assistant", content: "", charts: [], citations: [], toolsCalled: [], streaming: true, question: q },
+      { _id: msgId, role: "assistant", content: "", charts: [], citations: [], toolsCalled: [], streaming: true },
     ]);
     setLoading(true);
     setProgressLabel(null);
@@ -368,7 +354,7 @@ function IdjwiChat() {
         const resp = await fetch(`${RAILWAY_URL}/copilot/demo-stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: q, history: userHistory, advisor_enabled: advisorEnabled }),
+          body: JSON.stringify({ question: q, history: userHistory }),
         });
 
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -414,7 +400,6 @@ function IdjwiChat() {
                 content:     finalContent || "Done.",
                 citations:   event.citations || [],
                 toolsCalled: finalTools,
-                mode:        event.mode || "autonomous",
                 streaming:   false,
               });
               if (event.rate_limited) setRateLimited(true);
@@ -450,7 +435,7 @@ function IdjwiChat() {
         const resp = await fetch(`${RAILWAY_URL}/copilot/demo-ask`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: q, history: userHistory, advisor_enabled: advisorEnabled }),
+          body: JSON.stringify({ question: q, history: userHistory }),
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
@@ -462,7 +447,6 @@ function IdjwiChat() {
           charts:      finalCharts,
           citations:   data.citations || [],
           toolsCalled: finalTools,
-          mode:        data.mode || "autonomous",
           streaming:   false,
         });
         if (data.rate_limited) setRateLimited(true);
@@ -522,8 +506,7 @@ function IdjwiChat() {
             <Message key={m._id} role={m.role} content={m.content}
               charts={m.charts} citations={m.citations}
               toolsCalled={m.toolsCalled} streaming={m.streaming}
-              mode={m.mode} question={m.question}
-              onAskIdjwi={send} onDeepen={(q) => send(q, true)} />
+              onAskIdjwi={send} />
           ))}
 
           {/* Starter chips — before user has typed */}
