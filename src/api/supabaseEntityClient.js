@@ -382,6 +382,28 @@ export const supabaseEntities = {
   Risk:             entityWrapper("risks"),
   Opportunity:      entityWrapper("opportunities"),
   MetricDefinition: entityWrapper("metric_definitions"),
+
+  // Platform internals — formerly Base44-only fallback, added via
+  // 003_supabase_entity_expansion.sql. Run that migration before deploying
+  // this block, or every read/write to these entities will error against a
+  // nonexistent table instead of falling back to Base44.
+  User:                 entityWrapper("user_profiles"),   // wraps existing auth table, not a new one
+  RolePermissions:      entityWrapper("role_permissions"),
+  UserAppAccess:        entityWrapper("user_app_access"),
+  PendingInvitation:    entityWrapper("pending_invitations"),
+  Report:               entityWrapper("reports"),
+  ReportChart:          entityWrapper("report_charts"),
+  ReportComment:        entityWrapper("report_comments"),
+  ChartFolder:          entityWrapper("chart_folders"),
+  SavedDashboardWidget: entityWrapper("saved_dashboard_widgets"),
+  QueryDefinition:      entityWrapper("query_definitions"),
+  DataModel:            entityWrapper("data_models"),
+  ConnectorMapping:     entityWrapper("connector_mappings"),
+  ConnectorRun:         entityWrapper("connector_runs"),
+  FileRecord:           entityWrapper("file_records"),
+  FileShare:            entityWrapper("file_shares"),
+  MedicationProfile:    entityWrapper("medication_profiles"),
+  Attendance:           entityWrapper("attendance"),
 };
 
 // ── Auth shim — mirrors ncClient.auth.me() ─────────────────────────────────────
