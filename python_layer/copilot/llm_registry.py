@@ -190,8 +190,10 @@ TOOL_CAPABILITIES = {
     "get_company_graph_context": "read_company_data",
     "get_enrichment_context": "read_company_data",
     # Recommends sources by entity_type/industry/risk — no tenant records read.
+    "route_source_request": "read_public_data",
     "recommend_enrichment_sources": "read_default_brain",
     "get_ontology_schema": "read_default_brain",
+    "generate_import_template": "read_default_brain",
     "search_intelligence": "search_intelligence",
     "save_copilot_memory": "save_memory",
     "list_copilot_memory": "save_memory",

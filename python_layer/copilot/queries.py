@@ -5959,6 +5959,26 @@ TOOL_DEFINITIONS = [
     },
     # ── Intelligence entity search ────────────────────────────────────────────
     {
+        "name": "route_source_request",
+        "description": (
+            "Route any public API, enrichment API, connector, or external source question "
+            "through Idjwi's source_registry.json. Use this before choosing an enrichment "
+            "source. It selects the best source, identifies missing inputs, executes safe "
+            "public reads when possible, and explains when tenant authorization or approval "
+            "is required."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["question"],
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "The operator's original public data, source, connector, or enrichment question.",
+                },
+            },
+        },
+    },
+    {
         "name": "recommend_enrichment_sources",
         "description": (
             "Recommend public APIs, connectors, and external data sources Idjwi can use for "
@@ -8079,6 +8099,7 @@ def execute_tool(
         # ─── Ontology-native read tools ───────────────────────────────────────
         "get_company_graph_context":    _dispatch_graph_context,
         "get_enrichment_context":       _dispatch_enrichment_context,
+        "route_source_request":         _dispatch_route_source_request,
         "recommend_enrichment_sources": _dispatch_recommend_enrichment_sources,
         "search_intelligence":          _dispatch_search_intelligence,
         "get_ontology_schema":          _dispatch_ontology_schema,
@@ -8283,6 +8304,21 @@ def _dispatch_enrichment_context(company_id: str, entity_type: str, entity_id: s
                                   enrichment_types=None) -> dict:
     from copilot.ontology_tools import get_enrichment_context
     return get_enrichment_context(company_id, entity_type, entity_id, enrichment_types)
+
+
+def _dispatch_route_source_request(company_id: str, question: str) -> dict:
+    from copilot.source_router import route_source_request
+    principal = _CURRENT_PRINCIPAL.get()
+    result = route_source_request(
+        question,
+        company_id=company_id,
+        principal=principal,
+        execute_tool_fn=execute_tool,
+    )
+    result["company_id"] = company_id
+    result["data_source"] = "idjwi_source_registry_router"
+    result["data_as_of"] = "live route"
+    return result
 
 
 def _dispatch_recommend_enrichment_sources(

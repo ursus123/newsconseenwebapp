@@ -33,14 +33,25 @@ from .idjwi_security import authorize_capability
 # about it on the very next request.
 
 _DOCS_PATH = Path(__file__).parent / "docs" / "newsconseen_docs.md"
+_ARCHITECTURE_PATH = Path(__file__).resolve().parents[2] / "src" / "ARCHITECTURE.md"
 
 
 def _load_docs() -> str:
-    """Load Newsconseen product documentation from disk at request time."""
+    """Load Newsconseen default-brain docs from disk at request time."""
+    parts = []
     try:
-        return _DOCS_PATH.read_text(encoding="utf-8")
+        product_docs = _DOCS_PATH.read_text(encoding="utf-8")
+        if product_docs:
+            parts.append("# Newsconseen Product Documentation\n\n" + product_docs)
     except Exception:
-        return ""  # fall back to _SELF_KNOWLEDGE_FALLBACK if docs missing
+        pass
+    try:
+        architecture_docs = _ARCHITECTURE_PATH.read_text(encoding="utf-8")
+        if architecture_docs:
+            parts.append("# Newsconseen Architecture Contract\n\n" + architecture_docs)
+    except Exception:
+        pass
+    return "\n\n---\n\n".join(parts)
 
 logger = logging.getLogger(__name__)
 
@@ -945,8 +956,11 @@ def _extract_citations(collected_tools: list) -> list:
     """Extract web search citations from collected tool results."""
     citations = []
     for item in collected_tools:
-        if item["tool"] in ("web_search", "search_public_data"):
-            for r in item.get("result", {}).get("results", []):
+        if item["tool"] in ("web_search", "search_public_data", "route_source_request"):
+            result = item.get("result", {}) or {}
+            nested_public = result.get("result") if item["tool"] == "route_source_request" else None
+            citation_result = nested_public if isinstance(nested_public, dict) else result
+            for r in citation_result.get("results", []):
                 url   = r.get("url", "")
                 title = r.get("title", "")
                 if url or title:
@@ -1022,7 +1036,7 @@ def _extract_answer_confidence(collected_tools: list) -> dict:
     score = 0.84
     score -= min(failed * 0.22, 0.45)
     score -= min(empty * 0.08, 0.24)
-    if any(item.get("tool") in ("web_search", "search_public_data", "recommend_enrichment_sources") for item in collected_tools):
+    if any(item.get("tool") in ("web_search", "search_public_data", "route_source_request", "recommend_enrichment_sources") for item in collected_tools):
         score += 0.04
     score = max(0.2, min(round(score, 2), 0.97))
 
@@ -1069,6 +1083,30 @@ _AUTONOMOUS_INTENTS = [
       "enrich", "enrichment", "external data", "what should i connect",
       "what data should i connect", "what can you connect"],
      "__sources__"),
+    (["how newsconseen works", "system works", "architecture", "frontend app",
+      "frontend structure", "supabase", "python layer", "python_layer", "etl",
+      "datamart", "tenant isolation", "security boundary", "pages relate",
+      "pages and tools", "connectors", "workflows", "agents"],
+     "__system_explainer__"),
+    (["what data should i add first", "what should i add first", "data should i add first",
+      "what data is missing", "what is missing before", "before idjwi can analyze",
+      "before idjwi can analyse", "how do i add a clinic", "add a clinic",
+      "what should a farm connect first", "farm connect first", "how do i map my spreadsheet",
+      "map my spreadsheet", "spreadsheet into the ontology", "data onboarding",
+      "onboarding guide", "help me insert data", "help me add data"],
+     "__onboarding_guide__"),
+    (["import template", "make an import template", "generate import template",
+      "blank template", "columns do i need", "what columns", "csv template"],
+     "generate_import_template"),
+    (["gdp", "gdp per capita", "gdp growth", "inflation", "unemployment",
+      "population", "life expectancy", "literacy", "health spending",
+      "education spending", "internet users", "mobile subscriptions",
+      "world bank", "economic indicator", "economic indicators"],
+     "search_public_data"),
+    (["exchange rate", "exchange rates", "currency rate", "fx rate", "fx rates"],
+     "search_public_data"),
+    (["weather forecast", "weather in", "rain forecast", "temperature in"],
+     "search_public_data"),
     (["risk framework", "how do you calculate risk", "risk formula", "risk categories",
       "how do you assess risk", "how is risk scored"],
      "__risk_framework__"),
@@ -1323,7 +1361,158 @@ def _analysis_capabilities_answer() -> str:
     )
 
 
+def _system_explainer_answer(question: str) -> str:
+    from .idjwi_brain import SYSTEM_EXPLAINER_BRAIN
+    docs_hit = _docs_answer(question)
+    lines = [
+        "**How Newsconseen works end to end**",
+        "",
+        "Default brain:",
+        "- Product docs, architecture docs, ontology schema, source registry, public APIs, onboarding guidance, analysis/risk/chart defaults, and demo/no-data behavior.",
+        "- This layer belongs to Newsconseen and is safe before tenant authorization.",
+        "",
+        "Company-stamped brain:",
+        "- Company records, memory, graph, enrichment rows, risks, workflows, and approved decisions.",
+        "- This layer is scoped by `company_id` and requires tenant authorization.",
+        "",
+        "System layers:",
+        *[f"- {item}" for item in SYSTEM_EXPLAINER_BRAIN["layers"]],
+        "",
+        "Pages and tools:",
+        *[f"- {item}" for item in SYSTEM_EXPLAINER_BRAIN["page_model"]],
+        "",
+        "Security:",
+        *[f"- {item}" for item in SYSTEM_EXPLAINER_BRAIN["security_model"]],
+    ]
+    if docs_hit:
+        lines.extend(["", "Architecture/docs match:", docs_hit[:1200]])
+    return "\n".join(lines)
+
+
+def _industry_from_question(question: str) -> str:
+    q = question.lower()
+    for name in ("clinic", "farm", "retail"):
+        if name in q:
+            return name
+    if any(term in q for term in ("shop", "store", "sku", "barcode")):
+        return "retail"
+    return ""
+
+
+def _onboarding_guide_answer(question: str) -> str:
+    from .idjwi_brain import DATA_ENTRY_BRAIN, INDUSTRY_MEMORY
+    industry = _industry_from_question(question)
+    lines = [
+        "**Idjwi can help you set up Newsconseen before company data exists.**",
+        "",
+        "Add data in this order:",
+        *[f"- {item}" for item in DATA_ENTRY_BRAIN["minimum_sequence"]],
+        "",
+        "What is missing before Idjwi can analyze a business:",
+        *[f"- {item}" for item in DATA_ENTRY_BRAIN["missing_before_analysis"]],
+        "",
+        "Spreadsheet mapping rule:",
+        *[f"- {item}" for item in DATA_ENTRY_BRAIN["import_flow"]],
+    ]
+    if industry and industry in DATA_ENTRY_BRAIN["industry_starters"]:
+        lines.extend([
+            "",
+            f"{industry.title()} starter dataset:",
+            *[f"- {item}" for item in DATA_ENTRY_BRAIN["industry_starters"][industry]],
+        ])
+        industry_memory = INDUSTRY_MEMORY.get(industry, {})
+        if industry_memory:
+            lines.extend([
+                "",
+                "Default terms and source priorities:",
+                f"- Terms: {industry_memory.get('terms', {})}",
+                f"- Priority sources: {', '.join(industry_memory.get('priority_sources', []))}",
+                f"- Common risks: {', '.join(industry_memory.get('risks', []))}",
+            ])
+    lines.extend([
+        "",
+        "You can ask for a template next, for example: `make an import template for products`.",
+    ])
+    return "\n".join(lines)
+
+
+def _entity_from_question(question: str) -> str:
+    q = question.lower()
+    entity_aliases = {
+        "people": "person",
+        "persons": "person",
+        "staff": "person",
+        "clients": "person",
+        "patients": "person",
+        "enterprises": "enterprise",
+        "companies": "enterprise",
+        "clinics": "enterprise",
+        "farms": "enterprise",
+        "shops": "enterprise",
+        "products": "product",
+        "items": "product",
+        "inventory": "product",
+        "services": "service",
+        "tasks": "task",
+        "transactions": "transaction",
+        "relationships": "relationship",
+        "addresses": "address",
+        "documents": "document",
+        "schedules": "schedule",
+        "signals": "signal",
+        "channels": "channel",
+        "territories": "territory",
+        "animals": "animal",
+        "plots": "plot",
+        "observations": "observation",
+    }
+    for key, value in entity_aliases.items():
+        if key in q:
+            return value
+    match = re.search(r"\b(?:for|of)\s+([a-z_]+)\b", q)
+    return match.group(1) if match else "person"
+
+
 _PRODUCT_BRAIN_SUFFIX = "\n\n*(Answered from Idjwi's default brain — no LLM needed)*"
+
+
+def _country_from_question(question: str) -> str:
+    q = question.lower()
+    aliases = {
+        "usa": "USA",
+        "u.s.a": "USA",
+        "u.s.": "USA",
+        "united states": "USA",
+        "america": "USA",
+        "uk": "GBR",
+        "united kingdom": "GBR",
+        "great britain": "GBR",
+    }
+    for key, code in aliases.items():
+        if key in q:
+            return code
+    match = re.search(r"\b(?:of|for|in)\s+([a-z][a-z\s]{1,40}?)(?:\?|$|,|\.|\s+from\s+|\s+between\s+)", q)
+    if match:
+        return match.group(1).strip()
+    return ""
+
+
+def _public_data_input(question: str) -> dict:
+    q = question.lower()
+    if any(term in q for term in ("exchange rate", "exchange rates", "currency rate", "fx rate", "fx rates")):
+        currency = "USD"
+        match = re.search(r"\b([A-Z]{3})\b", question)
+        if match:
+            currency = match.group(1).upper()
+        return {"dataset": "fx_rates", "query": currency, "location": ""}
+    if any(term in q for term in ("weather forecast", "weather in", "rain forecast", "temperature in")):
+        location = _country_from_question(question) or question
+        return {"dataset": "weather", "query": question, "location": location}
+    return {
+        "dataset": "world_bank",
+        "query": question,
+        "location": _country_from_question(question),
+    }
 
 
 def _value_text(value) -> str:
@@ -1373,6 +1562,89 @@ def _format_rows(title: str, rows: list[dict], name_keys: list[str], metric_keys
 
 def _format_autonomous_answer(tool_name: str, result: dict) -> str:
     """Convert a tool result dict into a plain-text answer for autonomous mode."""
+
+    if tool_name == "search_public_data":
+        dataset = result.get("dataset", "public_data")
+        if result.get("error"):
+            return result.get("note") or f"I could not query {dataset}: {result.get('error')}"
+
+        if dataset == "world_bank":
+            data = result.get("data") or []
+            indicator = (result.get("indicator_name") or result.get("indicator") or "indicator").replace("_", " ").title()
+            country = data[0].get("country") if data else result.get("country", "")
+            if not data:
+                return f"I queried World Bank Open Data for {indicator}, but no recent value was returned."
+            latest = data[0]
+            value = latest.get("value")
+            year = latest.get("year")
+            value_text = _value_text(value)
+            if "gdp" in indicator.lower() and value:
+                try:
+                    value_text = f"${float(value) / 1_000_000_000_000:,.2f} trillion USD"
+                except Exception:
+                    pass
+            lines = [
+                f"**{indicator} for {country or result.get('country', 'the selected country')}**",
+                f"- Latest available value: **{value_text}** ({year})",
+            ]
+            if len(data) > 1:
+                lines.append("- Recent values:")
+                for row in data[1:5]:
+                    row_value = _value_text(row.get("value"))
+                    if "gdp" in indicator.lower() and row.get("value"):
+                        try:
+                            row_value = f"${float(row.get('value')) / 1_000_000_000_000:,.2f}T"
+                        except Exception:
+                            pass
+                    lines.append(f"  - {row.get('year')}: {row_value}")
+            lines.append(f"\n{result.get('note', 'Source: public data')}")
+            return "\n".join(lines)
+
+        if dataset in ("fx_rates", "exchange_rates"):
+            rates = result.get("rates") or result.get("data", {}).get("rates") or {}
+            base = result.get("base") or result.get("query") or "USD"
+            if not rates:
+                return "I queried exchange rates, but no rates were returned."
+            top = list(rates.items())[:10]
+            lines = [f"**Exchange rates for {base}**"]
+            lines.extend(f"- {code}: {_value_text(rate)}" for code, rate in top)
+            return "\n".join(lines)
+
+        if dataset == "weather":
+            forecast = result.get("forecast") or result.get("data") or []
+            if not forecast:
+                return result.get("note") or "I queried weather data, but no forecast was returned."
+            return f"**Weather data**\n\n{result.get('note', '')}\n\n" + _format_rows(
+                "Forecast", forecast, ["date", "day"], ["temp_max_c", "temp_min_c", "precipitation_mm"]
+            )
+
+        rows = result.get("data") or result.get("results") or []
+        if isinstance(rows, list) and rows:
+            return _format_rows(dataset.replace("_", " ").title(), rows, ["country", "name", "title"], ["value", "year", "count"])
+        return result.get("note") or f"I queried {dataset}, but no rows were returned."
+
+    if tool_name == "generate_import_template":
+        if result.get("error"):
+            return result.get("error")
+        columns = result.get("columns") or []
+        entity_type = result.get("entity_type") or "Entity"
+        lines = [
+            f"**Import template for {entity_type}**",
+            "",
+            "Use this when you want to put data into Newsconseen before Idjwi has company records to analyze.",
+            "",
+            "Columns:",
+            ", ".join(f"`{col}`" for col in columns[:80]) or "No columns returned.",
+        ]
+        if result.get("sample_row"):
+            sample = result["sample_row"]
+            preview = ", ".join(f"{k}: {v}" for k, v in list(sample.items())[:12])
+            lines.extend(["", "Sample row:", preview])
+        if result.get("download_url"):
+            lines.extend(["", f"Template endpoint: `{result.get('download_url')}`"])
+        if result.get("instructions"):
+            lines.extend(["", result["instructions"]])
+        return "\n".join(lines)
 
     if tool_name == "get_people_summary":
         summary = result.get("summary", {})
@@ -1620,6 +1892,27 @@ def _memory_context_text(memories: list[dict]) -> str:
 def _autonomous_miss_answer(question: str, company_id: str, principal=None) -> tuple[str, list, dict]:
     tenant_authorized = principal.tenant_authorized if principal is not None else True
 
+    # Source Registry Router: before giving up, let Idjwi's default brain
+    # reason over every public/enrichment source in source_registry.json.
+    # Public reads can execute without tenant auth; tenant/connector/write
+    # routes return a security-aware plan instead of bypassing the gate.
+    try:
+        from .source_router import route_source_request
+        route = route_source_request(
+            question,
+            company_id=company_id,
+            principal=principal,
+            execute_tool_fn=execute_tool,
+        )
+        if route.get("matched") and route.get("answer"):
+            return (
+                route["answer"] + "\n\n*(Routed by Idjwi's Source Registry Router - Advisor off)*",
+                route.get("tools_called", ["source_registry_router"]),
+                route.get("data") or {"source_registry_router": route},
+            )
+    except Exception as e:
+        logger.warning("Source Registry Router failed: %s", e)
+
     # Try Idjwi's default brain (product/ontology/source/risk knowledge)
     # before assuming this is an operational question the tenant tools
     # can't reach. No LLM, no tenant data — safe for any caller.
@@ -1692,6 +1985,8 @@ def _autonomous_answer(question: str, company_id: str, principal=None, return_me
             "__ontology__": _ontology_answer,
             "__risk_framework__": _risk_framework_answer,
             "__analysis_capabilities__": _analysis_capabilities_answer,
+            "__system_explainer__": lambda: _system_explainer_answer(question),
+            "__onboarding_guide__": lambda: _onboarding_guide_answer(question),
         }
         if tool_name in _PRODUCT_ANSWERS:
             answer = _PRODUCT_ANSWERS[tool_name]() + _PRODUCT_BRAIN_SUFFIX
@@ -1714,6 +2009,10 @@ def _autonomous_answer(question: str, company_id: str, principal=None, return_me
             return (answer, [], {}, bool(memories)) if return_meta else answer
 
         tool_input = {"company_id": company_id}
+        if tool_name == "search_public_data":
+            tool_input.update(_public_data_input(question))
+        if tool_name == "generate_import_template":
+            tool_input["entity_type"] = _entity_from_question(question)
         q = question.lower()
         if tool_name == "find_task_records" and "overdue" in q:
             tool_input["overdue_only"] = True

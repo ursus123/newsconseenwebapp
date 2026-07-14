@@ -113,6 +113,91 @@ ANSWER_POLICY = {
 }
 
 
+SYSTEM_EXPLAINER_BRAIN = {
+    "layers": [
+        "Frontend React apps create and inspect ontology records.",
+        "Supabase is the live operational source of truth, scoped by company_id.",
+        "python_layer runs FastAPI, ETL, analytics, enrichment, ML, agents, and copilot tools.",
+        "ETL/datamart converts live records into analytics.* summaries for reporting and reasoning.",
+        "Idjwi reads the default brain before signup and adds company-stamped context after tenant authorization.",
+        "Agents and workflows act on insights through capability and approval gates.",
+    ],
+    "security_model": [
+        "Default brain: product docs, architecture docs, ontology, source registry, public APIs, onboarding, demo behavior.",
+        "Company brain: company records, memory, graph, enrichment rows, risks, workflows, decisions.",
+        "Company writes/actions: tenant authorization plus role/capability/approval checks.",
+    ],
+    "page_model": [
+        "People, Enterprises, Products, Services, Tasks, Transactions, Relationships, Addresses, Documents, Schedules, Signals, Channels, Territories, Animals, Plots, and Observations are ontology pages.",
+        "Reports, Query Builder, Company Graph, Market Intelligence, Spatial Intelligence, ML Models, Agents, Alerts, and Workflows are intelligence/action pages over that ontology.",
+        "Onboarding, Add Data, Smart Import, and import templates help create the first ontology records.",
+    ],
+}
+
+
+DATA_ENTRY_BRAIN = {
+    "minimum_sequence": [
+        "Create or import Enterprises first: headquarters, branches, departments, farms, shops, clinics, suppliers, or customers that act as organizations.",
+        "Create or import People next: staff, clients/customers/patients/students, contacts, volunteers, and their role or subtype.",
+        "Create or import Products and Services: inventory, medications, SKUs, crops, animals, treatments, classes, subscriptions, packages, or financial instruments.",
+        "Add Addresses for physical places, service areas, plots, branches, clients, and suppliers.",
+        "Add Relationships to connect people, enterprises, products, services, addresses, and tasks into a graph.",
+        "Add Transactions, Tasks, Schedules, Documents, Signals, Observations, Animals, Plots, and domain records as soon as the core graph exists.",
+        "Run ETL or let mutation-triggered refreshes populate analytics so Idjwi can calculate KPIs, risks, trends, and charts.",
+    ],
+    "import_flow": [
+        "Start with a CSV/XLSX/JSON file or ask Idjwi for a blank template.",
+        "Map spreadsheet columns to ontology fields, not to a vertical-specific silo.",
+        "Keep company_id reserved for the system; do not ask users to manually create tenant IDs in public templates.",
+        "Review low-confidence mappings before loading.",
+        "After import, create relationships and addresses so the graph is analyzable.",
+    ],
+    "missing_before_analysis": [
+        "At least one Enterprise or operating unit.",
+        "People with person_type and status.",
+        "Products or Services with item/service classification if inventory or delivery matters.",
+        "Transactions if revenue, cash flow, AR/AP, pricing, or concentration analysis matters.",
+        "Tasks or schedules if operational workload, completion, attendance, or SLA analysis matters.",
+        "Addresses/plots/territories if spatial, market, weather, soil, routing, or coverage analysis matters.",
+        "Relationships if graph reasoning, dependency risk, customer/supplier concentration, or ownership questions matter.",
+    ],
+    "industry_starters": {
+        "clinic": [
+            "Enterprise: clinic, departments, pharmacy, suppliers, insurers.",
+            "People: staff, providers, patients/clients, emergency contacts.",
+            "Services: consultations, labs, procedures, care programs.",
+            "Products: medications, supplies, equipment, controlled items.",
+            "Documents: licenses, provider credentials, compliance files.",
+            "Transactions: invoices, payments, insurance claims, purchase orders.",
+            "Schedules/Tasks: appointments, follow-ups, medication/admin tasks.",
+        ],
+        "farm": [
+            "Enterprise: farm, plots/fields, buyers, suppliers, cooperatives.",
+            "Plots and Addresses: coordinates, area, soil zone, irrigation zone.",
+            "Animals/Products: livestock, crops, feed, inputs, harvested goods.",
+            "Observations: soil, rainfall, disease, yield, weight, temperature.",
+            "Tasks: planting, spraying, feeding, inspection, harvest, delivery.",
+            "Transactions: input purchases, sales, labor, transport, grants.",
+            "Public sources: weather, soil, climate history, FAOSTAT/USDA context.",
+        ],
+        "retail": [
+            "Enterprise: shop, branches, suppliers, marketplaces.",
+            "Products: SKUs, barcodes, categories, stock, prices, reorder levels.",
+            "People: staff, customers, suppliers/contacts.",
+            "Transactions: sales, purchases, refunds, expenses, payments.",
+            "Addresses: store location, service area, supplier locations.",
+            "Tasks: stock counts, replenishment, customer follow-ups.",
+            "Public sources: barcode data, OSM competitors, census/demographics, FX rates.",
+        ],
+    },
+    "template_entities": [
+        "person", "enterprise", "product", "service", "task", "transaction",
+        "relationship", "address", "document", "schedule", "signal", "channel",
+        "territory", "animal", "plot", "observation",
+    ],
+}
+
+
 QUESTION_ROUTING = [
     {
         "intent": "kpi_snapshot",
@@ -167,6 +252,18 @@ QUESTION_ROUTING = [
         "triggers": ["enrich", "public api", "source", "external data", "what can you know"],
         "tools": ["recommend_enrichment_sources", "get_enrichment_context"],
         "analysis": ["source registry", "required inputs", "confidence"],
+    },
+    {
+        "intent": "onboarding",
+        "triggers": ["add first", "add data", "onboard", "import", "template", "spreadsheet", "missing data", "connect first"],
+        "tools": ["generate_import_template", "get_ontology_schema", "recommend_enrichment_sources"],
+        "analysis": ["minimum dataset", "ontology mapping", "missing data before analysis"],
+    },
+    {
+        "intent": "system_explainer",
+        "triggers": ["how newsconseen works", "architecture", "frontend", "supabase", "python layer", "etl", "datamart", "tenant isolation"],
+        "tools": ["get_ontology_schema", "route_source_request"],
+        "analysis": ["system layers", "security boundary", "page-to-ontology map"],
     },
 ]
 
@@ -296,6 +393,8 @@ def get_brain_snapshot(
         "analysis_brain": ANALYSIS_BRAIN,
         "risk_brain": RISK_BRAIN,
         "answer_policy": ANSWER_POLICY,
+        "system_explainer_brain": SYSTEM_EXPLAINER_BRAIN,
+        "data_entry_brain": DATA_ENTRY_BRAIN,
         "question_route": route,
         "source_recommendations": sources,
         "industry_memory": INDUSTRY_MEMORY,
@@ -336,6 +435,16 @@ def build_prompt_section(company_id: str) -> str:
         "- Categories: " + ", ".join(RISK_BRAIN["categories"]),
         "- Every risk answer must explain: " + ", ".join(RISK_BRAIN["required_explanation"]),
         "",
+        "System explainer brain:",
+        *[f"- {item}" for item in SYSTEM_EXPLAINER_BRAIN["layers"]],
+        "Security boundary:",
+        *[f"- {item}" for item in SYSTEM_EXPLAINER_BRAIN["security_model"]],
+        "",
+        "Data entry and onboarding brain:",
+        *[f"- {item}" for item in DATA_ENTRY_BRAIN["minimum_sequence"]],
+        "Missing before meaningful company analysis:",
+        *[f"- {item}" for item in DATA_ENTRY_BRAIN["missing_before_analysis"]],
+        "",
         "Default answer policy:",
         "- Structure: " + " / ".join(ANSWER_POLICY["default_structure"]),
         f"- Voice: {ANSWER_POLICY['voice']}",
@@ -369,6 +478,8 @@ def seed_bootstrap_memory(engine=None) -> dict[str, Any]:
         (GLOBAL_MEMORY_COMPANY_ID, "analysis_brain", ANALYSIS_BRAIN, "analysis_capability", "global"),
         (GLOBAL_MEMORY_COMPANY_ID, "risk_brain", RISK_BRAIN, "risk_framework", "global"),
         (GLOBAL_MEMORY_COMPANY_ID, "answer_policy", ANSWER_POLICY, "answer_policy", "global"),
+        (GLOBAL_MEMORY_COMPANY_ID, "system_explainer_brain", SYSTEM_EXPLAINER_BRAIN, "system_architecture", "global"),
+        (GLOBAL_MEMORY_COMPANY_ID, "data_entry_brain", DATA_ENTRY_BRAIN, "onboarding_guidance", "global"),
         (INDUSTRY_MEMORY_COMPANY_ID, "industry_memory", INDUSTRY_MEMORY, "industry_context", "industry"),
     ]
     for cid, key, value, memory_type, scope in payloads:
