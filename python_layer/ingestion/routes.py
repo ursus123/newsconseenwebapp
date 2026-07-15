@@ -32,6 +32,7 @@ from ingestion import idjwi_analyser
 from ingestion import memory as mem_mod
 from ingestion import loader
 from ingestion import schema_registry
+from copilot.onboarding_intelligence import build_onboarding_brief
 
 logger = logging.getLogger(__name__)
 
@@ -324,6 +325,16 @@ async def upload_file(
     # Validate LLM field_map against canonical entity schemas and attach import scope.
     analysis = schema_registry.annotate_analysis(analysis)
     analysis = _attach_scope(analysis, scope)
+    analysis["onboarding_brief"] = build_onboarding_brief(
+        company_id=company_id,
+        source_name=source_name,
+        source_kind="file",
+        file_type=ext,
+        row_count=row_count,
+        columns=columns,
+        analysis=analysis,
+        ingestion_scope=scope,
+    )
 
     # Surface row-cap warning in analyst_notes when file was truncated
     if rows_capped:

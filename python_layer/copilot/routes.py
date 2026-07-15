@@ -105,6 +105,12 @@ class MemoryCreateRequest(BaseModel):
     review_status:  Optional[str] = "confirmed"
     metadata:       Optional[dict] = None
     expires_at:     Optional[str] = None
+    layer:          Optional[str] = None
+    subject_type:   Optional[str] = None
+    subject_id:     Optional[str] = None
+    provenance:     Optional[dict] = None
+    valid_from:     Optional[str] = None
+    valid_to:       Optional[str] = None
 
 
 class MemoryUpdateRequest(BaseModel):
@@ -333,7 +339,7 @@ def deterministic_command(
 
     try:
         from copilot.queries import execute_tool
-        from copilot.idjwi_memory import remember, recall, forget, summary
+        from copilot.idjwi_memory import remember, recall, forget, summary, explain_memory, restrict_memory_to_subject, memory_manifest
         from copilot.idjwi_security import (
             authorize_capability,
             principal_from_headers,
@@ -394,6 +400,26 @@ def deterministic_command(
         require("read_company_data")
         return execute_tool("find_graph_gaps", payload, request.company_id, principal=principal, llm_available=False)
 
+    if command in ("data_repairs", "plan_data_repairs", "repair_plan", "relationship_repairs"):
+        require("propose_record_update" if payload.get("submit_for_approval") else "read_company_data")
+        return execute_tool("plan_data_repairs", payload, request.company_id, principal=principal, llm_available=False)
+
+    if command in ("analysis_modules", "run_analysis_modules", "analysis_brief", "decision_analysis"):
+        require("read_company_data")
+        return execute_tool("run_analysis_modules", payload, request.company_id, principal=principal, llm_available=False)
+
+    if command in ("visual_output", "plan_visual_output", "chart_report", "report_visual", "dashboard_widget"):
+        require("read_company_data")
+        return execute_tool("plan_visual_output", payload, request.company_id, principal=principal, llm_available=False)
+
+    if command in ("source_enrichment", "plan_source_enrichment", "source_registry_plan", "enrichment_plan"):
+        require("read_default_brain")
+        return execute_tool("plan_source_enrichment", payload, request.company_id, principal=principal, llm_available=False)
+
+    if command in ("onboarding_intake", "plan_onboarding_intake", "onboarding_brief", "data_onboarding"):
+        require("read_default_brain")
+        return execute_tool("plan_onboarding_intake", payload, request.company_id, principal=principal, llm_available=False)
+
     if command in ("search_intelligence", "intelligence"):
         require("search_intelligence")
         return execute_tool("search_intelligence", payload, request.company_id, principal=principal, llm_available=False)
@@ -430,23 +456,68 @@ def deterministic_command(
             key=key,
             value=payload.get("value", ""),
             memory_type=payload.get("memory_type", "note"),
+            scope=payload.get("scope", "company"),
             owner=payload.get("owner", "operator"),
+            layer=payload.get("layer"),
+            subject_type=payload.get("subject_type"),
+            subject_id=payload.get("subject_id"),
+            provenance=payload.get("provenance"),
+            review_status=payload.get("review_status", "confirmed"),
+            metadata=payload.get("metadata"),
+            expires_at=payload.get("expires_at"),
+            valid_from=payload.get("valid_from"),
+            valid_to=payload.get("valid_to"),
         )
 
     if command in ("list_memory", "memory"):
         require("save_memory")
-        return {"entries": recall(request.company_id, limit=int(payload.get("limit", 100)))}
+        return {"entries": recall(
+            request.company_id,
+            layer=payload.get("layer"),
+            subject_type=payload.get("subject_type"),
+            subject_id=payload.get("subject_id"),
+            review_status=payload.get("review_status"),
+            limit=int(payload.get("limit", 100)),
+        )}
 
     if command in ("forget", "delete_memory"):
         require("save_memory")
-        key = payload.get("key")
-        if not key:
-            raise HTTPException(status_code=400, detail="payload.key is required")
-        return forget(request.company_id, key)
+        if not payload.get("key") and not payload.get("memory_id"):
+            raise HTTPException(status_code=400, detail="payload.key or payload.memory_id is required")
+        return forget(
+            request.company_id,
+            key=payload.get("key"),
+            memory_id=payload.get("memory_id"),
+            memory_type=payload.get("memory_type"),
+            layer=payload.get("layer"),
+            subject_type=payload.get("subject_type"),
+            subject_id=payload.get("subject_id"),
+            mode=payload.get("mode", "delete"),
+        )
+
+    if command in ("why_memory", "explain_memory", "why_remember"):
+        require("save_memory")
+        return explain_memory(request.company_id, memory_id=payload.get("memory_id"), key=payload.get("key"))
+
+    if command in ("use_memory_only_for_enterprise", "scope_memory_to_enterprise"):
+        require("save_memory")
+        if not payload.get("memory_id") or not payload.get("enterprise_id"):
+            raise HTTPException(status_code=400, detail="payload.memory_id and payload.enterprise_id are required")
+        return restrict_memory_to_subject(
+            request.company_id,
+            payload.get("memory_id"),
+            "enterprise",
+            payload.get("enterprise_id"),
+            layer="enterprise",
+        )
 
     if command in ("memory_summary", "summarize_memory"):
         require("save_memory")
         return summary(request.company_id)
+
+    if command in ("memory_manifest", "memory_layers"):
+        require("save_memory")
+        return memory_manifest()
 
     if command in ("approve_action", "approve_recommendation"):
         require("approve_actions")
@@ -478,6 +549,9 @@ def list_idjwi_memory(
     review_status: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     memory_type: Optional[str] = Query(None),
+    layer: Optional[str] = Query(None),
+    subject_type: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None),
     limit: int = Query(200),
     x_idjwi_api_key: Optional[str] = Header(None),
     x_idjwi_role: Optional[str] = Header(None),
@@ -500,6 +574,9 @@ def list_idjwi_memory(
             q=q or "",
             review_status=review_status or None,
             memory_type=memory_type or None,
+            layer=layer or None,
+            subject_type=subject_type or None,
+            subject_id=subject_id or None,
             limit=bounded_limit,
         )
     else:
@@ -507,6 +584,9 @@ def list_idjwi_memory(
             company_id,
             review_status=review_status or None,
             memory_type=memory_type or None,
+            layer=layer or None,
+            subject_type=subject_type or None,
+            subject_id=subject_id or None,
             limit=bounded_limit,
         )
     return {
@@ -548,6 +628,12 @@ def create_idjwi_memory(
         review_status=request.review_status or "confirmed",
         metadata=request.metadata or {},
         expires_at=request.expires_at,
+        layer=request.layer,
+        subject_type=request.subject_type,
+        subject_id=request.subject_id,
+        provenance=request.provenance,
+        valid_from=request.valid_from,
+        valid_to=request.valid_to,
     )
     if not result.get("saved"):
         raise HTTPException(status_code=400, detail=result.get("reason", "memory save failed"))
@@ -602,6 +688,55 @@ def update_idjwi_memory(
     return result
 
 
+@router.get("/idjwi-memory/by-id/{memory_id}/explain")
+def explain_idjwi_memory(
+    memory_id: str,
+    company_id: str = Query(...),
+    x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
+):
+    verify_tenant_access(authorization, company_id)
+    from copilot.idjwi_memory import explain_memory
+    from copilot.idjwi_security import principal_from_headers, require_api_key
+
+    api_gate = require_api_key(x_idjwi_api_key)
+    if not api_gate.get("allowed"):
+        raise HTTPException(status_code=401, detail=api_gate.get("reason"))
+
+    principal_from_headers(company_id=company_id, user_id=x_idjwi_user, role=x_idjwi_role)
+    result = explain_memory(company_id, memory_id=memory_id)
+    if not result.get("found"):
+        raise HTTPException(status_code=404, detail=result.get("reason", "memory not found"))
+    return result
+
+
+@router.delete("/idjwi-memory/by-id/{memory_id}")
+def delete_idjwi_memory(
+    memory_id: str,
+    company_id: str = Query(...),
+    mode: str = Query("delete"),
+    x_idjwi_api_key: Optional[str] = Header(None),
+    x_idjwi_role: Optional[str] = Header(None),
+    x_idjwi_user: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
+):
+    verify_tenant_access(authorization, company_id)
+    from copilot.idjwi_memory import forget
+    from copilot.idjwi_security import principal_from_headers, require_api_key
+
+    api_gate = require_api_key(x_idjwi_api_key)
+    if not api_gate.get("allowed"):
+        raise HTTPException(status_code=401, detail=api_gate.get("reason"))
+
+    principal_from_headers(company_id=company_id, user_id=x_idjwi_user, role=x_idjwi_role)
+    result = forget(company_id, memory_id=memory_id, mode=mode)
+    if not result.get("deleted"):
+        raise HTTPException(status_code=400, detail=result.get("reason", "memory delete failed"))
+    return result
+
+
 @router.post("/idjwi-memory/{memory_id}/usage")
 def mark_idjwi_memory_used(
     memory_id: str,
@@ -645,6 +780,19 @@ def list_idjwi_memory_conflicts(
 
     principal_from_headers(company_id=company_id, user_id=x_idjwi_user, role=x_idjwi_role)
     return {"company_id": company_id, "conflicts": conflicts(company_id, limit=max(1, min(limit, 500)))}
+
+
+@router.get("/idjwi-memory-manifest")
+def get_idjwi_memory_manifest(
+    x_idjwi_api_key: Optional[str] = Header(None),
+):
+    from copilot.idjwi_memory import memory_manifest
+    from copilot.idjwi_security import require_api_key
+
+    api_gate = require_api_key(x_idjwi_api_key)
+    if not api_gate.get("allowed"):
+        raise HTTPException(status_code=401, detail=api_gate.get("reason"))
+    return memory_manifest()
 
 
 @router.get("/health/full")

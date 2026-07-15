@@ -2936,6 +2936,36 @@ export default function Connectors() {
         </div>
       </div>
 
+      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div>
+            <p className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-emerald-600" /> Idjwi onboarding intelligence
+            </p>
+            <p className="text-xs text-slate-600 mt-1">
+              Use connectors for recurring systems and Add Data/Ingestion for first-time files. Idjwi maps both paths into the same ontology.
+            </p>
+          </div>
+          <span className="text-[10px] px-2 py-1 rounded-full bg-white text-emerald-700 border border-emerald-200 font-semibold">
+            one onboarding flow
+          </span>
+        </div>
+        <div className="grid md:grid-cols-3 gap-3">
+          <div className="bg-white rounded-lg border border-emerald-100 p-3">
+            <p className="text-xs font-semibold text-slate-800 mb-1">What to add first</p>
+            <p className="text-xs text-slate-600">Start with enterprises/branches, then people, products/services, transactions, tasks, addresses, and documents.</p>
+          </div>
+          <div className="bg-white rounded-lg border border-emerald-100 p-3">
+            <p className="text-xs font-semibold text-slate-800 mb-1">Connector vs upload</p>
+            <p className="text-xs text-slate-600">Use upload for one-time files. Use connectors when the source changes often or should refresh automatically.</p>
+          </div>
+          <div className="bg-white rounded-lg border border-emerald-100 p-3">
+            <p className="text-xs font-semibold text-slate-800 mb-1">Before analysis</p>
+            <p className="text-xs text-slate-600">Choose enterprise scope, review entity mapping, inspect relationships, and repair weak links before trusting dashboards.</p>
+          </div>
+        </div>
+      </div>
+
       {/* Section 1: Available Connectors */}
       <div>
         <h2 className="text-2xl font-bold text-slate-800 mb-2">Available Connectors</h2>

@@ -2908,6 +2908,72 @@ def find_graph_gaps(
     }
 
 
+def plan_data_repairs(
+    company_id: str,
+    repair_focus: str = "all",
+    entity_type: Optional[str] = None,
+    submit_for_approval: bool = False,
+    limit: int = 20,
+) -> dict:
+    """
+    Plan tenant-scoped data repairs without mutating records.
+    Optional approval submission stores pending repair actions for operator review.
+    """
+    from .data_repair import plan_data_repairs as _plan_data_repairs
+
+    return _plan_data_repairs(
+        company_id=company_id,
+        repair_focus=repair_focus,
+        entity_type=entity_type,
+        submit_for_approval=submit_for_approval,
+        limit=limit,
+    )
+
+
+def run_analysis_modules(
+    company_id: str,
+    analysis_type: str = "all",
+    entity_type: Optional[str] = None,
+    limit: int = 20,
+) -> dict:
+    """
+    Run Idjwi's built-in decision analysis modules over tenant records.
+    """
+    from .analysis_modules import run_analysis_modules as _run_analysis_modules
+
+    return _run_analysis_modules(
+        company_id=company_id,
+        analysis_type=analysis_type,
+        entity_type=entity_type,
+        limit=limit,
+    )
+
+
+def plan_visual_output(
+    company_id: str,
+    question: str,
+    output_type: str = "auto",
+    entity_type: Optional[str] = None,
+    group_by: Optional[str] = None,
+    metric: Optional[str] = None,
+    limit: int = 20,
+) -> dict:
+    """
+    Plan and return an Idjwi-native visual/report spec for a tenant question.
+    """
+    from .visual_language import plan_visual_output as _plan_visual_output
+
+    return _plan_visual_output(
+        company_id=company_id,
+        question=question,
+        output_type=output_type,
+        entity_type=entity_type,
+        group_by=group_by,
+        metric=metric,
+        limit=limit,
+    )
+
+
 # Supported join pairs and their join keys.
 # Left side is primary_entity, right side is secondary_entity.
 _JOIN_CONFIGS = {
@@ -3476,24 +3542,6 @@ def save_copilot_memory(
               "always show costs in USD", "our fiscal year starts in July".
     """
     _ensure_copilot_memory_table()
-    try:
-        from copilot.idjwi_memory import recall as _idjwi_recall
-        unified = _idjwi_recall(company_id=company_id, limit=50)
-        if unified:
-            return [
-                {
-                    "key": item.get("key"),
-                    "value": item.get("value"),
-                    "memory_type": item.get("memory_type"),
-                    "updated_at": str(item.get("updated_at")),
-                    "owner": item.get("owner"),
-                    "scope": item.get("scope"),
-                }
-                for item in unified
-            ]
-    except Exception:
-        pass
-
     engine = get_engine_safe()
     if not engine:
         return {"saved": False, "reason": "database unavailable"}
@@ -3506,6 +3554,9 @@ def save_copilot_memory(
             memory_type=memory_type,
             scope="company",
             owner="copilot",
+            review_status="confirmed",
+            source="operator_stated",
+            provenance={"tool": "save_copilot_memory", "compatibility_path": True},
             engine=engine,
         )
     except Exception:
@@ -3554,6 +3605,11 @@ def list_copilot_memory(company_id: str) -> dict:
                     "updated_at": str(item.get("updated_at")),
                     "owner": item.get("owner"),
                     "scope": item.get("scope"),
+                    "layer": item.get("layer"),
+                    "review_status": item.get("review_status"),
+                    "confidence": item.get("confidence"),
+                    "subject_type": item.get("subject_type"),
+                    "subject_id": item.get("subject_id"),
                 }
                 for item in unified
             ]
@@ -3605,6 +3661,76 @@ def delete_copilot_memory(company_id: str, key: str) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 # WEB-GROUNDED TOOLS — public data sources, no API key required
 # ═══════════════════════════════════════════════════════════════════════════════
+
+def get_idjwi_memory_manifest(company_id: str) -> dict:
+    from copilot.idjwi_memory import memory_manifest
+
+    return memory_manifest()
+
+
+def explain_idjwi_memory(company_id: str, key: str = None, memory_id: str = None) -> dict:
+    from copilot.idjwi_memory import explain_memory
+
+    return explain_memory(company_id, memory_id=memory_id, key=key)
+
+
+def find_idjwi_memory_conflicts(company_id: str, limit: int = 50) -> dict:
+    from copilot.idjwi_memory import conflicts
+
+    return {"company_id": company_id, "conflicts": conflicts(company_id, limit=limit)}
+
+
+def scope_idjwi_memory(company_id: str, memory_id: str, subject_type: str, subject_id: str, layer: str = "enterprise") -> dict:
+    from copilot.idjwi_memory import restrict_memory_to_subject
+
+    return restrict_memory_to_subject(company_id, memory_id, subject_type, subject_id, layer=layer)
+
+
+def plan_onboarding_intake(
+    company_id: str,
+    source_name: str = "",
+    source_kind: str = "question",
+    file_type: str = "",
+    row_count: int = 0,
+    columns: list | None = None,
+    detected_entities: list | None = None,
+    scope_mode: str = "company",
+    enterprise_id: str = "",
+    enterprise_name: str = "",
+    connector_id: str = "",
+    industry: str = "",
+    current_page: str = "",
+) -> dict:
+    from copilot.onboarding_intelligence import build_onboarding_brief, answer_onboarding_brief
+
+    analysis = {
+        "entity_splits": [{"entity_type": entity, "confidence": 0.75, "row_coverage": 1.0, "reason": "Provided by onboarding context."}
+                          for entity in (detected_entities or [])],
+        "field_map": [],
+        "relationships": [],
+    }
+    scope = {
+        "scope_mode": scope_mode or "company",
+        "enterprise_id": enterprise_id or None,
+        "enterprise_name": enterprise_name or None,
+        "source_kind": source_kind,
+        "connector_id": connector_id or None,
+    }
+    brief = build_onboarding_brief(
+        company_id=company_id,
+        source_name=source_name,
+        source_kind=source_kind,
+        file_type=file_type,
+        row_count=row_count,
+        columns=columns or [],
+        analysis=analysis,
+        ingestion_scope=scope,
+        connector_id=connector_id or None,
+        industry=industry or None,
+        current_page=current_page or None,
+    )
+    return {"brief": brief, "answer": answer_onboarding_brief(brief)}
+
 
 def web_search(query: str, company_id: str, max_results: int = 5) -> dict:
     """
@@ -5559,6 +5685,82 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "get_idjwi_memory_manifest",
+        "description": (
+            "Explain Idjwi's structured memory model: global, industry, company, enterprise, "
+            "user preference, workflow, decision, correction, source, session, and entity memory; "
+            "plus lifecycle states, provenance, conflicts, expiry, and trust controls."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "explain_idjwi_memory",
+        "description": (
+            "Explain why Idjwi remembers a specific memory, including layer, status, confidence, "
+            "source/provenance, subject scoping, lifecycle, and owner. Use for 'why do you remember this?'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "Memory key to explain."},
+                "memory_id": {"type": "string", "description": "Exact memory id to explain."},
+            },
+        },
+    },
+    {
+        "name": "find_idjwi_memory_conflicts",
+        "description": "Find conflicting memories with the same key/type but different remembered values.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Max conflicts to return. Default 50."},
+            },
+        },
+    },
+    {
+        "name": "scope_idjwi_memory",
+        "description": (
+            "Restrict a memory so it applies only to a specific enterprise/entity/user/workflow. "
+            "Use when the operator says 'use this only for this enterprise'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["memory_id", "subject_type", "subject_id"],
+            "properties": {
+                "memory_id": {"type": "string"},
+                "subject_type": {"type": "string", "description": "enterprise, person, product, workflow, user, etc."},
+                "subject_id": {"type": "string"},
+                "layer": {"type": "string", "description": "Memory layer. Default enterprise."},
+            },
+        },
+    },
+    {
+        "name": "plan_onboarding_intake",
+        "description": (
+            "Create an Idjwi onboarding brief across Add Data, Connectors, and Ingestion. "
+            "Use this to decide what data to add first, whether upload or connector is better, "
+            "which enterprise the source belongs to, ontology mapping, relationships, incomplete data, "
+            "and what analysis becomes available after upload/sync."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "source_name": {"type": "string", "description": "File/source/connector name."},
+                "source_kind": {"type": "string", "description": "file, connector, spreadsheet, api, question."},
+                "file_type": {"type": "string", "description": "File extension if known, e.g. .csv, .pdf."},
+                "row_count": {"type": "integer", "description": "Approximate row count if known."},
+                "columns": {"type": "array", "items": {"type": "string"}, "description": "Known source columns."},
+                "detected_entities": {"type": "array", "items": {"type": "string"}, "description": "Known ontology entities, e.g. Person, Enterprise, Product."},
+                "scope_mode": {"type": "string", "enum": ["company", "enterprise", "infer", "mixed"], "description": "How enterprise context should be applied."},
+                "enterprise_id": {"type": "string"},
+                "enterprise_name": {"type": "string"},
+                "connector_id": {"type": "string", "description": "Connector id if this is connector onboarding."},
+                "industry": {"type": "string", "description": "clinic, healthcare, farm, retail, etc."},
+                "current_page": {"type": "string", "description": "Add Data, Connectors, Ingestion, or current app page."},
+            },
+        },
+    },
+    {
         "name": "find_people_records",
         "description": (
             "Search for individual people records by name, type, status, or linked enterprise. "
@@ -5814,6 +6016,99 @@ TOOL_DEFINITIONS = [
                     "description": "Type of gap to find. Default all.",
                 },
                 "limit": {"type": "integer", "description": "Max gaps to return. Default 50."},
+            },
+        },
+    },
+    {
+        "name": "plan_data_repairs",
+        "description": (
+            "Plan concrete tenant data-quality and relationship repairs without changing records. "
+            "Use after graph gaps or when the operator asks what Idjwi should fix: likely person-enterprise "
+            "relationships, transaction/address/task/product enterprise stamps, duplicate people/products, "
+            "unassigned task assignees, missing candidate entities, or imported column mappings. "
+            "Set submit_for_approval only when the operator explicitly asks to propose/submit/fix with approval."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "repair_focus": {
+                    "type": "string",
+                    "enum": [
+                        "all", "relationship", "assignment", "duplicate",
+                        "enterprise_stamp", "imported_column", "missing_entity",
+                    ],
+                    "description": "Repair family to plan. Default all.",
+                },
+                "entity_type": {
+                    "type": "string",
+                    "enum": [
+                        "all", "person", "enterprise", "product", "task",
+                        "transaction", "address", "import",
+                    ],
+                    "description": "Optional entity scope.",
+                },
+                "submit_for_approval": {
+                    "type": "boolean",
+                    "description": "Submit proposed repair actions to the approval gate. Default false.",
+                },
+                "limit": {"type": "integer", "description": "Max repair proposals. Default 20."},
+            },
+        },
+    },
+    {
+        "name": "run_analysis_modules",
+        "description": (
+            "Run Idjwi's built-in decision analysis modules over tenant data. "
+            "Use when the operator asks for reasoning, diagnosis, decisions, what changed, what matters, "
+            "what to do next, statistical analysis, trends, anomalies, churn/risk, cohorts, inventory health, "
+            "AR aging, task bottlenecks, relationship centrality, enterprise comparison, or missing-data impact. "
+            "Returns findings, evidence, severity, and recommended next actions."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "analysis_type": {
+                    "type": "string",
+                    "enum": [
+                        "all", "descriptive", "trend", "anomaly", "churn_risk",
+                        "cohort", "inventory", "ar_aging", "task_bottleneck",
+                        "centrality", "enterprise_performance", "missing_data_impact",
+                    ],
+                    "description": "Analysis module to run. Default all.",
+                },
+                "entity_type": {
+                    "type": "string",
+                    "description": "Optional entity focus such as person, enterprise, product, task, transaction, relationship, address, or all.",
+                },
+                "limit": {"type": "integer", "description": "Max findings to return. Default 20."},
+            },
+        },
+    },
+    {
+        "name": "plan_visual_output",
+        "description": (
+            "Idjwi's native chart/report language controller. "
+            "Use when the operator asks to show, chart, graph, visualize, report, download, pin, make a dashboard widget, "
+            "or choose the best output for company data. It decides whether the best output is a table, bar chart, time series, "
+            "risk card, graph view, downloadable report, or dashboard widget and returns renderable specs."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["question"],
+            "properties": {
+                "question": {"type": "string", "description": "The user's original visual/report request."},
+                "output_type": {
+                    "type": "string",
+                    "enum": [
+                        "auto", "table", "bar_chart", "line_chart", "area_chart", "pie_chart",
+                        "risk_card", "graph_view", "downloadable_report", "dashboard_widget",
+                    ],
+                    "description": "Requested output type or auto. Default auto.",
+                },
+                "entity_type": {"type": "string", "description": "Optional entity focus such as transaction, task, product, person, enterprise, relationship, address."},
+                "group_by": {"type": "string", "description": "Optional grouping field such as enterprise_name, status, assigned_to."},
+                "metric": {"type": "string", "description": "Optional metric field such as amount or stock_quantity."},
+                "limit": {"type": "integer", "description": "Max rows/categories. Default 20."},
             },
         },
     },
@@ -6301,6 +6596,25 @@ TOOL_DEFINITIONS = [
                     "type": "string",
                     "description": "The operator's original public data, source, connector, or enrichment question.",
                 },
+            },
+        },
+    },
+    {
+        "name": "plan_source_enrichment",
+        "description": (
+            "Operationalize source_registry.json as live source knowledge. Use for enrichment planning such as "
+            "'enrich this clinic', 'what APIs can enrich a farm', 'what inputs do you need for this product', "
+            "or 'which sources map to the ontology'. Returns available public APIs/connectors, required inputs, "
+            "cost/rate/security limits, source scope, ontology mappings, and what to ask when inputs are missing."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["question"],
+            "properties": {
+                "question": {"type": "string", "description": "The operator's original enrichment/source request."},
+                "entity_type": {"type": "string", "description": "Optional ontology entity type such as Enterprise, Product, Address, Plot, Person."},
+                "industry": {"type": "string", "description": "Optional industry such as clinic, healthcare, farm, retail."},
+                "limit": {"type": "integer", "description": "Max source cards to return. Default 8."},
             },
         },
     },
@@ -8376,6 +8690,9 @@ def execute_tool(
         "find_address_records":         find_address_records,
         "find_ontology_records":        find_ontology_records,
         "find_graph_gaps":              find_graph_gaps,
+        "plan_data_repairs":            plan_data_repairs,
+        "run_analysis_modules":         run_analysis_modules,
+        "plan_visual_output":           plan_visual_output,
         # Cross-entity join
         "get_entity_join":              get_entity_join,
         # Write-back through approval gate
@@ -8384,6 +8701,11 @@ def execute_tool(
         "save_copilot_memory":          save_copilot_memory,
         "list_copilot_memory":          list_copilot_memory,
         "delete_copilot_memory":        delete_copilot_memory,
+        "get_idjwi_memory_manifest":    get_idjwi_memory_manifest,
+        "explain_idjwi_memory":         explain_idjwi_memory,
+        "find_idjwi_memory_conflicts":  find_idjwi_memory_conflicts,
+        "scope_idjwi_memory":           scope_idjwi_memory,
+        "plan_onboarding_intake":       plan_onboarding_intake,
         # Time / Attendance tools
         "get_attendance_report":        get_attendance_report,
         "get_time_summary":             get_time_summary,
@@ -8428,6 +8750,7 @@ def execute_tool(
         "get_company_graph_context":    _dispatch_graph_context,
         "get_enrichment_context":       _dispatch_enrichment_context,
         "route_source_request":         _dispatch_route_source_request,
+        "plan_source_enrichment":       _dispatch_plan_source_enrichment,
         "recommend_enrichment_sources": _dispatch_recommend_enrichment_sources,
         "search_intelligence":          _dispatch_search_intelligence,
         "get_ontology_schema":          _dispatch_ontology_schema,
@@ -8449,6 +8772,8 @@ def execute_tool(
 
     from copilot.llm_registry import capability_for_tool
     capability_id = capability_for_tool(tool_name)
+    if tool_name == "plan_data_repairs" and kwargs.get("submit_for_approval"):
+        capability_id = "propose_record_update"
     try:
         from copilot.idjwi_security import authorize_capability
         gate = authorize_capability(
@@ -8646,6 +8971,27 @@ def _dispatch_route_source_request(company_id: str, question: str) -> dict:
     result["company_id"] = company_id
     result["data_source"] = "idjwi_source_registry_router"
     result["data_as_of"] = "live route"
+    return result
+
+
+def _dispatch_plan_source_enrichment(
+    company_id: str,
+    question: str,
+    entity_type=None,
+    industry=None,
+    limit: int = 8,
+) -> dict:
+    from copilot.source_router import plan_source_enrichment
+
+    result = plan_source_enrichment(
+        question=question,
+        entity_type=entity_type,
+        industry=industry,
+        limit=limit,
+    )
+    result["company_id"] = company_id
+    result["data_source"] = "idjwi_source_registry_live_knowledge"
+    result["data_as_of"] = "static registry"
     return result
 
 

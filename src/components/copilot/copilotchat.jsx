@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
   Send, Loader2, Sparkles, ThumbsUp, ThumbsDown, AlertTriangle,
@@ -699,6 +699,93 @@ function EvidenceSummaryPanel({ confidence, caveats }) {
   );
 }
 
+function TrustAuditPanel({ trust }) {
+  if (!trust || typeof trust !== "object") return null;
+  const scope = trust.brain_scope || {};
+  const tools = trust.tools_called || [];
+  const dataUsed = trust.data_used || [];
+  const verification = trust.suggested_verification || [];
+  const caveats = trust.missing_data_caveats || [];
+
+  return (
+    <details className="w-full rounded-xl border border-slate-100 bg-white text-xs overflow-hidden">
+      <summary className="cursor-pointer list-none px-3 py-2 flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2 font-semibold text-slate-600">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+          Trust & audit
+        </span>
+        <span className="text-[10px] text-slate-400">
+          {trust.confidence?.label || "Confidence"} {trust.confidence?.score ? `${Math.round(Number(trust.confidence.score) * 100)}%` : ""}
+        </span>
+      </summary>
+      <div className="px-3 pb-3 space-y-2 border-t border-slate-50">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+          <div className="rounded-lg bg-slate-50 px-2.5 py-2">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase">Company queried</p>
+            <p className="text-[11px] text-slate-600 truncate">{trust.company_id_queried || "None/default brain"}</p>
+          </div>
+          <div className="rounded-lg bg-slate-50 px-2.5 py-2">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase">Brain scope</p>
+            <p className="text-[11px] text-slate-600">
+              {scope.tenant_brain_used ? "Tenant brain" : "Default brain"}
+              {scope.public_sources_used ? " + public sources" : ""}
+              {scope.memory_used ? " + memory" : ""}
+            </p>
+          </div>
+        </div>
+
+        {tools.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">Tools called</p>
+            <div className="flex flex-wrap gap-1">
+              {tools.slice(0, 8).map((tool, i) => (
+                <span key={`${tool}-${i}`} className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px]">
+                  {tool}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {dataUsed.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">Data used</p>
+            <ul className="space-y-0.5">
+              {dataUsed.slice(0, 5).map((d, i) => (
+                <li key={i} className="text-[11px] text-slate-500">
+                  {d.name || d.kind}{d.source ? ` from ${d.source}` : ""}{Number.isFinite(d.row_count) ? ` (${d.row_count} rows)` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {caveats.length > 0 && (
+          <div className="rounded-lg bg-amber-50 border border-amber-100 px-2.5 py-2">
+            <p className="text-[10px] font-semibold text-amber-700 uppercase mb-1">Caveats</p>
+            <ul className="space-y-0.5">
+              {caveats.slice(0, 4).map((c, i) => (
+                <li key={i} className="text-[11px] text-amber-700">{c}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {verification.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">Suggested verification</p>
+            <ul className="space-y-0.5">
+              {verification.slice(0, 4).map((v, i) => (
+                <li key={i} className="text-[11px] text-slate-500">{v}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
 function ProposedActionsPanel({ recommendations, insights, companyId }) {
   const [states, setStates] = useState({}); // approval_id → "approving"|"rejecting"|"approved"|"rejected"
 
@@ -940,7 +1027,16 @@ const TOOL_LABELS = {
   get_company_graph_context:  "Company graph",
   get_enrichment_context:     "Enrichment",
   recommend_enrichment_sources: "Source registry",
+  plan_source_enrichment:      "Source plan",
   search_intelligence:        "Intelligence",
+  plan_visual_output:         "Visual planner",
+  run_analysis_modules:       "Analysis modules",
+  plan_data_repairs:          "Repair planner",
+  plan_onboarding_intake:     "Onboarding brief",
+  get_idjwi_memory_manifest:  "Memory model",
+  explain_idjwi_memory:       "Memory provenance",
+  find_idjwi_memory_conflicts: "Memory conflicts",
+  scope_idjwi_memory:         "Memory scope",
   get_ontology_schema:        "Schema",
   // Propose tools
   propose_task:               "Proposing task",
@@ -1053,6 +1149,16 @@ function MessageBubble({ message, onFeedback, companyId, currentUser, onOpenQuer
                 {message.mode === "advisor" ? "Advisor Active" : "Autonomous"}
               </span>
             )}
+            {message.operating_mode && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-slate-50 text-slate-700 border border-slate-200">
+                {String(message.operating_mode).replace(/_/g, " ")}
+              </span>
+            )}
+            {message.company_context?.viewport?.current_page && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-cyan-50 text-cyan-700 border border-cyan-100">
+                {message.company_context.viewport.current_page}
+              </span>
+            )}
             {message.memory_used && (
               <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-blue-50 text-blue-700 border border-blue-100">
                 Memory
@@ -1089,6 +1195,10 @@ function MessageBubble({ message, onFeedback, companyId, currentUser, onOpenQuer
             confidence={message.confidence}
             caveats={message.missing_data_caveats}
           />
+        )}
+
+        {!isUser && message.trust && (
+          <TrustAuditPanel trust={message.trust} />
         )}
 
         {/* Charts */}
@@ -1424,6 +1534,7 @@ function IngestionPlanCard({ plan, companyId, onConfirm, onDismiss }) {
 // ── Main CopilotChat component ───────────────────────────────────────────────
 export default function CopilotChat({ currentUser, className = "", initialMessage = "", selectedModel = "claude-sonnet-4-6", pageContext = null, autoSend = false }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [messages, setMessages]   = useState([]);
   const [input, setInput]         = useState(initialMessage || "");
   const [loading, setLoading]     = useState(false);
@@ -1435,11 +1546,31 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
   const messagesEndRef             = useRef(null);
   const inputRef                   = useRef(null);
   const fileInputRef               = useRef(null);
+  const sessionIdRef               = useRef(`idjwi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
   const [uploadingFile, setUploadingFile] = useState(false);
 
   const openQueryBuilder = useCallback(() => navigate("/QueryBuilder"), [navigate]);
 
   const companyId = currentUser?.company_id;
+
+  const buildRequestContext = useCallback((extra = {}) => {
+    const routeName = (location.pathname || "/")
+      .replace(/^\//, "")
+      .replace(/\/.*/, "")
+      || "Home";
+    const base = {
+      ...(pageContext || {}),
+      current_page: pageContext?.current_page || pageContext?.page || routeName,
+      route: location.pathname,
+      url: typeof window !== "undefined" ? window.location.href : "",
+      surface: "idjwi_chat",
+      enterprise_name: currentUser?.enterprise_name || pageContext?.enterprise_name || "",
+      selected_entity_type: pageContext?.selected_entity_type || pageContext?.entity_type || "",
+      selected_entity_id: pageContext?.selected_entity_id || pageContext?.entity_id || "",
+      selected_entity_label: pageContext?.selected_entity_label || pageContext?.entity_label || "",
+    };
+    return { ...base, ...extra };
+  }, [currentUser?.enterprise_name, location.pathname, pageContext]);
 
   // Load context
   useEffect(() => {
@@ -1585,10 +1716,14 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           history,
           model:      selectedModel,
           advisor_enabled: advisorEnabled,
-          context:    pageContext || {},
-          current_page: pageContext?.current_page || "",
-          selected_entity_type: pageContext?.selected_entity_type || pageContext?.entity_type || "",
-          selected_entity_id: pageContext?.selected_entity_id || pageContext?.entity_id || "",
+          session_id: sessionIdRef.current,
+          context:    buildRequestContext({
+            last_import_plan_id: planId,
+            last_import_action: "confirm_load",
+          }),
+          current_page: buildRequestContext().current_page || "",
+          selected_entity_type: buildRequestContext().selected_entity_type || "",
+          selected_entity_id: buildRequestContext().selected_entity_id || "",
         }),
       });
       const result = await resp.json();
@@ -1597,16 +1732,20 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
         content:                 result.answer,
         tools_called:            result.tools_called            || [],
         data:                    result.data                    || {},
+        company_context:         result.company_context         || null,
         charts:                  [],
         citations:               [],
         created_recommendations: result.created_recommendations || [],
         created_insights:        result.created_insights        || [],
         mode:                    result.mode                    || (advisorEnabled ? "advisor" : "autonomous"),
+        operating_mode:          result.operating_mode          || result.execution_trace?.mode || "",
+        execution_trace:         result.execution_trace         || null,
         advisor_enabled:         result.advisor_enabled         ?? advisorEnabled,
         memory_used:             result.memory_used             || false,
         memory_candidates_created: result.memory_candidates_created || 0,
         confidence:              result.confidence              || null,
         missing_data_caveats:    result.missing_data_caveats    || [],
+        trust:                   result.trust                   || null,
         timestamp:               new Date().toISOString(),
       };
       setMessages(prev => [
@@ -1619,7 +1758,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
     } finally {
       setLoading(false);
     }
-  }, [companyId, messages, currentUser, selectedModel, advisorEnabled, pageContext]);
+  }, [companyId, messages, currentUser, selectedModel, advisorEnabled, buildRequestContext]);
 
   const handleIngestionDismiss = useCallback((planId) => {
     setMessages(prev => prev.filter(m =>
@@ -1694,10 +1833,11 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           history,
           model:           selectedModel,
           advisor_enabled: advisorEnabled,
-          context:         pageContext || {},
-          current_page:     pageContext?.current_page || "",
-          selected_entity_type: pageContext?.selected_entity_type || pageContext?.entity_type || "",
-          selected_entity_id:   pageContext?.selected_entity_id || pageContext?.entity_id || "",
+          session_id:      sessionIdRef.current,
+          context:         buildRequestContext(),
+          current_page:    buildRequestContext().current_page || "",
+          selected_entity_type: buildRequestContext().selected_entity_type || "",
+          selected_entity_id:   buildRequestContext().selected_entity_id || "",
         }),
       });
 
@@ -1714,6 +1854,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
         role:                    "assistant",
         content:                 result.answer,
         data:                    result.data                    || {},
+        company_context:         result.company_context         || null,
         charts:                  result.charts                  || [],
         citations:               result.citations               || [],
         tools_called:            result.tools_called            || [],
@@ -1724,11 +1865,14 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
         created_recommendations: result.created_recommendations || [],
         created_insights:        result.created_insights        || [],
         mode:                    result.mode                    || (advisorEnabled ? "advisor" : "autonomous"),
+        operating_mode:          result.operating_mode          || result.execution_trace?.mode || "",
+        execution_trace:         result.execution_trace         || null,
         advisor_enabled:         result.advisor_enabled         ?? advisorEnabled,
         memory_used:             result.memory_used             || false,
         memory_candidates_created: result.memory_candidates_created || 0,
         confidence:              result.confidence              || null,
         missing_data_caveats:    result.missing_data_caveats    || [],
+        trust:                   result.trust                   || null,
         timestamp:               new Date().toISOString(),
       };
 
@@ -1750,7 +1894,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       setLoading(false);
       inputRef.current?.focus();
     }
-  }, [input, loading, companyId, messages, currentUser, selectedModel, advisorEnabled, teachMode, pageContext]);
+  }, [input, loading, companyId, messages, currentUser, selectedModel, advisorEnabled, teachMode, buildRequestContext]);
 
   // Auto-send once when opened with a pre-filled question (e.g. from the docked panel)
   const autoSentRef = useRef(false);

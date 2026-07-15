@@ -294,6 +294,105 @@ function EntitySplits({ splits }) {
 }
 
 // ── Run history row ─────────────────────────────────────────────────────────
+function OnboardingBriefPanel({ brief }) {
+  if (!brief) return null;
+  const connector = brief.connector_recommendation || {};
+  const mapping = brief.ontology_mapping || [];
+  const relationships = brief.relationship_plan || [];
+  const incomplete = brief.incomplete_after_upload || [];
+  const unlocked = brief.analysis_unlocked || [];
+
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div>
+          <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+            <Brain className="w-4 h-4 text-emerald-600" /> Idjwi onboarding brief
+          </h3>
+          <p className="text-xs text-slate-600 mt-1">
+            One onboarding system for Add Data, Connectors, and Ingestion.
+          </p>
+        </div>
+        <Badge className="bg-white text-emerald-700 border border-emerald-200">
+          {brief.source_kind || "source"}
+        </Badge>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        <div className="rounded-lg bg-white border border-emerald-100 p-3">
+          <p className="text-xs font-semibold text-slate-700 mb-1">Enterprise scope</p>
+          <p className="text-xs text-slate-600">{brief.enterprise_guidance}</p>
+        </div>
+        <div className="rounded-lg bg-white border border-emerald-100 p-3">
+          <p className="text-xs font-semibold text-slate-700 mb-1">Upload vs connector</p>
+          <p className="text-xs text-slate-600">
+            <span className="font-semibold">{connector.recommended_path || "upload"}</span>
+            {connector.connector_id ? ` (${connector.connector_id})` : ""} - {connector.reason}
+          </p>
+        </div>
+      </div>
+
+      {mapping.length > 0 && (
+        <div className="mt-3 rounded-lg bg-white border border-emerald-100 p-3">
+          <p className="text-xs font-semibold text-slate-700 mb-2">Ontology mapping readiness</p>
+          <div className="grid md:grid-cols-2 gap-2">
+            {mapping.slice(0, 6).map(item => (
+              <div key={item.entity} className="text-xs rounded-md border border-slate-100 p-2">
+                <span className="font-semibold text-slate-800">{item.entity}</span>
+                <p className="text-slate-500 mt-1">
+                  Mapped: {(item.mapped_fields || []).slice(0, 4).join(", ") || "review needed"}
+                </p>
+                {(item.missing_fields || []).length > 0 && (
+                  <p className="text-amber-700 mt-1">
+                    Missing: {item.missing_fields.slice(0, 4).join(", ")}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {relationships.length > 0 && (
+        <div className="mt-3 rounded-lg bg-white border border-emerald-100 p-3">
+          <p className="text-xs font-semibold text-slate-700 mb-2">Relationships Idjwi expects</p>
+          <div className="space-y-1">
+            {relationships.slice(0, 5).map((rel, i) => (
+              <p key={i} className="text-xs text-slate-600">
+                <span className="font-semibold">{rel.from}</span> -&gt; {rel.relationship} -&gt; <span className="font-semibold">{rel.to}</span>
+                <span className="text-slate-400"> - {rel.basis}</span>
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-2 gap-3 mt-3">
+        {incomplete.length > 0 && (
+          <div className="rounded-lg bg-white border border-amber-100 p-3">
+            <p className="text-xs font-semibold text-amber-800 mb-2">Still incomplete after load</p>
+            <ul className="space-y-1">
+              {incomplete.slice(0, 5).map((item, i) => (
+                <li key={i} className="text-xs text-slate-600">- {item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {unlocked.length > 0 && (
+          <div className="rounded-lg bg-white border border-blue-100 p-3">
+            <p className="text-xs font-semibold text-blue-800 mb-2">Analysis unlocked</p>
+            <ul className="space-y-1">
+              {unlocked.slice(0, 5).map((item, i) => (
+                <li key={i} className="text-xs text-slate-600">- {item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RunRow({ run }) {
   const duration = run.finished_at && run.started_at
     ? Math.round((new Date(run.finished_at) - new Date(run.started_at)) / 1000)
@@ -589,6 +688,8 @@ export default function IngestionAgent() {
               <p>{analysis.analyst_notes}</p>
             </div>
           )}
+
+          <OnboardingBriefPanel brief={analysis.onboarding_brief} />
 
           {/* Entity splits */}
           <div>

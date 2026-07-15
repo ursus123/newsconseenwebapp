@@ -121,6 +121,125 @@ COUNTRY_ALIASES = {
 }
 
 
+ENTITY_ALIASES = {
+    "clinic": "Enterprise",
+    "hospital": "Enterprise",
+    "pharmacy": "Enterprise",
+    "farm": "Enterprise",
+    "shop": "Enterprise",
+    "store": "Enterprise",
+    "retail": "Enterprise",
+    "supplier": "Enterprise",
+    "vendor": "Enterprise",
+    "company": "Enterprise",
+    "enterprise": "Enterprise",
+    "business": "Enterprise",
+    "customer": "Person",
+    "client": "Person",
+    "patient": "Person",
+    "staff": "Person",
+    "employee": "Person",
+    "person": "Person",
+    "product": "Product",
+    "sku": "Product",
+    "item": "Product",
+    "medicine": "Product",
+    "drug": "Product",
+    "address": "Address",
+    "location": "Address",
+    "plot": "Plot",
+    "animal": "Animal",
+    "transaction": "Transaction",
+    "invoice": "Transaction",
+}
+
+
+INDUSTRY_SOURCE_HINTS = {
+    "clinic": {
+        "entity_type": "Enterprise",
+        "minimum_inputs": ["clinic_name", "country", "city", "address"],
+        "optional_inputs": ["registration_or_license_number", "provider_npi", "services", "products_or_medications"],
+        "preferred_sources": ["nominatim", "osm_overpass", "world_bank", "cms", "nppes_npi", "open_fda", "rxnorm"],
+        "note": "Use internal transactions, products, patients/clients, tasks, and relationships once tenant data exists.",
+    },
+    "healthcare": {
+        "entity_type": "Enterprise",
+        "minimum_inputs": ["provider_or_clinic_name", "country", "city_or_address"],
+        "optional_inputs": ["npi_or_license", "service_lines", "drug_or_device_names"],
+        "preferred_sources": ["cms", "nppes_npi", "nominatim", "osm_overpass", "open_fda", "rxnorm", "world_bank"],
+        "note": "Healthcare sources are strongest for provider verification, safety/recall risk, and market context.",
+    },
+    "farm": {
+        "entity_type": "Enterprise",
+        "minimum_inputs": ["farm_name", "country", "latitude_longitude_or_address", "crop_or_livestock"],
+        "optional_inputs": ["plot_boundaries", "soil_samples", "planting_dates", "inventory"],
+        "preferred_sources": ["nominatim", "soilgrids", "open_meteo", "nasa_power", "faostat", "usda_nass_ams"],
+        "note": "Farm enrichment needs precise location before weather, soil, and climate sources are useful.",
+    },
+    "retail": {
+        "entity_type": "Enterprise",
+        "minimum_inputs": ["shop_name", "country", "city_or_address", "product_categories"],
+        "optional_inputs": ["barcodes", "supplier_names", "pos_connector", "payment_connector"],
+        "preferred_sources": ["nominatim", "osm_overpass", "open_food_facts", "upc_item_db", "us_census", "stripe"],
+        "note": "Retail enrichment becomes much stronger once POS, products/SKUs, and transactions are connected.",
+    },
+}
+
+
+REQUIREMENT_PROMPTS = {
+    "country_code": "country code or country name",
+    "country": "country",
+    "indicator": "indicator to fetch",
+    "state": "state",
+    "county_or_place": "county, city, or place",
+    "variable": "variable/indicator",
+    "name": "entity name",
+    "location_optional": "optional location for disambiguation",
+    "latitude": "latitude",
+    "longitude": "longitude",
+    "radius": "search radius",
+    "address_text": "street address or place text",
+    "country_name_or_code": "country name or code",
+    "date_range": "date range",
+    "commodity": "commodity/crop/product",
+    "state_or_market": "state or market",
+    "provider_name_or_npi": "provider name or NPI",
+    "product_name": "product name",
+    "drug_name_or_device_name": "drug or device name",
+    "medication_name": "medication name",
+    "barcode_or_product_name": "barcode or product name",
+    "barcode": "barcode",
+    "compound_name_or_cas": "compound name or CAS",
+    "vin_or_vehicle_model": "VIN or vehicle model",
+    "base_currency": "base currency",
+    "target_currency": "target currency",
+    "connector_auth": "connector authorization",
+    "tenant_mapping": "tenant ontology mapping",
+    "course_mapping": "course/class mapping",
+    "account_mapping": "account mapping",
+    "package_name": "package name",
+}
+
+
+SOURCE_SCOPE = {
+    "public_data": {
+        "access_level": "public/default allowed",
+        "security": "No private tenant data required. Safe before tenant authorization.",
+        "write_capable": False,
+    },
+    "connector_data": {
+        "access_level": "tenant required",
+        "security": "Reads operator-owned connected systems. Requires tenant authorization and connector permission.",
+        "write_capable": False,
+    },
+    "write_capable": {
+        "access_level": "tenant + approval required",
+        "security": "Can change tenant records or connected systems. Requires tenant authorization and approval.",
+        "write_capable": True,
+    },
+}
+
+
 def _norm(value: Any) -> str:
     return str(value or "").lower().replace("_", " ").strip()
 
@@ -235,6 +354,254 @@ def _rank_sources(question: str) -> list[dict[str, Any]]:
             scored.append({**src, "match_score": score})
     scored.sort(key=lambda item: (item["match_score"], item.get("confidence") == "high"), reverse=True)
     return scored
+
+
+def _infer_entity(question: str, fallback: str = "") -> str:
+    q = _norm(question)
+    for key, entity in ENTITY_ALIASES.items():
+        if key in q:
+            return entity
+    return fallback or ""
+
+
+def _infer_industry(question: str, fallback: str = "") -> str:
+    q = _norm(question)
+    for industry in INDUSTRY_SOURCE_HINTS:
+        if industry in q:
+            return industry
+    for industry in INDUSTRY_MEMORY:
+        if industry in q:
+            return industry
+    return fallback or ""
+
+
+def _registry_by_id() -> dict[str, dict[str, Any]]:
+    return {src.get("source_id"): src for src in load_source_registry()}
+
+
+def _scope_card(src: dict[str, Any]) -> dict[str, Any]:
+    source_type = src.get("source_type") or "public_data"
+    scope = SOURCE_SCOPE.get(source_type, SOURCE_SCOPE["public_data"])
+    tools = src.get("tools") or []
+    write_capable = scope["write_capable"] or any(
+        any(term in str(tool).lower() for term in ("write", "sync", "create", "import", "update"))
+        for tool in tools
+    )
+    if write_capable:
+        scope = SOURCE_SCOPE["write_capable"]
+    return {
+        "source_type": source_type,
+        "access_level": scope["access_level"],
+        "security": scope["security"],
+        "write_capable": write_capable,
+        "public_safe": source_type == "public_data" and not write_capable,
+    }
+
+
+def _missing_requirements(src: dict[str, Any], question: str) -> list[dict[str, str]]:
+    missing = []
+    for requirement in src.get("requires", []):
+        if not _can_fill_requirement(requirement, question):
+            missing.append({
+                "key": requirement,
+                "ask": REQUIREMENT_PROMPTS.get(requirement, requirement.replace("_", " ")),
+            })
+    return missing
+
+
+def _ontology_mapping(src: dict[str, Any]) -> list[dict[str, str]]:
+    entities = src.get("entities_enriched") or []
+    fields = src.get("fields_created") or []
+    if not entities:
+        return []
+    mapped = []
+    for entity in entities[:6]:
+        mapped.append({
+            "entity": entity,
+            "fields_created": ", ".join(fields[:8]) if fields else "source-specific enrichment fields",
+            "risk_effects": ", ".join(src.get("risk_effects", [])[:5]) or "none",
+        })
+    return mapped
+
+
+def _source_card(src: dict[str, Any], question: str) -> dict[str, Any]:
+    scope = _scope_card(src)
+    return {
+        "source_id": src.get("source_id"),
+        "provider": src.get("provider"),
+        "category": src.get("category"),
+        "source_type": src.get("source_type"),
+        "tools": src.get("tools", []),
+        "access_level": scope["access_level"],
+        "security": scope["security"],
+        "write_capable": scope["write_capable"],
+        "public_safe": scope["public_safe"],
+        "requires": src.get("requires", []),
+        "missing_inputs": _missing_requirements(src, question),
+        "entities_enriched": src.get("entities_enriched", []),
+        "fields_created": src.get("fields_created", []),
+        "ontology_mapping": _ontology_mapping(src),
+        "used_for": src.get("used_for", []),
+        "risk_effects": src.get("risk_effects", []),
+        "limits": src.get("limits", []),
+        "freshness": src.get("freshness"),
+        "confidence": src.get("confidence"),
+        "match_score": src.get("match_score"),
+    }
+
+
+def _select_sources_for_plan(question: str, entity_type: str, industry: str, limit: int) -> list[dict[str, Any]]:
+    ranked = _rank_sources(question)
+    by_id = _registry_by_id()
+    selected: list[dict[str, Any]] = []
+    seen = set()
+
+    preset = INDUSTRY_SOURCE_HINTS.get(industry or "")
+    if preset:
+        for source_id in preset.get("preferred_sources", []):
+            src = by_id.get(source_id)
+            if src and source_id not in seen:
+                selected.append({**src, "match_score": 20})
+                seen.add(source_id)
+
+    entity_norm = _norm(entity_type)
+    for src in ranked:
+        sid = src.get("source_id")
+        if sid in seen:
+            continue
+        entities = {_norm(e) for e in src.get("entities_enriched", [])}
+        if entity_norm and entity_norm not in entities and ranked:
+            # Keep high-scoring sources even when entity mapping is indirect.
+            if src.get("match_score", 0) < 5:
+                continue
+        selected.append(src)
+        seen.add(sid)
+        if len(selected) >= limit:
+            break
+
+    if not selected and entity_type:
+        for src in load_source_registry():
+            if entity_norm in {_norm(e) for e in src.get("entities_enriched", [])}:
+                selected.append({**src, "match_score": 1})
+                if len(selected) >= limit:
+                    break
+    return selected[: max(1, min(int(limit or 8), 30))]
+
+
+def _input_plan(question: str, industry: str, source_cards: list[dict[str, Any]]) -> dict[str, Any]:
+    preset = INDUSTRY_SOURCE_HINTS.get(industry or "", {})
+    minimum = list(preset.get("minimum_inputs", []))
+    optional = list(preset.get("optional_inputs", []))
+    missing_keys = []
+    seen = set()
+    for card in source_cards:
+        for item in card.get("missing_inputs", []):
+            key = item["ask"]
+            if key not in seen:
+                missing_keys.append(key)
+                seen.add(key)
+    return {
+        "minimum_inputs": minimum,
+        "optional_inputs": optional,
+        "source_required_inputs": missing_keys,
+        "filled_from_request": {
+            "location": _extract_location(question),
+            "currency": _extract_currency(question) if re.search(r"\b[A-Z]{3}\b", question) else "",
+            "tokens": sorted(_tokens(question))[:12],
+        },
+    }
+
+
+def _source_plan_answer(plan: dict[str, Any]) -> str:
+    entity = plan.get("entity_type") or "the entity"
+    industry = plan.get("industry") or "general"
+    lines = [
+        f"**Source enrichment plan for {entity} ({industry})**",
+        "",
+    ]
+    input_plan = plan.get("input_plan") or {}
+    minimum = input_plan.get("minimum_inputs") or []
+    optional = input_plan.get("optional_inputs") or []
+    source_inputs = input_plan.get("source_required_inputs") or []
+    if minimum:
+        lines.append("I need: " + ", ".join(minimum) + ".")
+    if optional:
+        lines.append("Helpful optional inputs: " + ", ".join(optional) + ".")
+    if source_inputs:
+        lines.append("Source-specific missing inputs: " + ", ".join(source_inputs[:10]) + ".")
+    lines.append("")
+    lines.append("Best source bundle:")
+    for card in (plan.get("sources") or [])[:8]:
+        fields = ", ".join(card.get("fields_created", [])[:4]) or "context fields"
+        limits = "; ".join(card.get("limits", [])[:1])
+        lines.append(
+            f"- **{card.get('source_id')}** ({card.get('access_level')}): "
+            f"{card.get('provider')} enriches {', '.join(card.get('entities_enriched', [])[:4])}; "
+            f"creates {fields}."
+        )
+        if limits:
+            lines.append(f"  Caveat: {limits}.")
+    lines.append("")
+    lines.append("Ontology mapping:")
+    mappings = []
+    for card in (plan.get("sources") or [])[:6]:
+        mappings.extend(card.get("ontology_mapping", [])[:2])
+    for mapping in mappings[:8]:
+        lines.append(
+            f"- {mapping.get('entity')}: {mapping.get('fields_created')} "
+            f"(risk effects: {mapping.get('risk_effects')})."
+        )
+    if plan.get("industry_note"):
+        lines.append("")
+        lines.append(plan["industry_note"])
+    lines.append("")
+    lines.append("Security boundary: public/default sources can be planned before tenant auth; connector data needs tenant authorization; writes or stamping enrichment rows need approval.")
+    return "\n".join(lines)
+
+
+def plan_source_enrichment(
+    question: str,
+    entity_type: Optional[str] = None,
+    industry: Optional[str] = None,
+    limit: int = 8,
+) -> dict[str, Any]:
+    """
+    Operationalize the source registry for an enrichment request.
+
+    This does not execute APIs. It explains which sources exist, what inputs are
+    required, how each source maps into the ontology, and what security/cost/rate
+    limits apply before Idjwi can enrich records.
+    """
+    inferred_industry = _infer_industry(question, industry or "")
+    inferred_entity = entity_type or _infer_entity(question)
+    preset = INDUSTRY_SOURCE_HINTS.get(inferred_industry or "")
+    if not inferred_entity and preset:
+        inferred_entity = preset.get("entity_type", "")
+    if not inferred_entity:
+        inferred_entity = "Enterprise"
+
+    selected = _select_sources_for_plan(question, inferred_entity, inferred_industry, limit)
+    cards = [_source_card(src, question) for src in selected]
+    plan = {
+        "matched": bool(cards),
+        "entity_type": inferred_entity,
+        "industry": inferred_industry or "general",
+        "sources": cards,
+        "input_plan": _input_plan(question, inferred_industry, cards),
+        "industry_note": preset.get("note") if preset else "",
+        "source_counts": {
+            "public": sum(1 for c in cards if c.get("source_type") == "public_data"),
+            "connector": sum(1 for c in cards if c.get("source_type") == "connector_data"),
+            "write_capable": sum(1 for c in cards if c.get("write_capable")),
+        },
+        "registry_live_contract": {
+            "public_default_allowed": "product/default brain can explain and route these sources without tenant data",
+            "tenant_required": "connector/internal data requires tenant authorization",
+            "approval_required": "writing enrichment rows, stamping records, or connector write-back requires approval",
+        },
+    }
+    plan["answer"] = _source_plan_answer(plan)
+    return plan
 
 
 def _scope_for_source(src: dict[str, Any], question: str) -> dict[str, Any]:

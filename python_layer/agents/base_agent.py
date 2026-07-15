@@ -23,6 +23,7 @@ from .llm_router   import get_client, route, get_max_tokens, is_llm_available
 from .tool_registry import TOOL_DEFINITIONS, execute_tool
 from .approval_gate import submit_action, log_run, log_executed_action, get_risk_level, RiskLevel
 from .agent_memory  import recall, remember, update_baseline
+from .closed_loop_agent import normalize_closed_loop_result
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +180,14 @@ class BaseAgent(ABC):
             findings = {"error": error_str, "actions": [], "error_type": error_type}
 
         # 3. Report
+        if "error" not in findings:
+            findings = normalize_closed_loop_result(
+                agent_name=self.name,
+                company_id=company_id,
+                trigger=trigger,
+                raw=findings,
+                actions=findings.get("actions", []),
+            )
         actions_taken   = len([a for a in findings.get("actions", []) if a.get("status") == "executed"])
         actions_pending = len([a for a in findings.get("actions", []) if a.get("status") == "pending"])
         summary = findings.get("summary", f"{self.name} completed run.")

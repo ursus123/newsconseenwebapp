@@ -26,6 +26,13 @@ from .queries import (
 from .llm_adapters import get_adapter
 from .llm_registry import IDJWI_CAPABILITIES, capability_for_tool, resolve_model
 from .idjwi_security import authorize_capability
+from .execution_brain import apply_execution_style, build_execution_trace
+from .trust import build_trust_packet
+from .company_context import (
+    answer_company_context_question,
+    build_company_context,
+    format_company_context_for_prompt,
+)
 
 # ── Documentation loader ─────────────────────────────────────────────────────
 # Loaded at request time so docs updates are reflected immediately without
@@ -141,6 +148,25 @@ conversation — no modes, no switching. You draw on three capability areas:
 
 You decide autonomously which tools to use based on what the question requires.
 Mix capability areas freely in one answer when relevant.
+
+IDJWI OPERATING LOOP
+====================
+For every request, behave like a disciplined operating brain:
+Observe -> understand -> ask missing questions -> choose tool -> verify result -> explain -> recommend next action -> optionally act with approval.
+
+Recognize the active operating mode:
+- product_explanation: explain Newsconseen, Idjwi, architecture, ontology, and capabilities from the default brain.
+- onboarding_help: help users add data, make templates, choose connectors, and map spreadsheets to ontology entities.
+- company_data_lookup: read tenant-scoped records, counts, names, dates, and summaries.
+- graph_reasoning: inspect relationships, joins, unlinked records, graph gaps, and ontology connections.
+- enrichment_planning: select public/connector sources, ask for missing inputs, and map enrichments to entities.
+- statistical_analysis: compute trends, rankings, comparisons, outliers, charts, and BI summaries.
+- risk_analysis: explain churn, exposure, concentration, overdue, anomaly, or entity risk with evidence.
+- action_execution: create or propose governed tasks, updates, messages, or records.
+- data_repair: detect missing stamps, duplicates, broken mappings, and propose safe repairs.
+- workflow_automation: run or propose agents/workflows with audit and approval boundaries.
+
+If required inputs are missing, ask for them before pretending to execute. If a write/action is requested, use the approval gate instead of silently changing records.
 
 ─────────────────────────────────────────────
 INTERNAL DATA TOOLS (this organisation's data)
@@ -910,6 +936,9 @@ def _extract_chart_configs(collected_tools: list) -> list:
     """Extract chart configs from all collected tool results."""
     charts = []
     for item in collected_tools:
+        result = item.get("result", {})
+        if isinstance(result, dict) and isinstance(result.get("charts"), list):
+            charts.extend([cfg for cfg in result.get("charts", []) if cfg])
         cfg = _make_chart_config(item["tool"], item["result"])
         if cfg:
             charts.append(cfg)
@@ -1062,12 +1091,68 @@ def _extract_answer_confidence(collected_tools: list) -> dict:
 
 # ── Autonomous mode (no LLM) ─────────────────────────────────────────────────
 
+def _with_trust(
+    result: dict,
+    *,
+    question: str,
+    company_id: str,
+    principal=None,
+    collected_tools: list | None = None,
+    execution_trace: dict | None = None,
+    company_context: dict | None = None,
+    memory_used: bool = False,
+    default_brain_used: bool | None = None,
+    tenant_brain_used: bool | None = None,
+) -> dict:
+    collected_tools = collected_tools or []
+    tools_detail = result.get("tools_detail") or _build_tools_detail(collected_tools)
+    citations = result.get("citations") or []
+    confidence = result.get("confidence") or _extract_answer_confidence(collected_tools)
+    caveats = result.get("missing_data_caveats") or _extract_missing_data_caveats(collected_tools)
+    trust = build_trust_packet(
+        question=question,
+        company_id=company_id,
+        principal=principal,
+        mode=result.get("mode") or "autonomous",
+        operating_mode=result.get("operating_mode") or (execution_trace or {}).get("mode") or "",
+        collected_tools=collected_tools,
+        tools_detail=tools_detail,
+        citations=citations,
+        confidence=confidence,
+        caveats=caveats,
+        data_freshness=result.get("data_freshness") or {},
+        execution_trace=execution_trace,
+        company_context=company_context,
+        memory_used=memory_used,
+        default_brain_used=default_brain_used,
+        tenant_brain_used=tenant_brain_used,
+        error=result.get("error"),
+    )
+    result["tools_detail"] = tools_detail
+    result["confidence"] = confidence
+    result["missing_data_caveats"] = trust.get("missing_data_caveats", caveats)
+    result["trust"] = trust
+    return result
+
+
 # Intent table: first matching entry wins.
 # Each entry: (list-of-keywords, tool_name)
 _AUTONOMOUS_INTENTS = [
     (["what is idjwi", "tell me about idjwi", "who are you", "what can you do",
       "your capabilities", "what are you"],
      "__self_describe__"),
+    (["memory layers", "memory manifest", "structured memory", "how does your memory work",
+      "how your memory works", "memory lifecycle", "memory provenance",
+      "confirmed memory", "inferred memory", "enterprise memory", "global memory",
+      "industry memory", "decision memory", "correction memory"],
+     "get_idjwi_memory_manifest"),
+    (["why do you remember", "why remember", "why did you remember",
+      "explain memory", "explain your memory", "where did that memory come from",
+      "memory provenance for", "what is the source of that memory"],
+     "explain_idjwi_memory"),
+    (["conflicting memory", "memory conflicts", "conflict in memory",
+      "conflicting memories", "show memory conflicts"],
+     "find_idjwi_memory_conflicts"),
     # ── Product-knowledge intents — Idjwi's default brain. Checked before
     # every tenant-data intent below so a product question never gets
     # mistaken for an operational one. Answered from idjwi_brain.py's
@@ -1082,7 +1167,7 @@ _AUTONOMOUS_INTENTS = [
     (["public api", "public apis", "data source", "data sources", "source registry",
       "enrich", "enrichment", "external data", "what should i connect",
       "what data should i connect", "what can you connect"],
-     "__sources__"),
+     "plan_source_enrichment"),
     (["how newsconseen works", "system works", "architecture", "frontend app",
       "frontend structure", "supabase", "python layer", "python_layer", "etl",
       "datamart", "tenant isolation", "security boundary", "pages relate",
@@ -1093,11 +1178,22 @@ _AUTONOMOUS_INTENTS = [
       "before idjwi can analyse", "how do i add a clinic", "add a clinic",
       "what should a farm connect first", "farm connect first", "how do i map my spreadsheet",
       "map my spreadsheet", "spreadsheet into the ontology", "data onboarding",
-      "onboarding guide", "help me insert data", "help me add data"],
-     "__onboarding_guide__"),
+      "onboarding guide", "help me insert data", "help me add data",
+      "should i upload", "should i connect", "connector is better", "which connector",
+      "what relationships will be created", "what analysis becomes available",
+      "after upload", "after importing", "ingestion onboarding"],
+     "plan_onboarding_intake"),
     (["import template", "make an import template", "generate import template",
       "blank template", "columns do i need", "what columns", "csv template"],
      "generate_import_template"),
+    (["data repair", "repair data", "fix data", "fix relationships",
+      "propose repair", "submit repair", "relationship repair",
+      "probably belongs", "likely belongs", "stamp enterprise", "enterprise stamp",
+      "duplicate people", "duplicate person", "duplicate products", "duplicate product",
+      "same person", "same product", "merge duplicate", "likely assignee",
+      "assign task", "unassigned task", "map imported column", "missing entity",
+      "create missing entity"],
+     "plan_data_repairs"),
     (["not assigned a relationship", "missing relationship", "without relationship",
       "no relationship", "not connected", "unconnected records", "unlinked",
       "orphan", "floating records", "graph gaps", "data gaps", "not assigned",
@@ -1126,6 +1222,21 @@ _AUTONOMOUS_INTENTS = [
       "graph methods", "statistical methods", "what can you visualize",
       "what can you visualise", "what kind of charts"],
      "__analysis_capabilities__"),
+    (["analyze my business", "analyse my business", "true analysis",
+      "decision analysis", "reason from the data", "what should we do",
+      "what should i do next", "what matters", "what changed", "descriptive statistics",
+      "statistical analysis", "trend analysis", "anomaly detection", "cohort analysis",
+      "inventory health", "ar aging", "accounts receivable aging", "task bottleneck",
+      "task bottlenecks", "relationship centrality", "centrality",
+      "enterprise performance comparison", "compare enterprise performance",
+      "missing data impact", "analysis modules", "decision-ready findings"],
+     "run_analysis_modules"),
+    (["chart", "graph", "visualize", "visualise", "plot",
+      "bar chart", "line chart", "time series", "risk card", "graph view",
+      "dashboard widget", "downloadable report", "download report",
+      "report of", "report on", "by enterprise", "by branch", "by status",
+      "by assignee", "by product"],
+     "plan_visual_output"),
     (["show me overdue tasks", "list overdue tasks", "show overdue tasks",
       "list tasks for", "show me tasks", "list tasks"],
      "find_task_records"),
@@ -1512,6 +1623,213 @@ def _graph_gap_input(question: str) -> dict:
     return {"entity_type": entity, "gap_type": gap_type, "limit": 50}
 
 
+def _data_repair_input(question: str) -> dict:
+    q = question.lower()
+    entity = _entity_from_question(question)
+    focus = "all"
+    if any(term in q for term in ("duplicate", "same person", "same product", "merge")):
+        focus = "duplicate"
+    elif any(term in q for term in ("assign", "assignee", "unassigned", "who should")):
+        focus = "assignment"
+        entity = "task"
+    elif any(term in q for term in ("stamp enterprise", "enterprise stamp", "enterprise_id", "belongs to", "likely belongs", "probably belongs")):
+        focus = "enterprise_stamp"
+    elif any(term in q for term in ("map imported column", "imported column", "column mapping", "spreadsheet column")):
+        focus = "imported_column"
+        entity = "import"
+    elif any(term in q for term in ("missing entity", "create missing entity", "create candidate")):
+        focus = "missing_entity"
+    elif any(term in q for term in ("relationship", "unlinked", "not connected")):
+        focus = "relationship"
+
+    if entity == "person" and not any(term in q for term in ("people", "person", "staff", "client", "patient", "assignee")):
+        entity = "all"
+
+    submit_terms = (
+        "submit", "propose", "for approval", "fix it", "repair it", "go ahead",
+        "create approval", "queue", "send to approval",
+    )
+    return {
+        "repair_focus": focus,
+        "entity_type": entity,
+        "submit_for_approval": any(term in q for term in submit_terms),
+        "limit": 20,
+    }
+
+
+def _analysis_modules_input(question: str) -> dict:
+    q = question.lower()
+    analysis_type = "all"
+    if any(term in q for term in ("descriptive", "summary statistics", "statistical profile")):
+        analysis_type = "descriptive"
+    elif any(term in q for term in ("trend", "over time", "month by month", "what changed")):
+        analysis_type = "trend"
+    elif any(term in q for term in ("anomaly", "anomalies", "outlier", "unusual")):
+        analysis_type = "anomaly"
+    elif any(term in q for term in ("churn", "retention", "at risk")):
+        analysis_type = "churn_risk"
+    elif "cohort" in q:
+        analysis_type = "cohort"
+    elif any(term in q for term in ("inventory", "stock", "reorder", "expiry", "expiring")):
+        analysis_type = "inventory"
+    elif any(term in q for term in ("ar aging", "accounts receivable aging", "receivable aging", "collections")):
+        analysis_type = "ar_aging"
+    elif any(term in q for term in ("bottleneck", "overdue task", "task load")):
+        analysis_type = "task_bottleneck"
+    elif any(term in q for term in ("centrality", "central node", "dependency")):
+        analysis_type = "centrality"
+    elif any(term in q for term in ("enterprise performance", "branch performance", "compare enterprises", "compare branches")):
+        analysis_type = "enterprise_performance"
+    elif any(term in q for term in ("missing data impact", "data impact", "data quality impact")):
+        analysis_type = "missing_data_impact"
+
+    entity = _entity_from_question(question)
+    if entity == "person" and not any(term in q for term in ("people", "person", "staff", "client", "patient", "churn")):
+        entity = "all"
+    return {"analysis_type": analysis_type, "entity_type": entity, "limit": 20}
+
+
+def _visual_output_input(question: str) -> dict:
+    q = question.lower()
+    output_type = "auto"
+    if "table" in q or "list" in q:
+        output_type = "table"
+    elif "bar" in q:
+        output_type = "bar_chart"
+    elif any(term in q for term in ("line", "time series", "trend", "over time", "by month", "monthly")):
+        output_type = "line_chart"
+    elif "area" in q:
+        output_type = "area_chart"
+    elif any(term in q for term in ("pie", "share", "mix", "percentage")):
+        output_type = "pie_chart"
+    elif "risk card" in q or "at risk" in q:
+        output_type = "risk_card"
+    elif any(term in q for term in ("graph view", "relationship graph", "network graph", "entity graph")):
+        output_type = "graph_view"
+    elif "download" in q or "report" in q:
+        output_type = "downloadable_report"
+    elif "dashboard" in q or "widget" in q or "pin" in q:
+        output_type = "dashboard_widget"
+
+    entity = _entity_from_question(question)
+    if any(term in q for term in ("invoice", "invoices", "unpaid", "outstanding", "revenue", "ar aging")):
+        entity = "transaction"
+    if "relationship" in q or "graph" in q:
+        entity = "relationship"
+    group_by = None
+    if "by enterprise" in q or "by branch" in q:
+        group_by = "enterprise_name"
+    elif "by status" in q:
+        group_by = "status"
+    elif "by assignee" in q or "by staff" in q:
+        group_by = "assigned_to"
+    elif "by product" in q:
+        group_by = "product_name"
+
+    metric = None
+    if any(term in q for term in ("invoice", "revenue", "amount", "owed", "unpaid")):
+        metric = "amount"
+    elif any(term in q for term in ("stock", "inventory")):
+        metric = "stock_quantity"
+
+    return {
+        "question": question,
+        "output_type": output_type,
+        "entity_type": entity,
+        "group_by": group_by,
+        "metric": metric,
+        "limit": 20,
+    }
+
+
+def _source_enrichment_input(question: str) -> dict:
+    q = question.lower()
+    industry = None
+    for key in ("clinic", "healthcare", "farm", "retail"):
+        if key in q:
+            industry = key
+            break
+    entity = _entity_from_question(question)
+    if any(term in q for term in ("clinic", "farm", "shop", "store", "business", "company", "enterprise")):
+        entity = "Enterprise"
+    elif any(term in q for term in ("product", "sku", "item", "drug", "medicine")):
+        entity = "Product"
+    elif any(term in q for term in ("address", "location", "site")):
+        entity = "Address"
+    elif any(term in q for term in ("person", "client", "customer", "patient", "staff")):
+        entity = "Person"
+    return {"question": question, "entity_type": entity, "industry": industry, "limit": 8}
+
+
+def _onboarding_intake_input(question: str) -> dict:
+    q = question.lower()
+    industry = None
+    for candidate in ("clinic", "healthcare", "farm", "retail"):
+        if candidate in q:
+            industry = candidate
+            break
+    source_kind = "question"
+    file_type = ""
+    for ext in (".csv", ".xlsx", ".xls", ".pdf", ".docx", ".json", ".xml"):
+        if ext in q:
+            source_kind = "file"
+            file_type = ext
+            break
+    connector_id = ""
+    connector_terms = {
+        "quickbooks": "quickbooks",
+        "xero": "xero",
+        "sage": "sage",
+        "shopify": "shopify",
+        "square": "square",
+        "toast": "toast",
+        "stripe": "stripe",
+        "openmrs": "openmrs",
+        "epic": "epic_fhir",
+        "dhis2": "dhis2",
+        "mpesa": "mpesa",
+        "m-pesa": "mpesa",
+        "bank statement": "bank_statement",
+        "google sheets": "google_sheets",
+    }
+    for term, cid in connector_terms.items():
+        if term in q:
+            connector_id = cid
+            source_kind = "connector"
+            break
+    entities = []
+    entity_terms = {
+        "people": "Person", "person": "Person", "staff": "Person", "client": "Person", "customer": "Person", "patient": "Person",
+        "enterprise": "Enterprise", "branch": "Enterprise", "clinic": "Enterprise", "farm": "Enterprise", "shop": "Enterprise",
+        "product": "Product", "inventory": "Product", "sku": "Product",
+        "transaction": "Transaction", "invoice": "Transaction", "payment": "Transaction",
+        "task": "Task", "appointment": "Task", "visit": "Task",
+        "address": "Address", "location": "Address",
+        "plot": "Plot", "animal": "Animal", "observation": "Observation",
+    }
+    for term, entity in entity_terms.items():
+        if term in q and entity not in entities:
+            entities.append(entity)
+    scope_mode = "company"
+    if "specific enterprise" in q or "one enterprise" in q or "one branch" in q:
+        scope_mode = "enterprise"
+    elif "mixed" in q or "multiple enterprise" in q or "different enterprises" in q:
+        scope_mode = "mixed"
+    elif "infer" in q:
+        scope_mode = "infer"
+    page = "Connectors" if "connector" in q or connector_id else "Ingestion" if "upload" in q or "import" in q else "Add Data"
+    return {
+        "source_name": question[:120],
+        "source_kind": source_kind,
+        "file_type": file_type,
+        "detected_entities": entities,
+        "scope_mode": scope_mode,
+        "connector_id": connector_id,
+        "industry": industry or "",
+        "current_page": page,
+    }
+
+
 def _ontology_records_input(question: str) -> dict:
     q = question.lower()
     entity = _entity_from_question(question)
@@ -1565,6 +1883,22 @@ def _public_data_input(question: str) -> dict:
         "query": question,
         "location": _country_from_question(question),
     }
+
+
+def _memory_explain_input(question: str) -> dict:
+    q = question.strip()
+    quoted = re.search(r"[\"'`](.+?)[\"'`]", q)
+    if quoted:
+        return {"key": quoted.group(1).strip()}
+
+    lowered = q.lower()
+    for marker in ("memory about ", "remember about ", "remember this ", "remember "):
+        if marker in lowered:
+            idx = lowered.find(marker) + len(marker)
+            key = q[idx:].strip(" ?.!")
+            if key:
+                return {"key": key}
+    return {}
 
 
 def _value_text(value) -> str:
@@ -1698,6 +2032,76 @@ def _format_autonomous_answer(tool_name: str, result: dict) -> str:
             lines.extend(["", result["instructions"]])
         return "\n".join(lines)
 
+    if tool_name == "get_idjwi_memory_manifest":
+        layers = result.get("layers") or {}
+        lifecycle = result.get("lifecycle") or []
+        controls = result.get("trust_controls") or []
+        lines = ["**Idjwi structured memory**"]
+        lines.append("Idjwi memory is layered so default product knowledge, tenant knowledge, enterprise-specific facts, user preferences, workflows, decisions, and corrections do not collapse into one unsafe note pile.")
+        if layers:
+            lines.append("")
+            lines.append("Layers:")
+            for key, desc in list(layers.items())[:12]:
+                lines.append(f"- {str(key).replace('_', ' ').title()}: {desc}")
+        if lifecycle:
+            lines.append("")
+            lines.append("Lifecycle states: " + ", ".join(str(s) for s in lifecycle))
+        if controls:
+            lines.append("")
+            lines.append("Trust controls:")
+            for item in controls[:8]:
+                lines.append(f"- {item}")
+        return "\n".join(lines)
+
+    if tool_name == "explain_idjwi_memory":
+        if not result.get("found"):
+            return result.get("reason") or "I could not find that memory. Ask me to list memory first, then choose the exact key or memory id."
+        memory = result.get("memory") or {}
+        lines = ["**Why I remember this**"]
+        if result.get("explanation"):
+            lines.append(result["explanation"])
+        lines.append("")
+        lines.append(f"- Key: {memory.get('key')}")
+        lines.append(f"- Layer: {memory.get('layer') or memory.get('scope')}")
+        lines.append(f"- Status: {memory.get('review_status')}")
+        lines.append(f"- Confidence: {memory.get('confidence')}")
+        if memory.get("subject_type") or memory.get("subject_id"):
+            lines.append(f"- Applies to: {memory.get('subject_type') or 'subject'} `{memory.get('subject_id')}`")
+        if memory.get("source"):
+            lines.append(f"- Source: {memory.get('source')}")
+        if memory.get("provenance"):
+            lines.append(f"- Provenance: {_value_text(memory.get('provenance'))}")
+        if memory.get("expires_at") or memory.get("valid_to"):
+            lines.append(f"- Valid until: {memory.get('valid_to') or memory.get('expires_at')}")
+        return "\n".join(lines)
+
+    if tool_name == "find_idjwi_memory_conflicts":
+        conflicts = result.get("conflicts") or []
+        if not conflicts:
+            return "No conflicting Idjwi memories found for this company."
+        lines = [f"**{len(conflicts)} memory conflict(s)**"]
+        for idx, item in enumerate(conflicts[:20], 1):
+            key = item.get("key") or item.get("memory_key") or "memory"
+            mtype = item.get("memory_type") or "memory"
+            values = item.get("values") or item.get("conflicting_values") or []
+            if not values and item.get("memories"):
+                values = [m.get("value") for m in item.get("memories", []) if isinstance(m, dict)]
+            lines.append(f"{idx}. `{key}` ({mtype}) has conflicting remembered values.")
+            if values:
+                lines.append(f"   Values: {', '.join(str(v) for v in values[:4])}")
+        lines.append("Use review/update/forget controls to confirm the right memory, expire the stale one, or mark the conflict resolved.")
+        return "\n".join(lines)
+
+    if tool_name == "scope_idjwi_memory":
+        if not result.get("updated"):
+            return result.get("reason") or "I could not scope that memory. I need a memory id and the target enterprise/entity id."
+        return (
+            "**Memory scoped**\n"
+            f"- Memory id: `{result.get('memory_id')}`\n"
+            f"- Layer: {result.get('layer')}\n"
+            f"- Applies only to: {result.get('subject_type')} `{result.get('subject_id')}`"
+        )
+
     if tool_name == "get_people_summary":
         summary = result.get("summary", {})
         total = result.get("total_people") or sum(
@@ -1822,6 +2226,148 @@ def _format_autonomous_answer(tool_name: str, result: dict) -> str:
             gap_name = (gap.get("gap_type") or "gap").replace("_", " ")
             details = gap.get("details") or ""
             lines.append(f"{idx}. {label} ({entity}) - {gap_name}" + (f": {details}" if details else ""))
+        return "\n".join(lines)
+
+    if tool_name == "plan_data_repairs":
+        proposals = result.get("proposals", [])
+        if not proposals:
+            return (
+                "No high-confidence data repair proposals found for that scope.\n\n"
+                "Idjwi checked likely relationships, enterprise stamps, duplicate people/products, "
+                "unassigned task assignees, missing entities, and import column mappings where applicable."
+            )
+        lines = [f"**{result.get('repair_count', len(proposals))} data repair proposal(s)**"]
+        by_type = result.get("by_type") or {}
+        if by_type:
+            lines.append("Breakdown: " + ", ".join(f"{k.replace('_', ' ')}: {v}" for k, v in by_type.items()))
+        if result.get("submitted_for_approval"):
+            lines.append("Submitted to approval gate: yes")
+        else:
+            lines.append("No records were changed. Ask me to submit these for approval if you want to queue them.")
+        for idx, proposal in enumerate(proposals[:20], 1):
+            target = proposal.get("target") or {}
+            action = proposal.get("suggested_action") or {}
+            repair = (proposal.get("repair_type") or "repair").replace("_", " ")
+            confidence = proposal.get("confidence")
+            label = target.get("label") or target.get("entity_id") or "Unnamed record"
+            entity = (target.get("entity_type") or "record").replace("_", " ")
+            lines.append(f"{idx}. {repair.title()} - {label} ({entity}), confidence {confidence}")
+            reasoning = proposal.get("reasoning")
+            if reasoning:
+                lines.append(f"   Reason: {reasoning}")
+            evidence = proposal.get("evidence") or []
+            if evidence:
+                lines.append(f"   Evidence: {'; '.join(str(e) for e in evidence[:3])}")
+            action_type = action.get("action_type") or repair
+            lines.append(f"   Safe action: {str(action_type).replace('_', ' ')}")
+            if proposal.get("approval_id"):
+                lines.append(f"   Approval: {proposal.get('approval_id')} ({proposal.get('approval_status', 'pending')})")
+        return "\n".join(lines)
+
+    if tool_name == "run_analysis_modules":
+        findings = result.get("findings", [])
+        if not findings:
+            return (
+                "No decision-ready analysis findings were produced for that scope.\n\n"
+                "That usually means the tenant needs more dated transactions, tasks, relationships, products, or enterprise-stamped records before deeper analysis is possible."
+            )
+        lines = [f"**Idjwi analysis brief: {result.get('analysis_type', 'all').replace('_', ' ')}**"]
+        lines.append(f"Findings: {result.get('finding_count', len(findings))}")
+        for idx, finding in enumerate(findings[:12], 1):
+            severity = str(finding.get("severity") or "info").upper()
+            title = finding.get("title") or finding.get("module") or "Finding"
+            module = str(finding.get("module") or "analysis").replace("_", " ")
+            lines.append(f"{idx}. [{severity}] {title} ({module})")
+            evidence = finding.get("evidence") or []
+            if evidence:
+                lines.append(f"   Evidence: {'; '.join(str(e) for e in evidence[:3])}")
+            recommendation = finding.get("recommendation")
+            if recommendation:
+                lines.append(f"   Decision: {recommendation}")
+            records = finding.get("records") or []
+            if records:
+                labels = []
+                for record in records[:3]:
+                    label = (
+                        record.get("full_name") or record.get("name") or record.get("enterprise_name") or
+                        record.get("title") or record.get("reference_number") or record.get("counterparty_name") or
+                        record.get("id")
+                    )
+                    if label:
+                        labels.append(str(label))
+                if labels:
+                    lines.append(f"   Example records: {', '.join(labels)}")
+        decisions = result.get("decisions") or []
+        if decisions:
+            lines.append("")
+            lines.append("Recommended next moves:")
+            for decision in decisions[:5]:
+                lines.append(f"- {decision.get('recommended_next_action')}")
+        return "\n".join(lines)
+
+    if tool_name == "plan_visual_output":
+        viz = result.get("visualization") or {}
+        visual_language = result.get("visual_language") or {}
+        output = (viz.get("output_type") or visual_language.get("selected_output") or "visual").replace("_", " ")
+        title = viz.get("title") or "Idjwi visual output"
+        lines = [f"**{title}**"]
+        lines.append(f"Best output: {output}.")
+        if viz.get("reason"):
+            lines.append(f"Why: {viz.get('reason')}")
+        lines.append(f"Records used: {result.get('record_count', 0)}.")
+        filters = viz.get("filters") or []
+        if filters:
+            lines.append("Filters: " + ", ".join(filters))
+        if result.get("charts"):
+            lines.append("I prepared a renderable chart below.")
+        if result.get("table", {}).get("columns"):
+            lines.append("A table snapshot is included in the visual spec and can be saved into Reports.")
+        if result.get("report_spec"):
+            lines.append("A report spec is included with summary, visual, and row sections.")
+        contract = visual_language.get("chart_contract")
+        if contract:
+            lines.append(f"Visual contract: {contract}")
+        return "\n".join(lines)
+
+    if tool_name == "plan_onboarding_intake":
+        if result.get("answer"):
+            return result["answer"]
+        brief = result.get("brief") or {}
+        entities = ", ".join(brief.get("detected_entities") or [])
+        lines = ["**Idjwi onboarding brief**"]
+        lines.append(f"Detected ontology path: {entities or 'not enough data yet'}.")
+        if brief.get("enterprise_guidance"):
+            lines.append(f"Enterprise scope: {brief.get('enterprise_guidance')}")
+        connector = brief.get("connector_recommendation") or {}
+        if connector.get("reason"):
+            lines.append(f"Recommended path: {connector.get('recommended_path')} - {connector.get('reason')}")
+        if brief.get("relationship_plan"):
+            lines.append("Expected relationships:")
+            for rel in brief["relationship_plan"][:5]:
+                lines.append(f"- {rel.get('from')} -> {rel.get('relationship')} -> {rel.get('to')}: {rel.get('basis')}")
+        if brief.get("incomplete_after_upload"):
+            lines.append("Incomplete after upload:")
+            lines.extend(f"- {item}" for item in brief["incomplete_after_upload"][:5])
+        if brief.get("analysis_unlocked"):
+            lines.append("Analysis unlocked:")
+            lines.extend(f"- {item}" for item in brief["analysis_unlocked"][:5])
+        return "\n".join(lines)
+
+    if tool_name == "plan_source_enrichment":
+        if result.get("answer"):
+            return result["answer"]
+        sources = result.get("sources", [])
+        if not sources:
+            return "I could not match a source-registry enrichment plan for that request yet."
+        lines = [f"**Source enrichment plan for {result.get('entity_type', 'entity')}**"]
+        input_plan = result.get("input_plan") or {}
+        if input_plan.get("minimum_inputs"):
+            lines.append("I need: " + ", ".join(input_plan["minimum_inputs"]) + ".")
+        for src in sources[:8]:
+            lines.append(
+                f"- **{src.get('source_id')}** ({src.get('access_level')}): "
+                f"creates {', '.join(src.get('fields_created', [])[:4]) or 'context fields'}."
+            )
         return "\n".join(lines)
 
     if tool_name == "find_people_records":
@@ -2110,8 +2656,22 @@ def _autonomous_answer(question: str, company_id: str, principal=None, return_me
             tool_input["entity_type"] = _entity_from_question(question)
         if tool_name == "find_graph_gaps":
             tool_input.update(_graph_gap_input(question))
+        if tool_name == "plan_data_repairs":
+            tool_input.update(_data_repair_input(question))
+        if tool_name == "run_analysis_modules":
+            tool_input.update(_analysis_modules_input(question))
+        if tool_name == "plan_visual_output":
+            tool_input.update(_visual_output_input(question))
+        if tool_name == "plan_onboarding_intake":
+            tool_input.update(_onboarding_intake_input(question))
+        if tool_name == "plan_source_enrichment":
+            tool_input.update(_source_enrichment_input(question))
         if tool_name == "find_ontology_records":
             tool_input.update(_ontology_records_input(question))
+        if tool_name == "explain_idjwi_memory":
+            tool_input.update(_memory_explain_input(question))
+        if tool_name == "find_idjwi_memory_conflicts":
+            tool_input["limit"] = 50
         q = question.lower()
         if tool_name == "find_task_records" and "overdue" in q:
             tool_input["overdue_only"] = True
@@ -2469,17 +3029,80 @@ class CopilotEngine:
         else:
             resolved_history = []
 
+        request_context = dict(context or {})
+        if self.enterprise_name and not request_context.get("enterprise_name"):
+            request_context["enterprise_name"] = self.enterprise_name
+        company_context = build_company_context(
+            self.company_id,
+            request_context,
+            history=resolved_history,
+            session_id=session_id,
+            principal=self.principal,
+        )
+
         # Flatten context dict into question prefix
         full_question = question
-        if context:
-            ctx_str = "; ".join(f"{k}: {v}" for k, v in context.items() if v)
-            if ctx_str:
-                full_question = f"[Context: {ctx_str}]\n\n{question}"
+        ctx_str = format_company_context_for_prompt(company_context)
+        if ctx_str:
+            full_question = f"[Context]\n{ctx_str}\n\n{question}"
 
         messages = list(resolved_history)
         messages.append({"role": "user", "content": full_question})
 
         try:
+            context_answer = answer_company_context_question(company_context, question)
+            if context_answer:
+                execution_trace = build_execution_trace(
+                    full_question,
+                    [],
+                    {"company_context": company_context},
+                    context=company_context,
+                    tenant_authorized=getattr(self.principal, "tenant_authorized", True),
+                    advisor_enabled=advisor_enabled,
+                    memory_used=False,
+                )
+                answer_text = apply_execution_style(context_answer, execution_trace)
+                if session_id:
+                    updated = list(resolved_history)
+                    updated.append({"role": "user", "content": full_question})
+                    updated.append({"role": "assistant", "content": answer_text})
+                    save_session_history(self.company_id, session_id, updated)
+                result = {
+                    "answer": answer_text,
+                    "tools_called": [],
+                    "data": {"company_context": company_context},
+                    "charts": [],
+                    "citations": [],
+                    "data_freshness": {},
+                    "tools_detail": [],
+                    "confidence": {"level": "high", "reason": "Answered from request/session/company context."},
+                    "missing_data_caveats": company_context.get("missing_data") or [],
+                    "intent": "company_context",
+                    "operating_mode": execution_trace.get("mode"),
+                    "execution_trace": execution_trace,
+                    "company_context": company_context,
+                    "company_id": self.company_id,
+                    "backend": self.backend,
+                    "mode": "autonomous",
+                    "advisor_enabled": False,
+                    "memory_used": False,
+                    "memory_candidates_created": 0,
+                    "created_recommendations": [],
+                    "created_insights": [],
+                }
+                return _with_trust(
+                    result,
+                    question=full_question,
+                    company_id=self.company_id,
+                    principal=self.principal,
+                    collected_tools=[],
+                    execution_trace=execution_trace,
+                    company_context=company_context,
+                    memory_used=False,
+                    default_brain_used=True,
+                    tenant_brain_used=False,
+                )
+
             if not advisor_enabled:
                 answer_text, tools_called, data, memory_used = _autonomous_answer(
                     full_question,
@@ -2487,20 +3110,30 @@ class CopilotEngine:
                     principal=self.principal,
                     return_meta=True,
                 )
+                autonomous_collected = [
+                    {"tool": tool, "input": {"company_id": self.company_id}, "result": data.get(tool, {})}
+                    for tool in tools_called
+                ]
+                execution_trace = build_execution_trace(
+                    full_question,
+                    tools_called,
+                    data,
+                    context=company_context,
+                    tenant_authorized=getattr(self.principal, "tenant_authorized", True),
+                    advisor_enabled=False,
+                    memory_used=memory_used,
+                )
+                answer_text = apply_execution_style(answer_text, execution_trace)
                 if session_id:
                     updated = list(resolved_history)
                     updated.append({"role": "user", "content": full_question})
                     updated.append({"role": "assistant", "content": answer_text})
                     save_session_history(self.company_id, session_id, updated)
-                autonomous_collected = [
-                    {"tool": tool, "input": {"company_id": self.company_id}, "result": data.get(tool, {})}
-                    for tool in tools_called
-                ]
-                return {
+                result = {
                     "answer": answer_text,
                     "tools_called": tools_called,
                     "data": data,
-                    "charts": [],
+                    "charts": _extract_chart_configs(autonomous_collected),
                     "citations": [],
                     "data_freshness": {},
                     "tools_detail": [
@@ -2510,6 +3143,9 @@ class CopilotEngine:
                     "confidence": _extract_answer_confidence(autonomous_collected),
                     "missing_data_caveats": _extract_missing_data_caveats(autonomous_collected),
                     "intent": "",
+                    "operating_mode": execution_trace.get("mode"),
+                    "execution_trace": execution_trace,
+                    "company_context": company_context,
                     "company_id": self.company_id,
                     "backend": self.backend,
                     "mode": "autonomous",
@@ -2519,6 +3155,16 @@ class CopilotEngine:
                     "created_recommendations": [],
                     "created_insights": [],
                 }
+                return _with_trust(
+                    result,
+                    question=full_question,
+                    company_id=self.company_id,
+                    principal=self.principal,
+                    collected_tools=autonomous_collected,
+                    execution_trace=execution_trace,
+                    company_context=company_context,
+                    memory_used=memory_used,
+                )
 
             collected: list = []
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
@@ -2528,13 +3174,6 @@ class CopilotEngine:
                 )
                 answer_text = future.result(timeout=120)
 
-            # Save updated history to session store
-            if session_id:
-                updated = list(resolved_history)
-                updated.append({"role": "user",      "content": full_question})
-                updated.append({"role": "assistant",  "content": answer_text})
-                save_session_history(self.company_id, session_id, updated)
-
             charts    = _extract_chart_configs(collected)
             citations = _extract_citations(collected)
             created_recommendations, created_insights = _extract_created_objects(collected)
@@ -2543,11 +3182,30 @@ class CopilotEngine:
                 full_question,
                 answer_text,
             )
+            tools_called = [c["tool"] for c in collected]
+            data = {c["tool"]: c["result"] for c in collected}
+            execution_trace = build_execution_trace(
+                full_question,
+                tools_called,
+                data,
+                context=company_context,
+                tenant_authorized=getattr(self.principal, "tenant_authorized", True),
+                advisor_enabled=True,
+                memory_used=False,
+            )
+            answer_text = apply_execution_style(answer_text, execution_trace)
 
-            return {
+            # Save updated history to session store after execution style is applied.
+            if session_id:
+                updated = list(resolved_history)
+                updated.append({"role": "user",      "content": full_question})
+                updated.append({"role": "assistant",  "content": answer_text})
+                save_session_history(self.company_id, session_id, updated)
+
+            result = {
                 "answer":                   answer_text,
-                "tools_called":             [c["tool"] for c in collected],
-                "data":                     {c["tool"]: c["result"] for c in collected},
+                "tools_called":             tools_called,
+                "data":                     data,
                 "charts":                   charts,
                 "citations":                citations,
                 "data_freshness":           _extract_data_freshness(collected),
@@ -2555,6 +3213,9 @@ class CopilotEngine:
                 "confidence":               _extract_answer_confidence(collected),
                 "missing_data_caveats":      _extract_missing_data_caveats(collected),
                 "intent":                   "",
+                "operating_mode":           execution_trace.get("mode"),
+                "execution_trace":          execution_trace,
+                "company_context":          company_context,
                 "company_id":               self.company_id,
                 "backend":                  self.backend,
                 "mode":                     "advisor",
@@ -2564,10 +3225,30 @@ class CopilotEngine:
                 "created_recommendations":  created_recommendations,
                 "created_insights":         created_insights,
             }
+            return _with_trust(
+                result,
+                question=full_question,
+                company_id=self.company_id,
+                principal=self.principal,
+                collected_tools=collected,
+                execution_trace=execution_trace,
+                company_context=company_context,
+                memory_used=False,
+            )
 
         except Exception as exc:
             logger.error("CopilotEngine.ask failed: %s", exc)
-            return {
+            execution_trace = build_execution_trace(
+                question,
+                [],
+                {},
+                context=context,
+                tenant_authorized=getattr(self.principal, "tenant_authorized", True),
+                advisor_enabled=advisor_enabled,
+                memory_used=False,
+                error=str(exc),
+            )
+            result = {
                 "answer": (
                     "I encountered an unexpected error processing your request. "
                     "Please try rephrasing your question, or check the Railway logs "
@@ -2579,5 +3260,20 @@ class CopilotEngine:
                 "charts":       [],
                 "citations":    [],
                 "intent":       "",
+                "operating_mode": execution_trace.get("mode"),
+                "execution_trace": execution_trace,
+                "company_context": company_context if "company_context" in locals() else {},
                 "company_id":   self.company_id,
             }
+            return _with_trust(
+                result,
+                question=question,
+                company_id=self.company_id,
+                principal=self.principal,
+                collected_tools=[],
+                execution_trace=execution_trace,
+                company_context=company_context if "company_context" in locals() else {},
+                memory_used=False,
+                default_brain_used=True,
+                tenant_brain_used=False,
+            )

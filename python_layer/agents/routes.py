@@ -96,15 +96,8 @@ def scheduled_run(x_cron_secret: str = Header(default="")):
 @router.post("/trigger/onboarding")
 def trigger_onboarding(req: OnboardingTrigger):
     """Trigger the onboarding agent when a new entity is created."""
-    from .agents.onboarding import OnboardingAgent
     engine = get_engine_safe()
-    agent  = OnboardingAgent(engine=engine)
-    return agent.run_for_entity(
-        company_id=req.company_id,
-        entity_type=req.entity_type,
-        entity_id=req.entity_id,
-        entity_data=req.entity_data,
-    )
+    return run_agent("onboarding", req.company_id, f"entity:{req.entity_type}:{req.entity_id}", engine)
 
 
 # ── Approval gate ─────────────────────────────────────────────────────────────
@@ -289,7 +282,13 @@ def agents_status(company_id: str = Query(...), authorization: Optional[str] = H
         actions_week  = get_actions_this_week(engine, company_id)
 
     return {
-        "agents_enabled": bool(os.getenv("ANTHROPIC_API_KEY")),
+        "agents_enabled": db_ok,
+        "idjwi_closed_loop_enabled": db_ok,
+        "adviser_llm_configured": bool(
+            os.getenv("ANTHROPIC_API_KEY")
+            or os.getenv("OPENAI_API_KEY")
+            or os.getenv("GOOGLE_API_KEY")
+        ),
         "opus_enabled":   os.getenv("OPUS_ENABLED", "false").lower() == "true",
         "database_ok":    db_ok,
         "registered_agents": [a["name"] for a in list_agents()],

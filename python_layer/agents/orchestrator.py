@@ -1,19 +1,14 @@
-# ==============================================================
-# Phase 4A — Agent Orchestrator
-# ==============================================================
-# Central registry and dispatcher for all agents.
-# Routes run requests to the correct agent, manages scheduling,
-# and provides the unified /agents API surface.
-# ==============================================================
+"""
+Agent orchestrator.
+
+Central registry and dispatcher for company-scoped agents. The core agents are
+deterministic Idjwi closed-loop operators; optional adviser-backed agents can
+still live beside them.
+"""
 
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
-
-# ── Agent registry ────────────────────────────────────────────────────────────
-# Populated lazily on first access to avoid import-time errors
-# if optional dependencies (e.g. anthropic) are not installed.
 
 _REGISTRY: dict = {}
 
@@ -23,24 +18,28 @@ def _load_agents():
     if _REGISTRY:
         return
 
-    from .agents.operations    import OperationsAgent
-    from .agents.revenue       import RevenueAgent
-    from .agents.retention     import RetentionAgent
-    from .agents.inventory     import InventoryAgent
-    from .agents.onboarding    import OnboardingAgent
-    from .agents.compliance    import ComplianceAgent
-    from .agents.market_research import MarketResearchAgent
-    from .agents.network       import NetworkAgent
+    from .closed_loop_agent import (
+        DailyHealthCheckAgent,
+        EnrichmentAgent,
+        ImportCleanupAgent,
+        InventoryClosedLoopAgent,
+        OnboardingClosedLoopAgent,
+        OperationsClosedLoopAgent,
+        RelationshipRepairAgent,
+        RevenueClosedLoopAgent,
+        RiskMonitoringAgent,
+    )
 
     _REGISTRY = {
-        "operations":      OperationsAgent,
-        "revenue":         RevenueAgent,
-        "retention":       RetentionAgent,
-        "inventory":       InventoryAgent,
-        "onboarding":      OnboardingAgent,
-        "compliance":      ComplianceAgent,
-        "market_research": MarketResearchAgent,
-        "network":         NetworkAgent,
+        "daily_health_check": DailyHealthCheckAgent,
+        "import_cleanup": ImportCleanupAgent,
+        "relationship_repair": RelationshipRepairAgent,
+        "risk_monitoring": RiskMonitoringAgent,
+        "revenue": RevenueClosedLoopAgent,
+        "operations": OperationsClosedLoopAgent,
+        "inventory": InventoryClosedLoopAgent,
+        "onboarding": OnboardingClosedLoopAgent,
+        "enrichment": EnrichmentAgent,
     }
 
 
@@ -48,50 +47,73 @@ def list_agents() -> list[dict]:
     """Return metadata for all registered agents."""
     _load_agents()
     meta = {
-        "operations":      {"phase": "4B", "description": "Monitors task backlogs, staff availability, and operational health every 15 minutes.", "schedule": "*/15 * * * *"},
-        "revenue":         {"phase": "4B", "description": "Monitors financial data daily — anomalies, overdue invoices, margin erosion.", "schedule": "0 7 * * *"},
-        "retention":       {"phase": "4C", "description": "Runs retention risk weekly. Prepares re-engagement messages for high-risk clients.", "schedule": "0 8 * * 1"},
-        "inventory":       {"phase": "4C", "description": "Monitors stock levels. Drafts purchase orders when stock is critical.", "schedule": "0 6 * * *"},
-        "onboarding":      {"phase": "4C", "description": "Triggered when new Person/Enterprise created. Automates welcome workflow.", "schedule": "event-driven"},
-        "compliance":      {"phase": "4E", "description": "Nightly audit of data quality, missing fields, duplicates, and compliance gaps.", "schedule": "0 2 * * *"},
-        "market_research": {"phase": "4E", "description": "Deep market intelligence — competitor tracking, opportunity detection, weekly briefings.", "schedule": "0 5 * * 1"},
-        "network":         {"phase": "4E", "description": "Weekly cross-branch performance comparison and best-practice propagation.", "schedule": "0 9 * * 1"},
+        "daily_health_check": {
+            "phase": "9",
+            "description": "Closed-loop daily health review: KPIs, graph gaps, anomalies, alerts, actions, memory, and outcome.",
+            "schedule": "0 6 * * *",
+        },
+        "import_cleanup": {
+            "phase": "9",
+            "description": "Closed-loop cleanup after imports: unmapped fields, weak relationships, proposed repairs, and approval queue.",
+            "schedule": "after import",
+        },
+        "relationship_repair": {
+            "phase": "9",
+            "description": "Closed-loop ontology repair: unlinked records, likely relationship fixes, approval status, and memory updates.",
+            "schedule": "0 3 * * *",
+        },
+        "risk_monitoring": {
+            "phase": "9",
+            "description": "Closed-loop risk monitoring for churn, concentration, anomalies, and high-risk entities.",
+            "schedule": "0 7 * * *",
+        },
+        "operations": {
+            "phase": "9",
+            "description": "Closed-loop operations review for overdue work, staff bottlenecks, proposed actions, and measurable outcomes.",
+            "schedule": "*/15 * * * *",
+        },
+        "revenue": {
+            "phase": "9",
+            "description": "Closed-loop revenue review for overdue invoices, AR aging, debtor exposure, actions, and outcomes.",
+            "schedule": "0 7 * * *",
+        },
+        "inventory": {
+            "phase": "9",
+            "description": "Closed-loop inventory review for stock risk, expiry/reorder signals, proposals, memory, and outcomes.",
+            "schedule": "0 6 * * *",
+        },
+        "onboarding": {
+            "phase": "9",
+            "description": "Closed-loop onboarding guidance for data priorities, upload vs connector decisions, graph gaps, and next actions.",
+            "schedule": "event-driven",
+        },
+        "enrichment": {
+            "phase": "9",
+            "description": "Closed-loop enrichment planning from the source registry, required inputs, and safe public sources.",
+            "schedule": "0 4 * * *",
+        },
     }
-    return [
-        {"name": name, **meta.get(name, {})}
-        for name in _REGISTRY
-    ]
+    return [{"name": name, **meta.get(name, {})} for name in _REGISTRY]
 
 
-def run_agent(agent_name: str, company_id: str,
-              trigger: str = "manual",
-              engine=None) -> dict:
-    """
-    Instantiate and run a named agent for a company.
-    Returns the agent's findings dict.
-    """
+def run_agent(agent_name: str, company_id: str, trigger: str = "manual", engine=None) -> dict:
+    """Instantiate and run a named agent for a company."""
     _load_agents()
 
     AgentClass = _REGISTRY.get(agent_name)
     if AgentClass is None:
-        return {"error": f"Unknown agent: {agent_name}",
-                "available": list(_REGISTRY.keys())}
+        return {"error": f"Unknown agent: {agent_name}", "available": list(_REGISTRY.keys())}
 
     try:
         agent = AgentClass(engine=engine)
         return agent.run(company_id=company_id, trigger=trigger)
     except Exception as e:
-        logger.error("Orchestrator: agent %s failed for %s: %s",
-                     agent_name, company_id, e)
+        logger.error("Orchestrator: agent %s failed for %s: %s", agent_name, company_id, e)
         return {"error": str(e), "agent": agent_name, "company_id": company_id}
 
 
-def run_all(company_id: str, trigger: str = "scheduled",
-            engine=None) -> dict:
-    """
-    Run all agents for a company sequentially.
-    Returns a dict of agent_name → findings.
-    """
+def run_all(company_id: str, trigger: str = "scheduled", engine=None) -> dict:
+    """Run all agents for a company sequentially."""
     _load_agents()
     results = {}
     for name in _REGISTRY:
@@ -101,11 +123,7 @@ def run_all(company_id: str, trigger: str = "scheduled",
 
 
 def run_scheduled(engine=None) -> dict:
-    """
-    Entry point for the scheduler — runs all agents for all
-    companies that have data in the analytics tables.
-    Called by the cron endpoint.
-    """
+    """Scheduler entrypoint: run all agents for companies with analytics data."""
     from database import get_engine_safe
     from sqlalchemy import text
 
@@ -113,7 +131,6 @@ def run_scheduled(engine=None) -> dict:
     if not eng:
         return {"error": "No database connection"}
 
-    # Get all distinct company_ids from analytics tables
     company_ids = []
     try:
         with eng.connect() as conn:
@@ -134,7 +151,7 @@ def run_scheduled(engine=None) -> dict:
         all_results[company_id] = run_all(company_id, trigger="scheduled", engine=eng)
 
     return {
-        "status":    "completed",
+        "status": "completed",
         "companies": len(company_ids),
-        "results":   all_results,
+        "results": all_results,
     }
