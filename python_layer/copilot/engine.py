@@ -1098,6 +1098,18 @@ _AUTONOMOUS_INTENTS = [
     (["import template", "make an import template", "generate import template",
       "blank template", "columns do i need", "what columns", "csv template"],
      "generate_import_template"),
+    (["not assigned a relationship", "missing relationship", "without relationship",
+      "no relationship", "not connected", "unconnected records", "unlinked",
+      "orphan", "floating records", "graph gaps", "data gaps", "not assigned",
+      "unassigned", "no assignee", "which records are not"],
+     "find_graph_gaps"),
+    (["what is in people", "what is in persons", "what is in enterprises",
+      "what is in products", "what is in tasks", "what is in transactions",
+      "what is in relationships", "what is in addresses", "name the people",
+      "name the enterprises", "name the products", "name the tasks",
+      "list records", "show records", "actual records", "task dates",
+      "date of tasks", "assigned to whom", "who is assigned"],
+     "find_ontology_records"),
     (["gdp", "gdp per capita", "gdp growth", "inflation", "unemployment",
       "population", "life expectancy", "literacy", "health spending",
       "education spending", "internet users", "mobile subscriptions",
@@ -1476,6 +1488,46 @@ def _entity_from_question(question: str) -> str:
 _PRODUCT_BRAIN_SUFFIX = "\n\n*(Answered from Idjwi's default brain — no LLM needed)*"
 
 
+def _graph_gap_input(question: str) -> dict:
+    q = question.lower()
+    entity = _entity_from_question(question)
+    gap_type = "all"
+    if any(term in q for term in ("unassigned", "not assigned", "no assignee", "assigned to whom")):
+        gap_type = "unassigned_task" if entity in ("task", "person") else "missing_relationship"
+        if entity == "person":
+            entity = "task"
+    elif any(term in q for term in ("orphan address", "orphaned address")):
+        entity = "address"
+        gap_type = "orphan_address"
+    elif any(term in q for term in ("missing enterprise", "no enterprise", "without enterprise")):
+        gap_type = "missing_enterprise"
+    elif any(term in q for term in ("missing person", "no person", "without person", "missing counterparty")):
+        gap_type = "missing_person"
+    elif any(term in q for term in ("missing product", "no product", "without product", "missing item")):
+        gap_type = "missing_product"
+    elif any(term in q for term in ("relationship", "connected", "unlinked", "orphan", "graph")):
+        gap_type = "missing_relationship"
+    if "all" in q or ("records" in q and entity == "person" and not any(term in q for term in ("people", "person", "staff", "client", "patient"))):
+        entity = "all"
+    return {"entity_type": entity, "gap_type": gap_type, "limit": 50}
+
+
+def _ontology_records_input(question: str) -> dict:
+    q = question.lower()
+    entity = _entity_from_question(question)
+    payload = {"entity_type": entity, "limit": 50}
+    if any(term in q for term in ("inactive", "closed", "completed", "pending", "active", "open")):
+        for status in ("inactive", "closed", "completed", "pending", "active", "open"):
+            if status in q:
+                payload["status"] = status
+                break
+    if entity == "task" and any(term in q for term in ("unassigned", "not assigned", "no assignee")):
+        payload["unassigned_only"] = True
+    if any(term in q for term in ("without relationship", "no relationship", "not connected", "unlinked")):
+        payload["missing_relationship"] = True
+    return payload
+
+
 def _country_from_question(question: str) -> str:
     q = question.lower()
     aliases = {
@@ -1748,6 +1800,28 @@ def _format_autonomous_answer(tool_name: str, result: dict) -> str:
                 lines.append(f"- {key.replace('_', ' ').title()}: {_value_text(sc.get(key))}")
         if result.get("data_as_of"):
             lines.append(f"- Data as of: {result.get('data_as_of')}")
+        return "\n".join(lines)
+
+    if tool_name == "find_ontology_records":
+        entity = (result.get("entity_type") or "record").replace("_", " ")
+        return _format_records(f"{entity.title()} records", result.get("records", []),
+                               ["full_name", "name", "enterprise_name", "title", "reference_number", "counterparty_name", "label", "tag_id", "id"],
+                               ["status", "person_type", "task_type", "relationship_type", "enterprise_name", "assigned_to", "assignee_name", "due_date", "transaction_date", "amount", "currency", "city", "country"])
+
+    if tool_name == "find_graph_gaps":
+        gaps = result.get("gaps", [])
+        if not gaps:
+            return "No graph or assignment gaps found for that scope."
+        lines = [f"**{result.get('gap_count', len(gaps))} graph/data gap(s)**"]
+        by_type = result.get("by_type") or {}
+        if by_type:
+            lines.append("Breakdown: " + ", ".join(f"{k.replace('_', ' ')}: {v}" for k, v in by_type.items()))
+        for idx, gap in enumerate(gaps[:20], 1):
+            label = gap.get("record_label") or gap.get("record_id") or "Unnamed record"
+            entity = (gap.get("entity_type") or "record").replace("_", " ")
+            gap_name = (gap.get("gap_type") or "gap").replace("_", " ")
+            details = gap.get("details") or ""
+            lines.append(f"{idx}. {label} ({entity}) - {gap_name}" + (f": {details}" if details else ""))
         return "\n".join(lines)
 
     if tool_name == "find_people_records":
@@ -2034,6 +2108,10 @@ def _autonomous_answer(question: str, company_id: str, principal=None, return_me
             tool_input.update(_public_data_input(question))
         if tool_name == "generate_import_template":
             tool_input["entity_type"] = _entity_from_question(question)
+        if tool_name == "find_graph_gaps":
+            tool_input.update(_graph_gap_input(question))
+        if tool_name == "find_ontology_records":
+            tool_input.update(_ontology_records_input(question))
         q = question.lower()
         if tool_name == "find_task_records" and "overdue" in q:
             tool_input["overdue_only"] = True

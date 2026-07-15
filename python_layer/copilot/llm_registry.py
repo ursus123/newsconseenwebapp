@@ -185,6 +185,8 @@ TOOL_CAPABILITIES = {
     "find_relationship_records": "read_company_data",
     "find_product_records": "read_company_data",
     "find_address_records": "read_company_data",
+    "find_ontology_records": "read_company_data",
+    "find_graph_gaps": "read_company_data",
     "inspect_raw_record": "read_company_data",
     "get_entity_join": "read_company_data",
     "get_company_graph_context": "read_company_data",

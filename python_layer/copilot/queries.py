@@ -2646,6 +2646,268 @@ def find_address_records(
 # CROSS-ENTITY JOIN TOOL — merge two raw tables in Python
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Generic ontology row readers and graph-gap detection.
+
+_ONTOLOGY_ENTITY_SOURCES = {
+    "person": ("people", "persons", ["id", "full_name", "name", "first_name", "last_name", "person_type", "person_subtype", "status", "availability_status", "email", "phone", "enterprise_id", "enterprise_name", "created_date", "created_at", "end_date"]),
+    "enterprise": ("enterprises", "enterprises", ["id", "name", "enterprise_name", "short_name", "enterprise_type", "enterprise_tier", "status", "operating_status", "industry", "city", "country", "email", "phone", "created_date", "created_at"]),
+    "product": ("products", "products", ["id", "name", "sku", "item_type", "item_class", "item_subtype", "status", "stock_quantity", "reorder_level", "unit_of_measure", "unit_price", "expiry_date", "enterprise_id", "enterprise_name", "created_date", "created_at"]),
+    "task": ("tasks", "tasks", ["id", "title", "task_type", "status", "priority", "assigned_to", "assignee_name", "assigned_enterprise_id", "enterprise_id", "enterprise_name", "due_date", "start_date", "completed_at", "completed_date", "outcome", "created_date", "created_at"]),
+    "transaction": ("transactions", "transactions", ["id", "reference_number", "transaction_type", "status", "payment_status", "amount", "currency", "date", "transaction_date", "due_date", "person_id", "counterparty_id", "counterparty_name", "enterprise_id", "enterprise_name", "product_id", "item_id", "description", "created_date", "created_at"]),
+    "relationship": ("relationships", "relationships", ["id", "relationship_type", "status", "from_entity_type", "from_entity_id", "to_entity_type", "to_entity_id", "person_id", "person_name", "enterprise_id", "enterprise_name", "item_id", "item_name", "role", "start_date", "end_date", "notes", "created_date", "created_at"]),
+    "address": ("addresses", "addresses", ["id", "label", "address_type", "street", "street_address", "city", "state", "state_province", "country", "postal_code", "latitude", "longitude", "entity_type", "entity_id", "enterprise_id", "enterprise_name", "person_id", "person_name", "is_primary", "created_date", "created_at"]),
+    "service": ("services", "services", ["id", "name", "service_name", "service_type", "status", "price", "unit_price", "enterprise_id", "enterprise_name", "created_date", "created_at"]),
+    "document": ("documents", "documents", ["id", "title", "name", "document_type", "status", "entity_type", "entity_id", "enterprise_id", "enterprise_name", "person_id", "person_name", "created_date", "created_at"]),
+    "schedule": ("schedules", "schedules", ["id", "title", "schedule_type", "status", "start_time", "end_time", "person_id", "person_name", "enterprise_id", "enterprise_name", "created_date", "created_at"]),
+    "signal": ("signals", "signals", ["id", "name", "title", "signal_type", "status", "source", "severity", "entity_type", "entity_id", "created_date", "created_at"]),
+    "channel": ("channels", "channels", ["id", "name", "channel_type", "status", "source", "created_date", "created_at"]),
+    "territory": ("territories", "territories", ["id", "name", "territory_type", "status", "city", "country", "created_date", "created_at"]),
+    "animal": ("animals", "animals", ["id", "name", "tag_id", "species", "breed", "status", "plot_id", "enterprise_id", "enterprise_name", "created_date", "created_at"]),
+    "plot": ("plots", "plots", ["id", "name", "plot_type", "status", "area", "crop", "enterprise_id", "enterprise_name", "created_date", "created_at"]),
+    "observation": ("observations", "observations", ["id", "title", "observation_type", "status", "value", "unit", "entity_type", "entity_id", "plot_id", "animal_id", "created_date", "created_at"]),
+}
+
+_ONTOLOGY_ENTITY_ALIASES = {
+    "people": "person", "persons": "person", "person": "person", "staff": "person", "clients": "person", "client": "person", "patients": "person", "patient": "person",
+    "enterprises": "enterprise", "enterprise": "enterprise", "branches": "enterprise", "branch": "enterprise", "companies": "enterprise", "company": "enterprise",
+    "products": "product", "items": "product", "product": "product", "inventory": "product",
+    "tasks": "task", "task": "task", "assignments": "task", "assignment": "task",
+    "transactions": "transaction", "transaction": "transaction", "invoices": "transaction", "payments": "transaction",
+    "relationships": "relationship", "relationship": "relationship",
+    "addresses": "address", "address": "address", "locations": "address", "location": "address",
+    "services": "service", "service": "service", "documents": "document", "document": "document", "schedules": "schedule", "schedule": "schedule",
+    "signals": "signal", "signal": "signal", "channels": "channel", "channel": "channel", "territories": "territory", "territory": "territory",
+    "animals": "animal", "animal": "animal", "plots": "plot", "plot": "plot", "observations": "observation", "observation": "observation",
+}
+
+
+def _canonical_ontology_entity(entity_type: str) -> str:
+    key = str(entity_type or "").strip().lower().replace("-", "_")
+    return _ONTOLOGY_ENTITY_ALIASES.get(key, key)
+
+
+def _ontology_entity_df(company_id: str, entity_type: str) -> tuple:
+    canonical = _canonical_ontology_entity(entity_type)
+    cfg = _ONTOLOGY_ENTITY_SOURCES.get(canonical)
+    if not cfg:
+        return canonical, _pd.DataFrame(), "unknown"
+    raw_table, supabase_entity, _fields = cfg
+    df = _read_raw_table(raw_table, company_id)
+    if df is not None and not df.empty:
+        return canonical, df, "raw"
+    try:
+        df = _supabase_live(supabase_entity, company_id)
+        if df is not None and not df.empty:
+            return canonical, df, "supabase_live"
+    except Exception as e:
+        logger.warning("_ontology_entity_df(%s) Supabase fallback: %s", canonical, e)
+    return canonical, _pd.DataFrame(), "none"
+
+
+def _ontology_keep_fields(entity_type: str, df) -> list:
+    fields = _ONTOLOGY_ENTITY_SOURCES.get(entity_type, ("", "", []))[2]
+    keep = [c for c in fields if c in getattr(df, "columns", [])]
+    extra = [c for c in getattr(df, "columns", []) if c not in keep and c != "company_id"]
+    return (keep + extra[:8])[:28]
+
+
+def _blank_mask(df, cols: list[str], default_if_absent: bool = False):
+    existing = [c for c in cols if c in df.columns]
+    if not existing:
+        return _pd.Series([default_if_absent] * len(df), index=df.index)
+    mask = _pd.Series([True] * len(df), index=df.index)
+    for col in existing:
+        blank = df[col].isna().fillna(True) | (df[col].astype(str).str.strip() == "")
+        mask = mask & blank
+    return mask
+
+
+def _text_contains_mask(df, cols: list[str], query: str):
+    existing = [c for c in cols if c in df.columns]
+    if not existing or not query:
+        return _pd.Series([True] * len(df), index=df.index)
+    q = str(query).lower()
+    mask = _pd.Series([False] * len(df), index=df.index)
+    for col in existing:
+        mask = mask | df[col].astype(str).str.lower().str.contains(q, na=False, regex=False)
+    return mask
+
+
+def _record_label(row: dict) -> str:
+    for key in ("full_name", "name", "enterprise_name", "title", "reference_number", "counterparty_name", "label", "service_name", "tag_id", "id"):
+        val = row.get(key)
+        if val not in (None, ""):
+            return str(val)
+    return "Unnamed record"
+
+
+def _relationship_linked_ids(company_id: str, entity_type: str) -> set[str]:
+    rel_df = _read_raw_table("relationships", company_id)
+    if rel_df is None or rel_df.empty:
+        try:
+            rel_df = _supabase_live("relationships", company_id)
+        except Exception:
+            rel_df = _pd.DataFrame()
+    if rel_df is None or rel_df.empty:
+        return set()
+    ids: set[str] = set()
+    typed_aliases = {
+        "person": {"person", "people", "persons", "staff", "client"},
+        "enterprise": {"enterprise", "enterprises", "company", "branch"},
+        "product": {"product", "products", "item", "items"},
+        "task": {"task", "tasks", "assignment"},
+        "transaction": {"transaction", "transactions", "invoice", "payment"},
+        "address": {"address", "addresses", "location"},
+    }.get(entity_type, {entity_type})
+    for col in ("from_entity_id", "to_entity_id"):
+        type_col = "from_entity_type" if col.startswith("from_") else "to_entity_type"
+        if col in rel_df.columns:
+            if type_col in rel_df.columns:
+                typed = rel_df[rel_df[type_col].astype(str).str.lower().isin(typed_aliases)]
+                ids.update(typed[col].dropna().astype(str).tolist())
+            else:
+                ids.update(rel_df[col].dropna().astype(str).tolist())
+    direct_cols = {
+        "person": ["person_id"],
+        "enterprise": ["enterprise_id", "related_enterprise_id"],
+        "product": ["item_id", "product_id"],
+        "task": ["task_id"],
+        "transaction": ["transaction_id"],
+        "address": ["address_id"],
+    }.get(entity_type, [])
+    for col in direct_cols:
+        if col in rel_df.columns:
+            ids.update(rel_df[col].dropna().astype(str).tolist())
+    return {x for x in ids if x and x.lower() not in {"nan", "none", "null"}}
+
+
+def find_ontology_records(
+    company_id: str,
+    entity_type: str,
+    query: Optional[str] = None,
+    status: Optional[str] = None,
+    enterprise_name: Optional[str] = None,
+    assigned_to: Optional[str] = None,
+    unassigned_only: bool = False,
+    missing_relationship: bool = False,
+    limit: int = 50,
+) -> dict:
+    """
+    Generic tenant-scoped row reader for ontology entities.
+    Use when Idjwi needs names, dates, assignees, labels, or actual records.
+    """
+    canonical, df, source = _ontology_entity_df(company_id, entity_type)
+    if canonical not in _ONTOLOGY_ENTITY_SOURCES:
+        return {"error": f"Unknown ontology entity '{entity_type}'.", "entity_type": canonical, "valid_entities": sorted(_ONTOLOGY_ENTITY_SOURCES.keys())}
+    if df.empty:
+        return {"entity_type": canonical, "count": 0, "records": [], "filters": {"query": query, "status": status, "enterprise_name": enterprise_name, "assigned_to": assigned_to, "unassigned_only": unassigned_only, "missing_relationship": missing_relationship}, "data_source": source}
+
+    if query:
+        df = df[_text_contains_mask(df, _ontology_keep_fields(canonical, df), query)]
+    if status and "status" in df.columns:
+        df = df[df["status"].astype(str).str.lower() == str(status).lower()]
+    if enterprise_name:
+        df = df[_text_contains_mask(df, ["enterprise_name", "name", "counterparty_name"], enterprise_name)]
+    if assigned_to and canonical == "task":
+        df = df[_text_contains_mask(df, ["assigned_to", "assignee_name"], assigned_to)]
+    if unassigned_only and canonical == "task":
+        df = df[_blank_mask(df, ["assigned_to", "assignee_name", "assigned_user_id"], default_if_absent=True)]
+    if missing_relationship and "id" in df.columns:
+        linked = _relationship_linked_ids(company_id, canonical)
+        if linked:
+            df = df[~df["id"].astype(str).isin(linked)]
+
+    keep = _ontology_keep_fields(canonical, df)
+    records = df[keep].head(max(1, min(int(limit or 50), 500))).pipe(_clean_df).to_dict(orient="records")
+    return {
+        "entity_type": canonical,
+        "count": len(records),
+        "records": records,
+        "filters": {"query": query, "status": status, "enterprise_name": enterprise_name, "assigned_to": assigned_to, "unassigned_only": unassigned_only, "missing_relationship": missing_relationship},
+        "data_source": source,
+        "safe_fields": keep,
+        "note": "Tenant-scoped row-level ontology records. Company data access is required.",
+    }
+
+
+def _append_gap(gaps: list, gap_type: str, entity_type: str, row: dict, details: str):
+    gaps.append({"gap_type": gap_type, "entity_type": entity_type, "record_id": row.get("id"), "record_label": _record_label(row), "details": details, "record": row})
+
+
+def find_graph_gaps(
+    company_id: str,
+    entity_type: Optional[str] = None,
+    gap_type: Optional[str] = None,
+    limit: int = 50,
+) -> dict:
+    """
+    Find tenant records that are not linked, assigned, or stamped with expected ontology context.
+    """
+    requested = _canonical_ontology_entity(entity_type) if entity_type else "all"
+    targets = [requested] if requested != "all" else ["person", "enterprise", "product", "task", "transaction", "address", "service", "document", "schedule", "animal", "plot", "observation"]
+    max_rows = max(1, min(int(limit or 50), 500))
+    requested_gap = str(gap_type or "all").lower()
+    gaps: list[dict] = []
+    data_sources: dict[str, str] = {}
+
+    for target in targets:
+        if target not in _ONTOLOGY_ENTITY_SOURCES:
+            continue
+        canonical, df, source = _ontology_entity_df(company_id, target)
+        data_sources[canonical] = source
+        if df.empty:
+            continue
+        keep = _ontology_keep_fields(canonical, df)
+
+        if requested_gap in ("all", "missing_relationship", "unlinked"):
+            if "id" in df.columns:
+                linked = _relationship_linked_ids(company_id, canonical)
+                missing = df[~df["id"].astype(str).isin(linked)] if linked else df
+                for row in missing[keep].head(max_rows).pipe(_clean_df).to_dict(orient="records"):
+                    _append_gap(gaps, "missing_relationship", canonical, row, "No relationship row links this record into the company graph.")
+
+        if canonical == "task" and requested_gap in ("all", "unassigned_task", "unassigned"):
+            missing = df[_blank_mask(df, ["assigned_to", "assignee_name", "assigned_user_id"], default_if_absent=True)]
+            for row in missing[keep].head(max_rows).pipe(_clean_df).to_dict(orient="records"):
+                _append_gap(gaps, "unassigned_task", canonical, row, "Task has no assignee field populated.")
+
+        if canonical in ("task", "transaction", "product", "address", "document", "schedule", "animal", "plot") and requested_gap in ("all", "missing_enterprise"):
+            missing = df[_blank_mask(df, ["enterprise_id", "enterprise_name", "assigned_enterprise_id"], default_if_absent=False)]
+            for row in missing[keep].head(max_rows).pipe(_clean_df).to_dict(orient="records"):
+                _append_gap(gaps, "missing_enterprise", canonical, row, "Record is not stamped or named with an enterprise.")
+
+        if canonical == "transaction" and requested_gap in ("all", "missing_person"):
+            missing = df[_blank_mask(df, ["person_id", "counterparty_id", "counterparty_name"], default_if_absent=False)]
+            for row in missing[keep].head(max_rows).pipe(_clean_df).to_dict(orient="records"):
+                _append_gap(gaps, "missing_person", canonical, row, "Transaction has no person/counterparty link.")
+
+        if canonical == "transaction" and requested_gap in ("all", "missing_product"):
+            missing = df[_blank_mask(df, ["product_id", "item_id", "item_name", "product_name"], default_if_absent=False)]
+            for row in missing[keep].head(max_rows).pipe(_clean_df).to_dict(orient="records"):
+                _append_gap(gaps, "missing_product", canonical, row, "Transaction has no product/item link.")
+
+        if canonical == "address" and requested_gap in ("all", "orphan_address", "orphan"):
+            missing = df[_blank_mask(df, ["entity_id", "enterprise_id", "person_id"], default_if_absent=True)]
+            for row in missing[keep].head(max_rows).pipe(_clean_df).to_dict(orient="records"):
+                _append_gap(gaps, "orphan_address", canonical, row, "Address is not attached to a person, enterprise, or entity.")
+
+        if len(gaps) >= max_rows:
+            break
+
+    gaps = gaps[:max_rows]
+    by_type: dict[str, int] = {}
+    for gap in gaps:
+        by_type[gap["gap_type"]] = by_type.get(gap["gap_type"], 0) + 1
+    return {
+        "gap_count": len(gaps),
+        "gaps": gaps,
+        "by_type": by_type,
+        "filters": {"entity_type": requested, "gap_type": requested_gap, "limit": max_rows},
+        "data_sources": data_sources,
+        "note": "Graph gaps are tenant-scoped records that need relationships, assignments, or enterprise context before Idjwi can reason over them fully.",
+    }
+
+
 # Supported join pairs and their join keys.
 # Left side is primary_entity, right side is secondary_entity.
 _JOIN_CONFIGS = {
@@ -5492,6 +5754,70 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "find_ontology_records",
+        "description": (
+            "Generic row-level ontology reader for tenant company data. "
+            "Returns actual names, titles, dates, assignees, IDs, and linked fields for any canonical entity. "
+            "Use this when the operator asks what is inside an entity, asks to list records by name, "
+            "asks for task dates or assignees, or needs records instead of counts. "
+            "For relationship/assignment/data-quality gaps, use find_graph_gaps."
+        ),
+        "input_schema": {
+            "type": "object",
+            "required": ["entity_type"],
+            "properties": {
+                "entity_type": {
+                    "type": "string",
+                    "enum": [
+                        "person", "enterprise", "product", "task", "transaction",
+                        "relationship", "address", "service", "document", "schedule",
+                        "signal", "channel", "territory", "animal", "plot", "observation",
+                    ],
+                    "description": "Canonical ontology entity to read.",
+                },
+                "query": {"type": "string", "description": "Optional text search across safe display fields."},
+                "status": {"type": "string", "description": "Optional status filter."},
+                "enterprise_name": {"type": "string", "description": "Optional enterprise/branch/name filter."},
+                "assigned_to": {"type": "string", "description": "For tasks, filter by assignee name."},
+                "unassigned_only": {"type": "boolean", "description": "For tasks, return only records without an assignee."},
+                "missing_relationship": {"type": "boolean", "description": "Return records whose IDs do not appear in relationships."},
+                "limit": {"type": "integer", "description": "Max records to return. Default 50."},
+            },
+        },
+    },
+    {
+        "name": "find_graph_gaps",
+        "description": (
+            "Find tenant records that are not fully connected to the ontology graph. "
+            "Use for questions like 'what records are not assigned a relationship?', "
+            "'which tasks have no assignee?', 'what transactions are missing enterprise/person/product links?', "
+            "'which addresses are orphaned?', or 'what data is preventing Idjwi from reasoning well?'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity_type": {
+                    "type": "string",
+                    "enum": [
+                        "all", "person", "enterprise", "product", "task", "transaction",
+                        "address", "service", "document", "schedule", "animal", "plot", "observation",
+                    ],
+                    "description": "Entity to inspect, or all. Default all.",
+                },
+                "gap_type": {
+                    "type": "string",
+                    "enum": [
+                        "all", "missing_relationship", "unassigned_task",
+                        "missing_enterprise", "missing_person", "missing_product",
+                        "orphan_address",
+                    ],
+                    "description": "Type of gap to find. Default all.",
+                },
+                "limit": {"type": "integer", "description": "Max gaps to return. Default 50."},
+            },
+        },
+    },
+    {
         "name": "get_product_at_risk",
         "description": (
             "Returns specific product names and quantities that are at risk: "
@@ -8048,6 +8374,8 @@ def execute_tool(
         "find_relationship_records":    find_relationship_records,
         "find_product_records":         find_product_records,
         "find_address_records":         find_address_records,
+        "find_ontology_records":        find_ontology_records,
+        "find_graph_gaps":              find_graph_gaps,
         # Cross-entity join
         "get_entity_join":              get_entity_join,
         # Write-back through approval gate

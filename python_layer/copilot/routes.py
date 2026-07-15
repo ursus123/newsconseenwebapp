@@ -386,6 +386,14 @@ def deterministic_command(
         require("read_company_data")
         return execute_tool("find_people_records", payload, request.company_id, principal=principal, llm_available=False)
 
+    if command in ("find_records", "list_records", "ontology_records"):
+        require("read_company_data")
+        return execute_tool("find_ontology_records", payload, request.company_id, principal=principal, llm_available=False)
+
+    if command in ("graph_gaps", "find_graph_gaps", "unlinked_records", "data_gaps"):
+        require("read_company_data")
+        return execute_tool("find_graph_gaps", payload, request.company_id, principal=principal, llm_available=False)
+
     if command in ("search_intelligence", "intelligence"):
         require("search_intelligence")
         return execute_tool("search_intelligence", payload, request.company_id, principal=principal, llm_available=False)
