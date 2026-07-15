@@ -27,6 +27,8 @@ anthropic
 pandas
 numpy
 openpyxl
+pypdf
+python-docx
 scikit-learn
 
 # Scheduling / datetime

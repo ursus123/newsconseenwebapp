@@ -33,6 +33,11 @@ def extract(file_bytes: bytes, filename: str) -> dict[str, Any]:
         if fname.endswith((".xlsx", ".xls")):
             # Read all rows; openpyxl handles row count natively
             df = pd.read_excel(io.BytesIO(file_bytes))
+        elif fname.endswith(".tsv"):
+            try:
+                df = pd.read_csv(io.BytesIO(file_bytes), sep="\t", encoding="utf-8")
+            except UnicodeDecodeError:
+                df = pd.read_csv(io.BytesIO(file_bytes), sep="\t", encoding="latin-1")
         else:
             # CSV — try utf-8 then latin-1; read all rows
             try:

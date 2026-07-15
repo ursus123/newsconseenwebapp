@@ -60,6 +60,25 @@ _SUPABASE_TABLE: dict[str, str] = {
     "Observation":  "observations",
 }
 
+_ENTERPRISE_SCOPE_FIELD: dict[str, str] = {
+    "Person": "enterprise_id",
+    "Task": "assigned_enterprise_id",
+    "Transaction": "enterprise_id",
+    "Animal": "enterprise_id",
+    "Plot": "enterprise_id",
+}
+
+
+def _apply_ingestion_scope(entity_type: str, record: dict, scope: dict | None) -> None:
+    if not scope or scope.get("scope_mode") != "enterprise":
+        return
+    enterprise_id = scope.get("enterprise_id")
+    if not enterprise_id:
+        return
+    target_field = _ENTERPRISE_SCOPE_FIELD.get(entity_type)
+    if target_field and not record.get(target_field):
+        record[target_field] = enterprise_id
+
 
 # ── Transform hints ───────────────────────────────────────────────────────────
 
@@ -404,6 +423,7 @@ def execute(
     field_map     = plan.get("field_map", [])
     entity_splits = plan.get("entity_splits", [])
     relationships = plan.get("relationships", [])
+    ingestion_scope = plan.get("ingestion_scope") or {}
 
     # Group field_map by target_entity
     entity_fields: dict[str, list[dict]] = {}
@@ -438,6 +458,7 @@ def execute(
                 raw_val = raw_row.get(src_col)
                 if raw_val is not None:
                     record[tgt_fld] = _apply_transform(raw_val, fm.get("transform_hint"))
+            _apply_ingestion_scope(entity_type, record, ingestion_scope)
             entity_rows.append(record)
 
         entity_rows_cache[entity_type] = entity_rows

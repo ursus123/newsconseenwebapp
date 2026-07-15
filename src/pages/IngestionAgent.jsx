@@ -1,6 +1,7 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ncClient } from "@/api/ncClient";
+import { RAILWAY_URL, INGESTION_SUPPORTED_EXTENSIONS, formHeaders } from "@/config/api";
 import PageHeader from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,17 +10,10 @@ import { useToast } from "@/components/ui/use-toast";
 import {
   Upload, FileText, Brain, CheckCircle2, AlertTriangle,
   ChevronRight, RefreshCw, Table2, Layers, Database,
-  History, Trash2, X,
+  History, X, Building2, GitBranch,
 } from "lucide-react";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-
-const SUPPORTED = [".csv", ".xlsx", ".xls", ".json", ".xml"];
-
-function apiHeaders(extra = {}) {
-  return { ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}), ...extra };
-}
+const SUPPORTED = INGESTION_SUPPORTED_EXTENSIONS;
 
 // ── Confidence badge ────────────────────────────────────────────────────────
 function ConfBadge({ score }) {
@@ -97,6 +91,72 @@ function DropZone({ onFile, disabled }) {
         accept={SUPPORTED.join(",")}
         onChange={(e) => e.target.files[0] && onFile(e.target.files[0])}
       />
+    </div>
+  );
+}
+
+function ScopeSelector({
+  scopeMode,
+  setScopeMode,
+  selectedEnterpriseId,
+  setSelectedEnterpriseId,
+  enterprises,
+}) {
+  const selectedEnterprise = enterprises.find(e => e.id === selectedEnterpriseId);
+  const options = [
+    { id: "company", label: "Whole company", icon: Database },
+    { id: "enterprise", label: "Specific enterprise", icon: Building2 },
+    { id: "infer", label: "Let Idjwi infer", icon: Brain },
+    { id: "mixed", label: "Mixed enterprises", icon: GitBranch },
+  ];
+
+  return (
+    <div className="mb-6 border border-slate-200 rounded-xl bg-white p-4">
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-slate-500" /> Operating scope
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            Company is fixed by tenant security. Choose the enterprise context for this source when it is known.
+          </p>
+        </div>
+        {selectedEnterprise && scopeMode === "enterprise" && (
+          <Badge className="bg-emerald-100 text-emerald-700">{selectedEnterprise.enterprise_name || selectedEnterprise.name}</Badge>
+        )}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {options.map(opt => {
+          const Icon = opt.icon;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setScopeMode(opt.id)}
+              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                scopeMode === opt.id
+                  ? "border-blue-400 bg-blue-50 text-blue-700"
+                  : "border-slate-200 text-slate-600 hover:border-slate-300"
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      {scopeMode === "enterprise" && (
+        <select
+          value={selectedEnterpriseId}
+          onChange={e => setSelectedEnterpriseId(e.target.value)}
+          className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+        >
+          <option value="">Select an enterprise...</option>
+          {enterprises.map(e => (
+            <option key={e.id} value={e.id}>{e.enterprise_name || e.name || e.id}</option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }
@@ -185,6 +245,13 @@ export default function IngestionAgent() {
   });
 
   const companyId  = currentUser?.company_id;
+  const { data: enterprises = [] } = useQuery({
+    queryKey: ["ingestion-enterprises", companyId],
+    queryFn: () => ncClient.entities.Enterprise.filter({ company_id: companyId }),
+    enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const [step, setStep]         = useState(0);  // 0=upload, 1=review, 2=done
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -194,12 +261,23 @@ export default function IngestionAgent() {
   const [runStats, setRunStats]             = useState(null);
   const [runs, setRuns]                     = useState([]);
   const [showHistory, setShowHistory]       = useState(false);
+  const [scopeMode, setScopeMode]           = useState("company");
+  const [selectedEnterpriseId, setSelectedEnterpriseId] = useState("");
+
+  const selectedEnterprise = useMemo(
+    () => enterprises.find(e => e.id === selectedEnterpriseId) || null,
+    [enterprises, selectedEnterpriseId],
+  );
 
   // ── Upload ──────────────────────────────────────────────────────────────
   async function handleFile(file) {
     const ext = "." + file.name.split(".").pop().toLowerCase();
     if (!SUPPORTED.includes(ext)) {
       toast({ title: "Unsupported format", description: `Use: ${SUPPORTED.join("  ")}`, variant: "destructive" });
+      return;
+    }
+    if (scopeMode === "enterprise" && !selectedEnterpriseId) {
+      toast({ title: "Select an enterprise", description: "Choose the operating unit this import belongs to.", variant: "destructive" });
       return;
     }
     setSelectedFile(file);
@@ -210,12 +288,15 @@ export default function IngestionAgent() {
     fd.append("file", file);
     fd.append("company_id", companyId);
     fd.append("source_name", file.name);
+    fd.append("scope_mode", scopeMode);
+    if (selectedEnterpriseId) fd.append("enterprise_id", selectedEnterpriseId);
+    if (selectedEnterprise) fd.append("enterprise_name", selectedEnterprise.enterprise_name || selectedEnterprise.name || "");
 
     try {
       setUploadProgress(30);
       const res = await fetch(`${RAILWAY_URL}/ingestion/upload`, {
         method: "POST",
-        headers: apiHeaders(),
+        headers: formHeaders(),
         body: fd,
       });
       setUploadProgress(80);
@@ -249,7 +330,7 @@ export default function IngestionAgent() {
       if (plan.status === "pending_review") {
         const approveRes = await fetch(
           `${RAILWAY_URL}/ingestion/approve/${plan.plan_id}?company_id=${companyId}`,
-          { method: "POST", headers: apiHeaders() },
+          { method: "POST", headers: formHeaders() },
         );
         if (!approveRes.ok) {
           const err = await approveRes.json().catch(() => ({}));
@@ -261,10 +342,13 @@ export default function IngestionAgent() {
       const fd = new FormData();
       fd.append("file", selectedFile);
       fd.append("company_id", companyId);
+      fd.append("scope_mode", scopeMode);
+      if (selectedEnterpriseId) fd.append("enterprise_id", selectedEnterpriseId);
+      if (selectedEnterprise) fd.append("enterprise_name", selectedEnterprise.enterprise_name || selectedEnterprise.name || "");
 
       const res = await fetch(`${RAILWAY_URL}/ingestion/load/${plan.plan_id}`, {
         method: "POST",
-        headers: apiHeaders(),
+        headers: formHeaders(),
         body: fd,
       });
       if (!res.ok) {
@@ -291,7 +375,7 @@ export default function IngestionAgent() {
   async function loadHistory() {
     try {
       const res = await fetch(`${RAILWAY_URL}/ingestion/runs?company_id=${companyId}`, {
-        headers: apiHeaders(),
+        headers: formHeaders(),
       });
       if (res.ok) setRuns(await res.json());
     } catch (_) {}
@@ -315,7 +399,7 @@ export default function IngestionAgent() {
     <div className="p-6 max-w-5xl mx-auto">
       <PageHeader
         title="Ontology Ingestion Agent"
-        description="Import any spreadsheet, CSV, JSON or XML file — the agent maps it to the Newsconseen ontology automatically."
+        description="Import files, documents and connector exports. Idjwi profiles the source, maps it to the ontology, then waits for review before loading."
         icon={<Brain className="w-5 h-5" />}
         actions={
           <div className="flex gap-2">
@@ -336,6 +420,13 @@ export default function IngestionAgent() {
       {/* ── Step 0: Upload ── */}
       {step === 0 && (
         <div>
+          <ScopeSelector
+            scopeMode={scopeMode}
+            setScopeMode={setScopeMode}
+            selectedEnterpriseId={selectedEnterpriseId}
+            setSelectedEnterpriseId={setSelectedEnterpriseId}
+            enterprises={enterprises}
+          />
           <DropZone onFile={handleFile} disabled={uploading} />
           {uploading && (
             <div className="mt-6">
@@ -365,6 +456,13 @@ export default function IngestionAgent() {
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-600">Overall confidence:</span>
               <ConfBadge score={overallConf} />
+            </div>
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-700">
+                Scope: {plan.ingestion_scope?.scope_mode || analysis.ingestion_scope?.scope_mode || scopeMode}
+                {selectedEnterprise ? ` - ${selectedEnterprise.enterprise_name || selectedEnterprise.name}` : ""}
+              </span>
             </div>
             {plan.from_memory && (
               <Badge className="bg-purple-100 text-purple-700">

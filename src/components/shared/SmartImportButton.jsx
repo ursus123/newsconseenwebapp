@@ -16,6 +16,7 @@
 import React, { useState, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ncClient } from "@/api/ncClient";
+import { RAILWAY_URL, INGESTION_SUPPORTED_EXTENSIONS, formHeaders } from "@/config/api";
 import {
   Brain, Upload, FileText, Layers, X, Loader2,
   CheckCircle2, AlertTriangle, RefreshCw,
@@ -23,14 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-const RAILWAY_URL   = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-
-const SUPPORTED = [".csv", ".xlsx", ".xls", ".json", ".xml"];
-
-function apiHeaders() {
-  return RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
-}
+const SUPPORTED = INGESTION_SUPPORTED_EXTENSIONS;
 
 // ── Confidence badge ─────────────────────────────────────────────────────────
 function ConfBadge({ score }) {
@@ -265,7 +259,7 @@ export default function SmartImportButton({
     try {
       const res = await fetch(`${RAILWAY_URL}/ingestion/upload`, {
         method: "POST",
-        headers: apiHeaders(),
+        headers: formHeaders(),
         body: fd,
       });
       if (!res.ok) {
@@ -293,7 +287,7 @@ export default function SmartImportButton({
       if (plan.status === "pending_review") {
         const approveRes = await fetch(
           `${RAILWAY_URL}/ingestion/approve/${plan.plan_id}?company_id=${encodeURIComponent(companyId)}`,
-          { method: "POST", headers: apiHeaders() },
+          { method: "POST", headers: formHeaders() },
         );
         if (!approveRes.ok) {
           const err = await approveRes.json().catch(() => ({}));
@@ -307,7 +301,7 @@ export default function SmartImportButton({
 
       const res = await fetch(`${RAILWAY_URL}/ingestion/load/${plan.plan_id}`, {
         method: "POST",
-        headers: apiHeaders(),
+        headers: formHeaders(),
         body: fd,
       });
       if (!res.ok) {

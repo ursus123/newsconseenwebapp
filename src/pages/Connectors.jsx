@@ -2,6 +2,7 @@ import React, { useState, useCallback } from "react";
 import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import SmartImportButton from "@/components/shared/SmartImportButton";
+import { RAILWAY_URL, RAILWAY_API_KEY, apiHeaders, formHeaders } from "@/config/api";
 import {
   Plug, CheckCircle2, AlertCircle, XCircle, Loader2,
   Database, Cloud, HardDrive, X, ChevronRight, ChevronDown,
@@ -9,17 +10,12 @@ import {
   Clock, Calendar, CalendarClock, KeyRound,
   Webhook, Copy, Trash2, Plus, ExternalLink, Zap,
   ArrowUpRight, ToggleLeft, ToggleRight, Shield, Activity,
+  GitBranch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-
-const API_HEADERS = {
-  "Content-Type": "application/json",
-  ...(RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {}),
-};
+const API_HEADERS = apiHeaders();
 
 // ── Engine configs ──────────────────────────────────────────────────────────
 const DB_ENGINES = [
@@ -51,6 +47,57 @@ const ENTITY_TO_ONTOLOGY = {
 const DB_CONNECTOR_IDS = new Set([
   "postgresql_db", "mysql_db", "aws_rds", "mssql_db", "sqlite_db",
 ]);
+
+function ConnectorScopeSelector({
+  scopeMode,
+  setScopeMode,
+  enterpriseId,
+  setEnterpriseId,
+  enterprises = [],
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <Shield className="w-3.5 h-3.5 text-slate-500" />
+        <p className="text-xs font-semibold text-slate-700">Ontology scope</p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {[
+          ["company", "Whole company"],
+          ["enterprise", "One enterprise"],
+          ["infer", "Idjwi infers"],
+          ["mixed", "Mixed rows"],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setScopeMode(id)}
+            className={`rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors ${
+              scopeMode === id ? "border-indigo-400 bg-white text-indigo-700" : "border-slate-200 bg-white text-slate-500"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {scopeMode === "enterprise" && (
+        <select
+          value={enterpriseId}
+          onChange={e => setEnterpriseId(e.target.value)}
+          className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700"
+        >
+          <option value="">Select enterprise...</option>
+          {enterprises.map(e => (
+            <option key={e.id} value={e.id}>{e.enterprise_name || e.name || e.id}</option>
+          ))}
+        </select>
+      )}
+      <p className="text-[10px] text-slate-400">
+        Company is fixed by the signed-in tenant. This only sets operating-unit context for mapping and stamping.
+      </p>
+    </div>
+  );
+}
 
 // Static fallback catalog — renders even when Railway is unreachable.
 // All 25 connectors are implemented across Sprints 1-8.
@@ -135,13 +182,15 @@ const CREDENTIAL_SCHEMA = {
 
 // ── ApiConnectModal ─────────────────────────────────────────────────────────
 // Used for all API/OAuth connectors (Stripe, ADP, QuickBooks, OpenMRS, etc.)
-function ApiConnectModal({ connector, companyId, onClose }) {
+function ApiConnectModal({ connector, companyId, enterprises = [], onClose }) {
   const { toast } = useToast();
   const schema = CREDENTIAL_SCHEMA[connector?.id] || [];
   const [step, setStep]       = useState("credentials"); // credentials | result
   const [creds, setCreds]     = useState({});
   const [running, setRunning] = useState(false);
   const [result, setResult]   = useState(null);
+  const [scopeMode, setScopeMode] = useState("company");
+  const [enterpriseId, setEnterpriseId] = useState("");
 
   function setField(key, val) {
     setCreds(prev => ({ ...prev, [key]: val }));
@@ -155,9 +204,15 @@ function ApiConnectModal({ connector, companyId, onClose }) {
       form.append("connector_id",     connector.id);
       form.append("credentials_json", JSON.stringify(creds));
       form.append("dry_run",          dryRun ? "true" : "false");
+      form.append("scope_mode",       scopeMode);
+      if (enterpriseId) {
+        const ent = enterprises.find(e => e.id === enterpriseId);
+        form.append("enterprise_id", enterpriseId);
+        form.append("enterprise_name", ent?.enterprise_name || ent?.name || "");
+      }
       const res = await fetch(`${RAILWAY_URL}/connectors/run`, {
         method: "POST",
-        headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+        headers: formHeaders(),
         body: form,
       });
       const data = await res.json();
@@ -204,6 +259,13 @@ function ApiConnectModal({ connector, companyId, onClose }) {
                   <p className="text-xs text-slate-500">
                     Enter your {connector?.name} credentials. These are sent directly to the connector and are not stored.
                   </p>
+                  <ConnectorScopeSelector
+                    scopeMode={scopeMode}
+                    setScopeMode={setScopeMode}
+                    enterpriseId={enterpriseId}
+                    setEnterpriseId={setEnterpriseId}
+                    enterprises={enterprises}
+                  />
                   {schema.map(field => (
                     <div key={field.key}>
                       <label className="text-xs font-semibold text-slate-600 mb-1.5 block">{field.label}</label>
@@ -299,7 +361,7 @@ const FREQ_OPTIONS = [
 ];
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-function ScheduleModal({ connector, companyId, existingSchedule, onClose, onSaved }) {
+function ScheduleModal({ connector, companyId, enterprises = [], existingSchedule, onClose, onSaved }) {
   const { toast } = useToast();
   const schema     = CREDENTIAL_SCHEMA[connector?.id] || [];
   const [frequency,  setFrequency]  = useState(existingSchedule?.frequency  || "manual");
@@ -308,6 +370,8 @@ function ScheduleModal({ connector, companyId, existingSchedule, onClose, onSave
   const [entityType, setEntityType] = useState(existingSchedule?.entity_type || "people");
   const [creds,      setCreds]      = useState({});
   const [saving,     setSaving]     = useState(false);
+  const [scopeMode, setScopeMode] = useState(existingSchedule?.scope_mode || "company");
+  const [enterpriseId, setEnterpriseId] = useState(existingSchedule?.enterprise_id || "");
 
   function setCredField(key, val) {
     setCreds(prev => ({ ...prev, [key]: val }));
@@ -324,6 +388,9 @@ function ScheduleModal({ connector, companyId, existingSchedule, onClose, onSave
         run_at_hour:    parseInt(runAtHour, 10),
         run_at_day:     parseInt(runAtDay, 10),
         entity_type:    entityType,
+        scope_mode:     scopeMode,
+        enterprise_id:  enterpriseId || null,
+        enterprise_name: enterprises.find(e => e.id === enterpriseId)?.enterprise_name || enterprises.find(e => e.id === enterpriseId)?.name || null,
         is_active:      true,
       };
       // Only include credentials if operator filled them in
@@ -1321,7 +1388,7 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
 
 // ── FileConnectModal ─────────────────────────────────────────────────────────
 // Handles excel, csv, json_xml connectors via file upload
-function FileConnectModal({ connector, companyId, onClose }) {
+function FileConnectModal({ connector, companyId, enterprises = [], onClose }) {
   const { toast } = useToast();
   const [step, setStep]           = useState("upload"); // upload | preview | result
   const [file, setFile]           = useState(null);
@@ -1330,6 +1397,8 @@ function FileConnectModal({ connector, companyId, onClose }) {
   const [suggestion, setSuggestion] = useState(null);
   const [running, setRunning]     = useState(false);
   const [runResult, setRunResult] = useState(null);
+  const [scopeMode, setScopeMode] = useState("company");
+  const [enterpriseId, setEnterpriseId] = useState("");
 
   const isJson = connector?.id === "json_xml";
   const accept = isJson
@@ -1373,9 +1442,15 @@ function FileConnectModal({ connector, companyId, onClose }) {
       form.append("entity_type", entityType);
       form.append("file", file);
       form.append("dry_run", dryRun ? "true" : "false");
+      form.append("scope_mode", scopeMode);
+      if (enterpriseId) {
+        const ent = enterprises.find(e => e.id === enterpriseId);
+        form.append("enterprise_id", enterpriseId);
+        form.append("enterprise_name", ent?.enterprise_name || ent?.name || "");
+      }
       const res = await fetch(`${RAILWAY_URL}/connectors/run`, {
         method: "POST",
-        headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+        headers: formHeaders(),
         body: form,
       });
       const data = await res.json();
@@ -1441,6 +1516,13 @@ function FileConnectModal({ connector, companyId, onClose }) {
                   ))}
                 </div>
               </div>
+              <ConnectorScopeSelector
+                scopeMode={scopeMode}
+                setScopeMode={setScopeMode}
+                enterpriseId={enterpriseId}
+                setEnterpriseId={setEnterpriseId}
+                enterprises={enterprises}
+              />
               <div>
                 <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Select file</label>
                 <label className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-xl px-6 py-10 cursor-pointer transition-colors ${
@@ -1606,7 +1688,7 @@ function FileConnectModal({ connector, companyId, onClose }) {
 
 // ── GoogleSheetsModal ────────────────────────────────────────────────────────
 // Fetches a public Google Sheet via CSV export and imports it
-function GoogleSheetsModal({ connector, companyId, onClose }) {
+function GoogleSheetsModal({ connector, companyId, enterprises = [], onClose }) {
   const { toast } = useToast();
   const [step, setStep]             = useState("url"); // url | preview | result
   const [sheetUrl, setSheetUrl]     = useState("");
@@ -1616,6 +1698,8 @@ function GoogleSheetsModal({ connector, companyId, onClose }) {
   const [fetchedFile, setFetchedFile] = useState(null);
   const [running, setRunning]       = useState(false);
   const [runResult, setRunResult]   = useState(null);
+  const [scopeMode, setScopeMode] = useState("company");
+  const [enterpriseId, setEnterpriseId] = useState("");
 
   function extractSheetId(url) {
     const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
@@ -1667,9 +1751,15 @@ function GoogleSheetsModal({ connector, companyId, onClose }) {
       form.append("entity_type", entityType);
       form.append("file", fetchedFile);
       form.append("dry_run", dryRun ? "true" : "false");
+      form.append("scope_mode", scopeMode);
+      if (enterpriseId) {
+        const ent = enterprises.find(e => e.id === enterpriseId);
+        form.append("enterprise_id", enterpriseId);
+        form.append("enterprise_name", ent?.enterprise_name || ent?.name || "");
+      }
       const res = await fetch(`${RAILWAY_URL}/connectors/run`, {
         method: "POST",
-        headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+        headers: formHeaders(),
         body: form,
       });
       const data = await res.json();
@@ -1745,6 +1835,13 @@ function GoogleSheetsModal({ connector, companyId, onClose }) {
                   ))}
                 </div>
               </div>
+              <ConnectorScopeSelector
+                scopeMode={scopeMode}
+                setScopeMode={setScopeMode}
+                enterpriseId={enterpriseId}
+                setEnterpriseId={setEnterpriseId}
+                enterprises={enterprises}
+              />
             </>
           )}
 
@@ -2545,6 +2642,15 @@ export default function Connectors() {
   const [scheduleModalConnector, setScheduleModalConnector] = useState(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const companyId = currentUser?.company_id;
+
+  const { data: enterprises = [] } = useQuery({
+    queryKey: ["connector-enterprises", companyId],
+    queryFn: () => ncClient.entities.Enterprise.filter({ company_id: companyId }),
+    enabled: !!companyId,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
   const { data: catalogData = { connectors: STATIC_CATALOG }, isLoading: catalogLoading } = useQuery({
     queryKey: ["connector-catalog"],
@@ -2766,6 +2872,7 @@ export default function Connectors() {
         <DatabaseConnectModal
           connector={dbModalConnector}
           companyId={currentUser.company_id}
+          enterprises={enterprises}
           onClose={() => setDbModalConnector(null)}
         />
       )}
@@ -2775,6 +2882,7 @@ export default function Connectors() {
         <FileConnectModal
           connector={fileModalConnector}
           companyId={currentUser.company_id}
+          enterprises={enterprises}
           onClose={() => setFileModalConnector(null)}
         />
       )}
@@ -2784,6 +2892,7 @@ export default function Connectors() {
         <GoogleSheetsModal
           connector={sheetsModalConnector}
           companyId={currentUser.company_id}
+          enterprises={enterprises}
           onClose={() => setSheetsModalConnector(null)}
         />
       )}
@@ -2793,6 +2902,7 @@ export default function Connectors() {
         <ApiConnectModal
           connector={apiModalConnector}
           companyId={currentUser.company_id}
+          enterprises={enterprises}
           onClose={() => setApiModalConnector(null)}
         />
       )}
@@ -2802,11 +2912,29 @@ export default function Connectors() {
         <ScheduleModal
           connector={scheduleModalConnector}
           companyId={currentUser.company_id}
+          enterprises={enterprises}
           existingSchedule={scheduleByConnector[scheduleModalConnector.id] || null}
           onClose={() => setScheduleModalConnector(null)}
           onSaved={() => { refetchSchedules(); setScheduleModalConnector(null); }}
         />
       )}
+
+      <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <p className="text-sm font-bold text-slate-800 flex items-center gap-2">
+            <GitBranch className="w-4 h-4 text-indigo-600" /> Source Registry Router
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            Connectors manage recurring sources. Every source is profiled, scoped, mapped, reviewed, and loaded through the same ontology ingestion brain used by Add Data.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-[10px] font-semibold">
+          <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">source setup</span>
+          <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700">Idjwi mapping</span>
+          <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">tenant scoped</span>
+          <span className="px-2 py-1 rounded-full bg-amber-100 text-amber-700">review before load</span>
+        </div>
+      </div>
 
       {/* Section 1: Available Connectors */}
       <div>

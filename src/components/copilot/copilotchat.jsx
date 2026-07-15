@@ -20,7 +20,7 @@ import {
 } from "recharts";
 import TeachIdjwiButton from "@/components/shared/TeachIdjwiButton";
 import { saveIdjwiMemory } from "@/services/idjwiMemoryClient";
-import { RAILWAY_URL, RAILWAY_API_KEY, apiHeaders, authHeaders } from "@/config/api";
+import { RAILWAY_URL, RAILWAY_API_KEY, apiHeaders, authHeaders, formHeaders, INGESTION_SUPPORTED_EXTENSIONS } from "@/config/api";
 
 const idjwiHeaders = async (user) => ({
   ...(await authHeaders()),
@@ -1486,7 +1486,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
   // ── File upload → ingestion agent ────────────────────────────────────────
   const handleFileUpload = useCallback(async (file) => {
     if (!file || !companyId || uploadingFile) return;
-    const SUPPORTED = [".csv", ".xlsx", ".xls", ".json", ".xml"];
+    const SUPPORTED = INGESTION_SUPPORTED_EXTENSIONS;
     const ext = "." + file.name.split(".").pop().toLowerCase();
     if (!SUPPORTED.includes(ext)) {
       setError(`Unsupported file type: ${ext}. Supported: ${SUPPORTED.join("  ")}`);
@@ -1516,7 +1516,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
 
       const res = await fetch(`${RAILWAY_URL}/ingestion/upload`, {
         method: "POST",
-        headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
+        headers: formHeaders(),
         body: fd,
       });
       if (!res.ok) {

@@ -148,6 +148,10 @@ def _db_load_schedules() -> dict[str, dict]:
             # Deserialise credentials
             creds_raw = entry.pop("credentials_enc", None)
             entry["credentials"] = json.loads(creds_raw) if creds_raw else None
+            if isinstance(entry["credentials"], dict):
+                entry["scope_mode"] = entry["credentials"].get("scope_mode", entry.get("scope_mode", "company"))
+                entry["enterprise_id"] = entry["credentials"].get("enterprise_id", entry.get("enterprise_id"))
+                entry["enterprise_name"] = entry["credentials"].get("enterprise_name", entry.get("enterprise_name"))
             # Convert timestamps to ISO strings
             for ts_col in ("next_run_at", "last_run_at", "created_at", "updated_at"):
                 val = entry.get(ts_col)
@@ -343,6 +347,9 @@ class ConnectorScheduleConfig(BaseModel):
     run_at_hour:    int = 0          # hour of day (UTC, 0-23)
     run_at_day:     int = 1          # 0=Mon…6=Sun for weekly; 1-31 for monthly
     entity_type:    Optional[str] = "people"
+    scope_mode:     str = "company"
+    enterprise_id:  Optional[str] = None
+    enterprise_name: Optional[str] = None
     is_active:      bool = True
     credentials:    Optional[dict] = None  # stored in-memory, never logged
     inbound_conflict_policy: str = "connector_wins"  # connector_wins | manual_wins | flag_review
@@ -383,6 +390,12 @@ def save_schedule(config: ConnectorScheduleConfig):
     # Preserve previously stored credentials if none supplied this call
     if entry.get("credentials") is None:
         entry["credentials"] = store.get(key, {}).get("credentials")
+    entry["credentials"] = entry.get("credentials") or {}
+    entry["credentials"].update({
+        "scope_mode": entry.get("scope_mode", "company"),
+        "enterprise_id": entry.get("enterprise_id"),
+        "enterprise_name": entry.get("enterprise_name"),
+    })
     store[key] = entry
 
     # Persist to PostgreSQL — credentials stored alongside schedule config
@@ -469,6 +482,9 @@ def run_scheduled_connectors(x_cron_secret: Optional[str] = Header(None)):
                 runtime_creds = {
                     **stored_creds,
                     "entity_type": entity_type,
+                    "scope_mode": sched.get("scope_mode", "company"),
+                    "enterprise_id": sched.get("enterprise_id"),
+                    "enterprise_name": sched.get("enterprise_name"),
                     "_inbound_conflict_policy": sched.get("inbound_conflict_policy", "connector_wins"),
                     "_last_sync_at": sched.get("last_run_at"),
                 }
@@ -719,6 +735,9 @@ async def run_connector(
     column_map_json:  Optional[str] = Form(None),
     file:             Optional[UploadFile] = File(None),
     dry_run:          bool = Form(False),
+    scope_mode:       str = Form("company"),
+    enterprise_id:    Optional[str] = Form(None),
+    enterprise_name:  Optional[str] = Form(None),
 ):
     """
     Execute a connector run.
@@ -741,7 +760,12 @@ async def run_connector(
             detail=f"Connector '{connector_id}' not found or not yet implemented",
         )
 
-    credentials = {"entity_type": entity_type}
+    credentials = {
+        "entity_type": entity_type,
+        "scope_mode": scope_mode,
+        "enterprise_id": enterprise_id,
+        "enterprise_name": enterprise_name,
+    }
 
     # If a schedule exists for this connector, reuse its inbound conflict
     # policy + last sync time so manual "Run Now" clicks get the same

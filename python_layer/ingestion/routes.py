@@ -25,6 +25,7 @@ from database import get_engine_safe
 
 from ingestion.extractors import excel as excel_extractor
 from ingestion.extractors import json_xml as json_xml_extractor
+from ingestion.extractors import document as document_extractor
 from ingestion import profiler
 from ingestion import fingerprint as fp_mod
 from ingestion import analyser
@@ -40,7 +41,11 @@ _PLAN_TABLE = "analytics.ingestion_plans"
 _RUN_TABLE  = "analytics.ingestion_runs"
 _MEM_TABLE  = "analytics.ingestion_memory"
 
-_SUPPORTED_EXTENSIONS = {".csv", ".xlsx", ".xls", ".json", ".xml"}
+_SUPPORTED_EXTENSIONS = {
+    ".csv", ".tsv", ".xlsx", ".xls", ".json", ".xml",
+    ".pdf", ".docx", ".doc", ".txt", ".md", ".markdown", ".rtf",
+    ".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff",
+}
 _CONFIDENCE_AUTO_LOAD = 0.90   # plan auto-loads without review if all splits ≥ this
 _CONFIDENCE_REVIEW    = 0.65   # plan requires review if any split ≥ this
 
@@ -51,11 +56,43 @@ def _ext(filename: str) -> str:
 
 def _get_extractor(filename: str):
     ext = _ext(filename)
-    if ext in {".csv", ".xlsx", ".xls"}:
+    if ext in {".csv", ".tsv", ".xlsx", ".xls"}:
         return excel_extractor
     if ext in {".json", ".xml"}:
         return json_xml_extractor
+    if ext in {
+        ".pdf", ".docx", ".doc", ".txt", ".md", ".markdown", ".rtf",
+        ".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff",
+    }:
+        return document_extractor
     raise HTTPException(400, f"Unsupported file type: {ext}. Supported: {', '.join(_SUPPORTED_EXTENSIONS)}")
+
+
+def _normalise_ingestion_scope(
+    scope_mode: str | None = None,
+    enterprise_id: str | None = None,
+    enterprise_name: str | None = None,
+    source_kind: str | None = None,
+    connector_id: str | None = None,
+) -> dict:
+    mode = (scope_mode or "company").strip().lower()
+    if mode not in {"company", "enterprise", "infer", "mixed"}:
+        mode = "company"
+    if mode == "enterprise" and not enterprise_id:
+        mode = "company"
+    return {
+        "scope_mode": mode,
+        "enterprise_id": enterprise_id or None,
+        "enterprise_name": enterprise_name or None,
+        "source_kind": source_kind or "file",
+        "connector_id": connector_id or None,
+    }
+
+
+def _attach_scope(analysis: dict, scope: dict) -> dict:
+    result = dict(analysis or {})
+    result["ingestion_scope"] = scope
+    return result
 
 
 def _reconcile_fuzzy_mapping(
@@ -211,6 +248,9 @@ async def upload_file(
     file: UploadFile = File(...),
     company_id: str  = Form(...),
     source_name: str = Form(None),
+    scope_mode: str = Form("company"),
+    enterprise_id: str | None = Form(None),
+    enterprise_name: str | None = Form(None),
 ):
     """
     Step 1 + 2 + 3 of the ingestion pipeline:
@@ -225,6 +265,12 @@ async def upload_file(
     source_name = source_name or filename
     file_bytes  = await file.read()
     ext         = _ext(filename)
+    scope       = _normalise_ingestion_scope(
+        scope_mode=scope_mode,
+        enterprise_id=enterprise_id,
+        enterprise_name=enterprise_name,
+        source_kind="file",
+    )
 
     extractor   = _get_extractor(filename)
     try:
@@ -272,8 +318,9 @@ async def upload_file(
         )
         from_memory = False
 
-    # Validate LLM field_map against canonical entity schemas
+    # Validate LLM field_map against canonical entity schemas and attach import scope.
     analysis = schema_registry.annotate_analysis(analysis)
+    analysis = _attach_scope(analysis, scope)
 
     # Surface row-cap warning in analyst_notes when file was truncated
     if rows_capped:
@@ -306,6 +353,7 @@ async def upload_file(
         "analysis":           analysis,
         "from_memory":        from_memory,
         "column_profiles":    profiles,
+        "ingestion_scope":    scope,
     }
 
     # Persist rows in DB so copilot can trigger load without re-upload.
@@ -322,6 +370,7 @@ async def upload_file(
         "rows_capped": rows_capped,
         "analysis":    analysis,
         "profiles":    profiles,
+        "ingestion_scope": scope,
     }
 
 
@@ -363,6 +412,9 @@ async def load_plan(
     company_id: str = Form(...),
     file: UploadFile | None = File(None),
     duplicate_action: str = Form("skip"),
+    scope_mode: str | None = Form(None),
+    enterprise_id: str | None = Form(None),
+    enterprise_name: str | None = Form(None),
 ):
     """
     Execute an approved plan.
@@ -432,6 +484,17 @@ async def load_plan(
 
     if not settings.supabase_url or not settings.supabase_service_role_key:
         raise HTTPException(503, "Supabase not configured — set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.")
+
+    if scope_mode or enterprise_id or enterprise_name:
+        saved_scope = db_plan["analysis"].get("ingestion_scope", {})
+        override_scope = _normalise_ingestion_scope(
+            scope_mode=scope_mode,
+            enterprise_id=enterprise_id,
+            enterprise_name=enterprise_name,
+            source_kind=saved_scope.get("source_kind", "file"),
+            connector_id=saved_scope.get("connector_id"),
+        )
+        db_plan["analysis"] = _attach_scope(db_plan["analysis"], override_scope)
 
     run_stats = loader.execute(
         plan              = db_plan["analysis"],
@@ -663,6 +726,14 @@ async def ingest_from_connector(request: dict):
     source_name = request.get("source_name", "connector import")
     rows        = request.get("rows", [])
     auto_load   = request.get("auto_load", False)
+    connector_id = request.get("connector_id") or request.get("source_id")
+    scope = _normalise_ingestion_scope(
+        scope_mode=request.get("scope_mode"),
+        enterprise_id=request.get("enterprise_id"),
+        enterprise_name=request.get("enterprise_name"),
+        source_kind=request.get("source_kind") or "connector",
+        connector_id=connector_id,
+    )
 
     settings = get_settings()
     engine   = get_engine_safe()
@@ -704,8 +775,9 @@ async def ingest_from_connector(request: dict):
         # Memory saved only after successful load — not here
         from_memory = False
 
-    # Validate LLM field_map against canonical entity schemas
+    # Validate LLM field_map against canonical entity schemas and attach source scope.
     analysis = schema_registry.annotate_analysis(analysis)
+    analysis = _attach_scope(analysis, scope)
 
     overall_conf = analysis.get("overall_confidence", 0.0)
     if overall_conf >= _CONFIDENCE_AUTO_LOAD:
@@ -726,6 +798,7 @@ async def ingest_from_connector(request: dict):
         "status":             status,
         "analysis":           analysis,
         "from_memory":        from_memory,
+        "ingestion_scope":    scope,
     }
     _save_plan(engine, plan, rows=rows)
 
@@ -735,6 +808,7 @@ async def ingest_from_connector(request: dict):
         "from_memory": from_memory,
         "row_count":   row_count,
         "analysis":    analysis,
+        "ingestion_scope": scope,
     }
 
     # Auto-load if confidence is high enough and caller requested it

@@ -158,6 +158,7 @@ class BaseConnector(ABC):
 
             for record in records:
                 try:
+                    self._apply_enterprise_scope(entity_name, record)
                     result = self._upsert_record(url, record, entity_name)
                     if result == "created":
                         totals["created"] += 1
@@ -179,6 +180,23 @@ class BaseConnector(ABC):
         self.run_stats["skipped"] += totals["skipped_conflict"]
 
         return totals
+
+    def _apply_enterprise_scope(self, entity_name: str, record: dict) -> None:
+        if self.credentials.get("scope_mode") != "enterprise":
+            return
+        enterprise_id = self.credentials.get("enterprise_id")
+        if not enterprise_id:
+            return
+        field_map = {
+            "people": "enterprise_id",
+            "transactions": "enterprise_id",
+            "tasks": "assigned_enterprise_id",
+            "animals": "enterprise_id",
+            "plots": "enterprise_id",
+        }
+        target_field = field_map.get(entity_name)
+        if target_field and not record.get(target_field):
+            record[target_field] = enterprise_id
 
     def run(self) -> dict:
         """
