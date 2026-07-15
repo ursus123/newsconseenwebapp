@@ -1513,6 +1513,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       fd.append("file", file);
       fd.append("company_id", companyId);
       fd.append("source_name", file.name);
+      fd.append("adviser_mode", "idjwi_only");
 
       const res = await fetch(`${RAILWAY_URL}/ingestion/upload`, {
         method: "POST",

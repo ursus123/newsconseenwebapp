@@ -162,6 +162,88 @@ function ScopeSelector({
 }
 
 // ── Field map table ─────────────────────────────────────────────────────────
+function AdviserSelector({
+  adviserMode,
+  setAdviserMode,
+  selectedAdviserModel,
+  setSelectedAdviserModel,
+  models,
+}) {
+  const availableModels = (models || []).filter(model => model.available);
+  const selectedModel = (models || []).find(model => model.id === selectedAdviserModel);
+
+  return (
+    <div className="mb-6 border border-slate-200 rounded-xl bg-white p-4">
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+            <Brain className="w-4 h-4 text-slate-500" /> Idjwi reasoning mode
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            Idjwi maps the file by default. Choose one adviser only when you want paid model help for this import.
+          </p>
+        </div>
+        <Badge className={adviserMode === "selected_adviser" ? "bg-indigo-100 text-indigo-700" : "bg-emerald-100 text-emerald-700"}>
+          {adviserMode === "selected_adviser" ? (selectedModel?.label || "Selected adviser") : "Idjwi only"}
+        </Badge>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setAdviserMode("idjwi_only");
+            setSelectedAdviserModel("");
+          }}
+          className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+            adviserMode === "idjwi_only"
+              ? "border-emerald-400 bg-emerald-50 text-emerald-800"
+              : "border-slate-200 text-slate-600 hover:border-slate-300"
+          }`}
+        >
+          <span className="block text-xs font-semibold">Idjwi only</span>
+          <span className="block text-[11px] mt-0.5">No paid adviser. Review-first ontology draft.</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setAdviserMode("selected_adviser");
+            if (!selectedAdviserModel && availableModels[0]) setSelectedAdviserModel(availableModels[0].id);
+          }}
+          className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+            adviserMode === "selected_adviser"
+              ? "border-indigo-400 bg-indigo-50 text-indigo-800"
+              : "border-slate-200 text-slate-600 hover:border-slate-300"
+          }`}
+        >
+          <span className="block text-xs font-semibold">Use selected adviser</span>
+          <span className="block text-[11px] mt-0.5">One configured model helps Idjwi with this mapping.</span>
+        </button>
+      </div>
+      {adviserMode === "selected_adviser" && (
+        <div className="mt-3">
+          <select
+            value={selectedAdviserModel}
+            onChange={e => setSelectedAdviserModel(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+          >
+            <option value="">Choose an available adviser...</option>
+            {availableModels.map(model => (
+              <option key={model.id} value={model.id}>
+                {model.label} - {model.tag}
+              </option>
+            ))}
+          </select>
+          {availableModels.length === 0 && (
+            <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              No adviser provider is configured. Idjwi can still create a reviewable mapping without paid model usage.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FieldMapTable({ fieldMap }) {
   if (!fieldMap?.length) return <p className="text-sm text-gray-500 italic">No field mappings returned.</p>;
   return (
@@ -252,6 +334,15 @@ export default function IngestionAgent() {
     staleTime: 0,
     refetchOnMount: "always",
   });
+  const { data: modelInfo = {} } = useQuery({
+    queryKey: ["idjwi-models"],
+    queryFn: async () => {
+      const res = await fetch(`${RAILWAY_URL}/copilot/models`, { headers: formHeaders() });
+      if (!res.ok) return {};
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
   const [step, setStep]         = useState(0);  // 0=upload, 1=review, 2=done
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -263,6 +354,8 @@ export default function IngestionAgent() {
   const [showHistory, setShowHistory]       = useState(false);
   const [scopeMode, setScopeMode]           = useState("company");
   const [selectedEnterpriseId, setSelectedEnterpriseId] = useState("");
+  const [adviserMode, setAdviserMode]       = useState("idjwi_only");
+  const [selectedAdviserModel, setSelectedAdviserModel] = useState("");
 
   const selectedEnterprise = useMemo(
     () => enterprises.find(e => e.id === selectedEnterpriseId) || null,
@@ -289,6 +382,10 @@ export default function IngestionAgent() {
     fd.append("company_id", companyId);
     fd.append("source_name", file.name);
     fd.append("scope_mode", scopeMode);
+    fd.append("adviser_mode", adviserMode);
+    if (adviserMode === "selected_adviser" && selectedAdviserModel) {
+      fd.append("adviser_model", selectedAdviserModel);
+    }
     if (selectedEnterpriseId) fd.append("enterprise_id", selectedEnterpriseId);
     if (selectedEnterprise) fd.append("enterprise_name", selectedEnterprise.enterprise_name || selectedEnterprise.name || "");
 
@@ -427,6 +524,13 @@ export default function IngestionAgent() {
             setSelectedEnterpriseId={setSelectedEnterpriseId}
             enterprises={enterprises}
           />
+          <AdviserSelector
+            adviserMode={adviserMode}
+            setAdviserMode={setAdviserMode}
+            selectedAdviserModel={selectedAdviserModel}
+            setSelectedAdviserModel={setSelectedAdviserModel}
+            models={modelInfo.models || []}
+          />
           <DropZone onFile={handleFile} disabled={uploading} />
           {uploading && (
             <div className="mt-6">
@@ -462,6 +566,12 @@ export default function IngestionAgent() {
               <span className="text-sm text-gray-700">
                 Scope: {plan.ingestion_scope?.scope_mode || analysis.ingestion_scope?.scope_mode || scopeMode}
                 {selectedEnterprise ? ` - ${selectedEnterprise.enterprise_name || selectedEnterprise.name}` : ""}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Brain className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-700">
+                Reasoning: {analysis.adviser_label || (analysis.idjwi_analysis_mode === "selected_adviser" ? "Selected adviser" : "Idjwi only")}
               </span>
             </div>
             {plan.from_memory && (

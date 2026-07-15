@@ -2,7 +2,7 @@
 Central model and capability registry for Idjwi.
 
 Idjwi owns the tools, memory, approvals, and product behavior. LLM providers are
-swappable reasoning engines behind that stable capability layer.
+optional advisers behind that stable capability layer.
 """
 
 import os
@@ -51,7 +51,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         provider="anthropic",
         label="Claude Haiku 4.5",
         tag="Fast",
-        description="Quick answers, triage, tagging, and light querying.",
+        description="Optional adviser for quick triage, tagging, and light reasoning.",
         max_tokens=2048,
         task_tier="triage",
         env_key="ANTHROPIC_API_KEY",
@@ -62,7 +62,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         provider="anthropic",
         label="Claude Sonnet 4.6",
         tag="Balanced",
-        description="Default reasoning, tool use, and operational analysis.",
+        description="Optional adviser for balanced reasoning, tool use, and operational analysis.",
         max_tokens=8192,
         task_tier="execution",
         env_key="ANTHROPIC_API_KEY",
@@ -73,7 +73,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         provider="anthropic",
         label="Claude Opus 4.7",
         tag="Deep",
-        description="Strategic analysis, scenario modeling, and complex briefings.",
+        description="Optional adviser for strategic analysis, scenario modeling, and complex briefings.",
         max_tokens=16000,
         task_tier="strategy",
         env_key="ANTHROPIC_API_KEY",
@@ -84,7 +84,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         provider="openai",
         label="ChatGPT GPT-4.1",
         tag="OpenAI",
-        description="Registered provider slot for OpenAI-backed reasoning.",
+        description="Optional adviser slot for OpenAI-backed reasoning.",
         max_tokens=8192,
         task_tier="execution",
         env_key="OPENAI_API_KEY",
@@ -95,7 +95,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         provider="google",
         label="Gemini 2.5 Pro",
         tag="Gemini",
-        description="Registered provider slot for Google-backed reasoning.",
+        description="Optional adviser slot for Google-backed reasoning.",
         max_tokens=8192,
         task_tier="strategy",
         env_key="GOOGLE_API_KEY",

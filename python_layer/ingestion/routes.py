@@ -28,7 +28,7 @@ from ingestion.extractors import json_xml as json_xml_extractor
 from ingestion.extractors import document as document_extractor
 from ingestion import profiler
 from ingestion import fingerprint as fp_mod
-from ingestion import analyser
+from ingestion import idjwi_analyser
 from ingestion import memory as mem_mod
 from ingestion import loader
 from ingestion import schema_registry
@@ -102,14 +102,15 @@ def _reconcile_fuzzy_mapping(
     sample_rows: list[dict],
     row_count: int,
     source_name: str,
-    api_key: str | None,
+    adviser_mode: str | None,
+    adviser_model: str | None,
 ) -> dict:
     """
     Reconcile a fuzzy-recalled mapping with the actual incoming columns:
 
       1. Prune field_map entries whose source_column no longer exists in the file.
-      2. If new columns appear that aren't in the cached mapping AND an api_key is
-         available, call the analyser for just those columns and merge the result.
+      2. If new columns appear that aren't in the cached mapping AND an adviser is
+         explicitly selected, ask Idjwi to analyse just those columns and merge the result.
          This ensures the returned plan is complete without paying for a full re-analysis.
 
     Args:
@@ -117,7 +118,7 @@ def _reconcile_fuzzy_mapping(
         columns:     Actual column names in the current upload.
         profiles:    Column profiles for the current upload.
         sample_rows: Sample rows from the current upload (list of dicts).
-        api_key:     Anthropic API key; if None, new columns are annotated but not mapped.
+        adviser_mode/adviser_model: Optional selected adviser for new columns.
     """
     cached_field_map = cached.get("field_map", [])
     cached_cols = {fm["source_column"] for fm in cached_field_map}
@@ -141,9 +142,9 @@ def _reconcile_fuzzy_mapping(
         result["analyst_notes"] = notes.strip()
         return result
 
-    if not api_key:
-        # Can't analyse without a key — note the gap but return what we have
-        notes += f" [{len(new)} new columns not mapped (no API key): {', '.join(sorted(new))}]"
+    if adviser_mode != "selected_adviser" or not adviser_model:
+        # Keep memory recall cheap unless the operator explicitly selected an adviser.
+        notes += f" [{len(new)} new columns need review; no paid adviser was selected: {', '.join(sorted(new))}]"
         result["analyst_notes"] = notes.strip()
         return result
 
@@ -155,13 +156,14 @@ def _reconcile_fuzzy_mapping(
             for row in sample_rows[:20]
         ]
 
-        delta = analyser.analyse(
+        delta = idjwi_analyser.analyse(
             source_name  = f"{source_name} [delta: {len(new)} new columns]",
             columns      = sorted(new),
             profiles     = delta_profiles,
             sample_rows  = delta_samples,
             row_count    = row_count,
-            api_key      = api_key,
+            adviser_mode = adviser_mode,
+            adviser_model = adviser_model,
         )
 
         result["field_map"] = pruned_map + delta.get("field_map", [])
@@ -251,6 +253,8 @@ async def upload_file(
     scope_mode: str = Form("company"),
     enterprise_id: str | None = Form(None),
     enterprise_name: str | None = Form(None),
+    adviser_mode: str = Form("idjwi_only"),
+    adviser_model: str | None = Form(None),
 ):
     """
     Step 1 + 2 + 3 of the ingestion pipeline:
@@ -302,19 +306,18 @@ async def upload_file(
     if cached_mapping:
         analysis = _reconcile_fuzzy_mapping(
             cached_mapping, columns, profiles, sample_rows, row_count,
-            source_name, settings.anthropic_api_key,
+            source_name, adviser_mode, adviser_model,
         )
         from_memory = True
     else:
-        if not settings.anthropic_api_key:
-            raise HTTPException(503, "ANTHROPIC_API_KEY not configured — cannot analyse file.")
-        analysis = analyser.analyse(
+        analysis = idjwi_analyser.analyse(
             source_name  = source_name,
             columns      = columns,
             profiles     = profiles,
             sample_rows  = sample_rows,
             row_count    = row_count,
-            api_key      = settings.anthropic_api_key,
+            adviser_mode = adviser_mode,
+            adviser_model = adviser_model,
         )
         from_memory = False
 
@@ -727,6 +730,8 @@ async def ingest_from_connector(request: dict):
     rows        = request.get("rows", [])
     auto_load   = request.get("auto_load", False)
     connector_id = request.get("connector_id") or request.get("source_id")
+    adviser_mode = request.get("adviser_mode") or "idjwi_only"
+    adviser_model = request.get("adviser_model")
     scope = _normalise_ingestion_scope(
         scope_mode=request.get("scope_mode"),
         enterprise_id=request.get("enterprise_id"),
@@ -758,19 +763,18 @@ async def ingest_from_connector(request: dict):
     if cached_mapping:
         analysis = _reconcile_fuzzy_mapping(
             cached_mapping, columns, profiles, sample_rows[:20], row_count,
-            source_name, settings.anthropic_api_key,
+            source_name, adviser_mode, adviser_model,
         )
         from_memory = True
     else:
-        if not settings.anthropic_api_key:
-            raise HTTPException(503, "ANTHROPIC_API_KEY not configured.")
-        analysis = analyser.analyse(
+        analysis = idjwi_analyser.analyse(
             source_name  = source_name,
             columns      = columns,
             profiles     = profiles,
             sample_rows  = sample_rows,
             row_count    = row_count,
-            api_key      = settings.anthropic_api_key,
+            adviser_mode = adviser_mode,
+            adviser_model = adviser_model,
         )
         # Memory saved only after successful load — not here
         from_memory = False

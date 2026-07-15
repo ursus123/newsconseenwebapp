@@ -286,6 +286,7 @@ Rules:
       fd.append("file", jsonFile);
       fd.append("company_id", companyId);
       fd.append("source_name", `PDF Extract: ${file?.name || "document"}`);
+      fd.append("adviser_mode", "idjwi_only");
 
       const res = await fetch(`${RAILWAY_URL}/ingestion/upload`, {
         method:  "POST",

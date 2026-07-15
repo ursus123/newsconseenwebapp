@@ -254,6 +254,7 @@ export default function SmartImportButton({
     const fd = new FormData();
     fd.append("file", file);
     fd.append("company_id", companyId);
+    fd.append("adviser_mode", "idjwi_only");
     fd.append("source_name", entityHint ? `${entityHint} — ${file.name}` : file.name);
 
     try {
