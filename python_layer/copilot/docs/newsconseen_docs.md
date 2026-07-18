@@ -1,6 +1,6 @@
 # Newsconseen — Complete Product Documentation
 
-> **RULE FOR DEVELOPERS**: Whenever this file is updated, the copilot's knowledge is automatically
+> **RULE FOR DEVELOPERS**: Whenever this file is updated, Idjwi's product knowledge is automatically
 > refreshed on the next request (the file is loaded at request time, not startup). There is no
 > redeploy or cache flush required. Keep this file in sync with CLAUDE.md and ARCHITECTURE.md.
 
@@ -22,6 +22,20 @@ record, and addresses they operate from. The industry changes the labels. The st
 Newsconseen solves this with three architectural layers, one universal ontology, and autonomous
 agents that run operations on behalf of the operator.
 
+### Idjwi product contract
+
+Idjwi is Newsconseen's default operational mind. It owns organizational context,
+ontology, memory, permissions, tools, policies, decisions, audits, and governed
+actions. Idjwi Core remains available for deterministic intelligence and workflows
+without an external LLM.
+
+LLMs are optional tenant-controlled advisors. A tenant may use none, one, or
+multiple advisors for different objectives. Advisors receive bounded authorized
+context and return proposals to Idjwi. They do not own memory, authorize tools,
+approve decisions, or execute actions. Idjwi validates advisor output before it is
+presented, remembered, or acted upon. No provider, including Anthropic or
+Codex/OpenAI, is Idjwi.
+
 **The moat**: agent memory + operator data grows over time. The longer an operator uses
 Newsconseen, the smarter their agents become about their specific business. No competitor can
 replicate this without the history.
@@ -42,9 +56,9 @@ Layer 2 — Deployable Datamart (python_layer on Railway, FastAPI + PostgreSQL)
   Rule: ALL stat card values and copilot tool queries come from here.
          Never query Base44 directly for analytics.
 
-Layer 3 — Foundry Intelligence (Copilot, Agents, Alerts, Network Intelligence)
+Layer 3 — Foundry Intelligence (Idjwi Core, Advisors, Agents, Alerts, Network Intelligence)
   Rule: reads from Layer 2 only. Never touches Layer 1 directly.
-  Components: Copilot (you), 8 Autonomous Agents, Alert Engine, Anomaly Detection,
+  Components: Idjwi, optional tenant advisors, 8 Autonomous Agents, Alert Engine, Anomaly Detection,
               KPI Goal Tracking, ML Models, Network Intelligence.
 ```
 
@@ -179,7 +193,7 @@ Copilot tool: `get_observation_summary(observation_type, subject_type)`.
 
 ## Agricultural & Ecological Intelligence
 
-Newsconseen includes public agricultural APIs accessible to the copilot via `search_public_data`:
+Newsconseen includes public agricultural APIs accessible to Idjwi via `search_public_data`:
 
 | Dataset | Description | Example query |
 |---------|-------------|---------------|
@@ -247,13 +261,32 @@ The user always sees their data regardless of ETL state.
 
 ---
 
-## Copilot — The Intelligent Operational Assistant
+## Idjwi — The Operational Mind
 
-The Copilot is the interactive AI layer of Newsconseen. It answers any question — operational,
-market research, ML predictions, or product questions about Newsconseen itself — in one unified
-experience grounded in real data.
+Idjwi is Newsconseen's provider-neutral operational intelligence and governance
+layer. It understands authorized organizational scopes, answers from the ontology
+and datamart, preserves governed memory, coordinates tools and agents, records
+decisions and audits, and safely helps the SME act. Optional tenant-selected
+advisors can contribute bounded reasoning, but Idjwi owns the final governed result.
 
-### What the Copilot can do
+### Advisor policy and workspace endpoints
+
+The legacy-compatible `/copilot/*` API prefix exposes Idjwi services:
+
+- `GET /copilot/status` — Idjwi Core readiness and optional advisor availability.
+- `GET /copilot/context` — authenticated company and operational-unit context.
+- `GET /copilot/advisors` — tenant policy and secret-free advisor portfolio.
+- `PUT /copilot/advisors/policy` — manager/admin tenant routing policy.
+- `PUT /copilot/advisors/connection` — manager/admin provider metadata and secure credential reference.
+- `GET /copilot/decisions` — tenant-scoped decision and outcome register.
+- `GET /copilot/events` — tenant-scoped Idjwi audit trail.
+- `POST /copilot/ask` — Idjwi Core plus optional policy-routed advisor request.
+
+The Idjwi workspace is organized around Today, Ask Idjwi, Decisions, Work,
+Memory, Advisors, and Audit. Provider/model identity is secondary configuration
+and audit metadata, not Idjwi's product identity.
+
+### What Idjwi can do
 
 **Operational Intelligence** (your own data):
 - Headcount, staff availability, churn risk, people by type/status
@@ -290,7 +323,7 @@ experience grounded in real data.
 **Ontology-Native Intelligence** (added in Copilot v2):
 - Traverse the company graph — fetch an entity and its full web of relationships, tasks, and transactions (`get_company_graph_context`)
 - Read enrichment data for any entity — sanctions flags, risk scores, geocoding, spend trends (`get_enrichment_context`)
-- Search the intelligence layer — insights, risks, opportunities saved by the copilot or agents (`search_intelligence`)
+- Search the intelligence layer — insights, risks, opportunities saved by Idjwi or agents (`search_intelligence`)
 - Introspect the full ontology schema with valid enum values for all 15 entities (`get_ontology_schema`)
 - **Propose actions** without executing — `propose_task`, `propose_chart`, `propose_record_update` all write to the approval gate for operator review
 - **Save insights** to the intelligence layer immediately (`write_insight`) — appears in the Saved to Intelligence Layer panel in chat
@@ -398,10 +431,10 @@ Copilot questions you can ask:
 
 ## Ontology-Native Copilot (Copilot v2)
 
-The copilot is ontology-native: it answers from structured objects in the company graph,
+Idjwi is ontology-native: it answers from structured objects in the company graph,
 datamart, enrichment layer, and intelligence layer — not from free-text generation alone.
 
-### Four Data Layers Available to the Copilot
+### Four Data Layers Available to Idjwi
 
 | Layer | Tools | What it contains |
 |-------|-------|-----------------|
@@ -416,7 +449,7 @@ Every copilot response is structured as four sections:
 1. **Answer** — the direct answer to the question
 2. **Evidence** — the specific data used (tool name + key metric)
 3. **Recommended Actions** — proposed next steps (may include propose_* tool calls)
-4. **Limitations** — what the copilot couldn't verify or data gaps
+4. **Limitations** — what Idjwi could not verify or data gaps
 
 ### Propose → Approve Workflow
 
@@ -458,7 +491,7 @@ When the operator is on an entity page (Enterprises, People, etc.), the frontend
 - `selected_entity_type` — e.g. "enterprise"
 - `selected_entity_id` — the specific record being viewed
 
-The copilot receives this context and can automatically call `get_company_graph_context`
+Idjwi receives this context and can automatically call `get_company_graph_context`
 or `get_enrichment_context` for the selected entity without the operator needing to specify it.
 
 ---
@@ -466,7 +499,7 @@ or `get_enrichment_context` for the selected entity without the operator needing
 ## 8 Autonomous Agents (Layer 3)
 
 Autonomous agents run on a schedule and take actions without operator intervention.
-They operate through the same approval gate as the copilot's `request_action` tool.
+They operate through the same approval gate as Idjwi's legacy `request_action` tool.
 
 | Agent | Purpose | Model |
 |-------|---------|-------|
@@ -621,7 +654,8 @@ BASE44_ADDRESSES_URL        Base44 Addresses entity URL       ← commonly missi
 DATABASE_URL                PostgreSQL connection string
 CRON_SECRET                 Header secret for POST /cron/etl-all
 API_KEY                     x-api-key header for python_layer endpoints
-ANTHROPIC_API_KEY           Required for copilot + agents
+ANTHROPIC_API_KEY           Optional Anthropic advisor credential
+OPENAI_API_KEY              Optional OpenAI/Codex advisor credential
 SENDGRID_API_KEY            Email alerts
 WHATSAPP_TOKEN              WhatsApp Business API token
 WHATSAPP_PHONE_ID           WhatsApp sender phone ID
@@ -641,12 +675,12 @@ to Railway, or make the fields `Optional[str] = None` in `settings.py`.
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | Stat cards show 0 | ETL hasn't run | POST /cron/etl-all or wait for cron |
-| Copilot returns empty | ANTHROPIC_API_KEY not set | Add key to Railway env vars |
+| Advisor-assisted reasoning unavailable | Selected advisor credential missing | Configure an allowed tenant advisor or use Idjwi Core |
 | "relation does not exist" in query builder | Table not pre-created | Run startup DDL via /health endpoint |
 | python_layer crashes on startup | Missing BASE44_*_URL variable | Add variable to Railway |
 | ML predictions empty | ETL not run since data was added | Trigger POST /cron/etl-all |
 | Alerts not sending | SENDGRID/WHATSAPP env vars missing | Add to Railway env vars |
-| Agent actions not executing | ANTHROPIC_API_KEY not set | Add key to Railway env vars |
+| Advisor-dependent agent cannot reason | Selected advisor unavailable | Use a permitted fallback advisor or a deterministic Idjwi Core plan |
 | `get_company_graph_context` returns empty nodes | raw.relationships table is empty | Trigger POST /load/relationship-summary to populate raw tables |
 | `write_insight` falls back to PostgreSQL | BASE44_INSIGHTS_URL not set | Set env var in Railway, or leave as-is (PostgreSQL fallback is intentional) |
 | `propose_task` approval not appearing in UI | analytics.agent_approvals table missing | Run POST /health to trigger startup DDL which pre-creates the table |
@@ -773,7 +807,7 @@ For questions about the operator's own data, always use the query tools to groun
 in real numbers rather than generic descriptions.
 
 Examples:
-- "What can the copilot do?" → Describe the full capabilities from this documentation
+- "What can Idjwi do?" → Describe the full capabilities from this documentation
 - "How does the ETL work?" → Explain the three-tier fallback and the ETL trigger pattern
 - "What agents do you have?" → List all 8 agents with their purpose
 - "How many entities does Newsconseen have?" → Answer: 15 canonical entities (7 original + 5 operational: Document, Schedule, Signal, Channel, Territory + 3 agricultural: Animal, Plot, Observation), describe them

@@ -1,9 +1,11 @@
-# Idjwi Roadmap — Becoming the Operational Intelligence Layer
+# Idjwi Roadmap — Becoming the Operational Mind of SMEs
 
 ## North Star
 
-Idjwi should become the operational intelligence brain of the app. Not just a
-chat assistant. Not just a report generator. It should know:
+Idjwi is Newsconseen's default operational mind, not a chat assistant, report
+generator, rebranded LLM, or optional copilot. Idjwi Core owns context, ontology,
+memory, permissions, tools, policies, decisions, audits, and governed actions.
+Tenant-controlled LLMs are optional advisors behind this boundary. Idjwi should know:
 
 - what Newsconseen is
 - what the ontology means

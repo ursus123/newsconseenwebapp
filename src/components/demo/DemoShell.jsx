@@ -6,7 +6,7 @@ const NAV = [
   {
     id: "idjwi",
     label: "Idjwi",
-    sub: "AI copilot",
+    sub: "Operational mind",
     icon: Brain,
     href: "/",
     color: "emerald",

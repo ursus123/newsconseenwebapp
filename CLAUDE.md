@@ -32,6 +32,30 @@ The moat: agent memory + operator data grows over time. The longer an operator
 uses Newsconseen, the smarter their agents become about their specific business.
 No competitor can replicate this without the history.
 
+## Idjwi product contract (NON-NEGOTIABLE)
+
+> **Idjwi is Newsconseen's default operational mind.**
+
+Idjwi owns the durable intelligence of an SME: organizational context, ontology,
+memory, permissions, tools, policies, decisions, audits, and governed actions.
+It is available to every tenant independently of any external language-model
+provider. Idjwi Core must remain useful through deterministic queries, rules,
+calculations, memory retrieval, monitoring, and approved workflows when no LLM is
+configured or an advisor is unavailable.
+
+LLMs are optional, tenant-controlled **advisors** to Idjwi. An advisor may analyze
+a bounded objective using the minimum authorized context, but it does not own
+tenant memory, permissions, tools, decisions, or actions. Advisor output is an
+untrusted proposal until Idjwi validates its evidence, scope, policy compliance,
+and required approvals. Anthropic, Codex/OpenAI, local models, and future models
+are interchangeable implementations behind the advisor boundary; none is Idjwi.
+
+The authoritative detailed contract and terminology are in
+[`docs/idjwi-product-contract.md`](docs/idjwi-product-contract.md). Product copy,
+architecture, APIs, and code comments must use those terms consistently. Legacy
+`/copilot/*` routes and `copilot` module names are compatibility identifiers, not
+the product definition.
+
 ---
 
 ## Three-layer architecture
@@ -57,7 +81,7 @@ No competitor can replicate this without the history.
                        │ reads Layer 2 only
 ┌──────────────────────▼──────────────────────────────────┐
 │  LAYER 3 — FOUNDRY INTELLIGENCE                         │
-│  Copilot (grounded LLM), Alerts, Network Intelligence   │
+│  Idjwi Core, Advisors, Agents, Alerts, Network Intel.    │
 │  Rule: reads from Layer 2 only. Never touches Layer 1.  │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -248,7 +272,7 @@ newsconseenwebapp/
     │   ├── queries.py                Multi-layer spatial queries
     │   └── routes.py                 /postgis/* endpoints
     ├── copilot/                      Phase 3A
-    │   ├── engine.py                 Tool loop — Anthropic API
+    │   ├── engine.py                 Idjwi orchestration + legacy advisor loop
     │   └── queries.py                Query tools (15+ tools across all entities)
     ├── alerts/                       Phase 3B — WhatsApp/Email/SMS
     ├── network/                      Phase 3C — network intelligence
@@ -595,29 +619,31 @@ export function validateEntity(row) {
 
 ---
 
-## Copilot (Layer 3)
+## Idjwi (Layer 3)
 
 ### Architecture
 ```python
-# engine.py — tool loop
-for _ in range(5):
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        tools=TOOL_DEFINITIONS,
-        messages=messages,
-        system=build_system_prompt(company_id),  # built from Enterprise record
-    )
-    if response.stop_reason == "end_turn":
-        return answer
-    if response.stop_reason == "tool_use":
-        # execute tools → append results → loop again
+# Idjwi owns the request lifecycle; an advisor is optional.
+scope = authorize_scope(tenant, organization, operational_unit, user)
+context = idjwi_core.load_context(scope)
+plan = idjwi_core.plan(objective, context)
+
+if plan.requires_advisor:
+    proposal = advisor_router.advise(plan.bounded_request())
+    plan = idjwi_core.validate(proposal, context, policies=scope.policies)
+
+return idjwi_core.respond_or_act(plan, approvals=scope.approvals)
 ```
+
+Provider SDK calls and model identifiers belong only in advisor adapters. The
+Idjwi request lifecycle must not depend on Anthropic, OpenAI, Codex, or any other
+single provider.
 
 ### System prompt — built at runtime, never hardcoded
 ```python
 def build_system_prompt(company_id: str) -> str:
     ctx = get_operator_context(company_id)   # reads Enterprise record
-    return f"You are an operational assistant for {ctx['name']}..."
+    return f"You are an advisor to Idjwi for {ctx['name']}..."
 ```
 
 ### Tool definitions — universal, no industry hardcodes
@@ -678,7 +704,8 @@ CRON_SECRET
 API_KEY
 
 # Layer 3 — intelligence
-ANTHROPIC_API_KEY
+ANTHROPIC_API_KEY             # optional Anthropic advisor
+OPENAI_API_KEY                # optional OpenAI/Codex advisor
 SENDGRID_API_KEY
 WHATSAPP_TOKEN
 WHATSAPP_PHONE_ID
@@ -742,10 +769,11 @@ const { data } = useQuery({ queryFn: () => fetch(`${RAILWAY_URL}/open-data/excha
 - Suggest any Railway variable or config that assumes a single client
 - Add an app to APP_REGISTRY without declaring its `backend` and `ontologyObjects` array
 
-### Copilot documentation sync rule (ALWAYS)
+### Idjwi documentation sync rule (ALWAYS)
 
-**`python_layer/copilot/docs/newsconseen_docs.md` is the single source of truth for the
-copilot's product knowledge.** The file is loaded fresh on every copilot request — no
+**`python_layer/copilot/docs/newsconseen_docs.md` is the single source of truth for
+Idjwi product knowledge loaded by the legacy copilot module.** The file is loaded
+fresh on every Idjwi request — no
 redeploy, no cache flush required.
 
 **Rule: whenever any of the following change, update `newsconseen_docs.md` to match:**
@@ -756,7 +784,7 @@ redeploy, no cache flush required.
 - A new agent, connector, alert type, or ML model is added
 - Any troubleshooting knowledge is learned (add to Common Troubleshooting table)
 
-Failure to keep `newsconseen_docs.md` in sync means the copilot gives stale or wrong
+Failure to keep `newsconseen_docs.md` in sync means Idjwi gives stale or wrong
 answers about Newsconseen's own features — the most visible form of product regression.
 
 ### Always
@@ -951,7 +979,7 @@ python_layer/config/taxonomy.py
 ```
 Phase 1  Core OS          ✅ All 7 core entities, forms, lists, taxonomy
 Phase 2  Connectors       ✅ 35 connectors, 9 categories, full connect flow UI
-Phase 3A Copilot          ✅ Engine + query tools, session memory, grounded answers
+Phase 3A Idjwi            ✅ Core tools, memory, grounded answers, legacy copilot API
 Phase 3B Alerts           ✅ WhatsApp/Email/SMS alert engine, 10 alert types
 Phase 3C Network          ✅ Multi-tenant network intelligence + cross-branch compare
 Phase 4A Orchestrator     ✅ Multi-LLM routing + base agent loop + tool registry
@@ -985,7 +1013,7 @@ All Phases 1–8, Enrichment Phases A–E, Production Infra, Onboarding flow, BI
 COMPLETED
   ✅ All 7 core entities with forms, lists, bulk import, taxonomy
   ✅ ETL pipeline — all 9 entities, multi-tenant, three-tier fallback
-  ✅ Copilot — claude-sonnet-4-6, tool loop, 7 query tools, session memory
+  ✅ Idjwi — core tools, session memory, grounded answers, advisor adapter
   ✅ Alerts engine — 10 alert types, WhatsApp/Email/SMS, per-company config
   ✅ Network intelligence — cross-branch performance comparison
   ✅ Autonomous agents — 8 agents, orchestrator, approval gate, agent memory,

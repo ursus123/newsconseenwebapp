@@ -6,15 +6,14 @@
  * Persistence: per-enterprise localStorage (company_id scoped)
  */
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import {
-  GitBranch, Plus, Trash2, Play, Save, X, ChevronRight,
+  GitBranch, Plus, Trash2, Play, X, ChevronRight,
   Database, Filter, Merge, BarChart2, Brain, MapPin, Zap,
-  AlertTriangle, CheckCircle2, Settings, Copy, Eye,
-  ArrowRight, Layers, RefreshCw, Loader2, Package, Download,
-  Upload, Cpu, Globe, Activity, Code2,
+  AlertTriangle, CheckCircle2, Copy,
+  ArrowRight, Layers, RefreshCw, Loader2, Download, Globe, Activity, Code2,
 } from "lucide-react";
 
 // ── Node type catalogue ───────────────────────────────────────────────────────
@@ -171,9 +170,9 @@ const NODE_TYPES = {
     border: "border-purple-200",
     badgeBg: "bg-purple-100",
     badgeText: "text-purple-700",
-    description: "Apply an LLM prompt to each row (Claude)",
+    description: "Apply a tenant-approved advisor prompt to each row",
     configFields: [
-      { key: "model",        label: "Model",               type: "select", options: ["claude-sonnet-4-6","claude-haiku-4-5","claude-opus-4-6"] },
+      { key: "model",        label: "Advisor model",       type: "select", options: ["automatic","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-4-6"] },
       { key: "input_column", label: "Input column",        type: "text",   placeholder: "notes" },
       { key: "output_column",label: "Output column name",  type: "text",   placeholder: "sentiment" },
       { key: "prompt",       label: "Prompt template",     type: "textarea", placeholder: "Classify the sentiment of this text as positive, neutral, or negative: {{input}}" },

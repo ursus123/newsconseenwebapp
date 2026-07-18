@@ -1,6 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { Badge } from "@/components/ui/badge";
-import { ZoomIn, ZoomOut, Maximize2, GitBranch, Database, ArrowRight, Download, Search, X, LayoutGrid, Keyboard, Copy, CheckCheck, ChevronRight, Info, AlertTriangle } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, GitBranch, Database, Download, Search, X, LayoutGrid, Keyboard, Copy, CheckCheck, ChevronRight, Info, AlertTriangle } from "lucide-react";
 import { NotebookStore } from "@/components/querybuilder/NotebookStore";
 import html2canvas from "html2canvas";
 
@@ -1680,8 +1679,8 @@ const API_CATALOGUE = [
     name: "Idjwi", prefix: "/copilot", color: "#0891b2", bg: "#ecfeff",
     desc: "Idjwi reasoning engine — LLM-powered Q&A grounded in operator data. Accepts model param (Haiku/Sonnet/Opus). Tool loop with 40+ query tools + create_record + import_records write-back.",
     endpoints: [
-      { method: "POST", path: "/copilot/ask",              desc: "Submit query → tool loop → grounded answer. Accepts model: claude-haiku-4-5 | claude-sonnet-4-6 | claude-opus-4-7" },
-      { method: "GET",  path: "/copilot/status",           desc: "Backend availability + ANTHROPIC_API_KEY check" },
+      { method: "POST", path: "/copilot/ask",              desc: "Legacy-compatible Idjwi request route → Core tools and optional tenant advisor → governed answer" },
+      { method: "GET",  path: "/copilot/status",           desc: "Idjwi Core readiness + optional managed-advisor availability" },
       { method: "GET",  path: "/copilot/memory",           desc: "Read analytics.copilot_memory for company" },
       { method: "DELETE",path: "/copilot/memory/{key}",   desc: "Remove a memory entry by key" },
     ],
@@ -2083,7 +2082,7 @@ function generateDDL(tables) {
     string: "VARCHAR", text: "TEXT", number: "FLOAT", boolean: "BOOLEAN",
     date: "DATE", "date/number": "DATE", datetime: "TIMESTAMP",
     array: "JSONB", enum: "VARCHAR", "string/enum": "VARCHAR",
-    "date/number": "DATE", INT: "INT", FLOAT: "FLOAT", PK: "VARCHAR",
+      INT: "INT", FLOAT: "FLOAT", PK: "VARCHAR",
     "number/enum": "VARCHAR", "VARCHAR/FLOAT": "VARCHAR",
   };
   const skip = new Set([

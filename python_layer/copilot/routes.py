@@ -25,6 +25,14 @@ from copilot.llm_registry import (
     list_models,
     provider_status,
 )
+from copilot.advisor_policy import (
+    get_policy as get_advisor_policy,
+    list_connections as list_advisor_connections,
+    save_connection as save_advisor_connection,
+    save_policy as save_advisor_policy,
+    select_advisor,
+    resolve_credential as resolve_advisor_credential,
+)
 from onboarding.auth import try_tenant_access, verify_tenant_access
 
 logger = logging.getLogger(__name__)
@@ -61,6 +69,12 @@ class AskRequest(BaseModel):
     current_page:         Optional[str] = ""
     selected_entity_type: Optional[str] = ""
     selected_entity_id:   Optional[str] = ""
+    operational_unit_id:  Optional[str] = ""
+    operational_unit_name: Optional[str] = ""
+    advisor_mode:         Optional[str] = None
+    reasoning_profile:    Optional[str] = None
+    objective:            Optional[str] = "general"
+    data_classification:  Optional[str] = "internal"
 
 
 class FeedbackRequest(BaseModel):
@@ -122,13 +136,40 @@ class MemoryUsageRequest(BaseModel):
     company_id: str
 
 
+class AdvisorPolicyRequest(BaseModel):
+    company_id: str
+    default_mode: Optional[str] = "automatic"
+    default_profile: Optional[str] = "balanced"
+    allow_external: Optional[bool] = True
+    allow_comparison: Optional[bool] = False
+    monthly_budget_usd: Optional[float] = None
+    rules: Optional[list[dict]] = []
+
+
+class AdvisorConnectionRequest(BaseModel):
+    company_id: str
+    provider: str
+    model_id: str
+    label: Optional[str] = None
+    credential_ref: Optional[str] = None
+    enabled: Optional[bool] = True
+    objectives: Optional[list[str]] = []
+    data_classes: Optional[list[str]] = ["public", "internal"]
+    priority: Optional[int] = 100
+
+
+def _require_advisor_admin(user: dict) -> None:
+    if str((user or {}).get("role") or "").lower() not in {"manager", "admin", "super_admin"}:
+        raise HTTPException(status_code=403, detail="Manager or administrator role required to configure Idjwi advisors")
+
+
 # ----------------------------------------------------------
 # Endpoints
 # ----------------------------------------------------------
 
 @router.get("/status")
 def copilot_status():
-    """Health check — confirms copilot is available and which backend is configured."""
+    """Idjwi Core readiness and optional managed-advisor availability."""
     backend = COPILOT_BACKEND
 
     backend_available = False
@@ -160,7 +201,9 @@ def copilot_status():
             backend_note = "Ollama not running. Install from https://ollama.ai"
 
     return {
-        "status":            "available" if backend_available else "degraded",
+        "status":            "ready",
+        "idjwi_core":        "ready",
+        "advisor_status":    "available" if backend_available else "unavailable",
         "backend":           backend,
         "backend_available": backend_available,
         "backend_note":      backend_note if not backend_available else None,
@@ -177,6 +220,51 @@ def copilot_status():
             "POST /copilot/feedback",
         ],
     }
+
+
+@router.get("/advisors")
+def advisors(company_id: str = Query(...), authorization: Optional[str] = Header(None)):
+    """Return the tenant's advisor portfolio without exposing secrets."""
+    access = verify_tenant_access(authorization, company_id)
+    return {
+        "company_id": company_id,
+        "policy": get_advisor_policy(company_id),
+        "connections": list_advisor_connections(company_id),
+        "security": {
+            "plaintext_credentials_allowed": False,
+            "credential_reference_schemes": ["env:", "vault:"],
+        },
+        "actor": (access or {}).get("id") if isinstance(access, dict) else None,
+    }
+
+
+@router.put("/advisors/policy")
+def update_advisor_policy(request: AdvisorPolicyRequest, authorization: Optional[str] = Header(None)):
+    user = verify_tenant_access(authorization, request.company_id) or {}
+    _require_advisor_admin(user)
+    actor = user.get("id") or user.get("email") or "tenant_admin"
+    policy = save_advisor_policy(request.company_id, request.model_dump(exclude={"company_id"}), actor)
+    try:
+        from copilot.idjwi_observability import log_event
+        log_event("advisor.policy.updated", company_id=request.company_id, actor=actor, metadata={"policy": policy})
+    except Exception:
+        pass
+    return {"policy": policy}
+
+
+@router.put("/advisors/connection")
+def update_advisor_connection(request: AdvisorConnectionRequest, authorization: Optional[str] = Header(None)):
+    user = verify_tenant_access(authorization, request.company_id) or {}
+    _require_advisor_admin(user)
+    actor = user.get("id") or user.get("email") or "tenant_admin"
+    connection = save_advisor_connection(request.company_id, request.model_dump(exclude={"company_id"}), actor)
+    try:
+        from copilot.idjwi_observability import log_event
+        log_event("advisor.connection.updated", company_id=request.company_id, actor=actor,
+                  subject=request.model_id, metadata={"provider": request.provider, "enabled": request.enabled})
+    except Exception:
+        pass
+    return {"connection": connection}
 
 
 @router.get("/models")
@@ -253,12 +341,22 @@ def ask(
             auth_diagnostics=access.get("diagnostics"),
         )
 
+    advisor_selection = select_advisor(
+        request.company_id,
+        objective=request.objective or "general",
+        profile=request.reasoning_profile,
+        mode=request.advisor_mode or ("automatic" if request.advisor_enabled else "core"),
+        requested_model=request.model,
+        data_classification=request.data_classification or "internal",
+    )
+
     engine = CopilotEngine(
         company_id=request.company_id,
         enterprise_name=request.enterprise_name or "",
         backend=COPILOT_BACKEND,
         railway_url=RAILWAY_URL,
-        model=request.model or None,
+        model=advisor_selection.model_id,
+        advisor_api_key=resolve_advisor_credential(advisor_selection.credential_ref),
     )
     engine.principal = principal
 
@@ -276,15 +374,18 @@ def ask(
         ctx["selected_entity_type"] = request.selected_entity_type
     if request.selected_entity_id:
         ctx["selected_entity_id"] = request.selected_entity_id
+    if request.operational_unit_id:
+        ctx["operational_unit_id"] = request.operational_unit_id
+    if request.operational_unit_name:
+        ctx["operational_unit_name"] = request.operational_unit_name
+    ctx["advisor_selection"] = advisor_selection.public_dict()
 
     result = engine.ask(
         question=request.question,
         history=request.history or [],
         context=ctx,
         session_id=request.session_id or "",
-        advisor_enabled=bool(
-            request.advisor_enabled if request.ai_enabled is None else request.ai_enabled
-        ),
+        advisor_enabled=bool(advisor_selection.model_id),
     )
 
     # Never raise 500 for engine errors — return 200 with the error as the
@@ -293,13 +394,11 @@ def ask(
         error_msg = result["error"]
 
         # Friendly messages for known error types
-        if "ANTHROPIC_API_KEY" in error_msg:
+        if "API_KEY" in error_msg or "advisor" in error_msg.lower():
             friendly = (
-                "Idjwi's reasoning engine is not configured yet.\n\n"
-                "To enable it, add ANTHROPIC_API_KEY to the Railway environment variables "
-                "for the python_layer service.\n\n"
-                "Once set, redeploy and Idjwi will be available.\n\n"
-                "_Note: Idjwi's autonomous monitor (ETL, alerts, agents) continues to run regardless._"
+                "Idjwi Core is available, but the advisor selected by tenant policy is not configured.\n\n"
+                "An administrator can connect an allowed advisor or choose Core Mode.\n\n"
+                "_Idjwi's deterministic tools, memory, monitoring, and approved workflows remain available._"
             )
         else:
             friendly = (
@@ -311,6 +410,7 @@ def ask(
 
     result["tenant_authorized"] = bool(access.get("authorized"))
     result["tenant_auth_diagnostics"] = access.get("diagnostics")
+    result["advisor_selection"] = advisor_selection.public_dict()
 
     return result
 
@@ -981,7 +1081,12 @@ async def ask_stream(
 
 
 @router.get("/context")
-def get_context(company_id: str = Query(...), authorization: Optional[str] = Header(None)):
+def get_context(
+    company_id: str = Query(...),
+    operational_unit_id: str = Query(""),
+    operational_unit_name: str = Query(""),
+    authorization: Optional[str] = Header(None),
+):
     """
     Returns what the copilot knows about this tenant's data.
     Used by the chat UI to show data freshness and scope.
@@ -1004,6 +1109,11 @@ def get_context(company_id: str = Query(...), authorization: Optional[str] = Hea
 
     return {
         "company_id":          company_id,
+        "operational_scope": {
+            "operational_unit_id": operational_unit_id,
+            "operational_unit_name": operational_unit_name,
+            "scope": "operational_unit" if operational_unit_id else "organization",
+        },
         "backend":             COPILOT_BACKEND,
         "data_available":      not bool(overview.get("error")),
         "enterprises":         ent_list,
@@ -1019,6 +1129,51 @@ def get_context(company_id: str = Query(...), authorization: Optional[str] = Hea
             "Show me low stock alerts",
         ],
     }
+
+
+@router.get("/events")
+def idjwi_events(
+    company_id: str = Query(...),
+    event_type: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    authorization: Optional[str] = Header(None),
+):
+    """Tenant-scoped Idjwi audit events."""
+    verify_tenant_access(authorization, company_id)
+    from copilot.idjwi_observability import list_events
+    return list_events(company_id=company_id, event_type=event_type, status=status, limit=limit)
+
+
+@router.get("/decisions")
+def idjwi_decisions(
+    company_id: str = Query(...),
+    limit: int = Query(100, ge=1, le=500),
+    authorization: Optional[str] = Header(None),
+):
+    """Tenant-scoped decision register with evidence and outcome fields."""
+    verify_tenant_access(authorization, company_id)
+    from database import get_engine_safe
+    from sqlalchemy import text as _text
+    engine = get_engine_safe()
+    if not engine:
+        return {"decisions": [], "count": 0, "error": "database unavailable"}
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(_text("""
+                SELECT id, approval_id, recommendation_id, insight_id, decision,
+                       decided_by, decided_at, notes, rejection_reason,
+                       outcome_status, outcome_summary, outcome_metric_delta,
+                       execution_result, created_by
+                FROM analytics.decision_log
+                WHERE company_id = :cid
+                ORDER BY COALESCE(decided_at, loaded_at) DESC NULLS LAST
+                LIMIT :limit
+            """), {"cid": company_id, "limit": limit}).mappings().all()
+        decisions = [dict(row) for row in rows]
+        return {"decisions": decisions, "count": len(decisions)}
+    except Exception as exc:
+        return {"decisions": [], "count": 0, "error": str(exc)}
 
 
 @router.post("/feedback")

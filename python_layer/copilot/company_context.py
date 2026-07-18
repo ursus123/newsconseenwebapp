@@ -33,6 +33,7 @@ def build_company_context(
         "company_id": company_id,
         "tenant_authorized": tenant_authorized,
         "viewport": _viewport_context(ctx),
+        "operational_scope": _operational_scope(ctx),
         "selected_enterprise": _selected_enterprise(ctx),
         "selected_record": _selected_record(ctx),
         "session": _session_context(company_id, session_id, history or [], ctx),
@@ -64,6 +65,13 @@ def format_company_context_for_prompt(company_context: dict[str, Any]) -> str:
     viewport = company_context.get("viewport") or {}
     if viewport.get("current_page"):
         lines.append(f"- current_page: {viewport.get('current_page')}")
+    scope = company_context.get("operational_scope") or {}
+    if scope.get("operational_unit_id") or scope.get("operational_unit_name"):
+        lines.append(
+            "- operational_scope: "
+            f"{scope.get('operational_unit_name') or scope.get('operational_unit_id')} "
+            f"({scope.get('operational_unit_type') or 'operational_unit'})"
+        )
     selected_record = company_context.get("selected_record") or {}
     if selected_record.get("entity_type") or selected_record.get("entity_id"):
         lines.append(
@@ -188,6 +196,15 @@ def _viewport_context(ctx: dict) -> dict:
         "route": ctx.get("route") or ctx.get("pathname") or "",
         "url": ctx.get("url") or "",
         "surface": ctx.get("surface") or "idjwi_chat",
+    }
+
+
+def _operational_scope(ctx: dict) -> dict:
+    """Department/branch/project scope carried through every Idjwi request."""
+    return {
+        "operational_unit_id": ctx.get("operational_unit_id") or ctx.get("department_id") or "",
+        "operational_unit_name": ctx.get("operational_unit_name") or ctx.get("department_name") or "",
+        "operational_unit_type": ctx.get("operational_unit_type") or ctx.get("scope_type") or "",
     }
 
 

@@ -24,7 +24,7 @@ from .queries import (
     TOOL_DEFINITIONS, execute_tool, get_operator_context, QueryEngine,
 )
 from .llm_adapters import get_adapter
-from .llm_registry import IDJWI_CAPABILITIES, capability_for_tool, resolve_model
+from .llm_registry import IDJWI_CAPABILITIES, capability_for_tool, get_model, resolve_model
 from .idjwi_security import authorize_capability
 from .execution_brain import apply_execution_style, build_execution_trace
 from .trust import build_trust_packet
@@ -2719,16 +2719,17 @@ def _run_tool_loop(
     _collected=None,        # if list, append {"tool", "input", "result"} per call
     model: str = None,      # caller-selected LLM model ID
     principal=None,         # IdjwiPrincipal for role/capability checks
+    advisor_api_key: str = None,  # request-scoped tenant credential, never logged
 ) -> str:
     """
-    Run the Anthropic tool loop and return the final text answer.
+    Run the selected advisor adapter loop and return the final text proposal.
     Always returns a non-empty string — never raises to callers.
 
     on_tool_call: optional callable invoked before each tool executes,
                   used by the streaming path to yield progress events.
     """
-    resolved_spec = resolve_model(model)
-    adapter = get_adapter(resolved_spec)
+    resolved_spec = get_model(model) if advisor_api_key else resolve_model(model)
+    adapter = get_adapter(resolved_spec, api_key=advisor_api_key)
     tenant_authorized = principal.tenant_authorized if principal is not None else True
     system = build_system_prompt(company_id, tenant_authorized=tenant_authorized)
     for attempt in range(6):
@@ -2751,7 +2752,7 @@ def _run_tool_loop(
             if autonomous:
                 return autonomous
             return (
-                "I encountered an error reaching the AI service. "
+                "The selected advisor was unavailable, so Idjwi could not complete the advisor-assisted portion. "
                 "Please try again in a moment. "
                 f"(Error: {e})"
             )
@@ -2898,6 +2899,38 @@ def _ingest_advisor_memory_async(company_id: str, question: str, answer: str) ->
     return saved
 
 
+def _run_advisor_comparison(messages: list, company_id: str, model_ids: list[str], principal=None) -> tuple[str, list[dict]]:
+    """Collect independent, read-only advisor assessments for Idjwi review."""
+    contributions = []
+    tenant_authorized = principal.tenant_authorized if principal is not None else True
+    system = build_system_prompt(company_id, tenant_authorized=tenant_authorized) + (
+        "\n\nYou are an optional advisor to Idjwi. Give an independent assessment with "
+        "claims, assumptions, evidence needed, risks, and a proposed next step. Do not claim "
+        "that you executed tools or changed records."
+    )
+    for model_id in model_ids[:3]:
+        spec = resolve_model(model_id)
+        try:
+            response = get_adapter(spec).create(system=system, tools=[], messages=list(messages))
+            text_blocks = [block.text for block in response.content if hasattr(block, "text")]
+            assessment = "\n".join(text_blocks).strip()
+            if assessment:
+                contributions.append({"provider": spec.provider, "model_id": spec.id, "assessment": assessment})
+        except Exception as exc:
+            contributions.append({"provider": spec.provider, "model_id": spec.id, "error": str(exc)})
+    successful = [item for item in contributions if item.get("assessment")]
+    if not successful:
+        return "No permitted advisor completed the comparison. Idjwi Core remains available.", contributions
+    sections = ["## Idjwi advisor comparison"]
+    for index, item in enumerate(successful, 1):
+        sections.append(f"### Independent assessment {index}\n{item['assessment']}")
+    sections.append(
+        "### Idjwi governance note\nThese are independent advisor proposals, not established facts or authorized "
+        "actions. Verify evidence and resolve material disagreements before approval."
+    )
+    return "\n\n".join(sections), contributions
+
+
 # ── Public async interface ───────────────────────────────────────────────────
 
 async def ask(question: str, company_id: str, history: list = None) -> str:
@@ -2985,12 +3018,14 @@ class CopilotEngine:
         backend: str = "anthropic",
         railway_url: str = "",
         model: str = None,
+        advisor_api_key: str = None,
     ):
         self.company_id      = company_id
         self.enterprise_name = enterprise_name
         self.backend         = backend
         self.railway_url     = railway_url
         self.model           = model  # caller-selected LLM; None = use engine default
+        self.advisor_api_key = advisor_api_key
         self.principal       = None
         self.query_engine    = QueryEngine(company_id)
         # Ensure Idjwi memory table exists (idempotent, fast after first call)
@@ -3167,12 +3202,20 @@ class CopilotEngine:
                 )
 
             collected: list = []
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(
-                    _run_tool_loop, messages, self.company_id, None, collected,
-                    self.model, self.principal,
+            advisor_contributions = []
+            advisor_selection = request_context.get("advisor_selection") or {}
+            comparison_models = advisor_selection.get("comparison_models") or []
+            if advisor_selection.get("mode") == "compare" and len(comparison_models) >= 2:
+                answer_text, advisor_contributions = _run_advisor_comparison(
+                    messages, self.company_id, comparison_models, self.principal,
                 )
-                answer_text = future.result(timeout=120)
+            else:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(
+                        _run_tool_loop, messages, self.company_id, None, collected,
+                        self.model, self.principal, self.advisor_api_key,
+                    )
+                    answer_text = future.result(timeout=120)
 
             charts    = _extract_chart_configs(collected)
             citations = _extract_citations(collected)
@@ -3220,6 +3263,7 @@ class CopilotEngine:
                 "backend":                  self.backend,
                 "mode":                     "advisor",
                 "advisor_enabled":           True,
+                "advisor_contributions":     advisor_contributions,
                 "memory_used":               False,
                 "memory_candidates_created":  memory_candidates_created,
                 "created_recommendations":  created_recommendations,

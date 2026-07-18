@@ -494,9 +494,9 @@ export default function Desktop() {
             color: copilotOpen ? "#10b981" : textColor,
             cursor: "pointer",
           }}
-          title="Copilot (Ctrl+I)"
+          title="Idjwi (Ctrl+I)"
         >
-          🧠 Copilot
+          🧠 Idjwi
         </button>
 
         <span style={{ fontSize: 11, color: mutedColor, flexShrink: 0, display: "none" }} className="sm:block">

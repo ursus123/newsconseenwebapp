@@ -563,7 +563,7 @@ function IdjwiChat() {
             </button>
           </div>
           <p className="text-[10px] text-slate-600 mt-1.5 text-center">
-            Idjwi · Powered by Claude · Full capabilities demo · No company data connected
+            Idjwi Core · Optional advisor-assisted reasoning · No company data connected
           </p>
         </div>
       </div>
@@ -818,7 +818,7 @@ export default function Landing() {
             <p className="text-xs font-semibold text-emerald-400 uppercase tracking-widest mb-3">Inside Newsconseen</p>
             <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">One platform. Three views.</h2>
             <p className="text-slate-400 text-sm max-w-lg mx-auto">
-              Dashboard for visibility. Copilot for answers. Agents for action. All connected to the same data.
+              Dashboards for visibility. Idjwi for understanding and decisions. Agents for governed action. All connected to the same operational context.
             </p>
           </div>
           <AppMockup />

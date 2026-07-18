@@ -179,8 +179,10 @@ async def lifespan(app: FastAPI):
             from sqlalchemy import text as _text
             from copilot.idjwi_memory import ensure_table as ensure_idjwi_memory, migrate_legacy
             from copilot.idjwi_observability import ensure_table as ensure_idjwi_events
+            from copilot.advisor_policy import ensure_tables as ensure_idjwi_advisors
             ensure_idjwi_memory(engine)
             ensure_idjwi_events(engine)
+            ensure_idjwi_advisors(engine)
             company_ids = set()
             with engine.connect() as conn:
                 for table_name in ("copilot_memory", "agent_memory"):

@@ -1,463 +1,275 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Sparkles, AlertTriangle, CheckCircle2, Bot, Zap, Brain,
-  Activity, ChevronDown, Shield, RefreshCw,
-  Database, GitBranch, Bell,
+  Activity, AlertTriangle, Brain, BriefcaseBusiness, CheckCircle2,
+  ChevronDown, ClipboardCheck, Database, History, Lightbulb,
+  Loader2, MemoryStick, RefreshCw, Scale, Settings2, Sparkles,
+  Target, Users,
 } from "lucide-react";
-import { ncClient } from "@/api/ncClient";
 import { useLocation } from "react-router-dom";
+import { ncClient } from "@/api/ncClient";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 import CopilotChat from "@/components/copilot/copilotchat";
 
-const RAILWAY_URL   = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
-
-const FALLBACK_MODELS = [
-  {
-    id:   "claude-haiku-4-5-20251001",
-    label: "Haiku 4.5",
-    tag:  "Fast",
-    icon: "⚡",
-    desc: "Quick answers, efficient querying",
-  },
-  {
-    id:   "claude-sonnet-4-6",
-    label: "Sonnet 4.6",
-    tag:  "Balanced",
-    icon: "⚖",
-    desc: "Balanced reasoning and speed",
-  },
-  {
-    id:   "claude-opus-4-7",
-    label: "Opus 4.7",
-    tag:  "Deep",
-    icon: "🧠",
-    desc: "Deep analysis, complex reasoning",
-  },
+const TABS = [
+  ["today", "Today", Activity],
+  ["ask", "Ask Idjwi", Sparkles],
+  ["decisions", "Decisions", Scale],
+  ["work", "Work", BriefcaseBusiness],
+  ["memory", "Memory", MemoryStick],
+  ["advisors", "Advisors", Brain],
+  ["audit", "Audit", History],
 ];
 
-const DEFAULT_MODEL = "claude-sonnet-4-6";
+async function idjwiFetch(path, options = {}, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const headers = await authHeaders(options.headers || {});
+    const response = await fetch(`${RAILWAY_URL}${path}`, { ...options, headers, signal: controller.signal });
+    let body = null;
+    try { body = await response.json(); } catch { body = {}; }
+    if (!response.ok) throw new Error(body?.detail?.message || body?.detail || `HTTP ${response.status}`);
+    return body;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
-// ── Model selector dropdown ───────────────────────────────────────────────────
-function ModelSelector({ selected, onChange, models = FALLBACK_MODELS }) {
-  const [open, setOpen] = useState(false);
-  const current = models.find(m => m.id === selected) || models[0] || FALLBACK_MODELS[1];
-
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
-  }, [open]);
-
-  const tagColor = {
-    Fast:     "bg-blue-100 text-blue-600",
-    Balanced: "bg-emerald-100 text-emerald-600",
-    Deep:     "bg-violet-100 text-violet-600",
+function StatusPill({ tone = "slate", children }) {
+  const tones = {
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    amber: "border-amber-200 bg-amber-50 text-amber-700",
+    rose: "border-rose-200 bg-rose-50 text-rose-700",
+    slate: "border-slate-200 bg-slate-50 text-slate-600",
   };
+  return <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${tones[tone]}`}>{children}</span>;
+}
 
+function Panel({ title, icon: Icon, children, action }) {
   return (
-    <div className="relative" onClick={e => e.stopPropagation()}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-emerald-300 hover:bg-emerald-50 transition-all shadow-sm"
-      >
-        <span className="text-sm leading-none">{current.icon || current.provider || "LLM"}</span>
-        <span>{current.label}</span>
-        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${tagColor[current.tag] || "bg-slate-100 text-slate-500"}`}>
-          {current.tag}
-        </span>
-        <ChevronDown className="w-3 h-3 text-slate-400" />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-9 z-50 bg-white border border-slate-200 rounded-xl shadow-xl w-60 p-1.5">
-          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 pt-1 pb-2">
-            Choose LLM
-          </p>
-          {models.map(m => (
-            <button
-              key={m.id}
-              disabled={m.available === false}
-              onClick={() => { if (m.available !== false) { onChange(m.id); setOpen(false); } }}
-              className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg text-left transition-colors ${
-                m.id === selected
-                  ? "bg-emerald-50 text-emerald-700"
-                  : m.available === false
-                  ? "opacity-50 cursor-not-allowed text-slate-400"
-                  : "hover:bg-slate-50 text-slate-700"
-              }`}
-            >
-              <span className="text-base leading-none mt-0.5 shrink-0">{m.icon || m.provider || "LLM"}</span>
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="text-xs font-semibold">{m.label}</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${tagColor[m.tag] || "bg-slate-100 text-slate-500"}`}>
-                    {m.tag}
-                  </span>
-                  {m.id === selected && (
-                    <CheckCircle2 className="w-3 h-3 text-emerald-500 ml-auto shrink-0" />
-                  )}
-                </div>
-                <p className="text-[10px] text-slate-400 leading-tight">
-                  {m.available === false ? "Provider key not configured" : (m.description || m.desc)}
-                </p>
-              </div>
-            </button>
-          ))}
+    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+          {Icon && <Icon className="h-4 w-4 text-emerald-600" />}{title}
         </div>
-      )}
-    </div>
+        {action}
+      </header>
+      <div className="p-4">{children}</div>
+    </section>
   );
 }
 
-// ── Autonomous Monitor panel ──────────────────────────────────────────────────
-function AutonomousMonitor({ companyId, capabilities: backendCapabilities = [] }) {
-  const [health, setHealth]   = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const r = await fetch(`${RAILWAY_URL}/health`, {
-        headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
-      });
-      if (r.ok) setHealth(await r.json());
-    } catch { /* unreachable */ }
-    setLoading(false);
-  };
-
-  useEffect(() => { load(); }, []);
-
-  const fallbackCapabilities = [
-    { name: "ETL Pipeline",      desc: "Multi-tenant data sync after every mutation", icon: Database,   color: "emerald" },
-    { name: "Alert Engine",      desc: "10 alert types — WhatsApp / Email / SMS",     icon: Bell,       color: "amber"   },
-    { name: "Agent Queue",       desc: "8 agents monitoring and executing actions",    icon: Bot,        color: "violet"  },
-    { name: "Audit Logger",      desc: "Immutable change log across all entities",    icon: Shield,     color: "blue"    },
-    { name: "Threshold Monitor", desc: "Signal entity thresholds evaluated live",     icon: Activity,   color: "rose"    },
-    { name: "Connector Sync",    desc: "35 connectors — scheduled sync runs",         icon: GitBranch,  color: "teal"    },
-    { name: "Enrichment Engine", desc: "Phone / geo / sanctions / scores auto-run",  icon: Sparkles,   color: "pink"    },
-    { name: "Offline Sync",      desc: "PWA IndexedDB queue processing",              icon: RefreshCw,  color: "slate"   },
-  ];
-
-  const iconByCapability = {
-    read_company_data: Database,
-    create_task: Bot,
-    propose_record_update: Shield,
-    save_memory: Brain,
-    search_intelligence: Sparkles,
-    run_agents: Bot,
-    generate_report: Activity,
-    approve_actions: CheckCircle2,
-  };
-  const colors = ["emerald", "amber", "violet", "blue", "rose", "teal", "pink", "slate"];
-  const capabilities = backendCapabilities.length
-    ? backendCapabilities.map((cap, index) => ({
-        name: cap.name,
-        desc: cap.description,
-        icon: iconByCapability[cap.id] || Activity,
-        color: colors[index % colors.length],
-      }))
-    : fallbackCapabilities;
-
-  const colorRing = {
-    emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
-    amber:   "bg-amber-50 border-amber-200 text-amber-700",
-    violet:  "bg-violet-50 border-violet-200 text-violet-700",
-    blue:    "bg-blue-50 border-blue-200 text-blue-700",
-    rose:    "bg-rose-50 border-rose-200 text-rose-700",
-    teal:    "bg-teal-50 border-teal-200 text-teal-700",
-    pink:    "bg-pink-50 border-pink-200 text-pink-700",
-    slate:   "bg-slate-50 border-slate-200 text-slate-600",
-  };
-  const dotColor = {
-    emerald: "bg-emerald-400", amber: "bg-amber-400", violet: "bg-violet-400",
-    blue:    "bg-blue-400",    rose:  "bg-rose-400",  teal:   "bg-teal-400",
-    pink:    "bg-pink-400",    slate: "bg-slate-400",
-  };
-
-  const etlEntities = [
-    "people", "enterprises", "products", "tasks",
-    "transactions", "relationships", "addresses",
-    "animals", "plots", "observations",
-  ];
-
-  return (
-    <div className="h-full overflow-y-auto pr-1 space-y-5">
-
-      {/* Mission-control header */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl p-5 text-white">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse block" />
-            <span className="text-sm font-semibold">Autonomous System Active</span>
-          </div>
-          <button
-            onClick={load}
-            className="flex items-center gap-1.5 text-[10px] text-slate-400 hover:text-white transition-colors"
-          >
-            <RefreshCw className="w-3 h-3" /> Refresh
-          </button>
-        </div>
-
-        <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-          Idjwi is monitoring your operations and executing approved automations.
-          These 8 capabilities run 24/7 — no LLM required.
-        </p>
-
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "Reasoning", value: "Available", good: true },
-            { label: "Automations", value: "Always On", good: false },
-            { label: "Monitoring", value: "24/7", good: false },
-          ].map(s => (
-            <div key={s.label} className="bg-white/10 rounded-xl px-3 py-2.5">
-              <p className="text-[10px] text-slate-400 mb-0.5">{s.label}</p>
-              <p className={`text-xs font-semibold ${s.good ? "text-emerald-400" : "text-white"}`}>
-                {s.value}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Autonomous capabilities grid */}
-      <div>
-        <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">
-          Running Without LLM
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {capabilities.map(cap => {
-            const Icon = cap.icon;
-            return (
-              <div
-                key={cap.name}
-                className={`flex items-start gap-3 px-3 py-3 rounded-xl border ${colorRing[cap.color]}`}
-              >
-                <Icon className="w-4 h-4 shrink-0 mt-0.5" />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-semibold">{cap.name}</span>
-                    <span className={`w-1.5 h-1.5 rounded-full ${dotColor[cap.color]} animate-pulse shrink-0`} />
-                  </div>
-                  <p className="text-[10px] opacity-70 mt-0.5 leading-tight">{cap.desc}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ETL status */}
-      <div>
-        <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">
-          ETL Pipeline — Last Sync
-        </h3>
-
-        {loading ? (
-          <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
-            <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Checking python_layer…
-          </div>
-        ) : health ? (
-          <div className="space-y-1.5">
-            {etlEntities.map(entity => {
-              const key = `last_${entity}_etl`;
-              const ts  = health[key] || health.last_etl_run?.[entity] || null;
-              return (
-                <div
-                  key={entity}
-                  className="flex items-center justify-between px-3 py-2 bg-white rounded-xl border border-slate-100"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                    <span className="text-xs text-slate-700 capitalize">{entity}</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400">
-                    {ts
-                      ? new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                      : "Not run yet"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
-            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-            python_layer unreachable — ETL status unavailable. Automations are still running.
-          </div>
-        )}
-      </div>
-
-      {/* Graceful-degradation note */}
-      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-        <p className="text-xs font-semibold text-slate-700 mb-2">
-          What Idjwi does when AI is unavailable
-        </p>
-        <ul className="space-y-1.5">
-          {[
-            "Continues monitoring all thresholds and running scheduled tasks",
-            "Routes approved automations through the agent queue",
-            "Processes ETL and syncs all three data layers",
-            "Logs every change to the immutable audit trail",
-            "Queues reasoning requests for when AI comes back online",
-          ].map((item, i) => (
-            <li key={i} className="flex items-start gap-1.5 text-[11px] text-slate-500">
-              <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />
-              {item}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
+function EmptyState({ children }) {
+  return <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-xs text-slate-500">{children}</p>;
 }
 
-// ── Main Idjwi page ───────────────────────────────────────────────────────────
 export default function Idjwi() {
-  const location       = useLocation();
+  const location = useLocation();
   const prefillMessage = location.state?.prefillMessage || "";
+  const [tab, setTab] = useState(prefillMessage ? "ask" : "today");
+  const [scopeId, setScopeId] = useState("__all__");
+  const [advisorMode, setAdvisorMode] = useState(() => localStorage.getItem("idjwi_advisor_mode") || "automatic");
+  const [profile, setProfile] = useState(() => localStorage.getItem("idjwi_reasoning_profile") || "balanced");
+  const [snapshot, setSnapshot] = useState({ loading: true, error: null, status: null, context: null, advisors: null });
+  const [events, setEvents] = useState([]);
+  const [memories, setMemories] = useState([]);
+  const [decisions, setDecisions] = useState([]);
+  const [workItems, setWorkItems] = useState([]);
+  const [savingPolicy, setSavingPolicy] = useState(false);
 
   const { data: currentUser = null } = useQuery({
-    queryKey:       ["currentUser"],
-    queryFn:        () => ncClient.auth.me(),
-    staleTime:      0,
-    refetchOnMount: "always",
+    queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(), staleTime: 0, refetchOnMount: "always",
+  });
+  const companyId = currentUser?.company_id;
+  const { data: enterprises = [] } = useQuery({
+    queryKey: ["idjwiScopes", companyId],
+    queryFn: () => ncClient.entities.Enterprise.filter({ company_id: companyId }),
+    enabled: !!companyId,
+    staleTime: 60000,
   });
 
-  const [mode, setMode]                 = useState("reasoning"); // "reasoning" | "monitor"
-  const [selectedModel, setSelectedModel] = useState(
-    () => localStorage.getItem("idjwi_model") || DEFAULT_MODEL
-  );
-  const [backendStatus, setBackendStatus] = useState(null);
-  const [availableModels, setAvailableModels] = useState(FALLBACK_MODELS);
-  const [idjwiCapabilities, setIdjwiCapabilities] = useState([]);
+  const scopes = useMemo(() => {
+    const organization = {
+      id: "__all__",
+      name: currentUser?.enterprise_name || currentUser?.company_name || "Organization-wide",
+      type: "tenant_scope",
+    };
+    const units = enterprises
+      .filter(item => item.id && item.id !== companyId)
+      .slice(0, 50)
+      .map(item => ({
+        id: item.id,
+        name: item.name || item.enterprise_name || item.title || "Operational unit",
+        type: item.enterprise_type || item.enterprise_subtype || "operational_unit",
+      }));
+    return [organization, ...units];
+  }, [companyId, currentUser, enterprises]);
+  const activeScope = scopes.find(item => item.id === scopeId) || scopes[0];
 
-  const handleModelChange = (modelId) => {
-    setSelectedModel(modelId);
-    localStorage.setItem("idjwi_model", modelId);
+  const loadSnapshot = async () => {
+    if (!companyId) return;
+    setSnapshot(previous => ({ ...previous, loading: true, error: null }));
+    const scopeQuery = activeScope?.id !== "__all__"
+      ? `&operational_unit_id=${encodeURIComponent(activeScope.id)}&operational_unit_name=${encodeURIComponent(activeScope.name)}`
+      : "";
+    const results = await Promise.allSettled([
+      idjwiFetch("/copilot/status"),
+      idjwiFetch(`/copilot/context?company_id=${encodeURIComponent(companyId)}${scopeQuery}`),
+      idjwiFetch(`/copilot/advisors?company_id=${encodeURIComponent(companyId)}`),
+    ]);
+    const value = index => results[index].status === "fulfilled" ? results[index].value : null;
+    const failures = results.filter(result => result.status === "rejected");
+    setSnapshot({
+      loading: false,
+      error: failures.length === results.length ? failures[0]?.reason?.message || "Idjwi services unavailable" : null,
+      status: value(0), context: value(1), advisors: value(2),
+    });
   };
 
-  useEffect(() => {
-    fetch(`${RAILWAY_URL}/copilot/status`, {
-      headers: RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {},
-    })
-      .then(r => r.json())
-      .then(d => {
-        setBackendStatus(d.backend_available ? "ok" : "degraded");
-        if (Array.isArray(d.models) && d.models.length > 0) {
-          setAvailableModels(d.models);
-          const current = localStorage.getItem("idjwi_model") || DEFAULT_MODEL;
-          if (!d.models.some(m => m.id === current && m.available !== false)) {
-            const fallback = d.models.find(m => m.available !== false)?.id || d.default_model || DEFAULT_MODEL;
-            setSelectedModel(fallback);
-            localStorage.setItem("idjwi_model", fallback);
-          }
-        }
-        if (Array.isArray(d.capabilities)) setIdjwiCapabilities(d.capabilities);
-      })
-      .catch(() => setBackendStatus("unreachable"));
-  }, []);
+  useEffect(() => { loadSnapshot(); }, [companyId, activeScope?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const currentModel = availableModels.find(m => m.id === selectedModel) || availableModels[0] || FALLBACK_MODELS[1];
-  const currentModelMark = currentModel.icon || currentModel.provider || "LLM";
+  useEffect(() => {
+    if (!companyId || !["audit", "memory", "decisions", "work"].includes(tab)) return;
+    if (tab === "audit") {
+      idjwiFetch(`/copilot/events?company_id=${encodeURIComponent(companyId)}&limit=100`)
+        .then(data => setEvents(data.events || [])).catch(() => setEvents([]));
+    } else if (tab === "memory") {
+      idjwiFetch(`/copilot/idjwi-memory?company_id=${encodeURIComponent(companyId)}&limit=100`)
+        .then(data => setMemories(data.memories || data.items || [])).catch(() => setMemories([]));
+    } else if (tab === "decisions") {
+      idjwiFetch(`/copilot/decisions?company_id=${encodeURIComponent(companyId)}&limit=100`)
+        .then(data => setDecisions(data.decisions || [])).catch(() => setDecisions([]));
+    } else {
+      idjwiFetch(`/copilot/recommendations?company_id=${encodeURIComponent(companyId)}`)
+        .then(data => setWorkItems(data.recommendations || [])).catch(() => setWorkItems([]));
+    }
+  }, [companyId, tab]);
+
+  const setMode = value => { setAdvisorMode(value); localStorage.setItem("idjwi_advisor_mode", value); };
+  const setReasoningProfile = value => { setProfile(value); localStorage.setItem("idjwi_reasoning_profile", value); };
+  const saveTenantDefault = async () => {
+    if (!companyId) return;
+    setSavingPolicy(true);
+    try {
+      await idjwiFetch("/copilot/advisors/policy", {
+        method: "PUT",
+        body: JSON.stringify({
+          company_id: companyId,
+          default_mode: advisorMode,
+          default_profile: profile,
+          allow_external: advisorMode !== "core",
+          allow_comparison: !!snapshot.advisors?.policy?.allow_comparison,
+          monthly_budget_usd: snapshot.advisors?.policy?.monthly_budget_usd ?? null,
+          rules: snapshot.advisors?.policy?.rules || [],
+        }),
+      });
+      await loadSnapshot();
+    } finally {
+      setSavingPolicy(false);
+    }
+  };
+  const coreReady = snapshot.status?.idjwi_core === "ready" || snapshot.status?.status === "ready";
+  const contextReady = snapshot.context?.data_available === true;
+  const advisorCount = (snapshot.advisors?.connections || []).filter(item => item.enabled).length;
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-4 shrink-0 flex-wrap gap-2">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center shadow-sm shrink-0">
-            <Sparkles className="w-5 h-5 text-emerald-400" />
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <header className="shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900">
+              <Sparkles className="h-5 w-5 text-emerald-400" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold text-slate-900">Idjwi</h1>
+                <StatusPill tone={coreReady ? "emerald" : snapshot.loading ? "slate" : "amber"}>
+                  {snapshot.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : coreReady ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                  {snapshot.loading ? "Preparing" : coreReady ? "Core Ready" : "Core Degraded"}
+                </StatusPill>
+              </div>
+              <p className="truncate text-xs text-slate-500">The operational mind for {activeScope?.name || "your organization"}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">Idjwi</h1>
-            <p className="text-xs text-slate-500">
-              {mode === "reasoning"
-                ? `${currentModelMark} ${currentModel.label} · reasoning grounded in your data`
-                : "Autonomous monitor — 8 capabilities running without LLM"}
-            </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="relative flex items-center">
+              <Users className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-slate-400" />
+              <select value={scopeId} onChange={event => setScopeId(event.target.value)} className="appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-8 pr-8 text-xs font-medium text-slate-700">
+                {scopes.map(scope => <option key={scope.id} value={scope.id}>{scope.name}</option>)}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-slate-400" />
+            </label>
+            <select value={advisorMode} onChange={event => setMode(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
+              <option value="automatic">Advisor: Automatic</option>
+              <option value="core">Idjwi Core only</option>
+              <option value="compare" disabled={!snapshot.advisors?.policy?.allow_comparison}>Compare advisors</option>
+            </select>
+            <select value={profile} onChange={event => setReasoningProfile(event.target.value)} disabled={advisorMode === "core"} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 disabled:opacity-50">
+              <option value="fast">Fast</option><option value="balanced">Balanced</option><option value="deep">Deep</option><option value="coding">Coding</option><option value="research">Research</option>
+            </select>
+            <button onClick={loadSnapshot} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50" title="Refresh Idjwi readiness"><RefreshCw className={`h-4 w-4 ${snapshot.loading ? "animate-spin" : ""}`} /></button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-
-          {/* Backend status badge */}
-          {backendStatus === "ok" && (
-            <span className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
-              <CheckCircle2 className="w-3 h-3" /> AI Online
-            </span>
-          )}
-          {backendStatus === "degraded" && (
-            <span className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold">
-              <AlertTriangle className="w-3 h-3" /> AI Key Missing
-            </span>
-          )}
-          {backendStatus === "unreachable" && (
-            <span className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
-              <AlertTriangle className="w-3 h-3" /> Backend Offline
-            </span>
-          )}
-          {backendStatus === null && (
-            <span className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 border border-slate-200 text-slate-400 text-xs">
-              <Sparkles className="w-3 h-3 animate-pulse" /> Checking…
-            </span>
-          )}
-
-          {/* Mode toggle */}
-          <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-0.5">
-            <button
-              onClick={() => setMode("reasoning")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                mode === "reasoning"
-                  ? "bg-white text-slate-800 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              <Brain className="w-3 h-3" />
-              <span className="hidden sm:inline">Reasoning</span>
-            </button>
-            <button
-              onClick={() => setMode("monitor")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                mode === "monitor"
-                  ? "bg-white text-slate-800 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              <Zap className="w-3 h-3" />
-              <span className="hidden sm:inline">Autonomous</span>
-            </button>
-          </div>
-
-          {/* Model selector — only in reasoning mode */}
-          {mode === "reasoning" && (
-            <ModelSelector
-              selected={selectedModel}
-              onChange={handleModelChange}
-              models={availableModels}
-            />
-          )}
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+          <StatusPill tone={contextReady ? "emerald" : snapshot.context ? "amber" : "slate"}><Database className="h-3 w-3" />{contextReady ? "Context loaded" : "Context unavailable"}</StatusPill>
+          <StatusPill tone={advisorCount ? "emerald" : "slate"}><Brain className="h-3 w-3" />{advisorCount} advisor{advisorCount === 1 ? "" : "s"} available</StatusPill>
+          <StatusPill tone="slate"><Settings2 className="h-3 w-3" />{snapshot.status?.capabilities?.length || 0} governed capabilities</StatusPill>
+          {snapshot.error && <StatusPill tone="rose"><AlertTriangle className="h-3 w-3" />{snapshot.error}</StatusPill>}
         </div>
-      </div>
+      </header>
 
-      {/* ── Content ── */}
-      <div className="flex-1 min-h-0">
-        {mode === "reasoning" ? (
-          <CopilotChat
-            currentUser={currentUser}
-            className="h-full"
-            initialMessage={prefillMessage}
-            selectedModel={selectedModel}
-          />
-        ) : (
-          <AutonomousMonitor
-            companyId={currentUser?.company_id}
-            capabilities={idjwiCapabilities}
-          />
+      <nav className="flex shrink-0 gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1">
+        {TABS.map(([id, label, Icon]) => (
+          <button key={id} onClick={() => setTab(id)} className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${tab === id ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}>
+            <Icon className="h-3.5 w-3.5" />{label}
+          </button>
+        ))}
+      </nav>
+
+      <main className="min-h-0 flex-1 overflow-y-auto">
+        {tab === "ask" && (
+          <CopilotChat currentUser={currentUser} className="h-full min-h-[560px]" initialMessage={prefillMessage} autoSend={!!prefillMessage}
+            advisorMode={advisorMode} reasoningProfile={profile} operationalScope={activeScope} />
         )}
-      </div>
+
+        {tab === "today" && (
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="space-y-3 lg:col-span-2">
+              <Panel title={`Briefing for ${activeScope?.name || "your organization"}`} icon={Lightbulb}>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {[
+                    ["Decisions", snapshot.context?.critical_alerts || 0, "Need attention", Scale],
+                    ["Enterprises", snapshot.context?.enterprise_count || 0, "In current context", BriefcaseBusiness],
+                    ["Capabilities", snapshot.status?.capabilities?.length || 0, "Available to Idjwi", Target],
+                  ].map(([label, value, note, Icon]) => <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-4"><Icon className="mb-3 h-4 w-4 text-emerald-600" /><p className="text-2xl font-bold text-slate-900">{value}</p><p className="text-xs font-semibold text-slate-700">{label}</p><p className="text-[10px] text-slate-400">{note}</p></div>)}
+                </div>
+                <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                  <p className="text-sm font-semibold text-emerald-900">Idjwi is ready to review what changed, explain risks, and coordinate governed work.</p>
+                  <button onClick={() => setTab("ask")} className="mt-3 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">Ask for today&apos;s operational briefing</button>
+                </div>
+              </Panel>
+              <Panel title="Priority attention" icon={AlertTriangle}><EmptyState>Priorities will appear here as Idjwi evaluates risks, recommendations, deadlines, and data freshness for this scope.</EmptyState></Panel>
+            </div>
+            <Panel title="Readiness" icon={ClipboardCheck}>
+              <div className="space-y-2 text-xs">
+                {[
+                  ["Idjwi Core", coreReady], ["Tenant authorized", !!snapshot.context], ["Company context", contextReady],
+                  ["Memory", true], ["Governed tools", !!snapshot.status?.capabilities?.length], ["Optional advisors", advisorCount > 0],
+                ].map(([label, ready]) => <div key={label} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2"><span className="text-slate-600">{label}</span>{ready ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <AlertTriangle className="h-4 w-4 text-amber-500" />}</div>)}
+              </div>
+            </Panel>
+          </div>
+        )}
+
+        {tab === "decisions" && <Panel title="Decision register" icon={Scale}>{decisions.length ? <div className="space-y-2">{decisions.map((item, index) => <div key={item.id || index} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-sm font-semibold text-slate-800">{item.decision || "Recorded decision"}</p><p className="text-[11px] text-slate-500">Decided by {item.decided_by || item.created_by || "authorized operator"}</p></div><StatusPill tone={item.outcome_status === "successful" ? "emerald" : "slate"}>{item.outcome_status || "outcome pending"}</StatusPill></div>{item.notes && <p className="mt-2 text-xs text-slate-600">{item.notes}</p>}{item.outcome_summary && <p className="mt-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-600">Outcome: {item.outcome_summary}</p>}</div>)}</div> : <EmptyState>Recommendations requiring authority will appear here with evidence, alternatives, advisor contributions, approver, and eventual outcome.</EmptyState>}</Panel>}
+        {tab === "work" && <Panel title="Governed work" icon={BriefcaseBusiness}>{workItems.length ? <div className="space-y-2">{workItems.map((item, index) => <div key={item.id || index} className="rounded-xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-sm font-semibold text-slate-800">{item.title || item.action_type || "Proposed action"}</p><p className="mt-1 text-xs text-slate-500">{item.rationale || "Awaiting governed execution"}</p></div><StatusPill tone={item.status === "approved" || item.status === "executed" ? "emerald" : item.status === "pending" ? "amber" : "slate"}>{item.status || "pending"}</StatusPill></div></div>)}</div> : <EmptyState>Agent runs, workflows, proposed actions, approvals, completions, and failures will appear here.</EmptyState>}</Panel>}
+        {tab === "memory" && <Panel title="What Idjwi remembers" icon={MemoryStick}>{memories.length ? <div className="space-y-2">{memories.map((item, index) => <div key={item.id || index} className="rounded-xl border border-slate-100 p-3"><div className="flex items-center justify-between"><p className="text-xs font-semibold text-slate-800">{item.key || item.memory_type || "Memory"}</p><StatusPill tone={item.review_status === "confirmed" ? "emerald" : "amber"}>{item.review_status || "candidate"}</StatusPill></div><p className="mt-1 line-clamp-3 text-xs text-slate-500">{typeof item.value === "string" ? item.value : JSON.stringify(item.value)}</p></div>)}</div> : <EmptyState>No scoped memories were returned. Advisor answers do not become memory automatically.</EmptyState>}</Panel>}
+        {tab === "advisors" && <Panel title="Tenant advisor portfolio" icon={Brain} action={<button onClick={saveTenantDefault} disabled={savingPolicy} className="rounded-lg bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">{savingPolicy ? "Saving…" : "Save tenant default"}</button>}><div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">Advisors reason; Idjwi governs. Provider secrets are referenced through environment or vault identifiers and are never displayed here.</div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{(snapshot.advisors?.connections || []).map(item => <div key={item.id || `${item.provider}:${item.model_id}`} className="rounded-xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-sm font-semibold text-slate-800">{item.label || item.model_id}</p><p className="text-[10px] uppercase tracking-wide text-slate-400">{item.provider}</p></div><StatusPill tone={item.enabled ? "emerald" : "slate"}>{item.enabled ? "Available" : "Disabled"}</StatusPill></div><p className="mt-3 text-[11px] text-slate-500">Data: {(item.data_classes || []).join(", ") || "Policy controlled"}</p><p className="mt-1 text-[11px] text-slate-500">Objectives: {(item.objectives || []).join(", ") || "Any permitted objective"}</p></div>)}</div></Panel>}
+        {tab === "audit" && <Panel title="Idjwi audit trail" icon={History}>{events.length ? <div className="divide-y divide-slate-100">{events.map(event => <div key={event.id} className="flex gap-3 py-3"><Activity className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" /><div><p className="text-xs font-semibold text-slate-800">{event.event_type}</p><p className="text-[11px] text-slate-500">{event.actor} · {event.subject || "Idjwi"}</p><p className="text-[10px] text-slate-400">{event.created_at ? new Date(event.created_at).toLocaleString() : ""}</p></div></div>)}</div> : <EmptyState>No audit events were returned for this tenant.</EmptyState>}</Panel>}
+      </main>
     </div>
   );
 }

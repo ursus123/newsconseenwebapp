@@ -46,12 +46,13 @@ def _messages_to_text(messages: list[dict]) -> str:
 
 
 class AnthropicAdapter:
-    def __init__(self, spec: ModelSpec):
+    def __init__(self, spec: ModelSpec, api_key: str | None = None):
         self.spec = spec
+        self.api_key = api_key
 
     def create(self, *, system: str, tools: list, messages: list[dict]) -> Any:
         import anthropic
-        client = anthropic.Anthropic()
+        client = anthropic.Anthropic(api_key=self.api_key) if self.api_key else anthropic.Anthropic()
         return client.messages.create(
             model=self.spec.id,
             max_tokens=self.spec.max_tokens,
@@ -62,12 +63,13 @@ class AnthropicAdapter:
 
 
 class OpenAIAdapter:
-    def __init__(self, spec: ModelSpec):
+    def __init__(self, spec: ModelSpec, api_key: str | None = None):
         self.spec = spec
+        self.api_key = api_key
 
     def create(self, *, system: str, tools: list, messages: list[dict]) -> AdapterResponse:
         from openai import OpenAI
-        client = OpenAI()
+        client = OpenAI(api_key=self.api_key) if self.api_key else OpenAI()
         chat_messages = [{"role": "system", "content": system}]
         for message in messages:
             if isinstance(message.get("content"), str):
@@ -117,21 +119,24 @@ class OpenAIAdapter:
 
 
 class GeminiAdapter:
-    def __init__(self, spec: ModelSpec):
+    def __init__(self, spec: ModelSpec, api_key: str | None = None):
         self.spec = spec
+        self.api_key = api_key
 
     def create(self, *, system: str, tools: list, messages: list[dict]) -> AdapterResponse:
         import google.generativeai as genai
+        if self.api_key:
+            genai.configure(api_key=self.api_key)
         model = genai.GenerativeModel(self.spec.id, system_instruction=system)
         response = model.generate_content(_messages_to_text(messages))
         return AdapterResponse(content=[TextBlock(text=getattr(response, "text", "") or "")])
 
 
-def get_adapter(spec: ModelSpec):
+def get_adapter(spec: ModelSpec, api_key: str | None = None):
     if spec.provider == "anthropic":
-        return AnthropicAdapter(spec)
+        return AnthropicAdapter(spec, api_key=api_key)
     if spec.provider == "openai":
-        return OpenAIAdapter(spec)
+        return OpenAIAdapter(spec, api_key=api_key)
     if spec.provider == "google":
-        return GeminiAdapter(spec)
+        return GeminiAdapter(spec, api_key=api_key)
     raise RuntimeError(f"Unsupported Idjwi provider: {spec.provider}")

@@ -44,6 +44,20 @@ Newsconseen is.
 
 > **Newsconseen is the Autonomous SME Operating System.**
 
+### Idjwi architectural contract
+
+Idjwi is Newsconseen's default operational mind. It owns organizational context,
+ontology, memory, permissions, tools, policies, decisions, audits, and governed
+actions across tenant-authorized operational scopes. Idjwi Core is provider-neutral
+and must support deterministic intelligence and execution without an external LLM.
+
+LLMs are optional tenant-controlled advisors. A tenant may connect none, one, or
+multiple advisors and route objectives according to capability, privacy, cost, and
+policy. Advisors receive bounded authorized context and return proposals to Idjwi;
+they do not own memory, invoke tools directly, approve decisions, or execute actions.
+See [`../docs/idjwi-product-contract.md`](../docs/idjwi-product-contract.md) for the
+authoritative boundaries and terminology.
+
 This mantra is a constraint, not just a description. Every product decision must
 be tested against it.
 
@@ -65,7 +79,7 @@ operational intelligence capability that enterprise systems give large organisat
 | Applications built on the ontology | React apps (Supabase-backed) filtered through taxonomy |
 | Actions — write back to source | Form → master data → ETL trigger |
 | Typed ontology SDK | useTaxonomy + TaxonomySelect + TYPE_ALIASES |
-| AI reasoning over ontology | Operational copilot grounded in Layer 2 data |
+| Operational mind over ontology | Idjwi Core with optional tenant-controlled advisors |
 | **Autonomous execution** | **8 agents: monitor → reason → act → learn via agent memory** |
 | Multi-tenant | company_id scoping across all entities |
 | Operator extensibility | MasterDataOption custom taxonomy values |
@@ -113,7 +127,7 @@ Newsconseen has three distinct product layers. Every component belongs to one of
 ├─────────────────────────────────────────────────────────────────┤
 │  LAYER 3 — AUTONOMOUS INTELLIGENCE                               │
 │  Operational intelligence on the ontology                        │
-│  QueryBuilder · Dashboards · Copilot · Autonomous Agents         │
+│  QueryBuilder · Dashboards · Idjwi Core · Advisors · Agents      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -140,14 +154,16 @@ This layer answers: *What has been happening over time, and how does it compare?
 
 ### Layer 3 — Autonomous Intelligence
 
-The intelligence surface. QueryBuilder, dashboards, operational copilot, and
-autonomous agents that act on behalf of the operator. This layer reads exclusively
+The intelligence surface. QueryBuilder, dashboards, Idjwi Core, optional advisors,
+and autonomous agents that act on behalf of the operator. This layer reads exclusively
 from the Datamart — never from Supabase directly. It speaks in ontology terms —
 person_type, enterprise_subtype, item_class — not in raw SQL columns.
 
-The copilot allows an operator to ask questions in plain language and receive
-answers drawn directly from their ontology. Autonomous agents go further — they
-monitor, reason, draft, and act without waiting to be asked.
+Idjwi allows an operator to ask questions in plain language, receive answers drawn
+directly from the ontology, preserve governed organizational memory, make decisions,
+and coordinate authorized work. Idjwi Core handles deterministic intelligence;
+tenant-selected advisors may contribute bounded reasoning when needed. Autonomous
+agents monitor, plan, draft, and act under Idjwi policy without waiting to be asked.
 
 This layer answers: *What does this data mean, and what should I do about it?*
 
@@ -189,7 +205,7 @@ This layer answers: *What does this data mean, and what should I do about it?*
 │   analytics_people · analytics_transactions · analytics_products  │
 │   analytics_tasks · analytics_relationships · analytics_addresses │
 │                                                                   │
-│   Operational copilot — LLM reasoning over ontology              │
+│   Idjwi operational mind — Core + optional advisor reasoning     │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -359,20 +375,23 @@ Move from nightly ETL to event-driven updates:
 - **Stage 3** — In-memory operational queries for high-frequency apps
   (attendance, stock, scheduling)
 
-### Phase 4 — Operational copilot
+### Phase 4 — Idjwi operational mind
 
-An AI layer that reasons over the ontology in plain language. Not a chatbot.
-An operational intelligence interface.
+The provider-neutral operational intelligence layer that understands the ontology,
+organizational scope, memory, policy, decisions, and actions. It is not a chatbot
+and does not depend on one LLM provider.
 
 The operator asks: *"Which nurses are available at the Westlands clinic on Thursday?"*
-The copilot queries the ontology: Person where person_type = staff,
+Idjwi Core queries the ontology: Person where person_type = staff,
 person_subtype = Nurse, linked enterprise = Westlands, availability = available,
 shift covers Thursday.
-The copilot responds in plain language with structured data behind it.
+Idjwi responds in plain language with structured evidence behind it. If deeper
+language reasoning is required, Idjwi may consult a tenant-approved advisor and
+validate the proposal before presenting it or acting.
 
 This is the product that does not exist anywhere in the SME market. The technical
 foundation — three entities, universal taxonomy, analytics summaries — is already
-built. The LLM layer sits on top of it.
+built. Optional advisor adapters sit behind Idjwi's governance boundary.
 
 ### Phase 5 — Network and deployment scale
 
@@ -759,12 +778,12 @@ ML_ENABLED                  — false (set true only when ML endpoints are ready
 NOMINATIM_CONTACT_EMAIL     — Required for Nominatim geocoding
 ```
 
-#### Phase 3A — Operational Copilot
+#### Phase 3A — Idjwi and optional advisor adapters
 
 ```
-COPILOT_BACKEND           — anthropic  (or openai)
-ANTHROPIC_API_KEY         — sk-ant-...
-OPENAI_API_KEY            — sk-...     (if using OpenAI backend instead)
+COPILOT_BACKEND           — legacy compatibility selector during advisor migration
+ANTHROPIC_API_KEY         — optional Anthropic advisor credential
+OPENAI_API_KEY            — optional OpenAI/Codex advisor credential
 ```
 
 #### Phase 3B — Alert channels

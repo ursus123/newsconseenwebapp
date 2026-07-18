@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronUp, BarChart2, Globe, Brain, BookOpen,
   ExternalLink, Save, CheckCircle, RefreshCw, TrendingUp,
   PieChart as PieIcon, Activity, Copy, Check, Clock,
-  MessageSquare, X, History, Download, ChevronRight,
+  MessageSquare, X, History, ChevronRight,
   Search, ArrowUpRight, Database, Pin, Code2, Paperclip,
   FileText, Upload, CheckCircle2, Layers,
   Zap, ListTodo, Lightbulb, XCircle,
@@ -1532,7 +1532,17 @@ function IngestionPlanCard({ plan, companyId, onConfirm, onDismiss }) {
 }
 
 // ── Main CopilotChat component ───────────────────────────────────────────────
-export default function CopilotChat({ currentUser, className = "", initialMessage = "", selectedModel = "claude-sonnet-4-6", pageContext = null, autoSend = false }) {
+export default function CopilotChat({
+  currentUser,
+  className = "",
+  initialMessage = "",
+  selectedModel = null,
+  pageContext = null,
+  autoSend = false,
+  advisorMode = "automatic",
+  reasoningProfile = "balanced",
+  operationalScope = null,
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const [messages, setMessages]   = useState([]);
@@ -1541,7 +1551,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
   const [error, setError]         = useState(null);
   const [context, setContext]     = useState(null);
   const [showHistory, setShowHistory] = useState(false);
-  const [advisorEnabled, setAdvisorEnabled] = useState(false);
+  const [advisorEnabled, setAdvisorEnabled] = useState(advisorMode !== "core");
   const [teachMode, setTeachMode] = useState(false);
   const messagesEndRef             = useRef(null);
   const inputRef                   = useRef(null);
@@ -1552,6 +1562,10 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
   const openQueryBuilder = useCallback(() => navigate("/QueryBuilder"), [navigate]);
 
   const companyId = currentUser?.company_id;
+
+  useEffect(() => {
+    setAdvisorEnabled(advisorMode !== "core");
+  }, [advisorMode]);
 
   const buildRequestContext = useCallback((extra = {}) => {
     const routeName = (location.pathname || "/")
@@ -1568,9 +1582,12 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       selected_entity_type: pageContext?.selected_entity_type || pageContext?.entity_type || "",
       selected_entity_id: pageContext?.selected_entity_id || pageContext?.entity_id || "",
       selected_entity_label: pageContext?.selected_entity_label || pageContext?.entity_label || "",
+      operational_unit_id: operationalScope?.id === "__all__" ? "" : (operationalScope?.id || ""),
+      operational_unit_name: operationalScope?.name || "",
+      operational_unit_type: operationalScope?.type || "",
     };
     return { ...base, ...extra };
-  }, [currentUser?.enterprise_name, location.pathname, pageContext]);
+  }, [currentUser?.enterprise_name, location.pathname, operationalScope, pageContext]);
 
   // Load context
   useEffect(() => {
@@ -1578,10 +1595,15 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
     (async () => {
       try {
         const headers = await authHeaders();
-        const r = await fetch(`${RAILWAY_URL}/copilot/context?company_id=${companyId}`, { headers });
-        setContext(await r.json());
-      } catch {
-        setContext(null);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 12000);
+        const r = await fetch(`${RAILWAY_URL}/copilot/context?company_id=${companyId}`, { headers, signal: controller.signal });
+        clearTimeout(timer);
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body?.detail || `HTTP ${r.status}`);
+        setContext(body);
+      } catch (error) {
+        setContext({ data_available: false, error: error?.name === "AbortError" ? "Context request timed out" : (error?.message || "Context unavailable") });
       }
     })();
   }, [companyId]);
@@ -1716,6 +1738,10 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           history,
           model:      selectedModel,
           advisor_enabled: advisorEnabled,
+          advisor_mode: advisorEnabled ? advisorMode : "core",
+          reasoning_profile: reasoningProfile,
+          operational_unit_id: operationalScope?.id === "__all__" ? "" : (operationalScope?.id || ""),
+          operational_unit_name: operationalScope?.name || "",
           session_id: sessionIdRef.current,
           context:    buildRequestContext({
             last_import_plan_id: planId,
@@ -1758,7 +1784,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
     } finally {
       setLoading(false);
     }
-  }, [companyId, messages, currentUser, selectedModel, advisorEnabled, buildRequestContext]);
+  }, [companyId, messages, currentUser, selectedModel, advisorEnabled, advisorMode, reasoningProfile, operationalScope, buildRequestContext]);
 
   const handleIngestionDismiss = useCallback((planId) => {
     setMessages(prev => prev.filter(m =>
@@ -1833,6 +1859,10 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
           history,
           model:           selectedModel,
           advisor_enabled: advisorEnabled,
+          advisor_mode:    advisorEnabled ? advisorMode : "core",
+          reasoning_profile: reasoningProfile,
+          operational_unit_id: operationalScope?.id === "__all__" ? "" : (operationalScope?.id || ""),
+          operational_unit_name: operationalScope?.name || "",
           session_id:      sessionIdRef.current,
           context:         buildRequestContext(),
           current_page:    buildRequestContext().current_page || "",
@@ -1894,7 +1924,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
       setLoading(false);
       inputRef.current?.focus();
     }
-  }, [input, loading, companyId, messages, currentUser, selectedModel, advisorEnabled, teachMode, buildRequestContext]);
+  }, [input, loading, companyId, messages, currentUser, selectedModel, advisorEnabled, advisorMode, reasoningProfile, operationalScope, teachMode, buildRequestContext]);
 
   // Auto-send once when opened with a pre-filled question (e.g. from the docked panel)
   const autoSentRef = useRef(false);
@@ -1958,7 +1988,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
                         ? `${context.critical_alerts} critical`
                         : "All clear"
                     }`
-                  : "Connecting…"}
+                  : context?.error || "Loading company context…"}
               </p>
             </div>
           </div>
@@ -1971,7 +2001,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
             )}
             <button
               onClick={() => setAdvisorEnabled(v => !v)}
-              title={advisorEnabled ? "Advisor is on" : "Idjwi Autonomous is the default"}
+              title={advisorEnabled ? "Optional advisor assistance is enabled" : "Idjwi Core only"}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors ${
                 advisorEnabled
                   ? "border-violet-200 bg-violet-50 text-violet-700"
@@ -1980,7 +2010,7 @@ export default function CopilotChat({ currentUser, className = "", initialMessag
             >
               {advisorEnabled ? <Brain className="w-3.5 h-3.5" /> : <Activity className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">
-                {advisorEnabled ? "Advisor On" : "Autonomous"}
+                {advisorEnabled ? "Advisor-assisted" : "Core Mode"}
               </span>
             </button>
             <button

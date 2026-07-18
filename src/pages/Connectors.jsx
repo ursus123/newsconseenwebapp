@@ -8,8 +8,8 @@ import {
   Database, Cloud, HardDrive, X, ChevronRight, ChevronDown,
   Eye, Play, RefreshCw, AlertTriangle, Table2, Code2,
   Clock, Calendar, CalendarClock, KeyRound,
-  Webhook, Copy, Trash2, Plus, ExternalLink, Zap,
-  ArrowUpRight, ToggleLeft, ToggleRight, Shield, Activity,
+  Webhook, Copy, Trash2, Plus, Zap,
+  ArrowUpRight, Shield, Activity,
   GitBranch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -1145,7 +1145,7 @@ function DatabaseConnectModal({ connector, companyId, onClose }) {
 
                   <p className="text-[10px] text-slate-400">
                     Mirroring copies up to 10,000 rows into Newsconseen&apos;s analytical layer.
-                    The AI copilot can then query these tables directly with <code className="font-mono">query_external_table</code>.
+                    Idjwi can then query these tables through the governed <code className="font-mono">query_external_table</code> tool.
                   </p>
                 </div>
               )}

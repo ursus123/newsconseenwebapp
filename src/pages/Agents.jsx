@@ -11,8 +11,7 @@ import { ncClient } from "@/api/ncClient";
 import AgentDashboard from "@/components/agents/AgentDashboard";
 import ApprovalGate   from "@/components/agents/ApprovalGate";
 import {
-  Brain, Shield, Globe, Activity, Loader2, RefreshCw,
-  CheckCircle2, XCircle, Clock, AlertCircle, TrendingUp,
+  Brain, Shield, Globe, Activity, Loader2, RefreshCw, AlertCircle,
 } from "lucide-react";
 
 import { RAILWAY_URL, authHeaders } from "@/config/api";
@@ -160,7 +159,7 @@ function RunLog({ companyId }) {
                 <span className="text-[9px] text-slate-500 bg-slate-200 px-1.5 py-0.5 rounded-full">{run.trigger}</span>
                 {run.status === "degraded" && (
                   <span className="text-[9px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full"
-                        title="Reasoning engine unavailable — check ANTHROPIC_API_KEY">
+                        title="The advisor required by this agent is unavailable — review the tenant advisor policy">
                     degraded
                   </span>
                 )}
