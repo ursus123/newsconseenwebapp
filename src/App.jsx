@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import ErrorBoundary from '@/components/shared/ErrorBoundary';
 import PageNotFound from './lib/PageNotFound';
 import EntityGraph from './pages/EntityGraph';
@@ -60,14 +60,38 @@ const LayoutWrapper = ({ children, currentPageName }) => (
 );
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, user } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authStatus, authError, retryAuth, user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
-  // Show loading spinner while checking app public settings or auth
+  useEffect(() => {
+    if (authStatus === 'unauthenticated' || authError?.type === 'auth_required') {
+      const returnUrl = `${location.pathname}${location.search || ''}`;
+      if (returnUrl !== '/login') sessionStorage.setItem('auth_return_url', returnUrl);
+      navigate('/login', { replace: true });
+    }
+  }, [authStatus, authError?.type, location.pathname, location.search, navigate]);
+
+  // Session verification gets a compact branded state. Profile loading shows
+  // the workspace shell immediately instead of a blank full-screen spinner.
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
+      <div className="fixed inset-0 bg-slate-50">
+        <header className="h-16 border-b border-slate-200 bg-white px-6 flex items-center gap-3">
+          <div className="h-9 w-9 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center font-bold">N</div>
+          <div><p className="text-sm font-semibold text-slate-900">Newsconseen</p><p className="text-[11px] text-slate-400">Autonomous SME Operating System</p></div>
+        </header>
+        <div className="max-w-lg mx-auto mt-24 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm text-center">
+          <div className="mx-auto h-9 w-9 rounded-full border-4 border-slate-200 border-t-emerald-600 animate-spin" />
+          <h1 className="mt-5 text-lg font-semibold text-slate-900">
+            {authStatus === 'profile_loading' ? 'Loading your workspace' : 'Verifying your session'}
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            {authStatus === 'profile_loading'
+              ? 'Your session is active. Newsconseen is loading your tenant, role, and permissions.'
+              : 'Securely reconnecting to your Newsconseen session.'}
+          </p>
+        </div>
       </div>
     );
   }
@@ -77,8 +101,20 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else if (authError.type === 'auth_required') {
-      navigateToLogin();
       return null;
+    } else if (authError.type === 'profile_error' || authError.type === 'auth_error') {
+      return (
+        <div className="fixed inset-0 flex items-center justify-center bg-slate-50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-sm">
+            <h1 className="text-lg font-semibold text-slate-900">Workspace could not finish loading</h1>
+            <p className="mt-2 text-sm text-slate-600">{authError.message}</p>
+            <div className="mt-5 flex gap-2">
+              <button onClick={retryAuth} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Retry workspace</button>
+              <button onClick={() => navigate('/login', { replace: true })} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">Return to sign in</button>
+            </div>
+          </div>
+        </div>
+      );
     }
   }
 

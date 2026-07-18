@@ -19,7 +19,7 @@ import CopilotWidget from "@/components/desktop/CopilotWidget";
 import EnterpriseContextSwitcher from "@/components/desktop/EnterpriseContextSwitcher";
 import { usePWA } from "@/hooks/usePWA";
 import { ncClient } from "@/api/ncClient";
-import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/lib/AuthContext";
 import { useLockStore } from "@/desktop/lockStore";
 import LockScreen from "@/components/desktop/LockScreen";
 import { RAILWAY_URL } from "@/config/api";
@@ -35,12 +35,7 @@ const WALLPAPERS = [
 ];
 
 export default function Desktop() {
-  const { data: user = null } = useQuery({
-    queryKey: ["currentUser"],
-    queryFn: () => ncClient.auth.me(),
-    staleTime: 0,
-    refetchOnMount: "always",
-  });
+  const { user } = useAuth();
   const [notifOpen, setNotifOpen]     = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [wallpaperIdx, setWallpaperIdx] = useState(0);

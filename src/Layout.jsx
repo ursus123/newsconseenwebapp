@@ -359,8 +359,9 @@ const MODE_LABELS = {
 };
 
 export default function Layout({ children, currentPageName }) {
+  const { logout: authLogout, user: authenticatedUser } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(authenticatedUser);
   const [showWizard, setShowWizard] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [criticalAlerts, setCriticalAlerts] = useState(0);
@@ -396,16 +397,13 @@ export default function Layout({ children, currentPageName }) {
     document.body.style.userSelect = "none";
   }, [sidebarWidth, handleResizeMove, handleResizeUp]);
   const navigate = useNavigate();
-  const { logout: authLogout } = useAuth();
 
   useEffect(() => {
-    ncClient.auth.me().then(u => {
-      setCurrentUser(u);
-      if (u && !u.setup_complete && (u.role === 'admin' || u.role === 'super_admin')) {
-        setShowWizard(true);
-      }
-    }).catch(() => {});
-  }, []);
+    setCurrentUser(authenticatedUser);
+    if (authenticatedUser && !authenticatedUser.setup_complete && (authenticatedUser.role === 'admin' || authenticatedUser.role === 'super_admin')) {
+      setShowWizard(true);
+    }
+  }, [authenticatedUser]);
 
   // Sentry context — no-op if Sentry wasn't initialized (VITE_SENTRY_DSN unset)
   useEffect(() => {

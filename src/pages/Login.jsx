@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/api/supabaseEntityClient';
 
 export default function Login() {
+  const navigate = useNavigate();
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState('');
@@ -20,11 +22,12 @@ export default function Login() {
       return;
     }
 
-    // AuthContext onAuthStateChange fires SIGNED_IN → loads user → app renders.
-    // Redirect to intended page if stored, otherwise Dashboard.
-    const returnUrl = sessionStorage.getItem('auth_return_url') || '/Dashboard';
+    // Keep the already-loaded React application alive; AuthContext receives
+    // SIGNED_IN and loads the tenant profile without a cold page reload.
+    const requestedReturnUrl = sessionStorage.getItem('auth_return_url') || '/app';
+    const returnUrl = requestedReturnUrl.toLowerCase() === '/dashboard' ? '/app' : requestedReturnUrl;
     sessionStorage.removeItem('auth_return_url');
-    window.location.href = returnUrl;
+    navigate(returnUrl, { replace: true });
   };
 
   return (

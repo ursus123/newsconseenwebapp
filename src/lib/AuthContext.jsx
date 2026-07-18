@@ -1,4 +1,4 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+import { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { appParams } from '@/lib/app-params';
 
 // Lazy getter — avoids pulling @base44/sdk into the React module init chain
@@ -15,10 +15,26 @@ export const AuthProvider = ({ children }) => {
   const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [appPublicSettings, setAppPublicSettings] = useState(null); // Contains only { id, public_settings }
+  const [authStatus, setAuthStatus] = useState('initializing');
+  const profileCacheRef = useRef(new Map());
+  const profileRequestRef = useRef(new Map());
+  const authSubscriptionRef = useRef(null);
+
+  const withTimeout = (promise, timeoutMs, message) => {
+    let timer;
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]).finally(() => clearTimeout(timer));
+  };
 
   useEffect(() => {
     if (DATA_LAYER === 'supabase') {
-      _initSupabaseAuth();
+      let unsubscribe;
+      _initSupabaseAuth().then(cleanup => { unsubscribe = cleanup; });
+      return () => unsubscribe?.();
     } else {
       checkAppState();
     }
@@ -26,27 +42,47 @@ export const AuthProvider = ({ children }) => {
 
   // ── Supabase auth path ────────────────────────────────────────────────────
   const _loadSupabaseUser = async (authUser) => {
+    if (!authUser?.id) return null;
+    setAuthStatus('profile_loading');
     try {
       const { supabase } = await import('@/api/supabaseEntityClient');
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('company_id, role, full_name')
-        .eq('id', authUser.id)
-        .single();
+      let profile = profileCacheRef.current.get(authUser.id);
+      if (!profile) {
+        let request = profileRequestRef.current.get(authUser.id);
+        if (!request) {
+          request = withTimeout(
+            supabase.from('user_profiles').select('company_id, role, full_name').eq('id', authUser.id).single(),
+            10000,
+            'Workspace profile request timed out',
+          );
+          profileRequestRef.current.set(authUser.id, request);
+        }
+        const { data, error } = await request;
+        profileRequestRef.current.delete(authUser.id);
+        if (error && error.code !== 'PGRST116') throw error;
+        profile = data || {};
+        profileCacheRef.current.set(authUser.id, profile);
+      }
 
-      setUser({
+      const resolvedUser = {
         id:         authUser.id,
         email:      authUser.email,
         full_name:  profile?.full_name  || authUser.user_metadata?.full_name || authUser.email,
         company_id: profile?.company_id || authUser.app_metadata?.company_id || null,
         role:       profile?.role       || authUser.app_metadata?.role       || 'user',
         ...authUser.user_metadata,
-      });
+      };
+      setUser(resolvedUser);
       setIsAuthenticated(true);
+      setAuthStatus('ready');
+      setAuthError(null);
+      return resolvedUser;
     } catch (e) {
       console.error('Failed to load Supabase user profile:', e);
       setIsAuthenticated(false);
-      setAuthError({ type: 'auth_required', message: 'Could not load user profile' });
+      setAuthStatus('profile_error');
+      setAuthError({ type: 'profile_error', message: e.message || 'Could not load workspace profile' });
+      return null;
     } finally {
       setIsLoadingAuth(false);
       setIsLoadingPublicSettings(false);
@@ -54,29 +90,61 @@ export const AuthProvider = ({ children }) => {
   };
 
   const _initSupabaseAuth = async () => {
-    const { supabase } = await import('@/api/supabaseEntityClient');
+    setAuthStatus('initializing');
+    let supabase;
+    try {
+      ({ supabase } = await withTimeout(
+        import('@/api/supabaseEntityClient'),
+        10000,
+        'Authentication client took too long to load',
+      ));
+    } catch (error) {
+      setAuthStatus('auth_error');
+      setAuthError({ type: 'auth_error', message: error.message });
+      setIsLoadingAuth(false);
+      setIsLoadingPublicSettings(false);
+      return undefined;
+    }
 
     // Check existing session
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
+    const { data: { session }, error: sessionError } = await withTimeout(
+      supabase.auth.getSession(),
+      10000,
+      'Session verification timed out',
+    ).catch(error => ({ data: { session: null }, error }));
+    if (sessionError) {
+      setAuthStatus('auth_error');
+      setAuthError({ type: 'auth_error', message: sessionError.message || 'Could not verify session' });
+      setIsLoadingAuth(false);
+      setIsLoadingPublicSettings(false);
+    } else if (session?.user) {
       await _loadSupabaseUser(session.user);
     } else {
+      setAuthStatus('unauthenticated');
       setIsLoadingAuth(false);
       setIsLoadingPublicSettings(false);
       setAuthError({ type: 'auth_required', message: 'Authentication required' });
     }
 
     // Keep in sync with Supabase session changes
-    supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
+    authSubscriptionRef.current?.unsubscribe();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && nextSession?.user) {
+        if (nextSession.user.id === user?.id && profileCacheRef.current.has(nextSession.user.id)) return;
         setAuthError(null);
-        await _loadSupabaseUser(session.user);
+        await _loadSupabaseUser(nextSession.user);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setIsAuthenticated(false);
+        setAuthStatus('unauthenticated');
         setAuthError({ type: 'auth_required', message: 'Authentication required' });
       }
     });
+    authSubscriptionRef.current = subscription;
+    return () => {
+      subscription.unsubscribe();
+      if (authSubscriptionRef.current === subscription) authSubscriptionRef.current = null;
+    };
   };
 
   const checkAppState = async () => {
@@ -201,6 +269,14 @@ export const AuthProvider = ({ children }) => {
     } catch (_) {}
   };
 
+  const retryAuth = async () => {
+    setAuthError(null);
+    setIsLoadingAuth(true);
+    setIsLoadingPublicSettings(true);
+    profileRequestRef.current.clear();
+    await _initSupabaseAuth();
+  };
+
   return (
     <AuthContext.Provider value={{ 
       user, 
@@ -209,10 +285,12 @@ export const AuthProvider = ({ children }) => {
       isLoadingPublicSettings,
       authError,
       appPublicSettings,
+      authStatus,
       logout,
       navigateToLogin,
       checkAppState,
       refreshUser,
+      retryAuth,
     }}>
       {children}
     </AuthContext.Provider>

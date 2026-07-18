@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { ncClient } from "@/api/ncClient";
+import { useAuth } from "@/lib/AuthContext";
 import { RAILWAY_URL, authHeaders } from "@/config/api";
 import CopilotChat from "@/components/copilot/copilotchat";
 
@@ -78,9 +79,7 @@ export default function Idjwi() {
   const [workItems, setWorkItems] = useState([]);
   const [savingPolicy, setSavingPolicy] = useState(false);
 
-  const { data: currentUser = null } = useQuery({
-    queryKey: ["currentUser"], queryFn: () => ncClient.auth.me(), staleTime: 0, refetchOnMount: "always",
-  });
+  const { user: currentUser } = useAuth();
   const companyId = currentUser?.company_id;
   const { data: enterprises = [] } = useQuery({
     queryKey: ["idjwiScopes", companyId],
