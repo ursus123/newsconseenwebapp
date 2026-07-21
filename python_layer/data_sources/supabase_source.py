@@ -182,6 +182,91 @@ def require_configured() -> None:
         )
 
 
+def health_probe(timeout: float = 5.0) -> dict:
+    """Cheap, read-only connectivity probe for the canonical operational store."""
+    if not configured():
+        return {"status": "unavailable", "configured": False, "error": "not configured"}
+    started = time.monotonic()
+    try:
+        response = requests.get(
+            _url("enterprises"),
+            headers=_headers(),
+            params={"select": "id", "limit": 1},
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return {
+            "status": "connected",
+            "configured": True,
+            "latency_ms": round((time.monotonic() - started) * 1000, 1),
+        }
+    except requests.RequestException as exc:
+        return {
+            "status": "error",
+            "configured": True,
+            "latency_ms": round((time.monotonic() - started) * 1000, 1),
+            "error": str(exc)[:160],
+        }
+
+
+def count_records(entity: str, company_id: str) -> int:
+    """Return an exact tenant-scoped count without downloading entity rows."""
+    response = _request(
+        "GET",
+        table_for(entity),
+        headers=_headers("count=exact"),
+        params={"select": "id", "company_id": f"eq.{company_id}", "limit": 1},
+    )
+    content_range = response.headers.get("Content-Range", "")
+    if "/" in content_range:
+        total = content_range.rsplit("/", 1)[-1]
+        if total.isdigit():
+            return int(total)
+    rows = response.json()
+    return len(rows) if isinstance(rows, list) else 0
+
+
+def audit_company_id_assignments(entities: list[str], company_id: str, limit: int = 10000) -> dict:
+    """Audit tenant-id hygiene without returning other tenants' identifiers."""
+    requested = str(company_id or "")
+    normalized_requested = requested.strip().lower()
+    tables = {}
+    for entity in entities:
+        table = table_for(entity)
+        response = _request(
+            "GET",
+            table,
+            headers=_headers(),
+            params={"select": "company_id", "limit": limit},
+        )
+        rows = response.json() if response.content else []
+        exact = unassigned = normalized_variants = other_tenants = 0
+        for row in rows if isinstance(rows, list) else []:
+            value = row.get("company_id") if isinstance(row, dict) else None
+            if value is None or not str(value).strip():
+                unassigned += 1
+            elif str(value) == requested:
+                exact += 1
+            elif str(value).strip().lower() == normalized_requested:
+                normalized_variants += 1
+            else:
+                other_tenants += 1
+        tables[table] = {
+            "requested_tenant_records": exact,
+            "unassigned_records": unassigned,
+            "tenant_id_format_variants": normalized_variants,
+            "other_tenant_records": other_tenants,
+            "sample_complete": len(rows) < limit,
+        }
+    return {
+        "tables": tables,
+        "tenant_ids_normalized": all(
+            item["unassigned_records"] == 0 and item["tenant_id_format_variants"] == 0
+            for item in tables.values()
+        ),
+    }
+
+
 def table_for(entity: str) -> str:
     return ENTITY_TABLES.get((entity or "").lower(), (entity or "").lower())
 

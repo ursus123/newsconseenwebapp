@@ -14,7 +14,7 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -1082,7 +1082,9 @@ async def ask_stream(
 
 @router.get("/context")
 def get_context(
+    request: Request,
     company_id: str = Query(...),
+    frontend_project_ref: str = Query(""),
     operational_unit_id: str = Query(""),
     operational_unit_name: str = Query(""),
     authorization: Optional[str] = Header(None),
@@ -1091,31 +1093,171 @@ def get_context(
     Returns what the copilot knows about this tenant's data.
     Used by the chat UI to show data freshness and scope.
     """
-    verify_tenant_access(authorization, company_id)
+    request_id = getattr(request.state, "request_id", None)
+    from tenant_context import SupabaseTenantContextRepository
+
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    try:
+        tenant_context = repository.resolve_context(
+            authorization,
+            company_id,
+            request_id=request_id or "",
+            operational_unit_id=operational_unit_id,
+            operational_unit_name=operational_unit_name,
+        )
+    except HTTPException as exc:
+        try:
+            from copilot.idjwi_observability import log_event
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            log_event(
+                "idjwi.authorization.failed",
+                company_id=company_id,
+                actor="unverified",
+                subject=operational_unit_id or company_id,
+                metadata={
+                    "request_id": request_id,
+                    "code": detail.get("code") or "authorization_failed",
+                    "status_code": exc.status_code,
+                },
+                status="failed",
+            )
+        except Exception:
+            pass
+        raise
+
+    from data_sources.supabase_source import (
+        audit_company_id_assignments,
+        health_probe,
+    )
+
+    source_health = health_probe()
+    if source_health.get("status") != "connected":
+        raise HTTPException(status_code=503, detail={
+            "code": "operational_data_unavailable",
+            "category": "data_source",
+            "message": "Newsconseen could not reach this tenant's operational data.",
+            "retryable": True,
+            "action": "retry",
+            "request_id": request_id,
+        })
+
     engine = CopilotEngine(
         company_id=company_id,
         backend=COPILOT_BACKEND,
         railway_url=RAILWAY_URL,
     )
 
-    # Quick overview to show data availability
     overview = engine.query_engine.query_network_overview()
-
-    enterprises = engine.query_engine.query_enterprises()
+    snapshot_result = repository.build_operational_snapshot(tenant_context)
+    snapshot = snapshot_result.data
+    enterprises = snapshot.get("enterprises", [])
     ent_list = [
-        {"id": e.get("id"), "name": e.get("name"), "type": e.get("enterprise_type")}
-        for e in enterprises.get("data", [])
+        {"id": e.get("id"), "name": e.get("name") or e.get("enterprise_name"), "type": e.get("enterprise_type")}
+        for e in enterprises
     ]
 
+    entity_counts = snapshot.get("entity_counts", {})
+    unavailable_entities = snapshot.get("unavailable_entities", [])
+
+    records_available = any(
+        isinstance(value, int) and value > 0 for value in entity_counts.values()
+    )
+    if unavailable_entities:
+        context_state = "partial"
+    elif records_available:
+        context_state = "available"
+    else:
+        context_state = "empty"
+
+    try:
+        tenant_assignment_audit = audit_company_id_assignments(
+            ["enterprises", "persons", "tasks", "transactions"], company_id,
+        )
+    except SupabaseSourceError:
+        tenant_assignment_audit = {"tables": {}, "tenant_ids_normalized": None}
+
+    event_type = {
+        "available": "idjwi.context.loaded",
+        "empty": "idjwi.context.empty",
+        "partial": "idjwi.context.partial",
+    }[context_state]
+    try:
+        from copilot.idjwi_observability import log_event
+        log_event(
+            event_type,
+            company_id=company_id,
+            actor=tenant_context.user_id or "authorized_operator",
+            subject=operational_unit_id or company_id,
+            metadata={
+                "request_id": request_id,
+                "data_source": "tenant_context_repository",
+                "entity_counts": entity_counts,
+                "unavailable_entities": unavailable_entities,
+            },
+            status="success" if context_state != "partial" else "partial",
+        )
+    except Exception:
+        pass
+
+    from database import get_engine_safe
+
+    from urllib.parse import urlparse
+    from config import settings as app_settings
+    backend_host = urlparse(str(app_settings.supabase_url or "")).hostname or ""
+    backend_project_ref = backend_host.split(".", 1)[0] if backend_host else ""
+    normalized_frontend_ref = (frontend_project_ref or "").strip().lower()
+    projects_match = bool(
+        backend_project_ref and normalized_frontend_ref
+        and backend_project_ref.lower() == normalized_frontend_ref
+    )
+
     return {
+        "status":              "ready",
+        "request_id":          request_id,
         "company_id":          company_id,
+        "tenant_authorized":   True,
+        "authorization_source": tenant_context.auth_source,
+        "identity_chain": {
+            "frontend_project_ref": normalized_frontend_ref or None,
+            "backend_project_ref": backend_project_ref or None,
+            "projects_match": projects_match,
+            "authenticated_user_verified": bool(tenant_context.user_id),
+            "profile_found": tenant_context.profile_found,
+            "profile_user_id_matches": tenant_context.profile_user_id_matches,
+            "profile_tenant_matches_request": tenant_context.tenant_id == str(company_id),
+            "requested_company_id": company_id,
+            "record_company_ids_match_request": (
+                not unavailable_entities
+                and tenant_assignment_audit.get("tenant_ids_normalized") is True
+            ),
+            "server_tenant_filter_enforced": True,
+            "rls_policy_contract": "company_id = my_company_id()",
+            "rls_runtime_probe": "frontend_required",
+            "tenant_assignment_audit": tenant_assignment_audit,
+        },
         "operational_scope": {
             "operational_unit_id": operational_unit_id,
             "operational_unit_name": operational_unit_name,
             "scope": "operational_unit" if operational_unit_id else "organization",
         },
+        "tenant_context": tenant_context.public_dict(),
+        "context_repository": {
+            "status": "ready",
+            "implementation": "supabase",
+            "tenant_filter_enforced": True,
+            "snapshot_duration_ms": snapshot_result.duration_ms,
+            "queried_entities": list(snapshot_result.entities),
+        },
         "backend":             COPILOT_BACKEND,
-        "data_available":      not bool(overview.get("error")),
+        "context_state":       context_state,
+        "data_available":      True,
+        "records_available":   records_available,
+        "canonical_data_available": True,
+        "data_source":         "tenant_context_repository",
+        "data_as_of":          None,
+        "entity_counts":       entity_counts,
+        "unavailable_entities": unavailable_entities,
+        "analytics_available": get_engine_safe() is not None,
         "enterprises":         ent_list,
         "enterprise_count":    len(ent_list),
         "alert_count":         overview.get("summary", {}).get("alert_count", 0),

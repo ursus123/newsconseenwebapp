@@ -20,6 +20,16 @@ logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 15
 
 
+def _auth_error(code: str, message: str, *, action: str, retryable: bool) -> dict:
+    return {
+        "code": code,
+        "category": "authorization",
+        "message": message,
+        "retryable": retryable,
+        "action": action,
+    }
+
+
 def verify_supabase_user(authorization: Optional[str]) -> dict:
     """
     Verify a Supabase access token by forwarding it to Supabase's own
@@ -27,13 +37,25 @@ def verify_supabase_user(authorization: Optional[str]) -> dict:
     Raises HTTPException(401) if the token is missing or invalid.
     """
     if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="Missing bearer token")
+        raise HTTPException(status_code=401, detail=_auth_error(
+            "session_missing", "Your Newsconseen session is missing.",
+            action="sign_in", retryable=True,
+        ))
     token = authorization.split(" ", 1)[1].strip()
     if not token:
-        raise HTTPException(status_code=401, detail="Missing bearer token")
+        raise HTTPException(status_code=401, detail=_auth_error(
+            "session_missing", "Your Newsconseen session is missing.",
+            action="sign_in", retryable=True,
+        ))
 
     if not settings.supabase_url or not settings.supabase_service_role_key:
-        raise HTTPException(status_code=500, detail="Supabase is not configured")
+        raise HTTPException(status_code=503, detail={
+            "code": "authorization_service_unavailable",
+            "category": "authorization",
+            "message": "The tenant authorization service is not configured.",
+            "retryable": False,
+            "action": "contact_admin",
+        })
 
     try:
         resp = requests.get(
@@ -46,10 +68,19 @@ def verify_supabase_user(authorization: Optional[str]) -> dict:
         )
     except requests.RequestException as exc:
         logger.error("verify_supabase_user: request to Supabase failed — %s", exc)
-        raise HTTPException(status_code=401, detail="Could not verify session") from exc
+        raise HTTPException(status_code=503, detail={
+            "code": "authorization_service_unavailable",
+            "category": "authorization",
+            "message": "Newsconseen could not reach the tenant authorization service.",
+            "retryable": True,
+            "action": "retry",
+        }) from exc
 
     if not resp.ok:
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
+        raise HTTPException(status_code=401, detail=_auth_error(
+            "session_invalid", "Your Newsconseen session is invalid or expired.",
+            action="sign_in", retryable=True,
+        ))
 
     data = resp.json()
     user_id = data.get("id")
@@ -69,7 +100,7 @@ def _get_profile(user_id: str) -> dict:
     resp = supabase_source._request(
         "GET", "user_profiles",
         headers=supabase_source._headers(),
-        params={"id": f"eq.{user_id}", "select": "company_id,role"},
+        params={"id": f"eq.{user_id}", "select": "id,company_id,role"},
     )
     rows = resp.json()
     return rows[0] if rows else {}
@@ -88,11 +119,15 @@ def verify_tenant_access(authorization: Optional[str], company_id: str) -> dict:
     profile_company_id = profile.get("company_id")
     metadata_company_id = app_meta.get("company_id")
     role = profile.get("role") or app_meta.get("role") or "user"
+    identity_diagnostics = {
+        "profile_found": bool(profile),
+        "profile_user_id_matches": bool(profile) and str(profile.get("id")) == str(user.get("id")),
+    }
 
     if role == "super_admin":
-        return {**user, **profile, "role": role, "tenant_auth_source": "super_admin"}
+        return {**user, **profile, **identity_diagnostics, "role": role, "tenant_auth_source": "super_admin"}
     if profile_company_id == company_id:
-        return {**user, **profile, "role": role, "tenant_auth_source": "user_profiles"}
+        return {**user, **profile, **identity_diagnostics, "role": role, "tenant_auth_source": "user_profiles"}
 
     # Supabase app_metadata is server/admin controlled. Use it as a safe
     # fallback for newly linked or invited users whose user_profiles row has
@@ -105,11 +140,15 @@ def verify_tenant_access(authorization: Optional[str], company_id: str) -> dict:
             "role": role,
             "tenant_auth_source": "app_metadata",
             "profile_company_id": profile_company_id,
+            **identity_diagnostics,
         }
 
     raise HTTPException(status_code=403, detail={
         "code": "tenant_mismatch",
-        "message": "Not authorized for this company",
+        "category": "authorization",
+        "message": "Your account is not authorized for the requested organization.",
+        "retryable": False,
+        "action": "contact_admin",
         "requested_company_id": company_id,
         "profile_company_id": profile_company_id,
         "metadata_company_id": metadata_company_id,

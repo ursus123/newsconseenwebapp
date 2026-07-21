@@ -9,6 +9,7 @@
     "seed:demo": "python python_layer/demo_seed.py",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
+    "test:idjwi": "node --test src/lib/idjwiStatus.test.js src/lib/tenantIdentity.test.js",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview"
   },

@@ -11,6 +11,14 @@ export const RAILWAY_URL =
 
 export const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 
+export const SUPABASE_PROJECT_REF = (() => {
+  try {
+    return new URL(import.meta.env.VITE_SUPABASE_URL || "").hostname.split(".", 1)[0] || "";
+  } catch {
+    return "";
+  }
+})();
+
 export const INGESTION_SUPPORTED_EXTENSIONS = [
   ".csv", ".tsv", ".xlsx", ".xls", ".json", ".xml",
   ".pdf", ".docx", ".doc", ".txt", ".md", ".markdown", ".rtf",

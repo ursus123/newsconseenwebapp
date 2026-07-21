@@ -8917,7 +8917,11 @@ class QueryEngine:
             }
             for e in result.get("enterprises", [])
         ]
-        return {"data": data}
+        return {
+            "data": data,
+            "data_source": result.get("data_source") or "unknown",
+            "data_as_of": result.get("data_as_of"),
+        }
 
     def query_network_overview(self) -> dict:
         """

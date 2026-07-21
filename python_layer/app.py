@@ -387,9 +387,21 @@ _CRON_PREFIXES = ("/load/", "/cron/", "/webhook/")
 _CORS_HEADERS = {
     "Access-Control-Allow-Origin":  "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-    "Access-Control-Allow-Headers": "x-api-key, x-idjwi-api-key, x-idjwi-role, x-idjwi-user, x-idjwi-plan, x-cron-secret, Content-Type, Authorization, Accept, X-Requested-With",
+    "Access-Control-Allow-Headers": "x-api-key, x-idjwi-api-key, x-idjwi-role, x-idjwi-user, x-idjwi-plan, x-cron-secret, Content-Type, Authorization, Accept, X-Requested-With, X-Request-ID",
+    "Access-Control-Expose-Headers": "X-Request-ID",
     "Access-Control-Max-Age":       "86400",
 }
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Attach an audit-safe correlation id to every backend response."""
+    import uuid
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 @app.middleware("http")
@@ -922,6 +934,18 @@ def health():
 
     t_start = time.monotonic()
 
+    # Canonical operational data remains available even when the optional
+    # analytics PostgreSQL layer is not configured locally.
+    try:
+        from data_sources.supabase_source import health_probe
+        operational_data = health_probe()
+    except Exception as exc:
+        operational_data = {
+            "status": "error",
+            "configured": False,
+            "error": str(exc)[:160],
+        }
+
     # ── Database connectivity ─────────────────────────────────────────────────
     db_status        = "unavailable"
     db_latency_ms    = None
@@ -1001,14 +1025,18 @@ def health():
     # ── Response time ─────────────────────────────────────────────────────────
     health_latency_ms = round((time.monotonic() - t_start) * 1000, 1)
 
+    operational_ready = operational_data.get("status") == "connected"
+
     return {
-        "status":             "ok" if db_status == "connected" else "degraded",
+        "status":             "ok" if operational_ready else "degraded",
         "version":            "4.9.0",
         "api":                "ok",
         "health_latency_ms":  health_latency_ms,
+        "operational_data":   operational_data,
 
         # Layer 2 — database
         "database":           db_status,
+        "analytics_status":   "ready" if db_status == "connected" else "unavailable",
         "db_latency_ms":      db_latency_ms,
         "analytics_tables":   analytics_tables,
         "last_etl_at":        last_etl_at,

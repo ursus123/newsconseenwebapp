@@ -5,6 +5,23 @@ from sqlalchemy.engine import Engine
 from config import settings
 
 
+_DATABASE_PLACEHOLDERS = (
+    "your_railway_host",
+    "your_password",
+    "placeholder",
+    "example.com",
+)
+
+
+def database_url_configured() -> bool:
+    """Return True only for a non-placeholder analytics database URL."""
+    value = str(settings.database_url or "").strip()
+    if not value:
+        return False
+    lowered = value.lower()
+    return not any(marker in lowered for marker in _DATABASE_PLACEHOLDERS)
+
+
 def _clean_df(df):
     """
     Replace every NaN / NaT in a DataFrame or Series with Python None so that
@@ -42,10 +59,10 @@ def get_engine() -> Engine:
         pool_recycle=1800 — recycle connections every 30 min to avoid
                             Railway's idle connection drops
     """
-    if not settings.database_url:
+    if not database_url_configured():
         raise ValueError(
-            "DATABASE_URL is not set. "
-            "Add it to your .env file or Railway environment variables. "
+            "DATABASE_URL is missing or still contains placeholder values. "
+            "Add a real analytics PostgreSQL URL to your .env file or Railway environment variables. "
             "Format: postgresql://user:password@host:port/dbname"
         )
 
