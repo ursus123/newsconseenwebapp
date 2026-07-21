@@ -8,6 +8,11 @@
 >
 > When in doubt about any decision — return to this document.
 > If the document does not answer your question — ask before building.
+>
+> The required development process and page-level definition of done are in
+> [`../docs/strategy/DEVELOPMENT_STRATEGY.md`](../docs/strategy/DEVELOPMENT_STRATEGY.md).
+> Architecture and product changes must update all affected living documents in
+> the same workstream.
 
 ---
 
@@ -65,7 +70,8 @@ be tested against it.
 - If an app hardcodes its own type system instead of reading from the taxonomy — it violates the mantra.
 - If a dashboard reads directly from Supabase instead of the analytical layer — it violates the mantra.
 - If a new vertical requires rebuilding the data model — it violates the mantra.
-- If an agent acts without reading from the analytical layer — it violates the mantra.
+- If Idjwi or an agent bypasses governed tenant repositories, analytical evidence,
+  permissions, or approvals — it violates the mantra.
 - If the system surfaces an insight but leaves a human to manually close every loop — it violates the mantra.
 
 The mantra also sets the ambition ceiling. Newsconseen gives SMEs the same
@@ -155,9 +161,12 @@ This layer answers: *What has been happening over time, and how does it compare?
 ### Layer 3 — Autonomous Intelligence
 
 The intelligence surface. QueryBuilder, dashboards, Idjwi Core, optional advisors,
-and autonomous agents that act on behalf of the operator. This layer reads exclusively
-from the Datamart — never from Supabase directly. It speaks in ontology terms —
-person_type, enterprise_subtype, item_class — not in raw SQL columns.
+and autonomous agents that act on behalf of the operator. Idjwi may read bounded
+canonical operational context through tenant- and permission-enforcing repositories
+for immediate truth, and reads Layer 2 projections for historical, cross-object,
+governance, graph, and predictive intelligence. It never bypasses governed access
+or treats derived intelligence as canonical fact. It speaks in ontology terms —
+person_type, enterprise_subtype, item_class — not in ungoverned raw SQL columns.
 
 Idjwi allows an operator to ask questions in plain language, receive answers drawn
 directly from the ontology, preserve governed organizational memory, make decisions,

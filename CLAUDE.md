@@ -56,6 +56,13 @@ architecture, APIs, and code comments must use those terms consistently. Legacy
 `/copilot/*` routes and `copilot` module names are compatibility identifiers, not
 the product definition.
 
+The required page-by-page engineering method, cross-surface strategy, definition
+of done, backward-review loop, administrator page-explanation requirement, and
+living-documentation rules are in
+[`docs/strategy/DEVELOPMENT_STRATEGY.md`](docs/strategy/DEVELOPMENT_STRATEGY.md).
+Material changes must keep that strategy and all affected Markdown contracts
+current in the same workstream.
+
 ---
 
 ## Three-layer architecture
@@ -78,11 +85,12 @@ the product definition.
 │  Rule: ALL stat card values come from here.             │
 │        Never query Layer 1 directly for analytics.      │
 └──────────────────────┬──────────────────────────────────┘
-                       │ reads Layer 2 only
+                       │ governed canonical context + derived intelligence
 ┌──────────────────────▼──────────────────────────────────┐
 │  LAYER 3 — FOUNDRY INTELLIGENCE                         │
 │  Idjwi Core, Advisors, Agents, Alerts, Network Intel.    │
-│  Rule: reads from Layer 2 only. Never touches Layer 1.  │
+│  Canonical reads use tenant repositories; deeper        │
+│  reasoning uses Layer 2 intelligence.                   │
 └─────────────────────────────────────────────────────────┘
 ```
 

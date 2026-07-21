@@ -3,6 +3,9 @@
 > **RULE FOR DEVELOPERS**: Whenever this file is updated, Idjwi's product knowledge is automatically
 > refreshed on the next request (the file is loaded at request time, not startup). There is no
 > redeploy or cache flush required. Keep this file in sync with CLAUDE.md and ARCHITECTURE.md.
+> The development method, page definition of done, role-aware surface strategy,
+> administrator page explanations, backward review, and living-documentation rule
+> are defined in `docs/strategy/DEVELOPMENT_STRATEGY.md`.
 
 ---
 
@@ -45,8 +48,8 @@ replicate this without the history.
 ## Three-Layer Architecture
 
 ```
-Layer 1 — Enterprise OS (Base44 frontend, React)
-  The system of record. All master data lives here. Forms create reality.
+Layer 1 — Canonical Operational System (Supabase public.* + Auth + RLS)
+  The governed system of record. Canonical master data and actions live here.
   Entities: Person, Enterprise, Product, Relationship, Task, Transaction, Address.
   Rule: every mutation in Layer 1 triggers an ETL to Layer 2.
 
@@ -56,8 +59,10 @@ Layer 2 — Deployable Datamart (python_layer on Railway, FastAPI + PostgreSQL)
   Rule: ALL stat card values and copilot tool queries come from here.
          Never query Base44 directly for analytics.
 
-Layer 3 — Foundry Intelligence (Idjwi Core, Advisors, Agents, Alerts, Network Intelligence)
-  Rule: reads from Layer 2 only. Never touches Layer 1 directly.
+Layer 3 — Idjwi Operational Mind (Idjwi Core, Advisors, Agents, Alerts, Network Intelligence)
+  Rule: immediate canonical context is read only through tenant- and permission-enforcing
+  repositories; historical, cross-object, graph, governance, and predictive reasoning uses
+  Layer 2 intelligence. Derived intelligence never silently replaces canonical facts.
   Components: Idjwi, optional tenant advisors, 8 Autonomous Agents, Alert Engine, Anomaly Detection,
               KPI Goal Tracking, ML Models, Network Intelligence.
 ```
