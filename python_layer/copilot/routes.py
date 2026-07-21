@@ -1087,6 +1087,8 @@ def get_context(
     frontend_project_ref: str = Query(""),
     operational_unit_id: str = Query(""),
     operational_unit_name: str = Query(""),
+    context_layer: str = Query("core", pattern="^(core|all|domain)$"),
+    context_family: str = Query(""),
     authorization: Optional[str] = Header(None),
 ):
     """
@@ -1150,6 +1152,13 @@ def get_context(
     overview = engine.query_engine.query_network_overview()
     snapshot_result = repository.build_operational_snapshot(tenant_context)
     snapshot = snapshot_result.data
+    layered_snapshot = repository.build_layered_snapshot(
+        tenant_context,
+        layer=context_layer,
+        family=context_family or None,
+    )
+    from data_zones import build_intelligence_packet
+    intelligence_packet = build_intelligence_packet(tenant_context, layered_snapshot)
     enterprises = snapshot.get("enterprises", [])
     ent_list = [
         {"id": e.get("id"), "name": e.get("name") or e.get("enterprise_name"), "type": e.get("enterprise_type")}
@@ -1248,6 +1257,8 @@ def get_context(
             "snapshot_duration_ms": snapshot_result.duration_ms,
             "queried_entities": list(snapshot_result.entities),
         },
+        "operational_context": layered_snapshot,
+        "data_zones": intelligence_packet,
         "backend":             COPILOT_BACKEND,
         "context_state":       context_state,
         "data_available":      True,
@@ -1270,6 +1281,43 @@ def get_context(
             "Which tasks are overdue?",
             "Show me low stock alerts",
         ],
+    }
+
+
+@router.get("/analytics/layers")
+def analytics_layers(company_id: str = Query(...), authorization: Optional[str] = Header(None)):
+    """Return the five governed analytics-layer contracts and current store readiness."""
+    verify_tenant_access(authorization, company_id)
+    from data_zones.analytics_products import ANALYTICS_PRODUCT_CONTRACTS
+    from database import get_engine_safe
+    layers = {}
+    for contract in ANALYTICS_PRODUCT_CONTRACTS.values():
+        layers.setdefault(contract.layer.value, []).append({
+            "product": contract.name, "grain": contract.grain,
+            "derived_from": list(contract.derived_from), "methodology": contract.methodology,
+            "version": contract.version, "confidence_kind": contract.confidence_kind,
+            "maximum_age_seconds": contract.maximum_age_seconds,
+        })
+    return {"company_id": company_id, "analytics_store": "available" if get_engine_safe() else "unavailable", "layers": layers}
+
+
+@router.post("/analytics/refresh")
+def refresh_analytics_layers(
+    company_id: str = Query(...),
+    authorization: Optional[str] = Header(None),
+):
+    """Compute all five layers from verified canonical records and persist when available."""
+    from tenant_context import SupabaseTenantContextRepository
+    from data_zones.analytics_products import refresh_tenant_analytics
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context = repository.resolve_context(authorization, company_id, request_id="analytics-refresh")
+    _require_advisor_admin({"role": context.role})
+    result = refresh_tenant_analytics(context, repository)
+    return {
+        "status": result["status"], "company_id": company_id,
+        "row_counts": result["row_counts"], "persisted": result["persisted"],
+        "persistence_status": result["persistence_status"],
+        "unavailable_objects": result["unavailable_objects"],
     }
 
 

@@ -16,7 +16,7 @@
 import { ncClient } from "@/api/ncClient";
 import { supabaseEntities } from "@/api/supabaseEntityClient";
 import { createWithScope } from "@/components/shared/useDataQuery";
-import { RAILWAY_API_KEY, RAILWAY_URL } from "@/config/api";
+import { RAILWAY_API_KEY, RAILWAY_URL, authHeaders } from "@/config/api";
 
 /**
  * DATA_LAYER controls which Layer 1 backend is used.
@@ -413,12 +413,45 @@ export async function createRecord(entityName, data, currentUser, options = {}) 
   const { queryClient, notifyTaxonomyChange } = options;
   const reg = _reg(entityName);
 
-  const created = await createWithScope(reg.entity(), data, currentUser);
+  let created;
+  let governedVisibility = null;
+  if (!currentUser?.company_id && entityName !== "enterprise") {
+    const error = new Error("A verified tenant must be assigned before creating ontology records.");
+    error.code = "TENANT_NOT_ASSIGNED";
+    throw error;
+  }
+  if (currentUser?.company_id && ENTITY_REGISTRY[entityName]) {
+    const response = await fetch(`${RAILWAY_URL}/tenant-context/entities/${encodeURIComponent(entityName)}`, {
+      method: "POST",
+      headers: await authHeaders(),
+      body: JSON.stringify({ ...data, company_id: currentUser.company_id }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = body?.detail || body || {};
+      const error = new Error(detail.message || `${entityName} could not be created in canonical context.`);
+      error.code = detail.code || "CANONICAL_WRITE_FAILED";
+      error.detail = detail;
+      throw error;
+    }
+    created = body.record;
+    governedVisibility = body.visibility;
+  } else {
+    created = await createWithScope(reg.entity(), data, currentUser);
+  }
   const companyId = created?.company_id || currentUser?.company_id;
 
   syncQueryCache(queryClient, entityName, created, "created");
-  triggerEntityETL(entityName, companyId);
-  _logAudit(reg, companyId, "created", created, currentUser?.email);
+  queryClient?.invalidateQueries({ queryKey: ["idjwiScopes", companyId] });
+  queryClient?.refetchQueries({ queryKey: ["idjwiScopes", companyId] });
+  queryClient?.invalidateQueries({ queryKey: ["idjwi-context", companyId] });
+  globalThis.dispatchEvent?.(new CustomEvent("newsconseen:idjwi-context-invalidated", {
+    detail: { companyId, entityType: entityName, entityId: created?.id, visibility: governedVisibility },
+  }));
+  if (!governedVisibility) {
+    triggerEntityETL(entityName, companyId);
+    _logAudit(reg, companyId, "created", created, currentUser?.email);
+  }
   _triggerWorkflows(reg, companyId, "entity_created", created);
   _fireEvent(`${entityName}.created`, entityName, created?.id, reg.displayName(created || {}), currentUser);
   _triggerMarketEnrichment(entityName, companyId, created, "entity_created");
@@ -426,7 +459,7 @@ export async function createRecord(entityName, data, currentUser, options = {}) 
     notifyTaxonomyChange(reg.taxonomyType, companyId);
   }
 
-  return created;
+  return governedVisibility ? { ...created, _idjwi_visibility: governedVisibility } : created;
 }
 
 // ── Update ─────────────────────────────────────────────────────────

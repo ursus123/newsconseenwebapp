@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ENTERPRISE_TYPE_GROUPS, OBJECTIVE_OPTIONS } from "./typeConfig";
+import { OBJECTIVE_OPTIONS } from "./typeConfig";
 
 const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
@@ -261,7 +261,8 @@ export default function EnterpriseForm({ open, onClose, onSubmit, onArchive, ini
 
     // Save the enterprise
     await onSubmit(submitData);
-    triggerETL("enterprise");
+    // Canonical Enterprise creation now verifies Idjwi visibility and queues
+    // analytics refresh server-side. It must not wait for a client ETL call.
 
     // Create Address record if address data was entered
     if (form.primary_address || form.city || form.country) {

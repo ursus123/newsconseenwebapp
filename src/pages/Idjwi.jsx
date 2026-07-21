@@ -142,6 +142,14 @@ export default function Idjwi() {
   useEffect(() => { loadSnapshot(); }, [companyId, activeScope?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    const refresh = event => {
+      if (!event.detail?.companyId || event.detail.companyId === companyId) loadSnapshot();
+    };
+    globalThis.addEventListener?.("newsconseen:idjwi-context-invalidated", refresh);
+    return () => globalThis.removeEventListener?.("newsconseen:idjwi-context-invalidated", refresh);
+  }, [companyId, activeScope?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     if (!companyId || !["audit", "memory", "decisions", "work"].includes(tab)) return;
     if (tab === "audit") {
       idjwiFetch(`/copilot/events?company_id=${encodeURIComponent(companyId)}&limit=100`)
@@ -352,6 +360,9 @@ export default function Idjwi() {
                   ["Optional advisors", advisorCount > 0 ? `${advisorCount} connected` : "Not configured", advisorCount > 0],
                   ].map(([label, detail, ready]) => <div key={label} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2"><span className="text-slate-600">{label}</span><span className="flex items-center gap-2 text-right text-[10px] font-medium text-slate-500">{detail}{ready ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" /> : <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />}</span></div>)}
                 </div>
+                <div className="mt-3 space-y-1 rounded-lg border border-slate-100 p-2 text-[10px] text-slate-500">
+                  {Object.entries(snapshot.context?.data_zones?.analytics_layers || {}).map(([layer, products]) => <div key={layer} className="flex items-center justify-between gap-2"><span className="capitalize">{layer.replaceAll("_", " ")}</span><span>{products.length} products</span></div>)}
+                </div>
               </Panel>
               <Panel title="Tenant identity chain" icon={Users}>
                 <div className="space-y-2 text-xs">
@@ -374,6 +385,44 @@ export default function Idjwi() {
                     <p>Scope: {snapshot.context?.tenant_context?.scope_type || "not verified"}</p>
                     <p>Tenant filter: {snapshot.context?.context_repository?.tenant_filter_enforced ? "server enforced" : "not verified"}</p>
                     <p>RLS check: authenticated black-box isolation probe</p>
+                  </div>
+                </details>
+              </Panel>
+              <Panel title="Canonical operational context" icon={Database}>
+                <div className="space-y-2 text-xs">
+                  {Object.entries(snapshot.context?.operational_context?.sections || {}).map(([objectName, section]) => {
+                    const ready = section.status === "available" || section.status === "empty";
+                    const detail = section.status === "available" ? `${section.record_count} records` : section.status || "not checked";
+                    return <div key={objectName} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2"><span className="capitalize text-slate-600">{objectName}</span><span className="flex items-center gap-2 text-right text-[10px] font-medium text-slate-500">{detail}{ready ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" /> : <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />}</span></div>;
+                  })}
+                  {!Object.keys(snapshot.context?.operational_context?.sections || {}).length && <p className="rounded-lg bg-slate-50 p-3 text-slate-500">Canonical objects have not been checked.</p>}
+                </div>
+                <details className="mt-3 text-[10px] text-slate-500">
+                  <summary className="cursor-pointer font-semibold">Context source details</summary>
+                  <div className="mt-2 space-y-1 rounded-lg bg-slate-50 p-2">
+                    <p>State: {snapshot.context?.operational_context?.status || "not checked"}</p>
+                    <p>Layer: {snapshot.context?.operational_context?.layer || "core"}</p>
+                    <p>Cache: {snapshot.context?.operational_context?.cache || "not checked"}</p>
+                    <p>Source contract: canonical public schema</p>
+                  </div>
+                </details>
+              </Panel>
+              <Panel title="Data zones and lineage" icon={Activity}>
+                <div className="space-y-2 text-xs">
+                  {[
+                    ["Canonical truth", snapshot.context?.data_zones?.canonical_context?.status || "not checked", snapshot.context?.data_zones?.canonical_context?.authoritative],
+                    ["Derived intelligence", snapshot.context?.data_zones?.status === "ready" ? "Available" : "Canonical only", snapshot.context?.data_zones?.status === "ready"],
+                    ["Canonical wins conflicts", snapshot.context?.data_zones?.authority?.canonical_wins_conflicts ? "Enforced" : "Not checked", !!snapshot.context?.data_zones?.authority?.canonical_wins_conflicts],
+                    ["Raw payload exposure", "Blocked", true],
+                  ].map(([label, detail, ready]) => <div key={label} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2"><span className="text-slate-600">{label}</span><span className="flex items-center gap-2 text-right text-[10px] font-medium text-slate-500">{detail}{ready ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" /> : <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />}</span></div>)}
+                </div>
+                <details className="mt-3 text-[10px] text-slate-500">
+                  <summary className="cursor-pointer font-semibold">Zone contract</summary>
+                  <div className="mt-2 space-y-1 rounded-lg bg-slate-50 p-2">
+                    <p>Operational facts/actions: public.*</p>
+                    <p>Derived metrics/forecasts: analytics.*</p>
+                    <p>Import evidence/reconciliation: raw.*</p>
+                    {(snapshot.context?.data_zones?.limitations || []).map(item => <p key={item} className="text-amber-700">{item}</p>)}
                   </div>
                 </details>
               </Panel>

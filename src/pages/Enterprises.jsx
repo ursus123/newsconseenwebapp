@@ -188,7 +188,17 @@ export default function Enterprises() {
       }
       return { ...created, company_id: workspaceId };
     },
-    onSuccess: () => { setFormOpen(false); setEditing(null); },
+    onSuccess: (created) => {
+      setFormOpen(false); setEditing(null);
+      const visibility = created?._idjwi_visibility;
+      toast({
+        title: "Enterprise created",
+        description: visibility?.read_after_write_verified
+          ? "Canonical commit, tenant ownership, and immediate Idjwi visibility were verified. Analytics refresh is pending."
+          : "Enterprise created successfully.",
+      });
+    },
+    onError: (error) => toast({ title: "Enterprise creation failed", description: error?.message || "The canonical write was not completed.", variant: "destructive" }),
   });
 
   const updateMut = useMutation({

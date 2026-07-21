@@ -352,6 +352,7 @@ def list_records(
     company_id: Optional[str] = None,
     created_by: Optional[str] = None,
     limit: int = 5000,
+    fields: Optional[tuple[str, ...] | list[str]] = None,
 ) -> list[dict]:
     table = table_for(entity)
     rows = []
@@ -359,7 +360,7 @@ def list_records(
     while offset < limit:
         page_size = min(PAGE_SIZE, limit - offset)
         params = {
-            "select": "*",
+            "select": ",".join(fields) if fields else "*",
             "limit": page_size,
             "offset": offset,
         }
@@ -400,6 +401,22 @@ def create_record(entity: str, payload: dict, company_id: Optional[str] = None) 
     result = resp.json()
     row = result[0] if isinstance(result, list) and result else {}
     return _normalise_row(table, row)
+
+
+def get_record(entity: str, record_id: str, company_id: str, fields=None) -> dict | None:
+    """Read one canonical record with both record and tenant filters enforced."""
+    table = table_for(entity)
+    resp = _request(
+        "GET", table, headers=_headers(),
+        params={
+            "select": ",".join(fields) if fields else "*",
+            "id": f"eq.{record_id}", "company_id": f"eq.{company_id}", "limit": 1,
+        },
+    )
+    rows = resp.json()
+    if not isinstance(rows, list) or not rows:
+        return None
+    return _normalise_row(table, rows[0])
 
 
 def update_record(entity: str, record_id: str, payload: dict) -> dict:

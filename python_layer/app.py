@@ -449,6 +449,8 @@ app.include_router(connectors_router)
 # Phase 3A — Operational Copilot
 app.include_router(copilot_router)
 app.include_router(idjwi_router)
+from tenant_context.routes import router as tenant_context_router
+app.include_router(tenant_context_router)
 
 # Phase 3B — Proactive Alerts
 app.include_router(alerts_router)

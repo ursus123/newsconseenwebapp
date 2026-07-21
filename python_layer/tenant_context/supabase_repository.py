@@ -66,7 +66,9 @@ class SupabaseTenantContextRepository(TenantContextRepository):
         canonical, definition = definition_for(entity)
         self._require_permission(context, definition.read_permission)
         started = time.monotonic()
-        rows = supabase_source.list_records(definition.table, company_id=context.tenant_id, limit=limit)
+        rows = supabase_source.list_records(
+            definition.table, company_id=context.tenant_id, limit=limit, fields=definition.fields,
+        )
         return TenantRepositoryResult(
             rows, context, entities=(canonical,),
             duration_ms=round((time.monotonic() - started) * 1000, 1),
@@ -76,6 +78,18 @@ class SupabaseTenantContextRepository(TenantContextRepository):
         _, definition = definition_for(entity)
         self._require_permission(context, definition.read_permission)
         return supabase_source.count_records(definition.table, context.tenant_id)
+
+    def get_entity(self, context: TenantContext, entity: str, record_id: str) -> TenantRepositoryResult:
+        canonical, definition = definition_for(entity)
+        self._require_permission(context, definition.read_permission)
+        started = time.monotonic()
+        row = supabase_source.get_record(
+            definition.table, record_id, context.tenant_id, fields=definition.fields,
+        )
+        return TenantRepositoryResult(
+            row, context, code="CONTEXT_READY" if row else "EMPTY_DATA",
+            entities=(canonical,), duration_ms=round((time.monotonic() - started) * 1000, 1),
+        )
 
     def create_entity(self, context: TenantContext, entity: str, payload: dict) -> TenantRepositoryResult:
         canonical, definition = definition_for(entity)
@@ -93,6 +107,13 @@ class SupabaseTenantContextRepository(TenantContextRepository):
         governed_payload[definition.tenant_column] = context.tenant_id
         started = time.monotonic()
         row = supabase_source.create_record(definition.table, governed_payload, company_id=context.tenant_id)
+        if not row or row.get("error") or not row.get("id"):
+            raise HTTPException(status_code=502, detail={
+                "code": "CANONICAL_WRITE_FAILED", "category": "data_source",
+                "message": "The canonical record was not committed.", "action": "retry", "retryable": True,
+            })
+        from .snapshot_cache import invalidate_tenant
+        invalidate_tenant(context.tenant_id)
         return TenantRepositoryResult(
             row, context, entities=(canonical,),
             duration_ms=round((time.monotonic() - started) * 1000, 1),
@@ -120,3 +141,7 @@ class SupabaseTenantContextRepository(TenantContextRepository):
             data, context, entities=entities,
             duration_ms=round((time.monotonic() - started) * 1000, 1),
         )
+
+    def build_layered_snapshot(self, context: TenantContext, *, layer: str = "core", family: str | None = None) -> dict:
+        from .operational_snapshot import build_snapshot
+        return build_snapshot(self, context, layer=layer, family=family)

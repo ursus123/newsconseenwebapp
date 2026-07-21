@@ -18,9 +18,16 @@ class TenantContextRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def get_entity(self, context: TenantContext, entity: str, record_id: str) -> TenantRepositoryResult:
+        raise NotImplementedError
+
+    @abstractmethod
     def create_entity(self, context: TenantContext, entity: str, payload: dict) -> TenantRepositoryResult:
         raise NotImplementedError
 
     @abstractmethod
     def build_operational_snapshot(self, context: TenantContext) -> TenantRepositoryResult:
+        raise NotImplementedError
+
+    def build_layered_snapshot(self, context: TenantContext, *, layer: str = "core", family: str | None = None) -> dict:
         raise NotImplementedError

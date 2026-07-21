@@ -41,7 +41,7 @@ def configure_context(monkeypatch, counts, enterprises=None, failed=None):
     monkeypatch.setattr(
         supabase_source,
         "list_records",
-        lambda entity, company_id=None, limit=5000: (enterprises or []) if entity == "enterprises" else [],
+        lambda entity, company_id=None, limit=5000, fields=None: (enterprises or []) if entity == "enterprises" else [],
     )
     monkeypatch.setattr(supabase_source, "audit_company_id_assignments", lambda *_: {
         "tables": {}, "tenant_ids_normalized": True,

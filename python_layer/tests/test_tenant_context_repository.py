@@ -39,7 +39,7 @@ def test_resolve_context_uses_verified_identity_not_browser_identity():
 def test_list_always_passes_verified_tenant_filter(monkeypatch):
     called = {}
 
-    def fake_list(entity, company_id=None, limit=5000):
+    def fake_list(entity, company_id=None, limit=5000, fields=None):
         called.update(entity=entity, company_id=company_id, limit=limit)
         return [{"id": "e1", "company_id": company_id}]
 
@@ -70,6 +70,38 @@ def test_write_injects_verified_tenant(monkeypatch):
     payload = create.call_args.args[1]
     assert payload["company_id"] == "tenant-a"
     assert create.call_args.kwargs["company_id"] == "tenant-a"
+
+
+def test_cache_invalidates_only_after_successful_commit(monkeypatch):
+    invalidated = []
+    monkeypatch.setattr("tenant_context.snapshot_cache.invalidate_tenant", lambda tenant: invalidated.append(tenant))
+    monkeypatch.setattr(
+        "tenant_context.supabase_repository.supabase_source.create_record",
+        Mock(return_value={"id": "e1", "company_id": "tenant-a"}),
+    )
+    SupabaseTenantContextRepository().create_entity(_context(), "enterprise", {"enterprise_name": "Branch"})
+    assert invalidated == ["tenant-a"]
+
+
+def test_failed_commit_does_not_invalidate_cache(monkeypatch):
+    invalidated = []
+    monkeypatch.setattr("tenant_context.snapshot_cache.invalidate_tenant", lambda tenant: invalidated.append(tenant))
+    monkeypatch.setattr(
+        "tenant_context.supabase_repository.supabase_source.create_record",
+        Mock(return_value={}),
+    )
+    with pytest.raises(HTTPException) as exc:
+        SupabaseTenantContextRepository().create_entity(_context(), "enterprise", {"enterprise_name": "Branch"})
+    assert exc.value.detail["code"] == "CANONICAL_WRITE_FAILED"
+    assert invalidated == []
+
+
+def test_get_entity_enforces_record_and_tenant_scope(monkeypatch):
+    read = Mock(return_value={"id": "e1", "company_id": "tenant-a"})
+    monkeypatch.setattr("tenant_context.supabase_repository.supabase_source.get_record", read)
+    result = SupabaseTenantContextRepository().get_entity(_context(), "enterprise", "e1")
+    assert result.data["id"] == "e1"
+    assert read.call_args.args[:3] == ("enterprises", "e1", "tenant-a")
 
 
 def test_read_only_role_cannot_write():
