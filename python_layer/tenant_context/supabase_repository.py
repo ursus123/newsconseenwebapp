@@ -114,6 +114,11 @@ class SupabaseTenantContextRepository(TenantContextRepository):
             })
         from .snapshot_cache import invalidate_tenant
         invalidate_tenant(context.tenant_id)
+        try:
+            from company_graph.cache import invalidate as invalidate_graph
+            invalidate_graph(context.tenant_id)
+        except ImportError:
+            pass
         return TenantRepositoryResult(
             row, context, entities=(canonical,),
             duration_ms=round((time.monotonic() - started) * 1000, 1),

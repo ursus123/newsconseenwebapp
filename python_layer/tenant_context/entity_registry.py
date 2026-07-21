@@ -33,13 +33,13 @@ def _object(table, family, fields, *, classification="canonical_business", sensi
 # overview never uses select=* and sensitive detail is retrieved only on demand.
 ENTITY_REGISTRY = {
     "enterprise": _object("enterprises", "organization", ("enterprise_name", "enterprise_type", "enterprise_tier", "parent_enterprise_id", "status", "operating_status", "city", "region", "country"), tier="core"),
-    "person": _object("persons", "people", ("person_type", "person_subtype", "primary_role", "status", "availability_status", "start_date", "end_date"), sensitivity="personal", tier="core"),
-    "product": _object("products", "offerings", ("product_name", "item_type", "item_class", "stock_quantity", "reorder_level", "expiry_date", "price", "cost", "enterprise_id")),
+    "person": _object("persons", "people", ("first_name", "last_name", "preferred_name", "person_type", "person_subtype", "primary_role", "status", "availability_status", "start_date", "end_date"), sensitivity="personal", tier="core"),
+    "product": _object("products", "offerings", ("product_name", "item_name", "name", "item_type", "item_class", "stock_quantity", "reorder_level", "expiry_date", "price", "cost", "enterprise_id")),
     "service": _object("services", "offerings", ("name", "service_name", "service_type", "price", "is_active", "enterprise_id")),
-    "task": _object("tasks", "work", ("title", "task_type", "status", "priority", "due_date", "completed_at", "assigned_to_name", "enterprise_id"), tier="core"),
-    "transaction": _object("transactions", "finance", ("reference_number", "transaction_type", "status", "payment_status", "amount", "amount_paid", "net_amount", "currency", "date", "due_date", "enterprise_id"), sensitivity="financial", tier="core"),
+    "task": _object("tasks", "work", ("title", "task_type", "status", "priority", "due_date", "completed_at", "assigned_to_name", "related_person_id", "enterprise_id"), tier="core"),
+    "transaction": _object("transactions", "finance", ("reference_number", "description", "transaction_type", "status", "payment_status", "amount", "amount_paid", "net_amount", "currency", "date", "due_date", "enterprise_id", "person_id", "product_id"), sensitivity="financial", tier="core"),
     "relationship": _object("relationships", "knowledge", ("relationship_type", "person_id", "secondary_person_id", "enterprise_id", "secondary_enterprise_id", "item_id", "service_id", "role", "status", "start_date", "end_date")),
-    "address": _object("addresses", "spatial", ("city", "region", "country", "postal_code", "latitude", "longitude", "address_type", "entity_ref_type", "entity_ref_id", "is_primary")),
+    "address": _object("addresses", "spatial", ("address_line1", "city", "region", "country", "postal_code", "latitude", "longitude", "address_type", "entity_ref_type", "entity_ref_id", "is_primary")),
     "document": _object("documents", "knowledge", ("title", "document_type", "entity_ref_type", "entity_ref_id", "issue_date", "expiry_date", "status"), sensitivity="confidential"),
     "schedule": _object("schedules", "work", ("name", "title", "schedule_type", "frequency", "start_date", "end_date", "is_active", "entity_ref_type", "entity_ref_id")),
     "signal": _object("signals", "intelligence", ("name", "signal_type", "numeric_value", "unit", "source", "entity_ref_type", "entity_ref_id", "is_anomaly", "recorded_at"), classification="derived_intelligence"),

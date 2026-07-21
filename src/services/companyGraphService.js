@@ -29,6 +29,7 @@ export const NODE_COLORS = {
 };
 
 export const GRAPH_MODES = {
+  operational_focus: { label: "Operational Focus", types: ["enterprise","person","task","transaction","risk","recommendation","opportunity"] },
   full_graph:        { label: "Full Graph",        types: null },                                         // all
   company_structure: { label: "Company Structure", types: ["enterprise","person","address"] },
   operations_flow:   { label: "Operations Flow",   types: ["enterprise","task","transaction","product","service"] },
@@ -182,7 +183,7 @@ function buildEdges(entities, nodeMap) {
   const edges = [];
   const seen  = new Set();
 
-  const addEdge = (sourceId, targetId, relType, strength = 0.5, label = "") => {
+  const addEdge = (sourceId, targetId, relType, strength = 0.5, label = "", evidence = {}) => {
     if (!nodeMap[sourceId] || !nodeMap[targetId]) return;
     if (sourceId === targetId) return;
     const key = [sourceId, targetId, relType].sort().join("|");
@@ -193,8 +194,21 @@ function buildEdges(entities, nodeMap) {
       source:            sourceId,
       target:            targetId,
       relationship_type: relType,
+      predicate:         relType,
       strength,
-      label,
+      label:             label || relType.replaceAll("_", " "),
+      status:            evidence.status || "active",
+      valid_from:        evidence.valid_from || null,
+      valid_to:          evidence.valid_to || null,
+      evidence: {
+        source_zone:      evidence.source_zone || "analytics",
+        source_table:     evidence.source_table || "frontend projection",
+        source_record_id: String(evidence.source_record_id || ""),
+        assertion_type:   evidence.assertion_type || "derived",
+        confidence:       evidence.confidence ?? 0.95,
+        explanation:      evidence.explanation || `Newsconseen derived this ${relType.replaceAll("_", " ")} connection from canonical record references.`,
+        derivation_rule:  evidence.derivation_rule || null,
+      },
     });
   };
 
@@ -205,11 +219,19 @@ function buildEdges(entities, nodeMap) {
     const srcId = rel.enterprise_id ? nodeId("enterprise", rel.enterprise_id) : null;
     const tgtId = rel.person_id     ? nodeId("person",     rel.person_id)     : null;
     if (srcId && tgtId) {
-      addEdge(srcId, tgtId, rel.relationship_type || "relates_to", 0.7, rel.relationship_type || "");
+      addEdge(srcId, tgtId, rel.relationship_type || "relates_to", 0.7, rel.relationship_type || "", {
+        source_zone: "canonical", source_table: "public.relationships",
+        source_record_id: rel.id, assertion_type: "fact", confidence: 1,
+        status: rel.status, valid_from: rel.start_date, valid_to: rel.end_date,
+        explanation: `A tenant-governed relationship record states this ${String(rel.relationship_type || "relationship").replaceAll("_", " ")} connection.`,
+      });
     }
     // Item relationships
     if (rel.enterprise_id && rel.item_id) {
-      addEdge(nodeId("enterprise", rel.enterprise_id), nodeId("product", rel.item_id), rel.relationship_type || "uses", 0.5);
+      addEdge(nodeId("enterprise", rel.enterprise_id), nodeId("product", rel.item_id), rel.relationship_type || "uses", 0.5, "", {
+        source_zone: "canonical", source_table: "public.relationships", source_record_id: rel.id,
+        assertion_type: "fact", confidence: 1, status: rel.status,
+      });
     }
   });
 
@@ -332,7 +354,14 @@ export function toCytoscapeElements(nodes, edges) {
       label:  e.label,
       strength: e.strength,
       width:  Math.max(1, Math.round(e.strength * 3)),
+      predicate: e.predicate || e.relationship_type,
+      relationship_type: e.relationship_type,
+      status: e.status,
+      valid_from: e.valid_from,
+      valid_to: e.valid_to,
+      evidence: e.evidence,
     },
+    classes: e.evidence?.assertion_type === "fact" ? "edge-fact" : "edge-derived",
   }));
 
   return [...cyNodes, ...cyEdges];

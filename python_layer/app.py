@@ -451,6 +451,8 @@ app.include_router(copilot_router)
 app.include_router(idjwi_router)
 from tenant_context.routes import router as tenant_context_router
 app.include_router(tenant_context_router)
+from company_graph.routes import router as company_graph_router
+app.include_router(company_graph_router)
 
 # Phase 3B — Proactive Alerts
 app.include_router(alerts_router)
