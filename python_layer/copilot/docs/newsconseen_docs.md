@@ -55,6 +55,18 @@ The advisor request control is not proof of participation; successful
 identified contribution is required. Response metadata and the audit record
 must agree. `/copilot/*` is a legacy-compatible API path, not product identity.
 
+Important graph answers include `company-graph-citation.v1` citations. Each
+citation identifies authorized nodes, an edge and its evidence records so the
+operator can center, highlight and inspect the exact claim. Confidence exposes
+evidence strength, source completeness, freshness, intent completion and
+contradiction status.
+
+Graph correction learning accepts only governed assertion decisions and later
+observed outcomes. Proposals are persisted before review; confirmations create
+canonical relationships; rejections remain suppressed; caches refresh; audit
+events and correction memory retain provenance. Arbitrary chat text is not
+accepted as graph truth.
+
 Idjwi receives assertion state, validity, observation, confirmation/rejection,
 supersession, evidence version and sanitized transition history. It must explain
 why a relationship changed and must not re-propose a durably rejected key.

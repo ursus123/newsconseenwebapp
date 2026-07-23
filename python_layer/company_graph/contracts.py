@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 GRAPH_CONTRACT_VERSION = "company-graph.v1"
+GRAPH_CITATION_VERSION = "company-graph-citation.v1"
 
 AssertionClass = Literal[
     "canonical_relationship",
@@ -87,6 +88,24 @@ class GraphEvidence(BaseModel):
     retrieved_at: str | None = None
     freshness_at: str | None = None
     requirement: str = "canonical_record_id"
+
+
+class GraphCitation(BaseModel):
+    contract_version: str = GRAPH_CITATION_VERSION
+    citation_id: str
+    kind: Literal["graph_node", "graph_edge"]
+    title: str
+    claim: str
+    node_ids: list[str] = Field(default_factory=list, max_length=2)
+    edge_id: str | None = None
+    source: dict[str, Any]
+    target: dict[str, Any] | None = None
+    predicate: str | None = None
+    assertion_state: str | None = None
+    verification_state: str | None = None
+    evidence_ids: list[str] = Field(default_factory=list)
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    last_confirmed: str | None = None
 
 
 class GraphEdge(BaseModel):

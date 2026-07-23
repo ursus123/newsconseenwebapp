@@ -9,7 +9,7 @@ import {
   MessageSquare, X, History, ChevronRight,
   Search, ArrowUpRight, Database, Pin, Code2, Paperclip,
   FileText, Upload, CheckCircle2, Layers,
-  Zap, ListTodo, Lightbulb, XCircle,
+  Zap, ListTodo, Lightbulb, XCircle, Link2,
 } from "lucide-react";
 import { ncClient } from "@/api/ncClient";
 import {
@@ -478,6 +478,51 @@ function CitationsPanel({ citations }) {
               )}
               <span className="text-[10px] text-blue-400 font-medium">{c.source}</span>
             </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GraphCitationsPanel({ citations }) {
+  const [open, setOpen] = useState(true);
+  if (!citations?.length) return null;
+
+  const selectCitation = citation => {
+    window.dispatchEvent(new CustomEvent("company-graph-citation-selected", {
+      detail: citation,
+    }));
+  };
+
+  return (
+    <div className="mt-2 border border-emerald-100 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(value => !value)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-emerald-50 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+      >
+        <span className="flex items-center gap-1.5">
+          <Link2 className="w-3.5 h-3.5" />
+          {citations.length} governed graph citation{citations.length === 1 ? "" : "s"}
+        </span>
+        {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+      </button>
+      {open && (
+        <div className="divide-y divide-emerald-50 bg-white">
+          {citations.map(citation => (
+            <button
+              key={citation.citation_id}
+              onClick={() => selectCitation(citation)}
+              className="w-full text-left px-3 py-2.5 hover:bg-emerald-50 transition-colors"
+            >
+              <p className="text-xs font-semibold text-slate-700">{citation.claim || citation.title}</p>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
+                {citation.evidence_ids?.length > 0 && <span>Evidence: {citation.evidence_ids.join(", ")}</span>}
+                {citation.last_confirmed && <span>Last confirmed: {new Date(citation.last_confirmed).toLocaleDateString()}</span>}
+                {citation.assertion_state && <span className="capitalize">State: {citation.assertion_state}</span>}
+              </div>
+              <p className="mt-1 text-[10px] font-semibold text-emerald-600">Select to center and inspect evidence</p>
+            </button>
           ))}
         </div>
       )}
@@ -1226,6 +1271,12 @@ function MessageBubble({ message, onFeedback, companyId, currentUser, onOpenQuer
           </div>
         )}
 
+        {!isUser && message.graph_citations?.length > 0 && (
+          <div className="w-full">
+            <GraphCitationsPanel citations={message.graph_citations} />
+          </div>
+        )}
+
         {/* Proposed actions + created insights */}
         {!isUser && (message.created_recommendations?.length > 0 || message.created_insights?.length > 0) && (
           <ProposedActionsPanel
@@ -1761,6 +1812,7 @@ export default function CopilotChat({
         company_context:         result.company_context         || null,
         charts:                  [],
         citations:               [],
+        graph_citations:         result.graph_citations         || [],
         created_recommendations: result.created_recommendations || [],
         created_insights:        result.created_insights        || [],
         mode:                    result.mode                    || "autonomous",
@@ -1894,6 +1946,7 @@ export default function CopilotChat({
         company_context:         result.company_context         || null,
         charts:                  result.charts                  || [],
         citations:               result.citations               || [],
+        graph_citations:         result.graph_citations         || [],
         tools_called:            result.tools_called            || [],
         tools_detail:            result.tools_detail            || [],
         data_freshness:          result.data_freshness          || null,

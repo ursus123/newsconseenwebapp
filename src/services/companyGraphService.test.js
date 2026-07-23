@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 import {
   buildIdjwiGraphAction,
   buildIdjwiGraphContext,
+  buildOperationalFocus,
   IDJWI_GRAPH_INTENTS,
+  semanticPositions,
   serializeGovernedGraphPacket,
 } from "./companyGraphService.js";
 
@@ -101,4 +103,38 @@ test("Idjwi receives the exact semantic packet displayed by Company Graph", () =
   assert.equal(context.role, "admin");
   assert.equal(context.page, "CompanyGraphHome");
   assert.equal(context.product_surface, "web");
+});
+
+test("Operational Focus is bounded, prioritizes governed work, and summarizes omitted records", () => {
+  const nodes = [
+    ...Array.from({ length: 40 }, (_, index) => ({
+      id: `person:p${index}`, entity_type: "person", entity_id: `p${index}`,
+      label: `Person ${index}`, status: "active", importance: 0.1, attributes: {},
+    })),
+    {
+      id: "risk:r1", entity_type: "risk", entity_id: "r1", label: "Critical supply risk",
+      status: "open", importance: 1, risk_level: "critical", attributes: { severity: "critical" },
+    },
+  ];
+  const result = buildOperationalFocus(nodes, [], {
+    truncation: { omitted_nodes: 12 },
+    quality: { unconnected_count: 41 },
+    completeness: { state: "partial" },
+  }, 36);
+  assert.equal(result.nodes.some(node => node.id === "risk:r1"), true);
+  assert.equal(result.nodes.length, 37);
+  assert.equal(result.nodes.at(-1).entity_type, "quality_cluster");
+  assert.equal(result.nodes.at(-1).presentation_only, true);
+});
+
+test("semantic positions remain stable when a neighborhood expands", () => {
+  const base = [
+    { id: "enterprise:e1", entity_type: "enterprise" },
+    { id: "task:t1", entity_type: "task" },
+  ];
+  const first = semanticPositions(base, "operational_flow");
+  const expanded = semanticPositions([...base, { id: "transaction:x1", entity_type: "transaction" }], "operational_flow");
+  assert.deepEqual(first["enterprise:e1"], expanded["enterprise:e1"]);
+  assert.deepEqual(first["task:t1"], expanded["task:t1"]);
+  assert.notDeepEqual(first["enterprise:e1"], first["task:t1"]);
 });

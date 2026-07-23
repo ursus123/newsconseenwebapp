@@ -30,6 +30,8 @@ export const NODE_COLORS = {
   action:         "#dc2626",
   operational_unit: "#4f46e5",
   observation:    "#7c3aed",
+  external_observation: "#7c3aed",
+  quality_cluster: "#475569",
 };
 
 export const GRAPH_CONTRACT_VERSION = "company-graph.v1";
@@ -83,14 +85,113 @@ function graphSafeAttributes(entity, type, includeRoleRestricted = false) {
 }
 
 export const GRAPH_MODES = {
-  operational_focus: { label: "Operational Focus", types: ["enterprise","person","task","transaction","risk","recommendation","opportunity"] },
-  full_graph:        { label: "Full Graph",        types: null },                                         // all
-  company_structure: { label: "Company Structure", types: ["enterprise","person","address"] },
-  operations_flow:   { label: "Operations Flow",   types: ["enterprise","task","transaction","product","service"] },
-  market_context:    { label: "Market Context",    types: ["enterprise","address","territory","opportunity","insight"] },
-  risk_action:       { label: "Risk & Action",     types: ["enterprise","person","risk","recommendation","task","insight"] },
-  data_quality:      { label: "Data Quality",      types: null },                                         // all but highlights unconnected
+  operational_focus:        { label: "Operational Focus",        types: ["operational_unit","enterprise","person","task","transaction","risk","recommendation","opportunity","decision","action","quality_cluster"] },
+  organizational_structure: { label: "Organizational Structure", types: ["operational_unit","enterprise","person","address"] },
+  operational_flow:         { label: "Operational Flow",         types: ["operational_unit","enterprise","task","transaction","product","service","action"] },
+  responsibilities_work:    { label: "Responsibilities & Work",  types: ["operational_unit","person","task","schedule","action"] },
+  customers_suppliers:      { label: "Customers & Suppliers",    types: ["enterprise","person","transaction","product","service"] },
+  products_services:        { label: "Products & Services",      types: ["enterprise","product","service","transaction","recommendation"] },
+  risks_opportunities:      { label: "Risks & Opportunities",    types: ["operational_unit","enterprise","person","risk","opportunity","recommendation"] },
+  decisions_actions:        { label: "Decisions & Actions",      types: ["decision","recommendation","action","task","person","operational_unit"] },
+  data_quality:             { label: "Data-quality Gaps",        types: null },
+  external_disruptions:     { label: "External Disruptions",     types: ["external_observation","observation","territory","address","enterprise","operational_unit","risk","recommendation","action"] },
+  full_graph:               { label: "Full Governed Graph",      types: null },
+  company_structure:        { label: "Company Structure (legacy)", types: ["operational_unit","enterprise","person","address"] },
+  operations_flow:          { label: "Operations Flow (legacy)",   types: ["enterprise","task","transaction","product","service"] },
+  market_context:           { label: "Market Context (legacy)",    types: ["enterprise","address","territory","opportunity","insight"] },
+  risk_action:              { label: "Risk & Action (legacy)",     types: ["enterprise","person","risk","recommendation","task","insight"] },
 };
+
+export const OPERATIONAL_FOCUS_NODE_BUDGET = 36;
+
+const TYPE_OPERATIONAL_WEIGHT = {
+  risk: 100, decision: 96, action: 94, recommendation: 92, task: 88,
+  opportunity: 82, operational_unit: 78, enterprise: 72, person: 66,
+  transaction: 60, product: 40, service: 40,
+};
+
+function isOpenOperationalNode(node) {
+  return !["closed", "completed", "done", "inactive", "resolved", "dismissed", "rejected"]
+    .includes(String(node.status || node.attributes?.status || "").toLowerCase());
+}
+
+export function buildOperationalFocus(nodes, edges, graphPacket, budget = OPERATIONAL_FOCUS_NODE_BUDGET) {
+  const degree = new Map();
+  edges.forEach(edge => {
+    degree.set(edge.source, (degree.get(edge.source) || 0) + 1);
+    degree.set(edge.target, (degree.get(edge.target) || 0) + 1);
+  });
+  const ranked = [...nodes].sort((a, b) => {
+    const score = node => (
+      (TYPE_OPERATIONAL_WEIGHT[node.entity_type] || 20)
+      + (isOpenOperationalNode(node) ? 10 : 0)
+      + (["critical", "high"].includes(String(node.risk_level || node.attributes?.severity || "").toLowerCase()) ? 40 : 0)
+      + Math.min(20, (degree.get(node.id) || 0) * 2)
+      + Math.round((node.importance || 0) * 10)
+    );
+    return score(b) - score(a) || a.id.localeCompare(b.id);
+  });
+  const visible = ranked.slice(0, Math.max(1, budget));
+  const visibleIds = new Set(visible.map(node => node.id));
+  const visibleEdges = edges.filter(edge => visibleIds.has(edge.source) && visibleIds.has(edge.target));
+  const omitted = Math.max(0, Number(graphPacket?.truncation?.omitted_nodes || 0) + Math.max(0, nodes.length - visible.length));
+  const disconnected = Number(graphPacket?.quality?.unconnected_count || 0);
+  if (omitted > 0 || disconnected > 4) {
+    visible.push({
+      id: "quality_cluster:bounded-overview", entity_type: "quality_cluster", entity_id: "bounded-overview",
+      label: `${Math.max(omitted, disconnected)} records summarized`,
+      sublabel: "Data-quality and lower-priority records",
+      status: graphPacket?.completeness?.state || "partial", importance: 0.35,
+      risk_level: graphPacket?.completeness?.state === "complete" ? null : "medium",
+      is_unconnected: true, presentation_only: true,
+      attributes: {
+        omitted_records: omitted, disconnected_records: disconnected,
+        explanation: "This presentation cluster summarizes governed records omitted from the bounded operational overview.",
+      },
+      permitted_actions: [],
+    });
+  }
+  return { nodes: visible, edges: visibleEdges };
+}
+
+function stableHash(value) {
+  let hash = 2166136261;
+  for (const char of String(value)) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+const MODE_LANES = {
+  organizational_structure: [["operational_unit"], ["enterprise"], ["person"], ["address"]],
+  company_structure: [["operational_unit"], ["enterprise"], ["person"], ["address"]],
+  operational_flow: [["operational_unit","enterprise"], ["product","service"], ["task","action"], ["transaction"]],
+  operations_flow: [["enterprise"], ["product","service"], ["task"], ["transaction"]],
+  responsibilities_work: [["operational_unit"], ["person"], ["task","schedule"], ["action"]],
+  customers_suppliers: [["enterprise"], ["person"], ["product","service"], ["transaction"]],
+  products_services: [["enterprise"], ["product","service"], ["transaction"], ["recommendation"]],
+  risks_opportunities: [["operational_unit","enterprise","person"], ["risk"], ["opportunity"], ["recommendation"]],
+  decisions_actions: [["recommendation"], ["decision"], ["action"], ["task","person"]],
+  data_quality: [["quality_cluster"], ["operational_unit","enterprise"], ["person","product","service"], ["task","transaction","address"]],
+  external_disruptions: [["external_observation","observation"], ["territory","address"], ["enterprise","operational_unit"], ["risk","recommendation","action"]],
+  operational_focus: [["operational_unit","enterprise"], ["risk","opportunity"], ["person","task"], ["recommendation","decision","action","transaction"], ["quality_cluster"]],
+};
+
+export function semanticPositions(nodes, mode = "operational_focus") {
+  const lanes = MODE_LANES[mode] || MODE_LANES.operational_focus;
+  const laneFor = type => {
+    const lane = lanes.findIndex(types => types.includes(type));
+    return lane < 0 ? lanes.length : lane;
+  };
+  return Object.fromEntries(nodes.map(node => {
+    const hash = stableHash(`${mode}:${node.id}`);
+    return [node.id, {
+      x: 130 + laneFor(node.entity_type) * 245 + (Math.floor(hash / 11) % 5) * 18,
+      y: 90 + (hash % 11) * 92 + ((hash >>> 8) % 31),
+    }];
+  }));
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -391,15 +492,30 @@ function markUnconnected(nodes, edges) {
 
 // ── Cytoscape elements builder ────────────────────────────────────────────────
 
-export function toCytoscapeElements(nodes, edges) {
+const NODE_SHAPES = {
+  operational_unit: "round-rectangle", enterprise: "round-rectangle", person: "ellipse",
+  task: "round-diamond", transaction: "hexagon", product: "rectangle", service: "round-rectangle",
+  risk: "diamond", opportunity: "star", recommendation: "tag", decision: "octagon",
+  action: "vee", quality_cluster: "barrel", external_observation: "triangle", observation: "triangle",
+};
+const NODE_GLYPHS = {
+  operational_unit: "◆", enterprise: "▣", person: "●", task: "✓", transaction: "$",
+  product: "□", service: "◇", risk: "!", opportunity: "★", recommendation: "→",
+  decision: "?", action: "▶", quality_cluster: "…", external_observation: "△", observation: "△",
+};
+
+export function toCytoscapeElements(nodes, edges, positions = {}) {
   const cyNodes = nodes.map(n => {
-    const sz = n.importance >= 0.8 ? 110 : n.importance >= 0.6 ? 88 : n.importance >= 0.4 ? 70 : 55;
+    const sz = n.importance >= 0.8 ? 112 : n.importance >= 0.6 ? 94 : n.importance >= 0.4 ? 78 : 64;
+    const warning = n.risk_level || ["degraded", "partial", "unavailable", "disputed"].includes(String(n.status).toLowerCase());
     return {
       data: {
         id:            n.id,
-        label:         n.label,
+        label:         `${NODE_GLYPHS[n.entity_type] || "•"} ${n.label}`,
+        detailLabel:   `${NODE_GLYPHS[n.entity_type] || "•"} ${n.label}${n.sublabel ? `\n${n.sublabel}` : ""}`,
         sublabel:      n.sublabel || "",
         nodeColor:     NODE_COLORS[n.entity_type] || "#64748b",
+        shape:         NODE_SHAPES[n.entity_type] || "ellipse",
         size:          sz,
         entity_type:   n.entity_type,
         importance:    n.importance,
@@ -411,13 +527,17 @@ export function toCytoscapeElements(nodes, edges) {
           : n.has_opportunity ? "#22c55e"
           : n.is_unconnected ? "#94a3b8"
           : "transparent",
-        borderWidth:   n.risk_level || n.has_opportunity ? 3 : n.is_unconnected ? 1.5 : 0,
+        borderWidth:   warning || n.has_opportunity ? 3 : n.is_unconnected ? 1.5 : 0,
+        presentationOnly: Boolean(n.presentation_only),
       },
+      position: positions[n.id],
       classes: [
         n.entity_type,
         n.risk_level ? "has-risk" : "",
         n.has_opportunity ? "has-opportunity" : "",
         n.is_unconnected ? "unconnected" : "",
+        warning ? "has-warning" : "",
+        n.presentation_only ? "presentation-cluster" : "",
       ].filter(Boolean).join(" "),
     };
   });
@@ -433,14 +553,22 @@ export function toCytoscapeElements(nodes, edges) {
       predicate: e.predicate || e.relationship_type,
       relationship_type: e.relationship_type,
       status: e.status,
+      assertion_state: e.assertion_state,
       temporal: e.temporal,
       assertion_class: e.assertion_class,
       confidence: e.confidence,
       verification_state: e.verification_state,
       permitted_actions: e.permitted_actions,
       evidence: e.evidence,
+      evidenceCount: e.evidence?.length || 0,
+      detailLabel: `${e.label || e.predicate || "relationship"}${e.evidence?.length ? ` · ${e.evidence.length} evidence` : ""}`,
     },
-    classes: ["canonical_relationship", "operator_confirmed_assertion"].includes(e.assertion_class) ? "edge-fact" : "edge-derived",
+    classes: [
+      ["canonical_relationship", "operator_confirmed_assertion"].includes(e.assertion_class) ? "edge-fact" : "edge-derived",
+      ["disputed", "rejected"].includes(e.assertion_state || e.status) ? "edge-disputed" : "",
+      ["expired", "superseded"].includes(e.assertion_state || e.status) ? "edge-expired" : "",
+      e.evidence?.length ? "has-evidence" : "",
+    ].filter(Boolean).join(" "),
   }));
 
   return [...cyNodes, ...cyEdges];

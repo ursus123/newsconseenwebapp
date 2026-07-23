@@ -15,13 +15,14 @@ from .authorization import GraphAuthorizationPolicy
 from .execution import GRAPH_IO_EXECUTOR
 
 
-DEFAULT_NODE_BUDGET = 240
-DEFAULT_EDGE_BUDGET = 360
+DEFAULT_NODE_BUDGET = 36
+DEFAULT_EDGE_BUDGET = 72
 _PROCESS_SECRET = secrets.token_urlsafe(48)
 TYPE_WEIGHTS = {
-    "risk": 18, "recommendation": 16, "task": 15, "decision": 12,
-    "operational_unit": 12, "enterprise": 10, "person": 8,
-    "transaction": 7, "product": 6, "service": 6,
+    "risk": 22, "recommendation": 20, "decision": 19, "action": 18,
+    "task": 17, "opportunity": 15, "operational_unit": 14,
+    "enterprise": 12, "person": 10, "transaction": 9,
+    "product": 6, "service": 6, "external_observation": 5,
 }
 
 

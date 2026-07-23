@@ -45,6 +45,12 @@ export default function IdjwiDockedPanel({ currentUser }) {
     return () => document.removeEventListener("keydown", handler);
   }, [open]);
 
+  useEffect(() => {
+    const closeForGraphEvidence = () => setOpen(false);
+    window.addEventListener("company-graph-citation-selected", closeForGraphEvidence);
+    return () => window.removeEventListener("company-graph-citation-selected", closeForGraphEvidence);
+  }, []);
+
   const panel = (
     <AnimatePresence>
       {open && (

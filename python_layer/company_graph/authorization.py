@@ -111,6 +111,8 @@ class GraphAuthorizationPolicy:
         return [
             GraphPermittedAction(action="inspect_evidence", allowed=self.allows("graph.read")),
             GraphPermittedAction(action="ask_idjwi", allowed=self.allows("graph.read")),
+            GraphPermittedAction(action="record_proposal", allowed=proposed and self.allows("graph.relationship_propose"),
+                                 reason=None if proposed and self.allows("graph.relationship_propose") else "A proposed assertion and graph.relationship_propose are required."),
             GraphPermittedAction(action="confirm", allowed=proposed and self.allows("graph.relationship_confirm"), requires_approval=True,
                                  reason=None if proposed and self.allows("graph.relationship_confirm") else "A proposed assertion and graph.relationship_confirm are required."),
             GraphPermittedAction(action="reject", allowed=proposed and self.allows("graph.relationship_reject"),

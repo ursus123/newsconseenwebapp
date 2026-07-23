@@ -31,7 +31,8 @@ import {
 import {
   buildGraphData, toCytoscapeElements, filterForMode,
   GRAPH_MODES, GRAPH_CONTRACT_VERSION, assertGovernedGraphContract,
-  buildIdjwiGraphContext, IDJWI_GRAPH_INTENTS,
+  buildIdjwiGraphContext, IDJWI_GRAPH_INTENTS, buildOperationalFocus,
+  semanticPositions,
 } from "@/services/companyGraphService";
 import { getAttentionSignals } from "@/utils/attentionSignals";
 
@@ -58,6 +59,8 @@ const ENTITY_CONFIG = {
   animal:         { icon: Circle,       label: "Animals",         color: "#84cc16" },
   plot:           { icon: MapPin,       label: "Plots",           color: "#65a30d" },
   observation:    { icon: Eye,          label: "Observations",    color: "#7c3aed" },
+  external_observation: { icon: Eye,    label: "External observations", color: "#7c3aed" },
+  quality_cluster: { icon: Unlink,      label: "Summarized records", color: "#64748b" },
 };
 
 // ── Cytoscape graph style ─────────────────────────────────────────────────────
@@ -66,6 +69,7 @@ const CY_STYLE = [
     selector: "node",
     style: {
       "background-color":   "data(nodeColor)",
+      "shape":              "data(shape)",
       "label":              "data(label)",
       "color":              "#ffffff",
       "text-valign":        "center",
@@ -83,6 +87,24 @@ const CY_STYLE = [
       "text-outline-width": 1,
       "transition-property": "background-color, border-color, border-width, opacity",
       "transition-duration": "200ms",
+    },
+  },
+  {
+    selector: "node.zoom-detail",
+    style: {
+      "label": "data(detailLabel)",
+      "text-wrap": "wrap",
+      "text-max-width": "130px",
+      "font-size": "11px",
+    },
+  },
+  {
+    selector: "node.presentation-cluster",
+    style: {
+      "background-fill": "linear-gradient",
+      "background-gradient-stop-colors": "#334155 #64748b",
+      "border-style": "dashed",
+      "border-width": 3,
     },
   },
   {
@@ -144,6 +166,32 @@ const CY_STYLE = [
   {
     selector: "edge.edge-derived",
     style: { "line-style": "dashed", "opacity": 0.55 },
+  },
+  {
+    selector: "edge.edge-disputed",
+    style: {
+      "line-color": "#f43f5e", "target-arrow-color": "#f43f5e",
+      "line-style": "dotted", "width": 4,
+    },
+  },
+  {
+    selector: "edge.edge-expired",
+    style: {
+      "line-color": "#64748b", "target-arrow-color": "#64748b",
+      "line-style": "dashed", "opacity": 0.3,
+    },
+  },
+  {
+    selector: "edge.zoom-detail",
+    style: {
+      "label": "data(detailLabel)", "color": "#e2e8f0", "font-size": "10px",
+      "text-background-color": "#0f172a", "text-background-opacity": 0.86,
+      "text-background-padding": "3px", "text-rotation": "autorotate",
+    },
+  },
+  {
+    selector: "edge.has-evidence",
+    style: { "source-arrow-shape": "circle", "source-arrow-color": "#38bdf8" },
   },
   {
     selector: "edge:selected",
@@ -255,19 +303,31 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
     const { edge, sourceNode, targetNode } = selected;
     const evidence = edge.evidence?.[0] || {};
     const isFact = ["canonical_relationship", "operator_confirmed_assertion"].includes(edge.assertion_class);
+    const canPropose = edge.permitted_actions?.some(action => action.action === "record_proposal" && action.allowed);
     const canConfirm = edge.permitted_actions?.some(action => action.action === "confirm" && action.allowed);
     const canReject = edge.permitted_actions?.some(action => action.action === "reject" && action.allowed);
     const assertionHistory = (graphContext?.assertion_history || []).filter(event => event.assertion_key === edge.assertion_key);
     const govern = async action => {
-      const reason = window.prompt(action === "confirm" ? "Why should this relationship become canonical?" : "Why is this connection incorrect?") || "";
+      const correctedPredicate = action === "edit"
+        ? window.prompt("Enter the corrected governed predicate", edge.predicate || edge.relationship_type || "")
+        : null;
+      if (action === "edit" && (!correctedPredicate?.trim() || correctedPredicate.trim() === edge.predicate)) return;
+      const prompt = action === "confirm"
+        ? "Why should this relationship become canonical?"
+        : action === "reject"
+          ? "Why is this connection incorrect?"
+          : action === "edit"
+            ? "Why is this relationship correction required?"
+            : "Why should this possible relationship be recorded for governed review?";
+      const reason = window.prompt(prompt) || "";
       if (!reason.trim()) return;
-      const approvalConfirmed = action !== "confirm" || window.confirm("Approve this relationship as a canonical organizational fact?");
+      const approvalConfirmed = !["confirm", "edit"].includes(action) || window.confirm("Approve this relationship as a canonical organizational fact?");
       if (!approvalConfirmed) return;
       const [sourceType, sourceId] = String(edge.source).split(":");
       const [targetType, targetId] = String(edge.target).split(":");
       const response = await fetch(`${RAILWAY_URL}/company-graph/relationship/${action}`, {
         method: "POST", headers: await authHeaders(),
-        body: JSON.stringify({ company_id: companyId, edge_id: edge.id, source_type: sourceType, source_id: sourceId, target_type: targetType, target_id: targetId, predicate: edge.predicate || edge.relationship_type, reason: reason.trim(), approval_confirmed: approvalConfirmed }),
+        body: JSON.stringify({ company_id: companyId, edge_id: edge.id, source_type: sourceType, source_id: sourceId, target_type: targetType, target_id: targetId, predicate: edge.predicate || edge.relationship_type, corrected_predicate: correctedPredicate?.trim(), reason: reason.trim(), approval_confirmed: approvalConfirmed }),
       });
       if (!response.ok) {
         const detail = await response.json().catch(() => ({}));
@@ -331,14 +391,16 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
             className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700"
           ><Sparkles className="w-3.5 h-3.5" /> Ask Idjwi about this connection</button>
           <div className="grid grid-cols-2 gap-2">
+            {canPropose && <button onClick={() => govern("propose").catch(error => window.alert(error.message))} className="py-2 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">Record proposal</button>}
             {canConfirm && <button onClick={() => govern("confirm").catch(error => window.alert(error.message))} className="py-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Confirm</button>}
+            {canConfirm && <button onClick={() => govern("edit").catch(error => window.alert(error.message))} className="py-2 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">Edit & confirm</button>}
             {canReject && <button onClick={() => govern("reject").catch(error => window.alert(error.message))} className="py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">Reject</button>}
-            <button onClick={() => navigate(createPageUrl("Relationships"))} className="py-2 rounded-xl text-xs font-bold bg-slate-50 text-slate-700 border border-slate-200">Correct record</button>
-            <button onClick={() => openIdjwiGraphAction(
+            <button onClick={() => navigate(createPageUrl("Relationships"))} className="py-2 rounded-xl text-xs font-bold bg-slate-50 text-slate-700 border border-slate-200">Edit in Relationships</button>
+            {!canPropose && <button onClick={() => openIdjwiGraphAction(
               `Recommend the governed next action for relationship ${edge.id}.`,
               IDJWI_GRAPH_INTENTS.RECOMMEND_GRAPH_ACTION, graphContext,
               { graph_edge: edge, selected_edge_id: edge.id, correction_requested: true },
-            )} className="py-2 rounded-xl text-xs font-bold bg-violet-50 text-violet-700 border border-violet-200">Teach Idjwi</button>
+            )} className="py-2 rounded-xl text-xs font-bold bg-violet-50 text-violet-700 border border-violet-200">Ask next action</button>}
           </div>
         </div>
       </div>
@@ -551,9 +613,10 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
 }
 
 // ── Graph Canvas ──────────────────────────────────────────────────────────────
-function GraphCanvas({ elements, onNodeSelect, onEdgeSelect, highlightTypes, activeFilter, focusNodeId, isFullscreen, onToggleFullscreen }) {
+function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlightTypes, activeFilter, focusNodeId, focusEdgeId, isFullscreen, onToggleFullscreen }) {
   const containerRef = useRef(null);
   const cyRef        = useRef(null);
+  const [legendExpanded, setLegendExpanded] = useState(false);
 
   const elementsKey = useMemo(
     () => elements.map(e => e.data.id).join(","),
@@ -571,18 +634,10 @@ function GraphCanvas({ elements, onNodeSelect, onEdgeSelect, highlightTypes, act
       elements,
       style:               CY_STYLE,
       layout: {
-        name:              "cose",
-        idealEdgeLength:   120,
-        nodeRepulsion:     8000,
-        gravity:           0.1,
-        numIter:           800,
-        animate:           elements.length < 80,
-        animationDuration: 600,
+        name:              "preset",
         fit:               true,
-        padding:           40,
-        randomize:         true,
-        componentSpacing:  80,
-        nodeOverlap:       20,
+        padding:           70,
+        animate:           false,
       },
       userZoomingEnabled:  true,
       userPanningEnabled:  true,
@@ -613,6 +668,13 @@ function GraphCanvas({ elements, onNodeSelect, onEdgeSelect, highlightTypes, act
     });
     cy.on("mouseover", "edge", evt => evt.target.addClass("hovered"));
     cy.on("mouseout", "edge", evt => evt.target.removeClass("hovered"));
+    const applyZoomDetail = () => {
+      const detailed = cy.zoom() >= 0.72;
+      cy.nodes().toggleClass("zoom-detail", detailed);
+      cy.edges().toggleClass("zoom-detail", detailed);
+    };
+    cy.on("zoom", applyZoomDetail);
+    applyZoomDetail();
 
     cy.on("tap", evt => {
       if (evt.target === cy) {
@@ -624,7 +686,7 @@ function GraphCanvas({ elements, onNodeSelect, onEdgeSelect, highlightTypes, act
 
     cyRef.current = cy;
     return () => { if (cyRef.current) { cyRef.current.destroy(); cyRef.current = null; } };
-  }, [elementsKey]);
+  }, [elementsKey, layoutMode]);
 
   // Apply highlight filter (from pulse bar)
   useEffect(() => {
@@ -657,6 +719,18 @@ function GraphCanvas({ elements, onNodeSelect, onEdgeSelect, highlightTypes, act
     cyRef.current.animate({ center: { eles: node }, zoom: 1.35 }, { duration: 350 });
   }, [focusNodeId, elementsKey]);
 
+  useEffect(() => {
+    if (!cyRef.current || !focusEdgeId) return;
+    const edge = cyRef.current.getElementById(focusEdgeId);
+    if (!edge.length) return;
+    const endpoints = edge.connectedNodes();
+    cyRef.current.elements().removeClass("highlighted dimmed");
+    edge.addClass("highlighted");
+    endpoints.addClass("highlighted");
+    cyRef.current.elements().not(edge).not(endpoints).addClass("dimmed");
+    cyRef.current.animate({ fit: { eles: edge.union(endpoints), padding: 100 } }, { duration: 350 });
+  }, [focusEdgeId, elementsKey]);
+
   return (
     <div className="relative flex-1 min-h-0 bg-slate-950 rounded-2xl overflow-hidden border border-slate-800">
       <div ref={containerRef} className="absolute inset-0" />
@@ -676,10 +750,26 @@ function GraphCanvas({ elements, onNodeSelect, onEdgeSelect, highlightTypes, act
           </div>
         ))}
       </div>
-      <div className="absolute bottom-3 right-3 hidden md:flex gap-1.5 pointer-events-none z-10">
-        <span className="px-2 py-1 rounded-full bg-slate-900/90 border border-slate-700 text-[9px] text-slate-200">━ Verified fact</span>
-        <span className="px-2 py-1 rounded-full bg-slate-900/90 border border-slate-700 text-[9px] text-slate-200">┄ Derived</span>
-        <span className="px-2 py-1 rounded-full bg-slate-900/90 border border-slate-700 text-[9px] text-slate-200">→ Direction</span>
+      <div className="absolute bottom-3 right-3 hidden md:flex flex-col items-end gap-1.5 z-10">
+        <button
+          type="button"
+          aria-expanded={legendExpanded}
+          onClick={() => setLegendExpanded(value => !value)}
+          className="px-2.5 py-1.5 rounded-lg bg-slate-900/95 border border-slate-700 text-[10px] font-bold text-slate-100 hover:border-slate-500"
+        >
+          Relationship legend {legendExpanded ? "−" : "+"}
+        </button>
+        {legendExpanded && (
+          <div className="w-72 rounded-xl bg-slate-900/95 border border-slate-700 p-3 text-[10px] text-slate-200 shadow-xl space-y-2">
+            <p><span className="font-black text-white">Solid line</span> — canonical or operator-confirmed assertion.</p>
+            <p><span className="font-black text-white">Dashed line</span> — deterministic or analytical derivation requiring evidence review.</p>
+            <p><span className="font-black text-rose-300">Dotted red</span> — disputed or rejected assertion retained for history.</p>
+            <p><span className="font-black text-slate-400">Faded line</span> — expired or superseded relationship.</p>
+            <p><span className="font-black text-sky-300">Circle at source</span> — evidence is attached and can be inspected.</p>
+            <p><span className="font-black text-white">Arrow</span> — the governed predicate direction, from source to target.</p>
+            <p className="pt-1 border-t border-slate-700 text-slate-400">Hover a relationship to read its predicate. Select it to inspect confidence, temporal state, and evidence.</p>
+          </div>
+        )}
       </div>
 
       {/* Hint */}
@@ -722,6 +812,7 @@ export default function CompanyGraphHome() {
   const [scopeId, setScopeId] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [focusNodeId, setFocusNodeId] = useState("");
+  const [focusEdgeId, setFocusEdgeId] = useState("");
   const [neighborhoodGraph, setNeighborhoodGraph] = useState(null);
   const [continuedOverview, setContinuedOverview] = useState(null);
   const [loadingContinuation, setLoadingContinuation] = useState(false);
@@ -743,7 +834,7 @@ export default function CompanyGraphHome() {
     queryFn: async () => {
       const scope = scopeId ? `&operational_unit_id=${encodeURIComponent(scopeId)}` : "";
       try {
-        const response = await fetch(`${RAILWAY_URL}/company-graph/overview?company_id=${encodeURIComponent(currentUser.company_id)}&limit=500${scope}`, { headers: await authHeaders() });
+        const response = await fetch(`${RAILWAY_URL}/company-graph/overview?company_id=${encodeURIComponent(currentUser.company_id)}&limit=500&node_budget=36&edge_budget=72${scope}`, { headers: await authHeaders() });
         if (!response.ok) {
           const detail = await response.json().catch(() => ({}));
           const error = new Error(detail?.detail?.message || `Company graph service returned ${response.status}`);
@@ -844,16 +935,23 @@ export default function CompanyGraphHome() {
 
   // ── Apply mode + type filters ────────────────────────────────────────────────
   const { nodes: filteredNodes, edges: filteredEdges } = useMemo(() => {
-    const { nodes: mNodes, edges: mEdges } = filterForMode(nodes, edges, graphMode);
+    const focused = graphMode === "operational_focus"
+      ? buildOperationalFocus(nodes, edges, governedGraph)
+      : { nodes, edges };
+    const { nodes: mNodes, edges: mEdges } = filterForMode(focused.nodes, focused.edges, graphMode);
     const visible = mNodes.filter(n => visibleTypes.has(n.entity_type));
     const visibleIds = new Set(visible.map(n => n.id));
     const visibleEdges = mEdges.filter(e => visibleIds.has(e.source) && visibleIds.has(e.target));
     return { nodes: visible, edges: visibleEdges };
-  }, [nodes, edges, graphMode, visibleTypes]);
+  }, [nodes, edges, graphMode, visibleTypes, governedGraph]);
 
+  const graphPositions = useMemo(
+    () => semanticPositions(filteredNodes, graphMode),
+    [filteredNodes, graphMode],
+  );
   const cyElements = useMemo(
-    () => toCytoscapeElements(filteredNodes, filteredEdges),
-    [filteredNodes, filteredEdges],
+    () => toCytoscapeElements(filteredNodes, filteredEdges, graphPositions),
+    [filteredNodes, filteredEdges, graphPositions],
   );
 
   const graphRecords = useMemo(() => ({
@@ -1039,6 +1137,11 @@ export default function CompanyGraphHome() {
     setSelectedNode({ node: fullNode, connectedNodes, connectedEdges });
     auditGraph("node_inspected", fullNode.id, { graph_mode: graphMode, scope_id: scopeId });
     setFocusNodeId(fullNode.id);
+    if (fullNode.presentation_only) {
+      setGraphMode("data_quality");
+      setActiveFilter("unconnected");
+      return;
+    }
     if (currentUser?.company_id && !fallbackEnabled) {
       try {
         const scope = scopeId ? `&operational_unit_id=${encodeURIComponent(scopeId)}` : "";
@@ -1057,6 +1160,48 @@ export default function CompanyGraphHome() {
     });
     auditGraph("edge_inspected", edge.id, { predicate: edge.predicate || edge.relationship_type });
   }, [filteredNodes, filteredEdges, auditGraph]);
+
+  useEffect(() => {
+    const inspectCitation = event => {
+      const citation = event.detail || {};
+      const edge = citation.edge_id
+        ? edges.find(candidate => candidate.id === citation.edge_id)
+        : null;
+      const nodeIds = citation.node_ids || [];
+      setActiveFilter(null);
+      setGraphMode("full_graph");
+      setVisibleTypes(new Set(Object.keys(ENTITY_CONFIG)));
+      if (edge) {
+        const sourceNode = nodes.find(node => node.id === edge.source);
+        const targetNode = nodes.find(node => node.id === edge.target);
+        setSelectedNode({ edge, sourceNode, targetNode });
+        setFocusNodeId(edge.source);
+        setFocusEdgeId(edge.id);
+        auditGraph("citation_inspected", edge.id, {
+          citation_id: citation.citation_id,
+          evidence_ids: citation.evidence_ids || [],
+        });
+      } else if (nodeIds[0]) {
+        const node = nodes.find(candidate => candidate.id === nodeIds[0]);
+        if (!node) return;
+        const incident = edges.filter(candidate => candidate.source === node.id || candidate.target === node.id);
+        const connectedIds = new Set(incident.flatMap(candidate => [candidate.source, candidate.target]));
+        setSelectedNode({
+          node,
+          connectedEdges: incident,
+          connectedNodes: nodes.filter(candidate => candidate.id !== node.id && connectedIds.has(candidate.id)),
+        });
+        setFocusEdgeId("");
+        setFocusNodeId(node.id);
+        auditGraph("citation_inspected", node.id, {
+          citation_id: citation.citation_id,
+          evidence_ids: citation.evidence_ids || [],
+        });
+      }
+    };
+    window.addEventListener("company-graph-citation-selected", inspectCitation);
+    return () => window.removeEventListener("company-graph-citation-selected", inspectCitation);
+  }, [nodes, edges, auditGraph]);
 
   // ── Type toggle ──────────────────────────────────────────────────────────────
   const toggleType = useCallback(type => {
@@ -1283,11 +1428,13 @@ export default function CompanyGraphHome() {
           ) : (
             <GraphCanvas
               elements={cyElements}
+              layoutMode={graphMode}
               onNodeSelect={handleNodeSelect}
               onEdgeSelect={handleEdgeSelect}
               highlightTypes={pulseHighlight}
               activeFilter={activeFilter}
               focusNodeId={focusNodeId}
+              focusEdgeId={focusEdgeId}
               isFullscreen={isFullscreen}
               onToggleFullscreen={() => setIsFullscreen(value => !value)}
             />

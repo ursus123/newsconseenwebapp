@@ -37,8 +37,9 @@ from .bounded_queries import DEFAULT_EDGE_BUDGET, DEFAULT_NODE_BUDGET, TYPE_WEIG
 from .execution import GRAPH_IO_EXECUTOR
 
 
-ENTITY_TYPES = tuple(sorted(set(graph_entity_types()).union({"graph_assertion", "graph_assertion_event"})))
-NODE_TYPES = tuple(entity_type for entity_type in ENTITY_TYPES if entity_type not in edge_carrier_types() and entity_type not in {"graph_assertion", "graph_assertion_event"})
+GRAPH_GOVERNANCE_TYPES = {"graph_assertion", "graph_assertion_event", "graph_assertion_outcome"}
+ENTITY_TYPES = tuple(sorted((set(graph_entity_types()) - {"graph_assertion_outcome"}).union({"graph_assertion", "graph_assertion_event"})))
+NODE_TYPES = tuple(entity_type for entity_type in ENTITY_TYPES if entity_type not in edge_carrier_types() and entity_type not in GRAPH_GOVERNANCE_TYPES)
 _LAST_SOURCE_SUCCESS: dict[tuple[str, str], str] = {}
 
 def _now() -> str:
@@ -60,6 +61,39 @@ def _node(entity_type: str, row: dict, policy: GraphAuthorizationPolicy) -> Grap
         sublabel=projection["sublabel"], status=projection["status"],
         sensitivity=policy.sensitivity_for(entity_type),
         attributes=projection["attributes"], permitted_actions=policy.node_actions(),
+    )
+
+
+def _operational_priority(node: GraphNodeSummary, degree: int = 0) -> tuple:
+    """Rank the bounded overview by operational consequence, never by row order."""
+    status = str(node.status or node.attributes.get("status") or "").lower()
+    priority = str(node.attributes.get("priority") or "").lower()
+    severity = str(node.attributes.get("severity") or node.attributes.get("risk_level") or "").lower()
+    open_state = status not in {"closed", "completed", "done", "inactive", "resolved", "dismissed", "rejected"}
+    urgent = priority in {"urgent", "critical", "high"} or severity in {"critical", "high"}
+    awaiting = status in {"pending", "awaiting_approval", "proposed", "open", "overdue"}
+    unhandled = node.entity_type == "action" and open_state
+    temporal_signal = 0
+    for field in ("due_date", "transaction_date", "date", "created_at", "review_due_at"):
+        raw = node.attributes.get(field)
+        if not raw:
+            continue
+        try:
+            observed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if observed.tzinfo is None:
+                observed = observed.replace(tzinfo=timezone.utc)
+            age_days = (datetime.now(timezone.utc) - observed).days
+            temporal_signal = max(temporal_signal, 2 if -7 <= age_days <= 30 else 1 if -30 <= age_days <= 90 else 0)
+        except (TypeError, ValueError):
+            pass
+    return (
+        int(urgent),
+        int(awaiting or unhandled),
+        int(open_state),
+        TYPE_WEIGHTS.get(node.entity_type, 3),
+        temporal_signal,
+        min(degree, 20),
+        node.id,
     )
 
 
@@ -461,7 +495,11 @@ def build_graph_packet(context: TenantContext, repository, *, center: str | None
     pre_budget_type_counts = defaultdict(int)
     for node in nodes:
         pre_budget_type_counts[node.entity_type] += 1
-    nodes.sort(key=lambda node: (-TYPE_WEIGHTS.get(node.entity_type, 3), node.status in {"closed", "completed", "inactive"}, node.id))
+    degree = defaultdict(int)
+    for edge in edges:
+        degree[edge.source] += 1
+        degree[edge.target] += 1
+    nodes.sort(key=lambda node: _operational_priority(node, degree[node.id]), reverse=True)
     nodes = nodes[:node_budget]
     allowed_node_ids = {node.id for node in nodes}
     edges = [edge for edge in edges if edge.source in allowed_node_ids and edge.target in allowed_node_ids]

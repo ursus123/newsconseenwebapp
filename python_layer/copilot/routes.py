@@ -68,6 +68,7 @@ def _finalize_idjwi_response(*, result, request, advisor_selection, access, prin
     result["tenant_auth_diagnostics"] = access.get("diagnostics")
     result["advisor_selection"] = selection
     graph_summary = (result.get("data") or {}).get("graph_semantic_summary")
+    graph_citations = result.get("graph_citations") or []
     try:
         from copilot.idjwi_observability import log_event
         log_event(
@@ -79,6 +80,8 @@ def _finalize_idjwi_response(*, result, request, advisor_selection, access, prin
                 "response_identity": identity,
                 "operating_mode": result.get("operating_mode"),
                 "graph_semantic_summary": graph_summary,
+                "graph_citation_ids": [citation.get("citation_id") for citation in graph_citations],
+                "graph_confidence": result.get("confidence"),
             },
             status="error" if result.get("error") else "ok",
         )

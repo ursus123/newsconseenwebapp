@@ -17,6 +17,7 @@ from company_graph.assertion_governance import apply_assertion_state, persist_as
 from company_graph.contracts import GraphSourceStatus
 from company_graph.diagnostics import build_diagnostics
 from company_graph.bounded_queries import decode_continuation, direct_neighborhood_records, encode_continuation
+from company_graph.bounded_queries import DEFAULT_EDGE_BUDGET, DEFAULT_NODE_BUDGET
 
 
 class FakeRepository:
@@ -33,6 +34,11 @@ def _context():
         auth_source="test", profile_found=True, profile_user_id_matches=True,
         permissions=("*.read",),
     )
+
+
+def test_operational_overview_defaults_are_bounded_for_readability():
+    assert DEFAULT_NODE_BUDGET == 36
+    assert DEFAULT_EDGE_BUDGET == 72
 
 
 def test_graph_packet_explains_canonical_and_derived_edges():
@@ -609,6 +615,24 @@ def test_relationship_confirmation_requires_approval_and_rejects_conflict(client
     conflict = client.post("/company-graph/relationship/confirm", json=payload, headers={"Authorization": "Bearer admin"})
     assert conflict.status_code == 409
     assert conflict.json()["detail"]["code"] == "RELATIONSHIP_CONFLICT"
+
+
+def test_relationship_edit_rejects_ungoverned_predicate_before_writing(client, monkeypatch):
+    packet = _proposal_packet()
+    monkeypatch.setattr(routes, "verify_tenant_access", lambda *_: {
+        "id": "admin-mutation", "company_id": "tenant-mutation", "role": "admin",
+        "profile_found": True, "profile_user_id_matches": True,
+    })
+    monkeypatch.setattr(routes, "build_graph_packet", lambda *_args, **_kwargs: packet)
+    response = client.post("/company-graph/relationship/edit", json={
+        "company_id": "tenant-mutation", "edge_id": packet.edges[0].id,
+        "source_type": "person", "source_id": "p1",
+        "target_type": "enterprise", "target_id": "e1",
+        "predicate": "works_for", "corrected_predicate": "invented_by_chat",
+        "reason": "Operator correction", "approval_confirmed": True,
+    }, headers={"Authorization": "Bearer admin"})
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "RELATIONSHIP_CORRECTION_INVALID"
 
 
 def test_operational_unit_scope_uses_unit_identity_and_owned_records_not_enterprise_proxy():

@@ -16,6 +16,20 @@ consult; it does not produce an “advisor consulted” claim. The response and
 `idjwi.response` audit event store the same identity metadata. Legacy
 `/copilot/*` paths remain compatibility endpoints only.
 
+### Evidence-linked claims and correction learning
+
+`company-graph-citation.v1` binds Idjwi claims to graph-safe nodes, edges and
+evidence records. The web citation event centers and highlights the governed
+objects and opens their evidence panel. Confidence is a disclosed function of
+evidence strength, completeness, freshness, intent completion and
+contradictions; citation IDs and confidence factors are audited.
+
+Graph corrections use persisted assertion proposals and events. Confirmation
+creates the canonical relationship, rejection remains suppressive, and every
+decision invalidates the tenant graph cache. Migration 007 adds later assertion
+outcomes. Only governed decisions and observed outcomes feed Idjwi correction
+memory; chat text is not promoted to truth.
+
 The Python graph gateway plans bounded reads over canonical Supabase tables.
 Ranked overviews, direct registry-driven neighborhoods, direct edge evidence and
 governed search share `company-graph.v1`. Payloads declare budgets, omissions,
@@ -147,6 +161,14 @@ Ownership is explicit:
 - explanation, recommendation, tool coordination, and governed learning: Idjwi;
 - language-model reasoning: optional tenant-controlled advisor proposals only;
 - layout, selection, and visual emphasis: surface state, never organizational truth.
+- Company Graph Operational Focus: authorized server-side ranking with a
+  36-node/72-edge default; omitted records may be represented by a
+  presentation-only quality cluster.
+- Semantic layout coordinates: deterministic UI state keyed by view and node
+  identity, stable across refresh and expansion, excluded from canonical truth
+  and Idjwi evidence.
+- Relationship rendering: assertion class, temporal state, direction and
+  evidence availability come from the governed graph contract.
 
 Tenant, organization, operational unit, department, team, and enterprise are
 separate scope and ontology concepts. A graph node cannot silently redefine one as

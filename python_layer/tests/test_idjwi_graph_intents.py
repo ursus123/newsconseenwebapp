@@ -47,6 +47,11 @@ def test_explain_company_executes_its_own_capability():
     assert result["tools_called"] == ["explain_company_graph"]
     assert "authorized records" in result["answer"]
     assert "graph gaps" not in result["answer"].lower()
+    assert result["graph_citations"][0]["kind"] == "graph_node"
+    assert set(result["confidence"]["factors"]) == {
+        "evidence_strength", "source_completeness", "freshness",
+        "intent_completion", "contradiction_status",
+    }
 
 
 def test_ask_request_rejects_unknown_page_action_intent():

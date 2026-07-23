@@ -20,7 +20,8 @@ from .governance import (
     validate_relationship_proposal,
 )
 from ontology.relationship_registry import registry_contract
-from .assertion_governance import ASSERTION_STATES, persist_assertion_transition
+from .assertion_governance import ASSERTION_STATES, persist_assertion_transition, stable_assertion_key
+from .correction_learning import record_correction_memory
 from .bounded_queries import decode_continuation, direct_neighborhood_records
 from .field_classification import project_record
 from .contracts import GraphNodeSummary
@@ -45,7 +46,7 @@ def graph_relationship_registry(request: Request, company_id: str = Query(...), 
 
 
 def _packet(company_id: str, authorization: str | None, request: Request, *, center=None, depth=1, limit=500,
-            node_budget=240, edge_budget=360, continuation_token=None, operational_unit_id=""):
+            node_budget=36, edge_budget=72, continuation_token=None, operational_unit_id=""):
     repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
     context = repository.resolve_context(
         authorization, company_id, request_id=getattr(request.state, "request_id", ""), operational_unit_id=operational_unit_id,
@@ -93,7 +94,7 @@ def _packet(company_id: str, authorization: str | None, request: Request, *, cen
 
 @router.get("/overview")
 def graph_overview(request: Request, company_id: str = Query(...), limit: int = Query(500, ge=1, le=2000),
-                   node_budget: int = Query(240, ge=20, le=1000), edge_budget: int = Query(360, ge=20, le=2000),
+                   node_budget: int = Query(36, ge=20, le=1000), edge_budget: int = Query(72, ge=20, le=2000),
                    continuation_token: str | None = Query(None), operational_unit_id: str = Query(""), authorization: str | None = Header(None)):
     return _packet(company_id, authorization, request, limit=limit, node_budget=node_budget, edge_budget=edge_budget,
                    continuation_token=continuation_token, operational_unit_id=operational_unit_id)
@@ -271,9 +272,22 @@ class AssertionStateRequest(RelationshipGovernanceRequest):
     evidence_version: int | None = Field(default=None, ge=1)
 
 
+class AssertionOutcomeRequest(BaseModel):
+    company_id: str
+    assertion_key: str = Field(min_length=8, max_length=128)
+    outcome: str
+    observed_at: str | None = None
+    evidence: list[dict] = Field(default_factory=list, max_length=50)
+    notes: str = Field(default="", max_length=1000)
+
+
+class RelationshipEditRequest(RelationshipGovernanceRequest):
+    corrected_predicate: str
+
+
 @router.post("/audit")
 def graph_audit(body: GraphAuditRequest, request: Request, authorization: str | None = Header(None)):
-    allowed = {"opened", "scope_changed", "node_inspected", "edge_inspected", "view_saved", "exported"}
+    allowed = {"opened", "scope_changed", "node_inspected", "edge_inspected", "citation_inspected", "view_saved", "exported"}
     if body.event not in allowed:
         raise HTTPException(status_code=422, detail={"code": "GRAPH_AUDIT_EVENT_INVALID"})
     repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
@@ -312,6 +326,57 @@ def export_graph(body: GraphExportRequest, request: Request, authorization: str 
     return exported
 
 
+def _existing_assertion(repository, context, assertion_key: str) -> dict | None:
+    rows = repository.list_entities(context, "graph_assertion", limit=5000).data or []
+    return next((row for row in rows if row.get("assertion_key") == assertion_key), None)
+
+
+def _ensure_proposal_recorded(repository, context, edge, *, reason: str) -> dict:
+    existing = _existing_assertion(repository, context, edge.assertion_key)
+    if existing:
+        if existing.get("assertion_state") == "rejected":
+            raise HTTPException(status_code=409, detail={
+                "code": "RELATIONSHIP_PROPOSAL_PREVIOUSLY_REJECTED",
+                "category": "governance",
+                "message": "This assertion was previously rejected and remains suppressed.",
+                "action": "review_assertion_history",
+                "retryable": False,
+            })
+        return {"assertion": existing, "event": None, "created": False}
+    transition = persist_assertion_transition(
+        repository, context, edge, "proposed",
+        reason=reason or "Idjwi recorded a governed relationship proposal for operator review.",
+    )
+    return {**transition, "created": True}
+
+
+@router.post("/relationship/propose", status_code=201)
+def propose_relationship(body: RelationshipGovernanceRequest, request: Request, authorization: str | None = Header(None)):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context = repository.resolve_context(authorization, body.company_id, request_id=getattr(request.state, "request_id", ""))
+    policy = GraphAuthorizationPolicy.for_context(context)
+    policy.require("graph.relationship_propose")
+    packet = build_graph_packet(context, repository, limit=500)
+    edge = next((candidate for candidate in packet.edges if candidate.id == body.edge_id), None)
+    if not edge or edge.assertion_class not in {"deterministic_derivation", "analytical_inference", "advisor_proposal"}:
+        raise HTTPException(status_code=404, detail={"code": "RELATIONSHIP_PROPOSAL_NOT_FOUND", "action": "refresh_graph"})
+    supplied = (f"{body.source_type}:{body.source_id}", f"{body.target_type}:{body.target_id}", body.predicate)
+    if supplied != (edge.source, edge.target, edge.predicate):
+        raise HTTPException(status_code=409, detail={"code": "RELATIONSHIP_PROPOSAL_MISMATCH", "action": "refresh_graph"})
+    transition = _ensure_proposal_recorded(
+        repository, context, edge,
+        reason=body.reason or "Idjwi identified this possible relationship for governed review.",
+    )
+    cache_invalidate(body.company_id)
+    log_event(
+        "company_graph.relationship.proposed", company_id=body.company_id,
+        actor=context.user_id, subject=edge.id,
+        metadata={"assertion_key": edge.assertion_key, "predicate": edge.predicate, "evidence_ids": [item.evidence_id for item in edge.evidence]},
+        status="success",
+    )
+    return {"assertion": transition["assertion"], "event": transition["event"], "created": transition["created"], "graph_refresh_required": True}
+
+
 @router.post("/relationship/confirm", status_code=201)
 def confirm_relationship(body: RelationshipGovernanceRequest, request: Request, authorization: str | None = Header(None)):
     repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
@@ -323,14 +388,22 @@ def confirm_relationship(body: RelationshipGovernanceRequest, request: Request, 
     payload = relationship_payload(source, target, edge.predicate, context.user_id, body.reason)
     existing = repository.list_entities(context, "relationship", limit=5000).data or []
     ensure_no_relationship_conflict(existing, payload)
+    _ensure_proposal_recorded(
+        repository, context, edge,
+        reason="Proposal recorded before the operator confirmation decision.",
+    )
     created = repository.create_entity(context, "relationship", payload).data
     transition = persist_assertion_transition(
         repository, context, edge, "confirmed",
         reason=body.reason or "Operator confirmed the proposal.",
     )
+    memory = record_correction_memory(
+        body.company_id, assertion=transition["assertion"], outcome="confirmed",
+        actor=context.user_id, event=transition["event"],
+    )
     cache_invalidate(body.company_id)
     log_event("company_graph.relationship.confirmed", company_id=body.company_id, actor=context.user_id, subject=created.get("id"), metadata={"edge_id": body.edge_id, "predicate": body.predicate, "reason": body.reason}, status="success")
-    return {"record": created, "assertion": transition["assertion"], "graph_refresh_required": True, "idjwi_feedback": "canonical_relationship_confirmed"}
+    return {"record": created, "assertion": transition["assertion"], "event": transition["event"], "graph_refresh_required": True, "idjwi_feedback": "canonical_relationship_confirmed", "idjwi_memory": memory}
 
 
 @router.post("/relationship/reject")
@@ -345,13 +418,121 @@ def reject_relationship(body: RelationshipGovernanceRequest, request: Request, a
         raise HTTPException(status_code=404, detail={"code": "RELATIONSHIP_PROPOSAL_NOT_FOUND", "category": "empty_data", "message": "The proposal is not present in the operator's authorized graph.", "action": "refresh_graph"})
     if (f"{body.source_type}:{body.source_id}", f"{body.target_type}:{body.target_id}", body.predicate) != (edge.source, edge.target, edge.predicate):
         raise HTTPException(status_code=409, detail={"code": "RELATIONSHIP_PROPOSAL_MISMATCH", "category": "governance", "message": "The submitted relationship does not match the governed proposal.", "action": "refresh_graph"})
+    _ensure_proposal_recorded(
+        repository, context, edge,
+        reason="Proposal recorded before the operator rejection decision.",
+    )
     transition = persist_assertion_transition(
         repository, context, edge, "rejected",
         reason=body.reason or "Operator rejected derived connection",
     )
+    memory = record_correction_memory(
+        body.company_id, assertion=transition["assertion"], outcome="rejected",
+        actor=context.user_id, event=transition["event"],
+    )
     log_event("company_graph.relationship.rejected", company_id=body.company_id, actor=context.user_id, subject=edge.id, metadata={"predicate": edge.predicate, "reason": body.reason or "Operator rejected derived connection", "assertion_key": edge.assertion_key}, status="success")
     cache_invalidate(body.company_id)
-    return {"recorded": True, "assertion": transition["assertion"], "idjwi_feedback": "derived_relationship_rejected", "graph_refresh_required": True}
+    return {"recorded": True, "assertion": transition["assertion"], "event": transition["event"], "idjwi_feedback": "derived_relationship_rejected", "idjwi_memory": memory, "graph_refresh_required": True}
+
+
+@router.post("/relationship/edit", status_code=201)
+def edit_relationship_proposal(body: RelationshipEditRequest, request: Request, authorization: str | None = Header(None)):
+    if not body.approval_confirmed:
+        raise HTTPException(status_code=409, detail={"code": "RELATIONSHIP_APPROVAL_REQUIRED", "action": "confirm_approval"})
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context = repository.resolve_context(authorization, body.company_id, request_id=getattr(request.state, "request_id", ""))
+    policy = GraphAuthorizationPolicy.for_context(context)
+    policy.require("graph.relationship_confirm")
+    packet = build_graph_packet(context, repository, limit=500)
+    edge = next((candidate for candidate in packet.edges if candidate.id == body.edge_id), None)
+    if not edge or edge.assertion_class not in {"deterministic_derivation", "analytical_inference", "advisor_proposal"}:
+        raise HTTPException(status_code=404, detail={"code": "RELATIONSHIP_PROPOSAL_NOT_FOUND", "action": "refresh_graph"})
+    supplied = (f"{body.source_type}:{body.source_id}", f"{body.target_type}:{body.target_id}", body.predicate)
+    if supplied != (edge.source, edge.target, edge.predicate):
+        raise HTTPException(status_code=409, detail={"code": "RELATIONSHIP_PROPOSAL_MISMATCH", "action": "refresh_graph"})
+    nodes = {node.id: node for node in packet.nodes}
+    source, target = nodes.get(edge.source), nodes.get(edge.target)
+    predicate = PREDICATES.get(body.corrected_predicate)
+    if not predicate or not source or not target:
+        raise HTTPException(status_code=422, detail={"code": "RELATIONSHIP_CORRECTION_INVALID", "action": "choose_allowed_predicate"})
+    if (
+        ("*" not in predicate["source_types"] and source.entity_type not in predicate["source_types"])
+        or ("*" not in predicate["target_types"] and target.entity_type not in predicate["target_types"])
+    ):
+        raise HTTPException(status_code=422, detail={"code": "RELATIONSHIP_PREDICATE_SHAPE_INVALID", "action": "choose_allowed_predicate"})
+    payload = relationship_payload(source, target, body.corrected_predicate, context.user_id, body.reason)
+    existing = repository.list_entities(context, "relationship", limit=5000).data or []
+    ensure_no_relationship_conflict(existing, payload)
+    _ensure_proposal_recorded(repository, context, edge, reason="Original proposal recorded before operator correction.")
+    created = repository.create_entity(context, "relationship", payload).data
+    corrected_edge = edge.model_copy(deep=True)
+    corrected_edge.id = f"{edge.source}|{body.corrected_predicate}|{edge.target}|operator:{created['id']}"
+    corrected_edge.predicate = body.corrected_predicate
+    corrected_edge.label = predicate.get("label") or body.corrected_predicate.replace("_", " ")
+    corrected_edge.assertion_class = "operator_confirmed_assertion"
+    corrected_edge.assertion_key = stable_assertion_key(
+        corrected_edge.source, corrected_edge.predicate, corrected_edge.target, None,
+    )
+    corrected_edge.assertion_state = "confirmed"
+    corrected_edge.verification_state = "verified"
+    corrected = persist_assertion_transition(
+        repository, context, corrected_edge, "confirmed",
+        reason=body.reason or "Operator confirmed the corrected relationship.",
+    )
+    original = persist_assertion_transition(
+        repository, context, edge, "superseded",
+        reason=body.reason or f"Operator replaced predicate {edge.predicate} with {body.corrected_predicate}.",
+        superseded_by=str(corrected["assertion"]["id"]),
+    )
+    memory = record_correction_memory(
+        body.company_id, assertion=corrected["assertion"], outcome="edited_confirmed",
+        actor=context.user_id, event=corrected["event"],
+    )
+    cache_invalidate(body.company_id)
+    log_event(
+        "company_graph.relationship.edited", company_id=body.company_id,
+        actor=context.user_id, subject=created.get("id"),
+        metadata={"original_assertion_key": edge.assertion_key, "corrected_assertion_key": corrected_edge.assertion_key, "from_predicate": edge.predicate, "to_predicate": body.corrected_predicate},
+        status="success",
+    )
+    return {
+        "record": created, "superseded_assertion": original["assertion"],
+        "assertion": corrected["assertion"], "event": corrected["event"],
+        "idjwi_memory": memory, "graph_refresh_required": True,
+    }
+
+
+@router.post("/relationship/outcome", status_code=201)
+def observe_relationship_outcome(body: AssertionOutcomeRequest, request: Request, authorization: str | None = Header(None)):
+    if body.outcome not in {"supported", "refuted", "inconclusive"}:
+        raise HTTPException(status_code=422, detail={"code": "GRAPH_OUTCOME_INVALID"})
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context = repository.resolve_context(authorization, body.company_id, request_id=getattr(request.state, "request_id", ""))
+    policy = GraphAuthorizationPolicy.for_context(context)
+    policy.require("graph.relationship_confirm")
+    assertion = _existing_assertion(repository, context, body.assertion_key)
+    if not assertion:
+        raise HTTPException(status_code=404, detail={"code": "GRAPH_ASSERTION_NOT_FOUND", "action": "refresh_graph"})
+    outcome = repository.create_entity(context, "graph_assertion_outcome", {
+        "assertion_id": assertion["id"],
+        "assertion_key": body.assertion_key,
+        "outcome": body.outcome,
+        "observed_at": body.observed_at,
+        "evidence": body.evidence,
+        "notes": body.notes,
+        "actor_user_id": context.user_id,
+    }).data
+    memory = record_correction_memory(
+        body.company_id, assertion=assertion, outcome=body.outcome,
+        actor=context.user_id, observed_evidence=body.evidence,
+    )
+    log_event(
+        "company_graph.relationship.outcome_observed", company_id=body.company_id,
+        actor=context.user_id, subject=body.assertion_key,
+        metadata={"outcome_id": outcome.get("id"), "outcome": body.outcome, "evidence_count": len(body.evidence), "memory_saved": memory.get("saved", False)},
+        status="success",
+    )
+    return {"outcome": outcome, "idjwi_memory": memory, "graph_refresh_required": False}
 
 
 @router.post("/relationship/state")

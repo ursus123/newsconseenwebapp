@@ -1,6 +1,7 @@
 """Deterministic Idjwi execution for governed Company Graph intents."""
 
 from company_graph.intents import GRAPH_INTENT_VERSION
+from company_graph.explanations import edge_citation, graph_claim_confidence, node_citation
 from copilot.trust import build_trust_packet
 
 
@@ -52,6 +53,9 @@ def execute_graph_intent(intent, *, question, company_id, context, principal):
     selected_node = next((node for node in nodes if node.get("id") == context.get("selected_node_id")), None)
     selected_edge = next((edge for edge in edges if edge.get("id") == context.get("selected_edge_id")), None)
     quality = graph["quality"]
+    cited_edges = []
+    cited_nodes = []
+    intent_complete = True
 
     if intent == "explain_company_graph":
         types = {}
@@ -64,40 +68,62 @@ def execute_graph_intent(intent, *, question, company_id, context, principal):
             + (" and bounded; omitted records are disclosed in truncation metadata." if graph["truncation"].get("truncated") else ".")
         )
         data = {"scope": context.get("scope"), "node_count": len(nodes), "edge_count": len(edges), "counts": types}
+        cited_edges = edges[:5]
+        cited_nodes = nodes[:5] if not cited_edges else []
     elif intent == "explain_operational_unit":
         answer = f"The authorized graph for {scope_label} contains {len(nodes)} records and {len(edges)} relationships. It is restricted to the selected operational-unit permission boundary."
         data = {"scope": context.get("scope"), "node_count": len(nodes), "edge_count": len(edges)}
+        cited_edges = edges[:5]
+        cited_nodes = nodes[:5] if not cited_edges else []
     elif intent == "explain_node":
         if not selected_node:
             answer, data = "Select an authorized graph node before asking Idjwi to explain it.", {"required_context": "selected_node_id"}
+            intent_complete = False
         else:
             incident = [edge for edge in edges if selected_node["id"] in (edge.get("source"), edge.get("target"))]
             answer = f"{selected_node.get('label') or selected_node['id']} is a {selected_node.get('entity_type', 'record')} with {len(incident)} visible governed connections in this scope."
             data = {"node": selected_node, "relationships": incident}
+            cited_nodes = [selected_node]
+            cited_edges = incident[:8]
     elif intent == "explain_relationship":
         if not selected_edge:
             answer, data = "Select an authorized relationship before asking Idjwi to explain it.", {"required_context": "selected_edge_id"}
+            intent_complete = False
         else:
             evidence = (selected_edge.get("evidence") or [{}])[0]
-            answer = f"This relationship says {selected_edge.get('source')} {selected_edge.get('label') or selected_edge.get('predicate')} {selected_edge.get('target')}. It is a {selected_edge.get('assertion_class')} assertion with {round(float(selected_edge.get('confidence') or 0) * 100)}% confidence. {evidence.get('explanation') or ''}".strip()
+            last_confirmed = (selected_edge.get("temporal") or {}).get("confirmed_at")
+            answer = (
+                f"This relationship says {selected_edge.get('source')} "
+                f"{selected_edge.get('label') or selected_edge.get('predicate')} "
+                f"{selected_edge.get('target')}. Evidence: "
+                f"{evidence.get('source_record_id') or evidence.get('evidence_id') or 'governed graph evidence'}."
+                + (f" Last confirmed: {last_confirmed}." if last_confirmed else "")
+                + f" {evidence.get('explanation') or ''}"
+            ).strip()
             data = {"relationship": selected_edge, "evidence": selected_edge.get("evidence") or []}
+            cited_edges = [selected_edge]
     elif intent == "explain_graph_change":
         history = graph["history"]
         answer = f"Idjwi found {len(history)} governed relationship state changes in the supplied graph context."
         data = {"changes": history}
+        cited_edges = edges[:8]
     elif intent == "find_graph_gaps":
         issues = quality.get("issues") or []
         answer = f"Idjwi found {quality.get('unconnected_count', 0)} unconnected records, {quality.get('missing_assignment_count', 0)} missing assignments, and {len(issues)} graph-quality issue categories in this bounded scope."
         data = {"quality": quality, "issues": issues}
+        connected = {endpoint for edge in edges for endpoint in (edge.get("source"), edge.get("target"))}
+        cited_nodes = [node for node in nodes if node.get("id") not in connected][:8]
     elif intent == "recommend_graph_action":
         issues = quality.get("issues") or []
         first = issues[0] if issues else None
         answer = (f"Start with {str(first.get('code')).replace('_', ' ').lower()} affecting {first.get('count', 0)} records; review its evidence before approving corrections." if first else "No graph-quality repair is currently prioritized. Review open work and newly observed changes next.")
         data = {"priority_issue": first, "permitted_actions": context.get("permitted_actions") or []}
+        cited_edges = edges[:5]
     elif intent == "compare_graph_scopes":
         comparisons = context.get("comparison_scopes") or []
         answer = (f"Idjwi compared {len(comparisons)} authorized graph scopes." if len(comparisons) >= 2 else "Choose at least two authorized operational scopes before requesting a comparison.")
         data = {"comparison_scopes": comparisons, "required_scopes": max(0, 2 - len(comparisons))}
+        intent_complete = len(comparisons) >= 2
     else:
         raise ValueError(f"Unsupported Idjwi graph intent: {intent}")
 
@@ -128,17 +154,22 @@ def execute_graph_intent(intent, *, question, company_id, context, principal):
         "page": context.get("page"),
         "product_surface": context.get("product_surface"),
     }
+    node_lookup = {node["id"]: node for node in nodes}
+    graph_citations = [edge_citation(edge, node_lookup) for edge in cited_edges]
+    graph_citations.extend(node_citation(node) for node in cited_nodes)
+    confidence = graph_claim_confidence(context, cited_edges, intent_complete=intent_complete)
     return {
         "answer": answer, "intent": intent, "intent_version": GRAPH_INTENT_VERSION,
         "mode": "autonomous", "operating_mode": "governed_graph_intent",
         "tools_called": [intent], "tools_detail": [tool], "data": data,
-        "confidence": {"score": 0.95, "label": "High", "reason": "Deterministic reasoning over the authorized versioned graph context."},
+        "confidence": confidence,
+        "graph_citations": graph_citations,
         "missing_data_caveats": caveats,
         "trust": build_trust_packet(
             question=question, company_id=company_id, principal=principal,
             mode="autonomous", operating_mode="governed_graph_intent",
             collected_tools=[tool], tools_detail=[tool], caveats=caveats,
-            confidence={"score": 0.95, "label": "High", "reason": "Deterministic governed graph intent."},
+            confidence=confidence,
             tenant_brain_used=True, default_brain_used=False,
         ),
     }

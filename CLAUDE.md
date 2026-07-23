@@ -1170,3 +1170,24 @@ response, never from a toggle: available, requested, consulted, multiple
 consulted, unavailable, Core fallback, or required-but-unavailable. The
 response and audit event must carry the same proof-derived identity. Existing
 `/copilot/*` paths are compatibility APIs only and are not product language.
+
+### Evidence and correction learning
+
+Important Idjwi graph claims must emit `company-graph-citation.v1` references
+to authorized nodes, edges and evidence. Citation selection must center and
+highlight the graph and open the governed evidence view. Confidence must
+disclose evidence strength, source completeness, freshness, intent completion
+and contradiction status.
+
+Graph learning is outcome-based: proposal, evidence review, authorized
+confirmation/edit/rejection, canonical assertion or durable rejection, cache
+refresh, correction memory, then observed operational outcome. Arbitrary chat
+text must never enter this correction-memory channel as organizational truth.
+
+### Company Graph operational experience
+
+Operational Focus is the bounded 36-node default. Semantic layouts use stable,
+presentation-only coordinates. Node and edge styles expose operational
+importance, assertion class, temporal state, direction, evidence and quality
+without changing canonical truth. The contract is documented in
+`docs/COMPANY_GRAPH_OPERATIONAL_EXPERIENCE.md`.
