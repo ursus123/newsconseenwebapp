@@ -1698,7 +1698,7 @@ function AIReadinessSection({ user }) {
           <div className="text-xs text-slate-500 space-y-1">
             <p className="font-semibold text-slate-600">What does this score mean?</p>
             <p>
-              The AI Readiness Score measures how reliably the Copilot and Agents can answer questions
+              The AI Readiness Score measures how reliably Idjwi and governed agents can answer questions
               about your organisation. Missing required fields, duplicate records, and invalid values
               reduce accuracy — the AI may underestimate headcounts, revenue, or task completion rates
               when the underlying data has gaps.

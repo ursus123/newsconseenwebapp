@@ -8,6 +8,10 @@
 # ==============================================================
 
 import logging
+import copy
+import hashlib
+import threading
+import time
 from typing import Optional
 
 import requests
@@ -18,6 +22,33 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 15
+_VERIFIED_SESSION_TTL_SECONDS = 30
+_VERIFIED_SESSION_CACHE = {}
+_VERIFIED_SESSION_LOCK = threading.Lock()
+
+
+def _session_cache_key(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _get_verified_session(token: str):
+    key = _session_cache_key(token)
+    with _VERIFIED_SESSION_LOCK:
+        item = _VERIFIED_SESSION_CACHE.get(key)
+        if not item or item[0] <= time.monotonic():
+            _VERIFIED_SESSION_CACHE.pop(key, None)
+            return None
+        return copy.deepcopy(item[1])
+
+
+def _put_verified_session(token: str, user: dict):
+    with _VERIFIED_SESSION_LOCK:
+        if len(_VERIFIED_SESSION_CACHE) >= 512:
+            oldest = min(_VERIFIED_SESSION_CACHE, key=lambda candidate: _VERIFIED_SESSION_CACHE[candidate][0])
+            _VERIFIED_SESSION_CACHE.pop(oldest, None)
+        _VERIFIED_SESSION_CACHE[_session_cache_key(token)] = (
+            time.monotonic() + _VERIFIED_SESSION_TTL_SECONDS, copy.deepcopy(user),
+        )
 
 
 def _auth_error(code: str, message: str, *, action: str, retryable: bool) -> dict:
@@ -48,6 +79,10 @@ def verify_supabase_user(authorization: Optional[str]) -> dict:
             action="sign_in", retryable=True,
         ))
 
+    cached = _get_verified_session(token)
+    if cached:
+        return cached
+
     if not settings.supabase_url or not settings.supabase_service_role_key:
         raise HTTPException(status_code=503, detail={
             "code": "authorization_service_unavailable",
@@ -58,7 +93,8 @@ def verify_supabase_user(authorization: Optional[str]) -> dict:
         })
 
     try:
-        resp = requests.get(
+        from data_sources.supabase_source import _http_session
+        resp = _http_session().get(
             f"{settings.supabase_url.rstrip('/')}/auth/v1/user",
             headers={
                 "apikey": settings.supabase_service_role_key,
@@ -87,11 +123,13 @@ def verify_supabase_user(authorization: Optional[str]) -> dict:
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid session — no user id")
 
-    return {
+    verified = {
         "id": user_id,
         "email": data.get("email"),
         "app_metadata": data.get("app_metadata") or {},
     }
+    _put_verified_session(token, verified)
+    return verified
 
 
 def _get_profile(user_id: str) -> dict:

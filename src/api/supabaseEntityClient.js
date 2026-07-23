@@ -85,7 +85,7 @@ const TABLE_COLUMNS = {
     "first_name","last_name","preferred_name","person_type","person_subtype",
     "primary_role","engagement_model","status","availability_status",
     "start_date","end_date","phone","email","address","city","region","country",
-    "latitude","longitude","notes","photo_url","company_id","created_by",
+    "latitude","longitude","notes","photo_url","operational_unit_id","company_id","created_by",
   ]),
   enterprises: new Set([
     "enterprise_name","enterprise_type","enterprise_subtype","sic_sector_id","sic_sector_name",
@@ -99,34 +99,47 @@ const TABLE_COLUMNS = {
     "product_name","item_name","item_type","item_subtype","item_class",
     "item_brand","item_variant","unit_of_measure","stock_quantity","reorder_level",
     "expiry_date","price","cost","sku","barcode","description","image_url",
-    "enterprise_id","company_id","created_by",
+    "enterprise_id","operational_unit_id","company_id","created_by",
   ]),
   tasks: new Set([
     "title","description","task_type","status","priority","due_date","scheduled_time",
     "completed_at","assigned_to_email","assigned_to_name","enterprise_id","enterprise",
     "related_person","related_person_id","outcome","outcome_notes","notes",
-    "company_id","created_by",
+    "operational_unit_id","company_id","created_by",
   ]),
   transactions: new Set([
     "reference_number","description","transaction_type","status","payment_status",
     "amount","amount_paid","net_amount","currency","date","due_date",
     "enterprise_id","enterprise","person_id","person_name","product_id","product_name",
-    "line_items","notes","company_id","created_by",
+    "line_items","notes","operational_unit_id","company_id","created_by",
   ]),
   relationships: new Set([
     "relationship_type","person_id","person_name","person","secondary_person_id","secondary_person",
     "enterprise_id","enterprise_name","enterprise","secondary_enterprise_id","secondary_enterprise",
     "item_id","item_name","service_id","service_name","role","status","start_date","end_date",
-    "notes","company_id","created_by",
+    "notes","operational_unit_id","company_id","created_by",
   ]),
   addresses: new Set([
     "address_line1","address_line2","city","region","country","postal_code",
     "latitude","longitude","address_type","entity_ref_type","entity_ref_id",
-    "is_primary","notes","company_id","created_by",
+    "is_primary","notes","operational_unit_id","company_id","created_by",
   ]),
   services: new Set([
     "name","service_name","description","service_type","service_subtype","price",
-    "unit_of_measure","duration_minutes","is_active","enterprise_id","company_id","created_by",
+    "unit_of_measure","duration_minutes","is_active","enterprise_id","operational_unit_id","company_id","created_by",
+  ]),
+  operational_units: new Set([
+    "company_id","organization_id","unit_name","unit_type","parent_unit_id",
+    "manager_user_id","manager_person_id","jurisdiction","permission_policy",
+    "status","starts_at","ends_at","created_by",
+  ]),
+  operational_unit_memberships: new Set([
+    "company_id","operational_unit_id","user_id","person_id","membership_role",
+    "permissions","status","valid_from","valid_to",
+  ]),
+  operational_unit_relationships: new Set([
+    "company_id","source_unit_id","target_unit_id","predicate","status",
+    "valid_from","valid_to","evidence","created_by",
   ]),
 };
 
@@ -356,6 +369,9 @@ export const supabaseEntities = {
   Transaction:      entityWrapper("transactions"),
   Relationship:     entityWrapper("relationships"),
   Address:          entityWrapper("addresses"),
+  OperationalUnit: entityWrapper("operational_units"),
+  OperationalUnitMembership: entityWrapper("operational_unit_memberships"),
+  OperationalUnitRelationship: entityWrapper("operational_unit_relationships"),
 
   // Taxonomy
   MasterDataOption: entityWrapper("master_data_options"),

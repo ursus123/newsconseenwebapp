@@ -39,6 +39,88 @@ approve decisions, or execute actions. Idjwi validates advisor output before it 
 presented, remembered, or acted upon. No provider, including Anthropic or
 Codex/OpenAI, is Idjwi.
 
+### Company Graph
+
+Company Graph and Idjwi share one validated semantic graph packet. It includes
+authorized scope, role, selection, ranked neighborhood, predicates, evidence,
+provenance, freshness, assertion state, unavailable sources, completeness,
+truncation, sensitivity, permitted actions, page and product surface. The
+backend rejects packet summaries that disagree with the supplied nodes, edges,
+disconnected count or unavailable-source status.
+
+Idjwi is always the visible identity. Advisor labels are response-specific:
+Idjwi Core, advisor available/requested/consulted, multiple advisors consulted,
+advisor unavailable, Core fallback used, or advisor required but unavailable.
+The advisor request control is not proof of participation; successful
+identified contribution is required. Response metadata and the audit record
+must agree. `/copilot/*` is a legacy-compatible API path, not product identity.
+
+Idjwi receives assertion state, validity, observation, confirmation/rejection,
+supersession, evidence version and sanitized transition history. It must explain
+why a relationship changed and must not re-propose a durably rejected key.
+Completeness answers must distinguish complete, partial, empty, unauthorized and
+unavailable using the packet's diagnostic matrix and source remediation fields.
+
+Idjwi distinguishes the tenant organization, internal operational units and
+external enterprises. Unit context comes from canonical operational-unit
+identity, hierarchy, membership, manager, jurisdiction, permissions and record
+ownership. Every relationship supplied to Idjwi carries its
+`ontology-relationships.v1` rule ID, evidence requirement, sensitivity, temporal
+behavior and valid corrections; Idjwi must not invent these semantics.
+
+Company Graph exports are backend-generated with tenant, user, scope, purpose,
+object-type, redaction, sensitivity, timestamp, and audit metadata. Idjwi must
+not treat a browser-generated graph file or unvalidated relationship request as
+authoritative. Confirmation requires a current authorized proposal, authorized
+endpoints, an allowed predicate, no conflict, authority, and satisfied approval.
+
+Company Graph is Newsconseen's governed operational map. It helps an authorized
+operator and Idjwi understand how records, responsibilities, work, evidence,
+recommendations, decisions, and actions are connected inside a bounded operational
+scope. It is a projection, not a separate source of truth and not an LLM-generated
+description of the organization.
+
+Canonical facts remain owned by Supabase `public.*` through tenant- and
+permission-enforcing repositories. The Python layer owns bounded graph projection,
+provenance, quality, and derived intelligence. Idjwi observes the same authorized
+packet shown to the operator, explains its evidence and limitations, recommends a
+permitted next step, and coordinates approved tools. Optional advisors may return
+bounded proposals to Idjwi but cannot establish relationships, approve decisions,
+or execute actions.
+
+The scope vocabulary is precise: tenant, organization, operational unit,
+department, team, and enterprise are not interchangeable. People and other records
+connect through typed, directed, temporal relationships. Observations are
+time-bounded evidence; recommendations are proposals; decisions are authorized
+choices; and actions are governed executions. Missing edges never prove that a
+real-world relationship does not exist.
+
+Company Graph must disclose partial sources, authorization filtering, truncation,
+staleness, conflicts, derivation, confidence, and unavailable capabilities. It must
+never expose unauthorized fields, present inference as canonical fact, convert chat
+text into truth, or let a visualization, advisor, or agent bypass approval and audit.
+
+Company Graph API responses and page-provided Idjwi graph context use the
+`company-graph.v1` contract. Nodes contain allowlisted summaries rather than full
+records. Edges state source, predicate, target, direction, assertion class,
+temporal status, evidence, confidence, verification state, and allowed actions.
+Idjwi must treat partial, empty, unavailable, and truncated context differently.
+
+Company Graph authorization uses explicit permissions: `graph.read`,
+`graph.read_sensitive`, `graph.export`, `graph.relationship_propose`,
+`graph.relationship_confirm`, `graph.relationship_reject`, and `graph.admin`.
+Unauthorized sensitivity classes and fields are absent from both the visible packet
+and Idjwi context. Cache entries are isolated by tenant, user, role, effective graph
+permissions, scope, and policy version. Idjwi must never infer missing sensitive
+records from their absence or recommend an action not permitted by the packet.
+
+Graph fields are classified as graph-safe, role-restricted, sensitive, or
+prohibited. `graph.read_sensitive` permits only role-restricted graph fields;
+sensitive and prohibited fields remain outside graph nodes, Idjwi graph context,
+and exports. Unknown fields are prohibited. Idjwi must request a separately governed
+record-detail capability when an authorized objective genuinely requires sensitive
+detail, rather than asking the graph to expose it.
+
 **The moat**: agent memory + operator data grows over time. The longer an operator uses
 Newsconseen, the smarter their agents become about their specific business. No competitor can
 replicate this without the history.
@@ -290,6 +372,11 @@ The legacy-compatible `/copilot/*` API prefix exposes Idjwi services:
 The Idjwi workspace is organized around Today, Ask Idjwi, Decisions, Work,
 Memory, Advisors, and Audit. Provider/model identity is secondary configuration
 and audit metadata, not Idjwi's product identity.
+
+Company Graph page actions use `company-graph-intents.v1`: explain company,
+operational unit, node, relationship or change; find gaps; recommend a governed
+action; and compare authorized scopes. Explicit page intents override language
+classification. “Explain this company” never invokes `find_graph_gaps`.
 
 ### What Idjwi can do
 

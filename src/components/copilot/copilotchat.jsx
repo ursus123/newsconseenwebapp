@@ -266,14 +266,14 @@ function ChartCard({ config, companyId, currentUser, toolName, toolParams }) {
     setPinning(true);
     try {
       await ncClient.entities.ReportChart.create({
-        title:           title || "Copilot Chart",
+        title:           title || "Idjwi Chart",
         sql_query:       sql || "",
         tool_name:       toolName || "",
         tool_params:     toolParams ? JSON.stringify(toolParams) : "",
         chart_type:      type || "bar",
         status:          "active",
         company_id:      companyId,
-        description:     `Pinned from Copilot · tool: ${toolName || "chart"}${toolParams ? " · " + Object.entries(toolParams).map(([k,v]) => `${k}:${v}`).join(", ") : ""}`,
+        description:     `Pinned from Idjwi · tool: ${toolName || "chart"}${toolParams ? " · " + Object.entries(toolParams).map(([k,v]) => `${k}:${v}`).join(", ") : ""}`,
         shared_with_roles: ["admin","analyst","executive"],
         source:          "copilot",
       });
@@ -1074,7 +1074,7 @@ function SaveButton({ message, companyId }) {
         headers: apiHeaders(),
         body: JSON.stringify({
           company_id: companyId,
-          title:      message.content.split("\n")[0].replace(/^#+\s*/, "").slice(0, 80) || "Copilot Report",
+          title:      message.content.split("\n")[0].replace(/^#+\s*/, "").slice(0, 80) || "Idjwi Report",
           content:    message.content,
           charts:     message.charts || [],
           citations:  message.citations || [],
@@ -1138,15 +1138,15 @@ function MessageBubble({ message, onFeedback, companyId, currentUser, onOpenQuer
               <Sparkles className="w-2.5 h-2.5 text-white" />
             </div>
             <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-              Copilot
+              Idjwi
             </span>
-            {message.mode && (
+            {message.response_identity?.response_state && (
               <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
-                message.mode === "advisor"
+                message.response_identity.advisor_consulted
                   ? "bg-violet-50 text-violet-700 border border-violet-100"
                   : "bg-emerald-50 text-emerald-700 border border-emerald-100"
               }`}>
-                {message.mode === "advisor" ? "Advisor Active" : "Autonomous"}
+                {message.response_identity.response_state}
               </span>
             )}
             {message.operating_mode && (
@@ -1763,10 +1763,11 @@ export default function CopilotChat({
         citations:               [],
         created_recommendations: result.created_recommendations || [],
         created_insights:        result.created_insights        || [],
-        mode:                    result.mode                    || (advisorEnabled ? "advisor" : "autonomous"),
+        mode:                    result.mode                    || "autonomous",
         operating_mode:          result.operating_mode          || result.execution_trace?.mode || "",
         execution_trace:         result.execution_trace         || null,
-        advisor_enabled:         result.advisor_enabled         ?? advisorEnabled,
+        response_identity:       result.response_identity       || null,
+        advisor_enabled:         result.response_identity?.advisor_consulted === true,
         memory_used:             result.memory_used             || false,
         memory_candidates_created: result.memory_candidates_created || 0,
         confidence:              result.confidence              || null,
@@ -1823,6 +1824,10 @@ export default function CopilotChat({
           role: "assistant",
           content: "Saved as confirmed Idjwi Memory. Autonomous Mode can use this knowledge in future answers.",
           mode: "autonomous",
+          response_identity: {
+            visible_identity: "Idjwi", response_state: "Idjwi Core",
+            idjwi_core: true, advisor_consulted: false,
+          },
           memory_used: true,
           timestamp: new Date().toISOString(),
         }]);
@@ -1837,7 +1842,7 @@ export default function CopilotChat({
 
     const thinkingMsg = {
       id: Date.now() + 1, role: "assistant", type: "thinking",
-      content: advisorEnabled ? "Consulting Idjwi Advisor..." : "Answering in Idjwi Autonomous Mode...",
+      content: advisorEnabled ? "Advisor requested — Idjwi is selecting an allowed advisor..." : "Answering with Idjwi Core...",
       tools: [],
     };
 
@@ -1848,6 +1853,7 @@ export default function CopilotChat({
       const history = messages
         .filter(m => m.type !== "thinking")
         .map(m => ({ role: m.role, content: m.content }));
+      const requestContext = buildRequestContext();
 
       const resp = await fetch(`${RAILWAY_URL}/copilot/ask`, {
         method:  "POST",
@@ -1864,10 +1870,11 @@ export default function CopilotChat({
           operational_unit_id: operationalScope?.id === "__all__" ? "" : (operationalScope?.id || ""),
           operational_unit_name: operationalScope?.name || "",
           session_id:      sessionIdRef.current,
-          context:         buildRequestContext(),
-          current_page:    buildRequestContext().current_page || "",
-          selected_entity_type: buildRequestContext().selected_entity_type || "",
-          selected_entity_id:   buildRequestContext().selected_entity_id || "",
+          intent:          requestContext.intent || null,
+          context:         requestContext,
+          current_page:    requestContext.current_page || "",
+          selected_entity_type: requestContext.selected_entity_type || "",
+          selected_entity_id:   requestContext.selected_entity_id || "",
         }),
       });
 
@@ -1894,10 +1901,11 @@ export default function CopilotChat({
         feedback:                null,
         created_recommendations: result.created_recommendations || [],
         created_insights:        result.created_insights        || [],
-        mode:                    result.mode                    || (advisorEnabled ? "advisor" : "autonomous"),
+        mode:                    result.mode                    || "autonomous",
         operating_mode:          result.operating_mode          || result.execution_trace?.mode || "",
         execution_trace:         result.execution_trace         || null,
-        advisor_enabled:         result.advisor_enabled         ?? advisorEnabled,
+        response_identity:       result.response_identity       || null,
+        advisor_enabled:         result.response_identity?.advisor_consulted === true,
         memory_used:             result.memory_used             || false,
         memory_candidates_created: result.memory_candidates_created || 0,
         confidence:              result.confidence              || null,
@@ -2001,7 +2009,7 @@ export default function CopilotChat({
             )}
             <button
               onClick={() => setAdvisorEnabled(v => !v)}
-              title={advisorEnabled ? "Optional advisor assistance is enabled" : "Idjwi Core only"}
+              title={advisorEnabled ? "Request an allowed advisor for the next response" : "Use Idjwi Core for the next response"}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors ${
                 advisorEnabled
                   ? "border-violet-200 bg-violet-50 text-violet-700"
@@ -2010,7 +2018,7 @@ export default function CopilotChat({
             >
               {advisorEnabled ? <Brain className="w-3.5 h-3.5" /> : <Activity className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">
-                {advisorEnabled ? "Advisor-assisted" : "Core Mode"}
+                {advisorEnabled ? "Advisor requested" : "Idjwi Core"}
               </span>
             </button>
             <button

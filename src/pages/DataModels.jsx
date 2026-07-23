@@ -1777,7 +1777,7 @@ const API_CATALOGUE = [
   },
   {
     name: "Ingestion Agent", prefix: "/ingestion", color: "#0f766e", bg: "#f0fdfa",
-    desc: "Phase 12 — Universal AI import pipeline. Analyses any CSV/XLSX/JSON/XML, maps columns to the 15-entity ontology, deduplicates, and loads into Supabase. 50k row cap (reports actual count). Dedup defaults to skip-not-update. Memory saved only after successful load. Schema contract validation flags unknown LLM field names. Webhook + scheduled re-ingestion. Copilot generate_import_template tool.",
+    desc: "Phase 12 — Universal AI import pipeline. Analyses any CSV/XLSX/JSON/XML, maps columns to the 15-entity ontology, deduplicates, and loads into Supabase. 50k row cap (reports actual count). Dedup defaults to skip-not-update. Memory saved only after successful load. Schema contract validation flags unknown LLM field names. Webhook + scheduled re-ingestion. Idjwi generate_import_template tool.",
     endpoints: [
       { method: "POST",   path: "/ingestion/upload",              desc: "Analyse file → plan with entity_splits + field_map. Caches rows_json so load works without re-upload. Reports row_count (actual) + rows_capped." },
       { method: "GET",    path: "/ingestion/plan/{id}",           desc: "Fetch a plan for operator review (full JSON incl. schema_violations, analyst_notes)" },

@@ -132,10 +132,10 @@ function MarketAnalysisTemplate({ currentUser, onBack, onSaveReport }) {
         });
         if (r.ok) {
           const resp = await r.json();
-          data = { text: resp.answer || resp.response || resp.text || "No response", source: "Copilot + Web Search" };
+          data = { text: resp.answer || resp.response || resp.text || "No response", source: "Idjwi + Web Search" };
           setReportText(prev => ({ ...prev, [sectionId]: data.text }));
         } else {
-          data = { text: "Copilot unavailable — run the query manually in the Copilot tab.", source: "unavailable" };
+          data = { text: "Idjwi unavailable — run the query manually in the Idjwi page.", source: "unavailable" };
         }
       }
 
@@ -620,7 +620,7 @@ function PinnedChartsGrid({ charts, currentUser, onOpen }) {
               {/* Query label */}
               <div className="mx-4 mb-3 bg-slate-950 rounded-xl px-3 py-2.5 overflow-hidden">
                 <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                  {chart.sql_query ? "SQL · live against datamart" : chart.tool_name ? "Copilot tool · re-called live" : "Snapshot"}
+                  {chart.sql_query ? "SQL · live against datamart" : chart.tool_name ? "Idjwi tool · re-called live" : "Snapshot"}
                 </p>
                 <pre className="text-[10px] text-emerald-400 font-mono whitespace-pre-wrap line-clamp-3 leading-relaxed">
                   {chart.sql_query
@@ -655,7 +655,7 @@ function PinnedChartsGrid({ charts, currentUser, onOpen }) {
         </div>
         <div>
           <h2 className="text-lg font-bold text-slate-800">Pinned Charts</h2>
-          <p className="text-xs text-slate-500">All charts are live — SQL runs against the datamart, Copilot tools are re-called on open</p>
+          <p className="text-xs text-slate-500">All charts are live — SQL runs against the datamart, Idjwi tools are re-called on open</p>
         </div>
       </div>
 
@@ -670,7 +670,7 @@ function PinnedChartsGrid({ charts, currentUser, onOpen }) {
         </div>
       ) : (
         <>
-          <CardGroup title="From Copilot" icon={Sparkles} color="text-violet-600" items={copilotCharts} />
+          <CardGroup title="From Idjwi" icon={Sparkles} color="text-violet-600" items={copilotCharts} />
           <CardGroup title="From QueryBuilder" icon={Code2} color="text-blue-600" items={queryCharts} />
         </>
       )}
@@ -797,7 +797,7 @@ export default function Reports() {
     qbFolderCreated.current = true;
 
     const hasQBFolder = myFolders.some((f) => f.name === "From QueryBuilder");
-    const hasCopilotFolder = myFolders.some((f) => f.name === "From Copilot");
+    const hasCopilotFolder = myFolders.some((f) => f.name === "From Idjwi");
 
     const creates = [];
     if (!hasQBFolder) {
@@ -811,11 +811,11 @@ export default function Reports() {
     }
     if (!hasCopilotFolder) {
       creates.push(ncClient.entities.ChartFolder.create({
-        name: "From Copilot",
+        name: "From Idjwi",
         company_id: currentUser.company_id,
         status: "active",
         shared_with_roles: ["admin"],
-        description: "Charts and tables pinned from Copilot",
+        description: "Charts and tables pinned from Idjwi",
       }));
     }
     if (creates.length > 0) {

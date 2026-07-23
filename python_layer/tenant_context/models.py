@@ -17,10 +17,15 @@ class TenantContext:
     scope_id: Optional[str] = None
     scope_name: Optional[str] = None
     permissions: tuple[str, ...] = field(default_factory=tuple)
+    allowed_operational_unit_ids: tuple[str, ...] = field(default_factory=tuple)
+    managed_operational_unit_ids: tuple[str, ...] = field(default_factory=tuple)
+    scope_authorized: bool = True
 
     def public_dict(self) -> dict:
         data = asdict(self)
         data.pop("user_id", None)
+        data.pop("allowed_operational_unit_ids", None)
+        data.pop("managed_operational_unit_ids", None)
         data["authenticated_user_verified"] = bool(self.user_id)
         data["permissions"] = list(self.permissions)
         return data

@@ -1,0 +1,113 @@
+{
+  "contract": "company-graph-endpoint-benchmark.v1",
+  "base_url": "http://localhost:8001",
+  "company_id": "newsconseen-main",
+  "authorization": "bearer_token_verified_not_persisted",
+  "discovery_ms": 5075.47,
+  "selected_center": "transaction:2385db26-c98f-41ca-93cf-0de43f8b91d6",
+  "overview_shape": {
+    "nodes": 59,
+    "edges": 7
+  },
+  "completeness": "partial",
+  "truncated": true,
+  "metrics": {
+    "overview": {
+      "endpoint": "overview",
+      "repetitions": 20,
+      "cold_ms": 18.53,
+      "warm_median_ms": 12.81,
+      "warm_p95_ms": 21.12,
+      "maximum_ms": 21.12,
+      "response_bytes": 66476,
+      "target_ms": 500,
+      "target_met": true
+    },
+    "search": {
+      "endpoint": "search",
+      "repetitions": 20,
+      "cold_ms": 134.42,
+      "warm_median_ms": 135.41,
+      "warm_p95_ms": 228.05,
+      "maximum_ms": 228.05,
+      "response_bytes": 1412,
+      "target_ms": 300,
+      "target_met": true
+    },
+    "neighborhood_1": {
+      "endpoint": "neighborhood_1",
+      "repetitions": 20,
+      "cold_ms": 14.93,
+      "warm_median_ms": 7.86,
+      "warm_p95_ms": 15.5,
+      "maximum_ms": 15.5,
+      "response_bytes": 6197,
+      "target_ms": 250,
+      "target_met": true
+    },
+    "neighborhood_2": {
+      "endpoint": "neighborhood_2",
+      "repetitions": 20,
+      "cold_ms": 556.77,
+      "warm_median_ms": 6.42,
+      "warm_p95_ms": 8.06,
+      "maximum_ms": 556.77,
+      "response_bytes": 6198,
+      "target_ms": 750,
+      "target_met": true
+    },
+    "neighborhood_3": {
+      "endpoint": "neighborhood_3",
+      "repetitions": 20,
+      "cold_ms": 365.08,
+      "warm_median_ms": 5.53,
+      "warm_p95_ms": 7.09,
+      "maximum_ms": 365.08,
+      "response_bytes": 6198,
+      "target_ms": 2000,
+      "target_met": true
+    },
+    "edge_explain": {
+      "endpoint": "edge_explain",
+      "repetitions": 20,
+      "cold_ms": 216.75,
+      "warm_median_ms": 238.77,
+      "warm_p95_ms": 319.26,
+      "maximum_ms": 319.26,
+      "response_bytes": 3384,
+      "target_ms": 500,
+      "target_met": true
+    }
+  },
+  "concurrent_overview": {
+    "users": 4,
+    "median_ms": 2052.64,
+    "p95_ms": 2090.51,
+    "latencies_ms": [
+      2049.46,
+      2055.82,
+      2036.79,
+      2090.51
+    ]
+  },
+  "coverage": {
+    "required": [
+      "edge_explain",
+      "neighborhood_1",
+      "neighborhood_2",
+      "neighborhood_3",
+      "overview",
+      "search"
+    ],
+    "measured": [
+      "edge_explain",
+      "neighborhood_1",
+      "neighborhood_2",
+      "neighborhood_3",
+      "overview",
+      "search"
+    ],
+    "missing": []
+  },
+  "decision": "endpoint_targets_met"
+}

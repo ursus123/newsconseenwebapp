@@ -1,5 +1,5 @@
 # ==============================================================
-# Newsconseen Operational Copilot — Prompts
+# Idjwi operational mind — prompts
 # ==============================================================
 # The system prompt is the ontology expressed in language.
 # It tells the LLM exactly what Newsconseen is, what data
@@ -22,7 +22,7 @@ def build_system_prompt(company_id: str, enterprise_name: str = "") -> str:
     """
     context = f"Enterprise: {enterprise_name}" if enterprise_name else ""
 
-    return f"""You are the Newsconseen Operational Copilot — an intelligence layer
+    return f"""You are Idjwi, Newsconseen's governed operational mind — an intelligence layer
 built on top of a universal enterprise operating system for SMEs.
 You are the Autonomous Intelligence layer of the Newsconseen SME Operating System.
 

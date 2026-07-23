@@ -1,9 +1,9 @@
 /**
  * companyGraphService.js
  *
- * Builds a graph data structure from existing Base44 entity records.
- * No new entities — derives connections from Relationship records,
- * Task/Transaction fields, Address links, and Intelligence layer objects.
+ * Frontend adapter for the versioned governed Company Graph contract.
+ * The local builder is a compatibility fallback and emits the same safe summary
+ * shape; it must never use complete canonical rows as graph-node transport.
  *
  * Returns: { nodes, edges }
  *
@@ -26,7 +26,61 @@ export const NODE_COLORS = {
   opportunity:    "#22c55e",   // green
   insight:        "#a855f7",   // purple
   recommendation: "#fb923c",   // light orange
+  decision:       "#2563eb",
+  action:         "#dc2626",
+  operational_unit: "#4f46e5",
+  observation:    "#7c3aed",
 };
+
+export const GRAPH_CONTRACT_VERSION = "company-graph.v1";
+export const GRAPH_INTENT_VERSION = "company-graph-intents.v1";
+export const IDJWI_GRAPH_INTENTS = Object.freeze({
+  EXPLAIN_COMPANY_GRAPH: "explain_company_graph",
+  EXPLAIN_OPERATIONAL_UNIT: "explain_operational_unit",
+  EXPLAIN_NODE: "explain_node",
+  EXPLAIN_RELATIONSHIP: "explain_relationship",
+  EXPLAIN_GRAPH_CHANGE: "explain_graph_change",
+  FIND_GRAPH_GAPS: "find_graph_gaps",
+  RECOMMEND_GRAPH_ACTION: "recommend_graph_action",
+  COMPARE_GRAPH_SCOPES: "compare_graph_scopes",
+});
+
+export const GRAPH_FIELD_CLASSIFICATION = {
+  enterprise: { graph_safe: ["enterprise_name", "name", "enterprise_type", "enterprise_tier", "operating_status", "status", "city", "region", "country"], role_restricted: ["parent_enterprise_id"] },
+  operational_unit: { graph_safe: ["name", "unit_name", "unit_type", "status"], role_restricted: ["parent_unit_id", "manager_display_name"] },
+  person: { graph_safe: ["person_type", "person_subtype", "status", "availability_status", "engagement_model"], role_restricted: ["first_name", "last_name", "preferred_name", "full_name", "primary_role", "start_date", "end_date"] },
+  task: { graph_safe: ["title", "task_name", "task_type", "status", "priority", "due_date", "scheduled_date", "outcome"], role_restricted: ["assigned_to_name", "completed_at", "outcome_reason"] },
+  transaction: { graph_safe: ["transaction_type", "status", "payment_status", "transaction_date", "date", "due_date", "currency"], role_restricted: ["reference_number", "description"] },
+  product: { graph_safe: ["product_name", "item_name", "name", "item_type", "item_class", "unit_of_measure", "status", "stock_quantity", "reorder_level", "expiry_date"], role_restricted: ["sku", "supplier_display_name"] },
+  service: { graph_safe: ["name", "service_name", "service_type", "status", "is_active"], role_restricted: ["service_code", "delivery_owner"] },
+  relationship: { graph_safe: ["relationship_type", "status", "start_date", "end_date"], role_restricted: ["role"] },
+  address: { graph_safe: ["address_type", "city", "region", "state", "country", "is_primary"], role_restricted: ["postal_code"] },
+  document: { graph_safe: ["title", "document_type", "status", "issue_date", "expiry_date"], role_restricted: ["document_number", "issuer"] },
+  schedule: { graph_safe: ["name", "title", "schedule_type", "frequency", "status", "is_active", "start_date", "end_date"], role_restricted: ["timezone", "owner_display_name"] },
+  risk: { graph_safe: ["title", "risk_type", "status", "severity", "likelihood", "impact"], role_restricted: ["owner_display_name", "mitigation_status"] },
+  opportunity: { graph_safe: ["title", "opportunity_type", "status", "confidence"], role_restricted: ["owner_display_name", "stage"] },
+  recommendation: { graph_safe: ["title", "recommendation_type", "priority", "status", "is_actioned", "is_dismissed"], role_restricted: ["owner_display_name", "review_due_at"] },
+  decision: { graph_safe: ["title", "decision_type", "status", "outcome", "decided_at"], role_restricted: ["decision", "decided_by_display_name"] },
+  action: { graph_safe: ["title", "action_type", "action_label", "status", "priority", "risk_level", "created_at", "completed_at"], role_restricted: ["reasoning", "approval_status", "approved_at"] },
+  external_observation: { graph_safe: ["observation_type", "status", "severity", "observed_at", "expires_at", "confidence"], role_restricted: ["source_name", "location_label", "summary"] },
+  territory: { graph_safe: ["territory_type", "status"], role_restricted: [] },
+  insight: { graph_safe: ["insight_type", "severity", "status"], role_restricted: [] },
+};
+
+function exposableFields(type) {
+  const projectionType = type === "observation" ? "external_observation" : type;
+  const definition = GRAPH_FIELD_CLASSIFICATION[projectionType] || { graph_safe: [], role_restricted: [] };
+  return [...definition.graph_safe, ...definition.role_restricted];
+}
+
+function graphSafeAttributes(entity, type, includeRoleRestricted = false) {
+  const projectionType = type === "observation" ? "external_observation" : type;
+  const definition = GRAPH_FIELD_CLASSIFICATION[projectionType] || { graph_safe: [], role_restricted: [] };
+  const fields = includeRoleRestricted ? exposableFields(type) : definition.graph_safe;
+  return Object.fromEntries(fields
+    .filter(field => entity[field] != null)
+    .map(field => [field, entity[field]]));
+}
 
 export const GRAPH_MODES = {
   operational_focus: { label: "Operational Focus", types: ["enterprise","person","task","transaction","risk","recommendation","opportunity"] },
@@ -47,17 +101,21 @@ function safeStr(v) { return (v == null || v === "" || v === "null") ? null : St
 function labelFor(entity, type) {
   switch (type) {
     case "enterprise":     return safeStr(entity.enterprise_name) || safeStr(entity.name) || "Enterprise";
-    case "person":         return safeStr(entity.full_name) || [entity.first_name, entity.last_name].filter(Boolean).join(" ") || "Person";
+    case "person":         return "Person";
     case "product":        return safeStr(entity.item_name) || safeStr(entity.name) || "Product";
     case "service":        return safeStr(entity.name) || safeStr(entity.service_name) || "Service";
     case "task":           return safeStr(entity.title) || safeStr(entity.task_name) || "Task";
-    case "transaction":    return safeStr(entity.reference_number) || safeStr(entity.description) || "Transaction";
-    case "address":        return safeStr(entity.address_line1) || safeStr(entity.address) || "Address";
+    case "transaction":    return "Transaction";
+    case "address":        return safeStr(entity.city) || safeStr(entity.country) || "Address";
     case "territory":      return safeStr(entity.name) || safeStr(entity.territory_name) || "Territory";
     case "insight":        return safeStr(entity.title) || "Insight";
     case "risk":           return safeStr(entity.title) || "Risk";
     case "opportunity":    return safeStr(entity.title) || "Opportunity";
     case "recommendation": return safeStr(entity.title) || "Recommendation";
+    case "decision":       return safeStr(entity.title) || "Decision";
+    case "action":         return safeStr(entity.title) || safeStr(entity.action_label) || "Action";
+    case "external_observation": return safeStr(entity.observation_type) || "External observation";
+    case "operational_unit": return safeStr(entity.unit_name) || safeStr(entity.name) || "Operational unit";
     default:               return safeStr(entity.name) || safeStr(entity.id) || type;
   }
 }
@@ -147,7 +205,13 @@ function buildNodes(entities) {
       risk_level:     hasRisk ? (risks.find(r => r.subject_id === entity.id)?.severity || "medium") : null,
       has_opportunity: hasOpp,
       is_unconnected: false,  // updated below
-      metadata:       entity,
+      status:         entity.status || entity.operating_status || null,
+      sensitivity:    "internal",
+      attributes:     graphSafeAttributes(entity, type),
+      permitted_actions: [
+        { action: "inspect", allowed: true, requires_approval: false },
+        { action: "ask_idjwi", allowed: true, requires_approval: false },
+      ],
     };
     nodeMap[id] = node;
     all.push(node);
@@ -197,18 +261,30 @@ function buildEdges(entities, nodeMap) {
       predicate:         relType,
       strength,
       label:             label || relType.replaceAll("_", " "),
+      assertion_class:   evidence.assertion_class || "canonical_reference_projection",
       status:            evidence.status || "active",
-      valid_from:        evidence.valid_from || null,
-      valid_to:          evidence.valid_to || null,
-      evidence: {
+      temporal: {
+        status: evidence.status || "active",
+        valid_from: evidence.valid_from || null,
+        valid_to: evidence.valid_to || null,
+        observed_at: evidence.observed_at || null,
+        expires_at: evidence.expires_at || null,
+      },
+      confidence:        evidence.confidence ?? 1,
+      verification_state: evidence.verification_state || "verified",
+      permitted_actions: [
+        { action: "inspect_evidence", allowed: true, requires_approval: false },
+        { action: "ask_idjwi", allowed: true, requires_approval: false },
+      ],
+      evidence: [{
+        evidence_id:     `${evidence.source_table || "frontend-projection"}:${String(evidence.source_record_id || "")}`,
         source_zone:      evidence.source_zone || "analytics",
         source_table:     evidence.source_table || "frontend projection",
         source_record_id: String(evidence.source_record_id || ""),
-        assertion_type:   evidence.assertion_type || "derived",
-        confidence:       evidence.confidence ?? 0.95,
+        assertion_class:  evidence.assertion_class || "canonical_reference_projection",
         explanation:      evidence.explanation || `Newsconseen derived this ${relType.replaceAll("_", " ")} connection from canonical record references.`,
         derivation_rule:  evidence.derivation_rule || null,
-      },
+      }],
     });
   };
 
@@ -221,7 +297,7 @@ function buildEdges(entities, nodeMap) {
     if (srcId && tgtId) {
       addEdge(srcId, tgtId, rel.relationship_type || "relates_to", 0.7, rel.relationship_type || "", {
         source_zone: "canonical", source_table: "public.relationships",
-        source_record_id: rel.id, assertion_type: "fact", confidence: 1,
+        source_record_id: rel.id, assertion_class: "canonical_relationship", confidence: 1,
         status: rel.status, valid_from: rel.start_date, valid_to: rel.end_date,
         explanation: `A tenant-governed relationship record states this ${String(rel.relationship_type || "relationship").replaceAll("_", " ")} connection.`,
       });
@@ -230,7 +306,7 @@ function buildEdges(entities, nodeMap) {
     if (rel.enterprise_id && rel.item_id) {
       addEdge(nodeId("enterprise", rel.enterprise_id), nodeId("product", rel.item_id), rel.relationship_type || "uses", 0.5, "", {
         source_zone: "canonical", source_table: "public.relationships", source_record_id: rel.id,
-        assertion_type: "fact", confidence: 1, status: rel.status,
+        assertion_class: "canonical_relationship", confidence: 1, status: rel.status,
       });
     }
   });
@@ -357,11 +433,14 @@ export function toCytoscapeElements(nodes, edges) {
       predicate: e.predicate || e.relationship_type,
       relationship_type: e.relationship_type,
       status: e.status,
-      valid_from: e.valid_from,
-      valid_to: e.valid_to,
+      temporal: e.temporal,
+      assertion_class: e.assertion_class,
+      confidence: e.confidence,
+      verification_state: e.verification_state,
+      permitted_actions: e.permitted_actions,
       evidence: e.evidence,
     },
-    classes: e.evidence?.assertion_type === "fact" ? "edge-fact" : "edge-derived",
+    classes: ["canonical_relationship", "operator_confirmed_assertion"].includes(e.assertion_class) ? "edge-fact" : "edge-derived",
   }));
 
   return [...cyNodes, ...cyEdges];
@@ -404,4 +483,180 @@ export function buildGraphData(entities) {
   };
 
   return { nodes: allNodes, edges, stats };
+}
+
+export function assertGovernedGraphContract(packet) {
+  if (!packet || packet.contract_version !== GRAPH_CONTRACT_VERSION) {
+    throw new Error(`Unsupported Company Graph contract: ${packet?.contract_version || "missing"}`);
+  }
+  if (!packet.scope || !packet.provenance || !packet.completeness || !packet.truncation || !packet.quality) {
+    throw new Error("Incomplete governed Company Graph contract");
+  }
+  return packet;
+}
+
+export function sanitizeGraphNode(node) {
+  return {
+    id: node.id,
+    entity_type: node.entity_type,
+    entity_id: node.entity_id,
+    label: node.label,
+    sublabel: node.sublabel || null,
+    status: node.status || null,
+    sensitivity: node.sensitivity || "internal",
+    attributes: graphSafeAttributes(node.attributes || {}, node.entity_type, true),
+    permitted_actions: (node.permitted_actions || []).map(action => ({
+      action: action.action, allowed: Boolean(action.allowed),
+      requires_approval: Boolean(action.requires_approval), reason: action.reason || null,
+    })),
+  };
+}
+
+export function sanitizeGraphEdge(edge) {
+  return {
+    id: edge.id,
+    source: edge.source,
+    predicate: edge.predicate,
+    target: edge.target,
+    direction: edge.direction || "directed",
+    label: edge.label,
+    assertion_class: edge.assertion_class,
+    status: edge.status,
+    temporal: {
+      status: edge.temporal?.status || edge.status || "active",
+      valid_from: edge.temporal?.valid_from || null,
+      valid_to: edge.temporal?.valid_to || null,
+      observed_at: edge.temporal?.observed_at || null,
+      expires_at: edge.temporal?.expires_at || null,
+      confirmed_at: edge.temporal?.confirmed_at || null,
+      rejected_at: edge.temporal?.rejected_at || null,
+      superseded_by: edge.temporal?.superseded_by || null,
+      evidence_version: edge.temporal?.evidence_version || 1,
+    },
+    evidence: (edge.evidence || []).map(item => ({
+      evidence_id: item.evidence_id,
+      source_zone: item.source_zone,
+      source_table: item.source_table,
+      source_record_id: item.source_record_id,
+      assertion_class: item.assertion_class,
+      explanation: item.explanation,
+      derivation_rule: item.derivation_rule || null,
+      retrieved_at: item.retrieved_at || null,
+      freshness_at: item.freshness_at || null,
+      requirement: item.requirement || "canonical_record_id",
+    })),
+    confidence: edge.confidence,
+    verification_state: edge.verification_state,
+    assertion_key: edge.assertion_key || edge.id,
+    assertion_state: edge.assertion_state || (edge.verification_state === "proposed" ? "proposed" : "active"),
+    relationship_rule_id: edge.relationship_rule_id || null,
+    sensitivity: edge.sensitivity || "internal",
+    valid_correction_actions: edge.valid_correction_actions || [],
+    permitted_actions: (edge.permitted_actions || []).map(action => ({
+      action: action.action, allowed: Boolean(action.allowed),
+      requires_approval: Boolean(action.requires_approval), reason: action.reason || null,
+    })),
+  };
+}
+
+export function sanitizeAssertionHistoryEvent(event) {
+  return {
+    assertion_key: event.assertion_key,
+    edge_id: event.edge_id || null,
+    source: event.source,
+    predicate: event.predicate,
+    target: event.target,
+    from_state: event.from_state || null,
+    to_state: event.to_state,
+    reason: event.reason || null,
+    actor: "authorized_operator",
+    occurred_at: event.occurred_at || null,
+    evidence_version: event.evidence_version || 1,
+  };
+}
+
+export function serializeGovernedGraphPacket(packet, { nodes = packet?.nodes || [], edges = packet?.edges || [] } = {}) {
+  assertGovernedGraphContract(packet);
+  return {
+    contract_version: GRAPH_CONTRACT_VERSION,
+    company_id: packet.company_id,
+    scope: packet.scope,
+    nodes: nodes.map(sanitizeGraphNode),
+    edges: edges.map(sanitizeGraphEdge),
+    counts: packet.counts || {},
+    provenance: packet.provenance,
+    source_status: packet.source_status || [],
+    completeness: packet.completeness,
+    truncation: packet.truncation,
+    quality: packet.quality,
+    permitted_actions: packet.permitted_actions || [],
+    assertion_history: (packet.assertion_history || []).map(sanitizeAssertionHistoryEvent),
+  };
+}
+
+export function buildIdjwiGraphContext(packet, {
+  intent = null,
+  selectedNodeId = null,
+  selectedEdgeId = null,
+  nodes = packet?.nodes || [],
+  edges = packet?.edges || [],
+  tenantId = packet?.company_id || null,
+  role = null,
+  page = "CompanyGraphHome",
+  productSurface = "web",
+} = {}) {
+  assertGovernedGraphContract(packet);
+  const safeNodes = nodes.map(sanitizeGraphNode);
+  const safeEdges = edges.map(sanitizeGraphEdge);
+  const counts = safeNodes.reduce((result, node) => ({ ...result, [node.entity_type]: (result[node.entity_type] || 0) + 1 }), {});
+  const unavailableSources = (packet.source_status || []).filter(source => ["unavailable", "partial"].includes(source.state)).map(source => source.source_id).sort();
+  const predicates = [...new Set(safeEdges.map(edge => edge.predicate).filter(Boolean))].sort();
+  const sensitivities = [...new Set([...safeNodes, ...safeEdges].map(item => item.sensitivity).filter(Boolean))].sort();
+  return {
+    contract_version: GRAPH_CONTRACT_VERSION,
+    intent,
+    tenant_id: tenantId,
+    role,
+    scope: packet.scope,
+    selected_node_id: selectedNodeId,
+    selected_edge_id: selectedEdgeId,
+    nodes: safeNodes,
+    edges: safeEdges,
+    counts,
+    semantic_summary: {
+      node_count: safeNodes.length,
+      edge_count: safeEdges.length,
+      disconnected_count: packet.quality?.unconnected_count || 0,
+      unavailable_source_count: unavailableSources.length,
+    },
+    ranked_neighborhood: {
+      ranking: "server_operational_priority",
+      node_ids: safeNodes.map(node => node.id),
+      edge_ids: safeEdges.map(edge => edge.id),
+    },
+    relationship_predicates: predicates,
+    provenance: packet.provenance,
+    freshness: {
+      generated_at: packet.provenance?.generated_at || null,
+      source_last_success_at: Object.fromEntries((packet.source_status || []).filter(source => source.last_success_at).map(source => [source.source_id, source.last_success_at])),
+    },
+    source_status: packet.source_status || [],
+    unavailable_sources: unavailableSources,
+    completeness: packet.completeness,
+    truncation: packet.truncation,
+    quality: packet.quality,
+    permitted_actions: packet.permitted_actions || [],
+    sensitivity_classes: sensitivities,
+    page,
+    product_surface: productSurface,
+    assertion_history: (packet.assertion_history || []).slice(0, 200).map(sanitizeAssertionHistoryEvent),
+  };
+}
+
+export function buildIdjwiGraphAction(packet, intent, options = {}) {
+  if (!Object.values(IDJWI_GRAPH_INTENTS).includes(intent)) throw new Error(`Unsupported Idjwi graph intent: ${intent}`);
+  return {
+    intent,
+    context: buildIdjwiGraphContext(packet, { ...options, intent }),
+  };
 }

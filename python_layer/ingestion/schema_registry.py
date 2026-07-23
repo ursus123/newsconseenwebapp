@@ -11,7 +11,7 @@ ENTITY_FIELDS: dict[str, set[str]] = {
         "first_name", "last_name", "full_name", "email", "phone",
         "person_type", "person_subtype", "engagement_model", "status",
         "availability_status", "date_of_birth", "gender", "nationality",
-        "address_id", "enterprise_id", "notes", "company_id",
+        "address_id", "enterprise_id", "operational_unit_id", "notes", "company_id",
     },
     "Enterprise": {
         "name", "short_name", "email", "phone", "website",
@@ -24,36 +24,36 @@ ENTITY_FIELDS: dict[str, set[str]] = {
         "name", "sku", "barcode", "description", "item_type", "item_class",
         "item_subtype", "unit_of_measure", "price", "cost", "stock_quantity",
         "reorder_point", "expiry_date", "manufacturer", "supplier_id",
-        "category", "notes", "company_id",
+        "category", "operational_unit_id", "notes", "company_id",
     },
     "Task": {
         "title", "description", "task_type", "status", "priority",
         "assigned_to", "assigned_enterprise_id", "due_date", "start_date",
-        "completed_at", "outcome", "notes", "company_id",
+        "completed_at", "outcome", "operational_unit_id", "notes", "company_id",
     },
     "Transaction": {
         "reference_number", "transaction_type", "amount", "currency",
         "date", "status", "payment_method", "person_id", "enterprise_id",
-        "product_id", "description", "notes", "company_id",
+        "product_id", "description", "operational_unit_id", "notes", "company_id",
     },
     "Relationship": {
         "from_entity_type", "from_entity_id", "to_entity_type", "to_entity_id",
         "relationship_type", "status", "start_date", "end_date",
-        "strength", "notes", "company_id",
+        "strength", "operational_unit_id", "notes", "company_id",
     },
     "Address": {
         "street", "city", "state", "country", "postal_code",
         "latitude", "longitude", "address_type", "is_primary",
-        "entity_type", "entity_id", "notes", "company_id",
+        "entity_type", "entity_id", "operational_unit_id", "notes", "company_id",
     },
     "Document": {
         "title", "document_type", "file_url", "status", "description",
         "entity_type", "entity_id", "issued_date", "expiry_date",
-        "notes", "company_id",
+        "operational_unit_id", "notes", "company_id",
     },
     "Schedule": {
         "name", "frequency", "status", "description", "entity_type",
-        "entity_id", "next_run", "last_run", "notes", "company_id",
+        "entity_id", "next_run", "last_run", "operational_unit_id", "notes", "company_id",
     },
     "Signal": {
         "signal_type", "source", "value", "recorded_at", "status",
@@ -80,7 +80,20 @@ ENTITY_FIELDS: dict[str, set[str]] = {
     "Observation": {
         "observation_type", "subject_type", "subject_id",
         "numeric_value", "text_value", "unit_of_measure",
-        "is_anomaly", "observed_at", "notes", "company_id",
+        "is_anomaly", "observed_at", "operational_unit_id", "notes", "company_id",
+    },
+    "OperationalUnit": {
+        "unit_name", "unit_type", "organization_id", "parent_unit_id",
+        "manager_user_id", "manager_person_id", "jurisdiction",
+        "permission_policy", "status", "starts_at", "ends_at", "company_id",
+    },
+    "OperationalUnitMembership": {
+        "operational_unit_id", "user_id", "person_id", "membership_role",
+        "permissions", "status", "valid_from", "valid_to", "company_id",
+    },
+    "OperationalUnitRelationship": {
+        "source_unit_id", "target_unit_id", "predicate", "status",
+        "valid_from", "valid_to", "evidence", "company_id",
     },
 }
 

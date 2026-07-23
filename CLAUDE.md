@@ -1,5 +1,22 @@
 # Newsconseen OS — Project Context
 
+## Company Graph query boundary
+
+Company Graph must remain bounded as tenant data grows. Overviews use ranked
+global/per-type budgets and authorization-bound continuation tokens;
+neighborhoods, search and edge explanations query only the required governed
+scope. Do not restore a path that loads every canonical table into the browser.
+PostgreSQL is the accepted Company Graph query engine. The reproducible
+small/medium/large, sparse/dense, depth 1-3, authorization and concurrency suite
+passed its documented targets on 2026-07-22. Reconsider a dedicated graph
+projection only after new production-shaped evidence fails those targets after
+index, query, projection and cache optimization.
+
+Company Graph buttons must send one of the governed
+`company-graph-intents.v1` intents. Never infer a button capability from its
+label. Explicit intent overrides conservative natural-language classification;
+“Explain this company” is `explain_company_graph`, never `find_graph_gaps`.
+
 ## Mantra
 
 > **Newsconseen is the Autonomous SME Operating System.**
@@ -62,6 +79,61 @@ living-documentation rules are in
 [`docs/strategy/DEVELOPMENT_STRATEGY.md`](docs/strategy/DEVELOPMENT_STRATEGY.md).
 Material changes must keep that strategy and all affected Markdown contracts
 current in the same workstream.
+
+### Company Graph product contract
+
+Graph relationships are stateful assertions. Persist proposed/confirmed/rejected/
+disputed/active/expired/superseded state and append-only events using migration
+005. Never regenerate a rejected inference under the same stable assertion key.
+Idjwi receives sanitized history, temporal state and evidence version.
+
+Graph completeness is diagnostic, not a boolean. Top-level states are exactly
+complete, partial, empty, unauthorized and unavailable; truncation is a partial
+diagnostic. Always report source failures with category, affected capabilities,
+last success, retryability and operator action.
+
+Operational units are first-class canonical objects. Never use enterprise rows
+as department, branch, warehouse, pharmacy, field-team or project scope proxies.
+Use `operational_units`, memberships, hierarchy, unit relationships and
+`operational_unit_id` ownership from migration 004.
+
+Relationship extraction is registry-driven through
+`python_layer/ontology/relationship_registry.py`. Do not add entity-specific
+graph extraction loops. Update the entity registry and relationship registry so
+forms, repositories, graph, Idjwi, imports, quality and editing share one rule.
+
+Company Graph exports and relationship changes are server-governed operations.
+Never add a client-only official export or a relationship write that trusts
+browser-supplied endpoints or predicates. Rebuild the authorized graph, apply
+field projections, record export purpose/redactions, validate the proposal and
+endpoints, enforce predicate/conflict rules and approval, then audit the result.
+
+Company Graph is Newsconseen's governed operational map: a bounded,
+evidence-linked projection of authorized records, relationships, observations,
+recommendations, decisions, and actions. It is not a source of truth, a decorative
+network, or an LLM-generated model of the organization. Supabase `public.*` owns
+canonical facts; the Python layer owns governed projection and derived
+intelligence; Idjwi explains and coordinates permitted work over the same evidence.
+
+Tenant, organization, operational unit, department, team, and enterprise are
+distinct concepts and must not be silently substituted for one another. Company
+Graph must preserve role, scope, sensitivity, provenance, temporal state,
+uncertainty, approval, and audit boundaries on every surface. The authoritative
+product and design contract is
+[`docs/COMPANY_GRAPH_DESIGN_SPEC.md`](docs/COMPANY_GRAPH_DESIGN_SPEC.md), with the
+architectural decision recorded in
+[`docs/adr/ADR-001-company-graph-governed-operational-projection.md`](docs/adr/ADR-001-company-graph-governed-operational-projection.md).
+The graph API, frontend, and Idjwi context must share the versioned contract in
+[`docs/COMPANY_GRAPH_CONTRACT_V1.md`](docs/COMPANY_GRAPH_CONTRACT_V1.md). Graph
+nodes are allowlisted summaries, never complete canonical rows.
+Company Graph security uses the backend-enforced `graph-policy.v1` contract in
+[`docs/COMPANY_GRAPH_AUTHORIZATION.md`](docs/COMPANY_GRAPH_AUTHORIZATION.md).
+Graph caches must be principal- and policy-scoped; UI controls never substitute for
+tenant, user, role, permission, scope, sensitivity, field, or action authorization.
+Every graph field and label follows the four-class minimization registry documented
+in [`docs/COMPANY_GRAPH_FIELD_CLASSIFICATION.md`](docs/COMPANY_GRAPH_FIELD_CLASSIFICATION.md).
+Unknown fields default to prohibited; sensitive and prohibited fields never enter
+the graph, Idjwi graph context, or graph exports.
 
 ---
 
@@ -1085,3 +1157,16 @@ Build Phase 8 — Audit Trail: a python_layer /audit endpoint that reads from Su
 entity change history, stores to PostgreSQL audit.change_log, and a Settings > Audit Trail
 tab in the frontend with date/entity/user filters and CSV export.
 ```
+### Idjwi graph packet and response identity
+
+Company Graph and Idjwi use the same `company-graph.v1` semantic packet. Idjwi
+must receive exact authorized nodes, edges, quality totals, source status,
+completeness and truncation, plus scope, role, selection, evidence, provenance,
+freshness, sensitivities, permitted actions, page and product surface.
+Contradictory summaries are rejected before reasoning.
+
+Idjwi is always the visible identity. Advisor state is derived from each
+response, never from a toggle: available, requested, consulted, multiple
+consulted, unavailable, Core fallback, or required-but-unavailable. The
+response and audit event must carry the same proof-derived identity. Existing
+`/copilot/*` paths are compatibility APIs only and are not product language.

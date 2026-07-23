@@ -1,4 +1,4 @@
-# Newsconseen Operational Copilot
+# Idjwi operational mind (legacy-compatible package path)
 from copilot.engine import CopilotEngine
 from copilot.queries import QueryEngine
 from copilot.routes import router as copilot_router

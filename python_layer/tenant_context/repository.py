@@ -13,6 +13,10 @@ class TenantContextRepository(ABC):
     def list_entities(self, context: TenantContext, entity: str, *, limit: int = 5000) -> TenantRepositoryResult:
         raise NotImplementedError
 
+    def list_entities_filtered(self, context: TenantContext, entity: str, *, filters: dict,
+                               limit: int = 500, offset: int = 0) -> TenantRepositoryResult:
+        raise NotImplementedError
+
     @abstractmethod
     def count_entities(self, context: TenantContext, entity: str) -> int:
         raise NotImplementedError

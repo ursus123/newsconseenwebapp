@@ -1,5 +1,32 @@
 # Newsconseen OS — Product Constitution and Architecture
 
+## Bounded Company Graph reads
+
+### Shared Idjwi semantic packet and response identity
+
+The browser and Idjwi consume the same validated `company-graph.v1` packet.
+Exact node, edge, disconnected and unavailable-source totals are validated
+with the authorized scope, selection, graph-safe evidence, provenance,
+freshness, assertion state, truncation, sensitivity and permitted actions.
+Visualization filters are view state and do not rewrite the governed packet.
+
+Idjwi remains the visible operational identity. Advisor participation is
+response-specific and proof-derived. A request toggle records intent to
+consult; it does not produce an “advisor consulted” claim. The response and
+`idjwi.response` audit event store the same identity metadata. Legacy
+`/copilot/*` paths remain compatibility endpoints only.
+
+The Python graph gateway plans bounded reads over canonical Supabase tables.
+Ranked overviews, direct registry-driven neighborhoods, direct edge evidence and
+governed search share `company-graph.v1`. Payloads declare budgets, omissions,
+truncation and continuation. Migration `006_company_graph_bounded_query_indexes.sql`
+adds tenant-first reference indexes. `company_graph.benchmark` is the evidence
+gate for any future dedicated graph projection; Supabase remains canonical. The
+2026-07-22 Stage 11 benchmark passed every defined target through 200,000 nodes,
+2.4 million edges and authorized endpoint execution, so PostgreSQL is retained.
+Idjwi consumes this graph through explicit `company-graph-intents.v1` page
+actions; label interpretation is never the control plane for a button.
+
 > This document is the single source of truth for Newsconseen.
 > It is a product constitution, not just technical documentation.
 > Every developer, every AI assistant, every contributor must read
@@ -74,6 +101,83 @@ be tested against it.
   permissions, or approvals — it violates the mantra.
 - If the system surfaces an insight but leaves a human to manually close every loop — it violates the mantra.
 
+### Company Graph boundary
+
+Graph edges have durable temporal assertion governance in `graph_assertions` and
+append-only `graph_assertion_events`. The graph overlays current state and
+history onto registry projections and suppresses rejected inferred keys.
+Completeness is a multi-dimensional diagnostic contract, documented in
+[`../docs/GRAPH_ASSERTION_AND_COMPLETENESS_GOVERNANCE.md`](../docs/GRAPH_ASSERTION_AND_COMPLETENESS_GOVERNANCE.md).
+
+Internal departments, branches, warehouses, pharmacies, field teams and projects
+are `operational_units`, not enterprises. Membership and management authorize
+scope; `operational_unit_id` owns records; and a hierarchy plus cross-unit edges
+describe internal structure. Relationship projection is driven by the shared
+`ontology-relationships.v1` registry. See
+[`../docs/OPERATIONAL_UNITS_AND_RELATIONSHIP_REGISTRY.md`](../docs/OPERATIONAL_UNITS_AND_RELATIONSHIP_REGISTRY.md).
+
+Official graph exports and graph-to-canonical relationship changes cross a
+backend governance boundary. Export selections are intersected with a freshly
+authorized graph packet. Relationship changes bind to a visible proposal and
+check endpoint access, predicate validity, conflicts, operator authority, and
+approval before canonical write. See
+[`../docs/COMPANY_GRAPH_EXPORT_AND_MUTATION_GOVERNANCE.md`](../docs/COMPANY_GRAPH_EXPORT_AND_MUTATION_GOVERNANCE.md).
+
+Company Graph is the governed operational-map projection shared by the operator
+and Idjwi. It connects authorized canonical records, derived intelligence, and
+time-bounded observations without becoming a second source of truth.
+
+```text
+Supabase public.* through governed repositories
+                 +
+derived intelligence and governed observations
+                 ↓
+authorized, bounded Company Graph projection
+          ↙                         ↘
+operator experience          Idjwi explanation/action
+                 ↓
+approved canonical decision, correction, or action
+```
+
+Ownership is explicit:
+
+- canonical operational facts and confirmed governance records: Supabase `public.*`;
+- graph construction, bounding, provenance, quality, and derived connections:
+  Python intelligence/projection layer;
+- explanation, recommendation, tool coordination, and governed learning: Idjwi;
+- language-model reasoning: optional tenant-controlled advisor proposals only;
+- layout, selection, and visual emphasis: surface state, never organizational truth.
+
+Tenant, organization, operational unit, department, team, and enterprise are
+separate scope and ontology concepts. A graph node cannot silently redefine one as
+another. Web owns deep governance, desktop owns persistent exploration, and mobile
+uses bounded role-specific neighborhoods and actions. All share identity, scope,
+permissions, evidence, audit, and Idjwi Core.
+
+The complete product contract, prohibited behavior, vocabulary, and surface
+responsibilities are defined in
+[`../docs/COMPANY_GRAPH_DESIGN_SPEC.md`](../docs/COMPANY_GRAPH_DESIGN_SPEC.md).
+The governing decision is
+[`../docs/adr/ADR-001-company-graph-governed-operational-projection.md`](../docs/adr/ADR-001-company-graph-governed-operational-projection.md).
+The executable cross-surface schema is `company-graph.v1`, documented in
+[`../docs/COMPANY_GRAPH_CONTRACT_V1.md`](../docs/COMPANY_GRAPH_CONTRACT_V1.md).
+Backend models, frontend adapters, and Idjwi request validation must advance
+together; a consumer must not silently accept an unversioned graph packet.
+
+Company Graph authorization is governed by `graph-policy.v1`. Its cache key includes
+a one-way fingerprint of tenant, authenticated principal, role, effective graph
+permissions, and operational scope. Sensitive sources and fields are filtered before
+serialization, and every graph mutation rechecks its explicit graph permission.
+See [`../docs/COMPANY_GRAPH_AUTHORIZATION.md`](../docs/COMPANY_GRAPH_AUTHORIZATION.md).
+Graph-service and authorization failures fail closed; a frontend fallback cannot
+expand graph access or bypass the governed repository.
+
+Graph node construction is projection-only. The field registry classifies every
+candidate as graph-safe, role-restricted, sensitive, or prohibited; unknown fields
+are prohibited. Idjwi and export serialization rebuild their packets from this
+exposable subset instead of serializing UI objects. See
+[`../docs/COMPANY_GRAPH_FIELD_CLASSIFICATION.md`](../docs/COMPANY_GRAPH_FIELD_CLASSIFICATION.md).
+
 The mantra also sets the ambition ceiling. Newsconseen gives SMEs the same
 operational intelligence capability that enterprise systems give large organisations:
 
@@ -105,7 +209,7 @@ Forms create reality → Databases store reality → Intelligence explains reali
 |---|---|---|
 | Forms create reality | Human input creates or updates master data | Add Person, Add Enterprise, Log Transaction, Stock Count, Attendance Register |
 | Databases store reality | ETL extracts, transforms, loads into analytical layer | python_layer pipeline, PostgreSQL analytics summaries |
-| Intelligence explains reality | Reads from analytical layer, surfaces insights for the operator | Revenue trends, Inventory alerts, Attendance rates, Copilot answers |
+| Intelligence explains reality | Reads from analytical layer, surfaces insights for the operator | Revenue trends, Inventory alerts, Attendance rates, Idjwi answers |
 | **Agents act on reality** | **AI reads insight → reasons → drafts action → executes (with or without approval) → learns** | **Retention alert sent, task auto-created, reorder triggered, risk escalated, weekly briefing drafted** |
 
 The fourth pillar is what makes the mantra true. The first three pillars describe
@@ -331,7 +435,7 @@ the equivalent Supabase entity query:
 - Query Builder analytics_* and raw_* tables ✓
 - Reports / Charts ✓
 - Market Intelligence ML models ✓
-- Copilot tool queries ✓
+- Idjwi tool queries ✓
 - Object Views pipeline tables ✓
 - Any future feature reading from python_layer ✓
 

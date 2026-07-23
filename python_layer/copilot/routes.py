@@ -16,7 +16,12 @@ from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+from company_graph.contracts import GRAPH_CONTRACT_VERSION, IdjwiGraphContext
+from company_graph.intents import GRAPH_INTENT_SET, resolve_graph_intent
+from copilot.graph_intents import execute_graph_intent
+from copilot.response_identity import build_response_identity
 
 from copilot.engine import CopilotEngine, ask_stream_events
 from copilot.llm_registry import (
@@ -37,7 +42,7 @@ from onboarding.auth import try_tenant_access, verify_tenant_access
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/copilot", tags=["Copilot"])
+router = APIRouter(prefix="/copilot", tags=["Idjwi"])
 idjwi_router = APIRouter(prefix="/idjwi", tags=["Idjwi"])
 
 RAILWAY_URL = os.getenv(
@@ -46,6 +51,40 @@ RAILWAY_URL = os.getenv(
 )
 
 COPILOT_BACKEND = os.getenv("COPILOT_BACKEND", "anthropic")
+
+
+def _finalize_idjwi_response(*, result, request, advisor_selection, access, principal):
+    """Attach one proof-derived identity to the response and its audit event."""
+    selection = advisor_selection.public_dict()
+    identity = build_response_identity(
+        request=request, advisor_selection=selection, result=result,
+    )
+    result["visible_identity"] = "Idjwi"
+    result["response_identity"] = identity
+    # Backward-compatible field: this now means an advisor actually
+    # contributed to this response, never merely that the toggle was enabled.
+    result["advisor_enabled"] = identity["advisor_consulted"]
+    result["tenant_authorized"] = bool(access.get("authorized"))
+    result["tenant_auth_diagnostics"] = access.get("diagnostics")
+    result["advisor_selection"] = selection
+    graph_summary = (result.get("data") or {}).get("graph_semantic_summary")
+    try:
+        from copilot.idjwi_observability import log_event
+        log_event(
+            "idjwi.response",
+            company_id=request.company_id,
+            actor=getattr(principal, "user_id", None) or "system",
+            subject=result.get("intent") or "general",
+            metadata={
+                "response_identity": identity,
+                "operating_mode": result.get("operating_mode"),
+                "graph_semantic_summary": graph_summary,
+            },
+            status="error" if result.get("error") else "ok",
+        )
+    except Exception:
+        logger.exception("Unable to persist Idjwi response audit metadata")
+    return result
 
 
 # ----------------------------------------------------------
@@ -75,6 +114,21 @@ class AskRequest(BaseModel):
     reasoning_profile:    Optional[str] = None
     objective:            Optional[str] = "general"
     data_classification:  Optional[str] = "internal"
+    intent:               Optional[str] = None
+
+    @field_validator("intent")
+    @classmethod
+    def validate_graph_intent(cls, value):
+        if value is not None and value not in GRAPH_INTENT_SET:
+            raise ValueError("Unsupported governed Idjwi graph intent")
+        return value
+
+    @field_validator("context")
+    @classmethod
+    def validate_versioned_graph_context(cls, value):
+        if value and value.get("contract_version") == GRAPH_CONTRACT_VERSION:
+            return IdjwiGraphContext.model_validate(value).model_dump()
+        return value
 
 
 class FeedbackRequest(BaseModel):
@@ -380,6 +434,22 @@ def ask(
         ctx["operational_unit_name"] = request.operational_unit_name
     ctx["advisor_selection"] = advisor_selection.public_dict()
 
+    context_intent = ctx.get("intent")
+    if request.intent and context_intent and request.intent != context_intent:
+        raise HTTPException(status_code=422, detail={"code": "IDJWI_GRAPH_INTENT_MISMATCH", "category": "governance", "message": "The page action intent does not match its graph context.", "action": "refresh_graph", "retryable": False})
+    explicit_or_classified_intent = resolve_graph_intent(request.intent, request.question, ctx)
+    if explicit_or_classified_intent:
+        if not access.get("authorized"):
+            raise HTTPException(status_code=403, detail={"code": "IDJWI_GRAPH_TENANT_REQUIRED", "category": "authorization", "message": "Governed graph intelligence requires an authorized tenant context.", "action": "sign_in", "retryable": False})
+        result = execute_graph_intent(
+            explicit_or_classified_intent, question=request.question,
+            company_id=request.company_id, context=ctx, principal=principal,
+        )
+        return _finalize_idjwi_response(
+            result=result, request=request, advisor_selection=advisor_selection,
+            access=access, principal=principal,
+        )
+
     result = engine.ask(
         question=request.question,
         history=request.history or [],
@@ -408,11 +478,10 @@ def ask(
 
         result["answer"] = friendly
 
-    result["tenant_authorized"] = bool(access.get("authorized"))
-    result["tenant_auth_diagnostics"] = access.get("diagnostics")
-    result["advisor_selection"] = advisor_selection.public_dict()
-
-    return result
+    return _finalize_idjwi_response(
+        result=result, request=request, advisor_selection=advisor_selection,
+        access=access, principal=principal,
+    )
 
 
 @router.post("/command")

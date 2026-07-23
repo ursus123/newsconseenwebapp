@@ -1,0 +1,102 @@
+{
+  "contract": "company-graph-benchmark.v1",
+  "engine": "postgresql",
+  "isolated_temp_data": true,
+  "profiles": {
+    "small": 500,
+    "medium": 20000,
+    "large": 200000
+  },
+  "targets_ms": {
+    "overview": 500,
+    "neighborhood_1": 250,
+    "neighborhood_2": 750,
+    "neighborhood_3": 2000,
+    "search": 300
+  },
+  "started_at_epoch": 1784746304.735115,
+  "duration_seconds": 18.93,
+  "results": [
+    {
+      "profile": "large",
+      "pattern": "dense",
+      "nodes": 200000,
+      "edges": 2400000,
+      "metrics": {
+        "overview": {
+          "cold_ms": 178.0,
+          "warm_median_ms": 135.66,
+          "warm_p95_ms": 137.86,
+          "payload_bytes": 15,
+          "cache_speedup": 1.31
+        },
+        "search": {
+          "cold_ms": 77.88,
+          "warm_median_ms": 68.67,
+          "warm_p95_ms": 68.76,
+          "payload_bytes": 846,
+          "cache_speedup": 1.13
+        },
+        "permission_unfiltered": {
+          "cold_ms": 82.29,
+          "warm_median_ms": 87.05,
+          "warm_p95_ms": 100.47,
+          "payload_bytes": 8,
+          "cache_speedup": 0.95
+        },
+        "permission_filtered": {
+          "cold_ms": 73.23,
+          "warm_median_ms": 81.06,
+          "warm_p95_ms": 89.72,
+          "payload_bytes": 8,
+          "cache_speedup": 0.9
+        },
+        "payload": {
+          "cold_ms": 149.07,
+          "warm_median_ms": 75.52,
+          "warm_p95_ms": 80.0,
+          "payload_bytes": 21310,
+          "cache_speedup": 1.97
+        },
+        "neighborhood_1": {
+          "cold_ms": 68.92,
+          "warm_median_ms": 69.86,
+          "warm_p95_ms": 70.06,
+          "payload_bytes": 17,
+          "cache_speedup": 0.99
+        },
+        "neighborhood_2": {
+          "cold_ms": 69.83,
+          "warm_median_ms": 69.19,
+          "warm_p95_ms": 69.96,
+          "payload_bytes": 26,
+          "cache_speedup": 1.01
+        },
+        "neighborhood_3": {
+          "cold_ms": 95.62,
+          "warm_median_ms": 82.38,
+          "warm_p95_ms": 84.48,
+          "payload_bytes": 35,
+          "cache_speedup": 1.16
+        },
+        "concurrent_users": {
+          "users": 1,
+          "median_ms": 73.81,
+          "p95_ms": 73.81,
+          "latencies_ms": [
+            73.81
+          ]
+        },
+        "permission_filter_cost_ms": -5.99
+      },
+      "targets_met": {
+        "overview": true,
+        "neighborhood_1": true,
+        "neighborhood_2": true,
+        "neighborhood_3": true,
+        "search": true
+      }
+    }
+  ],
+  "decision": "retain_postgresql"
+}

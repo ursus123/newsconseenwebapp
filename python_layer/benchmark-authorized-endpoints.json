@@ -1,0 +1,103 @@
+{
+  "contract": "company-graph-endpoint-benchmark.v1",
+  "base_url": "http://localhost:8001",
+  "company_id": "newsconseen-main",
+  "authorization": "bearer_token_verified_not_persisted",
+  "discovery_ms": 9692.98,
+  "selected_center": "task:07a2894e-5ef9-4a7c-9de4-df3a3300c944",
+  "overview_shape": {
+    "nodes": 59,
+    "edges": 0
+  },
+  "completeness": "partial",
+  "truncated": true,
+  "metrics": {
+    "overview": {
+      "endpoint": "overview",
+      "repetitions": 20,
+      "cold_ms": 1479.14,
+      "warm_median_ms": 1395.15,
+      "warm_p95_ms": 6359.84,
+      "maximum_ms": 6359.84,
+      "response_bytes": 53636,
+      "target_ms": 500,
+      "target_met": false
+    },
+    "search": {
+      "endpoint": "search",
+      "repetitions": 20,
+      "cold_ms": 4548.5,
+      "warm_median_ms": 4568.88,
+      "warm_p95_ms": 4970.81,
+      "maximum_ms": 4970.81,
+      "response_bytes": 795,
+      "target_ms": 300,
+      "target_met": false
+    },
+    "neighborhood_1": {
+      "endpoint": "neighborhood_1",
+      "repetitions": 20,
+      "cold_ms": 7683.14,
+      "warm_median_ms": 1553.88,
+      "warm_p95_ms": 7742.48,
+      "maximum_ms": 7742.48,
+      "response_bytes": 6037,
+      "target_ms": 250,
+      "target_met": false
+    },
+    "neighborhood_2": {
+      "endpoint": "neighborhood_2",
+      "repetitions": 20,
+      "cold_ms": 7952.02,
+      "warm_median_ms": 1398.34,
+      "warm_p95_ms": 1560.94,
+      "maximum_ms": 7952.02,
+      "response_bytes": 6037,
+      "target_ms": 750,
+      "target_met": false
+    },
+    "neighborhood_3": {
+      "endpoint": "neighborhood_3",
+      "repetitions": 20,
+      "cold_ms": 7258.95,
+      "warm_median_ms": 1469.49,
+      "warm_p95_ms": 2104.75,
+      "maximum_ms": 7258.95,
+      "response_bytes": 6037,
+      "target_ms": 2000,
+      "target_met": false
+    }
+  },
+  "concurrent_overview": {
+    "users": 4,
+    "median_ms": 22782.05,
+    "p95_ms": 23114.18,
+    "latencies_ms": [
+      22357.89,
+      22454.59,
+      23114.18,
+      23109.51
+    ]
+  },
+  "coverage": {
+    "required": [
+      "edge_explain",
+      "neighborhood_1",
+      "neighborhood_2",
+      "neighborhood_3",
+      "overview",
+      "search"
+    ],
+    "measured": [
+      "neighborhood_1",
+      "neighborhood_2",
+      "neighborhood_3",
+      "overview",
+      "search"
+    ],
+    "missing": [
+      "edge_explain"
+    ]
+  },
+  "decision": "investigate_endpoint_path"
+}

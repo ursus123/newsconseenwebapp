@@ -510,7 +510,7 @@ export default function QueryBuilder() {
     if (preloadSql) {
       setSql(preloadSql);
       setMidTab("script");
-      setMessage("Copilot query loaded - verify or run it here.");
+      setMessage("Idjwi query loaded - verify or run it here.");
       sessionStorage.removeItem("qb_preload_sql");
       return;
     }

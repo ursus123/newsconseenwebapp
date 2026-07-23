@@ -8,11 +8,13 @@ source.
 
 import json
 import logging
+import threading
 import time
 from typing import Optional
 
 import pandas as pd
 import requests
+from requests.adapters import HTTPAdapter
 
 from config.settings import settings
 
@@ -22,6 +24,19 @@ REQUEST_TIMEOUT = 30
 PAGE_SIZE = 1000
 MAX_RETRIES = 3
 RETRY_STATUSES = {408, 409, 425, 429, 500, 502, 503, 504}
+_HTTP_LOCAL = threading.local()
+
+
+def _http_session() -> requests.Session:
+    """One pooled client per worker thread; reuses DNS, TCP and TLS state."""
+    session = getattr(_HTTP_LOCAL, "session", None)
+    if session is None:
+        session = requests.Session()
+        adapter = HTTPAdapter(pool_connections=16, pool_maxsize=32, max_retries=0, pool_block=True)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        _HTTP_LOCAL.session = session
+    return session
 
 
 class SupabaseSourceError(RuntimeError):
@@ -71,6 +86,16 @@ ENTITY_TABLES = {
     "risks": "risks",
     "opportunity": "opportunities",
     "opportunities": "opportunities",
+    "operational_unit": "operational_units",
+    "operational_units": "operational_units",
+    "operational_unit_membership": "operational_unit_memberships",
+    "operational_unit_memberships": "operational_unit_memberships",
+    "operational_unit_relationship": "operational_unit_relationships",
+    "operational_unit_relationships": "operational_unit_relationships",
+    "graph_assertion": "graph_assertions",
+    "graph_assertions": "graph_assertions",
+    "graph_assertion_event": "graph_assertion_events",
+    "graph_assertion_events": "graph_assertion_events",
     "user_profiles": "user_profiles",
     "user": "user_profiles",
     "users": "user_profiles",
@@ -291,7 +316,7 @@ def _request(method: str, table: str, **kwargs) -> requests.Response:
     last_error: Exception | None = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            resp = requests.request(method, url, timeout=REQUEST_TIMEOUT, **kwargs)
+            resp = _http_session().request(method, url, timeout=REQUEST_TIMEOUT, **kwargs)
             if resp.status_code in RETRY_STATUSES and attempt < MAX_RETRIES:
                 delay = 0.5 * (2 ** (attempt - 1))
                 logger.warning(
@@ -353,21 +378,38 @@ def list_records(
     created_by: Optional[str] = None,
     limit: int = 5000,
     fields: Optional[tuple[str, ...] | list[str]] = None,
+    filters: Optional[dict[str, object]] = None,
+    offset: int = 0,
+    order: Optional[str] = None,
 ) -> list[dict]:
     table = table_for(entity)
     rows = []
-    offset = 0
-    while offset < limit:
-        page_size = min(PAGE_SIZE, limit - offset)
+    start_offset = max(0, int(offset))
+    current_offset = start_offset
+    while current_offset < start_offset + limit:
+        page_size = min(PAGE_SIZE, start_offset + limit - current_offset)
         params = {
             "select": ",".join(fields) if fields else "*",
             "limit": page_size,
-            "offset": offset,
+            "offset": current_offset,
         }
+        if order:
+            params["order"] = order
         if company_id:
             params["company_id"] = f"eq.{company_id}"
         if created_by:
             params["created_by"] = f"eq.{created_by}"
+        for field, value in (filters or {}).items():
+            # Callers supply registry-owned field names; values remain data.
+            if not field.replace("_", "").isalnum():
+                raise ValueError(f"Unsafe Supabase filter field: {field}")
+            if isinstance(value, (tuple, list, set)):
+                encoded = ",".join(str(item) for item in value)
+                params[field] = f"in.({encoded})"
+            elif value is None:
+                params[field] = "is.null"
+            else:
+                params[field] = f"eq.{value}"
         resp = _request("GET", table, headers=_headers(), params=params)
         page = resp.json()
         if not isinstance(page, list) or not page:
@@ -375,8 +417,32 @@ def list_records(
         rows.extend(_normalise_row(table, r) for r in page)
         if len(page) < page_size:
             break
-        offset += page_size
+        current_offset += page_size
     return rows
+
+
+def search_records(entity: str, company_id: str, search_fields: tuple[str, ...], query: str,
+                   *, fields=None, limit: int = 25, filters: Optional[dict[str, object]] = None) -> list[dict]:
+    """Tenant-scoped bounded text search over registry-approved columns."""
+    table = table_for(entity)
+    if any(not field.replace("_", "").isalnum() for field in search_fields):
+        raise ValueError("Unsafe Supabase search field")
+    # PostgREST logical syntax uses these characters structurally.
+    safe_query = "".join(char for char in str(query)[:100] if char not in "(),.*").strip()
+    if len(safe_query) < 2:
+        return []
+    params = {
+        "select": ",".join(fields) if fields else "*",
+        "company_id": f"eq.{company_id}", "limit": min(limit, 100),
+        "or": "(" + ",".join(f"{field}.ilike.*{safe_query}*" for field in search_fields) + ")",
+    }
+    for field, value in (filters or {}).items():
+        if not field.replace("_", "").isalnum():
+            raise ValueError("Unsafe Supabase search filter")
+        params[field] = f"eq.{value}"
+    response = _request("GET", table, headers=_headers(), params=params)
+    rows = response.json() if response.content else []
+    return [_normalise_row(table, row) for row in rows] if isinstance(rows, list) else []
 
 
 def fetch_entity_df(entity: str, company_id: Optional[str] = None, limit: int = 5000) -> pd.DataFrame:
@@ -419,16 +485,19 @@ def get_record(entity: str, record_id: str, company_id: str, fields=None) -> dic
     return _normalise_row(table, rows[0])
 
 
-def update_record(entity: str, record_id: str, payload: dict) -> dict:
+def update_record(entity: str, record_id: str, payload: dict, company_id: Optional[str] = None) -> dict:
     if not configured():
         return {"error": "Supabase is not configured"}
     table = table_for(entity)
     data = _normalise_payload(table, payload)
+    params = {"id": f"eq.{record_id}"}
+    if company_id:
+        params["company_id"] = f"eq.{company_id}"
     resp = _request(
         "PATCH",
         table,
         headers=_headers(),
-        params={"id": f"eq.{record_id}"},
+        params=params,
         data=json.dumps(data, default=str),
     )
     result = resp.json()

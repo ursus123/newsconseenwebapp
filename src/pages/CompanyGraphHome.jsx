@@ -1,9 +1,10 @@
 /**
  * CompanyGraphHome.jsx
  *
- * Main landing page after login — a living Company Graph.
- * Shows every entity as a node, every connection as an edge.
- * Answers: "What is my company made of, what is connected, what needs attention?"
+ * Governed operational map for an authorized tenant and operational scope.
+ * Projects canonical facts, derived intelligence, and evidence-linked connections;
+ * it is not a source of truth and does not infer organizational reality from layout.
+ * Answers: "How does this operation fit together, what changed, and what needs attention?"
  *
  * Layout:
  *  - Top:  Company Pulse bar  (clickable filters that highlight graph nodes)
@@ -25,10 +26,12 @@ import {
   Loader2, Zap, Filter, GitBranch, BarChart3,
   Circle, AlertCircle, Unlink, Search, Save, Download,
   CheckCircle2, CloudOff, Maximize2, Minimize2, RotateCcw, Eye,
+  Info, ChevronDown, ChevronUp,
 } from "lucide-react";
 import {
   buildGraphData, toCytoscapeElements, filterForMode,
-  GRAPH_MODES,
+  GRAPH_MODES, GRAPH_CONTRACT_VERSION, assertGovernedGraphContract,
+  buildIdjwiGraphContext, IDJWI_GRAPH_INTENTS,
 } from "@/services/companyGraphService";
 import { getAttentionSignals } from "@/utils/attentionSignals";
 
@@ -50,6 +53,8 @@ const ENTITY_CONFIG = {
   schedule:       { icon: CheckSquare,  label: "Schedules",       color: "#0ea5e9" },
   signal:         { icon: TrendingUp,   label: "Signals",         color: "#8b5cf6" },
   decision:       { icon: CheckCircle2, label: "Decisions",       color: "#2563eb" },
+  action:         { icon: Zap,          label: "Actions",         color: "#dc2626" },
+  operational_unit: { icon: Building2, label: "Operational units", color: "#4f46e5" },
   animal:         { icon: Circle,       label: "Animals",         color: "#84cc16" },
   plot:           { icon: MapPin,       label: "Plots",           color: "#65a30d" },
   observation:    { icon: Eye,          label: "Observations",    color: "#7c3aed" },
@@ -202,6 +207,21 @@ const APP_LABEL = {
   report:      "Report",
 };
 
+const COMPANY_GRAPH_PROMPTS = [
+  { question: "Explain this company.", intent: IDJWI_GRAPH_INTENTS.EXPLAIN_COMPANY_GRAPH },
+  { question: "What changed this week?", intent: IDJWI_GRAPH_INTENTS.EXPLAIN_GRAPH_CHANGE },
+  { question: "What is disconnected?", intent: IDJWI_GRAPH_INTENTS.FIND_GRAPH_GAPS },
+  { question: "Where are the biggest risks?", intent: IDJWI_GRAPH_INTENTS.RECOMMEND_GRAPH_ACTION },
+  { question: "Which opportunities are most actionable?", intent: IDJWI_GRAPH_INTENTS.RECOMMEND_GRAPH_ACTION },
+  { question: "What should we do today?", intent: IDJWI_GRAPH_INTENTS.RECOMMEND_GRAPH_ACTION },
+];
+
+function openIdjwiGraphAction(question, intent, context, extraContext = {}) {
+  window.dispatchEvent(new CustomEvent("open-idjwi-panel", {
+    detail: { initialMessage: question, context: { ...context, ...extraContext, intent } },
+  }));
+}
+
 // ── Context Panel ─────────────────────────────────────────────────────────────
 function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, graphContext, insights = [], risks = [], opportunities = [] }) {
   if (!selected) {
@@ -209,25 +229,18 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
       <div className="flex flex-col h-full">
         <div className="p-5 border-b border-slate-100">
           <p className="text-sm font-bold text-slate-700">Company Graph</p>
-          <p className="text-xs text-slate-400 mt-1">Click any node to inspect it</p>
+          <p className="text-xs text-slate-400 mt-1">Inspect authorized records, governed relationships, and their evidence.</p>
         </div>
         <div className="p-4 flex-1 overflow-y-auto space-y-3">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Ask AI</p>
-          {[
-            "Explain this company.",
-            "What changed this week?",
-            "What is disconnected?",
-            "Where are the biggest risks?",
-            "Which opportunities are most actionable?",
-            "What should we do today?",
-          ].map(q => (
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Ask Idjwi</p>
+          {COMPANY_GRAPH_PROMPTS.map(({ question, intent }) => (
             <button
-              key={q}
-              onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: { initialMessage: q, context: graphContext } }))}
+              key={question}
+              onClick={() => openIdjwiGraphAction(question, intent, graphContext)}
               className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 hover:bg-violet-50 hover:border-violet-200 hover:text-violet-700 transition-colors flex items-center gap-2"
             >
               <Sparkles className="w-3.5 h-3.5 shrink-0 text-violet-400" />
-              {q}
+              {question}
             </button>
           ))}
         </div>
@@ -240,17 +253,26 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
 
   if (selected.edge) {
     const { edge, sourceNode, targetNode } = selected;
-    const evidence = edge.evidence || {};
-    const isFact = evidence.assertion_type === "fact";
+    const evidence = edge.evidence?.[0] || {};
+    const isFact = ["canonical_relationship", "operator_confirmed_assertion"].includes(edge.assertion_class);
+    const canConfirm = edge.permitted_actions?.some(action => action.action === "confirm" && action.allowed);
+    const canReject = edge.permitted_actions?.some(action => action.action === "reject" && action.allowed);
+    const assertionHistory = (graphContext?.assertion_history || []).filter(event => event.assertion_key === edge.assertion_key);
     const govern = async action => {
       const reason = window.prompt(action === "confirm" ? "Why should this relationship become canonical?" : "Why is this connection incorrect?") || "";
+      if (!reason.trim()) return;
+      const approvalConfirmed = action !== "confirm" || window.confirm("Approve this relationship as a canonical organizational fact?");
+      if (!approvalConfirmed) return;
       const [sourceType, sourceId] = String(edge.source).split(":");
       const [targetType, targetId] = String(edge.target).split(":");
       const response = await fetch(`${RAILWAY_URL}/company-graph/relationship/${action}`, {
         method: "POST", headers: await authHeaders(),
-        body: JSON.stringify({ company_id: companyId, edge_id: edge.id, source_type: sourceType, source_id: sourceId, target_type: targetType, target_id: targetId, predicate: edge.predicate || edge.relationship_type, reason }),
+        body: JSON.stringify({ company_id: companyId, edge_id: edge.id, source_type: sourceType, source_id: sourceId, target_type: targetType, target_id: targetId, predicate: edge.predicate || edge.relationship_type, reason: reason.trim(), approval_confirmed: approvalConfirmed }),
       });
-      if (!response.ok) throw new Error(`Relationship ${action} failed`);
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail?.detail?.message || `Relationship ${action} failed`);
+      }
       await onGraphRefresh?.();
     };
     return (
@@ -273,27 +295,50 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
           </div>
           <div className="flex gap-2 flex-wrap">
             <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${isFact ? "bg-emerald-100 text-emerald-700" : "bg-violet-100 text-violet-700"}`}>{isFact ? "Verified fact" : "Derived connection"}</span>
-            <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-600">{Math.round((evidence.confidence ?? 0) * 100)}% confidence</span>
+            <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-600">{Math.round((edge.confidence ?? 0) * 100)}% confidence</span>
             <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-600 capitalize">{edge.status || "active"}</span>
+            <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-600 capitalize">{(edge.verification_state || "unverified").replaceAll("_", " ")}</span>
           </div>
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Why this connection exists</p>
             <p className="text-xs text-slate-700 leading-relaxed">{evidence.explanation || "The graph projection found a canonical reference between these records."}</p>
           </div>
           <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 text-xs">
-            {[["Source", evidence.source_table || "Canonical ontology"], ["Record", evidence.source_record_id || "Not provided"], ["Data zone", evidence.source_zone || "canonical"], ["Rule", evidence.derivation_rule || (isFact ? "Direct tenant assertion" : "Canonical reference projection")], ["Valid from", edge.valid_from || "Not specified"], ["Valid to", edge.valid_to || "Current"]].map(([label, value]) => (
+            {[["Source", evidence.source_table || "Canonical ontology"], ["Record", evidence.source_record_id || "Not provided"], ["Data zone", evidence.source_zone || "canonical"], ["Assertion", (edge.assertion_class || "unclassified").replaceAll("_", " ")], ["Rule", evidence.derivation_rule || (isFact ? "Direct tenant assertion" : "Governed projection")], ["Valid from", edge.temporal?.valid_from || "Not specified"], ["Valid to", edge.temporal?.valid_to || "Current"]].map(([label, value]) => (
               <div key={label} className="flex gap-3 justify-between p-2.5"><span className="text-slate-400">{label}</span><span className="text-slate-700 font-medium text-right break-all">{value}</span></div>
             ))}
           </div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Assertion history</p>
+            {assertionHistory.length ? (
+              <div className="space-y-1.5">
+                {assertionHistory.map((event, index) => (
+                  <div key={`${event.occurred_at || "event"}-${index}`} className="rounded-lg border border-slate-200 p-2 text-[10px] text-slate-600">
+                    <p className="font-bold capitalize">{event.from_state || "new"} → {event.to_state}</p>
+                    <p>{event.reason || "No reason recorded"}</p>
+                    <p className="text-slate-400">{event.occurred_at ? new Date(event.occurred_at).toLocaleString() : "Time unavailable"} · evidence v{event.evidence_version || 1}</p>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-[10px] text-slate-400">No operator state changes have been recorded for this assertion.</p>}
+          </div>
           <button
-            onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: { initialMessage: `Explain why ${sourceNode?.label || edge.source} is connected to ${targetNode?.label || edge.target} through ${edge.predicate || edge.relationship_type}.`, context: { ...graphContext, graph_edge: edge } } }))}
+            onClick={() => openIdjwiGraphAction(
+              `Explain why ${sourceNode?.label || edge.source} is connected to ${targetNode?.label || edge.target} through ${edge.predicate || edge.relationship_type}.`,
+              IDJWI_GRAPH_INTENTS.EXPLAIN_RELATIONSHIP, graphContext,
+              { graph_edge: edge, selected_edge_id: edge.id },
+            )}
             className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700"
           ><Sparkles className="w-3.5 h-3.5" /> Ask Idjwi about this connection</button>
           <div className="grid grid-cols-2 gap-2">
-            {!isFact && <button onClick={() => govern("confirm").catch(error => window.alert(error.message))} className="py-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Confirm</button>}
-            {!isFact && <button onClick={() => govern("reject").catch(error => window.alert(error.message))} className="py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">Reject</button>}
+            {canConfirm && <button onClick={() => govern("confirm").catch(error => window.alert(error.message))} className="py-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Confirm</button>}
+            {canReject && <button onClick={() => govern("reject").catch(error => window.alert(error.message))} className="py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">Reject</button>}
             <button onClick={() => navigate(createPageUrl("Relationships"))} className="py-2 rounded-xl text-xs font-bold bg-slate-50 text-slate-700 border border-slate-200">Correct record</button>
-            <button onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: { initialMessage: `Record a governed correction for relationship ${edge.id}.`, context: { ...graphContext, graph_edge: edge, correction_requested: true } } }))} className="py-2 rounded-xl text-xs font-bold bg-violet-50 text-violet-700 border border-violet-200">Teach Idjwi</button>
+            <button onClick={() => openIdjwiGraphAction(
+              `Recommend the governed next action for relationship ${edge.id}.`,
+              IDJWI_GRAPH_INTENTS.RECOMMEND_GRAPH_ACTION, graphContext,
+              { graph_edge: edge, selected_edge_id: edge.id, correction_requested: true },
+            )} className="py-2 rounded-xl text-xs font-bold bg-violet-50 text-violet-700 border border-violet-200">Teach Idjwi</button>
           </div>
         </div>
       </div>
@@ -311,7 +356,7 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
 
   const cfg = ENTITY_CONFIG[node.entity_type] || {};
   const Icon = cfg.icon || Circle;
-  const meta = node.metadata || {};
+  const meta = node.attributes || {};
 
   const details = [];
   if (meta.enterprise_type || meta.person_type || meta.item_type || meta.task_type || meta.transaction_type)
@@ -320,16 +365,10 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
     details.push({ label: "Status", value: meta.status });
   if (meta.city || meta.country)
     details.push({ label: "Location", value: [meta.city, meta.country].filter(Boolean).join(", ") });
-  if (meta.amount || meta.total_amount)
-    details.push({ label: "Amount", value: `${meta.currency || "$"}${(meta.amount || meta.total_amount || 0).toLocaleString()}` });
   if (meta.priority)
     details.push({ label: "Priority", value: meta.priority });
   if (meta.severity)
     details.push({ label: "Severity", value: meta.severity });
-  if (meta.email)
-    details.push({ label: "Email", value: meta.email });
-  if (meta.phone)
-    details.push({ label: "Phone", value: meta.phone });
 
   const routeMap = {
     enterprise: "Enterprises", person: "People", product: "Products",
@@ -466,7 +505,7 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
 
         {/* AI prompts */}
         <div>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Ask AI</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Ask Idjwi</p>
           <div className="space-y-1.5">
             {[
               `Explain this ${node.entity_type}: ${node.label}`,
@@ -476,7 +515,7 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
             ].map(q => (
               <button
                 key={q}
-                onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: { initialMessage: q, context: { ...graphContext, entity_type: node.entity_type, entity_id: node.id, entity_label: node.label } } }))}
+                onClick={() => openIdjwiGraphAction(q, IDJWI_GRAPH_INTENTS.EXPLAIN_NODE, graphContext, { entity_type: node.entity_type, entity_id: node.id, entity_label: node.label, selected_node_id: node.id })}
                 className="w-full text-left px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600 hover:bg-violet-50 hover:border-violet-200 hover:text-violet-700 transition-colors flex items-center gap-1.5"
               >
                 <Sparkles className="w-3 h-3 shrink-0 text-violet-400" />
@@ -500,11 +539,11 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
           </button>
         )}
         <button
-          onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: { initialMessage: copilotQ, context: { ...graphContext, entity_type: node.entity_type, entity_id: node.id, entity_label: node.label } } }))}
+          onClick={() => openIdjwiGraphAction(copilotQ, IDJWI_GRAPH_INTENTS.EXPLAIN_NODE, graphContext, { entity_type: node.entity_type, entity_id: node.id, entity_label: node.label, selected_node_id: node.id })}
           className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
         >
           <Sparkles className="w-3.5 h-3.5" />
-          Ask AI about this
+          Ask Idjwi about this
         </button>
       </div>
     </div>
@@ -684,13 +723,17 @@ export default function CompanyGraphHome() {
   const [searchTerm, setSearchTerm] = useState("");
   const [focusNodeId, setFocusNodeId] = useState("");
   const [neighborhoodGraph, setNeighborhoodGraph] = useState(null);
+  const [continuedOverview, setContinuedOverview] = useState(null);
+  const [loadingContinuation, setLoadingContinuation] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [pageGuideOpen, setPageGuideOpen] = useState(false);
   const [savedViews, setSavedViews] = useState(() => {
     try { return JSON.parse(localStorage.getItem("newsconseen:company-graph-views") || "[]"); } catch { return []; }
   });
 
   // ── Entity fetches ───────────────────────────────────────────────────────────
   const enabled = !!currentUser?.company_id || currentUser?.role === "super_admin";
+  const isAdministrator = ["admin", "super_admin"].includes(currentUser?.role);
 
   const governedQuery = useQuery({
     queryKey: ["company-graph-overview", currentUser?.company_id, scopeId],
@@ -701,16 +744,24 @@ export default function CompanyGraphHome() {
       const scope = scopeId ? `&operational_unit_id=${encodeURIComponent(scopeId)}` : "";
       try {
         const response = await fetch(`${RAILWAY_URL}/company-graph/overview?company_id=${encodeURIComponent(currentUser.company_id)}&limit=500${scope}`, { headers: await authHeaders() });
-        if (!response.ok) throw new Error(`Company graph service returned ${response.status}`);
+        if (!response.ok) {
+          const detail = await response.json().catch(() => ({}));
+          const error = new Error(detail?.detail?.message || `Company graph service returned ${response.status}`);
+          error.status = response.status;
+          error.category = detail?.detail?.category || (response.status === 401 || response.status === 403 ? "authorization" : "backend");
+          throw error;
+        }
         setFallbackEnabled(false);
-        return response.json();
+        return assertGovernedGraphContract(await response.json());
       } catch (error) {
-        setFallbackEnabled(true);
+        // A failed governed request never authorizes a broader client-side graph.
+        setFallbackEnabled(false);
         throw error;
       }
     },
   });
-  const governedGraph = neighborhoodGraph || governedQuery.data || null;
+  const governedGraph = neighborhoodGraph || continuedOverview || governedQuery.data || null;
+  useEffect(() => { setContinuedOverview(null); }, [governedQuery.data, scopeId]);
 
   const auditGraph = useCallback(async (event, subject = "", metadata = {}) => {
     if (!currentUser?.company_id) return;
@@ -763,7 +814,7 @@ export default function CompanyGraphHome() {
       ...(localNodes.get(node.id) || {}),
       ...node,
       importance: localNodes.get(node.id)?.importance ?? 0.25,
-      metadata: { ...(localNodes.get(node.id)?.metadata || {}), ...(node.metadata || {}) },
+      attributes: { ...(localNodes.get(node.id)?.attributes || {}), ...(node.attributes || {}) },
       is_unconnected: true,
     }));
     const connected = new Set(governedGraph.edges.flatMap(edge => [edge.source, edge.target]));
@@ -771,7 +822,7 @@ export default function CompanyGraphHome() {
     const governedEdges = governedGraph.edges.map(edge => ({
       ...edge,
       relationship_type: edge.predicate,
-      strength: edge.evidence?.assertion_type === "fact" ? 0.9 : 0.65,
+      strength: ["canonical_relationship", "operator_confirmed_assertion"].includes(edge.assertion_class) ? 0.9 : 0.65,
     }));
     return {
       nodes: governedNodes,
@@ -806,9 +857,9 @@ export default function CompanyGraphHome() {
   );
 
   const graphRecords = useMemo(() => ({
-    tasks: nodes.filter(node => node.entity_type === "task").map(node => node.metadata || {}),
-    transactions: nodes.filter(node => node.entity_type === "transaction").map(node => node.metadata || {}),
-    products: nodes.filter(node => node.entity_type === "product").map(node => node.metadata || {}),
+    tasks: nodes.filter(node => node.entity_type === "task").map(node => node.attributes || {}),
+    transactions: nodes.filter(node => node.entity_type === "transaction").map(node => node.attributes || {}),
+    products: nodes.filter(node => node.entity_type === "product").map(node => node.attributes || {}),
   }), [nodes]);
 
   // ── What needs attention today — ranked, shared with NotificationsBell ──────
@@ -821,26 +872,128 @@ export default function CompanyGraphHome() {
     [tasks, transactions, products, graphRecords, fallbackEnabled]
   );
 
+  const graphSearchQuery = useQuery({
+    queryKey: ["company-graph-search", currentUser?.company_id, scopeId, searchTerm.trim()],
+    enabled: enabled && searchTerm.trim().length >= 2,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const scope = scopeId ? `&operational_unit_id=${encodeURIComponent(scopeId)}` : "";
+      const response = await fetch(`${RAILWAY_URL}/company-graph/search?company_id=${encodeURIComponent(currentUser.company_id)}&q=${encodeURIComponent(searchTerm.trim())}&limit=25${scope}`, { headers: await authHeaders() });
+      if (!response.ok) throw new Error("Graph search is unavailable");
+      return response.json();
+    },
+  });
   const searchResults = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) return [];
-    return nodes.filter(node => node.label?.toLowerCase().includes(query) || node.entity_type.includes(query)).slice(0, 8);
-  }, [nodes, searchTerm]);
-  const scopeOptions = useMemo(() => nodes.filter(node => node.entity_type === "enterprise"), [nodes]);
+    const combined = [...(graphSearchQuery.data?.results || []), ...nodes];
+    return [...new Map(combined.filter(node => node.label?.toLowerCase().includes(query) || node.entity_type.includes(query)).map(node => [node.id, node])).values()].slice(0, 8);
+  }, [nodes, searchTerm, graphSearchQuery.data]);
+  const scopeOptions = useMemo(() => nodes.filter(node => node.entity_type === "operational_unit"), [nodes]);
 
+  const effectiveGraphContract = useMemo(() => governedGraph || {
+    contract_version: GRAPH_CONTRACT_VERSION,
+    company_id: currentUser?.company_id || "",
+    scope: { type: scopeId ? "operational_unit" : "organization", id: scopeId || currentUser?.company_id || null },
+    nodes,
+    edges,
+    counts: {},
+    provenance: {
+      generated_at: new Date().toISOString(), projection: "unavailable_client_context",
+      source_of_truth: "No graph data returned", tenant_verified: !!currentUser?.company_id,
+      authorization_enforced: true, authorization_fingerprint: "frontend-fallback",
+      policy_version: "graph-policy.v1", contract_version: GRAPH_CONTRACT_VERSION, cache: "none",
+    },
+    source_status: [{ source_id: "company_graph_service", zone: "projection", table: "company_graph", state: "unavailable", returned_records: 0, retryable: true, message: "The governed graph service is unavailable. No client-side authorization fallback was used." }],
+    completeness: { state: "empty", sources_total: 1, sources_available: 0, sources_unavailable: 1, sources_unauthorized: 0, mapping_complete: false, authorization_filtered: false, explanation: "No governed graph packet is available." },
+    truncation: { truncated: false, requested_limit_per_source: null, sources_at_limit: [], returned_nodes: nodes.length, returned_edges: edges.length, continuation_available: false },
+    quality: { unconnected_count: stats.unconnected || 0, expired_relationship_count: 0, duplicate_edge_count: 0, missing_assignment_count: 0, issues: [] },
+    permitted_actions: [
+      { action: "search", allowed: true, requires_approval: false },
+      { action: "ask_idjwi", allowed: true, requires_approval: false },
+      { action: "export", allowed: false, requires_approval: false, reason: "Governed export is unavailable in fallback mode." },
+    ],
+  }, [governedGraph, currentUser?.company_id, scopeId, nodes, edges, stats.unconnected]);
+
+  const idjwiGraphContext = useMemo(() => buildIdjwiGraphContext(effectiveGraphContract, {
+    intent: null,
+    selectedNodeId: selectedNode?.node?.id || null,
+    selectedEdgeId: selectedNode?.edge?.id || null,
+    // Idjwi receives the same governed packet as the page. Focus/type filters
+    // remain view state and must not silently change graph-quality totals.
+    nodes,
+    edges,
+    tenantId: currentUser?.company_id || null,
+    role: currentUser?.role || "user",
+    page: "CompanyGraphHome",
+    productSurface: "web",
+  }), [effectiveGraphContract, selectedNode, nodes, edges, currentUser?.company_id, currentUser?.role]);
+
+  const unavailableSourceCount = effectiveGraphContract.source_status
+    .filter(source => ["unavailable", "partial"].includes(source.state)).length;
+  const authorizationFiltered = effectiveGraphContract.completeness.authorization_filtered;
+  const canExportGraph = effectiveGraphContract.permitted_actions
+    .some(action => action.action === "export" && action.allowed);
+
+  const completenessState = effectiveGraphContract.completeness?.state;
   const graphStatus = governedQuery.isError
-    ? { label: "Local projection fallback", color: "bg-amber-50 text-amber-700 border-amber-200", Icon: CloudOff }
-    : governedGraph?.unavailable_sources?.length
-      ? { label: `Partial graph · ${governedGraph.unavailable_sources.length} sources unavailable`, color: "bg-rose-50 text-rose-700 border-rose-200", Icon: AlertCircle }
+    ? { label: governedQuery.error?.category === "authorization" ? "Graph access denied" : "Governed graph unavailable", color: "bg-amber-50 text-amber-700 border-amber-200", Icon: CloudOff }
+    : completenessState === "unavailable"
+      ? { label: "Graph sources unavailable", color: "bg-rose-50 text-rose-700 border-rose-200", Icon: CloudOff }
+      : completenessState === "unauthorized"
+        ? { label: "No authorized graph coverage", color: "bg-amber-50 text-amber-700 border-amber-200", Icon: ShieldAlert }
+      : completenessState === "empty"
+        ? { label: "Authorized graph is empty", color: "bg-slate-50 text-slate-700 border-slate-200", Icon: Info }
+      : unavailableSourceCount
+      ? { label: `Partial graph · ${unavailableSourceCount} sources unavailable`, color: "bg-rose-50 text-rose-700 border-rose-200", Icon: AlertCircle }
+      : authorizationFiltered
+        ? { label: "Governed role-filtered graph", color: "bg-indigo-50 text-indigo-700 border-indigo-200", Icon: ShieldAlert }
       : { label: "Governed graph online", color: "bg-emerald-50 text-emerald-700 border-emerald-200", Icon: CheckCircle2 };
 
-  const exportGraph = () => {
-    const blob = new Blob([JSON.stringify({ nodes: filteredNodes, edges: filteredEdges, provenance: governedGraph?.provenance }, null, 2)], { type: "application/json" });
+  const exportGraph = async () => {
+    if (!canExportGraph) return;
+    const purpose = window.prompt("Why is this governed graph export needed?");
+    if (!purpose?.trim()) return;
+    const response = await fetch(`${RAILWAY_URL}/company-graph/export`, {
+      method: "POST", headers: await authHeaders(),
+      body: JSON.stringify({
+        company_id: currentUser.company_id,
+        operational_unit_id: scopeId || "",
+        purpose: purpose.trim(),
+        included_object_types: [...new Set(filteredNodes.map(node => node.entity_type))],
+        included_node_ids: filteredNodes.map(node => node.id),
+      }),
+    });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      throw new Error(detail?.detail?.message || "The governed export was denied.");
+    }
+    const exportPacket = await response.json();
+    const blob = new Blob([JSON.stringify(exportPacket, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url; anchor.download = `newsconseen-company-graph-${Date.now()}.json`; anchor.click();
     URL.revokeObjectURL(url);
-    auditGraph("exported", scopeId || currentUser?.company_id, { nodes: filteredNodes.length, edges: filteredEdges.length });
+  };
+
+  const loadNextBoundedPage = async () => {
+    const token = effectiveGraphContract.truncation?.continuation_token;
+    if (!token || loadingContinuation) return;
+    setLoadingContinuation(true);
+    try {
+      const scope = scopeId ? `&operational_unit_id=${encodeURIComponent(scopeId)}` : "";
+      const response = await fetch(`${RAILWAY_URL}/company-graph/overview?company_id=${encodeURIComponent(currentUser.company_id)}&continuation_token=${encodeURIComponent(token)}${scope}`, { headers: await authHeaders() });
+      if (!response.ok) throw new Error("The next governed graph page could not be loaded");
+      const next = assertGovernedGraphContract(await response.json());
+      const current = continuedOverview || governedQuery.data;
+      setContinuedOverview({
+        ...next,
+        nodes: [...new Map([...(current?.nodes || []), ...next.nodes].map(node => [node.id, node])).values()],
+        edges: [...new Map([...(current?.edges || []), ...next.edges].map(edge => [edge.id, edge])).values()],
+      });
+    } finally {
+      setLoadingContinuation(false);
+    }
   };
   const StatusIcon = graphStatus.Icon;
 
@@ -933,6 +1086,11 @@ export default function CompanyGraphHome() {
             </div>
             <p className="text-xs text-slate-600 mt-2">{governedGraph?.briefing?.headline || (governedQuery.isLoading ? "Evaluating your operational graph…" : "Using available company records.")}</p>
             <p className="text-[11px] text-slate-400 mt-1">{governedGraph?.briefing?.recommended_focus || "Select a node or relationship to investigate with Idjwi."}</p>
+            {effectiveGraphContract.truncation?.truncated && (
+              <p className="text-[10px] text-amber-700 mt-1">
+                Bounded view: {effectiveGraphContract.truncation.returned_nodes} nodes and {effectiveGraphContract.truncation.returned_edges} edges returned; at least {effectiveGraphContract.truncation.omitted_nodes || 0} nodes and {effectiveGraphContract.truncation.omitted_edges || 0} edges were omitted.
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-4 gap-2 text-center">
             {[["Open work", governedGraph?.briefing?.open_tasks || 0], ["High risks", governedGraph?.briefing?.high_risks || 0], ["Recommendations", governedGraph?.briefing?.pending_recommendations || 0], ["Data gaps", governedGraph?.briefing?.quality_issues || 0]].map(([label, value]) => (
@@ -942,17 +1100,59 @@ export default function CompanyGraphHome() {
         </div>
       </section>
 
+      {isAdministrator && (
+        <section className="rounded-2xl border border-slate-200 bg-white shrink-0" aria-labelledby="company-graph-guide-title">
+          <button
+            type="button"
+            onClick={() => setPageGuideOpen(open => !open)}
+            aria-expanded={pageGuideOpen}
+            aria-controls="company-graph-guide"
+            className="w-full flex items-center gap-3 p-3 text-left hover:bg-slate-50 rounded-2xl"
+          >
+            <span className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Info className="w-4 h-4" />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span id="company-graph-guide-title" className="block text-xs font-black text-slate-800">What is Company Graph?</span>
+              <span className="block text-[11px] text-slate-500 mt-0.5">A governed map of authorized operational records, relationships, evidence, decisions, and actions.</span>
+            </span>
+            {pageGuideOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+          </button>
+          {pageGuideOpen && (
+            <div id="company-graph-guide" className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 px-4 pb-4 border-t border-slate-100 pt-3 text-[11px] leading-relaxed">
+              <div>
+                <p className="font-black text-slate-700">What it maps</p>
+                <p className="text-slate-500 mt-1">People, enterprises, work, transactions, products, services, places, observations, recommendations, decisions, actions, and their governed connections in the selected scope.</p>
+              </div>
+              <div>
+                <p className="font-black text-slate-700">Where truth lives</p>
+                <p className="text-slate-500 mt-1">Canonical facts remain in Newsconseen's operational system. Derived links and observations retain provenance, freshness, confidence, and status; the graph itself is a projection.</p>
+              </div>
+              <div>
+                <p className="font-black text-slate-700">How Idjwi helps</p>
+                <p className="text-slate-500 mt-1">Idjwi uses the same authorized evidence to explain structure, changes, gaps, risks, and permitted next steps. Optional advisors contribute proposals only.</p>
+              </div>
+              <div>
+                <p className="font-black text-slate-700">Administrator responsibility</p>
+                <p className="text-slate-500 mt-1">Choose the correct organizational scope, review readiness and partial-source warnings, and confirm or reject corrections only when evidence and permissions support them.</p>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 shrink-0">
         <div className="relative min-w-[220px] flex-1 max-w-md">
           <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
           <input aria-label="Find a record in the company graph" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Find people, enterprises, work or risks…" className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white" />
           {searchResults.length > 0 && <div className="absolute z-40 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">{searchResults.map(node => <button key={node.id} onClick={() => { setFocusNodeId(node.id); setSearchTerm(""); handleNodeSelect({ id: node.id }); }} className="w-full flex justify-between px-3 py-2 text-xs hover:bg-slate-50"><span className="truncate">{node.label}</span><span className="capitalize text-slate-400">{node.entity_type}</span></button>)}</div>}
         </div>
-        <select aria-label="Organization or operational-unit scope" value={scopeId} onChange={event => { setScopeId(event.target.value); setNeighborhoodGraph(null); }} className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white"><option value="">Organization-wide</option>{scopeOptions.map(node => <option key={node.id} value={node.entity_id}>{node.label}</option>)}</select>
+        <select aria-label="Organization or operational-unit scope" value={scopeId} onChange={event => { setScopeId(event.target.value); setNeighborhoodGraph(null); }} className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white"><option value="">Organization-wide</option>{scopeOptions.map(node => <option key={node.id} value={node.entity_id}>{node.label} · {(node.attributes?.unit_type || "operational unit").replaceAll("_", " ")}</option>)}</select>
         {savedViews.length > 0 && <select aria-label="Saved graph views" defaultValue="" onChange={event => applySavedView(event.target.value)} className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white"><option value="">Saved views</option>{savedViews.map(view => <option key={view.name}>{view.name}</option>)}</select>}
         <button onClick={saveCurrentView} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600" title="Save current view" aria-label="Save current graph view"><Save className="w-4 h-4" /></button>
-        <button onClick={exportGraph} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600" title="Export visible graph" aria-label="Export visible graph"><Download className="w-4 h-4" /></button>
+        <button disabled={!canExportGraph} onClick={() => exportGraph().catch(error => window.alert(error.message))} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed" title={canExportGraph ? "Export visible graph through the governed backend" : "Governed graph export is not yet permitted"} aria-label="Export visible graph"><Download className="w-4 h-4" /></button>
         {neighborhoodGraph && <button onClick={() => { setNeighborhoodGraph(null); setSelectedNode(null); governedQuery.refetch(); }} className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600">Return to overview</button>}
+        {!neighborhoodGraph && effectiveGraphContract.truncation?.continuation_available && <button disabled={loadingContinuation} onClick={() => loadNextBoundedPage().catch(error => window.alert(error.message))} className="text-xs px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 disabled:opacity-50">{loadingContinuation ? "Loading bounded page…" : "Load next bounded page"}</button>}
       </div>
 
       {/* ── Company Pulse bar ──────────────────────────────────────────────── */}
@@ -1010,7 +1210,7 @@ export default function CompanyGraphHome() {
         <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mr-1">Needs attention</span>
         {governedQuery.isError && !fallbackEnabled ? (
           <span className="text-xs text-rose-600 font-medium">Operational evaluation unavailable</span>
-        ) : attentionSignals.length === 0 && (governedGraph?.provenance?.complete || fallbackEnabled) ? (
+        ) : attentionSignals.length === 0 && effectiveGraphContract.completeness.state === "complete" ? (
           <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
             <Circle className="w-2 h-2 fill-emerald-400 text-emerald-400" /> No operational alerts detected
           </span>
@@ -1102,7 +1302,7 @@ export default function CompanyGraphHome() {
             navigate={navigate}
             companyId={currentUser?.company_id}
             onGraphRefresh={async () => { setNeighborhoodGraph(null); await governedQuery.refetch(); }}
-            graphContext={{ graph_scope: scopeId || "organization", graph_mode: graphMode, visible_node_ids: filteredNodes.slice(0, 100).map(node => node.id), visible_edge_ids: filteredEdges.slice(0, 100).map(edge => edge.id), graph_provenance: governedGraph?.provenance, unavailable_sources: governedGraph?.unavailable_sources || [] }}
+            graphContext={idjwiGraphContext}
             insights={insights}
             risks={risks}
             opportunities={opportunities}
