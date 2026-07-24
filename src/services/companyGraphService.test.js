@@ -5,6 +5,7 @@ import {
   buildIdjwiGraphAction,
   buildIdjwiGraphContext,
   buildOperationalFocus,
+  createLatestGraphRequestCoordinator,
   IDJWI_GRAPH_INTENTS,
   semanticPositions,
   serializeGovernedGraphPacket,
@@ -137,4 +138,20 @@ test("semantic positions remain stable when a neighborhood expands", () => {
   assert.deepEqual(first["enterprise:e1"], expanded["enterprise:e1"]);
   assert.deepEqual(first["task:t1"], expanded["task:t1"]);
   assert.notDeepEqual(first["enterprise:e1"], first["task:t1"]);
+});
+
+test("latest graph request coordinator suppresses a stale neighborhood response", async () => {
+  const pending = [];
+  const fetcher = (url, options) => new Promise((resolve, reject) => {
+    pending.push({ url, options, resolve, reject });
+    options.signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+  });
+  const coordinator = createLatestGraphRequestCoordinator(fetcher);
+  const first = coordinator.run("/neighborhood/enterprise/e1");
+  const second = coordinator.run("/neighborhood/person/p1");
+  pending[1].resolve({ ok: true, marker: "person" });
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+  assert.equal(firstResult.stale, true);
+  assert.equal(secondResult.stale, false);
+  assert.equal(secondResult.response.marker, "person");
 });

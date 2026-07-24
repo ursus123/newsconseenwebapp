@@ -23,6 +23,8 @@ GRAPH_PERMISSIONS = (
     "graph.relationship_propose",
     "graph.relationship_confirm",
     "graph.relationship_reject",
+    "graph.view_save",
+    "graph.view_share",
     "graph.admin",
 )
 
@@ -32,12 +34,12 @@ ROLE_GRAPH_PERMISSIONS = {
     "manager": (
         "graph.read", "graph.read_sensitive", "graph.export",
         "graph.relationship_propose", "graph.relationship_confirm",
-        "graph.relationship_reject",
+        "graph.relationship_reject", "graph.view_save", "graph.view_share",
     ),
-    "teacher": ("graph.read", "graph.relationship_propose"),
-    "staff": ("graph.read", "graph.relationship_propose"),
-    "user": ("graph.read",),
-    "student": ("graph.read",),
+    "teacher": ("graph.read", "graph.relationship_propose", "graph.view_save"),
+    "staff": ("graph.read", "graph.relationship_propose", "graph.view_save"),
+    "user": ("graph.read", "graph.view_save"),
+    "student": ("graph.read", "graph.view_save"),
 }
 
 SENSITIVE_REGISTRY_LEVELS = {"personal", "financial", "confidential", "restricted"}

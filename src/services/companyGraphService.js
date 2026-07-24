@@ -45,6 +45,7 @@ export const IDJWI_GRAPH_INTENTS = Object.freeze({
   FIND_GRAPH_GAPS: "find_graph_gaps",
   RECOMMEND_GRAPH_ACTION: "recommend_graph_action",
   COMPARE_GRAPH_SCOPES: "compare_graph_scopes",
+  SEARCH_COMPANY_GRAPH: "search_company_graph",
 });
 
 export const GRAPH_FIELD_CLASSIFICATION = {
@@ -103,6 +104,33 @@ export const GRAPH_MODES = {
 };
 
 export const OPERATIONAL_FOCUS_NODE_BUDGET = 36;
+
+export function createLatestGraphRequestCoordinator(fetcher = fetch) {
+  let controller = null;
+  let requestId = 0;
+  return {
+    async run(url, options = {}) {
+      controller?.abort();
+      controller = new AbortController();
+      const currentId = ++requestId;
+      try {
+        const response = await fetcher(url, { ...options, signal: controller.signal });
+        if (currentId !== requestId) return { stale: true, response: null };
+        return { stale: false, response };
+      } catch (error) {
+        if (error?.name === "AbortError" || currentId !== requestId) {
+          return { stale: true, aborted: true, response: null };
+        }
+        throw error;
+      }
+    },
+    cancel() {
+      requestId += 1;
+      controller?.abort();
+      controller = null;
+    },
+  };
+}
 
 const TYPE_OPERATIONAL_WEIGHT = {
   risk: 100, decision: 96, action: 94, recommendation: 92, task: 88,

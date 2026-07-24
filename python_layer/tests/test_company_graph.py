@@ -2,6 +2,8 @@ from fastapi import HTTPException
 import threading
 import time
 import pytest
+from dataclasses import replace
+from types import SimpleNamespace
 
 from company_graph import routes
 from company_graph.cache import invalidate as invalidate_graph_cache
@@ -276,6 +278,7 @@ def test_graph_search_queries_authorized_sources_concurrently(client, monkeypatc
         return TenantRepositoryResult([], context, entities=(entity_type,), duration_ms=30.0)
 
     monkeypatch.setattr(routes.SupabaseTenantContextRepository, "search_entities", search_entities)
+    monkeypatch.setattr(routes, "_packet", lambda *_args, **_kwargs: SimpleNamespace(nodes=[], edges=[]))
     response = client.get(
         "/company-graph/search?company_id=tenant-a&q=acme",
         headers={"Authorization": "Bearer test"},
@@ -285,8 +288,9 @@ def test_graph_search_queries_authorized_sources_concurrently(client, monkeypatc
     body = response.json()
     assert max_active > 1
     assert body["partial"] is False
-    assert len(body["source_status"]) == 7
+    assert len(body["source_status"]) == 14
     assert {source["state"] for source in body["source_status"]} == {"empty"}
+    assert "predicates" in body["coverage"]
 
 
 def test_graph_search_preserves_results_when_one_source_fails(client, monkeypatch):
@@ -303,6 +307,7 @@ def test_graph_search_preserves_results_when_one_source_fails(client, monkeypatc
         return TenantRepositoryResult(rows, context, entities=(entity_type,), duration_ms=12.0)
 
     monkeypatch.setattr(routes.SupabaseTenantContextRepository, "search_entities", search_entities)
+    monkeypatch.setattr(routes, "_packet", lambda *_args, **_kwargs: SimpleNamespace(nodes=[], edges=[]))
     response = client.get(
         "/company-graph/search?company_id=tenant-a&q=acme",
         headers={"Authorization": "Bearer test"},
@@ -315,6 +320,32 @@ def test_graph_search_preserves_results_when_one_source_fails(client, monkeypatc
     failed = next(source for source in body["source_status"] if source["source_id"] == "task")
     assert failed["failure_category"] == "timeout"
     assert failed["affected_capabilities"] == ["graph_search"]
+
+
+def test_saved_graph_views_never_cross_private_owner_or_unit_scope():
+    owner = _context()
+    other = replace(owner, user_id="user-2", role="user", allowed_operational_unit_ids=("unit-2",))
+    owner_policy = routes.GraphAuthorizationPolicy.for_context(owner)
+    other_policy = routes.GraphAuthorizationPolicy.for_context(other)
+    private = {"owner_user_id": "user-1", "audience": "private", "scope": {"type": "organization", "id": "tenant-a"}}
+    unit = {"owner_user_id": "user-1", "audience": "operational_unit", "scope": {"type": "operational_unit", "id": "unit-1"}}
+    organization = {"owner_user_id": "user-1", "audience": "organization", "scope": {"type": "organization", "id": "tenant-a"}}
+    restricted = {**organization, "permissions": ["manager"]}
+
+    assert routes._saved_view_visible(private, owner, owner_policy) is True
+    assert routes._saved_view_visible(private, other, other_policy) is False
+    assert routes._saved_view_visible(unit, other, other_policy) is False
+    assert routes._saved_view_visible(organization, other, other_policy) is True
+    assert routes._saved_view_visible(restricted, other, other_policy) is False
+
+
+def test_saved_graph_view_rejects_unknown_layout():
+    body = routes.GraphSavedViewRequest(
+        company_id="tenant-a", name="Unsafe view", layout="invented-layout",
+    )
+    with pytest.raises(HTTPException) as error:
+        routes._validate_saved_view(body, _context(), routes.GraphAuthorizationPolicy.for_context(_context()))
+    assert error.value.status_code == 422
 
 
 def test_graph_nodes_are_safe_summaries_not_database_rows():

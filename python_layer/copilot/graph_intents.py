@@ -124,6 +124,37 @@ def execute_graph_intent(intent, *, question, company_id, context, principal):
         answer = (f"Idjwi compared {len(comparisons)} authorized graph scopes." if len(comparisons) >= 2 else "Choose at least two authorized operational scopes before requesting a comparison.")
         data = {"comparison_scopes": comparisons, "required_scopes": max(0, 2 - len(comparisons))}
         intent_complete = len(comparisons) >= 2
+    elif intent == "search_company_graph":
+        search_query = str(context.get("graph_search_query") or question or "").casefold().strip()
+        ignored = {
+            "a", "an", "and", "ask", "company", "find", "for", "graph", "governed",
+            "idjwi", "in", "me", "of", "record", "records", "search", "show", "the", "to",
+        }
+        terms = [
+            term for term in search_query.replace("?", " ").replace(",", " ").split()
+            if len(term) >= 2 and term not in ignored
+        ]
+        matched_nodes = [
+            node for node in nodes
+            if terms and any(term in " ".join([
+                str(node.get("label") or ""), str(node.get("sublabel") or ""),
+                str(node.get("status") or ""), str(node.get("entity_type") or ""),
+                " ".join(str(value) for value in (node.get("attributes") or {}).values()),
+            ]).casefold() for term in terms)
+        ]
+        matched_ids = {node.get("id") for node in matched_nodes}
+        matched_edges = [
+            edge for edge in edges
+            if any(term in str(edge.get("predicate") or edge.get("label") or "").casefold() for term in terms)
+            or edge.get("source") in matched_ids or edge.get("target") in matched_ids
+        ]
+        answer = (
+            f"Idjwi found {len(matched_nodes)} authorized records and {len(matched_edges)} relationships "
+            f"matching '{context.get('graph_search_query') or question}' in the supplied governed graph."
+        )
+        data = {"query": context.get("graph_search_query") or question, "nodes": matched_nodes, "relationships": matched_edges}
+        cited_nodes = matched_nodes[:8]
+        cited_edges = matched_edges[:8]
     else:
         raise ValueError(f"Unsupported Idjwi graph intent: {intent}")
 
@@ -157,6 +188,49 @@ def execute_graph_intent(intent, *, question, company_id, context, principal):
     node_lookup = {node["id"]: node for node in nodes}
     graph_citations = [edge_citation(edge, node_lookup) for edge in cited_edges]
     graph_citations.extend(node_citation(node) for node in cited_nodes)
+    cited_node_ids = list(dict.fromkeys(
+        node_id
+        for citation in graph_citations
+        for node_id in (citation.get("node_ids") or [])
+    ))
+    cited_edge_ids = list(dict.fromkeys(
+        citation.get("edge_id") for citation in graph_citations if citation.get("edge_id")
+    ))
+    graph_workspace_actions = []
+    if cited_node_ids:
+        graph_workspace_actions.extend([
+            {"action": "highlight_records", "label": "Highlight evidence", "node_ids": cited_node_ids},
+            {"action": "center_record", "label": "Center first record", "node_id": cited_node_ids[0]},
+        ])
+    if cited_edge_ids:
+        graph_workspace_actions.append({
+            "action": "open_edge", "label": "Open relationship", "edge_id": cited_edge_ids[0],
+        })
+    if len(cited_node_ids) >= 2:
+        graph_workspace_actions.append({
+            "action": "compare_neighborhoods", "label": "Compare neighborhoods",
+            "node_ids": cited_node_ids[:2],
+        })
+    permitted_action_names = {
+        item.get("action") if isinstance(item, dict) else item
+        for item in graph["permitted_actions"]
+    }
+    if selected_edge and permitted_action_names.intersection({
+        "confirm", "reject", "propose", "edit",
+        "relationship_confirm", "relationship_reject", "relationship_propose",
+    }):
+        graph_workspace_actions.append({
+            "action": "propose_governed_correction", "label": "Review correction",
+            "edge_id": selected_edge.get("id"),
+        })
+    graph_workspace_actions.extend([
+        {"action": "create_task", "label": "Create follow-up task"},
+        {"action": "request_approval", "label": "Request approval"},
+    ])
+    if graph["completeness"].get("state") != "complete" or graph["unavailable_sources"]:
+        graph_workspace_actions.append({
+            "action": "explain_degraded_data", "label": "Explain degraded data",
+        })
     confidence = graph_claim_confidence(context, cited_edges, intent_complete=intent_complete)
     return {
         "answer": answer, "intent": intent, "intent_version": GRAPH_INTENT_VERSION,
@@ -164,6 +238,7 @@ def execute_graph_intent(intent, *, question, company_id, context, principal):
         "tools_called": [intent], "tools_detail": [tool], "data": data,
         "confidence": confidence,
         "graph_citations": graph_citations,
+        "graph_workspace_actions": graph_workspace_actions,
         "missing_data_caveats": caveats,
         "trust": build_trust_packet(
             question=question, company_id=company_id, principal=principal,

@@ -27,12 +27,13 @@ import {
   Circle, AlertCircle, Unlink, Search, Save, Download,
   CheckCircle2, CloudOff, Maximize2, Minimize2, RotateCcw, Eye,
   Info, ChevronDown, ChevronUp,
+  ArrowLeft, Pin,
 } from "lucide-react";
 import {
   buildGraphData, toCytoscapeElements, filterForMode,
   GRAPH_MODES, GRAPH_CONTRACT_VERSION, assertGovernedGraphContract,
   buildIdjwiGraphContext, IDJWI_GRAPH_INTENTS, buildOperationalFocus,
-  semanticPositions,
+  semanticPositions, createLatestGraphRequestCoordinator,
 } from "@/services/companyGraphService";
 import { getAttentionSignals } from "@/utils/attentionSignals";
 
@@ -271,7 +272,12 @@ function openIdjwiGraphAction(question, intent, context, extraContext = {}) {
 }
 
 // ── Context Panel ─────────────────────────────────────────────────────────────
-function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, graphContext, insights = [], risks = [], opportunities = [] }) {
+function ContextPanel({
+  selected, onClose, navigate, companyId, onGraphRefresh, graphContext,
+  onInspectNode, onExpand, neighborhoodDepth = 1, inspectionState,
+  isPinned, onTogglePin, isCompared, onToggleCompare,
+  insights = [], risks = [], opportunities = [],
+}) {
   if (!selected) {
     return (
       <div className="flex flex-col h-full">
@@ -363,8 +369,21 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Why this connection exists</p>
             <p className="text-xs text-slate-700 leading-relaxed">{evidence.explanation || "The graph projection found a canonical reference between these records."}</p>
           </div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Evidence ({edge.evidence?.length || 0})</p>
+            <div className="space-y-1.5">
+              {(edge.evidence || []).map(item => (
+                <div key={item.evidence_id} className="rounded-lg border border-slate-200 p-2 text-[10px]">
+                  <p className="font-bold text-slate-700 break-all">{item.evidence_id}</p>
+                  <p className="text-slate-500 mt-0.5">{item.explanation}</p>
+                  <p className="text-slate-400 mt-1">{item.source_zone} · {item.source_table} · record {item.source_record_id}</p>
+                </div>
+              ))}
+              {!edge.evidence?.length && <p className="text-[10px] text-amber-600">No governed evidence record was returned for this relationship.</p>}
+            </div>
+          </div>
           <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 text-xs">
-            {[["Source", evidence.source_table || "Canonical ontology"], ["Record", evidence.source_record_id || "Not provided"], ["Data zone", evidence.source_zone || "canonical"], ["Assertion", (edge.assertion_class || "unclassified").replaceAll("_", " ")], ["Rule", evidence.derivation_rule || (isFact ? "Direct tenant assertion" : "Governed projection")], ["Valid from", edge.temporal?.valid_from || "Not specified"], ["Valid to", edge.temporal?.valid_to || "Current"]].map(([label, value]) => (
+            {[["Source", evidence.source_table || "Canonical ontology"], ["Record", evidence.source_record_id || "Not provided"], ["Data zone", evidence.source_zone || "canonical"], ["Assertion", (edge.assertion_class || "unclassified").replaceAll("_", " ")], ["Assertion state", (edge.assertion_state || edge.status || "active").replaceAll("_", " ")], ["Rule", evidence.derivation_rule || (isFact ? "Direct tenant assertion" : "Governed projection")], ["Valid from", edge.temporal?.valid_from || "Not specified"], ["Valid to", edge.temporal?.valid_to || "Current"], ["Observed", edge.temporal?.observed_at || "Not specified"], ["Confirmed", edge.temporal?.confirmed_at || "Not confirmed"], ["Rejected", edge.temporal?.rejected_at || "Not rejected"]].map(([label, value]) => (
               <div key={label} className="flex gap-3 justify-between p-2.5"><span className="text-slate-400">{label}</span><span className="text-slate-700 font-medium text-right break-all">{value}</span></div>
             ))}
           </div>
@@ -408,6 +427,28 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
   }
 
   const { node, connectedNodes, connectedEdges = [] } = selected;
+  const connectedById = new Map(connectedNodes.map(item => [item.id, item]));
+  const relationshipGroups = [
+    {
+      label: "Outgoing",
+      edges: connectedEdges.filter(edge => edge.source === node.id),
+      endpoint: edge => connectedById.get(edge.target),
+    },
+    {
+      label: "Incoming",
+      edges: connectedEdges.filter(edge => edge.target === node.id),
+      endpoint: edge => connectedById.get(edge.source),
+    },
+  ];
+  const operationalGroups = [
+    { label: "Risks", types: ["risk"], color: "text-rose-600 bg-rose-50" },
+    { label: "Work", types: ["task", "schedule"], color: "text-orange-600 bg-orange-50" },
+    { label: "Decisions", types: ["decision", "recommendation"], color: "text-blue-600 bg-blue-50" },
+    { label: "Actions", types: ["action"], color: "text-violet-600 bg-violet-50" },
+  ].map(group => ({
+    ...group,
+    nodes: connectedNodes.filter(item => group.types.includes(item.entity_type)),
+  }));
 
   // App-generated signals referencing this entity
   const appSignals = [
@@ -457,12 +498,26 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
             {cfg.label || node.entity_type}
           </p>
         </div>
+        <button onClick={() => onTogglePin?.(node)} title={isPinned ? "Unpin node" : "Pin node"} aria-label={isPinned ? "Unpin node" : "Pin node"} className={`p-1.5 rounded-lg border ${isPinned ? "bg-amber-50 text-amber-700 border-amber-200" : "text-slate-400 border-slate-200 hover:bg-slate-50"}`}>
+          <Pin className="w-3.5 h-3.5" />
+        </button>
         <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 shrink-0">
           <X className="w-4 h-4" />
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {inspectionState?.status === "loading" && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-700 flex items-center gap-2">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading governed neighborhood…
+          </div>
+        )}
+        {inspectionState?.status === "error" && (
+          <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
+            <p className="font-bold">Neighborhood retrieval failed</p>
+            <p className="mt-0.5">{inspectionState.error}</p>
+          </div>
+        )}
         {/* Status badges */}
         <div className="flex flex-wrap gap-1.5">
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
@@ -497,28 +552,43 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
           </div>
         )}
 
-        {/* Connected nodes */}
-        {connectedNodes.length > 0 && (
-          <div>
+        {relationshipGroups.map(group => group.edges.length > 0 && (
+          <div key={group.label}>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-              Connected ({connectedNodes.length})
+              {group.label} relationships ({group.edges.length})
             </p>
             <div className="space-y-1">
-              {connectedNodes.slice(0, 8).map(cn => {
-                const ccfg = ENTITY_CONFIG[cn.entity_type] || {};
-                const CIcon = ccfg.icon || Circle;
-                const connection = connectedEdges.find(edge => edge.source === cn.id || edge.target === cn.id);
+              {group.edges.slice(0, 10).map(edge => {
+                const endpoint = group.endpoint(edge);
+                const endpointConfig = ENTITY_CONFIG[endpoint?.entity_type] || {};
+                const EndpointIcon = endpointConfig.icon || Circle;
                 return (
-                  <div key={cn.id} className="flex items-center gap-2 py-1 border-b border-slate-50 last:border-0">
-                    <CIcon className="w-3 h-3 shrink-0" style={{ color: ccfg.color || "#64748b" }} />
-                    <div className="min-w-0 flex-1"><p className="text-[11px] text-slate-600 truncate">{cn.label}</p><p className="text-[9px] text-amber-600 capitalize truncate">{(connection?.predicate || connection?.relationship_type || "related to").replaceAll("_", " ")}</p></div>
-                    <span className="text-[10px] text-slate-300 capitalize shrink-0">{cn.entity_type}</span>
-                  </div>
+                  <button key={edge.id} onClick={() => endpoint && onInspectNode?.(endpoint)} className="w-full flex items-center gap-2 p-2 rounded-lg border border-slate-100 hover:bg-slate-50 text-left">
+                    <EndpointIcon className="w-3.5 h-3.5 shrink-0" style={{ color: endpointConfig.color || "#64748b" }} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[11px] font-semibold text-slate-700 truncate">{endpoint?.label || (group.label === "Outgoing" ? edge.target : edge.source)}</span>
+                      <span className="block text-[9px] text-amber-600 capitalize truncate">{(edge.predicate || edge.relationship_type || "related to").replaceAll("_", " ")}</span>
+                    </span>
+                    <span className="text-[9px] text-slate-400">{Math.round((edge.confidence ?? 0) * 100)}%</span>
+                  </button>
                 );
               })}
-              {connectedNodes.length > 8 && (
-                <p className="text-[10px] text-slate-400">+{connectedNodes.length - 8} more</p>
-              )}
+            </div>
+          </div>
+        ))}
+
+        {operationalGroups.some(group => group.nodes.length) && (
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Operational context</p>
+            <div className="grid grid-cols-2 gap-2">
+              {operationalGroups.map(group => (
+                <div key={group.label} className={`rounded-xl p-2.5 ${group.color}`}>
+                  <p className="text-[10px] font-black uppercase">{group.label} · {group.nodes.length}</p>
+                  {group.nodes.slice(0, 3).map(item => (
+                    <button key={item.id} onClick={() => onInspectNode?.(item)} className="block w-full text-left text-[10px] truncate mt-1 hover:underline">{item.label}</button>
+                  ))}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -590,6 +660,14 @@ function ContextPanel({ selected, onClose, navigate, companyId, onGraphRefresh, 
 
       {/* Footer actions */}
       <div className="p-3 border-t border-slate-100 space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => onExpand?.(node)} disabled={neighborhoodDepth >= 3 || inspectionState?.status === "loading"} className="py-2 rounded-xl text-xs font-bold bg-slate-50 text-slate-700 border border-slate-200 disabled:opacity-40">
+            Expand one level
+          </button>
+          <button onClick={() => onToggleCompare?.(node)} className={`py-2 rounded-xl text-xs font-bold border ${isCompared ? "bg-blue-100 text-blue-700 border-blue-300" : "bg-blue-50 text-blue-700 border-blue-200"}`}>
+            {isCompared ? "Remove compare" : "Compare node"}
+          </button>
+        </div>
         {routePage && (
           <button
             onClick={() => navigate(createPageUrl(routePage))}
@@ -814,17 +892,45 @@ export default function CompanyGraphHome() {
   const [focusNodeId, setFocusNodeId] = useState("");
   const [focusEdgeId, setFocusEdgeId] = useState("");
   const [neighborhoodGraph, setNeighborhoodGraph] = useState(null);
+  const [inspectionTrail, setInspectionTrail] = useState([]);
+  const [neighborhoodDepth, setNeighborhoodDepth] = useState(1);
+  const [neighborhoodState, setNeighborhoodState] = useState({ status: "idle", error: "" });
+  const [pinnedNodes, setPinnedNodes] = useState([]);
+  const [compareNodes, setCompareNodes] = useState([]);
+  const [idjwiWorkspaceWidth, setIdjwiWorkspaceWidth] = useState(0);
   const [continuedOverview, setContinuedOverview] = useState(null);
   const [loadingContinuation, setLoadingContinuation] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pageGuideOpen, setPageGuideOpen] = useState(false);
-  const [savedViews, setSavedViews] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("newsconseen:company-graph-views") || "[]"); } catch { return []; }
-  });
+  const neighborhoodCoordinatorRef = useRef(null);
+  if (!neighborhoodCoordinatorRef.current) {
+    neighborhoodCoordinatorRef.current = createLatestGraphRequestCoordinator();
+  }
+  useEffect(() => () => neighborhoodCoordinatorRef.current?.cancel(), []);
+  useEffect(() => {
+    const coordinateWorkspace = event => {
+      const detail = event.detail || {};
+      setIdjwiWorkspaceWidth(detail.open && detail.coordinated ? Number(detail.width || 0) : 0);
+    };
+    window.addEventListener("idjwi-workspace-state", coordinateWorkspace);
+    return () => window.removeEventListener("idjwi-workspace-state", coordinateWorkspace);
+  }, []);
 
   // ── Entity fetches ───────────────────────────────────────────────────────────
   const enabled = !!currentUser?.company_id || currentUser?.role === "super_admin";
   const isAdministrator = ["admin", "super_admin"].includes(currentUser?.role);
+
+  const savedViewsQuery = useQuery({
+    queryKey: ["company-graph-saved-views", currentUser?.company_id],
+    enabled: enabled && !!currentUser?.company_id,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const response = await fetch(`${RAILWAY_URL}/company-graph/views?company_id=${encodeURIComponent(currentUser.company_id)}`, { headers: await authHeaders() });
+      if (!response.ok) throw new Error("Governed saved views are unavailable");
+      return response.json();
+    },
+  });
+  const savedViews = savedViewsQuery.data?.views || [];
 
   const governedQuery = useQuery({
     queryKey: ["company-graph-overview", currentUser?.company_id, scopeId],
@@ -987,6 +1093,7 @@ export default function CompanyGraphHome() {
     const combined = [...(graphSearchQuery.data?.results || []), ...nodes];
     return [...new Map(combined.filter(node => node.label?.toLowerCase().includes(query) || node.entity_type.includes(query)).map(node => [node.id, node])).values()].slice(0, 8);
   }, [nodes, searchTerm, graphSearchQuery.data]);
+  const edgeSearchResults = graphSearchQuery.data?.edge_results || [];
   const scopeOptions = useMemo(() => nodes.filter(node => node.entity_type === "operational_unit"), [nodes]);
 
   const effectiveGraphContract = useMemo(() => governedGraph || {
@@ -1095,22 +1202,62 @@ export default function CompanyGraphHome() {
   };
   const StatusIcon = graphStatus.Icon;
 
-  const saveCurrentView = () => {
+  const saveCurrentView = async () => {
     const name = window.prompt("Name this graph view");
     if (!name?.trim()) return;
-    const next = [...savedViews.filter(view => view.name !== name.trim()), { name: name.trim(), graphMode, scopeId, visibleTypes: [...visibleTypes] }].slice(-10);
-    setSavedViews(next);
-    localStorage.setItem("newsconseen:company-graph-views", JSON.stringify(next));
+    const audience = window.prompt("Audience: private, team, operational_unit, or organization", "private") || "private";
+    // Audience vocabulary is governance metadata, not enterprise_type taxonomy.
+    // eslint-disable-next-line newsconseen/no-legacy-type-value
+    if (!["private", "team", "operational_unit", "organization"].includes(audience)) {
+      throw new Error("Choose a supported saved-view audience.");
+    }
+    if (["team", "operational_unit"].includes(audience) && !scopeId) {
+      throw new Error("Select an operational unit before saving a team or unit view.");
+    }
+    const permissionInput = audience === "private"
+      ? ""
+      : window.prompt("Optional allowed roles, separated by commas (leave blank for the whole audience)", "") || "";
+    const permissions = permissionInput.split(",").map(value => value.trim()).filter(Boolean);
+    const response = await fetch(`${RAILWAY_URL}/company-graph/views`, {
+      method: "POST", headers: await authHeaders(),
+      body: JSON.stringify({
+        company_id: currentUser.company_id,
+        name: name.trim(), audience,
+        scope: { type: scopeId ? "operational_unit" : "organization", id: scopeId || currentUser.company_id },
+        filters: {
+          visible_types: [...visibleTypes],
+          active_filter: activeFilter,
+          search_query: searchTerm.trim(),
+        },
+        layout: graphMode,
+        permissions,
+        version: 1,
+      }),
+    });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      throw new Error(detail?.detail?.message || detail?.detail?.code || "The governed view could not be saved.");
+    }
+    await savedViewsQuery.refetch();
     auditGraph("view_saved", name.trim(), { graph_mode: graphMode, scope_id: scopeId });
   };
 
   const applySavedView = value => {
-    const view = savedViews.find(item => item.name === value);
+    const view = savedViews.find(item => item.id === value);
     if (!view) return;
-    setGraphMode(view.graphMode || "operational_focus");
-    setScopeId(view.scopeId || "");
-    setVisibleTypes(new Set(view.visibleTypes || Object.keys(ENTITY_CONFIG)));
+    if (view.validation_state !== "valid") {
+      window.alert("This governed view requires validation before it can be applied.");
+      return;
+    }
+    const viewScope = view.scope || {};
+    setGraphMode(view.layout || "operational_focus");
+    setScopeId(viewScope.type === "operational_unit" ? viewScope.id || "" : "");
+    setVisibleTypes(new Set(view.filters?.visible_types || Object.keys(ENTITY_CONFIG)));
+    setActiveFilter(view.filters?.active_filter || null);
+    setSearchTerm(view.filters?.search_query || "");
     setNeighborhoodGraph(null);
+    setSelectedNode(null);
+    setInspectionTrail([]);
   };
 
   // ── Pulse bar highlight ──────────────────────────────────────────────────────
@@ -1121,37 +1268,119 @@ export default function CompanyGraphHome() {
   }, [activeFilter]);
 
   // ── Node click ───────────────────────────────────────────────────────────────
-  const handleNodeSelect = useCallback(async nodeData => {
-    if (!nodeData) { setSelectedNode(null); return; }
-    const fullNode = filteredNodes.find(n => n.id === nodeData.id);
+  const selectionFor = useCallback((fullNode, packetNodes, packetEdges) => {
+    const connectedEdges = packetEdges.filter(edge => edge.source === fullNode.id || edge.target === fullNode.id);
+    const connectedIds = new Set(connectedEdges
+      .flatMap(edge => [edge.source, edge.target])
+      .filter(id => id !== fullNode.id));
+    return {
+      node: fullNode,
+      connectedNodes: packetNodes.filter(node => connectedIds.has(node.id)),
+      connectedEdges,
+    };
+  }, []);
+
+  const inspectNode = useCallback(async (fullNode, depth = 1, { recordHistory = true } = {}) => {
     if (!fullNode) return;
-    // Find connected nodes
-    const connectedIds = new Set(
-      filteredEdges
-        .filter(e => e.source === fullNode.id || e.target === fullNode.id)
-        .flatMap(e => [e.source, e.target])
-        .filter(id => id !== fullNode.id),
-    );
-    const connectedNodes = filteredNodes.filter(n => connectedIds.has(n.id));
-    const connectedEdges = filteredEdges.filter(e => e.source === fullNode.id || e.target === fullNode.id);
-    setSelectedNode({ node: fullNode, connectedNodes, connectedEdges });
-    auditGraph("node_inspected", fullNode.id, { graph_mode: graphMode, scope_id: scopeId });
     setFocusNodeId(fullNode.id);
+    setFocusEdgeId("");
+    setSelectedNode(selectionFor(fullNode, filteredNodes, filteredEdges));
+    setNeighborhoodDepth(depth);
+    setNeighborhoodState({ status: "loading", error: "" });
+    if (recordHistory) {
+      setInspectionTrail(previous => previous.at(-1)?.id === fullNode.id
+        ? previous
+        : [...previous, fullNode].slice(-10));
+    }
+    auditGraph("node_inspected", fullNode.id, { graph_mode: graphMode, scope_id: scopeId, depth });
     if (fullNode.presentation_only) {
+      neighborhoodCoordinatorRef.current.cancel();
       setGraphMode("data_quality");
       setActiveFilter("unconnected");
+      setNeighborhoodState({ status: "ready", error: "" });
       return;
     }
-    if (currentUser?.company_id && !fallbackEnabled) {
-      try {
-        const scope = scopeId ? `&operational_unit_id=${encodeURIComponent(scopeId)}` : "";
-        const response = await fetch(`${RAILWAY_URL}/company-graph/neighborhood/${encodeURIComponent(fullNode.entity_type)}/${encodeURIComponent(fullNode.entity_id)}?company_id=${encodeURIComponent(currentUser.company_id)}&depth=1${scope}`, { headers: await authHeaders() });
-        if (response.ok) setNeighborhoodGraph(await response.json());
-      } catch { /* Preserve the visible overview when neighborhood retrieval fails. */ }
+    if (!currentUser?.company_id || fallbackEnabled) {
+      setNeighborhoodState({
+        status: fallbackEnabled ? "error" : "ready",
+        error: fallbackEnabled ? "Governed neighborhood retrieval is unavailable while the graph service is degraded." : "",
+      });
+      return;
     }
-  }, [filteredNodes, filteredEdges, currentUser?.company_id, fallbackEnabled, scopeId, graphMode, auditGraph]);
+    try {
+      const scope = scopeId ? `&operational_unit_id=${encodeURIComponent(scopeId)}` : "";
+      const url = `${RAILWAY_URL}/company-graph/neighborhood/${encodeURIComponent(fullNode.entity_type)}/${encodeURIComponent(fullNode.entity_id)}?company_id=${encodeURIComponent(currentUser.company_id)}&depth=${depth}${scope}`;
+      const result = await neighborhoodCoordinatorRef.current.run(url, { headers: await authHeaders() });
+      if (result.stale) return;
+      if (!result.response?.ok) {
+        const detail = await result.response?.json().catch(() => ({}));
+        throw new Error(detail?.detail?.message || detail?.detail?.code || `Neighborhood request failed (${result.response?.status || "network"})`);
+      }
+      const packet = assertGovernedGraphContract(await result.response.json());
+      const baseNodes = governedQuery.data?.nodes || [];
+      const retainedPins = baseNodes.filter(node => pinnedNodes.some(pin => pin.id === node.id));
+      const coordinatedPacket = {
+        ...packet,
+        nodes: [...new Map([...packet.nodes, ...retainedPins].map(node => [node.id, node])).values()],
+      };
+      setNeighborhoodGraph(coordinatedPacket);
+      const center = coordinatedPacket.nodes.find(node => node.id === fullNode.id) || fullNode;
+      setSelectedNode(selectionFor(center, coordinatedPacket.nodes, coordinatedPacket.edges));
+      setNeighborhoodState({ status: "ready", error: "" });
+    } catch (error) {
+      setNeighborhoodState({ status: "error", error: error.message || "The governed neighborhood could not be retrieved." });
+      auditGraph("neighborhood_failed", fullNode.id, { depth, message: error.message || "unknown" });
+    }
+  }, [
+    filteredNodes, filteredEdges, selectionFor, currentUser?.company_id,
+    fallbackEnabled, scopeId, graphMode, auditGraph, governedQuery.data, pinnedNodes,
+  ]);
+
+  const handleNodeSelect = useCallback(nodeData => {
+    if (!nodeData) { setSelectedNode(null); return; }
+    const fullNode = filteredNodes.find(node => node.id === nodeData.id);
+    if (fullNode) inspectNode(fullNode, 1);
+  }, [filteredNodes, inspectNode]);
+
+  const returnToOverview = useCallback(() => {
+    neighborhoodCoordinatorRef.current.cancel();
+    setNeighborhoodGraph(null);
+    setSelectedNode(null);
+    setInspectionTrail([]);
+    setNeighborhoodDepth(1);
+    setNeighborhoodState({ status: "idle", error: "" });
+    setFocusNodeId("");
+    setFocusEdgeId("");
+    governedQuery.refetch();
+  }, [governedQuery]);
+
+  const inspectTrailIndex = useCallback(index => {
+    const target = inspectionTrail[index];
+    if (!target) return;
+    setInspectionTrail(previous => previous.slice(0, index + 1));
+    inspectNode(target, 1, { recordHistory: false });
+  }, [inspectionTrail, inspectNode]);
+
+  const inspectBack = useCallback(() => {
+    if (inspectionTrail.length <= 1) returnToOverview();
+    else inspectTrailIndex(inspectionTrail.length - 2);
+  }, [inspectionTrail, inspectTrailIndex, returnToOverview]);
+
+  const togglePin = useCallback(node => {
+    setPinnedNodes(previous => previous.some(item => item.id === node.id)
+      ? previous.filter(item => item.id !== node.id)
+      : [...previous, node].slice(-8));
+  }, []);
+
+  const toggleCompare = useCallback(node => {
+    setCompareNodes(previous => previous.some(item => item.id === node.id)
+      ? previous.filter(item => item.id !== node.id)
+      : [...previous, node].slice(-2));
+  }, []);
 
   const handleEdgeSelect = useCallback(edgeData => {
+    neighborhoodCoordinatorRef.current.cancel();
+    setNeighborhoodState({ status: "idle", error: "" });
     const edge = filteredEdges.find(candidate => candidate.id === edgeData.id) || edgeData;
     setSelectedNode({
       edge,
@@ -1160,6 +1389,21 @@ export default function CompanyGraphHome() {
     });
     auditGraph("edge_inspected", edge.id, { predicate: edge.predicate || edge.relationship_type });
   }, [filteredNodes, filteredEdges, auditGraph]);
+
+  const inspectSearchedEdge = useCallback(async match => {
+    setSearchTerm("");
+    const response = await fetch(
+      `${RAILWAY_URL}/company-graph/edge/explain?company_id=${encodeURIComponent(currentUser.company_id)}&edge_id=${encodeURIComponent(match.id)}&source=${encodeURIComponent(match.source)}&target=${encodeURIComponent(match.target)}`,
+      { headers: await authHeaders() },
+    );
+    if (!response.ok) throw new Error("The governed relationship explanation is unavailable.");
+    const result = await response.json();
+    setGraphMode("full_graph");
+    setSelectedNode({ edge: result.edge, sourceNode: result.source_node, targetNode: result.target_node });
+    setFocusNodeId(result.edge.source);
+    setFocusEdgeId(result.edge.id);
+    auditGraph("edge_inspected", result.edge.id, { source: "advanced_search", predicate: result.edge.predicate });
+  }, [currentUser?.company_id, auditGraph]);
 
   useEffect(() => {
     const inspectCitation = event => {
@@ -1203,6 +1447,63 @@ export default function CompanyGraphHome() {
     return () => window.removeEventListener("company-graph-citation-selected", inspectCitation);
   }, [nodes, edges, auditGraph]);
 
+  useEffect(() => {
+    const handleWorkspaceAction = event => {
+      const action = event.detail || {};
+      const nodeIds = action.node_ids || (action.node_id ? [action.node_id] : []);
+      const selectedNodes = nodeIds.map(id => nodes.find(node => node.id === id)).filter(Boolean);
+      const edge = action.edge_id ? edges.find(candidate => candidate.id === action.edge_id) : null;
+
+      if (action.action === "highlight_records" && selectedNodes.length) {
+        setActiveFilter(null);
+        setGraphMode("full_graph");
+        setVisibleTypes(new Set(selectedNodes.map(node => node.entity_type)));
+        setFocusNodeId(selectedNodes[0].id);
+      } else if (action.action === "center_record" && selectedNodes[0]) {
+        inspectNode(selectedNodes[0], 1);
+      } else if (action.action === "open_edge" && edge) {
+        setGraphMode("full_graph");
+        setFocusNodeId(edge.source);
+        setFocusEdgeId(edge.id);
+        handleEdgeSelect(edge);
+      } else if (action.action === "compare_neighborhoods" && selectedNodes.length >= 2) {
+        setCompareNodes(selectedNodes.slice(0, 2));
+        setGraphMode("full_graph");
+        setFocusNodeId(selectedNodes[0].id);
+      } else if (action.action === "propose_governed_correction" && edge) {
+        setGraphMode("full_graph");
+        setFocusEdgeId(edge.id);
+        handleEdgeSelect(edge);
+      } else if (action.action === "create_task") {
+        window.dispatchEvent(new CustomEvent("open-idjwi-panel", {
+          detail: {
+            initialMessage: "Create a governed follow-up task from this graph evidence.",
+            context: { ...idjwiGraphContext, requested_action: "create_task" },
+          },
+        }));
+      } else if (action.action === "request_approval") {
+        window.dispatchEvent(new CustomEvent("open-idjwi-panel", {
+          detail: {
+            initialMessage: "Request the required approval for the selected graph action.",
+            context: { ...idjwiGraphContext, requested_action: "request_approval" },
+          },
+        }));
+      } else if (action.action === "explain_degraded_data") {
+        openIdjwiGraphAction(
+          "Explain which graph data is degraded, why, and what the operator can do next.",
+          IDJWI_GRAPH_INTENTS.EXPLAIN_COMPANY_GRAPH,
+          idjwiGraphContext,
+          { requested_action: "explain_degraded_data" },
+        );
+      }
+      auditGraph("idjwi_workspace_action", action.edge_id || action.node_id || action.action, {
+        action: action.action, node_ids: nodeIds,
+      });
+    };
+    window.addEventListener("company-graph-workspace-action", handleWorkspaceAction);
+    return () => window.removeEventListener("company-graph-workspace-action", handleWorkspaceAction);
+  }, [nodes, edges, inspectNode, handleEdgeSelect, idjwiGraphContext, auditGraph]);
+
   // ── Type toggle ──────────────────────────────────────────────────────────────
   const toggleType = useCallback(type => {
     setVisibleTypes(prev => {
@@ -1219,7 +1520,10 @@ export default function CompanyGraphHome() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div className={`flex flex-col min-h-0 gap-3 ${isFullscreen ? "fixed inset-0 z-50 bg-slate-50 p-3" : "h-full"}`}>
+    <div
+      className={`flex flex-col min-h-0 gap-3 transition-[padding] duration-300 ${isFullscreen ? "fixed inset-0 z-50 bg-slate-50 p-3" : "h-full"}`}
+      style={{ paddingRight: idjwiWorkspaceWidth ? `${idjwiWorkspaceWidth + 12}px` : undefined }}
+    >
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shrink-0" aria-label="Idjwi operational briefing">
         <div className="flex flex-col lg:flex-row lg:items-center gap-3">
@@ -1290,15 +1594,102 @@ export default function CompanyGraphHome() {
         <div className="relative min-w-[220px] flex-1 max-w-md">
           <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
           <input aria-label="Find a record in the company graph" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Find people, enterprises, work or risks…" className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white" />
-          {searchResults.length > 0 && <div className="absolute z-40 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">{searchResults.map(node => <button key={node.id} onClick={() => { setFocusNodeId(node.id); setSearchTerm(""); handleNodeSelect({ id: node.id }); }} className="w-full flex justify-between px-3 py-2 text-xs hover:bg-slate-50"><span className="truncate">{node.label}</span><span className="capitalize text-slate-400">{node.entity_type}</span></button>)}</div>}
+          {searchTerm.trim().length >= 2 && (
+            <div className="absolute z-40 top-full mt-1 w-full max-h-96 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl">
+              {searchResults.map(node => (
+                <button key={node.id} onClick={() => { setSearchTerm(""); inspectNode(node, 1); }} className="w-full flex justify-between gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-left">
+                  <span className="truncate"><span className="font-semibold">{node.label}</span><span className="block text-[9px] text-slate-400 truncate">{node.sublabel || node.status || node.entity_id}</span></span>
+                  <span className="capitalize text-slate-400 shrink-0">{node.entity_type}</span>
+                </button>
+              ))}
+              {edgeSearchResults.map(edge => (
+                <button key={edge.id} onClick={() => inspectSearchedEdge(edge).catch(error => window.alert(error.message))} className="w-full px-3 py-2 text-xs hover:bg-amber-50 text-left border-t border-slate-100">
+                  <span className="font-semibold text-slate-700">{edge.source_label}</span>
+                  <span className="mx-1.5 text-amber-600">{edge.label || edge.predicate}</span>
+                  <span className="font-semibold text-slate-700">{edge.target_label}</span>
+                  <span className="block text-[9px] text-slate-400">{edge.match_reason.replaceAll("_", " ")} · {Math.round((edge.confidence || 0) * 100)}%</span>
+                </button>
+              ))}
+              <button onClick={() => {
+                openIdjwiGraphAction(
+                  `Search the governed company graph for: ${searchTerm.trim()}`,
+                  IDJWI_GRAPH_INTENTS.SEARCH_COMPANY_GRAPH,
+                  idjwiGraphContext,
+                  { graph_search_query: searchTerm.trim() },
+                );
+              }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-bold text-violet-700 bg-violet-50 border-t border-violet-100 hover:bg-violet-100">
+                <Sparkles className="w-3.5 h-3.5" /> Ask Idjwi to search naturally
+              </button>
+              {!graphSearchQuery.isLoading && searchResults.length === 0 && edgeSearchResults.length === 0 && <p className="px-3 py-2 text-[10px] text-slate-400">No direct governed match. Idjwi can interpret the question using the visible graph.</p>}
+            </div>
+          )}
         </div>
-        <select aria-label="Organization or operational-unit scope" value={scopeId} onChange={event => { setScopeId(event.target.value); setNeighborhoodGraph(null); }} className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white"><option value="">Organization-wide</option>{scopeOptions.map(node => <option key={node.id} value={node.entity_id}>{node.label} · {(node.attributes?.unit_type || "operational unit").replaceAll("_", " ")}</option>)}</select>
-        {savedViews.length > 0 && <select aria-label="Saved graph views" defaultValue="" onChange={event => applySavedView(event.target.value)} className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white"><option value="">Saved views</option>{savedViews.map(view => <option key={view.name}>{view.name}</option>)}</select>}
-        <button onClick={saveCurrentView} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600" title="Save current view" aria-label="Save current graph view"><Save className="w-4 h-4" /></button>
+        <select aria-label="Organization or operational-unit scope" value={scopeId} onChange={event => {
+          neighborhoodCoordinatorRef.current.cancel();
+          setScopeId(event.target.value);
+          setNeighborhoodGraph(null);
+          setSelectedNode(null);
+          setInspectionTrail([]);
+          setNeighborhoodState({ status: "idle", error: "" });
+        }} className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white"><option value="">Organization-wide</option>{scopeOptions.map(node => <option key={node.id} value={node.entity_id}>{node.label} · {(node.attributes?.unit_type || "operational unit").replaceAll("_", " ")}</option>)}</select>
+        {savedViews.length > 0 && <select aria-label="Governed saved graph views" defaultValue="" onChange={event => applySavedView(event.target.value)} className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white"><option value="">Saved views</option>{savedViews.map(view => <option key={view.id} value={view.id}>{view.name} · {view.audience}{view.validation_state !== "valid" ? " · review" : ""}</option>)}</select>}
+        {savedViewsQuery.isError && <span role="status" className="text-[10px] font-semibold text-amber-700">Saved views unavailable</span>}
+        <button onClick={() => saveCurrentView().catch(error => window.alert(error.message))} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600" title="Save governed view" aria-label="Save governed graph view"><Save className="w-4 h-4" /></button>
         <button disabled={!canExportGraph} onClick={() => exportGraph().catch(error => window.alert(error.message))} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed" title={canExportGraph ? "Export visible graph through the governed backend" : "Governed graph export is not yet permitted"} aria-label="Export visible graph"><Download className="w-4 h-4" /></button>
-        {neighborhoodGraph && <button onClick={() => { setNeighborhoodGraph(null); setSelectedNode(null); governedQuery.refetch(); }} className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600">Return to overview</button>}
+        {inspectionTrail.length > 0 && <button onClick={inspectBack} className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 flex items-center gap-1"><ArrowLeft className="w-3.5 h-3.5" />Back</button>}
+        {neighborhoodGraph && <button onClick={returnToOverview} className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600">Return to overview</button>}
         {!neighborhoodGraph && effectiveGraphContract.truncation?.continuation_available && <button disabled={loadingContinuation} onClick={() => loadNextBoundedPage().catch(error => window.alert(error.message))} className="text-xs px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 disabled:opacity-50">{loadingContinuation ? "Loading bounded page…" : "Load next bounded page"}</button>}
       </div>
+
+      {(inspectionTrail.length > 0 || pinnedNodes.length > 0) && (
+        <div className="flex items-center gap-2 flex-wrap shrink-0" aria-label="Graph inspection navigation">
+          <button onClick={returnToOverview} className="text-[10px] font-bold text-slate-500 hover:text-slate-800">Overview</button>
+          {inspectionTrail.map((item, index) => (
+            <React.Fragment key={`${item.id}-${index}`}>
+              <span className="text-slate-300">/</span>
+              <button onClick={() => inspectTrailIndex(index)} className={`max-w-36 truncate text-[10px] ${index === inspectionTrail.length - 1 ? "font-black text-slate-800" : "text-slate-500 hover:text-slate-800"}`}>{item.label}</button>
+            </React.Fragment>
+          ))}
+          {pinnedNodes.length > 0 && (
+            <div className="ml-auto flex items-center gap-1">
+              <Pin className="w-3 h-3 text-amber-600" />
+              {pinnedNodes.map(node => (
+                <button key={node.id} onClick={() => inspectNode(node, 1)} className="px-2 py-1 rounded-full border border-amber-200 bg-amber-50 text-[9px] font-bold text-amber-800 max-w-28 truncate">{node.label}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {neighborhoodState.status === "error" && (
+        <div role="alert" className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 shrink-0">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span className="font-semibold flex-1">Neighborhood unavailable: {neighborhoodState.error}</span>
+          {selectedNode?.node && <button onClick={() => inspectNode(selectedNode.node, neighborhoodDepth, { recordHistory: false })} className="font-black underline">Retry</button>}
+        </div>
+      )}
+
+      {compareNodes.length > 0 && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 shrink-0" aria-label="Node comparison">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Compare nodes · {compareNodes.length}/2</p>
+            <button onClick={() => setCompareNodes([])} className="text-[10px] font-bold text-blue-600">Clear</button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {compareNodes.map(node => (
+              <button key={node.id} onClick={() => inspectNode(node, 1)} className="rounded-lg bg-white border border-blue-100 p-2 text-left">
+                <p className="text-xs font-black text-slate-800 truncate">{node.label}</p>
+                <p className="text-[10px] text-slate-500 capitalize">{node.entity_type} · {node.status || "status unavailable"}</p>
+                <p className="text-[10px] text-slate-500">Importance {Math.round((node.importance || 0) * 100)}% · {node.risk_level ? `${node.risk_level} risk` : "no flagged risk"}</p>
+                <p className="text-[10px] font-semibold text-blue-600">
+                  {edges.filter(edge => edge.source === node.id || edge.target === node.id).length} visible relationships
+                </p>
+              </button>
+            ))}
+            {compareNodes.length === 1 && <div className="rounded-lg border border-dashed border-blue-200 flex items-center justify-center text-[10px] text-blue-500 p-2">Select another node and choose Compare node</div>}
+          </div>
+        </div>
+      )}
 
       {/* ── Company Pulse bar ──────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 flex-wrap shrink-0">
@@ -1450,6 +1841,14 @@ export default function CompanyGraphHome() {
             companyId={currentUser?.company_id}
             onGraphRefresh={async () => { setNeighborhoodGraph(null); await governedQuery.refetch(); }}
             graphContext={idjwiGraphContext}
+            onInspectNode={node => inspectNode(node, 1)}
+            onExpand={node => inspectNode(node, Math.min(3, neighborhoodDepth + 1), { recordHistory: false })}
+            neighborhoodDepth={neighborhoodDepth}
+            inspectionState={neighborhoodState}
+            isPinned={Boolean(selectedNode?.node && pinnedNodes.some(node => node.id === selectedNode.node.id))}
+            onTogglePin={togglePin}
+            isCompared={Boolean(selectedNode?.node && compareNodes.some(node => node.id === selectedNode.node.id))}
+            onToggleCompare={toggleCompare}
             insights={insights}
             risks={risks}
             opportunities={opportunities}

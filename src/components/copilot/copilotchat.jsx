@@ -530,6 +530,31 @@ function GraphCitationsPanel({ citations }) {
   );
 }
 
+function GraphWorkspaceActions({ actions }) {
+  if (!actions?.length) return null;
+  const invoke = action => {
+    window.dispatchEvent(new CustomEvent("company-graph-workspace-action", { detail: action }));
+  };
+  return (
+    <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+      <p className="px-1 pb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+        Continue in Company Graph
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {actions.map((action, index) => (
+          <button
+            key={`${action.action}-${action.edge_id || action.node_id || index}`}
+            onClick={() => invoke(action)}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-semibold text-slate-700 hover:border-emerald-300 hover:text-emerald-700"
+          >
+            {action.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Sources verification panel ───────────────────────────────────────────────
 // Shows each internal tool that fired: label, data source, age, record count.
 // Lets the operator see exactly what data the copilot queried before answering.
@@ -1276,6 +1301,11 @@ function MessageBubble({ message, onFeedback, companyId, currentUser, onOpenQuer
             <GraphCitationsPanel citations={message.graph_citations} />
           </div>
         )}
+        {!isUser && message.graph_workspace_actions?.length > 0 && (
+          <div className="w-full">
+            <GraphWorkspaceActions actions={message.graph_workspace_actions} />
+          </div>
+        )}
 
         {/* Proposed actions + created insights */}
         {!isUser && (message.created_recommendations?.length > 0 || message.created_insights?.length > 0) && (
@@ -1813,6 +1843,7 @@ export default function CopilotChat({
         charts:                  [],
         citations:               [],
         graph_citations:         result.graph_citations         || [],
+        graph_workspace_actions: result.graph_workspace_actions || [],
         created_recommendations: result.created_recommendations || [],
         created_insights:        result.created_insights        || [],
         mode:                    result.mode                    || "autonomous",
@@ -1947,6 +1978,7 @@ export default function CopilotChat({
         charts:                  result.charts                  || [],
         citations:               result.citations               || [],
         graph_citations:         result.graph_citations         || [],
+        graph_workspace_actions: result.graph_workspace_actions || [],
         tools_called:            result.tools_called            || [],
         tools_detail:            result.tools_detail            || [],
         data_freshness:          result.data_freshness          || null,

@@ -26,10 +26,11 @@ def _context():
     }
 
 
-def test_all_eight_governed_graph_intents_are_registered():
-    assert len(GRAPH_INTENTS) == 8
+def test_all_nine_governed_graph_intents_are_registered():
+    assert len(GRAPH_INTENTS) == 9
     assert "explain_company_graph" in GRAPH_INTENTS
     assert "find_graph_gaps" in GRAPH_INTENTS
+    assert "search_company_graph" in GRAPH_INTENTS
 
 
 def test_explicit_intent_wins_and_explain_company_never_becomes_gap_detection():
@@ -48,6 +49,10 @@ def test_explain_company_executes_its_own_capability():
     assert "authorized records" in result["answer"]
     assert "graph gaps" not in result["answer"].lower()
     assert result["graph_citations"][0]["kind"] == "graph_node"
+    assert {action["action"] for action in result["graph_workspace_actions"]}.issuperset({
+        "highlight_records", "center_record", "create_task", "request_approval",
+        "explain_degraded_data",
+    })
     assert set(result["confidence"]["factors"]) == {
         "evidence_strength", "source_completeness", "freshness",
         "intent_completion", "contradiction_status",
@@ -57,3 +62,15 @@ def test_explain_company_executes_its_own_capability():
 def test_ask_request_rejects_unknown_page_action_intent():
     with pytest.raises(ValueError):
         AskRequest(question="Explain", company_id="tenant-a", intent="guess_for_me")
+
+
+def test_natural_graph_search_ignores_prompt_words_and_matches_governed_labels():
+    context = _context()
+    context["nodes"][0]["label"] = "Acme Pharmacy"
+    context["graph_search_query"] = "Search the governed company graph for pharmacy"
+    result = execute_graph_intent(
+        "search_company_graph", question=context["graph_search_query"],
+        company_id="tenant-a", context=context, principal=Principal(),
+    )
+    assert result["data"]["nodes"][0]["id"] == "enterprise:e1"
+    assert result["graph_citations"][0]["node_ids"] == ["enterprise:e1"]

@@ -10,7 +10,7 @@
  *   }))
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import ReactDOM from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -23,7 +23,10 @@ export default function IdjwiDockedPanel({ currentUser }) {
   const [initialMessage, setInitialMessage] = useState("");
   const [panelContext, setPanelContext] = useState(null);
   const [nonce, setNonce] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const navigate = useNavigate();
+  const coordinatedGraphWorkspace = panelContext?.page === "CompanyGraphHome" && viewportWidth >= 1024;
+  const closePanel = useCallback(() => setOpen(false), []);
 
   // Open via global event
   useEffect(() => {
@@ -37,33 +40,46 @@ export default function IdjwiDockedPanel({ currentUser }) {
     return () => window.removeEventListener("open-idjwi-panel", onOpen);
   }, []);
 
+  useEffect(() => {
+    const updateViewport = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
+
   // Close on Escape
   useEffect(() => {
     if (!open) return;
-    const handler = (e) => { if (e.key === "Escape") setOpen(false); };
+    const handler = (e) => { if (e.key === "Escape") closePanel(); };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open]);
+  }, [open, closePanel]);
 
   useEffect(() => {
-    const closeForGraphEvidence = () => setOpen(false);
-    window.addEventListener("company-graph-citation-selected", closeForGraphEvidence);
-    return () => window.removeEventListener("company-graph-citation-selected", closeForGraphEvidence);
-  }, []);
+    window.dispatchEvent(new CustomEvent("idjwi-workspace-state", {
+      detail: {
+        open,
+        coordinated: open && coordinatedGraphWorkspace,
+        width: open && coordinatedGraphWorkspace ? Math.min(480, Math.max(360, viewportWidth * 0.36)) : 0,
+      },
+    }));
+    return () => {
+      if (open) window.dispatchEvent(new CustomEvent("idjwi-workspace-state", { detail: { open: false, coordinated: false, width: 0 } }));
+    };
+  }, [open, coordinatedGraphWorkspace, viewportWidth]);
 
   const panel = (
     <AnimatePresence>
       {open && (
         <>
-          <motion.div
+          {!coordinatedGraphWorkspace && <motion.div
             key="backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
             className="fixed inset-0 z-[199] bg-black/20 backdrop-blur-[1px]"
-            onClick={() => setOpen(false)}
-          />
+            onClick={closePanel}
+          />}
           <motion.div
             key="panel"
             initial={{ x: "100%" }}
@@ -90,14 +106,14 @@ export default function IdjwiDockedPanel({ currentUser }) {
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
-                  onClick={() => { navigate(createPageUrl("idjwi")); setOpen(false); }}
+                  onClick={() => { navigate(createPageUrl("idjwi")); closePanel(); }}
                   title="Open full Idjwi"
                   className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                 </button>
                 <button
-                  onClick={() => setOpen(false)}
+                  onClick={closePanel}
                   className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                 >
                   <X className="w-4 h-4" />

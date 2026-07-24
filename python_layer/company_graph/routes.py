@@ -27,9 +27,128 @@ from .field_classification import project_record
 from .contracts import GraphNodeSummary
 from .execution import GRAPH_IO_EXECUTOR
 from concurrent.futures import as_completed
+from typing import Any, Literal
 
 
 router = APIRouter(prefix="/company-graph", tags=["Company Graph"])
+
+GRAPH_VIEW_LAYOUTS = {
+    "operational_focus", "organizational_structure", "operational_flow",
+    "responsibilities_work", "customers_suppliers", "products_services",
+    "risks_opportunities", "decisions_actions", "data_quality",
+    "external_disruptions", "full_graph",
+}
+GRAPH_VIEW_PERMISSION_ROLES = {
+    "super_admin", "admin", "manager", "teacher", "staff", "user", "student",
+}
+
+
+class GraphSavedViewRequest(BaseModel):
+    company_id: str
+    name: str = Field(min_length=2, max_length=100)
+    audience: Literal["private", "team", "operational_unit", "organization"] = "private"
+    scope: dict[str, Any] = Field(default_factory=dict)
+    filters: dict[str, Any] = Field(default_factory=dict)
+    layout: str = "operational_focus"
+    permissions: list[str] = Field(default_factory=list, max_length=50)
+    version: int = Field(default=1, ge=1)
+
+
+def _validate_saved_view(body: GraphSavedViewRequest, context, policy: GraphAuthorizationPolicy) -> dict:
+    if body.layout not in GRAPH_VIEW_LAYOUTS:
+        raise HTTPException(status_code=422, detail={"code": "GRAPH_VIEW_LAYOUT_INVALID", "action": "choose_supported_layout"})
+    scope_type = str(body.scope.get("type") or "organization")
+    scope_id = str(body.scope.get("id") or context.tenant_id)
+    if scope_type not in {"tenant", "organization", "operational_unit", "department", "team"}:
+        raise HTTPException(status_code=422, detail={"code": "GRAPH_VIEW_SCOPE_INVALID", "action": "choose_authorized_scope"})
+    if scope_type in {"operational_unit", "department", "team"}:
+        allowed = set(context.allowed_operational_unit_ids).union(context.managed_operational_unit_ids)
+        if scope_id not in allowed and not policy.allows("graph.admin"):
+            raise HTTPException(status_code=403, detail={"code": "GRAPH_VIEW_SCOPE_DENIED", "action": "request_unit_membership"})
+    if body.audience in {"team", "operational_unit"} and scope_type not in {"operational_unit", "department", "team"}:
+        raise HTTPException(status_code=422, detail={"code": "GRAPH_VIEW_AUDIENCE_SCOPE_INVALID", "action": "select_operational_unit"})
+    if body.audience != "private":
+        policy.require("graph.view_share")
+    if any(role not in GRAPH_VIEW_PERMISSION_ROLES for role in body.permissions):
+        raise HTTPException(status_code=422, detail={"code": "GRAPH_VIEW_PERMISSION_INVALID", "action": "choose_supported_roles"})
+    allowed_filter_keys = {"visible_types", "status", "risk", "active_filter", "search_query"}
+    if any(key not in allowed_filter_keys for key in body.filters):
+        raise HTTPException(status_code=422, detail={"code": "GRAPH_VIEW_FILTER_INVALID", "action": "remove_unsupported_filters"})
+    return {
+        "owner_user_id": context.user_id,
+        "name": body.name.strip(),
+        "audience": body.audience,
+        "scope": {"type": scope_type, "id": scope_id},
+        "filters": body.filters,
+        "layout": body.layout,
+        "permissions": sorted(set(body.permissions)),
+        "version": body.version,
+        "validation_state": "valid",
+    }
+
+
+def _saved_view_visible(row: dict, context, policy: GraphAuthorizationPolicy) -> bool:
+    if str(row.get("owner_user_id")) == context.user_id:
+        return True
+    permitted_roles = set(row.get("permissions") or [])
+    if permitted_roles and context.role not in permitted_roles and not policy.allows("graph.admin"):
+        return False
+    audience = row.get("audience")
+    if audience == "organization":
+        return True
+    if audience in {"operational_unit", "team"}:
+        scope_id = str((row.get("scope") or {}).get("id") or "")
+        allowed = set(context.allowed_operational_unit_ids).union(context.managed_operational_unit_ids)
+        if context.scope_id:
+            allowed.add(str(context.scope_id))
+        return scope_id in allowed or policy.allows("graph.admin")
+    return False
+
+
+@router.get("/views")
+def list_graph_views(request: Request, company_id: str = Query(...), authorization: str | None = Header(None)):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context = repository.resolve_context(authorization, company_id, request_id=getattr(request.state, "request_id", ""))
+    policy = GraphAuthorizationPolicy.for_context(context)
+    policy.require("graph.read")
+    rows = repository.list_entities(context, "graph_saved_view", limit=500).data or []
+    visible = [row for row in rows if _saved_view_visible(row, context, policy)]
+    visible.sort(key=lambda row: (str(row.get("name") or "").casefold(), str(row.get("id"))))
+    return {"contract_version": "company-graph-saved-views.v1", "company_id": context.tenant_id, "views": visible}
+
+
+@router.post("/views", status_code=201)
+def create_graph_view(body: GraphSavedViewRequest, request: Request, authorization: str | None = Header(None)):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context = repository.resolve_context(authorization, body.company_id, request_id=getattr(request.state, "request_id", ""))
+    policy = GraphAuthorizationPolicy.for_context(context)
+    policy.require("graph.view_save")
+    payload = _validate_saved_view(body, context, policy)
+    existing = repository.list_entities_filtered(
+        context, "graph_saved_view",
+        filters={"owner_user_id": context.user_id, "name": payload["name"]}, limit=1,
+    ).data or []
+    if existing:
+        row = repository.update_entity(context, "graph_saved_view", str(existing[0]["id"]), payload).data
+    else:
+        row = repository.create_entity(context, "graph_saved_view", payload).data
+    log_event("company_graph.view.saved", company_id=context.tenant_id, actor=context.user_id, subject=row.get("id"), metadata={"audience": body.audience, "layout": body.layout}, status="success")
+    return {"contract_version": "company-graph-saved-views.v1", "view": row}
+
+
+@router.put("/views/{view_id}")
+def update_graph_view(view_id: str, body: GraphSavedViewRequest, request: Request, authorization: str | None = Header(None)):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context = repository.resolve_context(authorization, body.company_id, request_id=getattr(request.state, "request_id", ""))
+    policy = GraphAuthorizationPolicy.for_context(context)
+    policy.require("graph.view_save")
+    existing = repository.get_entity(context, "graph_saved_view", view_id).data
+    if not existing:
+        raise HTTPException(status_code=404, detail={"code": "GRAPH_VIEW_NOT_FOUND"})
+    if str(existing.get("owner_user_id")) != context.user_id and not policy.allows("graph.admin"):
+        raise HTTPException(status_code=403, detail={"code": "GRAPH_VIEW_OWNER_REQUIRED", "action": "duplicate_view"})
+    row = repository.update_entity(context, "graph_saved_view", view_id, _validate_saved_view(body, context, policy)).data
+    return {"contract_version": "company-graph-saved-views.v1", "view": row}
 
 
 @router.get("/predicates")
@@ -125,10 +244,12 @@ def graph_search(request: Request, company_id: str = Query(...), q: str = Query(
     # Search the operational identities operators most commonly navigate to;
     # all fields remain graph-safe projections.
     search_types = tuple(entity_type for entity_type in (
-        "enterprise", "operational_unit", "person", "task", "product", "service", "transaction",
+        "enterprise", "operational_unit", "person", "task", "product", "service",
+        "transaction", "address", "risk", "opportunity", "recommendation",
+        "decision", "schedule", "observation",
     ) if policy.can_read_entity(entity_type))
     futures = {
-        GRAPH_IO_EXECUTOR.submit(repository.search_entities, context, entity_type, q, limit=max(2, limit // 3)): entity_type
+        GRAPH_IO_EXECUTOR.submit(repository.search_entities, context, entity_type, q, limit=max(2, limit // 5)): entity_type
         for entity_type in search_types
     }
     for future in as_completed(futures):
@@ -158,9 +279,53 @@ def graph_search(request: Request, company_id: str = Query(...), q: str = Query(
                 permitted_actions=policy.node_actions(),
             ))
     results.sort(key=lambda node: (search_types.index(node.entity_type), node.label.lower(), node.id))
+    edge_results = []
+    connected_record_ids = set()
+    try:
+        packet = _packet(
+            company_id, authorization, request, limit=200, node_budget=36,
+            edge_budget=72, operational_unit_id=operational_unit_id,
+        )
+        query = q.casefold()
+        node_lookup = {node.id: node for node in packet.nodes}
+        directly_matched = {node.id for node in results}
+        for edge in packet.edges:
+            source, target = node_lookup.get(edge.source), node_lookup.get(edge.target)
+            predicate_match = query in str(edge.predicate or edge.label).replace("_", " ").casefold()
+            connected_match = (
+                edge.source in directly_matched or edge.target in directly_matched
+                or query in str(source.label if source else "").casefold()
+                or query in str(target.label if target else "").casefold()
+            )
+            if not predicate_match and not connected_match:
+                continue
+            edge_results.append({
+                "id": edge.id, "source": edge.source, "source_label": source.label if source else edge.source,
+                "predicate": edge.predicate, "label": edge.label,
+                "target": edge.target, "target_label": target.label if target else edge.target,
+                "confidence": edge.confidence, "assertion_class": edge.assertion_class,
+                "match_reason": "predicate" if predicate_match else "connected_record",
+            })
+            connected_record_ids.update((edge.source, edge.target))
+        existing_ids = {node.id for node in results}
+        results.extend(
+            node for node in packet.nodes
+            if node.id in connected_record_ids and node.id not in existing_ids
+        )
+    except Exception:
+        # Canonical search results remain useful and explicitly partial when
+        # semantic edge expansion is unavailable.
+        source_status.append({
+            "source_id": "graph_relationship_context", "state": "unavailable",
+            "returned_records": 0, "failure_category": "data_source",
+            "affected_capabilities": ["predicate_search", "connected_record_search"],
+            "retryable": True, "operator_action": "Retry after graph sources recover.",
+        })
     unavailable = [source for source in source_status if source["state"] == "unavailable"]
     return {"contract_version": "company-graph.v1", "company_id": context.tenant_id,
             "query": q, "results": results[:limit], "truncated": len(results) > limit,
+            "edge_results": edge_results[:limit],
+            "coverage": ["labels", "record_references", "predicates", "operational_units", "status", "risk", "address", "connected_records"],
             "authorization_enforced": True, "partial": bool(unavailable),
             "source_status": sorted(source_status, key=lambda source: source["source_id"])}
 
@@ -287,7 +452,11 @@ class RelationshipEditRequest(RelationshipGovernanceRequest):
 
 @router.post("/audit")
 def graph_audit(body: GraphAuditRequest, request: Request, authorization: str | None = Header(None)):
-    allowed = {"opened", "scope_changed", "node_inspected", "edge_inspected", "citation_inspected", "view_saved", "exported"}
+    allowed = {
+        "opened", "scope_changed", "node_inspected", "edge_inspected",
+        "citation_inspected", "view_saved", "exported", "neighborhood_failed",
+        "idjwi_workspace_action",
+    }
     if body.event not in allowed:
         raise HTTPException(status_code=422, detail={"code": "GRAPH_AUDIT_EVENT_INVALID"})
     repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)

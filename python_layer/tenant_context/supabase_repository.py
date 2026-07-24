@@ -17,7 +17,7 @@ from .repository import TenantContextRepository
 
 
 ROLE_PERMISSIONS = {
-    "user": ("*.read",),
+    "user": ("*.read", "graph_saved_view.write"),
     "manager": ("*.read", "*.write"),
     "admin": ("*.read", "*.write"),
     "super_admin": ("*.read", "*.write"),
@@ -277,7 +277,10 @@ class SupabaseTenantContextRepository(TenantContextRepository):
         search_fields = tuple(field for field in definition.fields if field in {
             "name", "enterprise_name", "first_name", "last_name", "preferred_name",
             "title", "task_name", "product_name", "service_name", "reference_number",
-            "unit_name", "description",
+            "unit_name", "description", "status", "operating_status", "relationship_type",
+            "city", "region", "country", "address_line1", "postal_code",
+            "risk_type", "severity", "priority", "transaction_type", "item_type",
+            "service_type", "person_type", "primary_role",
         })
         if not search_fields:
             return TenantRepositoryResult([], context, entities=(canonical,))

@@ -169,6 +169,9 @@ Ownership is explicit:
   and Idjwi evidence.
 - Relationship rendering: assertion class, temporal state, direction and
   evidence availability come from the governed graph contract.
+- Coordinated inspection: cancellable latest-request-wins neighborhood reads,
+  visible retrieval state, bounded depth expansion, breadcrumbs and
+  presentation-only pin/compare state. Scope changes cancel in-flight reads.
 
 Tenant, organization, operational unit, department, team, and enterprise are
 separate scope and ontology concepts. A graph node cannot silently redefine one as
@@ -1373,3 +1376,26 @@ The taxonomy is what makes this work across every vertical.
 
 **Newsconseen is the Autonomous SME Operating System.**
 **One system. Any industry. Deploy in hours.**
+
+---
+
+## 21. Company Graph search, views, and Idjwi coordination
+
+Company Graph advanced search is served by the authenticated Python graph
+gateway. Canonical record searches are projected into graph-safe summaries;
+predicate and connected-record matches are derived from the same authorized
+graph packet. Natural-language graph search uses the explicit governed Idjwi
+intent `search_company_graph`.
+
+Saved views are tenant records in `public.graph_saved_views`. The browser never
+supplies authoritative ownership: the backend derives the owner from the
+verified principal and enforces audience, operational-unit scope, optional role
+permissions, version and validation state. A view controls presentation only
+and cannot grant access to records.
+
+`IdjwiDockedPanel` emits a desktop workspace-width event. Company Graph reserves
+that width, keeping the graph visible while the operator follows citations and
+actions. Governed Idjwi responses expose bounded workspace commands for
+highlight, center, edge inspection and comparison. Task creation, approval
+requests and relationship corrections remain consequential operations governed
+by existing policy and audit services.

@@ -17,6 +17,21 @@ Company Graph buttons must send one of the governed
 label. Explicit intent overrides conservative natural-language classification;
 “Explain this company” is `explain_company_graph`, never `find_graph_gaps`.
 
+Company Graph search and saved views are governed server capabilities. Search
+may span graph-safe labels, references, predicates, operational units, status,
+risk, address and connected records, but it must preserve source diagnostics
+and authorization. Saved views live in `public.graph_saved_views`; ownership is
+derived from the authenticated principal and audience, scope, role permissions,
+version and validation state are enforced on every read and write. Never use
+browser storage as the authoritative saved-view store.
+
+Idjwi is a coordinated Company Graph workspace, not an overlay. On supported
+desktop surfaces the graph resizes while Idjwi is open. Citation and workspace
+actions may highlight, center, inspect and compare only records in the governed
+packet. Corrections, tasks and approvals must continue through their policy,
+evidence and audit paths. The operator-facing label is “Ask Idjwi,” never
+“Ask AI.”
+
 ## Mantra
 
 > **Newsconseen is the Autonomous SME Operating System.**
@@ -1191,3 +1206,9 @@ presentation-only coordinates. Node and edge styles expose operational
 importance, assertion class, temporal state, direction, evidence and quality
 without changing canonical truth. The contract is documented in
 `docs/COMPANY_GRAPH_OPERATIONAL_EXPERIENCE.md`.
+
+Company Graph inspection must use latest-request-wins coordination. Node
+selection loads an authorized neighborhood with visible failure state,
+breadcrumbs, directional relationship groups, bounded expansion, pinning and
+comparison. An older or aborted neighborhood response must never replace the
+operator's current selection.
