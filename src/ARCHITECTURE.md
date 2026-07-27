@@ -1033,7 +1033,7 @@ Yes — always fire and forget after any mutation affecting analytics.
 
 ```bash
 docker-compose up --build
-# FastAPI:    http://localhost:8000
+# FastAPI:    http://127.0.0.1:8001
 # Airflow:    http://localhost:8080
 # PostgreSQL: localhost:5432
 ```
