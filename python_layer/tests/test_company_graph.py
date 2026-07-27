@@ -112,6 +112,31 @@ def test_graph_packet_explains_canonical_and_derived_edges():
     assert derived.evidence[0].derivation_rule == "ontology_registry:task.enterprise"
 
 
+def test_external_observation_projects_as_proposed_expiring_evidence_not_canonical_truth():
+    repository = FakeRepository({
+        "enterprise": [{"id": "e1", "enterprise_name": "North Pharmacy"}],
+        "external_observation": [{
+            "id": "o1", "observation_type": "closure", "title": "Location closed",
+            "status": "active", "severity": "high", "source_name": "County directory",
+            "freshness_at": "2026-07-27T12:00:00Z", "valid_from": "2026-07-27T12:00:00Z",
+            "expires_at": "2099-07-28T12:00:00Z", "confidence": .94,
+        }],
+        "external_observation_match": [{
+            "id": "m1", "observation_id": "o1", "target_type": "enterprise",
+            "target_id": "e1", "predicate": "requires_alternative",
+            "matching_method": "explicit_reference", "verification_status": "proposed",
+            "valid_from": "2026-07-27T12:00:00Z", "expires_at": "2099-07-28T12:00:00Z",
+            "confidence": .91,
+        }],
+    })
+    packet = build_graph_packet(_context(), repository)
+    edge = next(item for item in packet.edges if item.predicate == "requires_alternative")
+    assert edge.assertion_class == "external_observation"
+    assert edge.verification_state == "proposed"
+    assert edge.assertion_state == "proposed"
+    assert edge.evidence[0].source_table == "public.external_observation_matches"
+
+
 def test_graph_packet_recovers_exact_unique_legacy_name_links_as_unverified_derivations():
     repository = FakeRepository({
         "enterprise": [{"id": "e1", "enterprise_name": "Acme Pharmacy"}],

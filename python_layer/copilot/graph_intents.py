@@ -86,6 +86,42 @@ def execute_graph_intent(intent, *, question, company_id, context, principal):
             data = {"node": selected_node, "relationships": incident}
             cited_nodes = [selected_node]
             cited_edges = incident[:8]
+    elif intent == "explain_external_observation":
+        observations = [
+            node for node in nodes if node.get("entity_type") == "external_observation"
+            and (not context.get("selected_node_id") or node.get("id") == context.get("selected_node_id"))
+        ]
+        affected_edges = [
+            edge for edge in edges
+            if edge.get("source") in {node.get("id") for node in observations}
+            and edge.get("assertion_class") == "external_observation"
+        ]
+        if not observations:
+            answer = "No active authorized external observation is present in this governed graph packet."
+            data = {"observations": [], "relationships": [], "alternatives": []}
+        else:
+            primary = observations[0]
+            attributes = primary.get("attributes") or {}
+            answer = (
+                f"{primary.get('label') or 'This external observation'} may affect "
+                f"{len(affected_edges)} authorized operational records. "
+                f"Source: {attributes.get('source_name') or 'governed external source'}; "
+                f"freshness: {attributes.get('freshness_at') or 'not disclosed'}; "
+                f"expires: {attributes.get('expires_at') or 'not disclosed'}. "
+                "Review the cited evidence and approve an alternative before changing operational records."
+            )
+            data = {
+                "observations": observations,
+                "relationships": affected_edges,
+                "alternatives": [{
+                    "target_id": edge.get("target"),
+                    "recommendation": "Review a safe schedule, route, provider, supplier, or product alternative.",
+                    "requires_approval": True,
+                } for edge in affected_edges],
+                "canonical_records_modified": False,
+            }
+            cited_nodes = observations[:4]
+            cited_edges = affected_edges[:8]
     elif intent == "explain_relationship":
         if not selected_edge:
             answer, data = "Select an authorized relationship before asking Idjwi to explain it.", {"required_context": "selected_edge_id"}

@@ -27,11 +27,12 @@ def _context():
 
 
 def test_all_ten_governed_graph_intents_are_registered():
-    assert len(GRAPH_INTENTS) == 10
+    assert len(GRAPH_INTENTS) == 11
     assert "explain_company_graph" in GRAPH_INTENTS
     assert "find_graph_gaps" in GRAPH_INTENTS
     assert "search_company_graph" in GRAPH_INTENTS
     assert "daily_operational_briefing" in GRAPH_INTENTS
+    assert "explain_external_observation" in GRAPH_INTENTS
 
 
 def test_explicit_intent_wins_and_explain_company_never_becomes_gap_detection():

@@ -263,6 +263,7 @@ const COMPANY_GRAPH_PROMPTS = [
   { question: "Where are the biggest risks?", intent: IDJWI_GRAPH_INTENTS.RECOMMEND_GRAPH_ACTION },
   { question: "Which opportunities are most actionable?", intent: IDJWI_GRAPH_INTENTS.RECOMMEND_GRAPH_ACTION },
   { question: "What should we do today?", intent: IDJWI_GRAPH_INTENTS.RECOMMEND_GRAPH_ACTION },
+  { question: "Which external events may disrupt our operation?", intent: IDJWI_GRAPH_INTENTS.EXPLAIN_EXTERNAL_OBSERVATION },
 ];
 
 function openIdjwiGraphAction(question, intent, context, extraContext = {}) {
@@ -647,7 +648,7 @@ function ContextPanel({
             ].map(q => (
               <button
                 key={q}
-                onClick={() => openIdjwiGraphAction(q, IDJWI_GRAPH_INTENTS.EXPLAIN_NODE, graphContext, { entity_type: node.entity_type, entity_id: node.id, entity_label: node.label, selected_node_id: node.id })}
+                onClick={() => openIdjwiGraphAction(q, node.entity_type === "external_observation" ? IDJWI_GRAPH_INTENTS.EXPLAIN_EXTERNAL_OBSERVATION : IDJWI_GRAPH_INTENTS.EXPLAIN_NODE, graphContext, { entity_type: node.entity_type, entity_id: node.id, entity_label: node.label, selected_node_id: node.id })}
                 className="w-full text-left px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600 hover:bg-violet-50 hover:border-violet-200 hover:text-violet-700 transition-colors flex items-center gap-1.5"
               >
                 <Sparkles className="w-3 h-3 shrink-0 text-violet-400" />
@@ -679,7 +680,7 @@ function ContextPanel({
           </button>
         )}
         <button
-          onClick={() => openIdjwiGraphAction(copilotQ, IDJWI_GRAPH_INTENTS.EXPLAIN_NODE, graphContext, { entity_type: node.entity_type, entity_id: node.id, entity_label: node.label, selected_node_id: node.id })}
+          onClick={() => openIdjwiGraphAction(copilotQ, node.entity_type === "external_observation" ? IDJWI_GRAPH_INTENTS.EXPLAIN_EXTERNAL_OBSERVATION : IDJWI_GRAPH_INTENTS.EXPLAIN_NODE, graphContext, { entity_type: node.entity_type, entity_id: node.id, entity_label: node.label, selected_node_id: node.id })}
           className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
         >
           <Sparkles className="w-3.5 h-3.5" />

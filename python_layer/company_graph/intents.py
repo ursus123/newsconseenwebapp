@@ -12,6 +12,7 @@ GRAPH_INTENTS = (
     "compare_graph_scopes",
     "search_company_graph",
     "daily_operational_briefing",
+    "explain_external_observation",
 )
 GRAPH_INTENT_SET = frozenset(GRAPH_INTENTS)
 
@@ -26,6 +27,8 @@ def classify_graph_question(question: str, context: dict | None = None) -> str |
         return "search_company_graph"
     if any(phrase in text for phrase in ("daily briefing", "operational briefing", "what matters today")):
         return "daily_operational_briefing"
+    if any(phrase in text for phrase in ("external observation", "external disruption", "weather affects", "closure affects", "recall affects")):
+        return "explain_external_observation"
     if any(phrase in text for phrase in ("what changed", "graph change", "relationship changed")):
         return "explain_graph_change"
     if "compare" in text and any(word in text for word in ("scope", "department", "unit", "branch", "team")):

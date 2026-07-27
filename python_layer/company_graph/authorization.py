@@ -26,6 +26,7 @@ GRAPH_PERMISSIONS = (
     "graph.view_save",
     "graph.view_share",
     "graph.quality_manage",
+    "graph.external_observation_manage",
     "graph.admin",
 )
 
@@ -37,6 +38,7 @@ ROLE_GRAPH_PERMISSIONS = {
         "graph.relationship_propose", "graph.relationship_confirm",
         "graph.relationship_reject", "graph.view_save", "graph.view_share",
         "graph.quality_manage",
+        "graph.external_observation_manage",
     ),
     "teacher": ("graph.read", "graph.relationship_propose", "graph.view_save"),
     "staff": ("graph.read", "graph.relationship_propose", "graph.view_save"),

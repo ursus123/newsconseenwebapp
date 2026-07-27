@@ -47,6 +47,7 @@ export const IDJWI_GRAPH_INTENTS = Object.freeze({
   COMPARE_GRAPH_SCOPES: "compare_graph_scopes",
   SEARCH_COMPANY_GRAPH: "search_company_graph",
   DAILY_OPERATIONAL_BRIEFING: "daily_operational_briefing",
+  EXPLAIN_EXTERNAL_OBSERVATION: "explain_external_observation",
 });
 
 export const GRAPH_FIELD_CLASSIFICATION = {

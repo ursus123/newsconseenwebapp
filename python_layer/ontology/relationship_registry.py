@@ -88,7 +88,18 @@ RELATIONSHIP_RULES: tuple[RelationshipRule, ...] = (
     _reference("opportunity.subject", "opportunity", "entity_ref_id", "enterprise", "references", "referenced_by", target_type_field="entity_ref_type", assertion="analytical_inference", zone="analytics", confidence=.8),
     _reference("recommendation.subject", "recommendation", "entity_ref_id", "enterprise", "references", "referenced_by", target_type_field="entity_ref_type", assertion="analytical_inference", zone="analytics", confidence=.8),
     _reference("decision.subject", "decision", "entity_ref_id", "enterprise", "references", "referenced_by", target_type_field="entity_ref_type"),
-    _reference("observation.subject", "observation", "subject_id", "enterprise", "references", "referenced_by", target_type_field="subject_type", assertion="external_observation", zone="external", confidence=.8),
+    _reference("observation.subject", "observation", "subject_id", "enterprise", "references", "referenced_by", target_type_field="subject_type"),
+    RelationshipRule(
+        "external_observation.match", "external_observation_match",
+        "external_observation", "observation_id", "enterprise", "target_id",
+        "may_affect", predicate_field="predicate", target_type_field="target_type",
+        assertion_class="external_observation", source_zone="external",
+        valid_from_field="valid_from", valid_to_field="valid_until",
+        expires_at_field="expires_at", evidence_requirement="external_source_and_match_evidence",
+        canonicalization="governed_external_match", inverse_relationship="may_be_affected_by",
+        valid_correction_actions=("inspect", "confirm", "reject", "dispute"),
+        confidence=.8,
+    ),
     _reference("animal.enterprise", "animal", "enterprise_id", "enterprise", "belongs_to", "contains"),
     _reference("plot.enterprise", "plot", "enterprise_id", "enterprise", "belongs_to", "contains"),
 )
@@ -130,6 +141,9 @@ PREDICATE_METADATA = {
     "coordinates_with": ("coordinates with", "coordinates with", "organization", "#8b5cf6"),
     "operates_in": ("operates in", "owns record", "ownership", "#0f766e"),
     "related_to": ("related to", "related from", "custom", "#64748b"),
+    "may_affect": ("may affect", "may be affected by", "external", "#7c3aed"),
+    "may_disrupt": ("may disrupt", "may be disrupted by", "external", "#dc2626"),
+    "requires_alternative": ("requires alternative", "alternative required because of", "external", "#ea580c"),
 }
 
 DYNAMIC_PREDICATE_SHAPES = {
@@ -149,7 +163,7 @@ def graph_entity_types() -> tuple[str, ...]:
 
 
 def edge_carrier_types() -> set[str]:
-    return {"relationship", "operational_unit_membership", "operational_unit_relationship"}
+    return {"relationship", "operational_unit_membership", "operational_unit_relationship", "external_observation_match"}
 
 
 def registry_contract() -> dict[str, Any]:

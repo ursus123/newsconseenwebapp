@@ -2,6 +2,17 @@
 
 ## Company Graph query boundary
 
+### External operational observations
+
+Company Graph represents weather, closures, recalls, traffic, supply disruption,
+public holidays, and regulatory changes through
+`external-operational-observation.v1`. External observations and their proposed
+matches are derived, expiring intelligence with provenance; they never silently
+overwrite canonical `public.*` operational records. Idjwi uses the explicit
+`explain_external_observation` intent and proposes governed alternatives that
+require normal authorization and approval. See
+`docs/COMPANY_GRAPH_EXTERNAL_OBSERVATIONS.md`.
+
 Company Graph must remain bounded as tenant data grows. Overviews use ranked
 global/per-type budgets and authorization-bound continuation tokens;
 neighborhoods, search and edge explanations query only the required governed

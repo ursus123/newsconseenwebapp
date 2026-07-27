@@ -160,16 +160,20 @@ PROJECTIONS: dict[str, GraphProjectionDefinition] = {
         prohibited=COMMON_PROHIBITED + ("approved_by", "credential_ref", "tool_secret"),
         label_fields=("title", "action_label", "action_type"),
     ),
+    "observation": GraphProjectionDefinition(
+        graph_safe=("observation_type", "numeric_value", "unit_of_measure", "is_anomaly", "observed_at"),
+        prohibited=COMMON_PROHIBITED + ("subject_id",),
+    ),
     "external_observation": GraphProjectionDefinition(
-        graph_safe=("observation_type", "status", "severity", "observed_at", "expires_at", "confidence"),
-        role_restricted=("source_name", "location_label", "summary"),
+        graph_safe=("observation_type", "title", "status", "severity", "retrieved_at", "freshness_at", "valid_from", "valid_until", "expires_at", "confidence"),
+        role_restricted=("source_name", "source_url", "summary", "location", "provenance"),
         sensitive=("precise_location", "matched_person_details"),
-        prohibited=COMMON_PROHIBITED + ("source_credentials", "request_headers"),
-        restricted_label_fields=("summary", "location_label"),
+        prohibited=COMMON_PROHIBITED + ("source_credentials", "request_headers", "source_payload_hash"),
+        label_fields=("title",), restricted_label_fields=("summary",),
     ),
 }
 
-ALIASES = {"people": "person", "observation": "external_observation", "actions": "action", "operational_units": "operational_unit"}
+ALIASES = {"people": "person", "actions": "action", "operational_units": "operational_unit"}
 
 
 def definition_for_projection(entity_type: str) -> GraphProjectionDefinition:

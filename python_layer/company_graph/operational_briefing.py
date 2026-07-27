@@ -130,6 +130,14 @@ def build_daily_briefing(*, context, records, nodes, edges, quality, completenes
     for row in records.get("decision", []):
         if not row.get("outcome") and not row.get("decided_at"):
             add_priority("decision", row, "warning", "A decision is waiting for an authorized outcome.", "Record the decision or route it to the authorized approver.")
+    for row in records.get("external_observation", []):
+        expires = _time(row.get("expires_at"))
+        if row.get("status") == "active" and (not expires or expires > now):
+            add_priority(
+                "external_observation", row, row.get("severity") or "warning",
+                "A fresh external event may affect authorized internal records; it has not overwritten them.",
+                "Review source evidence and affected relationships, then approve a governed alternative if needed.",
+            )
     priorities.sort(key=lambda item: ({"critical": 0, "high": 1, "warning": 2}.get(item["severity"], 3), item["priority_id"]))
 
     uncertainties = []

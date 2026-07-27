@@ -27,12 +27,38 @@ from .field_classification import project_record
 from .contracts import GraphNodeSummary
 from .execution import GRAPH_IO_EXECUTOR
 from .quality_workflow import finding_record, project_findings
+from .external_observations import (
+    CONTRACT_VERSION as EXTERNAL_OBSERVATION_CONTRACT,
+    governed_alternatives, normalize_matches, normalize_observation,
+)
 from concurrent.futures import as_completed
 from typing import Any, Literal
 from datetime import datetime, timezone
 
 
 router = APIRouter(prefix="/company-graph", tags=["Company Graph"])
+
+
+class ExternalObservationRequest(BaseModel):
+    company_id: str
+    operational_unit_id: str | None = None
+    observation_type: str
+    title: str = Field(min_length=1, max_length=200)
+    summary: str = Field(min_length=1, max_length=2000)
+    severity: str = "warning"
+    source_name: str
+    source_url: str | None = None
+    source_record_id: str
+    retrieved_at: str
+    freshness_at: str | None = None
+    location: dict[str, Any] = Field(default_factory=dict)
+    valid_from: str
+    valid_until: str | None = None
+    confidence: float
+    expires_at: str
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    source_payload: dict[str, Any] = Field(default_factory=dict)
+    matches: list[dict[str, Any]] = Field(default_factory=list)
 
 GRAPH_VIEW_LAYOUTS = {
     "operational_focus", "organizational_structure", "operational_flow",
@@ -117,6 +143,108 @@ def _saved_view_visible(row: dict, context, policy: GraphAuthorizationPolicy) ->
             allowed.add(str(context.scope_id))
         return scope_id in allowed or policy.allows("graph.admin")
     return False
+
+
+@router.get("/external-observations")
+def list_external_observations(request: Request, company_id: str = Query(...),
+                               operational_unit_id: str = Query(""),
+                               authorization: str | None = Header(None)):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context = repository.resolve_context(
+        authorization, company_id, request_id=getattr(request.state, "request_id", ""),
+        operational_unit_id=operational_unit_id,
+    )
+    policy = GraphAuthorizationPolicy.for_context(context)
+    policy.require_scope(operational_unit_id)
+    now = datetime.now(timezone.utc)
+    observations = repository.list_entities(context, "external_observation", limit=250).data or []
+    observations = [
+        row for row in observations
+        if row.get("status") == "active"
+        and datetime.fromisoformat(str(row["expires_at"]).replace("Z", "+00:00")) > now
+        and (not operational_unit_id or str(row.get("operational_unit_id") or "") in {"", operational_unit_id})
+    ]
+    ids = {str(row["id"]) for row in observations}
+    matches = repository.list_entities(context, "external_observation_match", limit=1000).data or []
+    matches = [row for row in matches if str(row.get("observation_id")) in ids]
+    grouped = {}
+    for match in matches:
+        grouped.setdefault(str(match["observation_id"]), []).append(match)
+    return {
+        "contract_version": EXTERNAL_OBSERVATION_CONTRACT,
+        "company_id": context.tenant_id,
+        "observations": [
+            {**row, "matches": grouped.get(str(row["id"]), []),
+             "alternatives": governed_alternatives(row, grouped.get(str(row["id"]), []))}
+            for row in observations
+        ],
+        "canonical_records_modified": False,
+    }
+
+
+@router.post("/external-observations", status_code=201)
+def create_external_observation(body: ExternalObservationRequest, request: Request,
+                                authorization: str | None = Header(None)):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context = repository.resolve_context(
+        authorization, body.company_id, request_id=getattr(request.state, "request_id", ""),
+        operational_unit_id=body.operational_unit_id or "",
+    )
+    policy = GraphAuthorizationPolicy.for_context(context)
+    policy.require_scope(body.operational_unit_id or "")
+    policy.require("graph.external_observation_manage")
+    raw = body.dict()
+    supplied_matches = raw.pop("matches", [])
+    try:
+        observation_payload = normalize_observation(raw, actor=context.user_id)
+        for candidate in supplied_matches:
+            target_type = str(candidate.get("target_type") or "")
+            if not policy.can_read_entity(target_type):
+                raise HTTPException(status_code=403, detail={"code": "GRAPH_MATCH_TARGET_DENIED"})
+            if not repository.get_entity(context, target_type, str(candidate.get("target_id") or "")).data:
+                raise HTTPException(status_code=422, detail={"code": "GRAPH_MATCH_TARGET_NOT_FOUND"})
+        existing = repository.list_entities_filtered(
+            context, "external_observation",
+            filters={"source_name": observation_payload["source_name"],
+                     "source_record_id": observation_payload["source_record_id"]}, limit=1,
+        ).data or []
+        observation = (
+            repository.update_entity(context, "external_observation", str(existing[0]["id"]), observation_payload).data
+            if existing else repository.create_entity(context, "external_observation", observation_payload).data
+        )
+        matches = normalize_matches(
+            supplied_matches, observation_payload, observation_id=str(observation["id"]), actor=context.user_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail={
+            "code": "EXTERNAL_OBSERVATION_INVALID", "message": str(error),
+            "action": "correct_provider_mapping",
+        }) from error
+    created_matches = []
+    for match in matches:
+        prior = repository.list_entities_filtered(
+            context, "external_observation_match",
+            filters={"observation_id": observation["id"], "target_type": match["target_type"],
+                     "target_id": match["target_id"], "predicate": match["predicate"]}, limit=1,
+        ).data or []
+        created_matches.append(
+            repository.update_entity(context, "external_observation_match", str(prior[0]["id"]), match).data
+            if prior else repository.create_entity(context, "external_observation_match", match).data
+        )
+    cache_invalidate(context.tenant_id)
+    log_event(
+        "company_graph.external_observation.recorded", company_id=context.tenant_id,
+        actor=context.user_id, subject=observation["id"],
+        metadata={"type": observation["observation_type"], "source": observation["source_name"],
+                  "match_count": len(created_matches), "canonical_records_modified": False},
+        status="success",
+    )
+    return {
+        "contract_version": EXTERNAL_OBSERVATION_CONTRACT,
+        "observation": observation, "matches": created_matches,
+        "alternatives": governed_alternatives(observation, created_matches),
+        "canonical_records_modified": False, "graph_refresh_required": True,
+    }
 
 
 @router.get("/views")

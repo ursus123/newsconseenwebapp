@@ -2,6 +2,16 @@
 
 ## Bounded Company Graph reads
 
+### External observation boundary
+
+`public.external_observations` and `public.external_observation_matches` are
+tenant-scoped derived-intelligence projections. The Python gateway normalizes
+external providers, records provenance/freshness/expiry, and creates proposed
+matches to authorized internal records. These tables never replace or mutate
+canonical operational records. Company Graph and Idjwi consume only active,
+unexpired, authorized projections; any proposed alternative remains subject to
+the existing recommendation, decision, approval, action, and audit chain.
+
 ### Shared Idjwi semantic packet and response identity
 
 The browser and Idjwi consume the same validated `company-graph.v1` packet.

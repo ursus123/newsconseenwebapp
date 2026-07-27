@@ -328,7 +328,12 @@ def _registry_edges(records: dict[str, list[dict]], policy: GraphAuthorizationPo
                 if assertion_class == "canonical_relationship" and (row.get("confirmed_by") or row.get("verified_by")):
                     assertion_class = "operator_confirmed_assertion"
                 confidence = .95 if derived_reference else float(row.get("confidence") or rule.confidence)
-                verification = "verified" if assertion_class in {"canonical_relationship", "operator_confirmed_assertion", "canonical_reference_projection"} else "unverified"
+                verification = (
+                    str(row.get("verification_status"))
+                    if carrier_type == "external_observation_match" and row.get("verification_status")
+                    else "verified" if assertion_class in {"canonical_relationship", "operator_confirmed_assertion", "canonical_reference_projection"}
+                    else "unverified"
+                )
                 table = definition_for(carrier_type)[1].qualified_table
                 explanation = (
                     f"Newsconseen deterministically resolved {carrier_type}.{derived_reference['label_field']} "
@@ -457,6 +462,15 @@ def build_graph_packet(context: TenantContext, repository, *, center: str | None
 
     _apply_principal_unit_visibility(records, context)
     scoped_unit_ids = _apply_operational_unit_scope(records, context)
+    # Expired external intelligence remains auditable in its source table but
+    # is excluded from the current operational graph.
+    now = datetime.now(timezone.utc)
+    for entity_type in ("external_observation", "external_observation_match"):
+        records[entity_type] = [
+            row for row in records.get(entity_type, [])
+            if not row.get("expires_at")
+            or datetime.fromisoformat(str(row["expires_at"]).replace("Z", "+00:00")) > now
+        ]
     derived_reference_count = _resolve_legacy_name_references(records)
     nodes = [_node(kind, row, policy) for kind, rows in records.items() if kind in NODE_TYPES for row in rows if row.get("id")]
     node_ids = {node.id for node in nodes}
