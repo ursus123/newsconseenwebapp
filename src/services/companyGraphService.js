@@ -46,6 +46,7 @@ export const IDJWI_GRAPH_INTENTS = Object.freeze({
   RECOMMEND_GRAPH_ACTION: "recommend_graph_action",
   COMPARE_GRAPH_SCOPES: "compare_graph_scopes",
   SEARCH_COMPANY_GRAPH: "search_company_graph",
+  DAILY_OPERATIONAL_BRIEFING: "daily_operational_briefing",
 });
 
 export const GRAPH_FIELD_CLASSIFICATION = {
@@ -745,6 +746,7 @@ export function serializeGovernedGraphPacket(packet, { nodes = packet?.nodes || 
     completeness: packet.completeness,
     truncation: packet.truncation,
     quality: packet.quality,
+    briefing: packet.briefing || {},
     permitted_actions: packet.permitted_actions || [],
     assertion_history: (packet.assertion_history || []).map(sanitizeAssertionHistoryEvent),
   };
@@ -801,6 +803,7 @@ export function buildIdjwiGraphContext(packet, {
     completeness: packet.completeness,
     truncation: packet.truncation,
     quality: packet.quality,
+    briefing: packet.briefing || {},
     permitted_actions: packet.permitted_actions || [],
     sensitivity_classes: sensitivities,
     page,

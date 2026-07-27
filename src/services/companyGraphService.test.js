@@ -36,6 +36,11 @@ const packet = {
   truncation: { truncated: false, sources_at_limit: [], returned_nodes: 1, returned_edges: 0, continuation_available: false },
   quality: { unconnected_count: 1, expired_relationship_count: 0, duplicate_edge_count: 0, missing_assignment_count: 0, issues: [] },
   permitted_actions: [{ action: "export", allowed: true, requires_approval: false }],
+  briefing: {
+    contract_version: "company-graph-daily-briefing.v1",
+    what_matters_today: [],
+    workflow_contract: ["evidence", "recommendation", "decision", "approval", "action", "task_or_agent_execution", "outcome"],
+  },
   assertion_history: [{
     assertion_key: "key-1", source: "risk:r1", predicate: "references", target: "enterprise:e1",
     from_state: "proposed", to_state: "rejected", reason: "Wrong match",
@@ -55,6 +60,7 @@ test("export and Idjwi serializers retain only classified exposable attributes",
     assert.equal(value.assertion_history[0].actor, "authorized_operator");
     assert.equal(value.nodes[0].attributes.enterprise_type, "commercial");
     assert.equal(value.nodes[0].attributes.status, "active");
+    assert.equal(value.briefing.contract_version, "company-graph-daily-briefing.v1");
   }
 });
 

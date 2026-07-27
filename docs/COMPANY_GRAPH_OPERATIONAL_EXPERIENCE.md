@@ -1,6 +1,6 @@
 # Company Graph Operational Experience
 
-Status: implemented for Stages 17–22
+Status: implemented for Stages 17–24
 Surface: web Company Graph; shared contract for future desktop and mobile views
 
 ## Stage 17 — Operational Focus
@@ -108,6 +108,10 @@ existing tool and approval policies. The page consistently labels this surface
 - Saved views never store canonical records and never broaden authorization.
 - Idjwi workspace actions reference governed node and edge identifiers; they do
   not mutate canonical truth without the normal policy and audit path.
+- Daily briefing priorities cite governed evidence and disclose bounded or
+  unavailable context.
+- Graph-quality badges are projections of owned repair work; resolution never
+  silently changes the affected canonical record.
 
 ## Verification
 

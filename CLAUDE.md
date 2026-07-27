@@ -32,6 +32,21 @@ packet. Corrections, tasks and approvals must continue through their policy,
 evidence and audit paths. The operator-facing label is “Ask Idjwi,” never
 “Ask AI.”
 
+Company Graph daily briefing uses `company-graph-daily-briefing.v1` and the
+explicit `daily_operational_briefing` intent. It must answer what changed, what
+matters, which governed relationships explain it, what is uncertain, who can
+act and what should happen next. Preserve the workflow chain from evidence to
+recommendation, decision, approval, action, task or agent execution, and
+observed outcome. Counters alone are not a briefing.
+
+Graph-quality issues are governed work under
+`company-graph-quality-work.v1`. Findings have a stable tenant-and-scope key,
+severity, cause, business consequence, owner, repair, evidence, bulk
+eligibility, verification state and resolution history. They connect Company
+Graph with Data Readiness, tasks, alerts, Idjwi recommendations and audit.
+Never silently repair canonical records; verification, resolution and
+consequential repair still require authority and evidence.
+
 ## Mantra
 
 > **Newsconseen is the Autonomous SME Operating System.**

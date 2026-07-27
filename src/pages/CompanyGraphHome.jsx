@@ -902,6 +902,7 @@ export default function CompanyGraphHome() {
   const [loadingContinuation, setLoadingContinuation] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pageGuideOpen, setPageGuideOpen] = useState(false);
+  const [briefingOpen, setBriefingOpen] = useState(true);
   const neighborhoodCoordinatorRef = useRef(null);
   if (!neighborhoodCoordinatorRef.current) {
     neighborhoodCoordinatorRef.current = createLatestGraphRequestCoordinator();
@@ -931,6 +932,26 @@ export default function CompanyGraphHome() {
     },
   });
   const savedViews = savedViewsQuery.data?.views || [];
+  const qualityQuery = useQuery({
+    queryKey: ["company-graph-quality-findings", currentUser?.company_id, scopeId],
+    enabled: enabled && !!currentUser?.company_id,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const scope = scopeId ? `&operational_unit_id=${encodeURIComponent(scopeId)}` : "";
+      const response = await fetch(
+        `${RAILWAY_URL}/company-graph/quality/findings?company_id=${encodeURIComponent(currentUser.company_id)}${scope}`,
+        { headers: await authHeaders() },
+      );
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        const error = new Error(detail?.detail?.message || "Graph-quality work is unavailable.");
+        error.action = detail?.detail?.action;
+        throw error;
+      }
+      return response.json();
+    },
+  });
+  const qualityFindings = qualityQuery.data?.findings || [];
 
   const governedQuery = useQuery({
     queryKey: ["company-graph-overview", currentUser?.company_id, scopeId],
@@ -1260,6 +1281,37 @@ export default function CompanyGraphHome() {
     setInspectionTrail([]);
   };
 
+  const runQualityWork = async (finding, action) => {
+    let reason = "";
+    if (["mark_verified", "resolve"].includes(action)) {
+      reason = window.prompt(
+        action === "resolve"
+          ? "Describe the evidence showing this finding is resolved."
+          : "Describe the evidence used to verify this finding.",
+        "",
+      ) || "";
+      if (!reason.trim()) return;
+    }
+    const response = await fetch(
+      `${RAILWAY_URL}/company-graph/quality/findings/${encodeURIComponent(finding.finding_key)}/work`,
+      {
+        method: "POST", headers: await authHeaders(),
+        body: JSON.stringify({
+          company_id: currentUser.company_id,
+          operational_unit_id: scopeId || "",
+          action, reason,
+          owner_user_id: currentUser.id,
+          owner_display_name: currentUser.full_name || currentUser.email || "Authorized operator",
+        }),
+      },
+    );
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      throw new Error(detail?.detail?.message || detail?.detail?.code || "Graph-quality work could not be recorded.");
+    }
+    await Promise.all([qualityQuery.refetch(), governedQuery.refetch()]);
+  };
+
   // ── Pulse bar highlight ──────────────────────────────────────────────────────
   const pulseHighlight = useMemo(() => {
     if (!activeFilter) return null;
@@ -1540,6 +1592,21 @@ export default function CompanyGraphHome() {
                 Bounded view: {effectiveGraphContract.truncation.returned_nodes} nodes and {effectiveGraphContract.truncation.returned_edges} edges returned; at least {effectiveGraphContract.truncation.omitted_nodes || 0} nodes and {effectiveGraphContract.truncation.omitted_edges || 0} edges were omitted.
               </p>
             )}
+            <div className="flex flex-wrap gap-2 mt-3">
+              <button
+                onClick={() => openIdjwiGraphAction(
+                  "Give me today's evidence-backed operational briefing.",
+                  IDJWI_GRAPH_INTENTS.DAILY_OPERATIONAL_BRIEFING,
+                  idjwiGraphContext,
+                )}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-emerald-700"
+              >
+                <Sparkles className="w-3 h-3" /> Ask Idjwi for the briefing
+              </button>
+              <button onClick={() => setBriefingOpen(open => !open)} className="text-[10px] font-bold text-slate-600 hover:text-slate-900">
+                {briefingOpen ? "Hide operational detail" : "Show operational detail"}
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-4 gap-2 text-center">
             {[["Open work", governedGraph?.briefing?.open_tasks || 0], ["High risks", governedGraph?.briefing?.high_risks || 0], ["Recommendations", governedGraph?.briefing?.pending_recommendations || 0], ["Data gaps", governedGraph?.briefing?.quality_issues || 0]].map(([label, value]) => (
@@ -1547,7 +1614,102 @@ export default function CompanyGraphHome() {
             ))}
           </div>
         </div>
+        {briefingOpen && governedGraph?.briefing?.contract_version && (
+          <div className="mt-4 grid gap-3 lg:grid-cols-3 border-t border-slate-100 pt-4">
+            <div className="rounded-xl bg-slate-50 p-3">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">What changed</p>
+              <div className="mt-2 space-y-2">
+                {(governedGraph.briefing.what_changed || []).slice(0, 3).map(change => (
+                  <button key={`${change.record_type}:${change.record_id}`} onClick={() => {
+                    const node = nodes.find(item => item.id === `${change.record_type}:${change.record_id}`);
+                    if (node) inspectNode(node, 1);
+                  }} className="block w-full text-left">
+                    <span className="block text-[11px] font-bold text-slate-700">{change.label}</span>
+                    <span className="block text-[9px] text-slate-400">{change.change}</span>
+                  </button>
+                ))}
+                {!governedGraph.briefing.what_changed?.length && <p className="text-[10px] text-slate-400">No authorized change was recorded in the last 24 hours.</p>}
+              </div>
+            </div>
+            <div className="rounded-xl bg-emerald-50/60 p-3">
+              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700">What matters today</p>
+              <div className="mt-2 space-y-2">
+                {(governedGraph.briefing.what_matters_today || []).slice(0, 3).map(priority => (
+                  <button key={priority.priority_id} onClick={() => {
+                    const node = nodes.find(item => item.id === priority.priority_id);
+                    if (node) inspectNode(node, 1);
+                  }} className="block w-full text-left rounded-lg border border-emerald-100 bg-white p-2">
+                    <span className="block text-[11px] font-black text-slate-800">{priority.title}</span>
+                    <span className="block text-[9px] text-slate-500">{priority.why_it_matters}</span>
+                    <span className="block mt-1 text-[9px] font-bold text-emerald-700">{priority.owner?.display_name} · {priority.relationship_explanation?.length || 0} explaining relationships</span>
+                  </button>
+                ))}
+                {!governedGraph.briefing.what_matters_today?.length && <p className="text-[10px] text-emerald-700">No critical priority is visible in this bounded scope.</p>}
+              </div>
+            </div>
+            <div className="rounded-xl bg-amber-50/60 p-3">
+              <p className="text-[10px] font-black uppercase tracking-wider text-amber-700">Uncertainty and attention</p>
+              <div className="mt-2 space-y-1.5">
+                {(governedGraph.briefing.uncertainties || []).slice(0, 3).map((item, index) => (
+                  <p key={`${item.type}-${index}`} className="text-[10px] text-amber-800">{item.explanation}</p>
+                ))}
+                {(governedGraph.briefing.requires_attention || []).slice(0, 3).map(item => (
+                  <p key={item.finding_code} className="text-[10px] text-slate-600"><span className="font-black">{item.count}</span> · {item.message}</p>
+                ))}
+                {!governedGraph.briefing.uncertainties?.length && !governedGraph.briefing.requires_attention?.length && <p className="text-[10px] text-slate-500">No material uncertainty is disclosed.</p>}
+              </div>
+            </div>
+          </div>
+        )}
       </section>
+
+      {(qualityFindings.length > 0 || qualityQuery.isError) && (
+        <section className="rounded-2xl border border-amber-200 bg-white p-4 shrink-0" aria-label="Governed graph-quality work">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black text-slate-800">Graph-quality work</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Findings become owned, evidence-backed repair work connected to tasks, recommendations, alerts, Data Readiness, and audit.</p>
+            </div>
+            <button onClick={() => navigate(createPageUrl("DataReadiness"))} className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800">Open Data Readiness</button>
+          </div>
+          {qualityQuery.isError ? (
+            <div role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[10px] text-rose-700">
+              {qualityQuery.error.message}
+              {qualityQuery.error.action && <span className="block mt-1 font-bold">Operator action: {qualityQuery.error.action.replaceAll("_", " ")}</span>}
+            </div>
+          ) : (
+            <div className="mt-3 grid gap-2 xl:grid-cols-2">
+              {qualityFindings.slice(0, 6).map(finding => (
+                <article key={finding.finding_key} className="rounded-xl border border-slate-200 p-3">
+                  <div className="flex items-start gap-2">
+                    <span className={`mt-0.5 rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${finding.severity === "critical" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>{finding.severity}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-black text-slate-800">{finding.affected_count} · {finding.issue_code.replaceAll("_", " ").toLowerCase()}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">{finding.business_consequence}</p>
+                      <p className="mt-1 text-[10px] font-semibold text-slate-700">Owner: {finding.owner?.display_name} · {finding.verification_status}</p>
+                      <p className="mt-1 text-[9px] text-slate-400">Repair: {finding.suggested_repair}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {qualityQuery.data?.can_manage && !finding.task_id && <button onClick={() => runQualityWork(finding, "create_task").catch(error => window.alert(error.message))} className="rounded-lg border border-slate-200 px-2 py-1 text-[9px] font-bold">Create task</button>}
+                    {qualityQuery.data?.can_manage && !finding.recommendation_id && <button onClick={() => runQualityWork(finding, "create_recommendation").catch(error => window.alert(error.message))} className="rounded-lg border border-slate-200 px-2 py-1 text-[9px] font-bold">Recommend repair</button>}
+                    {qualityQuery.data?.can_manage && finding.alert_state === "open" && <button onClick={() => runQualityWork(finding, "acknowledge_alert").catch(error => window.alert(error.message))} className="rounded-lg border border-rose-200 px-2 py-1 text-[9px] font-bold text-rose-700">Acknowledge alert</button>}
+                    {qualityQuery.data?.can_manage && finding.verification_status !== "verified" && <button onClick={() => runQualityWork(finding, "mark_verified").catch(error => window.alert(error.message))} className="rounded-lg border border-emerald-200 px-2 py-1 text-[9px] font-bold text-emerald-700">Verify</button>}
+                    {qualityQuery.data?.can_manage && finding.status !== "resolved" && <button onClick={() => runQualityWork(finding, "resolve").catch(error => window.alert(error.message))} className="rounded-lg border border-blue-200 px-2 py-1 text-[9px] font-bold text-blue-700">Resolve</button>}
+                    <button onClick={() => openIdjwiGraphAction(
+                      `Explain graph-quality finding ${finding.issue_code} and its safest repair.`,
+                      IDJWI_GRAPH_INTENTS.RECOMMEND_GRAPH_ACTION,
+                      idjwiGraphContext,
+                      { graph_quality_finding: finding },
+                    )} className="rounded-lg border border-violet-200 px-2 py-1 text-[9px] font-bold text-violet-700">Ask Idjwi</button>
+                  </div>
+                  {finding.resolution_history?.length > 0 && <p className="mt-2 text-[9px] text-slate-400">{finding.resolution_history.length} audited resolution event{finding.resolution_history.length === 1 ? "" : "s"}</p>}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {isAdministrator && (
         <section className="rounded-2xl border border-slate-200 bg-white shrink-0" aria-labelledby="company-graph-guide-title">

@@ -246,6 +246,7 @@ class IdjwiGraphContext(BaseModel):
     completeness: GraphCompleteness
     truncation: GraphTruncation
     quality: GraphQuality
+    briefing: dict[str, Any] = Field(default_factory=dict)
     permitted_actions: list[GraphPermittedAction] = Field(default_factory=list)
     assertion_history: list[GraphAssertionHistoryEvent] = Field(default_factory=list)
     tenant_id: str | None = None

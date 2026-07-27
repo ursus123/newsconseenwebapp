@@ -1399,3 +1399,21 @@ actions. Governed Idjwi responses expose bounded workspace commands for
 highlight, center, edge inspection and comparison. Task creation, approval
 requests and relationship corrections remain consequential operations governed
 by existing policy and audit services.
+
+### 21.1 Operational briefing and quality work
+
+The graph service builds `company-graph-daily-briefing.v1` from authorized
+records, relationships, evidence and completeness diagnostics. It is part of
+the governed packet and therefore identical on the page and in Idjwi context.
+The briefing connects operational priorities to the lifecycle:
+
+`evidence → recommendation → decision → approval → action → task/agent → outcome`
+
+Graph-quality diagnostics become `company-graph-quality-work.v1` projections.
+Durable ownership and resolution state live in
+`public.graph_quality_findings` and
+`public.graph_quality_resolution_events`. The same finding is visible from
+Company Graph and Data Readiness. Creating repair tasks or recommendations uses
+canonical repositories; alert acknowledgement, verification and resolution are
+tenant-scoped audited transitions. No quality workflow grants permission to
+modify the affected canonical record.

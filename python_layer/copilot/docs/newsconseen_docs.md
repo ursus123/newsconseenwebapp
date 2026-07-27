@@ -67,6 +67,18 @@ canonical relationships; rejections remain suppressed; caches refresh; audit
 events and correction memory retain provenance. Arbitrary chat text is not
 accepted as graph truth.
 
+Company Graph daily briefings use the provider-neutral
+`company-graph-daily-briefing.v1` contract and the explicit
+`daily_operational_briefing` intent. They explain recent changes, today's
+priorities, causal or explanatory relationships, uncertainty, ownership and
+recommended action from the same authorized packet shown to the operator.
+
+Graph-quality diagnostics use `company-graph-quality-work.v1`. Findings retain
+tenant and operational scope, severity, cause, consequence, owner, repair,
+evidence, bulk eligibility, verification state and audited resolution history.
+Idjwi may explain or recommend a repair, but tasks, approvals and canonical
+changes remain governed actions.
+
 Idjwi receives assertion state, validity, observation, confirmation/rejection,
 supersession, evidence version and sanitized transition history. It must explain
 why a relationship changed and must not re-propose a durably rejected key.

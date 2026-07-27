@@ -38,6 +38,7 @@ def _base(context):
         "unavailable_sources": unavailable,
         "sensitivity_classes": context.get("sensitivity_classes") or [],
         "quality": context.get("quality") or {},
+        "briefing": context.get("briefing") or {},
         "completeness": context.get("completeness") or {},
         "truncation": context.get("truncation") or {},
         "history": context.get("assertion_history") or [],
@@ -155,6 +156,31 @@ def execute_graph_intent(intent, *, question, company_id, context, principal):
         data = {"query": context.get("graph_search_query") or question, "nodes": matched_nodes, "relationships": matched_edges}
         cited_nodes = matched_nodes[:8]
         cited_edges = matched_edges[:8]
+    elif intent == "daily_operational_briefing":
+        briefing = graph["briefing"]
+        priorities = briefing.get("what_matters_today") or []
+        attention = briefing.get("requires_attention") or []
+        answer = (
+            f"{briefing.get('summary') or 'No governed daily briefing is available.'} "
+            f"Recommended focus: {briefing.get('recommended_focus') or 'Continue monitoring governed changes.'}"
+        )
+        data = {
+            "briefing": briefing,
+            "workflow_contract": briefing.get("workflow_contract") or [],
+            "priorities": priorities,
+            "attention": attention,
+        }
+        priority_ids = {item.get("priority_id") for item in priorities if item.get("priority_id")}
+        cited_nodes = [node for node in nodes if node.get("id") in priority_ids][:8]
+        cited_edges = [
+            edge for edge in edges
+            if edge.get("id") in {
+                relationship.get("edge_id")
+                for priority in priorities
+                for relationship in (priority.get("relationship_explanation") or [])
+            }
+        ][:8]
+        intent_complete = bool(briefing.get("contract_version"))
     else:
         raise ValueError(f"Unsupported Idjwi graph intent: {intent}")
 

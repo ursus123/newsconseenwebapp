@@ -35,6 +35,7 @@ from .assertion_governance import apply_assertion_state, default_assertion_state
 from .diagnostics import build_diagnostics, source_failure_metadata
 from .bounded_queries import DEFAULT_EDGE_BUDGET, DEFAULT_NODE_BUDGET, TYPE_WEIGHTS, allocations, encode_continuation
 from .execution import GRAPH_IO_EXECUTOR
+from .operational_briefing import build_daily_briefing
 
 
 GRAPH_GOVERNANCE_TYPES = {"graph_assertion", "graph_assertion_event", "graph_assertion_outcome"}
@@ -588,14 +589,12 @@ def build_graph_packet(context: TenantContext, repository, *, center: str | None
         sources_unauthorized=len(unauthorized), authorization_filtered=bool(unauthorized),
         explanation=explanation, diagnostics=diagnostic_report,
     )
-    briefing = {
-        "headline": "Your operational graph is ready" if completeness_state == "complete" else f"Your operational graph is {completeness_state}",
-        "open_tasks": len(open_tasks), "high_risks": len(high_risks),
-        "pending_recommendations": len(recommendations),
-        "operational_units_in_scope": len(scoped_unit_ids),
-        "quality_issues": sum(issue.count for issue in issues),
-        "recommended_focus": "Review high risks first" if high_risks else "Review open work and graph gaps",
-    }
+    briefing = build_daily_briefing(
+        context=context, records=records, nodes=nodes, edges=edges,
+        quality=quality, completeness=completeness, truncation=truncation,
+        generated_at=generated_at,
+    )
+    briefing["operational_units_in_scope"] = len(scoped_unit_ids)
     packet_actions = policy.packet_actions()
     return GraphPacket(
         contract_version=GRAPH_CONTRACT_VERSION, company_id=context.tenant_id,

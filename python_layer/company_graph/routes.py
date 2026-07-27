@@ -26,8 +26,10 @@ from .bounded_queries import decode_continuation, direct_neighborhood_records
 from .field_classification import project_record
 from .contracts import GraphNodeSummary
 from .execution import GRAPH_IO_EXECUTOR
+from .quality_workflow import finding_record, project_findings
 from concurrent.futures import as_completed
 from typing import Any, Literal
+from datetime import datetime, timezone
 
 
 router = APIRouter(prefix="/company-graph", tags=["Company Graph"])
@@ -52,6 +54,18 @@ class GraphSavedViewRequest(BaseModel):
     layout: str = "operational_focus"
     permissions: list[str] = Field(default_factory=list, max_length=50)
     version: int = Field(default=1, ge=1)
+
+
+class GraphQualityWorkRequest(BaseModel):
+    company_id: str
+    action: Literal[
+        "create_task", "create_recommendation", "acknowledge_alert",
+        "mark_verified", "resolve", "reopen",
+    ]
+    operational_unit_id: str = ""
+    owner_user_id: str | None = None
+    owner_display_name: str | None = None
+    reason: str = Field(default="", max_length=1000)
 
 
 def _validate_saved_view(body: GraphSavedViewRequest, context, policy: GraphAuthorizationPolicy) -> dict:
@@ -149,6 +163,183 @@ def update_graph_view(view_id: str, body: GraphSavedViewRequest, request: Reques
         raise HTTPException(status_code=403, detail={"code": "GRAPH_VIEW_OWNER_REQUIRED", "action": "duplicate_view"})
     row = repository.update_entity(context, "graph_saved_view", view_id, _validate_saved_view(body, context, policy)).data
     return {"contract_version": "company-graph-saved-views.v1", "view": row}
+
+
+def _quality_context(repository, request, authorization, company_id, operational_unit_id=""):
+    context = repository.resolve_context(
+        authorization, company_id, request_id=getattr(request.state, "request_id", ""),
+        operational_unit_id=operational_unit_id,
+    )
+    policy = GraphAuthorizationPolicy.for_context(context)
+    policy.require_scope(operational_unit_id)
+    return context, policy
+
+
+def _stored_quality(repository, context):
+    try:
+        findings = repository.list_entities(context, "graph_quality_finding", limit=500).data or []
+        events = repository.list_entities(context, "graph_quality_resolution_event", limit=2000).data or []
+        return findings, events
+    except Exception as error:
+        raise HTTPException(status_code=503, detail={
+            "code": "GRAPH_QUALITY_STORE_UNAVAILABLE", "category": "data_source",
+            "message": "The graph-quality work store is unavailable.",
+            "action": "apply_009_graph_quality_work_migration", "retryable": True,
+        }) from error
+
+
+@router.get("/quality/findings")
+def graph_quality_findings(request: Request, company_id: str = Query(...),
+                           operational_unit_id: str = Query(""),
+                           authorization: str | None = Header(None)):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context, policy = _quality_context(
+        repository, request, authorization, company_id, operational_unit_id,
+    )
+    packet = _packet(
+        company_id, authorization, request, node_budget=36, edge_budget=72,
+        operational_unit_id=operational_unit_id,
+    )
+    stored, events = _stored_quality(repository, context)
+    findings = project_findings(packet, context=context, stored=stored, history=events)
+    return {
+        "contract_version": "company-graph-quality-work.v1",
+        "company_id": context.tenant_id,
+        "scope": packet.scope,
+        "findings": findings,
+        "summary": {
+            "open": sum(item["status"] in {"open", "in_progress", "recurring"} for item in findings),
+            "critical": sum(item["severity"] == "critical" for item in findings),
+            "affected_records": sum(item["affected_count"] for item in findings),
+            "actionable": sum(bool(item["operator_actions"]) for item in findings),
+        },
+        "connections": ["data_readiness", "tasks", "alerts", "idjwi_recommendations", "audit"],
+        "can_manage": policy.allows("graph.quality_manage"),
+    }
+
+
+@router.post("/quality/findings/{finding_key}/work")
+def graph_quality_work(finding_key: str, body: GraphQualityWorkRequest,
+                       request: Request, authorization: str | None = Header(None)):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context, policy = _quality_context(
+        repository, request, authorization, body.company_id, body.operational_unit_id,
+    )
+    policy.require("graph.quality_manage")
+    if body.owner_user_id and str(body.owner_user_id) != context.user_id:
+        raise HTTPException(status_code=403, detail={
+            "code": "GRAPH_QUALITY_OWNER_NOT_VERIFIED",
+            "message": "A finding can only be claimed by the verified requesting operator.",
+            "action": "use_verified_operator_identity",
+        })
+    if body.action in {"mark_verified", "resolve"} and not body.reason.strip():
+        raise HTTPException(status_code=422, detail={
+            "code": "GRAPH_QUALITY_REASON_REQUIRED", "action": "explain_verification_or_resolution",
+        })
+    packet = _packet(
+        body.company_id, authorization, request, node_budget=36, edge_budget=72,
+        operational_unit_id=body.operational_unit_id,
+    )
+    stored, events = _stored_quality(repository, context)
+    current = next((
+        item for item in project_findings(packet, context=context, stored=stored, history=events)
+        if item["finding_key"] == finding_key
+    ), None)
+    if not current:
+        raise HTTPException(status_code=404, detail={
+            "code": "GRAPH_QUALITY_FINDING_NOT_ACTIVE",
+            "message": "The finding is no longer active in the authorized graph scope.",
+            "action": "refresh_quality_findings",
+        })
+    if not current.get("currently_detected", True) and body.action != "reopen":
+        raise HTTPException(status_code=409, detail={
+            "code": "GRAPH_QUALITY_FINDING_NOT_CURRENT",
+            "message": "This historical finding is not currently detected.",
+            "action": "reopen_only_if_new_evidence_requires_review",
+        })
+    existing = next((row for row in stored if row.get("finding_key") == finding_key), None)
+    current["owner"]["user_id"] = context.user_id
+    current["owner"]["display_name"] = body.owner_display_name or current["owner"].get("display_name")
+    payload = finding_record(current, context=context)
+    if existing:
+        finding = repository.update_entity(context, "graph_quality_finding", str(existing["id"]), payload).data
+    else:
+        finding = repository.create_entity(context, "graph_quality_finding", payload).data
+    from_status = finding.get("status") or "open"
+    event_type = body.action
+    event_status = from_status
+
+    if body.action == "create_task":
+        task = repository.create_entity(context, "task", {
+            "title": f"Repair graph quality: {current['issue_code'].replace('_', ' ').title()}",
+            "description": f"{current['business_consequence']}\n\nSuggested repair: {current['suggested_repair']}",
+            "task_type": "data_quality_repair", "status": "open",
+            "priority": "urgent" if current["severity"] == "critical" else "high",
+            "assigned_to_name": current["owner"].get("display_name"),
+            "created_by": context.user_id,
+            **({"operational_unit_id": body.operational_unit_id} if body.operational_unit_id else {}),
+        }).data
+        event_type, event_status = "task_created", "in_progress"
+        finding = repository.update_entity(context, "graph_quality_finding", str(finding["id"]), {
+            "task_id": task["id"], "status": event_status,
+        }).data
+    elif body.action == "create_recommendation":
+        recommendation = repository.create_entity(context, "recommendation", {
+            "title": f"Repair {current['issue_code'].replace('_', ' ').lower()}",
+            "body": current["suggested_repair"],
+            "recommendation_type": "graph_quality_repair",
+            "priority": "urgent" if current["severity"] == "critical" else "high",
+            "entity_ref_type": "graph_quality_finding",
+            "entity_ref_id": finding["id"],
+            "created_by": context.user_id,
+            **({"operational_unit_id": body.operational_unit_id} if body.operational_unit_id else {}),
+        }).data
+        event_type = "recommendation_created"
+        finding = repository.update_entity(context, "graph_quality_finding", str(finding["id"]), {
+            "recommendation_id": recommendation["id"], "status": "in_progress",
+        }).data
+        event_status = "in_progress"
+    elif body.action == "acknowledge_alert":
+        event_type = "alert_acknowledged"
+        finding = repository.update_entity(context, "graph_quality_finding", str(finding["id"]), {
+            "alert_state": "acknowledged",
+        }).data
+    elif body.action == "mark_verified":
+        event_type, event_status = "verified", "in_progress"
+        finding = repository.update_entity(context, "graph_quality_finding", str(finding["id"]), {
+            "verification_status": "verified", "status": event_status,
+        }).data
+    elif body.action == "resolve":
+        event_type, event_status = "resolved", "resolved"
+        finding = repository.update_entity(context, "graph_quality_finding", str(finding["id"]), {
+            "status": "resolved", "verification_status": "verified",
+            "alert_state": "closed", "resolved_by": context.user_id,
+            "resolved_at": datetime.now(timezone.utc).isoformat(),
+        }).data
+    elif body.action == "reopen":
+        event_type, event_status = "reopened", "open"
+        finding = repository.update_entity(context, "graph_quality_finding", str(finding["id"]), {
+            "status": "open", "verification_status": "unverified", "resolved_by": None, "resolved_at": None,
+        }).data
+
+    event = repository.create_entity(context, "graph_quality_resolution_event", {
+        "finding_id": finding["id"], "finding_key": finding_key,
+        "event_type": event_type, "from_status": from_status, "to_status": event_status,
+        "actor_user_id": context.user_id, "reason": body.reason.strip(),
+        "evidence": current["evidence"],
+    }).data
+    log_event(
+        f"company_graph.quality.{event_type}", company_id=context.tenant_id,
+        actor=context.user_id, subject=finding_key,
+        metadata={"finding_id": finding["id"], "task_id": finding.get("task_id"), "recommendation_id": finding.get("recommendation_id")},
+        status="success",
+    )
+    cache_invalidate(context.tenant_id)
+    return {
+        "contract_version": "company-graph-quality-work.v1",
+        "finding": finding, "event": event,
+        "next": "Refresh Company Graph and Data Readiness to verify the repair outcome.",
+    }
 
 
 @router.get("/predicates")

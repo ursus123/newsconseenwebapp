@@ -20,7 +20,7 @@ import { ncClient } from "@/api/ncClient";
 import { usePermissions } from "@/components/shared/usePermissions";
 import { ENTITY_CONFIG, EntityCard } from "@/components/shared/DataHealthCards";
 import {
-  ShieldCheck, AlertTriangle, Loader2, RefreshCw, Link2Off,
+  AlertTriangle, Loader2, RefreshCw, Link2Off,
   Database, Search, ChevronDown, ChevronUp, Sparkles, Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -133,6 +133,22 @@ export default function DataReadiness() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [repairKey, setRepairKey] = useState(0);
+  const { data: graphQuality = null, error: graphQualityError, refetch: refetchGraphQuality } = useQuery({
+    queryKey: ["company-graph-quality-findings", companyId, ""],
+    enabled: !!companyId,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const response = await fetch(
+        `${RAILWAY_URL}/company-graph/quality/findings?company_id=${encodeURIComponent(companyId)}`,
+        { headers: await authHeaders() },
+      );
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail?.detail?.message || "Graph-quality workflow is unavailable.");
+      }
+      return response.json();
+    },
+  });
 
   async function fetchReadiness(force = false) {
     if (!companyId) return;
@@ -194,7 +210,7 @@ export default function DataReadiness() {
             size="sm"
             className="rounded-xl"
             disabled={refreshing}
-            onClick={() => { fetchReadiness(true); setRepairKey(k => k + 1); }}
+            onClick={() => { fetchReadiness(true); refetchGraphQuality(); setRepairKey(k => k + 1); }}
           >
             <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${refreshing ? "animate-spin" : ""}`} /> Re-scan
           </Button>
@@ -222,6 +238,33 @@ export default function DataReadiness() {
 
           {/* Deep diagnose */}
           <DeepDiagnose companyId={companyId} />
+
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50/30 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Link2Off className="w-4 h-4 text-indigo-600" />
+              <p className="text-sm font-bold text-slate-800">Governed Graph-quality Work</p>
+              {graphQuality && <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[9px] font-black text-indigo-700">{graphQuality.summary?.affected_records || 0} AFFECTED</span>}
+            </div>
+            <p className="text-xs text-slate-500">Company Graph findings are assigned, verified, connected to repair tasks and recommendations, and retained with resolution history.</p>
+            {graphQualityError && <p role="alert" className="mt-2 text-[10px] font-semibold text-rose-600">{graphQualityError.message}</p>}
+            {graphQuality?.findings?.length > 0 ? (
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {graphQuality.findings.slice(0, 6).map(finding => (
+                  <div key={finding.finding_key} className="rounded-xl border border-indigo-100 bg-white p-3">
+                    <p className="text-[10px] font-black text-slate-800">{finding.affected_count} · {finding.issue_code.replaceAll("_", " ").toLowerCase()}</p>
+                    <p className="mt-1 text-[10px] text-slate-500">{finding.cause}</p>
+                    <p className="mt-1 text-[9px] font-semibold text-indigo-700">{finding.owner?.display_name} · {finding.status} · {finding.verification_status}</p>
+                    <div className="mt-2 flex gap-2 text-[9px] text-slate-400">
+                      {finding.task_id && <span>Task linked</span>}
+                      {finding.recommendation_id && <span>Recommendation linked</span>}
+                      {finding.alert_state !== "not_required" && <span>Alert {finding.alert_state}</span>}
+                      <span>{finding.resolution_history?.length || 0} audit events</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : !graphQualityError && <p className="mt-2 text-[10px] text-emerald-700">No active governed graph-quality finding is visible.</p>}
+          </div>
 
           {/* Broken relationships */}
           <div className={`rounded-2xl border p-4 ${brokenRel.broken_count > 0 ? "border-rose-200 bg-rose-50/30" : "border-slate-200 bg-white"}`}>

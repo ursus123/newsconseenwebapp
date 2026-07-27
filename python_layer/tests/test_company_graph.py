@@ -20,6 +20,7 @@ from company_graph.contracts import GraphSourceStatus
 from company_graph.diagnostics import build_diagnostics
 from company_graph.bounded_queries import decode_continuation, direct_neighborhood_records, encode_continuation
 from company_graph.bounded_queries import DEFAULT_EDGE_BUDGET, DEFAULT_NODE_BUDGET
+from company_graph.quality_workflow import project_findings, stable_finding_key
 
 
 class FakeRepository:
@@ -41,6 +42,52 @@ def _context():
 def test_operational_overview_defaults_are_bounded_for_readability():
     assert DEFAULT_NODE_BUDGET == 36
     assert DEFAULT_EDGE_BUDGET == 72
+
+
+def test_daily_briefing_links_priorities_to_evidence_owner_and_outcome_workflow():
+    repository = FakeRepository({
+        "risk": [{
+            "id": "r1", "title": "Supplier disruption", "severity": "critical",
+            "status": "open", "updated_at": "2026-07-27T12:00:00Z",
+        }],
+    })
+    packet = build_graph_packet(_context(), repository)
+    briefing = packet.briefing
+    assert briefing["contract_version"] == "company-graph-daily-briefing.v1"
+    assert briefing["what_matters_today"][0]["priority_id"] == "risk:r1"
+    assert briefing["what_matters_today"][0]["evidence"][0]["record_id"] == "r1"
+    assert briefing["what_matters_today"][0]["owner"]["can_act"] is True
+    assert briefing["workflow_contract"] == [
+        "evidence", "recommendation", "decision", "approval",
+        "action", "task_or_agent_execution", "outcome",
+    ]
+
+
+def test_quality_findings_are_stable_owned_actionable_and_keep_resolution_history():
+    packet = build_graph_packet(
+        _context(),
+        FakeRepository({"enterprise": [{"id": "e1", "enterprise_name": "Disconnected"}]}),
+    )
+    key = stable_finding_key("tenant-a", "tenant-a", "UNCONNECTED_RECORDS")
+    findings = project_findings(
+        packet, context=_context(),
+        stored=[{
+            "finding_key": key, "owner_display_name": "Data steward",
+            "verification_status": "pending", "status": "in_progress",
+        }],
+        history=[{
+            "finding_key": key, "event_type": "task_created",
+            "occurred_at": "2026-07-27T12:00:00Z",
+        }],
+    )
+    finding = next(item for item in findings if item["issue_code"] == "UNCONNECTED_RECORDS")
+    assert finding["finding_key"] == key
+    assert finding["owner"]["display_name"] == "Data steward"
+    assert finding["business_consequence"]
+    assert finding["suggested_repair"]
+    assert finding["evidence"][0]["diagnostic"] == "UNCONNECTED_RECORDS"
+    assert finding["resolution_history"][0]["event_type"] == "task_created"
+    assert {"create_task", "create_recommendation", "resolve"}.issubset(finding["operator_actions"])
 
 
 def test_graph_packet_explains_canonical_and_derived_edges():

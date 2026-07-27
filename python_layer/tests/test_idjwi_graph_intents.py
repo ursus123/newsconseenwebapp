@@ -26,11 +26,12 @@ def _context():
     }
 
 
-def test_all_nine_governed_graph_intents_are_registered():
-    assert len(GRAPH_INTENTS) == 9
+def test_all_ten_governed_graph_intents_are_registered():
+    assert len(GRAPH_INTENTS) == 10
     assert "explain_company_graph" in GRAPH_INTENTS
     assert "find_graph_gaps" in GRAPH_INTENTS
     assert "search_company_graph" in GRAPH_INTENTS
+    assert "daily_operational_briefing" in GRAPH_INTENTS
 
 
 def test_explicit_intent_wins_and_explain_company_never_becomes_gap_detection():
@@ -74,3 +75,28 @@ def test_natural_graph_search_ignores_prompt_words_and_matches_governed_labels()
     )
     assert result["data"]["nodes"][0]["id"] == "enterprise:e1"
     assert result["graph_citations"][0]["node_ids"] == ["enterprise:e1"]
+
+
+def test_daily_briefing_uses_governed_packet_and_preserves_workflow():
+    context = _context()
+    context["briefing"] = {
+        "contract_version": "company-graph-daily-briefing.v1",
+        "summary": "One operational priority is visible.",
+        "recommended_focus": "Review Acme.",
+        "what_matters_today": [{
+            "priority_id": "enterprise:e1",
+            "relationship_explanation": [],
+        }],
+        "requires_attention": [],
+        "workflow_contract": [
+            "evidence", "recommendation", "decision", "approval",
+            "action", "task_or_agent_execution", "outcome",
+        ],
+    }
+    result = execute_graph_intent(
+        "daily_operational_briefing", question="What matters today?",
+        company_id="tenant-a", context=context, principal=Principal(),
+    )
+    assert result["intent"] == "daily_operational_briefing"
+    assert result["graph_citations"][0]["node_ids"] == ["enterprise:e1"]
+    assert result["data"]["workflow_contract"][-1] == "outcome"
