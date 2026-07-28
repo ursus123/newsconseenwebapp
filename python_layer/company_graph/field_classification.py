@@ -73,7 +73,7 @@ PROJECTIONS: dict[str, GraphProjectionDefinition] = {
         graph_safe=("title", "task_name", "task_type", "status", "priority", "due_date", "scheduled_date", "outcome"),
         role_restricted=("assigned_to_name", "completed_at", "outcome_reason"),
         sensitive=("outcome_notes", "private_description", "labor_cost"),
-        prohibited=COMMON_PROHIBITED + ("related_person_id", "assigned_to_id"),
+        prohibited=COMMON_PROHIBITED + ("related_person_id", "assigned_to_person_id", "assigned_to_email", "assigned_to_id"),
         label_fields=("title", "task_name"),
     ),
     "transaction": GraphProjectionDefinition(

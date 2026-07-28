@@ -138,7 +138,7 @@ def _get_profile(user_id: str) -> dict:
     resp = supabase_source._request(
         "GET", "user_profiles",
         headers=supabase_source._headers(),
-        params={"id": f"eq.{user_id}", "select": "id,company_id,role"},
+        params={"id": f"eq.{user_id}", "select": "id,company_id,role,person_id"},
     )
     rows = resp.json()
     return rows[0] if rows else {}

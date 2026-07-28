@@ -39,3 +39,8 @@ governed packet metadata used for the answer. See
 - Recommendations expose permitted actions; they do not approve or execute them.
 - Renaming button text cannot change the capability it invokes.
 - Advisor request controls never prove that an advisor contributed.
+
+Phase 9 acceptance invokes these exact intents for organization, operational-unit,
+node, relationship, change, gap and action scenarios. The response must preserve
+the graph packet's counts and citations, expose any unavailable source, and attach
+proof-derived advisor state. See `COMPANY_GRAPH_VERIFICATION_AND_RELEASE.md`.

@@ -56,3 +56,12 @@ records, derived intelligence, and time-bounded observations.
   graph store would still require a canonical operational owner.
 - **Treat departments and teams as generic enterprises everywhere:** identity,
   hierarchy, membership, and permission semantics differ.
+
+## Verification consequence
+
+This decision is protected by the Phase 9 traceability registry and release gate.
+Tenant/cache isolation, safe projections, operational-unit authorization,
+assertion history, exports, Idjwi identity and evidence, accessibility and
+PostgreSQL performance are mandatory regression areas. Production approval also
+requires role-based operator acceptance and realistic environment validation;
+build success alone is insufficient.

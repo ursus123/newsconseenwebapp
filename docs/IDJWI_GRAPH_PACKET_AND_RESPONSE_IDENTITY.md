@@ -53,3 +53,8 @@ compatibility paths. They must not appear as the visible product identity.
 Graph answers additionally use `company-graph-citation.v1`. See
 `IDJWI_GRAPH_EVIDENCE_AND_CORRECTION_LOOP.md` for citation navigation,
 confidence factors, correction decisions and outcome-based learning.
+
+Phase 9 acceptance verifies that Idjwi and the page report identical graph counts,
+source failures and citations, while the response and audit record report the same
+proof-derived advisor state. These checks are release requirements, not optional
+presentation tests. See `COMPANY_GRAPH_VERIFICATION_AND_RELEASE.md`.

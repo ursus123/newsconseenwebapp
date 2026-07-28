@@ -36,6 +36,12 @@ import {
   semanticPositions, createLatestGraphRequestCoordinator,
 } from "@/services/companyGraphService";
 import { getAttentionSignals } from "@/utils/attentionSignals";
+import AccessibleInteractionHost, {
+  requestConfirmation,
+  requestText,
+  showNotice,
+} from "@/components/shared/AccessibleInteractionDialog";
+import AccessibleGraphView from "@/components/companyGraph/AccessibleGraphView";
 
 // ── Entity type UI config ─────────────────────────────────────────────────────
 const ENTITY_CONFIG = {
@@ -63,6 +69,12 @@ const ENTITY_CONFIG = {
   external_observation: { icon: Eye,    label: "External observations", color: "#7c3aed" },
   quality_cluster: { icon: Unlink,      label: "Summarized records", color: "#64748b" },
 };
+
+const reportGraphError = (title, error) => showNotice({
+  title,
+  message: error?.message || "The requested Company Graph action could not be completed.",
+  tone: "error",
+});
 
 // ── Cytoscape graph style ─────────────────────────────────────────────────────
 const CY_STYLE = [
@@ -316,7 +328,13 @@ function ContextPanel({
     const assertionHistory = (graphContext?.assertion_history || []).filter(event => event.assertion_key === edge.assertion_key);
     const govern = async action => {
       const correctedPredicate = action === "edit"
-        ? window.prompt("Enter the corrected governed predicate", edge.predicate || edge.relationship_type || "")
+        ? await requestText({
+            title: "Correct relationship predicate",
+            message: "Enter the governed predicate that accurately describes this connection.",
+            label: "Governed predicate",
+            defaultValue: edge.predicate || edge.relationship_type || "",
+            confirmLabel: "Continue",
+          })
         : null;
       if (action === "edit" && (!correctedPredicate?.trim() || correctedPredicate.trim() === edge.predicate)) return;
       const prompt = action === "confirm"
@@ -326,9 +344,18 @@ function ContextPanel({
           : action === "edit"
             ? "Why is this relationship correction required?"
             : "Why should this possible relationship be recorded for governed review?";
-      const reason = window.prompt(prompt) || "";
+      const reason = await requestText({
+        title: `${action.charAt(0).toUpperCase()}${action.slice(1)} relationship`,
+        message: prompt,
+        label: "Evidence-based reason",
+        confirmLabel: "Continue",
+      }) || "";
       if (!reason.trim()) return;
-      const approvalConfirmed = !["confirm", "edit"].includes(action) || window.confirm("Approve this relationship as a canonical organizational fact?");
+      const approvalConfirmed = !["confirm", "edit"].includes(action) || await requestConfirmation({
+        title: "Approve canonical relationship",
+        message: "Approve this relationship as a canonical organizational fact? This decision will be recorded in the audit history.",
+        confirmLabel: "Approve relationship",
+      });
       if (!approvalConfirmed) return;
       const [sourceType, sourceId] = String(edge.source).split(":");
       const [targetType, targetId] = String(edge.target).split(":");
@@ -411,10 +438,10 @@ function ContextPanel({
             className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700"
           ><Sparkles className="w-3.5 h-3.5" /> Ask Idjwi about this connection</button>
           <div className="grid grid-cols-2 gap-2">
-            {canPropose && <button onClick={() => govern("propose").catch(error => window.alert(error.message))} className="py-2 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">Record proposal</button>}
-            {canConfirm && <button onClick={() => govern("confirm").catch(error => window.alert(error.message))} className="py-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Confirm</button>}
-            {canConfirm && <button onClick={() => govern("edit").catch(error => window.alert(error.message))} className="py-2 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">Edit & confirm</button>}
-            {canReject && <button onClick={() => govern("reject").catch(error => window.alert(error.message))} className="py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">Reject</button>}
+            {canPropose && <button onClick={() => govern("propose").catch(error => showNotice({ title: "Relationship proposal failed", message: error.message, tone: "error" }))} className="py-2 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">Record proposal</button>}
+            {canConfirm && <button onClick={() => govern("confirm").catch(error => showNotice({ title: "Relationship confirmation failed", message: error.message, tone: "error" }))} className="py-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Confirm</button>}
+            {canConfirm && <button onClick={() => govern("edit").catch(error => showNotice({ title: "Relationship correction failed", message: error.message, tone: "error" }))} className="py-2 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">Edit & confirm</button>}
+            {canReject && <button onClick={() => govern("reject").catch(error => showNotice({ title: "Relationship rejection failed", message: error.message, tone: "error" }))} className="py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">Reject</button>}
             <button onClick={() => navigate(createPageUrl("Relationships"))} className="py-2 rounded-xl text-xs font-bold bg-slate-50 text-slate-700 border border-slate-200">Edit in Relationships</button>
             {!canPropose && <button onClick={() => openIdjwiGraphAction(
               `Recommend the governed next action for relationship ${edge.id}.`,
@@ -692,6 +719,14 @@ function ContextPanel({
 }
 
 // ── Graph Canvas ──────────────────────────────────────────────────────────────
+export function LegacyAccessibleGraphView({ mode, nodes, edges, onInspectNode, onInspectEdge }) {
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  if (mode === "summary") return <section tabIndex={0} className="h-full overflow-auto rounded-2xl border bg-white p-5" aria-label="Textual graph summary"><h2 className="font-black">Company Graph textual summary</h2><p className="mt-2 text-sm">{nodes.length} authorized records and {edges.length} governed relationships are visible.</p><p className="mt-2 text-sm">{nodes.filter(node => !edges.some(edge => edge.source === node.id || edge.target === node.id)).length} records have no visible connection.</p></section>;
+  if (mode === "relationships") return <div className="h-full overflow-auto rounded-2xl border bg-white"><table className="w-full text-left text-xs"><caption className="p-3 text-left font-black">Governed relationships</caption><thead><tr className="border-y bg-slate-50"><th className="p-3">Source</th><th className="p-3">Relationship</th><th className="p-3">Target</th><th className="p-3">State</th></tr></thead><tbody>{edges.map(edge => <tr key={edge.id} tabIndex={0} onClick={() => onInspectEdge(edge)} onKeyDown={event => event.key === "Enter" && onInspectEdge(edge)} className="cursor-pointer border-b focus:bg-indigo-50"><td className="p-3">{byId.get(edge.source)?.label || edge.source}</td><td className="p-3 font-bold">{edge.label || edge.predicate}</td><td className="p-3">{byId.get(edge.target)?.label || edge.target}</td><td className="p-3">{edge.assertion_state}; {Math.round((edge.confidence || 0) * 100)}% confidence</td></tr>)}</tbody></table></div>;
+  if (mode === "outline") return <section className="h-full overflow-auto rounded-2xl border bg-white p-4" aria-label="Hierarchical neighborhood outline"><h2 className="font-black">Relationship outline</h2><ul className="mt-3 space-y-3">{nodes.map(node => <li key={node.id}><button onClick={() => onInspectNode(node)} className="font-bold text-indigo-700 focus:ring-2">{node.label}</button><ul className="ml-5 list-disc text-xs">{edges.filter(edge => edge.source === node.id).map(edge => <li key={edge.id}>{edge.label || edge.predicate} → {byId.get(edge.target)?.label || edge.target}</li>)}</ul></li>)}</ul></section>;
+  return <section className="h-full overflow-auto rounded-2xl border bg-white p-3" aria-label="Keyboard navigable graph records"><h2 className="px-2 font-black">Authorized records</h2><div className="mt-2 grid gap-2 sm:grid-cols-2">{nodes.map(node => <button key={node.id} onClick={() => onInspectNode(node)} className="rounded-xl border p-3 text-left focus:ring-2"><span className="block text-xs font-black">{node.label}</span><span className="text-[10px]">{node.entity_type}; status {node.status || "not available"}; {edges.filter(edge => edge.source === node.id || edge.target === node.id).length} relationships</span></button>)}</div></section>;
+}
+
 function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlightTypes, activeFilter, focusNodeId, focusEdgeId, isFullscreen, onToggleFullscreen }) {
   const containerRef = useRef(null);
   const cyRef        = useRef(null);
@@ -874,6 +909,7 @@ function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlig
 // ── Main component ────────────────────────────────────────────────────────────
 export default function CompanyGraphHome() {
   const navigate  = useNavigate();
+  const productSurface = new URLSearchParams(window.location.search).get("surface") === "desktop" ? "desktop" : "web";
   const { data: currentUser = null } = useQuery({
     queryKey: ["currentUser"],
     queryFn:  () => ncClient.auth.me(),
@@ -904,6 +940,12 @@ export default function CompanyGraphHome() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pageGuideOpen, setPageGuideOpen] = useState(false);
   const [briefingOpen, setBriefingOpen] = useState(true);
+  const [selectedCandidates, setSelectedCandidates] = useState(new Set());
+  const [candidateExplanations, setCandidateExplanations] = useState({});
+  const [candidateAction, setCandidateAction] = useState("");
+  const [lastRelationshipOutcome, setLastRelationshipOutcome] = useState(null);
+  const [graphRepresentation, setGraphRepresentation] = useState("visual");
+  const [screenReaderMessage, setScreenReaderMessage] = useState("");
   const neighborhoodCoordinatorRef = useRef(null);
   if (!neighborhoodCoordinatorRef.current) {
     neighborhoodCoordinatorRef.current = createLatestGraphRequestCoordinator();
@@ -953,6 +995,24 @@ export default function CompanyGraphHome() {
     },
   });
   const qualityFindings = qualityQuery.data?.findings || [];
+  const relationshipCandidatesQuery = useQuery({
+    queryKey: ["company-graph-relationship-candidates", currentUser?.company_id, scopeId],
+    enabled: enabled && isAdministrator && !!currentUser?.company_id,
+    staleTime: 15_000,
+    queryFn: async () => {
+      const scope = scopeId ? `&operational_unit_id=${encodeURIComponent(scopeId)}` : "";
+      const response = await fetch(
+        `${RAILWAY_URL}/company-graph/relationship-candidates?company_id=${encodeURIComponent(currentUser.company_id)}${scope}`,
+        { headers: await authHeaders() },
+      );
+      if (!response.ok) throw new Error("Relationship review is unavailable.");
+      return response.json();
+    },
+  });
+  const relationshipCandidates = relationshipCandidatesQuery.data?.candidates || [];
+  const selectedBulkGroup = relationshipCandidates.find(candidate =>
+    selectedCandidates.has(candidate.assertion_key)
+  )?.bulk_group_key || null;
 
   const governedQuery = useQuery({
     queryKey: ["company-graph-overview", currentUser?.company_id, scopeId],
@@ -962,7 +1022,10 @@ export default function CompanyGraphHome() {
     queryFn: async () => {
       const scope = scopeId ? `&operational_unit_id=${encodeURIComponent(scopeId)}` : "";
       try {
-        const response = await fetch(`${RAILWAY_URL}/company-graph/overview?company_id=${encodeURIComponent(currentUser.company_id)}&limit=500&node_budget=36&edge_budget=72${scope}`, { headers: await authHeaders() });
+        const endpoint = productSurface === "desktop"
+          ? `${RAILWAY_URL}/company-graph/surface/desktop?company_id=${encodeURIComponent(currentUser.company_id)}${scope}`
+          : `${RAILWAY_URL}/company-graph/overview?company_id=${encodeURIComponent(currentUser.company_id)}&limit=500&node_budget=36&edge_budget=72${scope}`;
+        const response = await fetch(endpoint, { headers: await authHeaders() });
         if (!response.ok) {
           const detail = await response.json().catch(() => ({}));
           const error = new Error(detail?.detail?.message || `Company graph service returned ${response.status}`);
@@ -971,7 +1034,8 @@ export default function CompanyGraphHome() {
           throw error;
         }
         setFallbackEnabled(false);
-        return assertGovernedGraphContract(await response.json());
+        const body = await response.json();
+        return assertGovernedGraphContract(body.packet || body);
       } catch (error) {
         // A failed governed request never authorizes a broader client-side graph.
         setFallbackEnabled(false);
@@ -1153,8 +1217,8 @@ export default function CompanyGraphHome() {
     tenantId: currentUser?.company_id || null,
     role: currentUser?.role || "user",
     page: "CompanyGraphHome",
-    productSurface: "web",
-  }), [effectiveGraphContract, selectedNode, nodes, edges, currentUser?.company_id, currentUser?.role]);
+    productSurface,
+  }), [effectiveGraphContract, selectedNode, nodes, edges, currentUser?.company_id, currentUser?.role, productSurface]);
 
   const unavailableSourceCount = effectiveGraphContract.source_status
     .filter(source => ["unavailable", "partial"].includes(source.state)).length;
@@ -1179,7 +1243,12 @@ export default function CompanyGraphHome() {
 
   const exportGraph = async () => {
     if (!canExportGraph) return;
-    const purpose = window.prompt("Why is this governed graph export needed?");
+    const purpose = await requestText({
+      title: "Export governed Company Graph",
+      message: "State the operational purpose for this export. The purpose, authorized scope, and redactions will be audited.",
+      label: "Export purpose",
+      confirmLabel: "Continue to export",
+    });
     if (!purpose?.trim()) return;
     const response = await fetch(`${RAILWAY_URL}/company-graph/export`, {
       method: "POST", headers: await authHeaders(),
@@ -1225,9 +1294,20 @@ export default function CompanyGraphHome() {
   const StatusIcon = graphStatus.Icon;
 
   const saveCurrentView = async () => {
-    const name = window.prompt("Name this graph view");
+    const name = await requestText({
+      title: "Save governed graph view",
+      message: "Give this reusable Company Graph view a clear name.",
+      label: "View name",
+      confirmLabel: "Continue",
+    });
     if (!name?.trim()) return;
-    const audience = window.prompt("Audience: private, team, operational_unit, or organization", "private") || "private";
+    const audience = await requestText({
+      title: "Choose the view audience",
+      message: "Use private, team, operational_unit, or organization. Access remains subject to backend policy.",
+      label: "Audience",
+      defaultValue: "private",
+      confirmLabel: "Continue",
+    }) || "private";
     // Audience vocabulary is governance metadata, not enterprise_type taxonomy.
     // eslint-disable-next-line newsconseen/no-legacy-type-value
     if (!["private", "team", "operational_unit", "organization"].includes(audience)) {
@@ -1238,7 +1318,13 @@ export default function CompanyGraphHome() {
     }
     const permissionInput = audience === "private"
       ? ""
-      : window.prompt("Optional allowed roles, separated by commas (leave blank for the whole audience)", "") || "";
+      : await requestText({
+          title: "Limit the view to roles",
+          message: "Optionally enter allowed roles separated by commas, or leave this blank for the full selected audience.",
+          label: "Allowed roles",
+          required: false,
+          confirmLabel: "Save view",
+        }) || "";
     const permissions = permissionInput.split(",").map(value => value.trim()).filter(Boolean);
     const response = await fetch(`${RAILWAY_URL}/company-graph/views`, {
       method: "POST", headers: await authHeaders(),
@@ -1268,7 +1354,11 @@ export default function CompanyGraphHome() {
     const view = savedViews.find(item => item.id === value);
     if (!view) return;
     if (view.validation_state !== "valid") {
-      window.alert("This governed view requires validation before it can be applied.");
+      showNotice({
+        title: "Saved view requires validation",
+        message: "This governed view cannot be applied until an authorized operator validates it.",
+        tone: "error",
+      });
       return;
     }
     const viewScope = view.scope || {};
@@ -1285,12 +1375,14 @@ export default function CompanyGraphHome() {
   const runQualityWork = async (finding, action) => {
     let reason = "";
     if (["mark_verified", "resolve"].includes(action)) {
-      reason = window.prompt(
-        action === "resolve"
+      reason = await requestText({
+        title: action === "resolve" ? "Resolve graph-quality finding" : "Verify graph-quality finding",
+        message: action === "resolve"
           ? "Describe the evidence showing this finding is resolved."
           : "Describe the evidence used to verify this finding.",
-        "",
-      ) || "";
+        label: "Verification evidence",
+        confirmLabel: action === "resolve" ? "Resolve finding" : "Verify finding",
+      }) || "";
       if (!reason.trim()) return;
     }
     const response = await fetch(
@@ -1311,6 +1403,90 @@ export default function CompanyGraphHome() {
       throw new Error(detail?.detail?.message || detail?.detail?.code || "Graph-quality work could not be recorded.");
     }
     await Promise.all([qualityQuery.refetch(), governedQuery.refetch()]);
+  };
+
+  const detectRelationshipCandidates = async () => {
+    setCandidateAction("detect");
+    try {
+      const response = await fetch(`${RAILWAY_URL}/company-graph/relationship-candidates/detect`, {
+        method: "POST", headers: await authHeaders(),
+        body: JSON.stringify({
+          company_id: currentUser.company_id,
+          operational_unit_id: scopeId || "",
+          max_per_type: 1000,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.detail?.message || result?.detail?.code || "Relationship detection failed.");
+      await relationshipCandidatesQuery.refetch();
+    } finally {
+      setCandidateAction("");
+    }
+  };
+
+  const explainCandidate = async candidateId => {
+    const scope = scopeId ? `&operational_unit_id=${encodeURIComponent(scopeId)}` : "";
+    const response = await fetch(
+      `${RAILWAY_URL}/company-graph/relationship-candidates/${encodeURIComponent(candidateId)}/explain?company_id=${encodeURIComponent(currentUser.company_id)}${scope}`,
+      { headers: await authHeaders() },
+    );
+    if (!response.ok) throw new Error("Idjwi could not explain this proposal.");
+    const explanation = await response.json();
+    setCandidateExplanations(current => ({ ...current, [candidateId]: explanation }));
+  };
+
+  const decideCandidates = async (candidateIds, decision, correctedPredicate = null) => {
+    if (!candidateIds.length) return;
+    const verb = decision === "confirm" ? "confirm" : "reject";
+    const reason = await requestText({
+      title: `${decision === "confirm" ? "Confirm" : "Reject"} relationship proposal${candidateIds.length === 1 ? "" : "s"}`,
+      message: `Explain why the operator should ${verb} ${candidateIds.length} relationship proposal${candidateIds.length === 1 ? "" : "s"}.`,
+      label: "Decision reason",
+      confirmLabel: "Continue",
+    });
+    if (!reason?.trim()) return;
+    if (decision === "confirm" && !await requestConfirmation({
+      title: "Apply canonical relationship changes",
+      message: `Apply the previewed canonical changes for ${candidateIds.length} proposal${candidateIds.length === 1 ? "" : "s"}? The decision will be audited.`,
+      confirmLabel: "Apply changes",
+    })) return;
+    setCandidateAction(decision);
+    try {
+      const response = await fetch(`${RAILWAY_URL}/company-graph/relationship-candidates/decide`, {
+        method: "POST", headers: await authHeaders(),
+        body: JSON.stringify({
+          company_id: currentUser.company_id,
+          candidate_ids: candidateIds,
+          decision,
+          reason: reason.trim(),
+          approval_confirmed: decision === "confirm",
+          corrected_predicate: correctedPredicate,
+          operational_unit_id: scopeId || "",
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.detail?.message || result?.detail?.code || "Relationship decision failed.");
+      const failures = result.results?.filter(item => item.status === "failed") || [];
+      setSelectedCandidates(new Set());
+      await Promise.all([
+        relationshipCandidatesQuery.refetch(),
+        governedQuery.refetch(),
+        qualityQuery.refetch(),
+      ]);
+      setLastRelationshipOutcome(result);
+      const highlighted = result.highlight?.[0];
+      if (highlighted?.source) {
+        setFocusNodeId(highlighted.source);
+        setFocusEdgeId("");
+      }
+      if (failures.length) showNotice({
+        title: "Some relationship decisions need review",
+        message: `${result.summary.successful} succeeded; ${failures.length} require individual review.`,
+        tone: "error",
+      });
+    } finally {
+      setCandidateAction("");
+    }
   };
 
   // ── Pulse bar highlight ──────────────────────────────────────────────────────
@@ -1337,6 +1513,7 @@ export default function CompanyGraphHome() {
     if (!fullNode) return;
     setFocusNodeId(fullNode.id);
     setFocusEdgeId("");
+    setScreenReaderMessage(`Inspecting ${fullNode.label}, ${fullNode.entity_type}.`);
     setSelectedNode(selectionFor(fullNode, filteredNodes, filteredEdges));
     setNeighborhoodDepth(depth);
     setNeighborhoodState({ status: "loading", error: "" });
@@ -1577,6 +1754,7 @@ export default function CompanyGraphHome() {
       className={`flex flex-col min-h-0 gap-3 transition-[padding] duration-300 ${isFullscreen ? "fixed inset-0 z-50 bg-slate-50 p-3" : "h-full"}`}
       style={{ paddingRight: idjwiWorkspaceWidth ? `${idjwiWorkspaceWidth + 12}px` : undefined }}
     >
+      <AccessibleInteractionHost />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shrink-0" aria-label="Idjwi operational briefing">
         <div className="flex flex-col lg:flex-row lg:items-center gap-3">
@@ -1664,6 +1842,139 @@ export default function CompanyGraphHome() {
         )}
       </section>
 
+      {isAdministrator && (
+        <section className="rounded-2xl border border-indigo-200 bg-white p-4 shrink-0" aria-label="Governed relationship review">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black text-slate-800">Relationship review</p>
+              <p className="mt-0.5 text-[10px] text-slate-500">
+                Review Idjwi Core&apos;s evidence-backed proposals across the ontology. Nothing becomes canonical until an authorized operator confirms it.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => detectRelationshipCandidates().catch(error => reportGraphError("Relationship detection failed", error))}
+                disabled={!!candidateAction}
+                className="rounded-lg border border-indigo-200 px-3 py-1.5 text-[10px] font-black text-indigo-700 disabled:opacity-50"
+              >
+                {candidateAction === "detect" ? "Detecting…" : "Detect relationships"}
+              </button>
+              <button
+                onClick={() => decideCandidates([...selectedCandidates], "confirm").catch(error => reportGraphError("Relationship confirmation failed", error))}
+                disabled={!selectedCandidates.size || !!candidateAction}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[10px] font-black text-white disabled:opacity-40"
+              >
+                Confirm selected ({selectedCandidates.size})
+              </button>
+            </div>
+          </div>
+          {relationshipCandidatesQuery.isError && (
+            <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[10px] text-rose-700">
+              {relationshipCandidatesQuery.error.message}
+            </p>
+          )}
+          {!relationshipCandidatesQuery.isError && relationshipCandidates.length === 0 && (
+            <p className="mt-3 rounded-xl bg-slate-50 p-3 text-[10px] text-slate-500">
+              No durable proposals are queued. Run detection to evaluate currently authorized records.
+            </p>
+          )}
+          <div className="mt-3 grid gap-2 xl:grid-cols-2">
+            {relationshipCandidates.slice(0, 20).map(candidate => {
+              const fields = candidate.evidence?.[0]?.matching_fields || {};
+              const explanation = candidateExplanations[candidate.assertion_key];
+              const selectable = candidate.assertion_state === "proposed" && !!candidate.bulk_group_key;
+              return (
+                <article key={candidate.assertion_key} className="rounded-xl border border-slate-200 p-3">
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      disabled={!selectable || (!!selectedBulkGroup && selectedBulkGroup !== candidate.bulk_group_key)}
+                      checked={selectedCandidates.has(candidate.assertion_key)}
+                      onChange={event => setSelectedCandidates(current => {
+                        const next = new Set(current);
+                        if (event.target.checked) next.add(candidate.assertion_key);
+                        else next.delete(candidate.assertion_key);
+                        return next;
+                      })}
+                      aria-label={`Select ${candidate.predicate} relationship proposal`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[9px] font-black text-indigo-700">{candidate.assertion_state}</span>
+                        <span className="text-[9px] text-slate-400">{candidate.matching_method?.replaceAll("_", " ")}</span>
+                      </div>
+                      <p className="mt-2 text-[11px] font-black text-slate-800">
+                        {fields.source_label || candidate.source_node_id} <span className="text-indigo-600">→ {candidate.predicate?.replaceAll("_", " ")} →</span> {fields.target_label || candidate.target_node_id}
+                      </p>
+                      <p className="mt-1 text-[9px] text-slate-500">
+                        Source: {candidate.carrier_type}:{candidate.carrier_record_id} · {Math.round(Number(candidate.candidate_confidence || 0) * 100)}% confidence · evidence v{candidate.evidence_version || 1}
+                      </p>
+                      {explanation && (
+                        <div className="mt-2 rounded-lg bg-slate-50 p-2 text-[9px] text-slate-600">
+                          <p className="font-bold text-slate-700">{explanation.summary}</p>
+                          <p className="mt-1">{explanation.reasoning?.uncertainty}</p>
+                          <p className="mt-1">{explanation.why_bulk_confirmation}</p>
+                          <p className="mt-1 font-semibold">Advisor used: No · Idjwi Core deterministic explanation</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <button onClick={() => explainCandidate(candidate.assertion_key).catch(error => reportGraphError("Relationship explanation failed", error))} className="rounded-lg border border-violet-200 px-2 py-1 text-[9px] font-bold text-violet-700">Why this match?</button>
+                    {candidate.assertion_state === "proposed" && (
+                      <>
+                        <button onClick={() => decideCandidates([candidate.assertion_key], "confirm").catch(error => reportGraphError("Relationship confirmation failed", error))} className="rounded-lg border border-emerald-200 px-2 py-1 text-[9px] font-bold text-emerald-700">Confirm</button>
+                        <button onClick={async () => {
+                          const corrected = await requestText({
+                            title: "Edit relationship predicate",
+                            message: "Enter the governed semantic predicate that accurately describes this proposed connection.",
+                            label: "Governed predicate",
+                            defaultValue: candidate.predicate || "",
+                            confirmLabel: "Review correction",
+                          });
+                          if (corrected?.trim() && corrected.trim() !== candidate.predicate) {
+                            decideCandidates([candidate.assertion_key], "confirm", corrected.trim()).catch(error => reportGraphError("Relationship correction failed", error));
+                          }
+                        }} className="rounded-lg border border-indigo-200 px-2 py-1 text-[9px] font-bold text-indigo-700">Edit predicate</button>
+                        <button onClick={() => decideCandidates([candidate.assertion_key], "reject").catch(error => reportGraphError("Relationship rejection failed", error))} className="rounded-lg border border-rose-200 px-2 py-1 text-[9px] font-bold text-rose-700">Reject</button>
+                      </>
+                    )}
+                    {candidate.assertion_state === "disputed" && <span className="text-[9px] font-bold text-amber-700">Individual semantic review required</span>}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          {lastRelationshipOutcome?.quality_comparison && (
+            <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <p className="text-[10px] font-black text-emerald-800">
+                Governed review completed · {lastRelationshipOutcome.summary.successful} succeeded · {lastRelationshipOutcome.summary.failed} failed
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                {[
+                  ["Visible edges", "visible_edges"],
+                  ["Connected records", "connected_records"],
+                  ["Unconnected", "unconnected_records"],
+                  ["Registry gaps", "registry_gaps"],
+                  ["Legacy proposals", "legacy_links_requiring_confirmation"],
+                ].map(([label, key]) => (
+                  <div key={key} className="rounded-lg bg-white p-2">
+                    <p className="text-[9px] text-slate-500">{label}</p>
+                    <p className="text-xs font-black text-slate-800">
+                      {lastRelationshipOutcome.quality_comparison.before[key]} → {lastRelationshipOutcome.quality_comparison.after[key]}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[9px] text-emerald-700">
+                Operational Focus: {lastRelationshipOutcome.quality_comparison.after.selection_strategy?.replaceAll("_", " ")} · {lastRelationshipOutcome.quality_comparison.after.preserved_relationship_edges} relationship edges preserved.
+              </p>
+            </div>
+          )}
+        </section>
+      )}
+
       {(qualityFindings.length > 0 || qualityQuery.isError) && (
         <section className="rounded-2xl border border-amber-200 bg-white p-4 shrink-0" aria-label="Governed graph-quality work">
           <div className="flex items-start justify-between gap-3">
@@ -1692,11 +2003,11 @@ export default function CompanyGraphHome() {
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
-                    {qualityQuery.data?.can_manage && !finding.task_id && <button onClick={() => runQualityWork(finding, "create_task").catch(error => window.alert(error.message))} className="rounded-lg border border-slate-200 px-2 py-1 text-[9px] font-bold">Create task</button>}
-                    {qualityQuery.data?.can_manage && !finding.recommendation_id && <button onClick={() => runQualityWork(finding, "create_recommendation").catch(error => window.alert(error.message))} className="rounded-lg border border-slate-200 px-2 py-1 text-[9px] font-bold">Recommend repair</button>}
-                    {qualityQuery.data?.can_manage && finding.alert_state === "open" && <button onClick={() => runQualityWork(finding, "acknowledge_alert").catch(error => window.alert(error.message))} className="rounded-lg border border-rose-200 px-2 py-1 text-[9px] font-bold text-rose-700">Acknowledge alert</button>}
-                    {qualityQuery.data?.can_manage && finding.verification_status !== "verified" && <button onClick={() => runQualityWork(finding, "mark_verified").catch(error => window.alert(error.message))} className="rounded-lg border border-emerald-200 px-2 py-1 text-[9px] font-bold text-emerald-700">Verify</button>}
-                    {qualityQuery.data?.can_manage && finding.status !== "resolved" && <button onClick={() => runQualityWork(finding, "resolve").catch(error => window.alert(error.message))} className="rounded-lg border border-blue-200 px-2 py-1 text-[9px] font-bold text-blue-700">Resolve</button>}
+                    {qualityQuery.data?.can_manage && !finding.task_id && <button onClick={() => runQualityWork(finding, "create_task").catch(error => reportGraphError("Task creation failed", error))} className="rounded-lg border border-slate-200 px-2 py-1 text-[9px] font-bold">Create task</button>}
+                    {qualityQuery.data?.can_manage && !finding.recommendation_id && <button onClick={() => runQualityWork(finding, "create_recommendation").catch(error => reportGraphError("Recommendation creation failed", error))} className="rounded-lg border border-slate-200 px-2 py-1 text-[9px] font-bold">Recommend repair</button>}
+                    {qualityQuery.data?.can_manage && finding.alert_state === "open" && <button onClick={() => runQualityWork(finding, "acknowledge_alert").catch(error => reportGraphError("Alert acknowledgement failed", error))} className="rounded-lg border border-rose-200 px-2 py-1 text-[9px] font-bold text-rose-700">Acknowledge alert</button>}
+                    {qualityQuery.data?.can_manage && finding.verification_status !== "verified" && <button onClick={() => runQualityWork(finding, "mark_verified").catch(error => reportGraphError("Finding verification failed", error))} className="rounded-lg border border-emerald-200 px-2 py-1 text-[9px] font-bold text-emerald-700">Verify</button>}
+                    {qualityQuery.data?.can_manage && finding.status !== "resolved" && <button onClick={() => runQualityWork(finding, "resolve").catch(error => reportGraphError("Finding resolution failed", error))} className="rounded-lg border border-blue-200 px-2 py-1 text-[9px] font-bold text-blue-700">Resolve</button>}
                     <button onClick={() => openIdjwiGraphAction(
                       `Explain graph-quality finding ${finding.issue_code} and its safest repair.`,
                       IDJWI_GRAPH_INTENTS.RECOMMEND_GRAPH_ACTION,
@@ -1766,7 +2077,7 @@ export default function CompanyGraphHome() {
                 </button>
               ))}
               {edgeSearchResults.map(edge => (
-                <button key={edge.id} onClick={() => inspectSearchedEdge(edge).catch(error => window.alert(error.message))} className="w-full px-3 py-2 text-xs hover:bg-amber-50 text-left border-t border-slate-100">
+                <button key={edge.id} onClick={() => inspectSearchedEdge(edge).catch(error => reportGraphError("Relationship inspection failed", error))} className="w-full px-3 py-2 text-xs hover:bg-amber-50 text-left border-t border-slate-100">
                   <span className="font-semibold text-slate-700">{edge.source_label}</span>
                   <span className="mx-1.5 text-amber-600">{edge.label || edge.predicate}</span>
                   <span className="font-semibold text-slate-700">{edge.target_label}</span>
@@ -1797,11 +2108,11 @@ export default function CompanyGraphHome() {
         }} className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white"><option value="">Organization-wide</option>{scopeOptions.map(node => <option key={node.id} value={node.entity_id}>{node.label} · {(node.attributes?.unit_type || "operational unit").replaceAll("_", " ")}</option>)}</select>
         {savedViews.length > 0 && <select aria-label="Governed saved graph views" defaultValue="" onChange={event => applySavedView(event.target.value)} className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white"><option value="">Saved views</option>{savedViews.map(view => <option key={view.id} value={view.id}>{view.name} · {view.audience}{view.validation_state !== "valid" ? " · review" : ""}</option>)}</select>}
         {savedViewsQuery.isError && <span role="status" className="text-[10px] font-semibold text-amber-700">Saved views unavailable</span>}
-        <button onClick={() => saveCurrentView().catch(error => window.alert(error.message))} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600" title="Save governed view" aria-label="Save governed graph view"><Save className="w-4 h-4" /></button>
-        <button disabled={!canExportGraph} onClick={() => exportGraph().catch(error => window.alert(error.message))} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed" title={canExportGraph ? "Export visible graph through the governed backend" : "Governed graph export is not yet permitted"} aria-label="Export visible graph"><Download className="w-4 h-4" /></button>
+        <button onClick={() => saveCurrentView().catch(error => reportGraphError("Saved view could not be created", error))} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600" title="Save governed view" aria-label="Save governed graph view"><Save className="w-4 h-4" /></button>
+        <button disabled={!canExportGraph} onClick={() => exportGraph().catch(error => reportGraphError("Governed export failed", error))} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed" title={canExportGraph ? "Export visible graph through the governed backend" : "Governed graph export is not yet permitted"} aria-label="Export visible graph"><Download className="w-4 h-4" /></button>
         {inspectionTrail.length > 0 && <button onClick={inspectBack} className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 flex items-center gap-1"><ArrowLeft className="w-3.5 h-3.5" />Back</button>}
         {neighborhoodGraph && <button onClick={returnToOverview} className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600">Return to overview</button>}
-        {!neighborhoodGraph && effectiveGraphContract.truncation?.continuation_available && <button disabled={loadingContinuation} onClick={() => loadNextBoundedPage().catch(error => window.alert(error.message))} className="text-xs px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 disabled:opacity-50">{loadingContinuation ? "Loading bounded page…" : "Load next bounded page"}</button>}
+        {!neighborhoodGraph && effectiveGraphContract.truncation?.continuation_available && <button disabled={loadingContinuation} onClick={() => loadNextBoundedPage().catch(error => reportGraphError("Additional graph records could not be loaded", error))} className="text-xs px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 disabled:opacity-50">{loadingContinuation ? "Loading bounded page…" : "Load next bounded page"}</button>}
       </div>
 
       {(inspectionTrail.length > 0 || pinnedNodes.length > 0) && (
@@ -1968,11 +2279,19 @@ export default function CompanyGraphHome() {
       </div>
 
       {/* ── Main area: Graph + Context panel ──────────────────────────────────── */}
+      <div className="flex flex-wrap gap-1" role="tablist" aria-label="Company Graph representation">
+        {[["visual", "Visual graph"], ["records", "Record list"], ["relationships", "Relationship table"], ["outline", "Neighborhood outline"], ["summary", "Text summary"]].map(([value, label]) => (
+          <button key={value} role="tab" aria-selected={graphRepresentation === value} onClick={() => setGraphRepresentation(value)} className={`rounded-lg px-3 py-1.5 text-[10px] font-bold focus:ring-2 focus:ring-indigo-500 ${graphRepresentation === value ? "bg-slate-800 text-white" : "border bg-white text-slate-600"}`}>{label}</button>
+        ))}
+      </div>
+      <p className="sr-only" aria-live="polite">{screenReaderMessage}</p>
       <div className="flex flex-col lg:flex-row gap-3 flex-1 min-h-0">
 
         {/* Graph canvas */}
         <div className={`flex flex-col flex-1 min-w-0 min-h-0 transition-all ${selectedNode ? "mr-0" : ""}`}>
-          {isLoading && enterprises.length === 0 ? (
+          {graphRepresentation !== "visual" ? (
+            <AccessibleGraphView mode={graphRepresentation} nodes={filteredNodes} edges={filteredEdges} onInspectNode={node => inspectNode(node, 1)} onInspectEdge={handleEdgeSelect} />
+          ) : isLoading && enterprises.length === 0 ? (
             <div className="flex-1 flex items-center justify-center bg-slate-950 rounded-2xl border border-slate-800">
               <div className="text-center">
                 <Loader2 className="w-8 h-8 text-slate-600 animate-spin mx-auto mb-3" />

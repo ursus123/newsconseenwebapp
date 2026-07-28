@@ -26,8 +26,21 @@ import {
   CheckSquare, MoreHorizontal, Send, Package,
 } from "lucide-react";
 import { usePWA } from "@/hooks/usePWA";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
+import AccessibleInteractionHost, {
+  requestConfirmation,
+  requestText,
+  showNotice,
+} from "@/components/shared/AccessibleInteractionDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
 const triggerETL = (entity) =>
   fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
@@ -337,6 +350,222 @@ function TodayTab({ user, isOnline }) {
   );
 }
 
+function MobileGraphTab({ user }) {
+  const manager = ["manager", "admin", "super_admin"].includes(user?.role);
+  const surface = manager ? "mobile_manager" : "mobile_worker";
+  const [reportTarget, setReportTarget] = useState(null);
+  const [decisionNodeId, setDecisionNodeId] = useState("");
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["mobile-graph-surface", user?.company_id, user?.id, user?.role, surface],
+    enabled: !!user?.company_id,
+    queryFn: async () => {
+      const response = await fetch(`${RAILWAY_URL}/company-graph/surface/${surface}?company_id=${encodeURIComponent(user.company_id)}`, { headers: await authHeaders() });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.detail?.message || body?.detail?.code || "Mobile operational context is unavailable.");
+      return body;
+    },
+  });
+  if (isLoading) return <div role="status" className="p-5 text-sm">Loading governed operational context…</div>;
+  if (error) return <div role="alert" className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-700">{error.message}</div>;
+  if (data?.readiness === "assignment_identity_required") return <div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><p className="font-bold text-amber-800">Task relationship identity is not ready</p><p className="mt-1 text-xs text-amber-700">Ask an administrator to connect your user identity to your canonical Person and task assignments. Broad company records were withheld.</p></div>;
+  const packet = data?.packet;
+  const decide = async (node, decision) => {
+    const reason = await requestText({
+      title: `${decision === "approve" ? "Approve" : "Reject"} ${node.entity_type}`,
+      message: `Explain why ${node.label} should be ${decision === "approve" ? "approved" : "rejected"}. This governed decision will be audited.`,
+      label: "Decision reason",
+      confirmLabel: "Continue",
+    });
+    if (!reason?.trim()) return;
+    const confirmed = await requestConfirmation({
+      title: "Confirm governed decision",
+      message: `${decision === "approve" ? "Approve" : "Reject"} ${node.label}? The backend will verify your role, tenant, scope, and the record's current state again.`,
+      confirmLabel: decision === "approve" ? "Approve" : "Reject",
+      tone: decision === "reject" ? "danger" : "default",
+    });
+    if (!confirmed) return;
+    setDecisionNodeId(node.id);
+    try {
+      const response = await fetch(`${RAILWAY_URL}/company-graph/mobile/manager/decision`, {
+        method: "POST",
+        headers: await authHeaders(),
+        body: JSON.stringify({
+          company_id: user.company_id,
+          node_id: node.id,
+          decision,
+          reason: reason.trim(),
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.detail?.message || body?.detail?.code || "The governed decision could not be recorded.");
+      await refetch();
+      await showNotice({
+        title: "Decision recorded",
+        message: `${node.label} was ${decision === "approve" ? "approved" : "rejected"} and the mobile context was refreshed.`,
+        tone: "success",
+      });
+    } catch (decisionError) {
+      await showNotice({ title: "Decision failed", message: decisionError.message, tone: "error" });
+    } finally {
+      setDecisionNodeId("");
+    }
+  };
+  return <div className="space-y-3">
+    <section className="rounded-2xl bg-slate-900 p-4 text-white"><p className="text-xs font-bold uppercase">{manager ? "Manager priorities" : "My work context"}</p><p className="mt-2 text-sm">{packet?.briefing?.headline || "Idjwi is evaluating the authorized scope."}</p></section>
+    {(packet?.nodes || []).map(node => {
+      const actions = data?.mobile_actions?.[node.id] || [];
+      return <article key={node.id} className="rounded-2xl border bg-white p-4">
+        <p className="text-sm font-black">{node.label}</p>
+        <p className="mt-1 text-xs text-slate-500">{node.entity_type} · {node.status || "status unavailable"}</p>
+        <p className="mt-2 text-xs">{(packet.edges || []).filter(edge => edge.source === node.id || edge.target === node.id).length} relevant relationships</p>
+        {actions.length > 0 && <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
+          {actions.includes("approve") && <button disabled={decisionNodeId === node.id} onClick={() => decide(node, "approve")} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{decisionNodeId === node.id ? "Recording…" : "Approve"}</button>}
+          {actions.includes("reject") && <button disabled={decisionNodeId === node.id} onClick={() => decide(node, "reject")} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Reject</button>}
+          {actions.includes("capture_evidence") && <button onClick={() => setReportTarget({ node, reportType: "evidence" })} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700"><Camera className="mr-1 inline h-3.5 w-3.5" />Capture evidence</button>}
+          {actions.includes("report_correction") && <button onClick={() => setReportTarget({ node, reportType: "correction" })} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800"><AlertCircle className="mr-1 inline h-3.5 w-3.5" />Report correction</button>}
+        </div>}
+      </article>;
+    })}
+    {!packet?.nodes?.length && <p className="rounded-2xl bg-white p-4 text-sm text-slate-500">No authorized priority relationships are visible.</p>}
+    <WorkerReportDialog
+      target={reportTarget}
+      user={user}
+      onClose={() => setReportTarget(null)}
+      onSubmitted={async () => {
+        setReportTarget(null);
+        await refetch();
+      }}
+    />
+  </div>;
+}
+
+function WorkerReportDialog({ target, user, onClose, onSubmitted }) {
+  const [description, setDescription] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [fieldName, setFieldName] = useState("");
+  const [proposedValue, setProposedValue] = useState("");
+  const [location, setLocation] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const correction = target?.reportType === "correction";
+
+  useEffect(() => {
+    if (!target) return;
+    setDescription("");
+    setSourceUrl("");
+    setFieldName("");
+    setProposedValue("");
+    setLocation(null);
+    setError("");
+  }, [target]);
+
+  const captureLocation = () => {
+    if (!navigator.geolocation) {
+      setError("Location capture is not supported on this device.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        setLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        setError("");
+      },
+      () => setError("Location permission was denied or the position was unavailable."),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
+
+  const submit = async event => {
+    event.preventDefault();
+    if (!description.trim()) {
+      setError("Describe what you observed.");
+      return;
+    }
+    if (correction && (!fieldName.trim() || !proposedValue.trim())) {
+      setError("Name the field and proposed corrected value.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const evidence = [{
+        kind: location ? "field_observation_with_location" : "field_observation",
+        label: description.trim(),
+        source_url: sourceUrl.trim() || undefined,
+        captured_at: new Date().toISOString(),
+        ...location,
+      }];
+      const response = await fetch(`${RAILWAY_URL}/company-graph/mobile/worker/report`, {
+        method: "POST",
+        headers: await authHeaders(),
+        body: JSON.stringify({
+          company_id: user.company_id,
+          subject_node_id: target.node.id,
+          report_type: target.reportType,
+          description: description.trim(),
+          evidence,
+          proposed_correction: correction
+            ? { field: fieldName.trim(), proposed_value: proposedValue.trim() }
+            : {},
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.detail?.message || body?.detail?.code || "The field report could not be submitted.");
+      await onSubmitted();
+      await showNotice({
+        title: correction ? "Correction submitted" : "Evidence submitted",
+        message: "The report is now in the governed review queue. The canonical record was not changed automatically.",
+        tone: "success",
+      });
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <Dialog open={Boolean(target)} onOpenChange={open => { if (!open && !saving) onClose(); }}>
+    <DialogContent className="max-w-md rounded-2xl">
+      <form onSubmit={submit}>
+        <DialogHeader>
+          <DialogTitle>{correction ? "Report a record correction" : "Capture operational evidence"}</DialogTitle>
+          <DialogDescription>
+            {target?.node?.label}. Your identity, assigned scope, timestamp, and evidence will be audited.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="mt-5 space-y-4">
+          <div>
+            <label htmlFor="worker-report-description" className="text-xs font-bold text-slate-700">What did you observe?</label>
+            <textarea id="worker-report-description" rows={4} value={description} onChange={event => setDescription(event.target.value)} className="mt-1.5 w-full rounded-xl border px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" required />
+          </div>
+          {correction && <>
+            <div>
+              <label htmlFor="worker-report-field" className="text-xs font-bold text-slate-700">Field that appears incorrect</label>
+              <input id="worker-report-field" value={fieldName} onChange={event => setFieldName(event.target.value)} className="mt-1.5 w-full rounded-xl border px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" required />
+            </div>
+            <div>
+              <label htmlFor="worker-report-value" className="text-xs font-bold text-slate-700">Proposed corrected value</label>
+              <input id="worker-report-value" value={proposedValue} onChange={event => setProposedValue(event.target.value)} className="mt-1.5 w-full rounded-xl border px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" required />
+            </div>
+          </>}
+          <div>
+            <label htmlFor="worker-report-source" className="text-xs font-bold text-slate-700">Evidence link (optional)</label>
+            <input id="worker-report-source" type="url" value={sourceUrl} onChange={event => setSourceUrl(event.target.value)} placeholder="https://…" className="mt-1.5 w-full rounded-xl border px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500" />
+          </div>
+          <button type="button" onClick={captureLocation} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700"><MapPin className="mr-1 inline h-3.5 w-3.5" />{location ? "Location captured" : "Attach current location"}</button>
+          {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700">{error}</p>}
+        </div>
+        <DialogFooter className="mt-6 gap-2">
+          <button type="button" disabled={saving} onClick={onClose} className="rounded-xl border px-4 py-2 text-sm font-bold">Cancel</button>
+          <button type="submit" disabled={saving} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{saving ? "Submitting…" : "Submit for review"}</button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  </Dialog>;
+}
+
 // ── Tab: Quick Log ─────────────────────────────────────────────────────────────
 function LogTab({ user, isOnline }) {
   const qc = useQueryClient();
@@ -604,6 +833,7 @@ function InstallBanner({ installPrompt, isInstalled, onDismiss }) {
 // ── Bottom tab bar ─────────────────────────────────────────────────────────────
 const TABS = [
   { id: "today", label: "Today",   icon: CheckSquare },
+  { id: "context", label: "Context", icon: Layers },
   { id: "log",   label: "Log",     icon: Plus        },
   { id: "sync",  label: "Sync",    icon: RefreshCw   },
 ];
@@ -655,6 +885,7 @@ export default function Mobile() {
 
   return (
     <div className="flex flex-col h-[100dvh] bg-slate-50 overflow-hidden">
+      <AccessibleInteractionHost />
       {/* Status bar area */}
       <div className="shrink-0 bg-white border-b border-slate-100 safe-top">
         {/* Header */}
@@ -701,6 +932,7 @@ export default function Mobile() {
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4">
         {activeTab === "today" && <TodayTab user={user} isOnline={isOnline} />}
+        {activeTab === "context" && <MobileGraphTab user={user} />}
         {activeTab === "log"   && <LogTab   user={user} isOnline={isOnline} />}
         {activeTab === "sync"  && <SyncTab  isOnline={isOnline} />}
       </div>

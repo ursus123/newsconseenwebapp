@@ -200,6 +200,10 @@ class GraphTruncation(BaseModel):
     omitted_by_type: dict[str, int] = Field(default_factory=dict)
     omission_counts_exact: bool = False
     continuation_token: str | None = None
+    selection_strategy: str = "operational_priority"
+    hydrated_relationship_endpoints: int = Field(default=0, ge=0)
+    preserved_relationship_edges: int = Field(default=0, ge=0)
+    summarized_disconnected_records: int = Field(default=0, ge=0)
 
 
 class GraphQualityIssue(BaseModel):
@@ -227,7 +231,7 @@ class GraphProvenance(BaseModel):
     authorization_fingerprint: str
     policy_version: str
     contract_version: str = GRAPH_CONTRACT_VERSION
-    relationship_registry_version: str = "ontology-relationships.v1"
+    relationship_registry_version: str = "ontology-relationships.v2"
     cache: Literal["hit", "miss", "none"] = "none"
     scope_type: str | None = None
     scope_id: str | None = None

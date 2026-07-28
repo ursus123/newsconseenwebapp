@@ -13,6 +13,8 @@ class TenantContext:
     auth_source: str
     profile_found: bool
     profile_user_id_matches: bool
+    person_id: Optional[str] = None
+    user_email: Optional[str] = None
     scope_type: str = "organization"
     scope_id: Optional[str] = None
     scope_name: Optional[str] = None
@@ -24,6 +26,8 @@ class TenantContext:
     def public_dict(self) -> dict:
         data = asdict(self)
         data.pop("user_id", None)
+        data.pop("person_id", None)
+        data.pop("user_email", None)
         data.pop("allowed_operational_unit_ids", None)
         data.pop("managed_operational_unit_ids", None)
         data["authenticated_user_verified"] = bool(self.user_id)

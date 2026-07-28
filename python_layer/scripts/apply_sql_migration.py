@@ -43,6 +43,15 @@ def main() -> None:
     expected_triggers = re.findall(
         r"CREATE\s+TRIGGER\s+([a-zA-Z0-9_]+)", sql, re.IGNORECASE,
     )
+    expected_columns: dict[str, set[str]] = {}
+    for table, alter_body in re.findall(
+        r"ALTER\s+TABLE\s+public\.([a-zA-Z0-9_]+)(.*?);",
+        sql, re.IGNORECASE | re.DOTALL,
+    ):
+        expected_columns.setdefault(table, set()).update(re.findall(
+            r"ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+([a-zA-Z0-9_]+)",
+            alter_body, re.IGNORECASE,
+        ))
 
     connection = psycopg2.connect(database_url, connect_timeout=20)
     try:
@@ -67,6 +76,14 @@ def main() -> None:
                 (expected_triggers,),
             )
             triggers = {row[0] for row in cursor.fetchall()}
+            columns = {}
+            for table, names in expected_columns.items():
+                cursor.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = %s AND column_name = ANY(%s)",
+                    (table, list(names)),
+                )
+                columns[table] = {row[0] for row in cursor.fetchall()}
     except Exception:
         connection.rollback()
         raise
@@ -77,6 +94,11 @@ def main() -> None:
         "indexes": sorted(set(expected_indexes) - indexes),
         "policies": sorted(set(expected_policies) - policies),
         "triggers": sorted(set(expected_triggers) - triggers),
+        "columns": {
+            table: sorted(names - columns.get(table, set()))
+            for table, names in expected_columns.items()
+            if names - columns.get(table, set())
+        },
     }
     if any(missing.values()) or any(not tables.get(table, False) for table in expected_tables):
         raise SystemExit(f"Migration applied but verification failed: {missing}, rls={tables}")
@@ -87,6 +109,7 @@ def main() -> None:
         "indexes": len(indexes),
         "policies": len(policies),
         "triggers": len(triggers),
+        "columns": sum(len(names) for names in columns.values()),
         "verification": "passed",
     })
 

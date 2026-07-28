@@ -56,12 +56,18 @@ def _node(entity_type: str, row: dict, policy: GraphAuthorizationPolicy) -> Grap
         entity_type, row,
         include_role_restricted=policy.allows("graph.read_sensitive"),
     )
+    attributes = dict(projection["attributes"])
+    if entity_type == "task":
+        attributes["assigned_to_current_user"] = bool(
+            policy.context.person_id
+            and str(row.get("assigned_to_person_id") or "") == policy.context.person_id
+        )
     return GraphNodeSummary(
         id=_node_id(entity_type, row["id"]), entity_type=entity_type,
         entity_id=str(row["id"]), label=projection["label"],
         sublabel=projection["sublabel"], status=projection["status"],
         sensitivity=policy.sensitivity_for(entity_type),
-        attributes=projection["attributes"], permitted_actions=policy.node_actions(),
+        attributes=attributes, permitted_actions=policy.node_actions(),
     )
 
 
@@ -308,6 +314,103 @@ def _resolve_legacy_name_references(records: dict[str, list[dict]]) -> int:
     return resolved
 
 
+def _hydrate_registered_endpoints(records, repository, context, policy, *, budget: int) -> int:
+    """Fetch missing UUID-referenced endpoints before projection.
+
+    Edge carriers have their own bounded reads. This pass spends a global,
+    explicit endpoint budget so a relationship is not discarded merely because
+    one endpoint fell outside an independent per-type first page.
+    """
+    if not hasattr(repository, "get_entity"):
+        return 0
+    existing = {
+        (kind, str(row.get("id"))) for kind, rows in records.items()
+        for row in rows if row.get("id")
+    }
+    requested = []
+    seen = set()
+    for carrier_type, rows in records.items():
+        for rule in rules_for_carrier(carrier_type):
+            for row in rows:
+                target_type = str(row.get(rule.target_type_field) or rule.target_type) if rule.target_type_field else rule.target_type
+                for entity_type, field in (
+                    (rule.source_type, rule.source_field),
+                    (target_type, rule.target_field),
+                ):
+                    record_id = row.get(field)
+                    key = (entity_type, str(record_id)) if record_id else None
+                    if (
+                        key and key not in existing and key not in seen
+                        and policy.can_read_entity(entity_type)
+                    ):
+                        seen.add(key)
+                        requested.append(key)
+    hydrated = 0
+    futures = {
+        GRAPH_IO_EXECUTOR.submit(repository.get_entity, context, kind, record_id): (kind, record_id)
+        for kind, record_id in requested[:max(0, budget)]
+    }
+    for future in as_completed(futures):
+        kind, _record_id = futures[future]
+        try:
+            row = future.result().data
+        except Exception:
+            row = None
+        if row and not any(str(item.get("id")) == str(row.get("id")) for item in records.setdefault(kind, [])):
+            records[kind].append(row)
+            hydrated += 1
+    return hydrated
+
+
+def _relationship_aware_node_selection(nodes, edges, budget: int):
+    """Select meaningful records while retaining both ends of strong edges."""
+    by_id = {node.id: node for node in nodes}
+    degree = defaultdict(int)
+    for edge in edges:
+        degree[edge.source] += 1
+        degree[edge.target] += 1
+    ranked_nodes = sorted(
+        nodes, key=lambda node: _operational_priority(node, degree[node.id]), reverse=True,
+    )
+    ranked_edges = sorted(edges, key=lambda edge: (
+        edge.assertion_class in {"operator_confirmed_assertion", "canonical_relationship"},
+        edge.verification_state == "verified",
+        edge.assertion_state not in {"expired", "rejected", "superseded"},
+        edge.confidence,
+        max(
+            _operational_priority(by_id[edge.source], degree[edge.source])
+            if edge.source in by_id else (0,),
+            _operational_priority(by_id[edge.target], degree[edge.target])
+            if edge.target in by_id else (0,),
+        ),
+        edge.id,
+    ), reverse=True)
+    selected = []
+    selected_ids = set()
+
+    def include(node_id):
+        if node_id in by_id and node_id not in selected_ids and len(selected) < budget:
+            selected_ids.add(node_id)
+            selected.append(by_id[node_id])
+
+    # Reserve most of the view for explainable structures. An edge is included
+    # only when both endpoints fit, preventing half-connections.
+    relationship_budget = max(2, int(budget * .72))
+    for edge in ranked_edges:
+        missing = [node_id for node_id in (edge.source, edge.target) if node_id not in selected_ids]
+        if len(selected) + len(missing) > relationship_budget:
+            continue
+        include(edge.source)
+        include(edge.target)
+    for node in ranked_nodes:
+        include(node.id)
+    preserved = sum(edge.source in selected_ids and edge.target in selected_ids for edge in edges)
+    summarized_disconnected = sum(
+        degree[node.id] == 0 and node.id not in selected_ids for node in nodes
+    )
+    return selected, selected_ids, preserved, summarized_disconnected
+
+
 def _registry_edges(records: dict[str, list[dict]], policy: GraphAuthorizationPolicy,
                     node_ids: set[str]) -> list[GraphEdge]:
     edges: list[GraphEdge] = []
@@ -462,6 +565,9 @@ def build_graph_packet(context: TenantContext, repository, *, center: str | None
 
     _apply_principal_unit_visibility(records, context)
     scoped_unit_ids = _apply_operational_unit_scope(records, context)
+    hydrated_endpoint_count = _hydrate_registered_endpoints(
+        records, repository, context, policy, budget=node_budget,
+    )
     # Expired external intelligence remains auditable in its source table but
     # is excluded from the current operational graph.
     now = datetime.now(timezone.utc)
@@ -510,13 +616,9 @@ def build_graph_packet(context: TenantContext, repository, *, center: str | None
     pre_budget_type_counts = defaultdict(int)
     for node in nodes:
         pre_budget_type_counts[node.entity_type] += 1
-    degree = defaultdict(int)
-    for edge in edges:
-        degree[edge.source] += 1
-        degree[edge.target] += 1
-    nodes.sort(key=lambda node: _operational_priority(node, degree[node.id]), reverse=True)
-    nodes = nodes[:node_budget]
-    allowed_node_ids = {node.id for node in nodes}
+    nodes, allowed_node_ids, preserved_edges, summarized_disconnected = (
+        _relationship_aware_node_selection(nodes, edges, node_budget)
+    )
     edges = [edge for edge in edges if edge.source in allowed_node_ids and edge.target in allowed_node_ids]
     edges.sort(key=lambda edge: (edge.assertion_state in {"expired", "rejected", "superseded"}, -edge.confidence, edge.id))
     edges = edges[:edge_budget]
@@ -590,6 +692,10 @@ def build_graph_packet(context: TenantContext, repository, *, center: str | None
         omitted_nodes=omitted_nodes, omitted_edges=omitted_edges,
         omitted_by_type=omitted_by_type, omission_counts_exact=omission_counts_exact,
         continuation_token=continuation_token,
+        selection_strategy="relationship_aware_operational_focus",
+        hydrated_relationship_endpoints=hydrated_endpoint_count,
+        preserved_relationship_edges=preserved_edges,
+        summarized_disconnected_records=summarized_disconnected,
     )
     completeness_state, explanation, diagnostic_report = build_diagnostics(
         source_status=source_status, records=records, nodes=nodes, edges=edges,

@@ -1,6 +1,29 @@
 # Newsconseen OS — Project Context
 
+## Ontology relationship closure
+
+All ontology objects use the provider-neutral candidate contract and semantic
+predicate registry in `docs/ONTOLOGY_RELATIONSHIP_CLOSURE.md`. Detection creates
+tenant-scoped graph-assertion proposals only. Supabase `public.*` remains
+canonical; no candidate becomes truth without governed review and authorization.
+Relationship review must revalidate evidence at decision time, return per-record
+bulk results, preserve rejections, execute only registered mutation recipes,
+invalidate graph caches, and write audit plus governed Idjwi correction memory.
+Confirmed candidates and visible edges have different stable identities and
+must be bridged explicitly. Operational Focus must hydrate authorized UUID
+endpoints within a global budget, retain both ends of selected edges, disclose
+omissions, and measure graph quality before and after governed decisions.
+
 ## Company Graph query boundary
+
+Role and surface behavior follows
+`docs/COMPANY_GRAPH_ROLE_SURFACE_ACCESSIBILITY.md`. Backend surface projection is
+authoritative. Worker context fails closed when canonical assignment identity
+cannot be proven; frontend hiding is never an authorization control.
+Canonical worker authority is `auth.users.id → public.user_profiles.person_id
+→ public.persons.id → public.tasks.assigned_to_person_id`. Email and display
+names are import/backfill hints only and must never authorize mobile records.
+`related_person_id` identifies the task subject, not its assignee.
 
 ### External operational observations
 
@@ -1238,3 +1261,12 @@ selection loads an authorized neighborhood with visible failure state,
 breadcrumbs, directional relationship groups, bounded expansion, pinning and
 comparison. An older or aborted neighborhood response must never replace the
 operator's current selection.
+
+### Company Graph release gate
+
+Company Graph changes must pass the Phase 9 security, graph-truth, Idjwi,
+accessibility and performance regression suite. Release also requires the 15
+multi-role operator scenarios and local, staging, desktop and mobile environment
+validation in `docs/COMPANY_GRAPH_VERIFICATION_AND_RELEASE.md`. Missing staging
+domains, identities, monitoring, backup/rollback evidence or device checks are
+release blockers and must never be described as passed.

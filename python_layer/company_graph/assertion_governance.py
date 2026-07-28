@@ -7,6 +7,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
+from .contracts import GraphEvidence
 
 
 ASSERTION_STATES = ("proposed", "confirmed", "rejected", "disputed", "active", "expired", "superseded")
@@ -98,6 +99,9 @@ def apply_assertion_state(edges, assertion_rows: list[dict], event_rows: list[di
         assertion = assertions.get(edge.assertion_key)
         if assertion:
             edge.assertion_state = assertion.get("assertion_state") or edge.assertion_state
+            if assertion.get("assertion_class") == "operator_confirmed_assertion":
+                edge.assertion_class = "operator_confirmed_assertion"
+                edge.verification_state = "verified"
             edge.temporal.valid_from = str(assertion.get("valid_from")) if assertion.get("valid_from") else edge.temporal.valid_from
             edge.temporal.valid_to = str(assertion.get("valid_until")) if assertion.get("valid_until") else edge.temporal.valid_to
             edge.temporal.observed_at = str(assertion.get("observed_at")) if assertion.get("observed_at") else edge.temporal.observed_at
@@ -105,6 +109,21 @@ def apply_assertion_state(edges, assertion_rows: list[dict], event_rows: list[di
             edge.temporal.rejected_at = str(assertion.get("rejected_at")) if assertion.get("rejected_at") else None
             edge.temporal.superseded_by = str(assertion.get("superseded_by")) if assertion.get("superseded_by") else None
             edge.temporal.evidence_version = int(assertion.get("evidence_version") or 1)
+            for item in assertion.get("evidence") or []:
+                if item.get("source_table") != "public.graph_assertion_events":
+                    continue
+                evidence_id = item.get("evidence_id") or f"public.graph_assertion_events:{item.get('source_record_id')}"
+                if not any(existing.evidence_id == evidence_id for existing in edge.evidence):
+                    edge.evidence.append(GraphEvidence(
+                        evidence_id=evidence_id,
+                        source_zone="canonical",
+                        source_table="public.graph_assertion_events",
+                        source_record_id=str(item.get("source_record_id") or ""),
+                        assertion_class="operator_confirmed_assertion",
+                        explanation=item.get("explanation") or "Authorized operator confirmation event.",
+                        retrieved_at=now_iso(),
+                        requirement="operator_confirmation",
+                    ))
         for event in sorted(events_by_key.get(edge.assertion_key, []), key=lambda row: str(row.get("occurred_at") or "")):
             history.append({
                 "assertion_key": edge.assertion_key, "edge_id": edge.id,

@@ -37,10 +37,37 @@ class RelationshipRule:
     inverse_relationship: str = "related_from"
     valid_correction_actions: tuple[str, ...] = ("inspect", "propose_correction")
     confidence: float = 1.0
+    source_label_fields: tuple[str, ...] = ()
+    target_label_fields: tuple[str, ...] = ()
+    proposed_operation: str = "confirm_assertion"
 
     def public_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["valid_correction_actions"] = list(self.valid_correction_actions)
+        data["source_label_fields"] = list(self.source_label_fields)
+        data["target_label_fields"] = list(self.target_label_fields)
+        return data
+
+
+@dataclass(frozen=True)
+class PredicateDefinition:
+    predicate: str
+    label: str
+    inverse: str
+    category: str
+    color: str
+    source_types: tuple[str, ...]
+    target_types: tuple[str, ...]
+    temporal_behavior: str = "current_until_revoked"
+    evidence_requirement: str = "canonical_record_or_operator_evidence"
+    sensitivity: str = "internal"
+    valid_correction_actions: tuple[str, ...] = ("inspect", "confirm", "reject", "dispute")
+    bulk_confirmable: bool = True
+
+    def public_dict(self) -> dict[str, Any]:
+        data = asdict(self)
+        for field in ("source_types", "target_types", "valid_correction_actions"):
+            data[field] = list(data[field])
         return data
 
 
@@ -59,11 +86,11 @@ def _reference(rule_id, carrier, source_field, target_type, predicate, inverse,
 
 RELATIONSHIP_RULES: tuple[RelationshipRule, ...] = (
     # Canonical relationship carrier.
-    RelationshipRule("relationship.person_enterprise", "relationship", "person", "person_id", "enterprise", "enterprise_id", "related_to", predicate_field="relationship_type", valid_from_field="start_date", valid_to_field="end_date", assertion_class="canonical_relationship", canonicalization="canonical_relationship_record", inverse_relationship="related_from", valid_correction_actions=("inspect", "confirm", "reject", "edit")),
-    RelationshipRule("relationship.person_person", "relationship", "person", "person_id", "person", "secondary_person_id", "related_to", predicate_field="relationship_type", valid_from_field="start_date", valid_to_field="end_date", assertion_class="canonical_relationship", canonicalization="canonical_relationship_record", inverse_relationship="related_from", valid_correction_actions=("inspect", "confirm", "reject", "edit"), sensitivity="restricted"),
-    RelationshipRule("relationship.enterprise_enterprise", "relationship", "enterprise", "enterprise_id", "enterprise", "secondary_enterprise_id", "related_to", predicate_field="relationship_type", valid_from_field="start_date", valid_to_field="end_date", assertion_class="canonical_relationship", canonicalization="canonical_relationship_record", inverse_relationship="related_from", valid_correction_actions=("inspect", "confirm", "reject", "edit")),
-    RelationshipRule("relationship.enterprise_product", "relationship", "enterprise", "enterprise_id", "product", "item_id", "related_to", predicate_field="relationship_type", valid_from_field="start_date", valid_to_field="end_date", assertion_class="canonical_relationship", canonicalization="canonical_relationship_record", inverse_relationship="related_from", valid_correction_actions=("inspect", "confirm", "reject", "edit")),
-    RelationshipRule("relationship.enterprise_service", "relationship", "enterprise", "enterprise_id", "service", "service_id", "related_to", predicate_field="relationship_type", valid_from_field="start_date", valid_to_field="end_date", assertion_class="canonical_relationship", canonicalization="canonical_relationship_record", inverse_relationship="related_from", valid_correction_actions=("inspect", "confirm", "reject", "edit")),
+    RelationshipRule("relationship.person_enterprise", "relationship", "person", "person_id", "enterprise", "enterprise_id", "related_to", predicate_field="relationship_type", valid_from_field="start_date", valid_to_field="end_date", assertion_class="canonical_relationship", canonicalization="canonical_relationship_record", inverse_relationship="related_from", valid_correction_actions=("inspect", "confirm", "reject", "edit"), source_label_fields=("person_name", "person"), target_label_fields=("enterprise_name", "enterprise"), proposed_operation="patch_relationship_references"),
+    RelationshipRule("relationship.person_person", "relationship", "person", "person_id", "person", "secondary_person_id", "related_to", predicate_field="relationship_type", valid_from_field="start_date", valid_to_field="end_date", assertion_class="canonical_relationship", canonicalization="canonical_relationship_record", inverse_relationship="related_from", valid_correction_actions=("inspect", "confirm", "reject", "edit"), sensitivity="restricted", source_label_fields=("person_name", "person"), target_label_fields=("secondary_person",), proposed_operation="patch_relationship_references"),
+    RelationshipRule("relationship.enterprise_enterprise", "relationship", "enterprise", "enterprise_id", "enterprise", "secondary_enterprise_id", "related_to", predicate_field="relationship_type", valid_from_field="start_date", valid_to_field="end_date", assertion_class="canonical_relationship", canonicalization="canonical_relationship_record", inverse_relationship="related_from", valid_correction_actions=("inspect", "confirm", "reject", "edit"), source_label_fields=("enterprise_name", "enterprise"), target_label_fields=("secondary_enterprise",), proposed_operation="patch_relationship_references"),
+    RelationshipRule("relationship.enterprise_product", "relationship", "enterprise", "enterprise_id", "product", "item_id", "related_to", predicate_field="relationship_type", valid_from_field="start_date", valid_to_field="end_date", assertion_class="canonical_relationship", canonicalization="canonical_relationship_record", inverse_relationship="related_from", valid_correction_actions=("inspect", "confirm", "reject", "edit"), source_label_fields=("enterprise_name", "enterprise"), target_label_fields=("item_name",), proposed_operation="patch_relationship_references"),
+    RelationshipRule("relationship.enterprise_service", "relationship", "enterprise", "enterprise_id", "service", "service_id", "related_to", predicate_field="relationship_type", valid_from_field="start_date", valid_to_field="end_date", assertion_class="canonical_relationship", canonicalization="canonical_relationship_record", inverse_relationship="related_from", valid_correction_actions=("inspect", "confirm", "reject", "edit"), source_label_fields=("enterprise_name", "enterprise"), target_label_fields=("service_name",), proposed_operation="patch_relationship_references"),
 
     # First-class operational-unit identity, hierarchy, management and membership.
     RelationshipRule("unit.parent", "operational_unit", "operational_unit", "id", "operational_unit", "parent_unit_id", "part_of", inverse_relationship="contains_unit", canonicalization="unit_hierarchy", valid_from_field="starts_at", valid_to_field="ends_at", valid_correction_actions=("inspect", "edit_hierarchy")),
@@ -73,7 +100,8 @@ RELATIONSHIP_RULES: tuple[RelationshipRule, ...] = (
 
     # Canonical object references.
     _reference("task.enterprise", "task", "enterprise_id", "enterprise", "belongs_to", "owns_work"),
-    _reference("task.person", "task", "related_person_id", "person", "assigned_to", "owns_assignment", sensitivity="restricted"),
+    _reference("task.assignee", "task", "assigned_to_person_id", "person", "assigned_to", "owns_assignment", sensitivity="restricted"),
+    _reference("task.subject_person", "task", "related_person_id", "person", "serves", "served_by", sensitivity="restricted"),
     _reference("transaction.enterprise", "transaction", "enterprise_id", "enterprise", "involves", "has_transaction", sensitivity="restricted"),
     _reference("transaction.person", "transaction", "person_id", "person", "involves_person", "has_transaction", sensitivity="restricted"),
     _reference("transaction.product", "transaction", "product_id", "product", "includes_product", "included_in", sensitivity="restricted"),
@@ -150,6 +178,52 @@ DYNAMIC_PREDICATE_SHAPES = {
     "works_for": (("person",), ("enterprise",)),
 }
 
+SEMANTIC_PREDICATES: tuple[PredicateDefinition, ...] = (
+    PredicateDefinition("client_of", "client of", "has client", "organization", "#2563eb", ("person",), ("enterprise",), evidence_requirement="client role plus canonical endpoint evidence"),
+    PredicateDefinition("receives_service_from", "receives service from", "provides service to", "service", "#0891b2", ("person", "enterprise"), ("enterprise", "operational_unit")),
+    PredicateDefinition("works_for", "works for", "employs", "organization", "#3b82f6", ("person",), ("enterprise", "operational_unit")),
+    PredicateDefinition("manages", "manages", "managed by", "organization", "#1d4ed8", ("person",), ("enterprise", "operational_unit", "team")),
+    PredicateDefinition("member_of", "member of", "has member", "organization", "#3b82f6", ("person",), ("operational_unit", "team")),
+    PredicateDefinition("represents", "represents", "represented by", "organization", "#6366f1", ("person",), ("enterprise",)),
+    PredicateDefinition("supplies", "supplies", "supplied by", "offering", "#10b981", ("enterprise",), ("product", "operational_unit")),
+    PredicateDefinition("provides", "provides", "provided by", "offering", "#059669", ("enterprise",), ("service",)),
+    PredicateDefinition("stored_at", "stored at", "stores", "inventory", "#0d9488", ("product",), ("operational_unit", "enterprise")),
+    PredicateDefinition("used_by", "used by", "uses", "operations", "#14b8a6", ("product", "service"), ("operational_unit", "task", "enterprise")),
+    PredicateDefinition("affected_by", "affected by", "affects", "intelligence", "#7c3aed", ("product", "task", "enterprise", "operational_unit"), ("external_observation", "risk")),
+    PredicateDefinition("assigned_to", "assigned to", "owns assignment", "work", "#f97316", ("task", "action", "recommendation"), ("person", "team", "operational_unit")),
+    PredicateDefinition("serves", "serves", "served by", "work", "#ea580c", ("task", "service", "operational_unit"), ("person", "enterprise", "operational_unit")),
+    PredicateDefinition("depends_on", "depends on", "required by", "work", "#f59e0b", ("task", "action"), ("task", "decision", "action")),
+    PredicateDefinition("involves", "involves", "participates in", "finance", "#f59e0b", ("transaction", "task"), ("enterprise", "person", "product", "service")),
+    PredicateDefinition("pays_for", "pays for", "paid by", "finance", "#d97706", ("transaction",), ("product", "service", "task")),
+    PredicateDefinition("evidence_for", "evidence for", "supported by", "evidence", "#a855f7", ("document", "observation"), ("decision", "recommendation", "risk", "action")),
+    PredicateDefinition("threatens", "threatens", "exposed to", "risk", "#dc2626", ("risk", "external_observation"), ("operational_unit", "enterprise", "task", "product")),
+    PredicateDefinition("responds_to", "responds to", "addressed by", "governance", "#9333ea", ("recommendation", "action"), ("risk", "external_observation", "graph_quality_finding")),
+    PredicateDefinition("approves", "approves", "approved by", "governance", "#7e22ce", ("decision",), ("action", "recommendation")),
+    PredicateDefinition("creates", "creates", "created from", "governance", "#6d28d9", ("action", "decision", "recommendation"), ("task", "document", "transaction")),
+    PredicateDefinition("may_affect", "may affect", "may be affected by", "external", "#7c3aed", ("external_observation",), ("enterprise", "operational_unit", "task", "product", "schedule", "address", "territory")),
+    PredicateDefinition("may_disrupt", "may disrupt", "may be disrupted by", "external", "#dc2626", ("external_observation",), ("enterprise", "operational_unit", "task", "product", "schedule")),
+    PredicateDefinition("unclassified_relationship", "unclassified relationship", "unclassified relationship from", "quality", "#94a3b8", ("*",), ("*",), bulk_confirmable=False, evidence_requirement="operator semantic classification"),
+)
+
+PREDICATE_ALIASES = {
+    ("person_enterprise", "client"): "client_of",
+    ("person_enterprise", "employee"): "works_for",
+    ("person_enterprise", "manager"): "manages",
+    ("enterprise_product", "supplier"): "supplies",
+    ("enterprise_service", "provider"): "provides",
+}
+
+
+def canonicalize_predicate(raw_predicate: str | None, role: str | None,
+                           source_type: str, target_type: str) -> str | None:
+    raw = str(raw_predicate or "").strip().casefold().replace(" ", "_")
+    role_key = str(role or "").strip().casefold()
+    semantic = {definition.predicate: definition for definition in SEMANTIC_PREDICATES}
+    direct = semantic.get(raw)
+    if direct and ("*" in direct.source_types or source_type in direct.source_types) and ("*" in direct.target_types or target_type in direct.target_types):
+        return raw
+    return PREDICATE_ALIASES.get((raw, role_key))
+
 
 def rules_for_carrier(entity_type: str) -> tuple[RelationshipRule, ...]:
     return tuple(rule for rule in ALL_RELATIONSHIP_RULES if rule.carrier_type == entity_type)
@@ -168,24 +242,29 @@ def edge_carrier_types() -> set[str]:
 
 def registry_contract() -> dict[str, Any]:
     return {
-        "version": "ontology-relationships.v1",
+        "version": "ontology-relationships.v2",
         "rules": [rule.public_dict() for rule in ALL_RELATIONSHIP_RULES],
+        "predicates": [definition.public_dict() for definition in SEMANTIC_PREDICATES],
         "consumers": ["forms", "canonical_repositories", "company_graph", "idjwi", "import_mapping", "data_quality", "relationship_editing"],
     }
 
 
 def predicate_catalog() -> dict[str, dict[str, Any]]:
-    catalog: dict[str, dict[str, Any]] = {}
+    catalog: dict[str, dict[str, Any]] = {
+        definition.predicate: definition.public_dict() for definition in SEMANTIC_PREDICATES
+    }
     for rule in ALL_RELATIONSHIP_RULES:
         label, inverse, category, color = PREDICATE_METADATA.get(rule.predicate, (rule.predicate.replace("_", " "), rule.inverse_relationship, "custom", "#64748b"))
-        entry = catalog.setdefault(rule.predicate, {"label": label, "inverse": inverse, "category": category, "source_types": [], "target_types": [], "color": color})
+        entry = catalog.setdefault(rule.predicate, {"predicate": rule.predicate, "label": label, "inverse": inverse, "category": category, "source_types": [], "target_types": [], "color": color, "temporal_behavior": rule.temporal_behavior, "evidence_requirement": rule.evidence_requirement, "sensitivity": rule.sensitivity, "valid_correction_actions": list(rule.valid_correction_actions), "bulk_confirmable": True})
         if rule.source_type not in entry["source_types"]:
             entry["source_types"].append(rule.source_type)
         if rule.target_type not in entry["target_types"]:
             entry["target_types"].append(rule.target_type)
     for predicate, (source_types, target_types) in DYNAMIC_PREDICATE_SHAPES.items():
         label, inverse, category, color = PREDICATE_METADATA[predicate]
-        catalog[predicate] = {"label": label, "inverse": inverse, "category": category, "source_types": list(source_types), "target_types": list(target_types), "color": color}
+        entry = catalog.setdefault(predicate, {"predicate": predicate, "label": label, "inverse": inverse, "category": category, "color": color})
+        entry["source_types"] = list(source_types)
+        entry["target_types"] = list(target_types)
     return catalog
 
 

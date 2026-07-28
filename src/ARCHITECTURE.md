@@ -1,6 +1,32 @@
 # Newsconseen OS — Product Constitution and Architecture
 
+## Ontology relationship closure
+
+The governed pipeline is: authorized `public.*` records -> universal candidate
+detector -> `graph_assertions` review queue -> governed review -> canonical
+mutation -> refreshed graph projection. Stages A-D stop at the review queue.
+Semantic rules live in `ontology/relationship_registry.py`; the shared packet
+lives in `company_graph/relationship_candidates.py`.
+Stages E-H add `company_graph/relationship_review.py`: deterministic explanation,
+current-evidence preview, independently revalidated decisions, registry-selected
+canonical execution, assertion history, cache invalidation, audit, and governed
+Idjwi outcome memory.
+Stages I-K bridge candidates to edge assertion keys, attach confirmation-event
+evidence, measure authorized quality before and after each decision batch, and
+use relationship-aware bounded selection with explicit endpoint hydration and
+omission diagnostics.
+
 ## Bounded Company Graph reads
+
+`company_graph/surfaces.py` projects the same authorized graph contract into web,
+desktop, mobile-manager, and mobile-worker packets. Role capabilities and
+assignment readiness are server-owned. Accessible list, table, outline, and text
+views are equivalent representations over that packet, not separate data paths.
+Worker authorization follows the canonical tenant-safe chain
+`auth user → user_profiles.person_id → persons.id →
+tasks.assigned_to_person_id`. The gateway derives only a boolean assignment
+match for graph-safe packets; Person IDs and assignee email remain prohibited.
+Missing profile links or assigned tasks return `assignment_identity_required`.
 
 ### External observation boundary
 
@@ -1427,3 +1453,12 @@ Company Graph and Data Readiness. Creating repair tasks or recommendations uses
 canonical repositories; alert acknowledgement, verification and resolution are
 tenant-scoped audited transitions. No quality workflow grants permission to
 modify the affected canonical record.
+
+### 21.2 Verification boundary
+
+`python_layer/company_graph/release_contract.py` is the traceability contract for
+Company Graph security, truth, Idjwi and operator acceptance. Backend policy tests,
+frontend request-coordination and accessible-representation tests, recorded
+PostgreSQL benchmarks, and the read-only environment validator form one release
+gate. Local, staging, web, desktop, mobile-manager and mobile-worker results remain
+separate; success in one surface cannot stand in for another.

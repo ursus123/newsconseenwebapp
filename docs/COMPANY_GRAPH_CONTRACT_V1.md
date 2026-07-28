@@ -124,3 +124,11 @@ authorized `company-graph.v1` packet before exporting or writing. See
   partial compatibility projection.
 - Legacy raw graph tools must migrate to this governed contract; they cannot define
   a competing public graph shape.
+
+## Release conformance
+
+API, frontend and Idjwi conformance is regression-tested through the coverage
+registry in `python_layer/company_graph/release_contract.py`. Environment and
+operator validation follows `COMPANY_GRAPH_VERIFICATION_AND_RELEASE.md`. A
+consumer that cannot preserve authorization, source status, truncation, evidence,
+assertion state or permitted actions is non-conforming even if it can draw nodes.

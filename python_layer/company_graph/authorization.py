@@ -27,6 +27,10 @@ GRAPH_PERMISSIONS = (
     "graph.view_share",
     "graph.quality_manage",
     "graph.external_observation_manage",
+    "graph.action_approve",
+    "graph.mobile_evidence_capture",
+    "graph.mobile_correction_report",
+    "graph.advisor_control",
     "graph.admin",
 )
 
@@ -39,11 +43,17 @@ ROLE_GRAPH_PERMISSIONS = {
         "graph.relationship_reject", "graph.view_save", "graph.view_share",
         "graph.quality_manage",
         "graph.external_observation_manage",
+        "graph.action_approve",
+        "graph.mobile_evidence_capture", "graph.mobile_correction_report",
     ),
-    "teacher": ("graph.read", "graph.relationship_propose", "graph.view_save"),
-    "staff": ("graph.read", "graph.relationship_propose", "graph.view_save"),
-    "user": ("graph.read", "graph.view_save"),
-    "student": ("graph.read", "graph.view_save"),
+    "technician": (
+        "graph.read", "graph.export", "graph.relationship_propose",
+        "graph.view_save", "graph.quality_manage",
+    ),
+    "teacher": ("graph.read", "graph.relationship_propose", "graph.view_save", "graph.mobile_evidence_capture", "graph.mobile_correction_report"),
+    "staff": ("graph.read", "graph.relationship_propose", "graph.view_save", "graph.mobile_evidence_capture", "graph.mobile_correction_report"),
+    "user": ("graph.read", "graph.view_save", "graph.mobile_evidence_capture", "graph.mobile_correction_report"),
+    "student": ("graph.read", "graph.view_save", "graph.mobile_evidence_capture", "graph.mobile_correction_report"),
 }
 
 SENSITIVE_REGISTRY_LEVELS = {"personal", "financial", "confidential", "restricted"}

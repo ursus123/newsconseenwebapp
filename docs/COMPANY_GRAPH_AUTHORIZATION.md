@@ -6,6 +6,13 @@
 **Last reviewed:** 2026-07-21  
 **Implementation:** `python_layer/company_graph/authorization.py`
 
+Phase 9 release tests cover tenant and authorization-fingerprint cache isolation,
+operational-unit membership and hierarchy, role/surface differences, field
+redaction, governed export denial and canonical worker assignment identity.
+Staging acceptance uses separate role accounts; UI hiding, shared bearer tokens
+or temporary elevation cannot satisfy the authorization completion test. See
+`COMPANY_GRAPH_VERIFICATION_AND_RELEASE.md`.
+
 ## Security boundary
 
 Every graph request verifies the authenticated user and requested tenant before a

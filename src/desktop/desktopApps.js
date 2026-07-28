@@ -21,7 +21,7 @@ function app(config) {
 }
 
 export const DESKTOP_APPS = [
-  app({ id: "companygraph", name: "Company Graph", icon: "🕸️", color: "#0f766e", route: "/CompanyGraphHome", category: "Operations", pageName: "CompanyGraphHome", description: "Operational graph home across people, enterprises, services, places, and work.", keywords: ["home", "graph", "operating picture"], roles: allRoles, isCore: true }),
+  app({ id: "companygraph", name: "Company Graph", icon: "🕸️", color: "#0f766e", route: "/CompanyGraphHome?surface=desktop", category: "Operations", pageName: "CompanyGraphHome", description: "Persistent governed graph workspace for multi-panel operations and continuous Idjwi access.", keywords: ["home", "graph", "operating picture"], roles: allRoles, isCore: true, persistentWorkspace: true }),
   app({ id: "dashboard", name: "Dashboard", icon: "📊", color: "#ec4899", route: "/Dashboard", category: "Operations", description: "Live operating dashboard and KPI snapshot.", keywords: ["home", "kpi", "summary", "metrics"], roles: allRoles }),
   app({ id: "people", name: "People", icon: "👥", color: "#8b5cf6", route: "/People", category: "Operations", description: "People, staff, clients, members, learners, patients, and contacts.", keywords: ["person", "staff", "client", "student", "member"], entity: "Person", roles: opsRoles, isCore: true, isCreateTarget: true }),
   app({ id: "enterprises", name: "Enterprises", icon: "🏢", color: "#0ea5e9", route: "/Enterprises", category: "Operations", description: "Organizations, branches, suppliers, customers, departments, and partners.", keywords: ["organization", "branch", "supplier", "customer"], entity: "Enterprise", roles: adminRoles, isCore: true, isCreateTarget: true }),

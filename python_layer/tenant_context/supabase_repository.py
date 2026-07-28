@@ -17,7 +17,7 @@ from .repository import TenantContextRepository
 
 
 ROLE_PERMISSIONS = {
-    "user": ("*.read", "graph_saved_view.write"),
+    "user": ("*.read", "graph_saved_view.write", "graph_field_report.write"),
     "manager": ("*.read", "*.write"),
     "admin": ("*.read", "*.write"),
     "super_admin": ("*.read", "*.write"),
@@ -165,6 +165,8 @@ class SupabaseTenantContextRepository(TenantContextRepository):
             auth_source=str(access.get("tenant_auth_source") or "unknown"),
             profile_found=bool(access.get("profile_found")),
             profile_user_id_matches=bool(access.get("profile_user_id_matches")),
+            person_id=str(access.get("person_id") or "") or None,
+            user_email=str(access.get("email") or "") or None,
             scope_type="operational_unit" if operational_unit_id else "organization",
             scope_id=operational_unit_id or requested_tenant_id,
             scope_name=operational_unit_name or None,

@@ -19,7 +19,22 @@ from .governance import (
     relationship_payload,
     validate_relationship_proposal,
 )
-from ontology.relationship_registry import registry_contract
+from ontology.relationship_registry import graph_entity_types, registry_contract
+from .relationship_candidates import (
+    RELATIONSHIP_CANDIDATE_VERSION,
+    detect_relationship_candidates,
+    persist_relationship_candidates,
+    requires_governed_review,
+)
+from .relationship_review import (
+    REVIEW_CONTRACT_VERSION,
+    candidate_explanation,
+    confirm_candidate,
+    mutation_preview,
+    new_bulk_operation_id,
+    reject_candidate,
+)
+from .surfaces import surface_projection
 from .assertion_governance import ASSERTION_STATES, persist_assertion_transition, stable_assertion_key
 from .correction_learning import record_correction_memory
 from .bounded_queries import decode_continuation, direct_neighborhood_records
@@ -92,6 +107,41 @@ class GraphQualityWorkRequest(BaseModel):
     owner_user_id: str | None = None
     owner_display_name: str | None = None
     reason: str = Field(default="", max_length=1000)
+
+
+class RelationshipCandidateDetectionRequest(BaseModel):
+    company_id: str
+    operational_unit_id: str = ""
+    object_types: list[str] = Field(default_factory=list, max_length=50)
+    max_per_type: int = Field(default=1000, ge=1, le=2000)
+
+
+class RelationshipCandidateDecisionRequest(BaseModel):
+    company_id: str
+    candidate_ids: list[str] = Field(min_length=1, max_length=100)
+    decision: Literal["confirm", "reject"]
+    reason: str = Field(min_length=3, max_length=1000)
+    approval_confirmed: bool = False
+    corrected_predicate: str | None = None
+    operational_unit_id: str = ""
+
+
+class MobileManagerDecisionRequest(BaseModel):
+    company_id: str
+    node_id: str
+    decision: Literal["approve", "reject"]
+    reason: str = Field(min_length=3, max_length=1000)
+    operational_unit_id: str = ""
+
+
+class MobileWorkerReportRequest(BaseModel):
+    company_id: str
+    subject_node_id: str
+    report_type: Literal["evidence", "correction"]
+    description: str = Field(min_length=3, max_length=2000)
+    evidence: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
+    proposed_correction: dict[str, Any] = Field(default_factory=dict)
+    operational_unit_id: str = ""
 
 
 def _validate_saved_view(body: GraphSavedViewRequest, context, policy: GraphAuthorizationPolicy) -> dict:
@@ -483,6 +533,323 @@ def graph_relationship_registry(request: Request, company_id: str = Query(...), 
     return {**registry_contract(), "company_id": context.tenant_id, "tenant_verified": True}
 
 
+def _candidate_context(repository, authorization, company_id, request, operational_unit_id=""):
+    context = repository.resolve_context(
+        authorization, company_id,
+        request_id=getattr(request.state, "request_id", ""),
+        operational_unit_id=operational_unit_id,
+    )
+    policy = GraphAuthorizationPolicy.for_context(context)
+    policy.require_scope(operational_unit_id)
+    return context, policy
+
+
+@router.get("/relationship-candidates")
+def relationship_candidate_queue(
+    request: Request, company_id: str = Query(...),
+    operational_unit_id: str = Query(""),
+    assertion_state: str | None = Query(None),
+    object_type: str | None = Query(None),
+    predicate: str | None = Query(None),
+    matching_method: str | None = Query(None),
+    bulk_confirmable: bool | None = Query(None),
+    authorization: str | None = Header(None),
+):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context, policy = _candidate_context(
+        repository, authorization, company_id, request, operational_unit_id,
+    )
+    policy.require("graph.read_sensitive")
+    rows = repository.list_entities(context, "graph_assertion", limit=5000).data or []
+    rows = [
+        row for row in rows
+        if row.get("carrier_type") and (
+            not assertion_state or str(row.get("assertion_state")) == assertion_state
+        )
+        and (not object_type or str(row.get("carrier_type")) == object_type)
+        and (not predicate or str(row.get("predicate")) == predicate)
+        and (not matching_method or str(row.get("matching_method")) == matching_method)
+        and (bulk_confirmable is None or bool(row.get("bulk_group_key")) == bulk_confirmable)
+    ]
+    rows.sort(key=lambda row: str(row.get("last_evaluated_at") or ""), reverse=True)
+    return {
+        "contract_version": RELATIONSHIP_CANDIDATE_VERSION,
+        "company_id": context.tenant_id,
+        "scope": {"type": context.scope_type, "id": context.scope_id},
+        "authorization_fingerprint": policy.fingerprint(),
+        "summary": {
+            "total": len(rows),
+            "proposed": sum(row.get("assertion_state") == "proposed" for row in rows),
+            "disputed": sum(row.get("assertion_state") == "disputed" for row in rows),
+            "rejected": sum(row.get("assertion_state") == "rejected" for row in rows),
+            "bulk_confirmable": sum(bool(row.get("bulk_group_key")) for row in rows),
+        },
+        "candidates": rows,
+    }
+
+
+def _candidate_assertion(repository, context, candidate_id: str) -> dict:
+    rows = repository.list_entities_filtered(
+        context, "graph_assertion", filters={"assertion_key": candidate_id}, limit=2,
+    ).data or []
+    candidate = next((row for row in rows if row.get("carrier_type")), None)
+    if not candidate:
+        raise HTTPException(status_code=404, detail={
+            "code": "RELATIONSHIP_CANDIDATE_NOT_FOUND",
+            "category": "empty_data", "action": "refresh_relationship_queue",
+        })
+    return candidate
+
+
+@router.get("/relationship-candidates/{candidate_id}/explain")
+def explain_relationship_candidate(
+    candidate_id: str, request: Request, company_id: str = Query(...),
+    operational_unit_id: str = Query(""), authorization: str | None = Header(None),
+):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context, policy = _candidate_context(
+        repository, authorization, company_id, request, operational_unit_id,
+    )
+    policy.require("graph.read_sensitive")
+    assertion = _candidate_assertion(repository, context, candidate_id)
+    return candidate_explanation(assertion, context)
+
+
+@router.get("/relationship-candidates/{candidate_id}/preview")
+def preview_relationship_candidate(
+    candidate_id: str, request: Request, company_id: str = Query(...),
+    operational_unit_id: str = Query(""), authorization: str | None = Header(None),
+):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context, policy = _candidate_context(
+        repository, authorization, company_id, request, operational_unit_id,
+    )
+    policy.require("graph.relationship_confirm")
+    assertion = _candidate_assertion(repository, context, candidate_id)
+    return mutation_preview(repository, context, assertion)
+
+
+@router.post("/relationship-candidates/decide")
+def decide_relationship_candidates(
+    body: RelationshipCandidateDecisionRequest, request: Request,
+    authorization: str | None = Header(None),
+):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context, policy = _candidate_context(
+        repository, authorization, body.company_id, request, body.operational_unit_id,
+    )
+    permission = "graph.relationship_confirm" if body.decision == "confirm" else "graph.relationship_reject"
+    policy.require(permission)
+    if body.decision == "confirm" and not body.approval_confirmed:
+        raise HTTPException(status_code=409, detail={
+            "code": "RELATIONSHIP_APPROVAL_REQUIRED", "action": "preview_and_confirm",
+        })
+    if len(body.candidate_ids) > 1 and body.corrected_predicate:
+        raise HTTPException(status_code=422, detail={
+            "code": "BULK_RELATIONSHIP_EDIT_NOT_ALLOWED", "action": "edit_individually",
+        })
+    assertions = [_candidate_assertion(repository, context, item) for item in body.candidate_ids]
+    if len(assertions) > 1:
+        groups = {item.get("bulk_group_key") for item in assertions}
+        if None in groups or len(groups) != 1:
+            raise HTTPException(status_code=422, detail={
+                "code": "RELATIONSHIP_BULK_GROUP_UNSAFE",
+                "action": "review_candidates_individually",
+            })
+    baseline_packet = build_graph_packet(
+        context, repository, limit=500, node_budget=36, edge_budget=72,
+    )
+    operation_id = new_bulk_operation_id()
+    results = []
+    for assertion in assertions:
+        try:
+            if body.decision == "confirm":
+                result = confirm_candidate(
+                    repository, context, assertion, reason=body.reason,
+                    bulk_operation_id=operation_id,
+                    corrected_predicate=body.corrected_predicate,
+                )
+                outcome = "edited_confirmed" if body.corrected_predicate else "confirmed"
+            else:
+                result = reject_candidate(
+                    repository, context, assertion, reason=body.reason,
+                    bulk_operation_id=operation_id,
+                )
+                outcome = "rejected"
+            memory = record_correction_memory(
+                body.company_id, assertion=result["assertion"], outcome=outcome,
+                actor=context.user_id, event=result["event"],
+            )
+            results.append({
+                "candidate_id": assertion["assertion_key"], "status": "success",
+                **result, "idjwi_memory": memory,
+            })
+            log_event(
+                f"company_graph.relationship_candidate.{outcome}",
+                company_id=context.tenant_id, actor=context.user_id,
+                subject=str(assertion["assertion_key"]),
+                metadata={
+                    "bulk_operation_id": operation_id,
+                    "carrier_type": assertion.get("carrier_type"),
+                    "carrier_record_id": assertion.get("carrier_record_id"),
+                    "previous_values": result.get("previous_values") or {},
+                    "new_values": result.get("new_values") or {},
+                    "evidence_hash": assertion.get("evidence_hash"),
+                    "confidence": (assertion.get("evidence") or [{}])[0]
+                        .get("matching_fields", {}).get("confidence"),
+                    "reason": body.reason,
+                },
+                status="success",
+            )
+        except HTTPException as error:
+            results.append({
+                "candidate_id": assertion["assertion_key"], "status": "failed",
+                "error": error.detail,
+            })
+    cache_invalidate(context.tenant_id)
+    successful = sum(item["status"] == "success" for item in results)
+    outcome_packet = (
+        build_graph_packet(context, repository, limit=500, node_budget=36, edge_budget=72)
+        if successful else baseline_packet
+    )
+    def measurement(packet):
+        return {
+            "visible_nodes": len(packet.nodes),
+            "visible_edges": len(packet.edges),
+            "connected_records": len({
+                endpoint for edge in packet.edges for endpoint in (edge.source, edge.target)
+            }),
+            "unconnected_records": packet.quality.unconnected_count,
+            "registry_gaps": next((
+                item.count for item in packet.quality.issues
+                if item.code == "RELATIONSHIP_REGISTRY_GAPS"
+            ), 0),
+            "legacy_links_requiring_confirmation": next((
+                item.count for item in packet.quality.issues
+                if item.code == "LEGACY_LINKS_REQUIRE_CONFIRMATION"
+            ), 0),
+            "disputed_or_rejected": sum(
+                event.to_state in {"disputed", "rejected"}
+                for event in packet.assertion_history
+            ),
+            "truncated_sources": len(packet.truncation.sources_at_limit),
+            "omitted_nodes": packet.truncation.omitted_nodes,
+            "selection_strategy": packet.truncation.selection_strategy,
+            "preserved_relationship_edges": packet.truncation.preserved_relationship_edges,
+        }
+    baseline = measurement(baseline_packet)
+    outcome = measurement(outcome_packet)
+    quality_comparison = {
+        "before": baseline,
+        "after": outcome,
+        "change": {
+            key: outcome[key] - baseline[key]
+            for key in (
+                "visible_edges", "connected_records", "unconnected_records",
+                "registry_gaps", "legacy_links_requiring_confirmation",
+            )
+        },
+    }
+    log_event(
+        "company_graph.relationship_review.quality_measured",
+        company_id=context.tenant_id, actor=context.user_id,
+        subject=operation_id, metadata=quality_comparison,
+        status="success" if successful else "unchanged",
+    )
+    return {
+        "contract_version": REVIEW_CONTRACT_VERSION,
+        "bulk_operation_id": operation_id,
+        "decision": body.decision,
+        "summary": {
+            "requested": len(results), "successful": successful,
+            "failed": len(results) - successful,
+        },
+        "results": results,
+        "graph_refresh_required": successful > 0,
+        "quality_refresh_required": successful > 0,
+        "quality_comparison": quality_comparison,
+        "highlight": [
+            {
+                "source": item["assertion"].get("source_node_id"),
+                "predicate": item["assertion"].get("predicate"),
+                "target": item["assertion"].get("target_node_id"),
+            }
+            for item in results if item["status"] == "success" and body.decision == "confirm"
+        ],
+    }
+
+
+@router.post("/relationship-candidates/detect")
+def detect_candidate_queue(
+    body: RelationshipCandidateDetectionRequest, request: Request,
+    authorization: str | None = Header(None),
+):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context, policy = _candidate_context(
+        repository, authorization, body.company_id, request, body.operational_unit_id,
+    )
+    policy.require("graph.relationship_propose")
+    requested = set(body.object_types or graph_entity_types())
+    unknown = []
+    readable = []
+    for entity_type in sorted(requested):
+        try:
+            definition_for(entity_type)
+        except ValueError:
+            unknown.append(entity_type)
+            continue
+        if policy.can_read_entity(entity_type):
+            readable.append(entity_type)
+    futures = {
+        GRAPH_IO_EXECUTOR.submit(
+            repository.list_entities, context, entity_type, limit=body.max_per_type
+        ): entity_type
+        for entity_type in readable
+    }
+    records, unavailable = {}, []
+    for future in as_completed(futures):
+        entity_type = futures[future]
+        try:
+            records[entity_type] = future.result().data or []
+        except Exception as error:
+            unavailable.append({
+                "entity_type": entity_type,
+                "category": "source_unavailable",
+                "message": str(error),
+                "retryable": True,
+            })
+    candidates = detect_relationship_candidates(context.tenant_id, records)
+    review_candidates = [item for item in candidates if requires_governed_review(item)]
+    persistence = persist_relationship_candidates(repository, context, review_candidates)
+    log_event(
+        "company_graph.relationship_candidates.detected",
+        company_id=context.tenant_id, actor=context.user_id,
+        metadata={
+            "detected": len(candidates), "review_required": len(review_candidates),
+            "created": persistence["created"], "updated": persistence["updated"],
+            "suppressed_rejections": persistence["suppressed_rejections"],
+        },
+        status="partial" if unavailable else "success",
+    )
+    cache_invalidate(context.tenant_id)
+    return {
+        "contract_version": RELATIONSHIP_CANDIDATE_VERSION,
+        "company_id": context.tenant_id,
+        "scope": {"type": context.scope_type, "id": context.scope_id},
+        "evaluated_object_types": readable,
+        "unknown_object_types": unknown,
+        "unavailable_sources": unavailable,
+        "summary": {
+            "detected": len(candidates),
+            "review_required": len(review_candidates),
+            **{key: persistence[key] for key in (
+                "created", "updated", "unchanged", "suppressed_rejections"
+            )},
+        },
+        "candidates": [item.model_dump() for item in review_candidates],
+    }
+
+
 def _packet(company_id: str, authorization: str | None, request: Request, *, center=None, depth=1, limit=500,
             node_budget=36, edge_budget=72, continuation_token=None, operational_unit_id=""):
     repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
@@ -536,6 +903,175 @@ def graph_overview(request: Request, company_id: str = Query(...), limit: int = 
                    continuation_token: str | None = Query(None), operational_unit_id: str = Query(""), authorization: str | None = Header(None)):
     return _packet(company_id, authorization, request, limit=limit, node_budget=node_budget, edge_budget=edge_budget,
                    continuation_token=continuation_token, operational_unit_id=operational_unit_id)
+
+
+@router.get("/surface/{surface}")
+def graph_surface(
+    surface: str, request: Request, company_id: str = Query(...),
+    operational_unit_id: str = Query(""), authorization: str | None = Header(None),
+):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context, policy = _candidate_context(
+        repository, authorization, company_id, request, operational_unit_id,
+    )
+    policy.require("graph.read")
+    packet = build_graph_packet(
+        context, repository, limit=500,
+        node_budget=36 if surface in {"web", "desktop"} else 20,
+        edge_budget=72 if surface in {"web", "desktop"} else 30,
+    )
+    return surface_projection(packet, context, surface)
+
+
+@router.post("/mobile/manager/decision")
+def mobile_manager_decision(
+    body: MobileManagerDecisionRequest, request: Request,
+    authorization: str | None = Header(None),
+):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context, policy = _candidate_context(
+        repository, authorization, body.company_id, request, body.operational_unit_id,
+    )
+    policy.require("graph.action_approve")
+    projection = surface_projection(
+        build_graph_packet(context, repository, limit=500, node_budget=20, edge_budget=30),
+        context, "mobile_manager",
+    )
+    allowed = projection.get("mobile_actions", {}).get(body.node_id, [])
+    if body.decision not in allowed:
+        raise HTTPException(status_code=409, detail={
+            "code": "MOBILE_ACTION_NOT_PERMITTED",
+            "category": "governance",
+            "message": "This record is not awaiting that decision in the manager's authorized mobile scope.",
+            "action": "refresh_mobile_context",
+            "retryable": False,
+        })
+    try:
+        entity_type, record_id = body.node_id.split(":", 1)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail={"code": "GRAPH_NODE_ID_INVALID"}) from error
+    timestamp = datetime.now(timezone.utc).isoformat()
+    if entity_type == "recommendation":
+        payload = {
+            "is_actioned": body.decision == "approve",
+            "is_dismissed": body.decision == "reject",
+            "action_taken": body.reason,
+            "actioned_at": timestamp,
+            "actioned_by": context.user_id,
+        }
+    elif entity_type == "decision":
+        payload = {
+            "outcome": "approved" if body.decision == "approve" else "rejected",
+            "outcome_notes": body.reason,
+            "decided_at": timestamp,
+            "decided_by": context.user_id,
+        }
+    else:
+        raise HTTPException(status_code=422, detail={
+            "code": "MOBILE_ACTION_TYPE_UNSUPPORTED",
+            "message": "Only governed recommendation and decision records can be decided from this surface.",
+        })
+    record = repository.update_entity(context, entity_type, record_id, payload).data
+    cache_invalidate(body.company_id)
+    log_event(
+        f"company_graph.mobile_manager.{body.decision}",
+        company_id=body.company_id, actor=context.user_id, subject=body.node_id,
+        metadata={
+            "reason": body.reason,
+            "surface": "mobile_manager",
+            "operational_unit_id": body.operational_unit_id or None,
+        },
+        status="success",
+    )
+    return {
+        "contract_version": "company-graph-mobile-action.v1",
+        "node_id": body.node_id,
+        "decision": body.decision,
+        "record": record,
+        "graph_refresh_required": True,
+        "audit_recorded": True,
+    }
+
+
+@router.post("/mobile/worker/report", status_code=201)
+def mobile_worker_report(
+    body: MobileWorkerReportRequest, request: Request,
+    authorization: str | None = Header(None),
+):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context, policy = _candidate_context(
+        repository, authorization, body.company_id, request, body.operational_unit_id,
+    )
+    required_permission = (
+        "graph.mobile_evidence_capture"
+        if body.report_type == "evidence"
+        else "graph.mobile_correction_report"
+    )
+    policy.require(required_permission)
+    projection = surface_projection(
+        build_graph_packet(context, repository, limit=500, node_budget=20, edge_budget=30),
+        context, "mobile_worker",
+    )
+    if projection["readiness"] != "ready":
+        raise HTTPException(status_code=409, detail={
+            "code": "WORKER_ASSIGNMENT_IDENTITY_REQUIRED",
+            "category": "governance",
+            "message": "The worker identity must be connected to an assigned task before evidence or corrections can be submitted.",
+            "action": "request_assignment_identity",
+            "retryable": False,
+        })
+    allowed = projection.get("mobile_actions", {}).get(body.subject_node_id, [])
+    expected_action = "capture_evidence" if body.report_type == "evidence" else "report_correction"
+    if expected_action not in allowed:
+        raise HTTPException(status_code=403, detail={
+            "code": "WORKER_SUBJECT_OUTSIDE_ASSIGNMENT",
+            "category": "authorization",
+            "message": "The selected record is outside the worker's assignment-scoped mobile context.",
+            "action": "refresh_mobile_context",
+            "retryable": False,
+        })
+    try:
+        subject_type, subject_record_id = body.subject_node_id.split(":", 1)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail={"code": "GRAPH_NODE_ID_INVALID"}) from error
+    evidence = []
+    for item in body.evidence:
+        evidence.append({
+            key: item[key] for key in (
+                "kind", "label", "source_url", "captured_at", "latitude", "longitude"
+            ) if key in item
+        })
+    report = repository.create_entity(context, "graph_field_report", {
+        "operational_unit_id": body.operational_unit_id or None,
+        "report_type": body.report_type,
+        "subject_node_id": body.subject_node_id,
+        "subject_type": subject_type,
+        "subject_record_id": subject_record_id,
+        "description": body.description,
+        "evidence": evidence,
+        "proposed_correction": body.proposed_correction if body.report_type == "correction" else {},
+        "status": "submitted",
+        "reported_by": context.user_id,
+        "reported_at": datetime.now(timezone.utc).isoformat(),
+    }).data
+    log_event(
+        f"company_graph.mobile_worker.{body.report_type}_reported",
+        company_id=body.company_id, actor=context.user_id, subject=body.subject_node_id,
+        metadata={
+            "report_id": report.get("id"),
+            "surface": "mobile_worker",
+            "evidence_count": len(evidence),
+            "has_proposed_correction": bool(body.proposed_correction),
+        },
+        status="success",
+    )
+    return {
+        "contract_version": "company-graph-mobile-report.v1",
+        "report": report,
+        "audit_recorded": True,
+        "canonical_record_changed": False,
+        "next_step": "manager_or_data_steward_review",
+    }
 
 
 @router.get("/neighborhood/{entity_type}/{entity_id}")
@@ -775,6 +1311,7 @@ def graph_audit(body: GraphAuditRequest, request: Request, authorization: str | 
         "opened", "scope_changed", "node_inspected", "edge_inspected",
         "citation_inspected", "view_saved", "exported", "neighborhood_failed",
         "idjwi_workspace_action",
+        "correction_reported",
     }
     if body.event not in allowed:
         raise HTTPException(status_code=422, detail={"code": "GRAPH_AUDIT_EVENT_INVALID"})

@@ -210,3 +210,9 @@ surface contracts → implement shared patterns → review previous pages → up
 documentation → test locally → deploy to staging → verify by role/device → commit
 and push
 ```
+
+For Company Graph, the concrete gate is
+`docs/COMPANY_GRAPH_VERIFICATION_AND_RELEASE.md`. Acceptance uses separate
+administrator, manager, worker and technician identities. A blocked external
+environment is recorded honestly and prevents production approval without
+invalidating completed local engineering verification.

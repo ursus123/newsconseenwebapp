@@ -38,6 +38,7 @@ from urllib.parse import urlparse
 from sqlalchemy import text
 
 from database import get_engine_safe
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,10 @@ def run_backup() -> dict:
         "duration_s":   0.0,
     }
 
-    database_url = os.getenv("DATABASE_URL", "")
+    # Use the same Pydantic settings source as the application and analytics
+    # engine. Reading os.environ directly breaks local .env loading and can make
+    # health report a connected database while backup reports no DATABASE_URL.
+    database_url = str(settings.database_url or "").strip()
     if not database_url:
         result["error"] = "DATABASE_URL not set — nothing to back up"
         _log_backup(result)
@@ -177,7 +181,7 @@ def restore_drill() -> dict:
             _log_drill(result, started_at)
             return result
 
-        restore_url = os.getenv("RESTORE_TEST_DATABASE_URL", "")
+        restore_url = str(settings.restore_test_database_url or "").strip()
         if restore_url:
             result["method"] = "full_restore"
             _restore_into_scratch_db(dump_path, restore_url)

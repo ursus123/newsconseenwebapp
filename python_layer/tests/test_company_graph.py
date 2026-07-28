@@ -21,6 +21,7 @@ from company_graph.diagnostics import build_diagnostics
 from company_graph.bounded_queries import decode_continuation, direct_neighborhood_records, encode_continuation
 from company_graph.bounded_queries import DEFAULT_EDGE_BUDGET, DEFAULT_NODE_BUDGET
 from company_graph.quality_workflow import project_findings, stable_finding_key
+from company_graph.surfaces import surface_projection
 
 
 class FakeRepository:
@@ -42,6 +43,209 @@ def _context():
 def test_operational_overview_defaults_are_bounded_for_readability():
     assert DEFAULT_NODE_BUDGET == 36
     assert DEFAULT_EDGE_BUDGET == 72
+
+
+def test_role_surface_policy_is_backend_enforced_and_worker_fails_closed():
+    packet = build_graph_packet(_context(), FakeRepository({
+        "enterprise": [{"id": "e1", "enterprise_name": "Broad company"}],
+        "task": [{"id": "t1", "title": "Someone else's task", "status": "open"}],
+    }))
+    worker = replace(_context(), user_id="worker-1", role="staff")
+    projected = surface_projection(packet, worker, "mobile_worker")
+    assert projected["readiness"] == "assignment_identity_required"
+    assert projected["packet"].nodes == []
+    assert "view_assigned_work" in projected["capabilities"]
+    with pytest.raises(HTTPException) as denied:
+        surface_projection(packet, worker, "mobile_manager")
+    assert denied.value.status_code == 403
+
+
+def test_manager_mobile_surface_contains_priorities_not_broad_company_records():
+    packet = build_graph_packet(_context(), FakeRepository({
+        "enterprise": [{"id": "e1", "enterprise_name": "Counterparty"}],
+        "risk": [{"id": "r1", "title": "Supply risk", "status": "open", "severity": "high"}],
+    }))
+    manager = replace(_context(), role="manager")
+    projected = surface_projection(packet, manager, "mobile_manager")
+    assert {node.entity_type for node in projected["packet"].nodes} == {"risk"}
+    assert "monitor_unit_outcomes" in projected["capabilities"]
+
+
+def test_mobile_surfaces_expose_only_governed_role_specific_actions():
+    manager_context = replace(_context(), role="manager")
+    manager_packet = build_graph_packet(manager_context, FakeRepository({
+        "recommendation": [{
+            "id": "rec-1", "title": "Approve alternate supplier",
+            "is_actioned": False, "is_dismissed": False,
+        }],
+        "decision": [{
+            "id": "dec-1", "decision": "Approve route change",
+            "outcome": None,
+        }],
+    }))
+    manager = surface_projection(manager_packet, manager_context, "mobile_manager")
+    assert manager["mobile_actions"]["recommendation:rec-1"] == ["approve", "reject"]
+    assert manager["mobile_actions"]["decision:dec-1"] == ["approve", "reject"]
+
+    worker_context = replace(
+        _context(), role="staff", user_id="worker-1",
+        person_id="person-1", user_email="worker@example.com",
+    )
+    worker_packet = build_graph_packet(worker_context, FakeRepository({
+        "task": [{
+            "id": "task-1", "title": "Inspect delivery",
+            "status": "open", "assigned_to_person_id": "person-1",
+            "assigned_to_email": "worker@example.com",
+        }],
+    }))
+    worker = surface_projection(worker_packet, worker_context, "mobile_worker")
+    assert worker["readiness"] == "ready"
+    assert worker["mobile_actions"]["task:task-1"] == [
+        "capture_evidence", "report_correction",
+    ]
+    task = next(node for node in worker["packet"].nodes if node.id == "task:task-1")
+    assert task.attributes["assigned_to_current_user"] is True
+    assert "assigned_to_email" not in task.attributes
+    assert worker["identity_chain"] == {
+        "user_profile_to_person": "verified",
+        "assigned_task_count": 1,
+        "authorization_basis": "canonical_person_assignment",
+    }
+
+
+@pytest.mark.parametrize("role,surface,allowed", [
+    ("super_admin", "web", True),
+    ("admin", "desktop", True),
+    ("manager", "mobile_manager", True),
+    ("admin", "mobile_manager", True),
+    ("super_admin", "mobile_manager", True),
+    ("staff", "mobile_manager", False),
+    ("user", "mobile_manager", False),
+    ("teacher", "mobile_manager", False),
+    ("student", "mobile_manager", False),
+    ("technician", "mobile_manager", False),
+    ("staff", "mobile_worker", True),
+    ("user", "mobile_worker", True),
+    ("teacher", "mobile_worker", True),
+    ("student", "mobile_worker", True),
+    ("manager", "mobile_worker", False),
+    ("admin", "mobile_worker", False),
+    ("super_admin", "mobile_worker", False),
+    ("technician", "mobile_worker", False),
+])
+def test_role_surface_matrix_is_enforced_by_backend(role, surface, allowed):
+    context = replace(_context(), role=role)
+    packet = build_graph_packet(context, FakeRepository({}))
+    if allowed:
+        assert surface_projection(packet, context, surface)["surface"] == surface
+    else:
+        with pytest.raises(HTTPException) as denied:
+            surface_projection(packet, context, surface)
+        assert denied.value.status_code == 403
+
+
+def test_worker_identity_chain_fails_closed_without_profile_person_or_assignment():
+    no_person = replace(_context(), role="staff", person_id=None)
+    packet = build_graph_packet(no_person, FakeRepository({
+        "task": [{
+            "id": "task-email-only", "title": "Legacy assignment",
+            "assigned_to_email": "worker@example.com", "status": "open",
+        }],
+    }))
+    projected = surface_projection(packet, no_person, "mobile_worker")
+    assert projected["readiness"] == "assignment_identity_required"
+    assert projected["packet"].nodes == []
+    assert projected["mobile_actions"] == {}
+    assert projected["identity_chain"]["user_profile_to_person"] == "missing"
+
+    linked_person = replace(no_person, person_id="person-1")
+    unassigned = surface_projection(packet, linked_person, "mobile_worker")
+    assert unassigned["readiness"] == "assignment_identity_required"
+    assert unassigned["identity_chain"]["assigned_task_count"] == 0
+
+
+def test_mobile_manager_and_worker_endpoints_recheck_authority_and_persist(monkeypatch):
+    class MutableRepository(FakeRepository):
+        context = None
+
+        def __init__(self, records):
+            super().__init__(records)
+            self.created = []
+            self.updated = []
+
+        def resolve_context(self, *_args, **_kwargs):
+            return self.context
+
+        def update_entity(self, context, entity, record_id, payload):
+            row = next(item for item in self.records[entity] if item["id"] == record_id)
+            row.update(payload)
+            self.updated.append((entity, record_id, payload))
+            return TenantRepositoryResult(row, context, entities=(entity,))
+
+        def create_entity(self, context, entity, payload):
+            row = {"id": f"{entity}-1", "company_id": context.tenant_id, **payload}
+            self.created.append((entity, row))
+            return TenantRepositoryResult(row, context, entities=(entity,))
+
+    request = SimpleNamespace(state=SimpleNamespace(request_id="mobile-test"))
+    manager_context = replace(_context(), role="manager")
+    manager_repository = MutableRepository({
+        "recommendation": [{
+            "id": "rec-1", "title": "Use alternate supplier",
+            "is_actioned": False, "is_dismissed": False,
+        }],
+    })
+    manager_repository.context = manager_context
+    monkeypatch.setattr(routes, "SupabaseTenantContextRepository", lambda verifier: manager_repository)
+    monkeypatch.setattr(routes, "log_event", lambda *_args, **_kwargs: None)
+    manager_result = routes.mobile_manager_decision(
+        routes.MobileManagerDecisionRequest(
+            company_id="tenant-a", node_id="recommendation:rec-1",
+            decision="approve", reason="Evidence supports the alternative",
+        ),
+        request,
+        authorization="Bearer manager",
+    )
+    assert manager_result["decision"] == "approve"
+    assert manager_repository.updated[0][0] == "recommendation"
+    assert manager_repository.updated[0][2]["is_actioned"] is True
+
+    worker_context = replace(
+        _context(), role="staff", user_id="worker-1", person_id="person-1",
+    )
+    worker_repository = MutableRepository({
+        "task": [{
+            "id": "task-1", "title": "Inspect delivery", "status": "open",
+            "assigned_to_person_id": "person-1",
+        }],
+    })
+    worker_repository.context = worker_context
+    monkeypatch.setattr(routes, "SupabaseTenantContextRepository", lambda verifier: worker_repository)
+    worker_result = routes.mobile_worker_report(
+        routes.MobileWorkerReportRequest(
+            company_id="tenant-a", subject_node_id="task:task-1",
+            report_type="correction", description="The delivery address is incorrect",
+            evidence=[{"kind": "field_observation", "label": "Observed at destination"}],
+            proposed_correction={"field": "address", "proposed_value": "Warehouse B"},
+        ),
+        request,
+        authorization="Bearer worker",
+    )
+    assert worker_result["canonical_record_changed"] is False
+    assert worker_repository.created[0][0] == "graph_field_report"
+    assert worker_repository.created[0][1]["reported_by"] == "worker-1"
+
+    worker_repository.context = replace(worker_context, role="manager")
+    with pytest.raises(HTTPException) as denied:
+        routes.mobile_worker_report(
+            routes.MobileWorkerReportRequest(
+                company_id="tenant-a", subject_node_id="task:task-1",
+                report_type="evidence", description="Attempt outside worker surface",
+            ),
+            request,
+            authorization="Bearer manager",
+        )
+    assert denied.value.status_code == 403
 
 
 def test_daily_briefing_links_priorities_to_evidence_owner_and_outcome_workflow():
@@ -813,7 +1017,7 @@ def test_relationship_registry_is_complete_and_exposed_to_shared_consumers(clien
     })
     response = client.get("/company-graph/relationship-registry?company_id=tenant-a", headers={"Authorization": "Bearer admin"})
     assert response.status_code == 200
-    assert response.json()["version"] == "ontology-relationships.v1"
+    assert response.json()["version"] == "ontology-relationships.v2"
     assert response.json()["tenant_verified"] is True
 
 

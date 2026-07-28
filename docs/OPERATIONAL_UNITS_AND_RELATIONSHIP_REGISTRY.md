@@ -1,9 +1,13 @@
 # Operational units and ontology relationship registry
 
 **Status:** Implemented  
-**Contracts:** `company-graph.v1`, `ontology-relationships.v1`  
+**Contracts:** `company-graph.v1`, `ontology-relationships.v2`, `ontology-relationship-candidate.v1`
 **Migration:** `src/migrations/004_operational_units_and_relationship_registry.sql`  
-**Updated:** 2026-07-22
+**Updated:** 2026-07-27
+
+The registry now includes semantic predicate definitions as well as extraction
+rules. Universal candidate detection and its persistent review boundary are
+specified in [ONTOLOGY_RELATIONSHIP_CLOSURE.md](ONTOLOGY_RELATIONSHIP_CLOSURE.md).
 
 ## First-class operational units
 
@@ -92,3 +96,8 @@ Automated tests verify that Finance, HR, branches and warehouses remain distinct
 managed descendants are included without sibling leakage; membership controls
 scope; unit nodes are not enterprises; owned records are bounded; and every
 relationship rule exposes the complete shared contract.
+
+The Phase 9 gate repeats these checks across administrator, manager, worker and
+technician policies. Operator acceptance must use operational-unit memberships
+and canonical `user_profiles.person_id → tasks.assigned_to_person_id` assignments;
+labels and email matches never authorize a scope.

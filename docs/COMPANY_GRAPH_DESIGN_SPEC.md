@@ -213,3 +213,10 @@ Company Graph actions use `company-graph-intents.v1`. Buttons carry explicit
 intents from the page through the Idjwi request; natural-language classification
 is only a fallback. Idjwi executes them deterministically over the authorized
 `company-graph.v1` context shown to the operator.
+
+## Completion and release
+
+The implementation is evaluated through the security, truth, Idjwi,
+accessibility, performance, operator and environment gates in
+`COMPANY_GRAPH_VERIFICATION_AND_RELEASE.md`. A frontend build or a single
+administrator demonstration cannot complete the product contract.
