@@ -56,7 +56,7 @@ def step_create_task(params: dict, context: dict, company_id: str) -> dict:
         assigned_to   str  — email of the assignee (optional)
     """
     try:
-        from config.settings import settings, HEADERS
+        from data_sources import supabase_source
 
         title    = _render(params.get("title", "Workflow task"), context)
         due_date = (datetime.now(timezone.utc) + timedelta(
@@ -79,6 +79,9 @@ def step_create_task(params: dict, context: dict, company_id: str) -> dict:
         # Remove None values
         task_payload = {k: v for k, v in task_payload.items() if v is not None}
 
+        created = supabase_source.create_record("task", task_payload, company_id=company_id)
+        logger.info("workflow executor: created task id=%s title=%s", created.get("id"), title)
+        return {"status": "ok", "task_id": created.get("id"), "title": title}
         resp = requests.post(
             settings.base44_tasks_url,
             json=task_payload,

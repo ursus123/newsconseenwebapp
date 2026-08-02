@@ -38,7 +38,7 @@ def _now_iso() -> str:
 ENTITY_RULES = {
     "people": {
         "raw_table":        "raw.people",
-        "base44_url_attr":  "base44_people_url",
+        "canonical_entity": "people",
         "page":             "People",
         "required":         ["person_type", "status"],
         "recommended":      ["email", "first_name"],
@@ -50,7 +50,7 @@ ENTITY_RULES = {
     },
     "enterprises": {
         "raw_table":        "raw.enterprises",
-        "base44_url_attr":  "base44_enterprises_url",
+        "canonical_entity": "enterprises",
         "page":             "Enterprises",
         "required":         ["enterprise_type", "status", "enterprise_name"],
         "recommended":      ["country"],
@@ -63,7 +63,7 @@ ENTITY_RULES = {
     },
     "products": {
         "raw_table":        "raw.products",
-        "base44_url_attr":  "base44_products_url",
+        "canonical_entity": "products",
         "page":             "Products",
         "required":         ["item_type", "status", "name"],
         "recommended":      ["unit_price", "stock_quantity"],
@@ -76,7 +76,7 @@ ENTITY_RULES = {
     },
     "tasks": {
         "raw_table":        "raw.tasks",
-        "base44_url_attr":  "base44_tasks_url",
+        "canonical_entity": "tasks",
         "page":             "Tasks",
         "required":         ["status", "title"],
         "recommended":      ["due_date", "assigned_to_name"],
@@ -87,7 +87,7 @@ ENTITY_RULES = {
     },
     "transactions": {
         "raw_table":        "raw.transactions",
-        "base44_url_attr":  "base44_transactions_url",
+        "canonical_entity": "transactions",
         "page":             "Transactions",
         "required":         ["transaction_type", "status", "amount"],
         "recommended":      ["reference_number", "due_date"],
@@ -98,7 +98,7 @@ ENTITY_RULES = {
     },
     "relationships": {
         "raw_table":        "raw.relationships",
-        "base44_url_attr":  "base44_relationships_url",
+        "canonical_entity": "relationships",
         "page":             "Relationships",
         "required":         ["relationship_type", "status"],
         "recommended":      [],
@@ -107,7 +107,7 @@ ENTITY_RULES = {
     },
     "addresses": {
         "raw_table":        "raw.addresses",
-        "base44_url_attr":  "base44_addresses_url",
+        "canonical_entity": "addresses",
         "page":             "Addresses",
         "required":         ["address_type"],
         "recommended":      ["city", "country"],
@@ -164,7 +164,8 @@ def _load(entity: str, rules: dict, company_id: str):
     """Three-tier load: raw PG → Base44 live."""
     df = _load_from_pg(rules["raw_table"], company_id)
     if df is None:
-        df = _load_from_base44(rules["base44_url_attr"], company_id)
+        from data_sources.supabase_source import fetch_entity_df
+        df = fetch_entity_df(rules["canonical_entity"], company_id=company_id)
     return df
 
 

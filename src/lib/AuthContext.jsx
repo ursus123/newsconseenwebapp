@@ -1,10 +1,7 @@
 import { createContext, useState, useContext, useEffect, useRef } from 'react';
-import { appParams } from '@/lib/app-params';
 
 // Lazy getter — avoids pulling @base44/sdk into the React module init chain
 const getNcClient = () => import('@/api/ncClient').then(m => m.ncClient);
-
-const DATA_LAYER = import.meta.env.VITE_DATA_LAYER || 'base44';
 
 const AuthContext = createContext();
 
@@ -31,13 +28,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    if (DATA_LAYER === 'supabase') {
-      let unsubscribe;
-      _initSupabaseAuth().then(cleanup => { unsubscribe = cleanup; });
-      return () => unsubscribe?.();
-    } else {
-      checkAppState();
-    }
+    let unsubscribe;
+    _initSupabaseAuth().then(cleanup => { unsubscribe = cleanup; });
+    return () => unsubscribe?.();
   }, []);
 
   // ── Supabase auth path ────────────────────────────────────────────────────
@@ -147,6 +140,7 @@ export const AuthProvider = ({ children }) => {
     };
   };
 
+  /* Legacy app-state transport retained only as unreachable source history.
   const checkAppState = async () => {
     try {
       setIsLoadingPublicSettings(true);
@@ -243,6 +237,9 @@ export const AuthProvider = ({ children }) => {
       }
     }
   };
+
+  */
+  const checkAppState = async () => _initSupabaseAuth();
 
   const logout = async (shouldRedirect = true) => {
     setUser(null);

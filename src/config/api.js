@@ -11,6 +11,11 @@ export const RAILWAY_URL =
 
 export const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 
+export const APP_URL = (
+  import.meta.env.VITE_APP_URL ||
+  (typeof window !== "undefined" ? window.location.origin : "")
+).replace(/\/$/, "");
+
 export const SUPABASE_PROJECT_REF = (() => {
   try {
     return new URL(import.meta.env.VITE_SUPABASE_URL || "").hostname.split(".", 1)[0] || "";

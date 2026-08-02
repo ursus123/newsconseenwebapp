@@ -134,13 +134,7 @@ class BaseConnector(ABC):
 
         Returns counts per entity type.
         """
-        entity_url_map = {
-            "people":        settings.base44_people_url,
-            "enterprises":   settings.base44_enterprises_url,
-            "products":      settings.base44_products_url,
-            "transactions":  getattr(settings, "base44_transactions_url", None),
-            "relationships": settings.base44_relationships_url,
-        }
+        from data_sources import supabase_source
 
         totals = {"created": 0, "updated": 0, "failed": 0, "skipped_conflict": 0}
 
@@ -148,8 +142,8 @@ class BaseConnector(ABC):
             if not records:
                 continue
 
-            url = entity_url_map.get(entity_name)
-            if not url:
+            url = None
+            if False:
                 logger.warning(
                     "connector.load: no URL configured for entity '%s' — skipping",
                     entity_name,
@@ -159,7 +153,19 @@ class BaseConnector(ABC):
             for record in records:
                 try:
                     self._apply_enterprise_scope(entity_name, record)
-                    result = self._upsert_record(url, record, entity_name)
+                    external_id = record.get("external_id")
+                    existing = supabase_source.list_records(
+                        entity_name,
+                        company_id=self.company_id,
+                        filters={"external_id": external_id} if external_id else None,
+                        limit=1,
+                    ) if external_id else []
+                    if existing:
+                        supabase_source.update_record(entity_name, existing[0]["id"], record, company_id=self.company_id)
+                        result = "updated"
+                    else:
+                        supabase_source.create_record(entity_name, record, company_id=self.company_id)
+                        result = "created"
                     if result == "created":
                         totals["created"] += 1
                     elif result == "updated":

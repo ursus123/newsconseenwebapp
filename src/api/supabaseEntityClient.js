@@ -1,15 +1,15 @@
 /**
  * supabaseEntityClient.js
  *
- * Drop-in replacement for ncClient.entities.* usage inside dataService.js.
- * Every entity wrapper exposes the same four methods Base44 does:
+ * Canonical Supabase entity access used throughout the frontend.
+ * Every entity wrapper exposes the established application methods:
  *   .create(data)              → supabase insert
  *   .filter(filters, sort)     → supabase select + eq filters
  *   .list(sort)                → supabase select all
  *   .update(id, data)          → supabase update by id
  *   .delete(id)                → supabase delete by id
  *
- * Sort strings follow the Base44 convention: "-created_date" means DESC.
+ * Sort strings use "-created_date" to mean descending order.
  * "created_date" is mapped to the Supabase column "created_at" for backward compat.
  * Every returned row gets a synthetic "created_date" and "updated_date" field so
  * callers that read those fields still work without change.
@@ -28,11 +28,11 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL     || "";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
-// Guard: if env vars are absent (e.g. VITE_DATA_LAYER=ncClient), create a no-op
-// client so the import itself never crashes the Base44 build path.
-export const supabase = (supabaseUrl && supabaseAnonKey)
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : createClient("https://placeholder.supabase.co", "placeholder-key");
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are required.");
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // ── Column name map — Base44 field names → Supabase column names ──────────────
 // Applied on filter keys and sort strings. Does NOT rename payload fields on

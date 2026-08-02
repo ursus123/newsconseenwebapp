@@ -46,10 +46,7 @@ def _create_task(title: str, description: str, task_type: str,
     Create a single task in Base44.
     Returns the created task dict on success, None on failure.
     """
-    url = _tasks_create_url()
-    if not url:
-        logger.warning("autotask: base44_tasks_url not configured")
-        return None
+    url = None
 
     now = datetime.now(timezone.utc)
     due = (now + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -69,6 +66,10 @@ def _create_task(title: str, description: str, task_type: str,
         payload["assignee_id"] = assignee_id
 
     try:
+        from data_sources import supabase_source
+        result = supabase_source.create_record("task", payload, company_id=company_id)
+        logger.info("autotask: created task '%s' for company=%s", title, company_id)
+        return result
         resp = requests.post(url, json=payload, headers=HEADERS, timeout=15)
         if resp.status_code in (200, 201):
             logger.info("autotask: created task '%s' for company=%s", title, company_id)

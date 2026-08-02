@@ -30,3 +30,11 @@ dist-ssr
 
 .env
 base44/.app.jsonc
+.vercel
+.env*
+
+# Local agent and Python environments
+.claude/
+.venv*/
+**/__pycache__/
+*.py[cod]

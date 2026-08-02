@@ -639,25 +639,8 @@ def retry_failed_row(row_id: int):
         payload = json.loads(payload)
 
     try:
-        if source.startswith("connector:"):
-            # Connector-sourced rows go through Base44, not Supabase.
-            from config.settings import settings, HEADERS
-            import requests as _req
-            entity_url_map = {
-                "people":       settings.base44_people_url,
-                "enterprises":  settings.base44_enterprises_url,
-                "products":     settings.base44_products_url,
-                "transactions": getattr(settings, "base44_transactions_url", None),
-                "relationships": settings.base44_relationships_url,
-            }
-            url = entity_url_map.get(entity_type)
-            if not url:
-                raise RuntimeError(f"No Base44 URL configured for entity '{entity_type}'")
-            resp = _req.post(url, json=payload, headers=HEADERS, timeout=30)
-            resp.raise_for_status()
-        else:
-            from data_sources import supabase_source
-            supabase_source.create_record(entity_type, payload, company_id=company_id)
+        from data_sources import supabase_source
+        supabase_source.create_record(entity_type, payload, company_id=company_id)
         with engine.begin() as conn:
             conn.execute(text("""
                 UPDATE analytics.ingestion_failed_rows

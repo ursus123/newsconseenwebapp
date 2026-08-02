@@ -1,155 +1,117 @@
-import { createClient } from '@base44/sdk';
-import { appParams } from '@/lib/app-params';
-import { supabaseEntities, supabase } from '@/api/supabaseEntityClient';
+import { supabaseEntities, supabase } from "@/api/supabaseEntityClient";
+import { authHeaders, RAILWAY_URL } from "@/config/api";
 
-const { appId, token, functionsVersion, appBaseUrl } = appParams;
+const STORAGE_BUCKET = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || "tenant-files";
 
-// Real Base44 client — always initialised.
-// When DATA_LAYER=supabase it is only used for integrations
-// (UploadFile, InvokeLLM, SendEmail) which have no Supabase equivalent yet.
-const _real = createClient({
-  appId,
-  token,
-  functionsVersion,
-  serverUrl: '',
-  requiresAuth: false,
-  appBaseUrl,
-});
-
-// ── Feature flag ──────────────────────────────────────────────────────────────
-// Set VITE_DATA_LAYER=supabase in .env to activate.
-// Leave unset (or set to "base44") to use Base44 as before.
-const DATA_LAYER = import.meta.env.VITE_DATA_LAYER || 'base44';
-
-// ── Supabase auth shim — full ncClient.auth.* surface ─────────────────────────
-const _supabaseAuth = {
-  // Most-used call — get current user from Supabase session + user_profiles
+const auth = {
   async me() {
     const { data: { user }, error } = await supabase.auth.getUser();
-    if (error || !user) throw new Error('Not authenticated');
-
-    // Prefer user_profiles for company_id/role (server-authoritative)
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('company_id, role, full_name')
-      .eq('id', user.id)
+    if (error || !user) throw new Error("Not authenticated");
+    const { data: profile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("company_id, role, full_name")
+      .eq("id", user.id)
       .single();
-
+    if (profileError && profileError.code !== "PGRST116") throw profileError;
     return {
-      id:               user.id,
-      email:            user.email,
-      full_name:        profile?.full_name  || user.user_metadata?.full_name || user.email,
-      company_id:       profile?.company_id || user.app_metadata?.company_id || null,
-      role:             profile?.role       || user.app_metadata?.role       || 'user',
-      // Pass through any extra metadata pages might read
+      id: user.id,
+      email: user.email,
+      full_name: profile?.full_name || user.user_metadata?.full_name || user.email,
+      company_id: profile?.company_id || user.app_metadata?.company_id || null,
+      role: profile?.role || user.app_metadata?.role || "user",
       ...user.user_metadata,
     };
   },
-
-  // Sign out and optionally redirect
-  logout(redirectUrl) {
-    supabase.auth.signOut().then(() => {
-      window.location.href = redirectUrl || window.location.origin;
-    });
+  async logout(redirectUrl) {
+    await supabase.auth.signOut();
+    if (redirectUrl) window.location.href = redirectUrl;
   },
-
-  // Redirect to Supabase login page; store return URL in sessionStorage
   redirectToLogin(returnUrl) {
-    if (returnUrl) sessionStorage.setItem('auth_return_url', returnUrl);
-    window.location.href = '/login';
+    if (returnUrl) sessionStorage.setItem("auth_return_url", returnUrl);
+    window.location.href = "/login";
   },
-
-  // Update user profile fields — role and company_id are server-only, never writable by the user
   async updateMe(data) {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    // Strip privileged fields — callers like Enterprises.jsx pass company_id via updateMe
-    // but in Supabase those are set server-side (user_profiles INSERT by admin, not self-service)
-    const { role: _r, company_id: _c, ...safeData } = data;
-
-    // Update Supabase user metadata (full_name, onboarding_complete, setup_complete, etc.)
-    const metaFields = {};
-    const META_ALLOWED = ['full_name', 'onboarding_complete', 'setup_complete', 'avatar_url'];
-    for (const k of META_ALLOWED) {
-      if (safeData[k] !== undefined) metaFields[k] = safeData[k];
+    if (!user) throw new Error("Not authenticated");
+    const { role: _role, company_id: _companyId, password: _password, ...safe } = data;
+    const metadata = Object.fromEntries(
+      Object.entries(safe).filter(([key]) => ["full_name", "onboarding_complete", "setup_complete", "avatar_url"].includes(key)),
+    );
+    if (Object.keys(metadata).length) {
+      const { error } = await supabase.auth.updateUser({ data: metadata });
+      if (error) throw error;
     }
-    if (Object.keys(metaFields).length) {
-      await supabase.auth.updateUser({ data: metaFields });
-    }
-
-    // Write non-privileged profile fields to user_profiles
-    const profileFields = { ...safeData };
-    delete profileFields.password;
-    if (Object.keys(profileFields).length) {
-      await supabase.from('user_profiles').update({
-        ...profileFields,
-        updated_at: new Date().toISOString(),
-      }).eq('id', user.id);
-    }
-
-    return { id: user.id, email: user.email, ...safeData };
+    const { error } = await supabase.from("user_profiles").update({ ...safe, updated_at: new Date().toISOString() }).eq("id", user.id);
+    if (error) throw error;
+    return { id: user.id, email: user.email, ...safe };
   },
-
-  // Alias — some pages call updateProfile instead of updateMe
-  async updateProfile(data) {
-    return this.updateMe(data);
-  },
-
-  // Change password via Supabase auth
-  async changePassword({ currentPassword, newPassword }) {
+  updateProfile(data) { return this.updateMe(data); },
+  async changePassword({ newPassword }) {
     const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) throw new Error(error.message);
+    if (error) throw error;
   },
-
-  // Alias — some pages call updatePassword
-  async updatePassword({ currentPassword, newPassword }) {
-    return this.changePassword({ currentPassword, newPassword });
-  },
-
-  // Verify password — used by LockScreen PIN check
+  updatePassword(payload) { return this.changePassword(payload); },
   async verifyPassword({ password }) {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user?.email) throw new Error('Not authenticated');
-    const { error } = await supabase.auth.signInWithPassword({
-      email:    user.email,
-      password,
-    });
-    if (error) throw new Error('Invalid password');
+    if (!user?.email) throw new Error("Not authenticated");
+    const { error } = await supabase.auth.signInWithPassword({ email: user.email, password });
+    if (error) throw new Error("Invalid password");
     return true;
   },
 };
 
-// ── Entity Proxy — intercepts every ncClient.entities.Xyz access ─────────────
-// Unknown entity names fall back to the real Base44 entity so nothing breaks
-// while the migration is in progress.
-const _entityProxy = new Proxy({}, {
-  get(_, name) {
-    const supabaseEntity = supabaseEntities[name];
-    if (supabaseEntity) return supabaseEntity;
-    // Explicit fallback — logs clearly so split-brain data paths are visible in console.
-    // These entities are intentionally staying on Base44 until their Supabase tables
-    // are created and mapped. Check MIGRATION_STATUS in supabaseEntityClient.js.
-    console.warn(
-      `[ncClient→supabase] "${name}" has no Supabase table yet — reads/writes go to Base44. ` +
-      `Data written here will NOT appear in Supabase analytics or RLS-scoped queries.`
-    );
-    return _real.entities?.[name];
+function safeFileName(name = "upload") {
+  return name.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(-120);
+}
+
+async function uploadFile({ file }) {
+  if (!file) throw new Error("A file is required");
+  const user = await auth.me();
+  if (!user.company_id) throw new Error("A tenant identity is required before uploading files");
+  const path = `${user.company_id}/${user.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
+  const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file, {
+    contentType: file.type || "application/octet-stream",
+    upsert: false,
+  });
+  if (error) throw new Error(`Supabase Storage upload failed: ${error.message}`);
+  const { data, error: signedError } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path, 60 * 60 * 24);
+  if (signedError) throw new Error(`Could not authorize uploaded file: ${signedError.message}`);
+  return { file_url: data.signedUrl, storage_path: path, bucket: STORAGE_BUCKET };
+}
+
+async function governedIntegration(path, body) {
+  const user = await auth.me();
+  const response = await fetch(`${RAILWAY_URL}${path}`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ company_id: user.company_id, ...body }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result?.detail?.message || result?.detail || `Governed service returned ${response.status}`);
+  return result;
+}
+
+const entities = new Proxy(supabaseEntities, {
+  get(target, name) {
+    if (name in target) return target[name];
+    throw new Error(`Entity "${String(name)}" has no canonical Supabase mapping.`);
   },
 });
 
-// ── Final export ──────────────────────────────────────────────────────────────
-// When DATA_LAYER=supabase:
-//   ncClient.entities.*     → Supabase (all 23 entities via _entityProxy)
-//   ncClient.auth.*         → Supabase (_supabaseAuth shim)
-//   ncClient.integrations.* → Base44 real client (UploadFile / InvokeLLM / SendEmail)
-//
-// When DATA_LAYER=base44 (default):
-//   Everything routes to the real Base44 client — zero behaviour change.
-export const ncClient = DATA_LAYER === 'supabase'
-  ? {
-      entities:     _entityProxy,
-      auth:         _supabaseAuth,
-      integrations: _real.integrations,   // file upload + LLM stay on Base44 for now
-    }
-  : _real;
+const integrations = {
+  Core: {
+    UploadFile: uploadFile,
+    InvokeLLM: (payload) => governedIntegration("/integrations/idjwi-invoke", payload),
+    ExtractDataFromUploadedFile: (payload) => governedIntegration("/integrations/document-extract", payload),
+    SendEmail: (payload) => governedIntegration("/integrations/send-email", payload),
+  },
+};
+
+const functions = {
+  async invoke(name, payload = {}) {
+    const response = await governedIntegration(`/integrations/function/${encodeURIComponent(name)}`, payload);
+    return { data: response };
+  },
+};
+
+export const ncClient = { entities, auth, integrations, functions };

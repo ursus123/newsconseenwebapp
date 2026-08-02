@@ -371,7 +371,7 @@ def create_tenant(
 
     enterprise_record = None
     try:
-        if settings.base44_enterprises_url:
+        if False:
             resp = httpx.post(
                 settings.base44_enterprises_url,
                 json=payload,
@@ -386,6 +386,11 @@ def create_tenant(
                 logger.warning("admin: Base44 enterprise create returned %d", resp.status_code)
     except Exception as exc:
         logger.warning("admin: Base44 enterprise create failed — %s", exc)
+
+    if enterprise_record is None:
+        from data_sources import supabase_source
+        enterprise_record = supabase_source.create_record("enterprise", payload, company_id=enterprise_id)
+        enterprise_id = enterprise_record.get("id") or enterprise_id
 
     # Step 2: Run onboarding/provision
     provision_result = {}
@@ -426,7 +431,7 @@ def create_tenant(
         "admin_email":     req.admin_email,
         "provision":       provision_result if isinstance(provision_result, dict) else {},
         "next_steps": [
-            f"Invite {req.admin_email} to Base44 and set their company_id to {enterprise_id}",
+            f"Invite {req.admin_email} through Supabase Auth and assign company_id {enterprise_id}",
             "Operator can now log in and their onboarding is pre-provisioned",
         ],
     }

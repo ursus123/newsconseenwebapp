@@ -85,6 +85,7 @@ from copilot.routes import idjwi_router, router as copilot_router
 
 # Phase 3B — Proactive Alerts
 from alerts.routes import router as alerts_router
+from integrations.routes import router as integrations_router
 
 # Phase 3C — Network Intelligence
 from network.routes import router as network_router
@@ -327,10 +328,26 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+allowed_origins = [
+    origin.strip().rstrip("/")
+    for origin in settings.cors_allowed_origins.split(",")
+    if origin.strip()
+]
+if not allowed_origins:
+    raise RuntimeError("CORS_ALLOWED_ORIGINS must contain at least one trusted origin")
+if "*" in allowed_origins:
+    logger.warning("Wildcard CORS value ignored; using the trusted origin set")
+    allowed_origins = [
+        "http://localhost:5173",
+        "https://staging.news-con-seen.com",
+        "https://news-con-seen.com",
+        "https://www.news-con-seen.com",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -384,15 +401,6 @@ _PUBLIC_PATHS = {
 _CRON_PREFIXES = ("/load/", "/cron/", "/webhook/")
 
 
-_CORS_HEADERS = {
-    "Access-Control-Allow-Origin":  "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-    "Access-Control-Allow-Headers": "x-api-key, x-idjwi-api-key, x-idjwi-role, x-idjwi-user, x-idjwi-plan, x-cron-secret, Content-Type, Authorization, Accept, X-Requested-With, X-Request-ID",
-    "Access-Control-Expose-Headers": "X-Request-ID",
-    "Access-Control-Max-Age":       "86400",
-}
-
-
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
     """Attach an audit-safe correlation id to every backend response."""
@@ -406,10 +414,11 @@ async def request_id_middleware(request: Request, call_next):
 
 @app.middleware("http")
 async def cors_and_auth_middleware(request: Request, call_next):
-    # Always handle OPTIONS preflight immediately with explicit CORS headers.
+    # Let the configured CORSMiddleware validate and answer preflight requests.
+    # Handling them here used to stamp `Access-Control-Allow-Origin: *`, which
+    # bypassed the trusted-origin contract used by web and staging deployments.
     if request.method == "OPTIONS":
-        from fastapi.responses import Response as _Resp
-        return _Resp(status_code=200, headers=_CORS_HEADERS)
+        return await call_next(request)
 
     # Check API key (skip if API_KEY not configured)
     expected = settings.api_key
@@ -418,19 +427,17 @@ async def cors_and_auth_middleware(request: Request, call_next):
         if path not in _PUBLIC_PATHS and not any(path.startswith(p) for p in _CRON_PREFIXES):
             provided = request.headers.get("x-api-key", "")
             if provided != expected:
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=401,
                     content={"detail": "Missing or invalid x-api-key header"},
-                    headers={"Access-Control-Allow-Origin": "*"},
                 )
+                origin = request.headers.get("origin", "").rstrip("/")
+                if origin in allowed_origins:
+                    response.headers["Access-Control-Allow-Origin"] = origin
+                    response.headers["Vary"] = "Origin"
+                return response
 
-    response = await call_next(request)
-
-    # Stamp every response with CORS headers so the browser never blocks it.
-    response.headers["Access-Control-Allow-Origin"]  = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-    response.headers["Access-Control-Allow-Headers"] = "x-api-key, x-idjwi-api-key, x-idjwi-role, x-idjwi-user, x-idjwi-plan, x-cron-secret, Content-Type, Authorization, Accept, X-Requested-With"
-    return response
+    return await call_next(request)
 
 # ----------------------------------------------------------
 # Mount all routers
@@ -456,6 +463,7 @@ app.include_router(company_graph_router)
 
 # Phase 3B — Proactive Alerts
 app.include_router(alerts_router)
+app.include_router(integrations_router)
 
 # Phase 3C — Network Intelligence
 app.include_router(network_router)

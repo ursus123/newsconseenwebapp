@@ -12,41 +12,26 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    app_env: str = "development"
+    cors_allowed_origins: str = (
+        "http://localhost:5173,"
+        "https://staging.news-con-seen.com,"
+        "https://news-con-seen.com,"
+        "https://www.news-con-seen.com"
+    )
     # ----------------------------------------------------------
     # Base44 entity URLs — still live. Read by connectors/base.py (all
     # connector writes), admin/routes.py (tenant provisioning), etl/base.py
     # (analytics fallback), and autotask/engine.py. Migration to Supabase is
     # in progress but NOT complete for these write paths — do not remove.
     # ----------------------------------------------------------
-    base44_tasks_url:          Optional[str] = None
-    base44_transactions_url:   Optional[str] = None
-    base44_services_url:       Optional[str] = None
-    base44_enterprises_url:    Optional[str] = None
-    base44_people_url:         Optional[str] = None
-    base44_products_url:       Optional[str] = None
-    base44_relationships_url:  Optional[str] = None
-    base44_addresses_url:      Optional[str] = None
     # New canonical entities
-    base44_documents_url:      Optional[str] = None
-    base44_schedules_url:      Optional[str] = None
-    base44_signals_url:        Optional[str] = None
-    base44_channels_url:       Optional[str] = None
-    base44_territories_url:    Optional[str] = None
     # Agricultural / ecological entities
-    base44_animals_url:        Optional[str] = None
-    base44_plots_url:          Optional[str] = None
-    base44_observations_url:   Optional[str] = None
     # Intelligence layer entities — write-back targets for enrichment engine
-    base44_insights_url:         Optional[str] = None
-    base44_recommendations_url:  Optional[str] = None
-    base44_risks_url:            Optional[str] = None
-    base44_opportunities_url:    Optional[str] = None
-    base44_decisions_url:        Optional[str] = None
 
     # ----------------------------------------------------------
     # Base44 authentication
     # ----------------------------------------------------------
-    base44_api_key: Optional[str] = None
 
     # ----------------------------------------------------------
     # Railway PostgreSQL
@@ -114,7 +99,6 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------
     # Base44 REST API base URL — kept for backward compat, unused
     # ----------------------------------------------------------
-    base44_api_url: Optional[str] = None
 
     # ----------------------------------------------------------
     # Platform admin secret — protects /admin/* endpoints
@@ -147,14 +131,14 @@ settings = Settings()
 def get_settings() -> Settings:
     return settings
 
+
+# Backward-compatible name for generic JSON transport headers. It contains no
+# platform credential and must not be used as an authorization mechanism.
+HEADERS = {"Content-Type": "application/json"}
+
 # ----------------------------------------------------------
 # Shared request headers for all Base44 API calls
 # ----------------------------------------------------------
-HEADERS = {
-    "api_key":      settings.base44_api_key or "",
-    "Content-Type": "application/json",
-}
-
 # ----------------------------------------------------------
 # Nominatim User-Agent string
 # ----------------------------------------------------------

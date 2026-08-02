@@ -36,6 +36,7 @@ import ObjectViews from './pages/ObjectViews';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import AcceptInvite from './pages/AcceptInvite';
+import ResetPassword from './pages/ResetPassword';
 import QueryPublic from './pages/QueryPublic';
 import ExplorePublic from './pages/ExplorePublic';
 import Agents from './pages/Agents';
@@ -197,6 +198,7 @@ function App() {
               {/* Public routes — no auth required */}
               <Route path="/login" element={<Login />} />
               <Route path="/AcceptInvite" element={<AcceptInvite />} />
+              <Route path="/ResetPassword" element={<ResetPassword />} />
               <Route path="/" element={<Landing />} />
               <Route path="/query" element={<QueryPublic />} />
               <Route path="/explore" element={<ExplorePublic />} />
