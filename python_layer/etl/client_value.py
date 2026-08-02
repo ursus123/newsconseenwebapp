@@ -12,7 +12,7 @@ RFM model:
 
 Columns produced:
     company_id
-    person_id             Base44 person id
+    person_id             Supabase person id
     person_name           full_name or first+last
     person_type           canonical type (client / patient / student / etc.)
     person_subtype

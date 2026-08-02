@@ -54,7 +54,7 @@ const rollupFixPlugin = {
   },
 }
 
-// Vite plugin (enforce:'pre') — catches imports before base44 plugin runs
+// Vite plugin (enforce:'pre') — catches imports before supabase plugin runs
 const viteFixPlugin = {
   name: 'fix-react-paths-vite',
   enforce: 'pre',

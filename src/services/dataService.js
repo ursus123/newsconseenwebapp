@@ -19,7 +19,7 @@ import { RAILWAY_API_KEY, RAILWAY_URL, authHeaders } from "@/config/api";
 
 /**
  * DATA_LAYER controls which Layer 1 backend is used.
- *   "base44"   — original Base44 SDK (default)
+ *   "supabase"   — original Supabase SDK (default)
  *   "supabase" — Supabase Postgres + RLS (migration target)
  *
  * Supabase is the only operational entity backend.

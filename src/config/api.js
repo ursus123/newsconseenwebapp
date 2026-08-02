@@ -2,7 +2,7 @@ import { supabase } from "@/api/supabaseEntityClient";
 
 const DEFAULT_API_BASE = import.meta.env.DEV
   ? "http://127.0.0.1:8001"
-  : "https://newsconseenwebapp-production.up.railway.app";
+  : "https://staging-api.news-con-seen.com";
 
 export const RAILWAY_URL =
   import.meta.env.VITE_RAILWAY_URL ||

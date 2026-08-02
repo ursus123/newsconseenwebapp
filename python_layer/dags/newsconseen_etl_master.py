@@ -113,7 +113,7 @@ def run_geospatial_summary():
 #     so all entity summaries are from the same generation before the
 #     relationship join backbone is written
 #   - geospatial (t9) waits for addresses (coordinates in address_summary)
-#     AND enterprises (entity data read from same Base44 source) so that
+#     AND enterprises (entity data read from same Supabase source) so that
 #     geospatial_summary reflects a consistent snapshot
 # ----------------------------------------------------------
 

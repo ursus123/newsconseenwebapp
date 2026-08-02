@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 # Raw tables — minimal schema.
 # load_raw() uses if_exists="replace" so these get recreated with full
-# Base44 columns on first ETL run. Pre-creation just prevents 404 on reads.
+# Supabase columns on first ETL run. Pre-creation just prevents 404 on reads.
 # ─────────────────────────────────────────────────────────────────────────────
 _RAW_TABLES = [
     "people", "enterprises", "products", "transactions",

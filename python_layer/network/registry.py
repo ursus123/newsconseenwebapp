@@ -6,7 +6,7 @@
 #
 # Supports three membership methods (all active simultaneously):
 #
-#   Method A — Base44 NetworkMembership entity
+#   Method A — Supabase NetworkMembership entity
 #     Operator manually maps children in the UI
 #     Most common for franchise / HQ deployments
 #
@@ -22,7 +22,7 @@
 #     Best for government / regulator deployments
 #
 # Resolution order: Method A + C are merged (union)
-# Method B writes to Method A (Base44 entity)
+# Method B writes to Method A (Supabase entity)
 # ==============================================================
 
 import hashlib
@@ -33,9 +33,7 @@ import string
 from datetime import datetime, timezone
 from typing import Optional
 
-import requests
-
-from config.settings import settings, HEADERS
+from data_sources import supabase_source
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +54,12 @@ class NetworkRegistry:
         """
         members = {}
 
-        # Method A — Base44 NetworkMembership entity
-        for m in self._load_from_base44():
+        # Method A — Supabase NetworkMembership entity
+        for m in self._load_from_canonical_store():
             members[m["company_id"]] = m
 
         # Method C — environment variable override
-        # (Method B writes to Base44 so is already in Method A)
+        # (Method B writes to Supabase so is already in Method A)
         for m in self._load_from_env():
             if m["company_id"] not in members:
                 members[m["company_id"]] = m
@@ -88,20 +86,17 @@ class NetworkRegistry:
         enterprise_type: str = "commercial",
     ) -> bool:
         """
-        Add a company to this network (writes to Base44).
+        Add a company to this network (writes to Supabase).
         Called when a child operator redeems a join code.
         """
         try:
-            membership_url = getattr(settings, "base44_network_membership_url", None)
-            if not membership_url:
-                logger.warning(
-                    "NetworkRegistry.add_member: BASE44_NETWORK_MEMBERSHIP_URL not set"
-                )
-                return False
-
-            resp = requests.post(
-                membership_url,
-                json={
+            existing = supabase_source.list_records(
+                "network_membership", company_id=self.network_id,
+                filters={"network_company_id": self.network_id, "child_company_id": company_id},
+                limit=1,
+            )
+            payload = {
+                    "company_id": self.network_id,
                     "network_company_id":  self.network_id,
                     "child_company_id":    company_id,
                     "child_name":          name,
@@ -109,11 +104,16 @@ class NetworkRegistry:
                     "joined_at":           datetime.now(timezone.utc).isoformat(),
                     "is_active":           True,
                     "source":              "join_code",
-                },
-                headers=HEADERS,
-                timeout=10,
-            )
-            resp.raise_for_status()
+            }
+            if existing:
+                supabase_source.update_record(
+                    "network_membership", existing[0]["id"], payload,
+                    company_id=self.network_id,
+                )
+            else:
+                supabase_source.create_record(
+                    "network_membership", payload, company_id=self.network_id
+                )
             logger.info(
                 "NetworkRegistry.add_member: added %s to network %s",
                 company_id, self.network_id,
@@ -127,33 +127,18 @@ class NetworkRegistry:
     def remove_member(self, company_id: str) -> bool:
         """Deactivate a member (soft delete)."""
         try:
-            membership_url = getattr(settings, "base44_network_membership_url", None)
-            if not membership_url:
-                return False
-
-            # Find the membership record
-            resp = requests.get(
-                membership_url,
-                params={
-                    "network_company_id": self.network_id,
-                    "child_company_id":   company_id,
-                },
-                headers=HEADERS,
-                timeout=10,
+            records = supabase_source.list_records(
+                "network_membership", company_id=self.network_id,
+                filters={"network_company_id": self.network_id, "child_company_id": company_id},
+                limit=10,
             )
-            resp.raise_for_status()
-            records = resp.json()
-            if isinstance(records, dict):
-                records = records.get("data", [])
 
             for record in records:
                 record_id = record.get("id")
                 if record_id:
-                    requests.patch(
-                        f"{membership_url}/{record_id}",
-                        json={"is_active": False},
-                        headers=HEADERS,
-                        timeout=10,
+                    supabase_source.update_record(
+                        "network_membership", record_id, {"is_active": False},
+                        company_id=self.network_id,
                     )
 
             logger.info(
@@ -190,24 +175,14 @@ class NetworkRegistry:
         Returns None if the code is invalid.
         Called when a child operator submits a join code.
         """
-        # In production: look up join_code in a JoinCode entity in Base44
+        # In production: look up join_code in a JoinCode entity in Supabase
         # that maps code → network_company_id + expiry
         # For now: store and look up via python_layer endpoint
         try:
-            join_codes_url = getattr(settings, "base44_join_codes_url", None)
-            if not join_codes_url:
-                return None
-
-            resp = requests.get(
-                join_codes_url,
-                params={"code": join_code, "is_active": True},
-                headers=HEADERS,
-                timeout=10,
+            records = supabase_source.list_records(
+                "network_join_code", filters={"code": join_code, "is_active": True},
+                limit=1,
             )
-            resp.raise_for_status()
-            records = resp.json()
-            if isinstance(records, dict):
-                records = records.get("data", [])
 
             if not records:
                 return None
@@ -231,27 +206,14 @@ class NetworkRegistry:
     # Membership loaders
     # ----------------------------------------------------------
 
-    def _load_from_base44(self) -> list[dict]:
-        """Load network members from Base44 NetworkMembership entity."""
+    def _load_from_canonical_store(self) -> list[dict]:
+        """Load network members from canonical Supabase records."""
         try:
-            membership_url = getattr(settings, "base44_network_membership_url", None)
-            if not membership_url:
-                return []
-
-            resp = requests.get(
-                membership_url,
-                params={
-                    "network_company_id": self.network_id,
-                    "is_active":          True,
-                    "limit":              500,
-                },
-                headers=HEADERS,
-                timeout=10,
+            records = supabase_source.list_records(
+                "network_membership", company_id=self.network_id,
+                filters={"network_company_id": self.network_id, "is_active": True},
+                limit=500,
             )
-            resp.raise_for_status()
-            records = resp.json()
-            if isinstance(records, dict):
-                records = records.get("data", [])
 
             return [
                 {
@@ -260,14 +222,14 @@ class NetworkRegistry:
                     "enterprise_type":  r.get("child_enterprise_type", "commercial"),
                     "joined_at":        r.get("joined_at"),
                     "is_active":        r.get("is_active", True),
-                    "source":           "base44",
+                    "source":           "canonical",
                 }
                 for r in records
                 if r.get("child_company_id")
             ]
 
         except Exception as e:
-            logger.debug("NetworkRegistry._load_from_base44: %s", e)
+            logger.debug("NetworkRegistry._load_from_canonical_store: %s", e)
             return []
 
     def _load_from_env(self) -> list[dict]:

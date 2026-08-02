@@ -113,7 +113,7 @@ export default function BarcodeScanner() {
 
   const checkRecall = async (name) => {
     try {
-      const res = await fetch(`https://newsconseenwebapp-production.up.railway.app/medications/recalls?name=${encodeURIComponent(name)}`);
+      const res = await fetch(`${RAILWAY_URL}/medications/recalls?name=${encodeURIComponent(name)}`);
       const data = await res.json();
       setRecall(data?.has_active_recall ? data : null);
     } catch { setRecall(null); }
@@ -507,3 +507,4 @@ export default function BarcodeScanner() {
     </div>
   );
 }
+import { RAILWAY_URL } from "@/config/api";

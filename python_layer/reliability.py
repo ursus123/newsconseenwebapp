@@ -3,7 +3,7 @@ reliability.py
 ---------------
 Retry and circuit-breaker utilities for python_layer.
 
-Used to protect calls to external APIs (Base44, OFAC, World Bank, GDELT, etc.)
+Used to protect calls to external APIs (Supabase, OFAC, World Bank, GDELT, etc.)
 from transient failures without cascading timeouts.
 
 Usage:
@@ -11,7 +11,7 @@ Usage:
 
     # Retry up to 3 times with exponential backoff
     @retry(max_attempts=3, backoff_base=1.5)
-    def fetch_from_base44(url):
+    def fetch_from_supabase(url):
         return requests.get(url, timeout=10).json()
 
     # Circuit breaker — opens after 5 consecutive failures, resets after 60s

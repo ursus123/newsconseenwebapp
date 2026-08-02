@@ -156,7 +156,7 @@ class AlertEvaluator:
         """
         Load recipient list from config.
         Recipients can come from:
-          1. Base44 AlertConfig entity (operator-configured)
+          1. Supabase AlertConfig entity (operator-configured)
           2. Environment variable defaults (ALERT_DEFAULT_EMAIL, etc.)
         """
         from config.settings import settings

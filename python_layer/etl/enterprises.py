@@ -17,7 +17,7 @@ REQUIRED_COLUMNS = {"id"}
 
 def extract_enterprises() -> pd.DataFrame:
     """
-    Extract all enterprise records from Base44.
+    Extract all enterprise records from Supabase.
     Returns raw DataFrame — no transformation applied here.
     """
     return fetch_supabase_entity_to_df("enterprises")
@@ -124,7 +124,7 @@ def transform_enterprises(df: pd.DataFrame) -> pd.DataFrame:
     a specific named enterprise.
 
     Produces one row per enterprise with:
-        id                  — Base44 enterprise ID (join key for all other tables)
+        id                  — Supabase enterprise ID (join key for all other tables)
         company_id          — tenant identifier (scopes all other tables)
         name                — enterprise display name
         enterprise_type     — type from the 40+ type taxonomy

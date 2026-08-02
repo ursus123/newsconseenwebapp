@@ -6,7 +6,7 @@
 #
 # Read priority:
 #   Tier 1 — raw.* PostgreSQL tables (full records, populated by ETL)
-#   Tier 2 — Base44 live API (if raw tables are empty or DB unavailable)
+#   Tier 2 — Supabase live API (if raw tables are empty or DB unavailable)
 #
 # Produces a DataQualityReport with:
 #   overall_score   (0–100)
@@ -32,7 +32,7 @@ def _now_iso() -> str:
 # duplicate_fields:  group-by these columns to detect likely duplicates
 # valid_enums:       field → set of canonical values; anything else → warning
 # raw_table:         PostgreSQL raw.* table name
-# base44_url_attr:   settings attribute name for Base44 fallback URL
+# supabase_url_attr:   settings attribute name for Supabase fallback URL
 # page:              frontend page name for "Fix →" link
 
 ENTITY_RULES = {
@@ -139,29 +139,8 @@ def _load_from_pg(table: str, company_id: str):
         return None
 
 
-def _load_from_base44(url_attr: str, company_id: str):
-    """Fallback: fetch records directly from Base44 REST API."""
-    try:
-        import pandas as pd
-        from config.settings import get_settings
-        from etl.utils import fetch_json_to_df, HEADERS
-        settings = get_settings()
-        url = getattr(settings, url_attr, None)
-        if not url:
-            return None
-        df = fetch_json_to_df(url, HEADERS)
-        if df.empty:
-            return None
-        if "company_id" in df.columns:
-            df = df[df["company_id"] == company_id]
-        return df if not df.empty else None
-    except Exception as e:
-        logger.debug("dataquality: base44 load %s failed — %s", url_attr, e)
-        return None
-
-
 def _load(entity: str, rules: dict, company_id: str):
-    """Three-tier load: raw PG → Base44 live."""
+    """Three-tier load: raw PG → Supabase live."""
     df = _load_from_pg(rules["raw_table"], company_id)
     if df is None:
         from data_sources.supabase_source import fetch_entity_df

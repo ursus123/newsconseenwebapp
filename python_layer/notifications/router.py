@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------------
 # Default alert config — applies when operator has not
-# configured custom settings in Base44 AlertConfig entity
+# configured custom settings in Supabase AlertConfig entity
 # ----------------------------------------------------------
 DEFAULT_CONFIG = {
     # Which alert types are enabled
@@ -82,7 +82,7 @@ class NotificationRouter:
         """
         Route a list of alerts to their recipients.
 
-        config: loaded from Base44 AlertConfig + DEFAULT_CONFIG
+        config: loaded from Supabase AlertConfig + DEFAULT_CONFIG
         dry_run: if True, log what would be sent without sending
 
         Returns summary of sent/skipped/failed notifications.
@@ -159,7 +159,7 @@ class NotificationRouter:
                             "status":     "failed",
                         })
 
-                # Log to AlertLog (currently a no-op — see _log_alert, base44_alert_log_url is unset)
+                # Log to AlertLog (currently a no-op — see _log_alert, supabase_alert_log_url is unset)
                 if sent_any and not dry_run:
                     self._log_alert(alert, channels, recipients)
 
@@ -237,29 +237,16 @@ class NotificationRouter:
         """
         Load AlertLog to check frequency caps.
         Returns dict of {company:type:enterprise → hours_since_last_fire}.
-        Currently always returns {} — base44_alert_log_url is not a configured
+        Currently always returns {} — supabase_alert_log_url is not a configured
         setting, so this is a dead read path (see _log_alert for the matching
         dead write path). Frequency caps are effectively disabled today.
         """
         try:
-            alert_log_url = getattr(settings, "base44_alert_log_url", None)
-            if not alert_log_url:
-                return {}
-
-            resp = requests.get(
-                alert_log_url,
-                params={
-                    "company_id": self.company_id,
-                    "limit": 500,
-                    "is_resolved": False,
-                },
-                headers=HEADERS,
-                timeout=10,
+            from data_sources import supabase_source
+            records = supabase_source.list_records(
+                "alert_delivery_log", company_id=self.company_id,
+                filters={"is_resolved": False}, limit=500,
             )
-            resp.raise_for_status()
-            records = resp.json()
-            if isinstance(records, dict):
-                records = records.get("data", [])
 
             now = datetime.now(timezone.utc)
             caps = {}
@@ -283,26 +270,28 @@ class NotificationRouter:
             return {}
 
     def _log_alert(self, alert: Alert, channels: list, recipients: list):
-        """Save fired alert to Base44 AlertLog entity. Currently a no-op —
-        base44_alert_log_url is not a configured setting, so this always
+        """Save fired alert to Supabase AlertLog entity. Currently a no-op —
+        supabase_alert_log_url is not a configured setting, so this always
         returns early. Needs a real Supabase-backed audit table."""
         try:
-            alert_log_url = getattr(settings, "base44_alert_log_url", None)
-            if not alert_log_url:
-                return
-
-            requests.post(
-                alert_log_url,
-                json={
-                    **alert.to_dict(),
-                    "sent_to":        [r.get("name", "") for r in recipients],
-                    "channel_used":   channels,
-                    "delivery_status":"sent",
-                    "is_resolved":    False,
+            from data_sources import supabase_source
+            alert_data = alert.to_dict()
+            supabase_source.create_record(
+                "alert_delivery_log",
+                {
+                    "company_id": self.company_id,
+                    "alert_type": alert_data.get("alert_type", "operational"),
+                    "enterprise_id": alert_data.get("enterprise_id"),
+                    "severity": alert_data.get("severity"),
+                    "payload": alert_data,
+                    "sent_to": [r.get("name", "") for r in recipients],
+                    "channels": channels,
+                    "delivery_status": "sent",
+                    "is_resolved": False,
+                    "triggered_at": alert_data.get("triggered_at"),
                 },
-                headers=HEADERS,
-                timeout=10,
-            ).raise_for_status()
+                company_id=self.company_id,
+            )
 
         except Exception as e:
             logger.warning("NotificationRouter._log_alert: failed — %s", e)
@@ -311,26 +300,16 @@ class NotificationRouter:
     def load_config(company_id: str) -> dict:
         """
         Load alert configuration for a company.
-        Merges DEFAULT_CONFIG with operator overrides from Base44 AlertConfig entity.
+        Merges DEFAULT_CONFIG with operator overrides from Supabase AlertConfig entity.
         Operator settings always win.
         """
         config = dict(DEFAULT_CONFIG)
 
         try:
-            alert_config_url = getattr(settings, "base44_alert_config_url", None)
-            if not alert_config_url:
-                return config
-
-            resp = requests.get(
-                alert_config_url,
-                params={"company_id": company_id, "limit": 100},
-                headers=HEADERS,
-                timeout=10,
+            from data_sources import supabase_source
+            records = supabase_source.list_records(
+                "alert_configuration", company_id=company_id, limit=100
             )
-            resp.raise_for_status()
-            records = resp.json()
-            if isinstance(records, dict):
-                records = records.get("data", [])
 
             # Each record overrides one config key
             for record in records:

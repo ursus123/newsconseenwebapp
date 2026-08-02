@@ -30,7 +30,7 @@ import {
   ADDRESS_TEMPLATE_INSTRUCTIONS, validateAddress, transformAddress,
 } from "@/components/shared/importConfigs";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 const statusColor = (s) => ({
   active: "bg-emerald-50 text-emerald-700",

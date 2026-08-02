@@ -185,7 +185,7 @@ def collect_evidence(company_id: str, engine) -> dict:
         "evidence": {
             "hosting":         "Railway — managed container platform with automatic restarts",
             "health_check":    "GET /health — monitored by uptime services",
-            "fallback_chain":  "Three-tier fallback: analytics.* → raw.* → Base44 live API",
+            "fallback_chain":  "Three-tier fallback: analytics.* → raw.* → Supabase live API",
             "circuit_breaker": "reliability.py circuit breakers on all external API calls",
             "retry_logic":     "reliability.py @retry with exponential backoff on external calls",
         },

@@ -2,7 +2,7 @@
 Supabase source of record for Newsconseen backend services.
 
 All Python-side operational reads and writes should go through this adapter
-instead of Base44 URLs. Base44 can remain only as an explicit legacy migration
+instead of Supabase URLs. Supabase can remain only as an explicit legacy migration
 source.
 """
 
@@ -99,9 +99,18 @@ ENTITY_TABLES = {
     "user_profiles": "user_profiles",
     "user": "user_profiles",
     "users": "user_profiles",
+    "connector_mapping": "connector_mappings",
+    "connector_mappings": "connector_mappings",
+    "alert_configuration": "alert_configurations",
+    "alert_configurations": "alert_configurations",
+    "alert_delivery_log": "alert_delivery_log",
+    "network_membership": "network_memberships",
+    "network_memberships": "network_memberships",
+    "network_join_code": "network_join_codes",
+    "network_join_codes": "network_join_codes",
 }
 
-BASE44_TO_SUPABASE_COLUMNS = {
+LEGACY_TO_SUPABASE_COLUMNS = {
     "persons": {
         "created_at": "created_date",
         "updated_at": "updated_date",
@@ -350,7 +359,7 @@ def _request(method: str, table: str, **kwargs) -> requests.Response:
 
 def _normalise_row(table: str, row: dict) -> dict:
     out = dict(row or {})
-    for src, dest in BASE44_TO_SUPABASE_COLUMNS.get(table, {}).items():
+    for src, dest in LEGACY_TO_SUPABASE_COLUMNS.get(table, {}).items():
         if src in out and dest not in out:
             out[dest] = out[src]
     if table == "persons" and "full_name" not in out:

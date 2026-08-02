@@ -1,6 +1,6 @@
 import { createContext, useState, useContext, useEffect, useRef } from 'react';
 
-// Lazy getter — avoids pulling @base44/sdk into the React module init chain
+// Lazy getter — avoids pulling @supabase/sdk into the React module init chain
 const getNcClient = () => import('@/api/ncClient').then(m => m.ncClient);
 
 const AuthContext = createContext();

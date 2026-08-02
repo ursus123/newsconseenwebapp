@@ -1,9 +1,9 @@
 """
 ingestion/schema_registry.py
-Canonical Base44 entity field definitions used to validate LLM-generated field_map entries.
+Canonical Supabase entity field definitions used to validate LLM-generated field_map entries.
 
 Fields listed here are the safe, writable payload fields for each entity.
-System fields (id, created_at, updated_at) are excluded — Base44 manages those.
+System fields (id, created_at, updated_at) are excluded — Supabase manages those.
 """
 
 ENTITY_FIELDS: dict[str, set[str]] = {

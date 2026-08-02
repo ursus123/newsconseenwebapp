@@ -116,7 +116,7 @@ def get_pending_approvals(company_id: str = Query(...), authorization: Optional[
 def resolve_approval(approval_id: str, req: ResolveRequest, authorization: Optional[str] = Header(default=None)):
     """
     Approve or reject a pending agent action.
-    Phase 13: when approved, immediately executes the Base44 mutation.
+    Phase 13: when approved, immediately executes the Supabase mutation.
     Returns both the resolution result and the execution result.
     """
     engine = get_engine_safe()

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import * as Sentry from "@sentry/react";
+import { RAILWAY_URL } from "@/config/api";
 import { createPageUrl } from "@/utils";
 import {
   LayoutDashboard,
@@ -408,8 +409,8 @@ export default function Layout({ children, currentPageName }) {
   // Sentry context — no-op if Sentry wasn't initialized (VITE_SENTRY_DSN unset)
   useEffect(() => {
     if (!currentUser) return;
-    Sentry.setUser({ id: currentUser.email || currentUser.id, email: currentUser.email });
-    Sentry.setTag("company_id", currentUser.company_id);
+    Sentry.setUser(null);
+    Sentry.setTag("tenant_id", currentUser.company_id);
     Sentry.setTag("role", currentUser.role);
   }, [currentUser]);
 
@@ -425,7 +426,7 @@ export default function Layout({ children, currentPageName }) {
   };
 
   useEffect(() => {
-    fetch("https://newsconseenwebapp-production.up.railway.app/alerts/status")
+    fetch(`${RAILWAY_URL}/alerts/status`)
       .then(r => r.json())
       .then(data => setCriticalAlerts(data?.critical_count || 0))
       .catch(() => {});
@@ -437,7 +438,7 @@ export default function Layout({ children, currentPageName }) {
   useEffect(() => {
     const companyId = currentUser?.company_id;
     if (!companyId) return;
-    const base = "https://newsconseenwebapp-production.up.railway.app";
+    const base = RAILWAY_URL;
     Promise.all([
       fetch(`${base}/agents/approvals/pending?company_id=${companyId}`).then(r => r.ok ? r.json() : { pending: [] }).catch(() => ({ pending: [] })),
       fetch(`${base}/intelligence/inbox?company_id=${companyId}&limit=200`).then(r => r.ok ? r.json() : {}).catch(() => ({})),

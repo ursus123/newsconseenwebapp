@@ -9,7 +9,7 @@
  *   isPersonType(person.person_type, "client")         // helper for single-value checks
  *
  * Never add raw legacy strings to filter conditions — always go through this map.
- * When Base44 taxonomy values change, update taxonomy.py (python_layer) first,
+ * When Supabase taxonomy values change, update taxonomy.py (python_layer) first,
  * then update this file to match.
  */
 

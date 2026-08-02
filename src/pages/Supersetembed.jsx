@@ -4,7 +4,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 const SUPERSET_URL = "https://superset-production-6eb0.up.railway.app";
-const API_DOCS_URL = "https://newsconseenwebapp-production.up.railway.app/docs";
+import { RAILWAY_URL } from "@/config/api";
+const API_DOCS_URL = `${RAILWAY_URL}/docs`;
 
 const FEATURES = [
   { icon: "✅", text: "Live charts and drill-down dashboards" },

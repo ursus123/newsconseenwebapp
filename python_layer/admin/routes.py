@@ -135,7 +135,7 @@ class CreateTenantRequest(BaseModel):
     enterprise_name:  str
     enterprise_type:  str
     country:          str
-    admin_email:      str                    # sent an invite (informational — Base44 manages actual user creation)
+    admin_email:      str                    # sent an invite (informational — Supabase manages actual user creation)
     admin_name:       Optional[str] = ""
     subscription_tier: str = "professional"
     notes:            Optional[str] = ""
@@ -343,17 +343,14 @@ def create_tenant(
     """
     Manually provision a new tenant from the admin UI.
 
-    Creates the Enterprise record in Base44, assigns company_id,
+    Creates the Enterprise record in Supabase, assigns company_id,
     calls /onboarding/provision for taxonomy + workflows,
     and records the action in admin_audit_log.
     """
     _check_auth(x_admin_secret, authorization)
     engine = _get_engine()
 
-    from config.settings import settings, HEADERS
-    import httpx
-
-    # Step 1: Create Enterprise in Base44
+    # Step 1: Create the canonical enterprise
     enterprise_id = str(uuid.uuid4())
     trial_end = datetime.now(timezone.utc).strftime("%Y-%m-%d")  # admin provisions immediately active
 
@@ -369,28 +366,9 @@ def create_tenant(
         "description":        req.notes or "",
     }
 
-    enterprise_record = None
-    try:
-        if False:
-            resp = httpx.post(
-                settings.base44_enterprises_url,
-                json=payload,
-                headers=HEADERS,
-                timeout=15,
-            )
-            if resp.status_code in (200, 201):
-                enterprise_record = resp.json()
-                real_id = enterprise_record.get("id") or enterprise_id
-                enterprise_id = real_id
-            else:
-                logger.warning("admin: Base44 enterprise create returned %d", resp.status_code)
-    except Exception as exc:
-        logger.warning("admin: Base44 enterprise create failed — %s", exc)
-
-    if enterprise_record is None:
-        from data_sources import supabase_source
-        enterprise_record = supabase_source.create_record("enterprise", payload, company_id=enterprise_id)
-        enterprise_id = enterprise_record.get("id") or enterprise_id
+    from data_sources import supabase_source
+    enterprise_record = supabase_source.create_record("enterprise", payload, company_id=enterprise_id)
+    enterprise_id = enterprise_record.get("id") or enterprise_id
 
     # Step 2: Run onboarding/provision
     provision_result = {}

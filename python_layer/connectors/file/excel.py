@@ -10,7 +10,7 @@
 #   3. Operator confirms or adjusts: "this column = first_name"
 #   4. System validates taxonomy — flags unmapped type values
 #   5. Operator maps: "Mwalimu → staff/Teacher"
-#   6. On confirm → records created in Base44 with taxonomy fields
+#   6. On confirm → records created in Supabase with taxonomy fields
 #   7. ETL refresh triggered automatically
 #
 # Supports three target entity types:

@@ -3,7 +3,7 @@ python_layer/etl/time.py
 ========================
 ETL for analytics.time_summary — daily attendance and clock-in/out analysis.
 
-Clock data lives in Base44 Tasks as rows where:
+Clock data lives in Supabase Tasks as rows where:
   task_type IN ('clock_in', 'clock_out', 'break_start', 'break_end')
 
 One row per person per day is produced, with:
@@ -33,7 +33,7 @@ OVERTIME_THRESHOLD_HOURS = 8.0
 
 def extract_time_tasks() -> pd.DataFrame:
     """
-    Extract all task records from Base44, then filter to clock-related types.
+    Extract all task records from Supabase, then filter to clock-related types.
     Returns raw DataFrame — no transformation applied here.
     """
     df = fetch_supabase_entity_to_df("tasks")

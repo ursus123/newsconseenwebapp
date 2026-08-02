@@ -34,7 +34,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// ── Column name map — Base44 field names → Supabase column names ──────────────
+// ── Column name map — Supabase field names → Supabase column names ──────────────
 // Applied on filter keys and sort strings. Does NOT rename payload fields on
 // insert/update — use FIELD_ALIASES per entity for that.
 const COL_MAP = {
@@ -234,7 +234,7 @@ function entityWrapper(table) {
     /**
      * filter(filters, sort, limit?) — selects rows matching all key=value pairs.
      * filters: plain object { company_id: "x", person_type: "staff" }
-     * sort:    Base44-style string e.g. "-created_date"
+     * sort:    Supabase-style string e.g. "-created_date"
      * limit:   optional integer cap on result count
      */
     async filter(filters = {}, sort = "-created_at", limit) {
@@ -338,7 +338,7 @@ function entityWrapper(table) {
 
     /**
      * subscribe(callback) — listen for INSERT/UPDATE/DELETE on this table.
-     * Mirrors the Base44 entity.subscribe() API.
+     * Mirrors the Supabase entity.subscribe() API.
      * Returns an unsubscribe function.
      */
     subscribe(callback) {
@@ -356,7 +356,7 @@ function entityWrapper(table) {
   };
 }
 
-// ── Entity registry — mirrors every entity in Base44 ─────────────────────────
+// ── Entity registry — mirrors every entity in Supabase ─────────────────────────
 // Key: the name used on ncClient.entities.* (PascalCase)
 // Value: the Supabase table name (snake_case, plural)
 
@@ -399,10 +399,10 @@ export const supabaseEntities = {
   Opportunity:      entityWrapper("opportunities"),
   MetricDefinition: entityWrapper("metric_definitions"),
 
-  // Platform internals — formerly Base44-only fallback, added via
+  // Platform internals — formerly Supabase-only fallback, added via
   // 003_supabase_entity_expansion.sql. Run that migration before deploying
   // this block, or every read/write to these entities will error against a
-  // nonexistent table instead of falling back to Base44.
+  // nonexistent table instead of falling back to Supabase.
   User:                 entityWrapper("user_profiles"),   // wraps existing auth table, not a new one
   RolePermissions:      entityWrapper("role_permissions"),
   UserAppAccess:        entityWrapper("user_app_access"),

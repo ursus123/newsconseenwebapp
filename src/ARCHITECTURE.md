@@ -801,7 +801,7 @@ people.filter(p => (TYPE_ALIASES["staff"] || ["staff"]).includes(p.person_type))
 4. Trigger ETL refresh — fire and forget
 
 ```javascript
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 const triggerETL = (entity) => {
   fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
@@ -823,7 +823,7 @@ triggerETL("transaction");  // after transaction posted
 The python_layer is a FastAPI service on Railway. It is the analytical engine — Layer 2.
 **It never writes back to Supabase. Data flows one way only: Supabase → python_layer → PostgreSQL.**
 
-**Railway production URL:** `https://newsconseenwebapp-production.up.railway.app`
+**Railway production URL:** `https://staging-api.news-con-seen.com`
 
 ### 12.1 Taxonomy normalization — config/taxonomy.py
 
@@ -910,7 +910,7 @@ All `/cron/*` and `/load/*` endpoints require `x-cron-secret` header.
 ### 12.5 How the frontend reads from python_layer
 
 ```javascript
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 const ANALYTICS_TABLE_MAP = {
   analytics_people:        "/people-summary",
@@ -1071,7 +1071,7 @@ PostgreSQL is Railway managed.
 
 Health check:
 ```
-GET https://newsconseenwebapp-production.up.railway.app/health
+GET https://staging-api.news-con-seen.com/health
 
 {
   "status": "ok",

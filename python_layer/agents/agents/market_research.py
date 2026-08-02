@@ -361,7 +361,7 @@ def _insert_market_signals(engine, company_id: str, opportunities: list) -> None
 
 
 def _create_recommendation_tasks(company_id: str, recommendations: list) -> None:
-    """Create Base44 tasks for high/critical priority recommendations."""
+    """Create Supabase tasks for high/critical priority recommendations."""
     for rec in recommendations:
         if not isinstance(rec, dict):
             continue

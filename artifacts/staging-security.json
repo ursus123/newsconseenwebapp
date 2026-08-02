@@ -1,0 +1,160 @@
+{
+  "contract": "newsconseen-browser-security.v1",
+  "environment": "staging",
+  "checks": [
+    {
+      "scenario": "https.web",
+      "status": "pass",
+      "evidence": {
+        "status": 200,
+        "url": "https://staging.news-con-seen.com/",
+        "certificate": {
+          "subject": [
+            [
+              [
+                "commonName",
+                "staging.news-con-seen.com"
+              ]
+            ]
+          ],
+          "issuer": [
+            [
+              [
+                "countryName",
+                "US"
+              ]
+            ],
+            [
+              [
+                "organizationName",
+                "Let's Encrypt"
+              ]
+            ],
+            [
+              [
+                "commonName",
+                "YR2"
+              ]
+            ]
+          ],
+          "notAfter": "Oct 31 16:39:02 2026 GMT"
+        }
+      }
+    },
+    {
+      "scenario": "headers.web",
+      "status": "fail",
+      "evidence": {
+        "missing": [
+          "content-security-policy",
+          "x-frame-options"
+        ],
+        "present": [
+          "permissions-policy",
+          "referrer-policy",
+          "strict-transport-security",
+          "x-content-type-options"
+        ]
+      }
+    },
+    {
+      "scenario": "https.api",
+      "status": "pass",
+      "evidence": {
+        "status": 200,
+        "url": "https://staging-api.news-con-seen.com/health",
+        "certificate": {
+          "subject": [
+            [
+              [
+                "commonName",
+                "staging-api.news-con-seen.com"
+              ]
+            ]
+          ],
+          "issuer": [
+            [
+              [
+                "countryName",
+                "US"
+              ]
+            ],
+            [
+              [
+                "organizationName",
+                "Let's Encrypt"
+              ]
+            ],
+            [
+              [
+                "commonName",
+                "YR1"
+              ]
+            ]
+          ],
+          "notAfter": "Oct 31 16:16:20 2026 GMT"
+        }
+      }
+    },
+    {
+      "scenario": "headers.api",
+      "status": "pass",
+      "evidence": {
+        "missing": [],
+        "present": [
+          "content-security-policy",
+          "permissions-policy",
+          "referrer-policy",
+          "strict-transport-security",
+          "x-content-type-options"
+        ]
+      }
+    },
+    {
+      "scenario": "assets.zero_legacy_platform",
+      "status": "fail",
+      "evidence": {
+        "assets_scanned": 4,
+        "hits": [
+          "https://staging.news-con-seen.com/assets/index-jbCXfVpj.js"
+        ]
+      }
+    },
+    {
+      "scenario": "assets.no_server_secrets",
+      "status": "pass",
+      "evidence": {
+        "assets_scanned": 4,
+        "hits": []
+      }
+    },
+    {
+      "scenario": "browser.no_mixed_content",
+      "status": "pass",
+      "evidence": {
+        "http_references": []
+      }
+    },
+    {
+      "scenario": "cors.trusted_origin",
+      "status": "pass",
+      "evidence": {
+        "status": 200,
+        "allow_origin": "https://staging.news-con-seen.com"
+      }
+    },
+    {
+      "scenario": "cors.untrusted_origin_rejected",
+      "status": "pass",
+      "evidence": {
+        "status": 400,
+        "allow_origin": null
+      }
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 2
+  },
+  "evidence_digest": "1dd020af72b82245f95211c142adff081cd28e7493ba53ca8c49f7b7140bac99"
+}

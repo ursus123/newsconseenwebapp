@@ -20,7 +20,7 @@ class Settings(BaseSettings):
         "https://www.news-con-seen.com"
     )
     # ----------------------------------------------------------
-    # Base44 entity URLs — still live. Read by connectors/base.py (all
+    # Supabase entity URLs — still live. Read by connectors/base.py (all
     # connector writes), admin/routes.py (tenant provisioning), etl/base.py
     # (analytics fallback), and autotask/engine.py. Migration to Supabase is
     # in progress but NOT complete for these write paths — do not remove.
@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Intelligence layer entities — write-back targets for enrichment engine
 
     # ----------------------------------------------------------
-    # Base44 authentication
+    # Supabase authentication
     # ----------------------------------------------------------
 
     # ----------------------------------------------------------
@@ -97,7 +97,7 @@ class Settings(BaseSettings):
     supabase_service_role_key: Optional[str] = None
 
     # ----------------------------------------------------------
-    # Base44 REST API base URL — kept for backward compat, unused
+    # Supabase REST API base URL — kept for backward compat, unused
     # ----------------------------------------------------------
 
     # ----------------------------------------------------------
@@ -137,7 +137,7 @@ def get_settings() -> Settings:
 HEADERS = {"Content-Type": "application/json"}
 
 # ----------------------------------------------------------
-# Shared request headers for all Base44 API calls
+# Shared request headers for all Supabase API calls
 # ----------------------------------------------------------
 # ----------------------------------------------------------
 # Nominatim User-Agent string

@@ -1,14 +1,14 @@
 /**
  * PdfToOntology.jsx — Phase J (Phase 13)
  *
- * PDF → AI entity extraction → Ingestion Agent → Base44 ontology
+ * PDF → AI entity extraction → Ingestion Agent → Supabase ontology
  *
  * Pipeline:
  *  1. Upload PDF → ncClient file storage
  *  2. LLM extracts structured records (people, enterprises, products, etc.)
  *  3. Records serialised to JSON → POST to /ingestion/upload
  *  4. Ingestion Agent returns field-map plan → user reviews
- *  5. POST /ingestion/load/{plan_id} → records land in Base44
+ *  5. POST /ingestion/load/{plan_id} → records land in Supabase
  */
 import React, { useState, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const RAILWAY_URL   = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const RAILWAY_API_KEY = import.meta.env?.VITE_RAILWAY_API_KEY || "";
 
 const ENTITY_HINTS = [

@@ -7,7 +7,7 @@
 #   GET  /connectors/catalog            — list all connectors with status
 #   GET  /connectors/catalog/{id}       — single connector metadata
 #   POST /connectors/run                — execute a connector
-#   POST /connectors/preview            — preview without loading to Base44
+#   POST /connectors/preview            — preview without loading to Supabase
 #   GET  /connectors/suggest-columns    — suggest column mappings for a file
 #   POST /connectors/save-mapping       — save an operator taxonomy mapping
 #   GET  /connectors/runs               — connector run history
@@ -747,11 +747,11 @@ async def run_connector(
       - Optionally specify entity_type
 
     For API-based connectors (mpesa, adp, etc.):
-      - Credentials are loaded from ConnectorConfig in Base44
+      - Credentials are loaded from ConnectorConfig in Supabase
       - No file upload needed
 
     dry_run=True runs extract+transform but skips the load step.
-    Use this to validate data before committing to Base44.
+    Use this to validate data before committing to Supabase.
     """
     connector_class = get_connector(connector_id)
     if not connector_class:
@@ -806,7 +806,7 @@ async def run_connector(
     engine = MappingEngine(company_id=company_id)
     mappings = {
         f"{m['field_name']}:{m['source_value'].lower()}": m["taxonomy_value"]
-        for m in []  # loaded from Base44 ConnectorMapping in MappingEngine
+        for m in []  # loaded from Supabase ConnectorMapping in MappingEngine
     }
 
     connector = connector_class(
@@ -894,7 +894,7 @@ def save_taxonomy_mapping(payload: dict):
     Called when the operator resolves an unmapped value in the UI:
     "Mwalimu → staff/Teacher"
 
-    Saves to ConnectorMapping entity in Base44 so all future
+    Saves to ConnectorMapping entity in Supabase so all future
     syncs use this mapping automatically.
 
     Payload:
@@ -1037,12 +1037,12 @@ def db_run_sync(
     dry_run:    bool = Query(False),
 ):
     """
-    Extract rows from the external database and load them into Base44.
+    Extract rows from the external database and load them into Supabase.
 
     Steps:
       1. Connect to external DB and run query/table
       2. Apply column_map to translate source columns → entity fields
-      3. Load records into Base44 (or dry_run to preview without writing)
+      3. Load records into Supabase (or dry_run to preview without writing)
 
     Returns the standard connector run summary.
     """

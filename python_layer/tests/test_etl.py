@@ -2,7 +2,7 @@
 tests/test_etl.py
 ------------------
 Unit tests for the ETL pipeline — transform logic only.
-No database, no Base44 network calls.
+No database and no external network calls.
 
 Tests verify:
   - ETL transform functions return DataFrames with expected columns

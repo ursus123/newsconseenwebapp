@@ -8,11 +8,11 @@
  * fires inside the protected useTaxonomy hook, we cannot intercept
  * taxonomy saves directly.  Instead, pages call notifyTaxonomyChange()
  * at the point where a form is submitted — by then any new taxonomy
- * values have already been written to Base44 and we can fire the ETL.
+ * values have already been written to Supabase and we can fire the ETL.
  *
  * Flow:
  *   1. User adds "Custom Nurse Specialist" in a subtype field
- *      → useTaxonomy.addCustomOption() writes to Base44 immediately
+ *      → useTaxonomy.addCustomOption() writes to Supabase immediately
  *   2. User completes the form and saves
  *      → page calls notifyTaxonomyChange("person", companyId)
  *      → frontend shows "Syncing analytics…" badge
@@ -32,7 +32,7 @@
 
 import { useState, useCallback } from "react";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 // Delay (ms) before the "synced" badge auto-clears
 const BADGE_CLEAR_DELAY = 4000;
@@ -44,7 +44,7 @@ export function useTaxonomySync() {
   /**
    * notifyTaxonomyChange(entityType, companyId, meta?)
    *
-   * @param {string} entityType  Base44 entity type: "person", "enterprise",
+   * @param {string} entityType  Supabase entity type: "person", "enterprise",
    *                             "item", "task", "transaction", "address",
    *                             "relationship", "service"
    * @param {string} companyId   Tenant company_id — scopes the ETL run

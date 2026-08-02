@@ -12,10 +12,10 @@ import {
   X, ExternalLink, Edit2, Check, Loader2, AlertTriangle, ChevronRight,
 } from "lucide-react";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 
-// ── Entity → Base44 class name ───────────────────────────────────────────────
+// ── Entity → Supabase class name ───────────────────────────────────────────────
 const ENTITY_CLASS_MAP = {
   person: "Person", enterprise: "Enterprise", product: "Product",
   service: "Service", task: "Task", transaction: "Transaction",

@@ -29,8 +29,7 @@ from typing import Optional
 
 import pandas as pd
 
-from config import settings, HEADERS
-from etl.base import fetch_json_to_df
+from data_sources.supabase_source import fetch_entity_df
 from database import get_engine_safe
 
 logger = logging.getLogger(__name__)
@@ -45,7 +44,7 @@ def _now_iso() -> str:
 
 
 def _load_raw_df(table: str, company_id: str) -> pd.DataFrame:
-    """Load from raw.* PostgreSQL table with Base44 fallback."""
+    """Load from raw.* PostgreSQL table with Supabase fallback."""
     engine = get_engine_safe()
     if engine:
         try:
@@ -58,17 +57,11 @@ def _load_raw_df(table: str, company_id: str) -> pd.DataFrame:
                 return df
         except Exception as e:
             logger.debug("anomaly: raw.%s unavailable — %s", table, e)
-    # Base44 fallback
-    url_attr = f"base44_{table}_url"
-    url = getattr(settings, url_attr, None)
-    if url:
-        try:
-            df = fetch_json_to_df(url)
-            if not df.empty and "company_id" in df.columns:
-                return df[df["company_id"] == company_id].copy()
-        except Exception as e:
-            logger.debug("anomaly: Base44 fallback for %s failed — %s", table, e)
-    return pd.DataFrame()
+    try:
+        return fetch_entity_df(table, company_id=company_id)
+    except Exception as e:
+        logger.debug("anomaly: canonical fallback for %s failed — %s", table, e)
+        return pd.DataFrame()
 
 
 def _z_score_anomalies(

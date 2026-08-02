@@ -10,7 +10,7 @@ import ClusterAnalysisView from "./ClusterAnalysisView";
 import PlottableCompetitorScatter from "./PlottableCompetitorScatter";
 import { PlusCircle, CheckCircle2, Loader2, X } from "lucide-react";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -65,8 +65,8 @@ const DISTANCE_BUCKETS = [
 
 const BUCKET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#84cc16", "#22c55e"];
 
-// ── AddToBase44 button — inline enterprise picker ────────────────────────────
-function AddToBase44Button({ competitor, myEnterprises, companyId, businessType, location }) {
+// ── AddToSupabase button — inline enterprise picker ────────────────────────────
+function AddToSupabaseButton({ competitor, myEnterprises, companyId, businessType, location }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -117,7 +117,7 @@ function AddToBase44Button({ competitor, myEnterprises, companyId, businessType,
         <button
           onClick={() => setOpen(true)}
           className="flex items-center gap-1 text-[10px] text-violet-600 hover:text-violet-800 font-semibold whitespace-nowrap"
-          title="Add to Base44"
+          title="Add to Supabase"
         >
           <PlusCircle className="w-3 h-3" /> Add
         </button>
@@ -254,7 +254,7 @@ export default function CompetitorSection({ data, businessType, location, radius
                     {c.address && <p className="text-[10px] text-slate-400 truncate">{c.address}</p>}
                     {myEnterprises?.length > 0 && companyId && (
                       <div className="absolute top-2 right-2">
-                        <AddToBase44Button
+                        <AddToSupabaseButton
                           competitor={c}
                           myEnterprises={myEnterprises}
                           companyId={companyId}
@@ -309,7 +309,7 @@ export default function CompetitorSection({ data, businessType, location, radius
                       <td className="py-1.5 text-slate-500 text-xs whitespace-nowrap">{c.distance_km} km</td>
                       {myEnterprises?.length > 0 && companyId && (
                         <td className="py-1.5 relative">
-                          <AddToBase44Button
+                          <AddToSupabaseButton
                             competitor={c}
                             myEnterprises={myEnterprises}
                             companyId={companyId}

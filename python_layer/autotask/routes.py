@@ -118,7 +118,7 @@ class AutoTaskConfig(BaseModel):
     company_id:    str
     enabled:       bool = True
     enabled_rules: Optional[List[str]] = None   # None = all rules enabled
-    assignee_id:   Optional[str] = None          # Base44 person_id
+    assignee_id:   Optional[str] = None          # Supabase person_id
     rule_config:   Optional[dict] = None         # threshold overrides
 
 

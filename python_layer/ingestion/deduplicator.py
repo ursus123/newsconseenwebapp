@@ -1,6 +1,6 @@
 """
 ingestion/deduplicator.py
-Row-level deduplication before loading into Base44.
+Row-level deduplication before loading into Supabase.
 
 Strategy per entity type:
   Person      — match on (full_name + phone) or (full_name + email)
@@ -135,7 +135,7 @@ def deduplicate(
     Args:
         entity_type:       One of the 15 canonical entity names.
         incoming_rows:     Rows to be loaded (already transformed).
-        existing_records:  Records already in Base44 for this entity + company.
+        existing_records:  Records already in Supabase for this entity + company.
         duplicate_action:  What to do when a match is found above threshold.
                            "skip"   — leave the existing record untouched (default).
                            "update" — merge incoming fields onto the existing record.

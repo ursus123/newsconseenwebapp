@@ -32,7 +32,10 @@ _CONTEXT_FLIGHTS = weakref.WeakValueDictionary()
 
 def _context_key(verifier, authorization, tenant_id, operational_unit_id):
     token_fingerprint = hashlib.sha256(str(authorization or "").encode()).hexdigest()
-    return (id(verifier), token_fingerprint, str(tenant_id), str(operational_unit_id or ""))
+    # Keep the verifier object itself in the key. Using id(verifier) allowed a
+    # short-lived test/request verifier to be garbage-collected and its memory
+    # id reused, which could return another principal's cached context.
+    return (verifier, token_fingerprint, str(tenant_id), str(operational_unit_id or ""))
 
 
 def _get_cached_context(key, request_id):

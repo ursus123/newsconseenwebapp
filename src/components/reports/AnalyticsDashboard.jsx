@@ -90,25 +90,25 @@ export default function AnalyticsDashboard({ companyId }) {
         fetchWithFallback({
           analyticsEndpoint: "/enterprise-summary",
           rawEntity:         "enterprises",
-          base44Fn:          () => ncClient.entities.Enterprise.filter(companyId ? { company_id: companyId } : {}),
+          supabaseFn:          () => ncClient.entities.Enterprise.filter(companyId ? { company_id: companyId } : {}),
           companyId,
         }),
         fetchWithFallback({
           analyticsEndpoint: "/people-summary",
           rawEntity:         "people",
-          base44Fn:          () => ncClient.entities.Person.filter(companyId ? { company_id: companyId } : {}),
+          supabaseFn:          () => ncClient.entities.Person.filter(companyId ? { company_id: companyId } : {}),
           companyId,
         }),
         fetchWithFallback({
           analyticsEndpoint: "/task-summary",
           rawEntity:         "tasks",
-          base44Fn:          () => ncClient.entities.Task.filter(companyId ? { company_id: companyId } : {}),
+          supabaseFn:          () => ncClient.entities.Task.filter(companyId ? { company_id: companyId } : {}),
           companyId,
         }),
         fetchWithFallback({
           analyticsEndpoint: "/transaction-summary",
           rawEntity:         "transactions",
-          base44Fn:          () => ncClient.entities.Transaction.filter(companyId ? { company_id: companyId } : {}),
+          supabaseFn:          () => ncClient.entities.Transaction.filter(companyId ? { company_id: companyId } : {}),
           companyId,
         }),
       ]);

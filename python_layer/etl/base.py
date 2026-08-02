@@ -18,7 +18,7 @@ RETRY_BACKOFF = 2.0         # seconds — doubles on each retry (exponential)
 
 # ----------------------------------------------------------
 # Pagination configuration
-# Base44 uses 'limit' and 'skip' query params.
+# Supabase uses 'limit' and 'skip' query params.
 # We fetch pages until a page comes back with fewer records
 # than the page size, which signals the last page.
 # ----------------------------------------------------------
@@ -27,7 +27,7 @@ PAGE_SIZE = 500
 
 def fetch_json_to_df(url: str, params: dict | None = None) -> pd.DataFrame:
     """
-    Fetch all records from a Base44 entity URL and return as a DataFrame.
+    Fetch all records from a Supabase entity URL and return as a DataFrame.
 
     Handles:
         - Timeouts          (REQUEST_TIMEOUT seconds per request)
@@ -37,7 +37,7 @@ def fetch_json_to_df(url: str, params: dict | None = None) -> pd.DataFrame:
         - Logging           (records count on success, error on failure)
 
     Args:
-        url:    Base44 entity endpoint URL from config.settings
+        url:    Supabase entity endpoint URL from config.settings
         params: Optional extra query params merged with pagination params
 
     Returns:
@@ -101,7 +101,7 @@ def _fetch_with_retry(url: str, params: dict) -> list[dict]:
             resp.raise_for_status()
             data = resp.json()
 
-            # Base44 may return a list directly or wrap in {"data": [...]}
+            # Supabase may return a list directly or wrap in {"data": [...]}
             if isinstance(data, list):
                 return data
             if isinstance(data, dict):
@@ -115,7 +115,7 @@ def _fetch_with_retry(url: str, params: dict) -> list[dict]:
 
         except requests.exceptions.Timeout:
             last_exc = TimeoutError(
-                f"Base44 request timed out after {REQUEST_TIMEOUT}s "
+                f"Supabase request timed out after {REQUEST_TIMEOUT}s "
                 f"(attempt {attempt}/{MAX_RETRIES}): {url}"
             )
             logger.warning(str(last_exc))
@@ -128,20 +128,20 @@ def _fetch_with_retry(url: str, params: dict) -> list[dict]:
             # 4xx client errors (except 429) — don't retry, raise immediately
             if status not in (429,) and isinstance(status, int) and status < 500:
                 logger.error(
-                    "Base44 client error %s for %s — not retrying", status, url
+                    "Supabase client error %s for %s — not retrying", status, url
                 )
                 raise
 
             last_exc = e
             logger.warning(
-                "Base44 HTTP %s on attempt %d/%d for %s",
+                "Supabase HTTP %s on attempt %d/%d for %s",
                 status, attempt, MAX_RETRIES, url,
             )
 
         except requests.exceptions.RequestException as e:
             last_exc = e
             logger.warning(
-                "Base44 request error on attempt %d/%d for %s: %s",
+                "Supabase request error on attempt %d/%d for %s: %s",
                 attempt, MAX_RETRIES, url, e,
             )
 

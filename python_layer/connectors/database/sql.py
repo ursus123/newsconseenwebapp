@@ -477,7 +477,7 @@ class SqlDatabaseConnector(BaseConnector):
         entity_type: str,
     ) -> dict | None:
         """
-        Apply column_map to a raw row, producing a record ready for Base44.
+        Apply column_map to a raw row, producing a record ready for Supabase.
 
         column_map example:
             {
