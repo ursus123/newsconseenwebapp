@@ -61,8 +61,9 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
           <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700">Email</label>
+            <label htmlFor="login-email" className="text-sm font-medium text-slate-700">Email</label>
             <input
+              id="login-email"
               type="email"
               required
               autoFocus
@@ -74,8 +75,9 @@ export default function Login() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700">Password</label>
+            <label htmlFor="login-password" className="text-sm font-medium text-slate-700">Password</label>
             <input
+              id="login-password"
               type="password"
               required
               value={password}

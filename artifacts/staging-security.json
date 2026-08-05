@@ -43,17 +43,16 @@
     },
     {
       "scenario": "headers.web",
-      "status": "fail",
+      "status": "pass",
       "evidence": {
-        "missing": [
-          "content-security-policy",
-          "x-frame-options"
-        ],
+        "missing": [],
         "present": [
+          "content-security-policy",
           "permissions-policy",
           "referrer-policy",
           "strict-transport-security",
-          "x-content-type-options"
+          "x-content-type-options",
+          "x-frame-options"
         ]
       }
     },
@@ -112,12 +111,10 @@
     },
     {
       "scenario": "assets.zero_legacy_platform",
-      "status": "fail",
+      "status": "pass",
       "evidence": {
         "assets_scanned": 4,
-        "hits": [
-          "https://staging.news-con-seen.com/assets/index-jbCXfVpj.js"
-        ]
+        "hits": []
       }
     },
     {
@@ -153,8 +150,8 @@
     }
   ],
   "summary": {
-    "passed": 7,
-    "failed": 2
+    "passed": 9,
+    "failed": 0
   },
-  "evidence_digest": "1dd020af72b82245f95211c142adff081cd28e7493ba53ca8c49f7b7140bac99"
+  "evidence_digest": "485b2b583358365df58b19d6a3ca504ef076b19bd2a39ed71e95a89afe637cd7"
 }

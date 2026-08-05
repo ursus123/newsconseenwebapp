@@ -38,3 +38,8 @@ base44/.app.jsonc
 .venv*/
 **/__pycache__/
 *.py[cod]
+
+# Acceptance evidence that may contain sessions, personal data, or binary dumps
+artifacts/browser-acceptance/*.har
+artifacts/browser-acceptance/*.png
+artifacts/local-restore-drill/*.dump
