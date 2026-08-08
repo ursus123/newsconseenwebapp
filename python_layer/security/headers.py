@@ -30,7 +30,7 @@ from starlette.responses import Response
 # CSP tuned for a FastAPI JSON API:
 # - default-src 'none'   — deny everything not explicitly allowed
 # - frame-ancestors 'none' — equivalent to X-Frame-Options: DENY
-# The frontend (React/Base44) is a separate origin — it doesn't serve HTML
+# The frontend (React/Supabase) is a separate origin — it doesn't serve HTML
 # from this API, so a strict CSP is safe here.
 _CSP = (
     "default-src 'none'; "

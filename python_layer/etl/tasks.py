@@ -9,14 +9,14 @@ logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------------
 # Columns required for a meaningful transform.
-# If Base44 returns a partial response missing these,
+# If Supabase returns a partial response missing these,
 # we log a warning and return empty rather than crash.
 # ----------------------------------------------------------
 REQUIRED_COLUMNS = {"id", "status"}
 
 # ----------------------------------------------------------
 # Columns used in groupBy — only included if present in df.
-# This makes the transform safe against partial Base44 responses.
+# This makes the transform safe against partial Supabase responses.
 # ----------------------------------------------------------
 GROUP_COLUMNS = [
     "enterprise_id",
@@ -28,7 +28,7 @@ GROUP_COLUMNS = [
 
 def extract_tasks() -> pd.DataFrame:
     """
-    Extract all task records from Base44.
+    Extract all task records from Supabase.
     Returns raw DataFrame — no transformation applied here.
     """
     return fetch_supabase_entity_to_df("tasks")

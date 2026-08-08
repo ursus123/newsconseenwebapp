@@ -3,7 +3,7 @@ python_layer/search/routes.py
 ==============================
 Unified full-text search across all raw entity tables.
 
-Replaces 12 parallel Base44 calls in the frontend with a single
+Replaces 12 parallel Supabase calls in the frontend with a single
 parameterised ILIKE query per entity table. Returns consistent
 {id, entity_type, page, title, subtitle, fields} results.
 
@@ -249,7 +249,7 @@ def search(
 
     engine = get_engine_safe()
     if not engine:
-        # Signal to frontend to fall back to Base44 direct calls
+        # Signal to frontend to fall back to Supabase direct calls
         return {"results": [], "query": q, "total": 0, "source": "no_db"}
 
     pattern = f"%{q.strip()}%"

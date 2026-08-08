@@ -135,7 +135,7 @@ function EmbeddedDashboard({ dashboardId, companyId, height = 500 }) {
 // ── Dashboard tab bar ─────────────────────────────────────────────────────────
 
 // Operators configure their dashboards here — or this list can be fetched
-// from python_layer / Base44 Enterprise record in the future.
+// from python_layer / Supabase Enterprise record in the future.
 const DEFAULT_DASHBOARDS = [
   {
     id:    import.meta.env.VITE_SUPERSET_DASHBOARD_1 || "",

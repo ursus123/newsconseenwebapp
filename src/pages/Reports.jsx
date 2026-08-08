@@ -379,7 +379,7 @@ function MLInsightsPanel({ currentUser, onBack }) {
           if (data && data.tables && Object.keys(data.tables).length > 0) return data;
         }
       } catch (_) {}
-      // Base44 fallback — derive counts from live entities
+      // Supabase fallback — derive counts from live entities
       try {
         const [people, enterprises, products, transactions, tasks] = await Promise.allSettled([
           ncClient.entities.Person.filter({ company_id: companyId }),
@@ -396,7 +396,7 @@ function MLInsightsPanel({ currentUser, onBack }) {
             transactions: transactions.status=== "fulfilled" ? transactions.value.length: 0,
             tasks:        tasks.status       === "fulfilled" ? tasks.value.length       : 0,
           },
-          source: "base44",
+          source: "supabase",
         };
       } catch (_) {
         return {};
@@ -459,7 +459,7 @@ function MLInsightsPanel({ currentUser, onBack }) {
         <div>
           <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
             <Database className="w-4 h-4 text-slate-400" />
-            {rawStats.source === "base44" ? "Live data" : "Data in python_layer"}
+            {rawStats.source === "supabase" ? "Live data" : "Data in python_layer"}
           </h3>
           <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
             {Object.entries(rawStats.tables || {}).map(([table, count]) => (
@@ -545,7 +545,7 @@ function MLInsightsPanel({ currentUser, onBack }) {
                     )}
                   </div>
                   <p className="text-[10px] mt-2 opacity-60 font-mono">
-                    POST {RAILWAY_URL}/ml/push-to-ncClient?company_id={companyId}&model={pred.model}
+                    POST {RAILWAY_URL}/ml/push-to-canonical?company_id={companyId}&model={pred.model}
                   </p>
                 </div>
               );
@@ -827,7 +827,7 @@ export default function Reports() {
     setEtlLoading(true);
     setEtlResult(null);
     try {
-      const API = "https://newsconseenwebapp-production.up.railway.app";
+      const API = RAILWAY_URL;
       const id = currentUser?.company_id;
       const endpoints = [
         "enterprise-summary", "task-summary", "people-summary",

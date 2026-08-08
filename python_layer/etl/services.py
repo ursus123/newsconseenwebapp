@@ -28,7 +28,7 @@ GROUP_COLUMNS = [
 
 def extract_services() -> pd.DataFrame:
     """
-    Extract all service records from Base44.
+    Extract all service records from Supabase.
     Returns raw DataFrame — no transformation applied here.
     """
     return fetch_supabase_entity_to_df("services")

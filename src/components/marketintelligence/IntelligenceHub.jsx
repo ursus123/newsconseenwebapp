@@ -36,7 +36,7 @@ import {
 import { fetchPeopleFallback, fetchEnterprisesFallback } from "@/utils/fetchWithFallback";
 import { useEntityListFn } from "@/components/shared/useDataQuery";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
 const API_HEADERS = {
   "Content-Type": "application/json",
@@ -289,7 +289,7 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
     return null;
   }
 
-  // ── Normalize a Base44 enterprise record to match python_layer shape ─────
+  // ── Normalize a Supabase enterprise record to match python_layer shape ─────
   function normalizeEnterprise(e) {
     return {
       id:               e.id,
@@ -307,7 +307,7 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
     };
   }
 
-  // Load own enterprises — python_layer first, then Base44 live fallback
+  // Load own enterprises — python_layer first, then Supabase live fallback
   useEffect(() => {
     if (!companyId) return;
     (async () => {
@@ -317,7 +317,7 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
         const ents = d.enterprises || [];
         if (ents.length > 0) {
           // Also include any that have no coordinates — python_layer filters them out
-          // so merge with Base44 to catch the ones it dropped
+          // so merge with Supabase to catch the ones it dropped
           let all = [...ents];
           try {
             const b44 = await listFn(ncClient.entities.Enterprise);
@@ -329,7 +329,7 @@ export default function IntelligenceHub({ currentUser, enrichedCoords = {} }) {
           return;
         }
       } catch (_) {}
-      // Full Base44 fallback
+      // Full Supabase fallback
       try {
         const b44 = await listFn(ncClient.entities.Enterprise);
         setMyEnterprises(b44.map(normalizeEnterprise));

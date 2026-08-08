@@ -1256,6 +1256,59 @@ importance, assertion class, temporal state, direction, evidence and quality
 without changing canonical truth. The contract is documented in
 `docs/COMPANY_GRAPH_OPERATIONAL_EXPERIENCE.md`.
 
+The administrator page hierarchy is operational-header first, primary graph
+workspace second, governance summaries third, and optional supporting detail
+last. Briefing detail, relationship review, graph-quality work, page guidance,
+graph status and the relationship legend are independent disclosures. Their
+presentation preferences are browser-local and keyed by tenant, principal,
+surface and device class; they never change authorization or canonical truth.
+The graph must remain visible in the initial laptop viewport while detailed
+governance queues default to collapsed summaries.
+
+Company Graph expansion is graph-scoped, never page fullscreen. “Expand graph”
+opens a portal containing the canvas and compact controls; “Expand workspace”
+adds the governed inspector and coordinates with Idjwi. Both modes lock
+background scrolling, support Escape and focus restoration, and preserve
+scope, filters, selection, neighborhood, zoom and pan. Cytoscape sizing is
+driven by an explicit responsive height contract and `ResizeObserver`; it must
+never initialize or remain at zero height during layout transitions.
+
+Company Graph uses the light Newsconseen operational theme by default. Its
+versioned presentation registry is presentation-only and is the future bridge
+to the Newsconseen Ontology SDK: semantic type, icon key, shape, accent, safe
+labels, status/warning inputs, importance band, accessible name and preferred
+layouts. Zoom-aware nodes progress from semantic markers to labeled operational
+cards. Edge color, line style, weight, arrows and evidence markers express
+assertion class, temporal state and confidence; layout never supplies meaning.
+
+Company Graph layouts follow `company-graph-layouts.v1`. Every visible choice
+states an operational question and uses an explicit strategy: importance orbits,
+hierarchy, operational flow, relationship sides, opposing risk/opportunity
+sides, quality gravity, outside-in disruption or selected-neighborhood rings.
+Coordinates are presentation-only and cached per tenant, scope, layout and
+anchor to preserve the operator's mental map.
+
+Low-attention authorized populations may become semantic summary clusters.
+Clusters must disclose count, source pattern, reason, expandability and repair
+eligibility; critical/high-importance records are never clustered. Expansion,
+Ask Idjwi and repair-work actions remain governed, auditable and tenant-scoped.
+
+Administrator governance queues are backend-paginated and bounded: five
+relationship proposals and four graph-quality findings on the home surface,
+with larger bounded pages only in dedicated workspaces. Collapsed totals always
+come from the full authorized result set. Relationship bulk decisions may span
+only one backend-issued safe bulk group. Proposal and quality selection must
+coordinate graph highlighting, evidence inspection and immediate post-action
+refresh; the browser must not infer authorization or safe grouping.
+
+Company Graph controls are consolidated into Scope, Find, View, Navigate,
+Boundary and Governance groups. There is one Graph Health disclosure, and it
+must distinguish service availability from data quality while reporting scope,
+completeness, freshness, source failures, truncation and pending governance
+work. Graph, queue, inspector and Idjwi citation actions share one selected
+governed object/assertion. Citation navigation preserves a return path to the
+operator's previous context; an empty inspector is hidden.
+
 Company Graph inspection must use latest-request-wins coordination. Node
 selection loads an authorized neighborhood with visible failure state,
 breadcrumbs, directional relationship groups, bounded expansion, pinning and
@@ -1270,3 +1323,11 @@ multi-role operator scenarios and local, staging, desktop and mobile environment
 validation in `docs/COMPANY_GRAPH_VERIFICATION_AND_RELEASE.md`. Missing staging
 domains, identities, monitoring, backup/rollback evidence or device checks are
 release blockers and must never be described as passed.
+# Company Graph administrator release rule
+
+Company Graph supporting capabilities must distinguish `available`,
+`unauthorized`, `unavailable`, `empty`, and `degraded`; never swallow authorization
+or backend failures as empty data. Maintain equivalent keyboard record,
+relationship, outline and text representations. The future Newsconseen Ontology
+SDK is an architectural extraction target only—do not introduce Palantir
+OntologyJs or a parallel ontology runtime.

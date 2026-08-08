@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Newsconseen OS — Supabase Entity Expansion
 -- Adds real Supabase tables for the 17 entities that were previously only
--- reachable via the Base44 fallback client (ncClient.entities.X). This lets
+-- reachable via the retired legacy platform fallback client (ncClient.entities.X). This lets
 -- them be registered in src/api/supabaseEntityClient.js.
 --
 -- Scope: 16 new tables. `User` is intentionally skipped — it wraps the
@@ -28,15 +28,48 @@
 ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'
   CHECK (status IN ('active','inactive','suspended'));
 
+-- Tenant and role lookups must bypass user_profiles RLS. Referencing
+-- user_profiles directly from one of its own policies causes recursive policy
+-- evaluation and also prevents Supabase Storage from evaluating its policies.
+CREATE OR REPLACE FUNCTION public.my_company_id()
+RETURNS TEXT
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT company_id
+  FROM public.user_profiles
+  WHERE id = (SELECT auth.uid())
+$$;
+
+CREATE OR REPLACE FUNCTION public.my_role()
+RETURNS TEXT
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT role
+  FROM public.user_profiles
+  WHERE id = (SELECT auth.uid())
+$$;
+
+REVOKE ALL ON FUNCTION public.my_company_id() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.my_role() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.my_company_id() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.my_role() TO authenticated, service_role;
+
+DROP POLICY IF EXISTS up_admin_select_company ON user_profiles;
+DROP POLICY IF EXISTS up_admin_update_company ON user_profiles;
+DROP POLICY IF EXISTS up_update ON user_profiles;
+
 -- Additional SELECT policy (OR'd with the existing up_select "own row" policy):
 -- admins/super_admins can list every user_profiles row in their own company.
 CREATE POLICY up_admin_select_company ON user_profiles FOR SELECT TO authenticated
   USING (
     company_id = my_company_id()
-    AND EXISTS (
-      SELECT 1 FROM user_profiles me
-      WHERE me.id = auth.uid() AND me.role IN ('admin','super_admin')
-    )
+    AND public.my_role() IN ('admin','super_admin')
   );
 
 -- Matching UPDATE policy so admins can actually call .update(userId, {...})
@@ -44,10 +77,15 @@ CREATE POLICY up_admin_select_company ON user_profiles FOR SELECT TO authenticat
 CREATE POLICY up_admin_update_company ON user_profiles FOR UPDATE TO authenticated
   USING (
     company_id = my_company_id()
-    AND EXISTS (
-      SELECT 1 FROM user_profiles me
-      WHERE me.id = auth.uid() AND me.role IN ('admin','super_admin')
-    )
+    AND public.my_role() IN ('admin','super_admin')
+  );
+
+CREATE POLICY up_update ON user_profiles FOR UPDATE TO authenticated
+  USING (id = auth.uid())
+  WITH CHECK (
+    id = auth.uid()
+    AND role = public.my_role()
+    AND company_id = public.my_company_id()
   );
 
 -- =============================================================================
@@ -77,7 +115,7 @@ CREATE TABLE IF NOT EXISTS attendance (
 );
 
 -- =============================================================================
--- ENTITY 2 — CHART_FOLDERS (Base44 entity: ChartFolder)
+-- ENTITY 2 — CHART_FOLDERS (retired legacy platform entity: ChartFolder)
 -- Folder tree for Reports & Charts. Confirmed usage: src/pages/Reports.jsx,
 -- src/components/reports/FolderTree.jsx, src/components/reports/WelcomeSetup.jsx,
 -- src/components/querybuilder/PinWidgetModal.jsx, src/pages/MarketIntelligence.jsx,
@@ -100,7 +138,7 @@ CREATE TABLE IF NOT EXISTS chart_folders (
 );
 
 -- =============================================================================
--- ENTITY 3 — CONNECTOR_MAPPINGS (Base44 entity: ConnectorMapping)
+-- ENTITY 3 — CONNECTOR_MAPPINGS (retired legacy platform entity: ConnectorMapping)
 -- Operator-confirmed taxonomy mappings for connector field values.
 -- Confirmed usage: src/pages/Connectors.jsx:2657-2672 (saveMappingMutation
 -- .filter + .update + .create).
@@ -122,7 +160,7 @@ CREATE TABLE IF NOT EXISTS connector_mappings (
 );
 
 -- =============================================================================
--- ENTITY 4 — CONNECTOR_RUNS (Base44 entity: ConnectorRun)
+-- ENTITY 4 — CONNECTOR_RUNS (retired legacy platform entity: ConnectorRun)
 -- Fallback run log when python_layer's connectors.run_log (Railway Postgres)
 -- is unreachable. Confirmed read usage: src/pages/Connectors.jsx:2605
 -- (.filter by company_id) + table render at lines 2989-3017 (run.connector_id,
@@ -155,7 +193,7 @@ CREATE TABLE IF NOT EXISTS connector_runs (
 );
 
 -- =============================================================================
--- ENTITY 5 — DATA_MODELS (Base44 entity: DataModel)
+-- ENTITY 5 — DATA_MODELS (retired legacy platform entity: DataModel)
 -- Saved QueryBuilder schema snapshots. Confirmed usage:
 -- src/components/querybuilder/AddToGraphModal.jsx:30, SaveDataModelModal.jsx:22
 -- (.create with name, description, source_script, fields, sample_rows).
@@ -175,7 +213,7 @@ CREATE TABLE IF NOT EXISTS data_models (
 );
 
 -- =============================================================================
--- ENTITY 6 — FILE_RECORDS (Base44 entity: FileRecord)
+-- ENTITY 6 — FILE_RECORDS (retired legacy platform entity: FileRecord)
 -- File Manager files + folders. Confirmed usage: src/pages/FileManager.jsx
 -- (.filter with is_trashed/scope/company_id/folder_id, .create with name,
 -- file_type, file_url, size_bytes, mime_type, folder_id, scope, owner_email,
@@ -203,7 +241,7 @@ CREATE TABLE IF NOT EXISTS file_records (
 );
 
 -- =============================================================================
--- ENTITY 7 — FILE_SHARES (Base44 entity: FileShare)
+-- ENTITY 7 — FILE_SHARES (retired legacy platform entity: FileShare)
 -- Per-file sharing grants. Confirmed usage: src/pages/FileManager.jsx:231
 -- (.create with file_id, file_name, shared_by_email, shared_with_email,
 -- shared_with_name, access_level, company_id).
@@ -224,7 +262,7 @@ CREATE TABLE IF NOT EXISTS file_shares (
 );
 
 -- =============================================================================
--- ENTITY 8 — MEDICATION_PROFILES (Base44 entity: MedicationProfile)
+-- ENTITY 8 — MEDICATION_PROFILES (retired legacy platform entity: MedicationProfile)
 -- Per-client medication administration records. Confirmed usage:
 -- src/components/medadmin/MedProfileForm.jsx (EMPTY form state + handleSave
 -- payload: client_id, client_name, medication_name, strength, dose_amount,
@@ -263,7 +301,7 @@ CREATE TABLE IF NOT EXISTS medication_profiles (
 );
 
 -- =============================================================================
--- ENTITY 9 — PENDING_INVITATIONS (Base44 entity: PendingInvitation)
+-- ENTITY 9 — PENDING_INVITATIONS (retired legacy platform entity: PendingInvitation)
 -- NOT linked to user_profiles — the invitee has no auth.users row yet.
 -- Confirmed usage: src/pages/UserManagement.jsx:315 (InviteForm .create with
 -- email, company_id, role, invited_by). The actual invite send goes through
@@ -289,7 +327,7 @@ CREATE TABLE IF NOT EXISTS pending_invitations (
 );
 
 -- =============================================================================
--- ENTITY 10 — QUERY_DEFINITIONS (Base44 entity: QueryDefinition)
+-- ENTITY 10 — QUERY_DEFINITIONS (retired legacy platform entity: QueryDefinition)
 -- Saved QueryBuilder SQL queries. Confirmed usage:
 -- src/components/querybuilder/SaveQueryModal.jsx:17 (.create with name,
 -- description, script, data_source, output_schema, last_run_rows).
@@ -310,7 +348,7 @@ CREATE TABLE IF NOT EXISTS query_definitions (
 );
 
 -- =============================================================================
--- ENTITY 11 — REPORTS (Base44 entity: Report)
+-- ENTITY 11 — REPORTS (retired legacy platform entity: Report)
 -- Confirmed usage across src/pages/Reports.jsx, ReportBuilder.jsx,
 -- MarketIntelligence.jsx:902, MarketIntelligencePDF.jsx, WelcomeSetup.jsx,
 -- OutputPanel.jsx: title, name (some call sites use "name" instead of
@@ -340,7 +378,7 @@ CREATE TABLE IF NOT EXISTS reports (
 );
 
 -- =============================================================================
--- ENTITY 12 — REPORT_CHARTS (Base44 entity: ReportChart)
+-- ENTITY 12 — REPORT_CHARTS (retired legacy platform entity: ReportChart)
 -- Confirmed usage — src/components/copilot/copilotchat.jsx:112 writes:
 -- title, sql_query, tool_name, tool_params, chart_type, status, company_id,
 -- description, table_snapshot, shared_with_roles, source. Additional fields
@@ -374,7 +412,7 @@ CREATE TABLE IF NOT EXISTS report_charts (
 );
 
 -- =============================================================================
--- ENTITY 13 — REPORT_COMMENTS (Base44 entity: ReportComment)
+-- ENTITY 13 — REPORT_COMMENTS (retired legacy platform entity: ReportComment)
 -- Confirmed usage: src/components/reports/ReportViewer.jsx:144-166
 -- (.filter by report_id, .create with report_id, comment_text, commented_by,
 -- commenter_name, company_id).
@@ -393,7 +431,7 @@ CREATE TABLE IF NOT EXISTS report_comments (
 );
 
 -- =============================================================================
--- ENTITY 14 — ROLE_PERMISSIONS (Base44 entity: RolePermissions)
+-- ENTITY 14 — ROLE_PERMISSIONS (retired legacy platform entity: RolePermissions)
 -- Modeling decision: a grant attached to a user, not a user record itself —
 -- carries user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE.
 -- Confirmed usage: src/pages/Permissions.jsx (DEFAULT_PERMS shape + saveMut
@@ -436,7 +474,7 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 );
 
 -- =============================================================================
--- ENTITY 15 — SAVED_DASHBOARD_WIDGETS (Base44 entity: SavedDashboardWidget)
+-- ENTITY 15 — SAVED_DASHBOARD_WIDGETS (retired legacy platform entity: SavedDashboardWidget)
 -- Confirmed usage: src/components/querybuilder/PinWidgetModal.jsx:31
 -- (.create with title, sql, chart_type, created_by, company_id).
 -- =============================================================================
@@ -453,7 +491,7 @@ CREATE TABLE IF NOT EXISTS saved_dashboard_widgets (
 );
 
 -- =============================================================================
--- ENTITY 16 — USER_APP_ACCESS (Base44 entity: UserAppAccess)
+-- ENTITY 16 — USER_APP_ACCESS (retired legacy platform entity: UserAppAccess)
 -- Modeling decision: a grant attached to a user, not a user record itself —
 -- carries user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE.
 -- Confirmed usage: src/pages/UserManagement.jsx:480-490 (saveMut payload:

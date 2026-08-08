@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------
 # Nominatim configuration
 # Used as a FALLBACK for addresses that are missing coordinates
-# in Base44. If lat/lon are already stored, we use those and
+# in Supabase. If lat/lon are already stored, we use those and
 # skip Nominatim entirely for that record.
 #
 # Nominatim ToS:
@@ -72,18 +72,18 @@ def transform_addresses(df: pd.DataFrame) -> pd.DataFrame:
     other summary tables can join back via address_id.
 
     Coordinate strategy (in priority order):
-        1. Use lat/lon already stored in Base44 — no API call needed
+        1. Use lat/lon already stored in Supabase — no API call needed
         2. If lat/lon missing → geocode via Nominatim using full_address
         3. If Nominatim fails → leave as null, log warning
 
     This means:
-        - Records with coordinates in Base44 → zero API calls
+        - Records with coordinates in Supabase → zero API calls
         - Records missing coordinates → Nominatim fills the gap
         - etl/geospatial.py uses this table as its coordinate source
           for DBSCAN clustering and distance calculations
 
     Produces one row per address with:
-        id                  — Base44 address ID (join key)
+        id                  — Supabase address ID (join key)
         company_id          — tenant identifier
         label               — human-readable name (Main Office, Home, etc.)
         address_line_1      — street address
@@ -93,10 +93,10 @@ def transform_addresses(df: pd.DataFrame) -> pd.DataFrame:
         postal_code         — ZIP or postal code
         country             — country name or ISO code
         full_address        — concatenated string for geocoding and display
-        latitude            — coordinate (from Base44 or Nominatim)
-        longitude           — coordinate (from Base44 or Nominatim)
+        latitude            — coordinate (from Supabase or Nominatim)
+        longitude           — coordinate (from Supabase or Nominatim)
         has_coordinates     — True if both lat and lon are present
-        coordinate_source   — "base44", "nominatim", or "missing"
+        coordinate_source   — "supabase", "nominatim", or "missing"
         address_type        — normalised: "enterprise", "people", or "general"
         linked_entity_type  — "enterprise", "person", "both", or "unlinked"
         enterprise_id       — linked enterprise (if any)
@@ -132,7 +132,7 @@ def transform_addresses(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # ----------------------------------------------------------
-    # Parse and validate stored coordinates from Base44
+    # Parse and validate stored coordinates from Supabase
     # Coerce to float so bad values (empty string, "N/A") → NaN.
     # Validate ranges — reject physically impossible values rather
     # than silently keeping bad data.
@@ -162,7 +162,7 @@ def transform_addresses(df: pd.DataFrame) -> pd.DataFrame:
 
     # ----------------------------------------------------------
     # Normalise text fields
-    # Handle alternate field names Base44 might use.
+    # Handle alternate field names Supabase might use.
     # Strip whitespace so downstream joins don't break on
     # invisible whitespace differences.
     # ----------------------------------------------------------
@@ -211,13 +211,13 @@ def transform_addresses(df: pd.DataFrame) -> pd.DataFrame:
     # Geocode addresses missing coordinates via Nominatim
     #
     # Strategy:
-    #   - Records where Base44 already has valid lat+lon → skip
+    #   - Records where Supabase already has valid lat+lon → skip
     #   - Records with no/invalid coordinates → call Nominatim
     #   - Records with no full_address to geocode → mark "missing"
     #
     # Rate limiting: sleep NOMINATIM_RATE_LIMIT_SECONDS between
     # each API call. Only the records that NEED geocoding incur
-    # the delay — records served from Base44 are instant.
+    # the delay — records served from Supabase are instant.
     # ----------------------------------------------------------
     needs_geocoding_mask = (
         df["latitude"].isna() | df["longitude"].isna()
@@ -229,7 +229,7 @@ def transform_addresses(df: pd.DataFrame) -> pd.DataFrame:
         lat = df["latitude"].iloc[i]
         lon = df["longitude"].iloc[i]
         if pd.notna(lat) and pd.notna(lon):
-            coordinate_source.append("base44")
+            coordinate_source.append("supabase")
         else:
             coordinate_source.append(None)  # filled in loop below
 
@@ -279,8 +279,8 @@ def transform_addresses(df: pd.DataFrame) -> pd.DataFrame:
     if needs_geocoding_indices:
         logger.info(
             "transform_addresses: geocoding complete — "
-            "%d from Base44, %d via Nominatim, %d failed/missing",
-            sum(1 for s in coordinate_source if s == "base44"),
+            "%d from Supabase, %d via Nominatim, %d failed/missing",
+            sum(1 for s in coordinate_source if s == "supabase"),
             geocoded_count,
             failed_count,
         )
@@ -438,7 +438,7 @@ def _geocode_address(address: str) -> Optional[tuple[float, float]]:
     """
     Geocode a single address string using Nominatim.
 
-    Called ONLY for addresses that are missing coordinates in Base44.
+    Called ONLY for addresses that are missing coordinates in Supabase.
     Addresses that already have valid lat/lon skip this entirely.
 
     Returns (latitude, longitude) on success.

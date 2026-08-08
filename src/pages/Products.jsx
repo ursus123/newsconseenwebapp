@@ -32,7 +32,7 @@ import { useSpreadsheet } from "@/hooks/useSpreadsheet";
 import DeleteAllDialog from "@/components/shared/DeleteAllDialog";
 import ProductsAnalytics from "@/components/products/ProductsAnalytics";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 
 const statusColor = (s) => ({ active: "bg-emerald-50 text-emerald-700", discontinued: "bg-slate-100 text-slate-600", out_of_stock: "bg-rose-50 text-rose-700", archived: "bg-slate-100 text-slate-400" }[s] || "bg-slate-100 text-slate-600");

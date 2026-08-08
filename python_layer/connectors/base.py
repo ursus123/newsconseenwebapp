@@ -6,7 +6,7 @@
 #
 #   extract()   → pull raw records from the source system
 #   transform() → map to master entity format using taxonomy
-#   load()      → create/update records in Base44 via API
+#   load()      → create/update records in Supabase via API
 #
 # The load() method is implemented here and shared by all
 # connectors. Only extract() and transform() differ per source.
@@ -63,7 +63,7 @@ class BaseConnector(ABC):
         company_id:   Tenant identifier — all created records are scoped to this
         credentials:  Dict of API keys, tokens, file paths etc. per connector
         mappings:     Saved taxonomy mappings {field:value → taxonomy_value}
-                      loaded from ConnectorMapping entity in Base44
+                      loaded from ConnectorMapping entity in Supabase
     """
 
     def __init__(
@@ -104,7 +104,7 @@ class BaseConnector(ABC):
         """
         Map raw records to master entity format using the taxonomy.
 
-        Returns a dict with keys matching Base44 entity names:
+        Returns a dict with keys matching Supabase entity names:
             {
                 "people":        [...],
                 "enterprises":   [...],
@@ -113,7 +113,7 @@ class BaseConnector(ABC):
                 "relationships": [...],
             }
 
-        Each list contains records ready to upsert into Base44.
+        Each list contains records ready to upsert into Supabase.
         Any list can be empty — only the populated ones are loaded.
 
         Use self.map_value() for every field that needs taxonomy mapping.
@@ -127,20 +127,14 @@ class BaseConnector(ABC):
 
     def load(self, transformed: dict[str, list]) -> dict[str, int]:
         """
-        Upsert transformed records into Base44 via REST API.
+        Upsert transformed records into Supabase via REST API.
 
         Uses external_id (source system record ID) to detect
         existing records and update them rather than duplicating.
 
         Returns counts per entity type.
         """
-        entity_url_map = {
-            "people":        settings.base44_people_url,
-            "enterprises":   settings.base44_enterprises_url,
-            "products":      settings.base44_products_url,
-            "transactions":  getattr(settings, "base44_transactions_url", None),
-            "relationships": settings.base44_relationships_url,
-        }
+        from data_sources import supabase_source
 
         totals = {"created": 0, "updated": 0, "failed": 0, "skipped_conflict": 0}
 
@@ -148,8 +142,8 @@ class BaseConnector(ABC):
             if not records:
                 continue
 
-            url = entity_url_map.get(entity_name)
-            if not url:
+            url = None
+            if False:
                 logger.warning(
                     "connector.load: no URL configured for entity '%s' — skipping",
                     entity_name,
@@ -159,7 +153,19 @@ class BaseConnector(ABC):
             for record in records:
                 try:
                     self._apply_enterprise_scope(entity_name, record)
-                    result = self._upsert_record(url, record, entity_name)
+                    external_id = record.get("external_id")
+                    existing = supabase_source.list_records(
+                        entity_name,
+                        company_id=self.company_id,
+                        filters={"external_id": external_id} if external_id else None,
+                        limit=1,
+                    ) if external_id else []
+                    if existing:
+                        supabase_source.update_record(entity_name, existing[0]["id"], record, company_id=self.company_id)
+                        result = "updated"
+                    else:
+                        supabase_source.create_record(entity_name, record, company_id=self.company_id)
+                        result = "created"
                     if result == "created":
                         totals["created"] += 1
                     elif result == "updated":
@@ -203,7 +209,7 @@ class BaseConnector(ABC):
         Execute the full extract → transform → load cycle.
 
         Returns a run summary dict suitable for saving to
-        ConnectorRun entity in Base44.
+        ConnectorRun entity in Supabase.
         """
         started_at = datetime.now(timezone.utc)
         logger.info(
@@ -346,7 +352,7 @@ class BaseConnector(ABC):
 
     def _upsert_record(self, url: str, record: dict, entity_name: str) -> str:
         """
-        Create or update a record in Base44.
+        Create or update a record in Supabase.
 
         Uses external_id field to detect duplicates:
           - If a record with the same external_id exists → update it
@@ -503,7 +509,7 @@ class BaseConnector(ABC):
         tenants are never wiped. Only this company's rows are touched.
 
         Called fire-and-forget after load() — database unavailability
-        never fails the connector run (data is already safely in Base44).
+        never fails the connector run (data is already safely in Supabase).
 
         Entity name → raw table mapping mirrors the ETL cron convention:
             people       → raw.people
@@ -604,7 +610,7 @@ class BaseConnector(ABC):
         Entity name → ETL endpoint mapping mirrors the cron pipeline.
         Failures are logged but never surfaced to the caller — ETL
         is best-effort from the connector's perspective; the data
-        is already safely in Base44.
+        is already safely in Supabase.
         """
         import os
         import threading
@@ -661,7 +667,7 @@ class BaseConnector(ABC):
 
     def _find_by_external_id(self, url: str, external_id: str) -> dict | None:
         """
-        Search Base44 for a record with matching external_id.
+        Search Supabase for a record with matching external_id.
         Returns the first match or None.
         """
         try:

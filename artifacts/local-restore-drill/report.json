@@ -1,0 +1,16 @@
+﻿{
+    "contract":  "newsconseen-local-postgresql-restore-drill.v1",
+    "executed_at":  "2026-08-04T23:34:18.7714455Z",
+    "source":  "disposable_local_postgresql_container",
+    "restore_target":  "separate_disposable_local_postgresql_container",
+    "active_supabase_used":  false,
+    "durable_offsite_backup":  false,
+    "dump_sha256":  "ca810c39d352d52439430980563f7725d2762f124b9cde1adc8991e7dea44da6",
+    "representative_records":  {
+                                   "enterprises":  1,
+                                   "tasks":  1,
+                                   "valid_task_enterprise_links":  1
+                               },
+    "status":  "pass",
+    "limitation":  "Validates local dump/restore machinery only; it is not a durable production backup."
+}

@@ -914,11 +914,11 @@ def _extract_data_freshness(collected_tools: list) -> dict:
         return {}
 
     # If any tool fell back to live data, the whole answer is live
-    has_live = bool({"supabase_live", "base44_live"} & sources)
+    has_live = "supabase_live" in sources
     # Pick the least fresh label to surface to the user
     # Priority: "Supabase live" > "today (cached)" > "Xh Ym ago" > "X min ago" > "just now"
     def _rank(label: str) -> int:
-        if label in ("Supabase live", "Base44 live"): return 0
+        if label in ("Supabase live", "Supabase live"): return 0
         if label == "today (cached)":       return 1
         if "h" in label and "m" in label:   return 2
         if "min ago" in label:              return 3

@@ -19,7 +19,7 @@ export async function getLocationCoords() {
   });
 }
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 export async function getLocationString(coords) {
   if (!coords) return null;

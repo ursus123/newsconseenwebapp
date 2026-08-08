@@ -95,13 +95,13 @@ FIELD_CAPTURE_PROFILES = {
 # Map write-type names → (settings url attr, ETL entity name)
 # Risk and Opportunity have no standalone entity — they become Tasks with a specific task_type
 _FC_ENTITY_MAP: Dict[str, tuple] = {
-    "Task":        ("base44_tasks_url",         "task"),
-    "Transaction": ("base44_transactions_url",  "transaction"),
-    "Document":    ("base44_documents_url",     "document"),
-    "Observation": ("base44_observations_url",  "observation"),
-    "Signal":      ("base44_signals_url",       "signal"),
-    "Risk":        ("base44_tasks_url",         "task"),
-    "Opportunity": ("base44_tasks_url",         "task"),
+    "Task":        ("task", "task"),
+    "Transaction": ("transaction", "transaction"),
+    "Document":    ("document", "document"),
+    "Observation": ("observation", "observation"),
+    "Signal":      ("signal", "signal"),
+    "Risk":        ("task", "task"),
+    "Opportunity": ("task", "task"),
 }
 
 _FC_TASK_TYPE_MAP: Dict[str, str] = {
@@ -182,7 +182,7 @@ def _build_field_capture_payload(
     app_id: str,
     event_type: str,
 ) -> dict:
-    """Build a Base44-ready payload from a raw field capture record."""
+    """Build a Supabase-ready payload from a raw field capture record."""
     now_iso = datetime.now(timezone.utc).isoformat()
     task_type_override = _FC_TASK_TYPE_MAP.get(entity_type)
     resolved = "Task" if task_type_override else entity_type
@@ -256,17 +256,11 @@ def _build_field_capture_payload(
 
 def sync_field_capture(req: FieldCaptureSync) -> dict[str, Any]:
     """
-    Sync offline field capture records to Base44 ontology entities.
+    Sync offline field capture records to Supabase ontology entities.
     Each record is routed to the correct entity type (Task, Observation, Transaction,
     Document, Signal) based on the app profile and an optional per-record entity_type override.
     """
-    from config.settings import settings
-    try:
-        from agents.action_executor import _post_base44, _fire_etl
-    except Exception as _imp_err:
-        logger.warning("sync_field_capture: action_executor unavailable — %s", _imp_err)
-        _post_base44 = None
-        _fire_etl = None
+    from data_sources import supabase_source
 
     profile    = FIELD_CAPTURE_PROFILES.get(req.app_id, {})
     writes     = profile.get("writes", ["Task"])
@@ -281,18 +275,7 @@ def sync_field_capture(req: FieldCaptureSync) -> dict[str, Any]:
             continue
 
         entity_type = record.get("entity_type") or writes[0]
-        url_attr, etl_name = _FC_ENTITY_MAP.get(entity_type, ("base44_tasks_url", "task"))
-        url = getattr(settings, url_attr, None)
-
-        if not url or _post_base44 is None:
-            accepted.append({
-                "local_id":   record["local_id"],
-                "status":     "queued",
-                "entity_type": entity_type.lower(),
-                "reason":     f"{url_attr} not configured" if not url else "executor unavailable",
-                "event_type": event_type,
-            })
-            continue
+        canonical_entity, etl_name = _FC_ENTITY_MAP.get(entity_type, ("task", "task"))
 
         try:
             payload = _build_field_capture_payload(
@@ -302,8 +285,9 @@ def sync_field_capture(req: FieldCaptureSync) -> dict[str, Any]:
                 app_id=req.app_id,
                 event_type=event_type,
             )
-            created = _post_base44(url, payload)
-            _fire_etl(etl_name)
+            created = supabase_source.create_record(
+                canonical_entity, payload, company_id=req.company_id
+            )
             accepted.append({
                 "local_id":   record["local_id"],
                 "status":     "synced",

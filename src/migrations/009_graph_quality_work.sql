@@ -71,13 +71,11 @@ CREATE POLICY graph_quality_findings_manager_write
   ON public.graph_quality_findings FOR ALL TO authenticated
   USING (
     company_id = public.my_company_id()
-    AND COALESCE((SELECT role FROM public.user_profiles WHERE id = auth.uid()), 'user')
-      IN ('manager', 'admin', 'super_admin')
+    AND COALESCE(public.my_role(), 'user') IN ('manager', 'admin', 'super_admin')
   )
   WITH CHECK (
     company_id = public.my_company_id()
-    AND COALESCE((SELECT role FROM public.user_profiles WHERE id = auth.uid()), 'user')
-      IN ('manager', 'admin', 'super_admin')
+    AND COALESCE(public.my_role(), 'user') IN ('manager', 'admin', 'super_admin')
   );
 
 DROP POLICY IF EXISTS graph_quality_events_tenant_select ON public.graph_quality_resolution_events;
@@ -89,8 +87,7 @@ CREATE POLICY graph_quality_events_manager_write
   ON public.graph_quality_resolution_events FOR INSERT TO authenticated
   WITH CHECK (
     company_id = public.my_company_id()
-    AND COALESCE((SELECT role FROM public.user_profiles WHERE id = auth.uid()), 'user')
-      IN ('manager', 'admin', 'super_admin')
+    AND COALESCE(public.my_role(), 'user') IN ('manager', 'admin', 'super_admin')
   );
 
 DROP TRIGGER IF EXISTS graph_quality_findings_set_updated_at ON public.graph_quality_findings;

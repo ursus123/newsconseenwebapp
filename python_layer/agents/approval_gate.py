@@ -347,7 +347,7 @@ def get_recent_runs(engine, company_id: str, limit: int = 20) -> list[dict]:
 
 def execute_approved(engine, approval_id: str, company_id: str) -> dict:
     """
-    Phase 13: Execute the Base44 mutation for an already-approved action.
+    Phase 13: Execute the Supabase mutation for an already-approved action.
 
     Called immediately after resolve() when decision == 'approved'.
     Returns the execution result and stamps executed_at + execution_result

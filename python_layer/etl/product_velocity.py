@@ -62,7 +62,7 @@ def transform_product_velocity(
 
     prod = products_df.copy()
 
-    # Normalise product name column (Base44 uses item_name or product_name)
+    # Normalise product name column (Supabase uses item_name or product_name)
     name_col = next((c for c in ["item_name", "product_name", "name"] if c in prod.columns), None)
     if name_col:
         prod["_product_name"] = prod[name_col].fillna("").str.strip()

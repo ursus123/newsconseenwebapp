@@ -29,7 +29,7 @@ class AddressSummary(BaseModel):
     latitude:            Optional[float] = None
     longitude:           Optional[float] = None
     has_coordinates:     bool = False
-    coordinate_source:   Optional[str] = None   # "base44" | "nominatim" | "missing"
+    coordinate_source:   Optional[str] = None   # "supabase" | "nominatim" | "missing"
 
     # -- Classification --
     address_type:        Optional[str] = None   # "enterprise" | "people" | "general"

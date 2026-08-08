@@ -10,15 +10,14 @@
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "test:idjwi": "node --test src/lib/idjwiStatus.test.js src/lib/tenantIdentity.test.js",
+    "test:supabase-boundary": "node --test src/lib/supabaseOnlyBoundary.test.js",
     "test:a11y": "vitest run --config vitest.config.js src/components/shared/AccessibleInteractionDialog.test.jsx src/components/companyGraph/AccessibleGraphView.test.jsx",
-    "test:company-graph:frontend": "node --test src/services/companyGraphService.test.js",
+    "test:company-graph:frontend": "node --test src/services/companyGraphService.test.js src/services/companyGraphPreferences.test.js src/services/companyGraphPresentationRegistry.test.js src/services/capabilityState.test.js",
     "test:company-graph:backend": "python -m pytest python_layer/tests/test_company_graph.py python_layer/tests/test_company_graph_cache.py python_layer/tests/test_idjwi_graph_intents.py python_layer/tests/test_idjwi_response_identity.py python_layer/tests/test_graph_explanations_learning.py python_layer/tests/test_external_observations.py python_layer/tests/test_company_graph_release.py python_layer/tests/test_company_graph_operator_acceptance.py",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@base44/sdk": "^0.8.40",
-    "@base44/vite-plugin": "^1.0.30",
     "@blueprintjs/core": "^5.10.3",
     "@blueprintjs/datetime2": "^2.3.3",
     "@blueprintjs/table": "^5.2.3",
@@ -94,6 +93,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",
+    "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

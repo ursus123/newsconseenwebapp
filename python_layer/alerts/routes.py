@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Header
 from pydantic import BaseModel
 
 from alerts.evaluator import AlertEvaluator, run_all_companies
+from onboarding.auth import verify_tenant_access
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +71,9 @@ def evaluate_all(
 
 
 @router.get("/status")
-def alerts_status():
+def alerts_status(company_id: str = Query(...), authorization: Optional[str] = Header(None)):
     """Check which notification channels are configured."""
+    verify_tenant_access(authorization, company_id)
     from alerts.channels.email import EmailChannel
     from alerts.channels.whatsapp import WhatsAppChannel
     from alerts.channels.sms import SmsChannel
@@ -80,7 +82,7 @@ def alerts_status():
     whatsapp_ch = WhatsAppChannel()
     sms_ch      = SmsChannel()
 
-    return {
+    payload = {
         "channels": {
             "email": {
                 "configured": email_ch.is_configured(),
@@ -107,6 +109,10 @@ def alerts_status():
         },
         "schedule": "Every 4 hours via Airflow DAG: alert_evaluator",
     }
+    configured = sum(bool(channel.get("configured")) for channel in payload["channels"].values())
+    payload["state"] = "available" if configured else "degraded"
+    payload["message"] = None if configured else "No governed notification channel is configured."
+    return payload
 
 
 @router.post("/test")

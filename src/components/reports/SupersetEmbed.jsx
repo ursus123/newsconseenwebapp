@@ -16,7 +16,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { BarChart2, ExternalLink, Loader2, AlertCircle, Maximize2, Minimize2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const SUPERSET_URL = (typeof import.meta !== "undefined" ? import.meta.env?.VITE_SUPERSET_URL : "") || "";
 const DASHBOARD_IDS = [
   (typeof import.meta !== "undefined" ? import.meta.env?.VITE_SUPERSET_DASHBOARD_1 : "") || "",

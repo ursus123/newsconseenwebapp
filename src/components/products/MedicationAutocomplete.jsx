@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Loader2, Search } from "lucide-react";
 
-const API_BASE = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL as API_BASE } from "@/config/api";
 
 export default function MedicationAutocomplete({ value, onChange, onMedicationSelected, onRecallWarning }) {
   const [query, setQuery] = useState(value || "");

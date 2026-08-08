@@ -13,7 +13,7 @@ GET  /webhook/etl-status
     State is in-memory — resets on server restart.
 
 Entity-type mapping:
-    Base44 entity_type → ETL module → analytics table
+    Supabase entity_type → ETL module → analytics table
 
     person       → people       → analytics.people_summary
     enterprise   → enterprise   → analytics.enterprise_summary
@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhook", tags=["Webhook"])
 
 # ── Entity map ────────────────────────────────────────────────────────────────
-# Maps Base44 entity_type → (extract_fn, transform_fn, analytics_table_name)
+# Maps Supabase entity_type → (extract_fn, transform_fn, analytics_table_name)
 _ENTITY_MAP = {
     "person":       (people.extract_people,                 people.transform_people,                "people_summary"),
     "enterprise":   (enterprises.extract_enterprises,       enterprises.transform_enterprises,      "enterprise_summary"),

@@ -13,28 +13,27 @@
  *  - Taxonomy sync (when provided by caller)
  */
 
-import { ncClient } from "@/api/ncClient";
 import { supabaseEntities } from "@/api/supabaseEntityClient";
 import { createWithScope } from "@/components/shared/useDataQuery";
 import { RAILWAY_API_KEY, RAILWAY_URL, authHeaders } from "@/config/api";
 
 /**
  * DATA_LAYER controls which Layer 1 backend is used.
- *   "base44"   — original Base44 SDK (default)
+ *   "supabase"   — original Supabase SDK (default)
  *   "supabase" — Supabase Postgres + RLS (migration target)
  *
- * Switch by setting VITE_DATA_LAYER=supabase in .env.local.
+ * Supabase is the only operational entity backend.
  * No other file needs to change — all entity access goes through this service.
  */
-const DATA_LAYER = import.meta.env.VITE_DATA_LAYER || "base44";
-
-function _ent(base44Name) {
-  if (DATA_LAYER === "supabase") {
-    const e = supabaseEntities[base44Name];
-    if (!e) throw new Error(`[dataService] No Supabase entity for "${base44Name}"`);
-    return e;
+function _ent(entityName) {
+  const entity = supabaseEntities[entityName];
+  if (!entity) {
+    throw new Error(
+      `[dataService] Entity "${entityName}" has no canonical Supabase mapping. ` +
+      "Register it before enabling this workflow."
+    );
   }
-  return ncClient.entities[base44Name];
+  return entity;
 }
 
 /** @param {any} queryClient @param {any} queryKey @param {any} record */
@@ -52,7 +51,7 @@ function addRecordToQueryCache(queryClient, queryKey, record) {
 
 
 // ── Entity registry ────────────────────────────────────────────────
-// thunks prevent initialization-order issues with ncClient.entities.*
+// Thunks prevent initialization-order issues while keeping one canonical registry.
 
 export const ENTITY_REGISTRY = {
   person: {

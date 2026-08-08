@@ -108,15 +108,16 @@ def get_pending_approvals(company_id: str = Query(...), authorization: Optional[
     verify_tenant_access(authorization, company_id)
     engine = get_engine_safe()
     if not engine:
-        return {"pending": []}
-    return {"pending": get_pending(engine, company_id)}
+        return {"state": "degraded", "pending": [], "message": "The approval store is unavailable."}
+    pending = get_pending(engine, company_id)
+    return {"state": "available" if pending else "empty", "pending": pending}
 
 
 @router.post("/approvals/{approval_id}/resolve")
 def resolve_approval(approval_id: str, req: ResolveRequest, authorization: Optional[str] = Header(default=None)):
     """
     Approve or reject a pending agent action.
-    Phase 13: when approved, immediately executes the Base44 mutation.
+    Phase 13: when approved, immediately executes the Supabase mutation.
     Returns both the resolution result and the execution result.
     """
     engine = get_engine_safe()

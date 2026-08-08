@@ -17,7 +17,7 @@ import { Brain, RefreshCw, Play, AlertTriangle, CheckCircle, TrendingUp, Users, 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 const MODELS = [
   {

@@ -132,3 +132,17 @@ registry in `python_layer/company_graph/release_contract.py`. Environment and
 operator validation follows `COMPANY_GRAPH_VERIFICATION_AND_RELEASE.md`. A
 consumer that cannot preserve authorization, source status, truncation, evidence,
 assertion state or permitted actions is non-conforming even if it can draw nodes.
+
+## Supporting capability state contract
+
+`company-graph-capability-state.v1` applies to graph audit and to supporting
+alerts, approval and intelligence reads. Its state vocabulary is exhaustive:
+
+- `available`: the authorized capability returned usable content or configuration;
+- `empty`: the authorized capability succeeded and contains no records;
+- `unauthorized`: authentication or policy denied access;
+- `unavailable`: the capability could not be reached or failed at its service boundary;
+- `degraded`: the capability responded but a required store, channel or source is impaired.
+
+Clients preserve the HTTP status and safe operator message alongside the state.
+They must not convert 401/403/5xx/network failures into empty arrays.

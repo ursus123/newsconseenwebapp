@@ -26,7 +26,7 @@ function TierBadge({ tier }) {
  * Props:
  *   sources  { [key]: { label, tier, source, loading } }
  *     tier   1 = analytics, 2 = raw DB, 3 = live, 0 = pending
- *     source "analytics" | "raw" | "base44" | "none"
+ *     source "analytics" | "raw" | "supabase" | "none"
  *   onRefresh    () => void
  *   isRefreshing bool
  *

@@ -801,7 +801,7 @@ people.filter(p => (TYPE_ALIASES["staff"] || ["staff"]).includes(p.person_type))
 4. Trigger ETL refresh — fire and forget
 
 ```javascript
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 const triggerETL = (entity) => {
   fetch(`${RAILWAY_URL}/load/${entity}-summary`, {
@@ -823,7 +823,7 @@ triggerETL("transaction");  // after transaction posted
 The python_layer is a FastAPI service on Railway. It is the analytical engine — Layer 2.
 **It never writes back to Supabase. Data flows one way only: Supabase → python_layer → PostgreSQL.**
 
-**Railway production URL:** `https://newsconseenwebapp-production.up.railway.app`
+**Railway production URL:** `https://staging-api.news-con-seen.com`
 
 ### 12.1 Taxonomy normalization — config/taxonomy.py
 
@@ -910,7 +910,7 @@ All `/cron/*` and `/load/*` endpoints require `x-cron-secret` header.
 ### 12.5 How the frontend reads from python_layer
 
 ```javascript
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 const ANALYTICS_TABLE_MAP = {
   analytics_people:        "/people-summary",
@@ -1071,7 +1071,7 @@ PostgreSQL is Railway managed.
 
 Health check:
 ```
-GET https://newsconseenwebapp-production.up.railway.app/health
+GET https://staging-api.news-con-seen.com/health
 
 {
   "status": "ok",
@@ -1462,3 +1462,15 @@ frontend request-coordination and accessible-representation tests, recorded
 PostgreSQL benchmarks, and the read-only environment validator form one release
 gate. Local, staging, web, desktop, mobile-manager and mobile-worker results remain
 separate; success in one surface cannot stand in for another.
+# Company Graph administrator reliability boundary
+
+Company Graph is an authorized operational projection, not an unrestricted client
+graph. The Python service owns tenant verification, graph permissions, projections,
+audit and governed mutations. The web client owns visualization and interaction
+only. Supporting alerts, approval, intelligence and audit reads expose one of five
+explicit states: available, unauthorized, unavailable, empty or degraded.
+
+The current presentation registry is the extraction seam for a future Newsconseen
+Ontology SDK. No SDK runtime is introduced by the Company Graph redesign; canonical
+object/link/action/function/permission definitions remain owned by their existing
+registries and backend contracts.

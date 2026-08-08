@@ -1,4 +1,4 @@
-﻿"""
+"""
 python_layer/ingest/routes.py  — Phase 12: Live Data Feeds
 ===========================================================
 Inbound webhook receiver. Any external system (POS, LIMS, mobile app,

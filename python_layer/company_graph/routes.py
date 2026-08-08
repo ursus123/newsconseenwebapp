@@ -47,6 +47,7 @@ from .external_observations import (
     governed_alternatives, normalize_matches, normalize_observation,
 )
 from concurrent.futures import as_completed
+from datetime import date, timedelta
 from typing import Any, Literal
 from datetime import datetime, timezone
 
@@ -369,6 +370,12 @@ def _stored_quality(repository, context):
 @router.get("/quality/findings")
 def graph_quality_findings(request: Request, company_id: str = Query(...),
                            operational_unit_id: str = Query(""),
+                           status: str | None = Query(None),
+                           severity: str | None = Query(None),
+                           verification_status: str | None = Query(None),
+                           sort: str = Query("priority"),
+                           limit: int = Query(100, ge=1, le=100),
+                           offset: int = Query(0, ge=0),
                            authorization: str | None = Header(None)):
     repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
     context, policy = _quality_context(
@@ -379,18 +386,39 @@ def graph_quality_findings(request: Request, company_id: str = Query(...),
         operational_unit_id=operational_unit_id,
     )
     stored, events = _stored_quality(repository, context)
-    findings = project_findings(packet, context=context, stored=stored, history=events)
+    all_findings = project_findings(packet, context=context, stored=stored, history=events)
+    findings = [item for item in all_findings if (
+        (not status or str(item.get("status")) == status)
+        and (not severity or str(item.get("severity")) == severity)
+        and (not verification_status or str(item.get("verification_status")) == verification_status)
+    )]
+    severity_rank = {"critical": 0, "high": 1, "warning": 2, "medium": 2, "low": 3}
+    if sort == "affected_records":
+        findings.sort(key=lambda item: int(item.get("affected_count") or 0), reverse=True)
+    else:
+        findings.sort(key=lambda item: (
+            severity_rank.get(str(item.get("severity") or "").lower(), 9),
+            0 if str(item.get("verification_status")) != "verified" else 1,
+            -int(item.get("affected_count") or 0),
+            str(item.get("finding_key") or ""),
+        ))
+    total = len(findings)
+    page = findings[offset:offset + limit]
     return {
         "contract_version": "company-graph-quality-work.v1",
         "company_id": context.tenant_id,
         "scope": packet.scope,
-        "findings": findings,
+        "findings": page,
         "summary": {
-            "open": sum(item["status"] in {"open", "in_progress", "recurring"} for item in findings),
-            "critical": sum(item["severity"] == "critical" for item in findings),
-            "affected_records": sum(item["affected_count"] for item in findings),
-            "actionable": sum(bool(item["operator_actions"]) for item in findings),
+            "open": sum(item["status"] in {"open", "in_progress", "recurring"} for item in all_findings),
+            "critical": sum(item["severity"] == "critical" and item["status"] != "resolved" for item in all_findings),
+            "unverified": sum(item.get("verification_status") != "verified" for item in all_findings),
+            "affected_records": sum(item["affected_count"] for item in all_findings),
+            "actionable": sum(bool(item["operator_actions"]) for item in all_findings),
         },
+        "pagination": {"total": total, "visible": len(page), "limit": limit, "offset": offset,
+                       "has_more": offset + len(page) < total,
+                       "next_offset": offset + len(page) if offset + len(page) < total else None},
         "connections": ["data_readiness", "tasks", "alerts", "idjwi_recommendations", "audit"],
         "can_manage": policy.allows("graph.quality_manage"),
     }
@@ -553,6 +581,12 @@ def relationship_candidate_queue(
     predicate: str | None = Query(None),
     matching_method: str | None = Query(None),
     bulk_confirmable: bool | None = Query(None),
+    confidence: str | None = Query(None),
+    source: str | None = Query(None),
+    age: str | None = Query(None),
+    sort: str = Query("priority"),
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     authorization: str | None = Header(None),
 ):
     repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
@@ -561,30 +595,79 @@ def relationship_candidate_queue(
     )
     policy.require("graph.read_sensitive")
     rows = repository.list_entities(context, "graph_assertion", limit=5000).data or []
+    rows = [row for row in rows if row.get("carrier_type")]
+    summary_rows = rows[:]
     rows = [
         row for row in rows
-        if row.get("carrier_type") and (
-            not assertion_state or str(row.get("assertion_state")) == assertion_state
-        )
+        if (not assertion_state or str(row.get("assertion_state")) == assertion_state)
         and (not object_type or str(row.get("carrier_type")) == object_type)
         and (not predicate or str(row.get("predicate")) == predicate)
         and (not matching_method or str(row.get("matching_method")) == matching_method)
         and (bulk_confirmable is None or bool(row.get("bulk_group_key")) == bulk_confirmable)
+        and (not source or source.lower() in str(row.get("matching_method") or row.get("source_system") or "").lower())
     ]
-    rows.sort(key=lambda row: str(row.get("last_evaluated_at") or ""), reverse=True)
+    if confidence == "high":
+        rows = [row for row in rows if float(row.get("candidate_confidence") or 0) >= .8]
+    elif confidence == "medium":
+        rows = [row for row in rows if .5 <= float(row.get("candidate_confidence") or 0) < .8]
+    elif confidence == "low":
+        rows = [row for row in rows if float(row.get("candidate_confidence") or 0) < .5]
+    if age == "older_30_days":
+        cutoff = (date.today() - timedelta(days=30)).isoformat()
+        rows = [row for row in rows if str(row.get("last_evaluated_at") or "")[:10] < cutoff]
+    state_rank = {"disputed": 0, "proposed": 1, "active": 2, "confirmed": 2, "rejected": 3}
+    risk_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3, "unassessed": 4}
+    def priority_metadata(row):
+        evidence = (row.get("evidence") or [{}])[0]
+        matching = evidence.get("matching_fields") or {}
+        risk = str(row.get("risk_level") or matching.get("risk_level") or "unassessed").lower()
+        impact = float(row.get("operational_impact") or matching.get("operational_impact") or 0)
+        return risk, impact
+    if sort == "confidence":
+        rows.sort(key=lambda row: float(row.get("candidate_confidence") or 0), reverse=True)
+    elif sort == "oldest":
+        rows.sort(key=lambda row: str(row.get("last_evaluated_at") or ""))
+    else:
+        rows.sort(key=lambda row: (
+            state_rank.get(str(row.get("assertion_state")), 9),
+            risk_rank.get(priority_metadata(row)[0], 9),
+            -priority_metadata(row)[1],
+            -float(row.get("candidate_confidence") or 0),
+            str(row.get("last_evaluated_at") or ""),
+        ))
+    total = len(rows)
+    page = []
+    for row in rows[offset:offset + limit]:
+        risk, impact = priority_metadata(row)
+        page.append({**row, "queue_priority": {
+            "risk": risk, "operational_impact": impact,
+            "basis": "assertion_evidence" if risk != "unassessed" or impact else "confidence_and_age",
+        }})
+    groups = {}
+    for row in page:
+        key = row.get("bulk_group_key") or f"individual:{row.get('assertion_key')}"
+        groups.setdefault(key, {"bulk_group_key": row.get("bulk_group_key"), "predicate": row.get("predicate"), "candidate_ids": []})
+        groups[key]["candidate_ids"].append(row.get("assertion_key"))
     return {
         "contract_version": RELATIONSHIP_CANDIDATE_VERSION,
         "company_id": context.tenant_id,
         "scope": {"type": context.scope_type, "id": context.scope_id},
         "authorization_fingerprint": policy.fingerprint(),
         "summary": {
-            "total": len(rows),
-            "proposed": sum(row.get("assertion_state") == "proposed" for row in rows),
-            "disputed": sum(row.get("assertion_state") == "disputed" for row in rows),
-            "rejected": sum(row.get("assertion_state") == "rejected" for row in rows),
-            "bulk_confirmable": sum(bool(row.get("bulk_group_key")) for row in rows),
+            "total": total,
+            "proposed": sum(row.get("assertion_state") == "proposed" for row in summary_rows),
+            "high_confidence": sum(row.get("assertion_state") == "proposed" and float(row.get("candidate_confidence") or 0) >= .8 for row in summary_rows),
+            "disputed": sum(row.get("assertion_state") == "disputed" for row in summary_rows),
+            "rejected": sum(row.get("assertion_state") == "rejected" for row in summary_rows),
+            "bulk_confirmable": sum(bool(row.get("bulk_group_key")) for row in summary_rows),
+            "critical": sum(priority_metadata(row)[0] == "critical" for row in summary_rows),
+            "oldest_proposal": min((row.get("last_evaluated_at") for row in summary_rows if row.get("assertion_state") == "proposed" and row.get("last_evaluated_at")), default=None),
         },
-        "candidates": rows,
+        "pagination": {"total": total, "visible": len(page), "limit": limit, "offset": offset,
+                       "has_more": offset + len(page) < total,
+                       "next_offset": offset + len(page) if offset + len(page) < total else None},
+        "safe_bulk_groups": list(groups.values()),
+        "candidates": page,
     }
 
 
@@ -1323,6 +1406,23 @@ def graph_audit(body: GraphAuditRequest, request: Request, authorization: str | 
         policy.require("graph.export")
     log_event(f"company_graph.{body.event}", company_id=body.company_id, actor=context.user_id, subject=body.subject or body.company_id, metadata=body.metadata, status="success")
     return {"recorded": True}
+
+
+@router.get("/audit/status")
+def graph_audit_status(request: Request, company_id: str = Query(...),
+                       authorization: str | None = Header(None)):
+    repository = SupabaseTenantContextRepository(verifier=verify_tenant_access)
+    context = repository.resolve_context(
+        authorization, company_id, request_id=getattr(request.state, "request_id", ""),
+    )
+    GraphAuthorizationPolicy.for_context(context).require("graph.read")
+    return {
+        "contract_version": "company-graph-capability-state.v1",
+        "state": "available",
+        "capability": "graph_audit",
+        "audit_recording": True,
+        "request_id": getattr(request.state, "request_id", ""),
+    }
 
 
 @router.post("/export")

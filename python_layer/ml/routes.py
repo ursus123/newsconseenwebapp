@@ -122,7 +122,7 @@ def _load_raw_from_railway(entity: str, company_id: str = None) -> "pd.DataFrame
     the full feature set needed for meaningful predictions.
 
     The raw.* tables are written by the ETL cron on every run via load_raw().
-    They are always a full snapshot of the current Base44 state.
+    They are always a full snapshot of the current Supabase state.
 
     Args:
         entity:     Table name inside the raw schema, e.g. "people", "tasks"
@@ -202,7 +202,7 @@ def retention_risk(
     Score active clients by predicted discharge risk using Cox PH.
 
     Uses Railway time-series history for model training.
-    Falls back to live Base44 extract if Railway unavailable.
+    Falls back to live Supabase extract if Railway unavailable.
 
     Returns per-enterprise-group risk scores with tier classification:
         high   — >70% predicted discharge probability
@@ -218,7 +218,7 @@ def retention_risk(
         task_df   = _load_raw_from_railway("tasks",  company_id)
 
         if people_df.empty:
-            logger.info("/ml/retention-risk: raw.people empty — falling back to live Base44 extract")
+            logger.info("/ml/retention-risk: raw.people empty — falling back to live Supabase extract")
             import pandas as pd
             raw = people.extract_people()
             people_df = pd.DataFrame(raw) if isinstance(raw, list) else raw
@@ -226,7 +226,7 @@ def retention_risk(
                 people_df = people_df[people_df["company_id"] == company_id]
 
         if task_df.empty:
-            logger.info("/ml/retention-risk: raw.tasks empty — falling back to live Base44 extract")
+            logger.info("/ml/retention-risk: raw.tasks empty — falling back to live Supabase extract")
             import pandas as pd
             raw = tasks.extract_tasks()
             task_df = pd.DataFrame(raw) if isinstance(raw, list) else raw
@@ -273,7 +273,7 @@ def staffing_forecast(
     forecast_days: int = Query(30, ge=7, le=90, description="Days ahead to forecast"),
     metric: str = Query("tasks_last_30d", description="Metric to forecast"),
     research_mode: bool = Query(False, description="Enable research mode — synthesizes forecast from available data"),
-    company_id: Optional[str] = Query(None, description="Tenant filter for Base44 fallback"),
+    company_id: Optional[str] = Query(None, description="Tenant filter for Supabase fallback"),
 ):
     """
     Forecast care visit volume for the next N days using Prophet.
@@ -292,7 +292,7 @@ def staffing_forecast(
             task_df = task_df[task_df["enterprise_id"] == enterprise_id]
 
         if task_df.empty:
-            # Try Base44 live fallback
+            # Try Supabase live fallback
             try:
                 import pandas as pd
                 raw = tasks.extract_tasks()
@@ -571,27 +571,27 @@ def get_predictions(
 
 
 # ----------------------------------------------------------
-# POST /ml/push-to-base44
-# Write ML risk scores back to Base44 Person records
+# POST /ml/push-to-canonical
+# Write governed ML risk scores to canonical Person records.
 # ----------------------------------------------------------
-@router.post("/push-to-base44")
-def push_ml_to_base44(
+@router.post("/push-to-canonical")
+def push_ml_to_canonical(
     company_id: str = Query(..., description="Tenant to push predictions for"),
     model:      str = Query("retention-risk", description="Which model results to push"),
     dry_run:    bool = Query(False, description="Preview without writing"),
 ):
     """
-    Push the latest ML predictions back to Base44 entity records.
+    Push the latest ML predictions back to Supabase entity records.
 
     For retention-risk: updates Person.ml_risk_score and Person.ml_risk_tier.
     For ltv-segmentation: updates Person.ml_segment.
     For forecasts: no writeback (forecasts are aggregate, not per-entity).
 
     Reads the most recent stored prediction from raw.ml_predictions,
-    then batch-updates the corresponding Base44 entities.
+    then batch-updates the corresponding Supabase entities.
 
     This closes the loop:
-      Base44 → python_layer ETL → raw.* → ML → raw.ml_predictions → Base44
+      Supabase → python_layer ETL → raw.* → ML → raw.ml_predictions → Supabase
     """
     import httpx
     from config.settings import HEADERS
@@ -640,9 +640,7 @@ def push_ml_to_base44(
                 "sample":       scored_entities[:5],
             }
 
-        # Determine which Base44 URL and field names to use
-        from config import settings as s
-        base_url = s.base44_people_url
+        from data_sources import supabase_source
 
         updated, failed = 0, 0
         field_map = {
@@ -663,13 +661,10 @@ def push_ml_to_base44(
                 continue
 
             try:
-                r = httpx.patch(
-                    f"{base_url}/{entity_id}",
-                    json=payload,
-                    headers=HEADERS,
-                    timeout=10,
+                result = supabase_source.update_record(
+                    "person", entity_id, payload, company_id=company_id
                 )
-                if r.status_code < 300:
+                if result and not result.get("error"):
                     updated += 1
                 else:
                     failed += 1
@@ -688,7 +683,7 @@ def push_ml_to_base44(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("/ml/push-to-base44 failed: %s", e)
+        logger.error("/ml/push-to-canonical failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

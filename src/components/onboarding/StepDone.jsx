@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { CheckCircle2, ArrowRight, Zap, Plug, Bot, RefreshCw } from "lucide-react";
 import { getTermsFromEnterpriseType } from "@/config/enterpriseTerminology";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
 const API_HEADERS = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
 

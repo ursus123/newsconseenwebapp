@@ -81,7 +81,7 @@ def transform_kpi_summary(
     """
     Build analytics.kpi_summary — one row per company_id.
 
-    All six DataFrames are the raw extracts from Base44 (no pre-aggregation).
+    All six DataFrames are the raw extracts from Supabase (no pre-aggregation).
     ETL multi-tenancy rule: extract ALL companies, derive company_ids from the data.
     """
     now = datetime.now(timezone.utc)

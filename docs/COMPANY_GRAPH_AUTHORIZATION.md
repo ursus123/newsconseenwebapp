@@ -128,3 +128,12 @@ both cache orders. They must prove different authorized node/source/action packe
 different authorization fingerprints, independent cache misses, and a cache hit
 only for the same principal and policy. Tests also cover unauthorized scope changes
 and relationship actions.
+
+## Supporting capability authorization
+
+Company Graph calls alerts status, pending approvals, Intelligence Inbox and
+graph-audit status with the current Supabase bearer token and tenant identifier.
+Every tenant-scoped backend route re-verifies that identity. The graph-audit
+status endpoint additionally requires `graph.read`. The page displays a distinct
+unauthorized state for 401/403; it does not infer lack of data or retry through a
+broader client-side repository.

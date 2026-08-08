@@ -30,7 +30,7 @@ export const ONTOLOGY_TYPES = [
 ];
 export const ONTOLOGY_MAP = Object.fromEntries(ONTOLOGY_TYPES.map(t => [t.key, t]));
 
-// backend: "ontology" — app reads/writes Layer 1 (Base44 entities), company_id stamped on every write
+// backend: "ontology" — app reads/writes Layer 1 (Supabase entities), company_id stamped on every write
 // backend: "datamart" — app reads Layer 2 (python_layer analytics), three-tier fallback required
 export const APP_REGISTRY = [
   // HR & PEOPLE

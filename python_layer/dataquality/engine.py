@@ -6,7 +6,7 @@
 #
 # Read priority:
 #   Tier 1 — raw.* PostgreSQL tables (full records, populated by ETL)
-#   Tier 2 — Base44 live API (if raw tables are empty or DB unavailable)
+#   Tier 2 — Supabase live API (if raw tables are empty or DB unavailable)
 #
 # Produces a DataQualityReport with:
 #   overall_score   (0–100)
@@ -32,13 +32,13 @@ def _now_iso() -> str:
 # duplicate_fields:  group-by these columns to detect likely duplicates
 # valid_enums:       field → set of canonical values; anything else → warning
 # raw_table:         PostgreSQL raw.* table name
-# base44_url_attr:   settings attribute name for Base44 fallback URL
+# supabase_url_attr:   settings attribute name for Supabase fallback URL
 # page:              frontend page name for "Fix →" link
 
 ENTITY_RULES = {
     "people": {
         "raw_table":        "raw.people",
-        "base44_url_attr":  "base44_people_url",
+        "canonical_entity": "people",
         "page":             "People",
         "required":         ["person_type", "status"],
         "recommended":      ["email", "first_name"],
@@ -50,7 +50,7 @@ ENTITY_RULES = {
     },
     "enterprises": {
         "raw_table":        "raw.enterprises",
-        "base44_url_attr":  "base44_enterprises_url",
+        "canonical_entity": "enterprises",
         "page":             "Enterprises",
         "required":         ["enterprise_type", "status", "enterprise_name"],
         "recommended":      ["country"],
@@ -63,7 +63,7 @@ ENTITY_RULES = {
     },
     "products": {
         "raw_table":        "raw.products",
-        "base44_url_attr":  "base44_products_url",
+        "canonical_entity": "products",
         "page":             "Products",
         "required":         ["item_type", "status", "name"],
         "recommended":      ["unit_price", "stock_quantity"],
@@ -76,7 +76,7 @@ ENTITY_RULES = {
     },
     "tasks": {
         "raw_table":        "raw.tasks",
-        "base44_url_attr":  "base44_tasks_url",
+        "canonical_entity": "tasks",
         "page":             "Tasks",
         "required":         ["status", "title"],
         "recommended":      ["due_date", "assigned_to_name"],
@@ -87,7 +87,7 @@ ENTITY_RULES = {
     },
     "transactions": {
         "raw_table":        "raw.transactions",
-        "base44_url_attr":  "base44_transactions_url",
+        "canonical_entity": "transactions",
         "page":             "Transactions",
         "required":         ["transaction_type", "status", "amount"],
         "recommended":      ["reference_number", "due_date"],
@@ -98,7 +98,7 @@ ENTITY_RULES = {
     },
     "relationships": {
         "raw_table":        "raw.relationships",
-        "base44_url_attr":  "base44_relationships_url",
+        "canonical_entity": "relationships",
         "page":             "Relationships",
         "required":         ["relationship_type", "status"],
         "recommended":      [],
@@ -107,7 +107,7 @@ ENTITY_RULES = {
     },
     "addresses": {
         "raw_table":        "raw.addresses",
-        "base44_url_attr":  "base44_addresses_url",
+        "canonical_entity": "addresses",
         "page":             "Addresses",
         "required":         ["address_type"],
         "recommended":      ["city", "country"],
@@ -139,32 +139,12 @@ def _load_from_pg(table: str, company_id: str):
         return None
 
 
-def _load_from_base44(url_attr: str, company_id: str):
-    """Fallback: fetch records directly from Base44 REST API."""
-    try:
-        import pandas as pd
-        from config.settings import get_settings
-        from etl.utils import fetch_json_to_df, HEADERS
-        settings = get_settings()
-        url = getattr(settings, url_attr, None)
-        if not url:
-            return None
-        df = fetch_json_to_df(url, HEADERS)
-        if df.empty:
-            return None
-        if "company_id" in df.columns:
-            df = df[df["company_id"] == company_id]
-        return df if not df.empty else None
-    except Exception as e:
-        logger.debug("dataquality: base44 load %s failed — %s", url_attr, e)
-        return None
-
-
 def _load(entity: str, rules: dict, company_id: str):
-    """Three-tier load: raw PG → Base44 live."""
+    """Three-tier load: raw PG → Supabase live."""
     df = _load_from_pg(rules["raw_table"], company_id)
     if df is None:
-        df = _load_from_base44(rules["base44_url_attr"], company_id)
+        from data_sources.supabase_source import fetch_entity_df
+        df = fetch_entity_df(rules["canonical_entity"], company_id=company_id)
     return df
 
 

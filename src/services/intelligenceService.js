@@ -129,7 +129,7 @@ export async function listInsights(currentUser, filters = {}) {
     }
   } catch (_) {}
 
-  // Fallback to Base44 live
+  // Fallback to Supabase live
   try {
     if (isSuperAdmin) return ncClient.entities.Insight.list("-detected_at");
     return ncClient.entities.Insight.filter(

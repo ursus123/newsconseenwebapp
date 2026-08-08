@@ -1452,7 +1452,7 @@ def submit_feedback(request: FeedbackRequest, authorization: Optional[str] = Hea
         request.company_id, request.rating, request.question[:100],
     )
 
-    # Future: store to Base44 CopilotFeedback entity
+    # Future: store to Supabase CopilotFeedback entity
     # For now just acknowledge
     return {
         "status":  "received",
@@ -1471,7 +1471,7 @@ def diagnose(company_id: str = Query(...), authorization: Optional[str] = Header
     A tool showing count=0 means either:
       - The analytics table has no rows for this company_id (re-run ETL)
       - The ETL ran with company_id=NULL (check Cron: company_id log lines)
-      - The Base44 entity has no records yet (create some data first)
+      - The Supabase entity has no records yet (create some data first)
     """
     verify_tenant_access(authorization, company_id)
     from copilot.queries import (

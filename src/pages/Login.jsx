@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/api/supabaseEntityClient';
+import { APP_URL } from '@/config/api';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -8,6 +9,26 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
+  const [notice,   setNotice]   = useState('');
+
+  const handlePasswordReset = async () => {
+    setError('');
+    setNotice('');
+    if (!email) {
+      setError('Enter your email address first.');
+      return;
+    }
+    setLoading(true);
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${APP_URL}/ResetPassword`,
+    });
+    setLoading(false);
+    if (resetError) {
+      setError(resetError.message);
+      return;
+    }
+    setNotice('If that account exists, a password-reset link has been sent.');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,8 +61,9 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
           <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700">Email</label>
+            <label htmlFor="login-email" className="text-sm font-medium text-slate-700">Email</label>
             <input
+              id="login-email"
               type="email"
               required
               autoFocus
@@ -53,8 +75,9 @@ export default function Login() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700">Password</label>
+            <label htmlFor="login-password" className="text-sm font-medium text-slate-700">Password</label>
             <input
+              id="login-password"
               type="password"
               required
               value={password}
@@ -70,12 +93,27 @@ export default function Login() {
             </p>
           )}
 
+          {notice && (
+            <p role="status" className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              {notice}
+            </p>
+          )}
+
           <button
             type="submit"
             disabled={loading}
             className="w-full py-2 px-4 text-sm font-medium text-white bg-slate-800 rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? 'Signing in…' : 'Sign in'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePasswordReset}
+            disabled={loading}
+            className="w-full text-sm font-medium text-emerald-700 hover:underline disabled:opacity-50"
+          >
+            Forgot your password?
           </button>
         </form>
       </div>

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { MapPin, ZoomIn, ZoomOut, Maximize2,
          RefreshCw, AlertTriangle, CheckCircle } from "lucide-react";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 // ----------------------------------------------------------
 // Health grade → visual config

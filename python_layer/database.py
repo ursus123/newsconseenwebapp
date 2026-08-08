@@ -50,7 +50,7 @@ def get_engine() -> Engine:
 
     Called lazily — only when a route or ETL job actually needs the DB.
     This means the app starts cleanly even if DATABASE_URL is not set,
-    which is normal in local development against Base44 only.
+    which is normal in local development against Supabase only.
 
     Pool sizing:
         pool_size=5       — max persistent connections kept open
@@ -100,7 +100,7 @@ def ensure_analytics_schema(engine: Engine) -> None:
     can assume both schemas are present.
 
     - analytics.*  — aggregated snapshots (time-series, trend analysis)
-    - raw.*        — full individual records from Base44 (ML, advanced queries)
+    - raw.*        — full individual records from Supabase (ML, advanced queries)
     """
     with engine.connect() as conn:
         conn.execute(text("CREATE SCHEMA IF NOT EXISTS analytics;"))

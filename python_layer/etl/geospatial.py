@@ -27,7 +27,7 @@ DEFAULT_EPS_METERS = 500
 
 def extract_geospatial() -> pd.DataFrame:
     """
-    Extract all enterprise records from Base44.
+    Extract all enterprise records from Supabase.
     Geospatial enrichment reads from the enterprises entity —
     the same source as etl/enterprises.py.
     """
@@ -45,7 +45,7 @@ def transform_geospatial(df: pd.DataFrame) -> pd.DataFrame:
 
     Coordinate strategy (in priority order):
         1. address_summary table in Railway — populated by etl/addresses.py
-           which already geocodes via Base44 frontend or Nominatim fallback.
+           which already geocodes via Supabase frontend or Nominatim fallback.
            This is the preferred source — avoids duplicate Nominatim calls.
         2. Legacy geocode cache from geospatial_summary — used for addresses
            that predate the address_summary table.
@@ -83,7 +83,7 @@ def transform_geospatial(df: pd.DataFrame) -> pd.DataFrame:
 
     # ----------------------------------------------------------
     # Step 1 — load coordinates from address_summary
-    # etl/addresses.py already geocoded these via Base44 or Nominatim.
+    # etl/addresses.py already geocoded these via Supabase or Nominatim.
     # Join on enterprise_id to pull lat/lon without re-geocoding.
     # ----------------------------------------------------------
     address_coords = _load_address_summary_coords()

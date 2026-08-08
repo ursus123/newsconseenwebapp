@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import * as Sentry from "@sentry/react";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 import { createPageUrl } from "@/utils";
 import {
   LayoutDashboard,
@@ -400,16 +401,18 @@ export default function Layout({ children, currentPageName }) {
 
   useEffect(() => {
     setCurrentUser(authenticatedUser);
-    if (authenticatedUser && !authenticatedUser.setup_complete && (authenticatedUser.role === 'admin' || authenticatedUser.role === 'super_admin')) {
-      setShowWizard(true);
-    }
+    setShowWizard(Boolean(
+      authenticatedUser
+      && !authenticatedUser.setup_complete
+      && (authenticatedUser.role === 'admin' || authenticatedUser.role === 'super_admin')
+    ));
   }, [authenticatedUser]);
 
   // Sentry context — no-op if Sentry wasn't initialized (VITE_SENTRY_DSN unset)
   useEffect(() => {
     if (!currentUser) return;
-    Sentry.setUser({ id: currentUser.email || currentUser.id, email: currentUser.email });
-    Sentry.setTag("company_id", currentUser.company_id);
+    Sentry.setUser(null);
+    Sentry.setTag("tenant_id", currentUser.company_id);
     Sentry.setTag("role", currentUser.role);
   }, [currentUser]);
 
@@ -425,11 +428,12 @@ export default function Layout({ children, currentPageName }) {
   };
 
   useEffect(() => {
-    fetch("https://newsconseenwebapp-production.up.railway.app/alerts/status")
+    if (!currentUser?.company_id) return;
+    authHeaders().then(headers => fetch(`${RAILWAY_URL}/alerts/status?company_id=${encodeURIComponent(currentUser.company_id)}`, { headers }))
       .then(r => r.json())
       .then(data => setCriticalAlerts(data?.critical_count || 0))
       .catch(() => {});
-  }, []);
+  }, [currentUser?.company_id]);
 
   // Combined "needs approval" signal — agent approvals + Intelligence Inbox
   // recommendations — one badge instead of two silent counts (see ApprovalGate.jsx
@@ -437,11 +441,11 @@ export default function Layout({ children, currentPageName }) {
   useEffect(() => {
     const companyId = currentUser?.company_id;
     if (!companyId) return;
-    const base = "https://newsconseenwebapp-production.up.railway.app";
-    Promise.all([
-      fetch(`${base}/agents/approvals/pending?company_id=${companyId}`).then(r => r.ok ? r.json() : { pending: [] }).catch(() => ({ pending: [] })),
-      fetch(`${base}/intelligence/inbox?company_id=${companyId}&limit=200`).then(r => r.ok ? r.json() : {}).catch(() => ({})),
-    ]).then(([approvals, inbox]) => {
+    const base = RAILWAY_URL;
+    authHeaders().then(headers => Promise.all([
+      fetch(`${base}/agents/approvals/pending?company_id=${companyId}`, { headers }).then(r => r.ok ? r.json() : { pending: [] }).catch(() => ({ pending: [] })),
+      fetch(`${base}/intelligence/inbox?company_id=${companyId}&limit=200`, { headers }).then(r => r.ok ? r.json() : {}).catch(() => ({})),
+    ])).then(([approvals, inbox]) => {
       const pendingApprovalCount = (approvals?.pending || []).length;
       const pendingRecCount = (inbox?.recommendations || []).filter(r => r.status === "proposed").length;
       setPendingApprovals(pendingApprovalCount + pendingRecCount);
@@ -570,7 +574,7 @@ export default function Layout({ children, currentPageName }) {
         {/* Sidebar */}
         <aside
           style={{ backgroundColor: branding.secondaryColor, width: sidebarWidth, minWidth: sidebarWidth }}
-          className={`fixed lg:static inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-out relative shrink-0
+          className={`fixed lg:relative inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-out shrink-0
             ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
         >
           {/* Drag-to-resize handle */}
