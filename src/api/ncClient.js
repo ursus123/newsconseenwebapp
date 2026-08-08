@@ -13,13 +13,19 @@ const auth = {
       .eq("id", user.id)
       .single();
     if (profileError && profileError.code !== "PGRST116") throw profileError;
+    const metadata = user.user_metadata || {};
+    const onboardingComplete = Boolean(
+      metadata.setup_complete ?? metadata.onboarding_complete ?? false
+    );
     return {
       id: user.id,
       email: user.email,
       full_name: profile?.full_name || user.user_metadata?.full_name || user.email,
       company_id: profile?.company_id || user.app_metadata?.company_id || null,
       role: profile?.role || user.app_metadata?.role || "user",
-      ...user.user_metadata,
+      ...metadata,
+      setup_complete: onboardingComplete,
+      onboarding_complete: onboardingComplete,
     };
   },
   async logout(redirectUrl) {

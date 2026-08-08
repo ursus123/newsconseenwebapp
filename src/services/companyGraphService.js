@@ -13,26 +13,17 @@
  * Edge: { id, source, target, relationship_type, strength, label }
  */
 
-export const NODE_COLORS = {
-  enterprise:     "#6366f1",   // indigo
-  person:         "#3b82f6",   // blue
-  product:        "#10b981",   // emerald
-  service:        "#059669",   // green
-  transaction:    "#f59e0b",   // amber
-  task:           "#f97316",   // orange
-  address:        "#14b8a6",   // teal
-  territory:      "#0d9488",   // dark teal
-  risk:           "#ef4444",   // red
-  opportunity:    "#22c55e",   // green
-  insight:        "#a855f7",   // purple
-  recommendation: "#fb923c",   // light orange
-  decision:       "#2563eb",
-  action:         "#dc2626",
-  operational_unit: "#4f46e5",
-  observation:    "#7c3aed",
-  external_observation: "#7c3aed",
-  quality_cluster: "#475569",
-};
+import {
+  COMPANY_GRAPH_GLYPHS,
+  COMPANY_GRAPH_PRESENTATION_REGISTRY,
+  graphAccessibleNodeName,
+  graphImportanceBand,
+  graphPresentationFor,
+} from "./companyGraphPresentationRegistry.js";
+
+export const NODE_COLORS = Object.freeze(Object.fromEntries(
+  Object.entries(COMPANY_GRAPH_PRESENTATION_REGISTRY).map(([type, presentation]) => [type, presentation.accent]),
+));
 
 export const GRAPH_CONTRACT_VERSION = "company-graph.v1";
 export const GRAPH_INTENT_VERSION = "company-graph-intents.v1";
@@ -70,6 +61,7 @@ export const GRAPH_FIELD_CLASSIFICATION = {
   external_observation: { graph_safe: ["observation_type", "status", "severity", "observed_at", "expires_at", "confidence"], role_restricted: ["source_name", "location_label", "summary"] },
   territory: { graph_safe: ["territory_type", "status"], role_restricted: [] },
   insight: { graph_safe: ["insight_type", "severity", "status"], role_restricted: [] },
+  quality_cluster: { graph_safe: ["cluster_key", "record_count", "reason", "explanation", "source_summary", "member_ids", "repair_eligible", "critical_records_excluded"], role_restricted: [] },
 };
 
 function exposableFields(type) {
@@ -87,23 +79,29 @@ function graphSafeAttributes(entity, type, includeRoleRestricted = false) {
     .map(field => [field, entity[field]]));
 }
 
-export const GRAPH_MODES = {
-  operational_focus:        { label: "Operational Focus",        types: ["operational_unit","enterprise","person","task","transaction","risk","recommendation","opportunity","decision","action","quality_cluster"] },
-  organizational_structure: { label: "Organizational Structure", types: ["operational_unit","enterprise","person","address"] },
-  operational_flow:         { label: "Operational Flow",         types: ["operational_unit","enterprise","task","transaction","product","service","action"] },
-  responsibilities_work:    { label: "Responsibilities & Work",  types: ["operational_unit","person","task","schedule","action"] },
-  customers_suppliers:      { label: "Customers & Suppliers",    types: ["enterprise","person","transaction","product","service"] },
-  products_services:        { label: "Products & Services",      types: ["enterprise","product","service","transaction","recommendation"] },
-  risks_opportunities:      { label: "Risks & Opportunities",    types: ["operational_unit","enterprise","person","risk","opportunity","recommendation"] },
-  decisions_actions:        { label: "Decisions & Actions",      types: ["decision","recommendation","action","task","person","operational_unit"] },
-  data_quality:             { label: "Data-quality Gaps",        types: null },
-  external_disruptions:     { label: "External Disruptions",     types: ["external_observation","observation","territory","address","enterprise","operational_unit","risk","recommendation","action"] },
-  full_graph:               { label: "Full Governed Graph",      types: null },
-  company_structure:        { label: "Company Structure (legacy)", types: ["operational_unit","enterprise","person","address"] },
-  operations_flow:          { label: "Operations Flow (legacy)",   types: ["enterprise","task","transaction","product","service"] },
-  market_context:           { label: "Market Context (legacy)",    types: ["enterprise","address","territory","opportunity","insight"] },
-  risk_action:              { label: "Risk & Action (legacy)",     types: ["enterprise","person","risk","recommendation","task","insight"] },
-};
+export const GRAPH_LAYOUT_CONTRACT_VERSION = "company-graph-layouts.v1";
+export const GRAPH_LAYOUT_REGISTRY = Object.freeze({
+  operational_focus: { label: "Operational Focus", question: "What matters now around this organization or unit?", strategy: "importance_orbits", anchorTypes: ["operational_unit", "enterprise"], types: ["operational_unit","enterprise","person","task","transaction","risk","recommendation","opportunity","decision","action","quality_cluster"] },
+  organizational_structure: { label: "Organization Structure", question: "How is this operation organized?", strategy: "top_down_hierarchy", anchorTypes: ["operational_unit"], types: ["operational_unit","enterprise","person","address"] },
+  responsibilities_work: { label: "Responsibilities & Work", question: "Who owns which work?", strategy: "left_to_right_flow", anchorTypes: ["operational_unit", "person"], types: ["operational_unit","person","task","schedule","action"] },
+  customers_suppliers: { label: "Customers & Suppliers", question: "Which parties exchange value with the operation?", strategy: "relationship_sides", anchorTypes: ["operational_unit", "enterprise"], types: ["operational_unit","enterprise","person","transaction","product","service"] },
+  products_services: { label: "Products & Services", question: "How do offerings connect to enterprises and transactions?", strategy: "left_to_right_flow", anchorTypes: ["enterprise"], types: ["enterprise","product","service","transaction","recommendation"] },
+  risks_opportunities: { label: "Risks & Opportunities", question: "What threatens or improves the operation?", strategy: "opposing_sides", anchorTypes: ["operational_unit", "enterprise", "person"], types: ["operational_unit","enterprise","person","risk","opportunity","recommendation"] },
+  decisions_actions: { label: "Decisions & Actions", question: "How does evidence become approved work?", strategy: "left_to_right_flow", anchorTypes: ["recommendation"], types: ["recommendation","decision","action","task","person","operational_unit"] },
+  data_quality: { label: "Data-quality Gaps", question: "Where does graph truth need governed repair?", strategy: "quality_gravity", anchorTypes: ["quality_cluster"], types: null },
+  external_disruptions: { label: "External Disruptions", question: "Which external events affect internal operations?", strategy: "outside_in", anchorTypes: ["external_observation", "observation"], types: ["external_observation","observation","territory","address","enterprise","operational_unit","risk","recommendation","action"] },
+  selected_neighborhood: { label: "Selected Neighborhood", question: "What directly explains the selected record?", strategy: "relationship_rings", anchorTypes: [], types: null },
+  full_graph: { label: "Full Governed Graph", question: "What authorized structure exists across the complete bounded packet?", strategy: "semantic_lanes", anchorTypes: ["operational_unit", "enterprise"], types: null },
+});
+
+export const GRAPH_MODES = Object.freeze({
+  ...GRAPH_LAYOUT_REGISTRY,
+  operational_flow: { ...GRAPH_LAYOUT_REGISTRY.products_services, label: "Operational Flow", legacy: true, types: ["operational_unit","enterprise","task","transaction","product","service","action"] },
+  company_structure: { ...GRAPH_LAYOUT_REGISTRY.organizational_structure, label: "Company Structure (legacy)", legacy: true },
+  operations_flow: { ...GRAPH_LAYOUT_REGISTRY.products_services, label: "Operations Flow (legacy)", legacy: true, types: ["enterprise","task","transaction","product","service"] },
+  market_context: { ...GRAPH_LAYOUT_REGISTRY.customers_suppliers, label: "Market Context (legacy)", legacy: true, types: ["enterprise","address","territory","opportunity","insight"] },
+  risk_action: { ...GRAPH_LAYOUT_REGISTRY.risks_opportunities, label: "Risk & Action (legacy)", legacy: true, types: ["enterprise","person","risk","recommendation","task","insight"] },
+});
 
 export const OPERATIONAL_FOCUS_NODE_BUDGET = 36;
 
@@ -184,6 +182,97 @@ export function buildOperationalFocus(nodes, edges, graphPacket, budget = OPERAT
   return { nodes: visible, edges: visibleEdges };
 }
 
+const COMPLETED_STATUSES = new Set(["closed", "completed", "done", "resolved", "dismissed"]);
+
+function clusterDescriptor(node) {
+  const status = String(node.status || node.attributes?.status || "").toLowerCase();
+  const severity = String(node.risk_level || node.attributes?.severity || "").toLowerCase();
+  if (["critical", "high"].includes(severity) || Number(node.importance || 0) >= 0.65) return null;
+  if (node.entity_type === "task" && COMPLETED_STATUSES.has(status)) return { key: "completed_tasks", label: "completed tasks", reason: "Completed work is summarized outside the current attention window.", repair: false };
+  if (node.entity_type === "transaction" && node.is_unconnected) return { key: "disconnected_transactions", label: "disconnected transactions", reason: "These transactions have no authorized visible relationship endpoint.", repair: true };
+  if (node.entity_type === "enterprise" && ["low", "none", ""].includes(severity) && /supplier|vendor/i.test(String(node.attributes?.enterprise_type || node.sublabel || ""))) return { key: "low_risk_suppliers", label: "low-risk suppliers", reason: "These suppliers have no immediate risk or open high-priority work.", repair: false };
+  if (node.is_unconnected) return { key: `disconnected_${node.entity_type}`, label: `disconnected ${node.entity_type} records`, reason: `These ${node.entity_type} records have no authorized visible connection.`, repair: true };
+  if (COMPLETED_STATUSES.has(status) && Number(node.importance || 0) < 0.35) return { key: `historical_${node.entity_type}`, label: `historical ${node.entity_type} records`, reason: "Closed low-attention records are summarized to protect the operational signal.", repair: false };
+  return null;
+}
+
+export function buildSemanticClusters(nodes, edges, { expandedClusterIds = [], minimumClusterSize = 8 } = {}) {
+  const expanded = new Set(expandedClusterIds);
+  const buckets = new Map();
+  nodes.forEach(node => {
+    if (node.presentation_only) return;
+    const descriptor = clusterDescriptor(node);
+    if (!descriptor) return;
+    const clusterId = `quality_cluster:semantic:${descriptor.key}`;
+    if (expanded.has(clusterId)) return;
+    const current = buckets.get(clusterId) || { descriptor, members: [] };
+    current.members.push(node);
+    buckets.set(clusterId, current);
+  });
+  const activeBuckets = [...buckets.entries()].filter(([, bucket]) => bucket.members.length >= minimumClusterSize);
+  if (!activeBuckets.length) return { nodes, edges, clusters: [] };
+
+  const memberToCluster = new Map();
+  const clusters = activeBuckets.map(([clusterId, bucket]) => {
+    const memberIds = bucket.members.map(node => node.id).sort();
+    memberIds.forEach(id => memberToCluster.set(id, clusterId));
+    const sourceCounts = new Map();
+    bucket.members.forEach(node => {
+      const source = node.attributes?.source_name || node.attributes?.import_name || node.attributes?.import_id || "canonical records";
+      sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1);
+    });
+    const [primarySource, sourceCount] = [...sourceCounts.entries()].sort((a, b) => b[1] - a[1])[0] || ["canonical records", bucket.members.length];
+    return {
+      id: clusterId,
+      entity_type: "quality_cluster",
+      entity_id: clusterId.split(":").at(-1),
+      label: `${bucket.members.length} ${bucket.descriptor.label}`,
+      sublabel: `${sourceCount === bucket.members.length ? "All" : "Mostly"} from ${primarySource}`,
+      status: bucket.descriptor.repair ? "attention" : "summarized",
+      importance: bucket.descriptor.repair ? 0.5 : 0.25,
+      risk_level: bucket.descriptor.repair ? "medium" : null,
+      is_unconnected: bucket.descriptor.repair,
+      presentation_only: true,
+      attributes: {
+        cluster_key: bucket.descriptor.key,
+        record_count: bucket.members.length,
+        reason: bucket.descriptor.reason,
+        explanation: `${bucket.members.length} authorized records were summarized. ${bucket.descriptor.reason}`,
+        source_summary: primarySource,
+        member_ids: memberIds,
+        repair_eligible: bucket.descriptor.repair,
+        critical_records_excluded: true,
+      },
+      permitted_actions: [
+        { action: "expand_cluster", allowed: true, requires_approval: false },
+        { action: "ask_idjwi", allowed: true, requires_approval: false },
+        { action: "create_repair_work", allowed: bucket.descriptor.repair, requires_approval: false },
+      ],
+    };
+  });
+  const visibleNodes = [...nodes.filter(node => !memberToCluster.has(node.id)), ...clusters];
+  const visibleNodeIds = new Set(visibleNodes.map(node => node.id));
+  const deduplicatedEdges = new Map();
+  edges.forEach(edge => {
+    const source = memberToCluster.get(edge.source) || edge.source;
+    const target = memberToCluster.get(edge.target) || edge.target;
+    if (source === target || !visibleNodeIds.has(source) || !visibleNodeIds.has(target)) return;
+    const remapped = source !== edge.source || target !== edge.target;
+    const key = `${source}|${edge.predicate || edge.relationship_type}|${target}`;
+    if (!deduplicatedEdges.has(key)) deduplicatedEdges.set(key, remapped ? {
+      ...edge,
+      id: `cluster-edge:${stableHash(key)}`,
+      source,
+      target,
+      label: edge.label || edge.predicate || "summarized connection",
+      assertion_class: "deterministic_derivation",
+      confidence: Math.min(Number(edge.confidence ?? 1), 0.85),
+      presentation_only: true,
+    } : edge);
+  });
+  return { nodes: visibleNodes, edges: [...deduplicatedEdges.values()], clusters };
+}
+
 function stableHash(value) {
   let hash = 2166136261;
   for (const char of String(value)) {
@@ -208,19 +297,112 @@ const MODE_LANES = {
   operational_focus: [["operational_unit","enterprise"], ["risk","opportunity"], ["person","task"], ["recommendation","decision","action","transaction"], ["quality_cluster"]],
 };
 
-export function semanticPositions(nodes, mode = "operational_focus") {
+function rankedNodes(nodes) {
+  return [...nodes].sort((a, b) => Number(b.importance || 0) - Number(a.importance || 0) || a.id.localeCompare(b.id));
+}
+
+function chooseLayoutAnchor(nodes, definition, requestedAnchorId) {
+  if (requestedAnchorId) {
+    const requested = nodes.find(node => node.id === requestedAnchorId || node.entity_id === requestedAnchorId);
+    if (requested) return requested;
+  }
+  return rankedNodes(nodes).find(node => definition.anchorTypes?.includes(node.entity_type)) || rankedNodes(nodes)[0] || null;
+}
+
+function orbitPositions(nodes, anchor, center = { x: 620, y: 470 }) {
+  if (!anchor) return {};
+  const positions = { [anchor.id]: center };
+  rankedNodes(nodes.filter(node => node.id !== anchor.id)).forEach((node, index) => {
+    const ring = Math.floor(index / 10) + 1;
+    const withinRing = index % 10;
+    const ringCount = Math.min(10, nodes.length - 1 - ((ring - 1) * 10));
+    const angle = (-Math.PI / 2) + ((Math.PI * 2 * withinRing) / Math.max(1, ringCount));
+    const radius = 230 + ((ring - 1) * 210);
+    positions[node.id] = {
+      x: Math.round(center.x + Math.cos(angle) * radius),
+      y: Math.round(center.y + Math.sin(angle) * radius),
+    };
+  });
+  return positions;
+}
+
+function relationshipRingPositions(nodes, edges, anchor) {
+  if (!anchor) return {};
+  const adjacency = new Map(nodes.map(node => [node.id, []]));
+  edges.forEach(edge => {
+    adjacency.get(edge.source)?.push(edge.target);
+    adjacency.get(edge.target)?.push(edge.source);
+  });
+  const distance = new Map([[anchor.id, 0]]);
+  const queue = [anchor.id];
+  while (queue.length) {
+    const current = queue.shift();
+    for (const neighbor of adjacency.get(current) || []) {
+      if (distance.has(neighbor)) continue;
+      distance.set(neighbor, distance.get(current) + 1);
+      queue.push(neighbor);
+    }
+  }
+  const positions = { [anchor.id]: { x: 620, y: 470 } };
+  const byDepth = new Map();
+  rankedNodes(nodes.filter(node => node.id !== anchor.id)).forEach(node => {
+    const depth = Math.min(3, distance.get(node.id) || 3);
+    byDepth.set(depth, [...(byDepth.get(depth) || []), node]);
+  });
+  for (const [depth, members] of byDepth) {
+    members.forEach((node, index) => {
+      const angle = (-Math.PI / 2) + ((Math.PI * 2 * index) / members.length);
+      positions[node.id] = { x: Math.round(620 + Math.cos(angle) * depth * 230), y: Math.round(470 + Math.sin(angle) * depth * 190) };
+    });
+  }
+  return positions;
+}
+
+export function semanticPositions(nodes, mode = "operational_focus", options = {}) {
+  const definition = GRAPH_LAYOUT_REGISTRY[mode] || GRAPH_MODES[mode] || GRAPH_LAYOUT_REGISTRY.operational_focus;
+  const anchor = chooseLayoutAnchor(nodes, definition, options.anchorNodeId);
+  let calculated = {};
+  if (definition.strategy === "importance_orbits") calculated = orbitPositions(nodes, anchor);
+  if (definition.strategy === "relationship_rings") calculated = relationshipRingPositions(nodes, options.edges || [], anchor);
+
   const lanes = MODE_LANES[mode] || MODE_LANES.operational_focus;
   const laneFor = type => {
     const lane = lanes.findIndex(types => types.includes(type));
     return lane < 0 ? lanes.length : lane;
   };
-  return Object.fromEntries(nodes.map(node => {
-    const hash = stableHash(`${mode}:${node.id}`);
-    return [node.id, {
-      x: 130 + laneFor(node.entity_type) * 245 + (Math.floor(hash / 11) % 5) * 18,
-      y: 90 + (hash % 11) * 92 + ((hash >>> 8) % 31),
-    }];
-  }));
+  if (!Object.keys(calculated).length) {
+    const grouped = new Map();
+    rankedNodes(nodes).forEach(node => {
+      const lane = laneFor(node.entity_type);
+      grouped.set(lane, [...(grouped.get(lane) || []), node]);
+    });
+    for (const [lane, members] of grouped) {
+      members.forEach((node, index) => {
+        const jitter = stableHash(`${mode}:${node.id}`) % 17;
+        let x = 150 + lane * 255;
+        let y = 120 + index * 115 + jitter;
+        if (definition.strategy === "top_down_hierarchy") {
+          x = 160 + index * 210 + jitter;
+          y = 110 + lane * 220;
+        } else if (definition.strategy === "opposing_sides") {
+          x = node.entity_type === "risk" ? 250 : node.entity_type === "opportunity" ? 990 : node.entity_type === "recommendation" ? 760 : 620;
+          y = 120 + index * 125 + jitter;
+        } else if (definition.strategy === "outside_in") {
+          x = ["external_observation", "observation"].includes(node.entity_type) ? 170 : 420 + lane * 210;
+          y = 120 + index * 120 + jitter;
+        } else if (definition.strategy === "quality_gravity") {
+          x = node.entity_type === "quality_cluster" ? 600 : 180 + lane * 245;
+          y = 120 + index * 120 + jitter;
+        } else if (definition.strategy === "relationship_sides") {
+          x = node.id === anchor?.id ? 620 : (stableHash(node.id) % 2 ? 300 : 940);
+          y = node.id === anchor?.id ? 470 : 110 + index * 105 + jitter;
+        }
+        calculated[node.id] = { x, y };
+      });
+    }
+  }
+  const previous = options.previousPositions || {};
+  return Object.fromEntries(nodes.map(node => [node.id, previous[node.id] || calculated[node.id] || { x: 620, y: 470 }]));
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -522,33 +704,35 @@ function markUnconnected(nodes, edges) {
 
 // ── Cytoscape elements builder ────────────────────────────────────────────────
 
-const NODE_SHAPES = {
-  operational_unit: "round-rectangle", enterprise: "round-rectangle", person: "ellipse",
-  task: "round-diamond", transaction: "hexagon", product: "rectangle", service: "round-rectangle",
-  risk: "diamond", opportunity: "star", recommendation: "tag", decision: "octagon",
-  action: "vee", quality_cluster: "barrel", external_observation: "triangle", observation: "triangle",
-};
-const NODE_GLYPHS = {
-  operational_unit: "◆", enterprise: "▣", person: "●", task: "✓", transaction: "$",
-  product: "□", service: "◇", risk: "!", opportunity: "★", recommendation: "→",
-  decision: "?", action: "▶", quality_cluster: "…", external_observation: "△", observation: "△",
-};
-
 export function toCytoscapeElements(nodes, edges, positions = {}) {
   const cyNodes = nodes.map(n => {
-    const sz = n.importance >= 0.8 ? 112 : n.importance >= 0.6 ? 94 : n.importance >= 0.4 ? 78 : 64;
+    const presentation = graphPresentationFor(n.entity_type);
+    const importanceBand = graphImportanceBand(n.importance);
+    const sz = importanceBand === "critical" ? 58 : importanceBand === "high" ? 52 : importanceBand === "medium" ? 46 : 40;
+    const cardWidth = importanceBand === "critical" ? 190 : importanceBand === "high" ? 174 : 158;
     const warning = n.risk_level || ["degraded", "partial", "unavailable", "disputed"].includes(String(n.status).toLowerCase());
+    const statusText = String(n.status || "status unavailable").replaceAll("_", " ");
+    const statusMarker = warning ? "▲" : ["active", "open", "ready", "complete", "approved"].includes(String(n.status).toLowerCase()) ? "●" : "○";
+    const glyph = COMPANY_GRAPH_GLYPHS[n.entity_type] || "•";
     return {
       data: {
         id:            n.id,
-        label:         `${NODE_GLYPHS[n.entity_type] || "•"} ${n.label}`,
-        detailLabel:   `${NODE_GLYPHS[n.entity_type] || "•"} ${n.label}${n.sublabel ? `\n${n.sublabel}` : ""}`,
+        label:         `${glyph} ${n.label}`,
+        mediumLabel:   `${glyph} ${n.label}\n${statusMarker} ${statusText}`,
+        detailLabel:   `${glyph} ${n.label}\n${[n.sublabel, `${statusMarker} ${statusText}`].filter(Boolean).join(" · ")}`,
         sublabel:      n.sublabel || "",
-        nodeColor:     NODE_COLORS[n.entity_type] || "#64748b",
-        shape:         NODE_SHAPES[n.entity_type] || "ellipse",
+        statusLabel:   statusText,
+        warningMarker: warning ? "warning" : "none",
+        accessibleName: graphAccessibleNodeName(n),
+        nodeColor:     presentation.surface,
+        accentColor:   presentation.accent,
+        shape:         presentation.shape,
         size:          sz,
+        cardWidth,
+        cardHeight:    n.sublabel ? 70 : 58,
         entity_type:   n.entity_type,
         importance:    n.importance,
+        importanceBand,
         riskLevel:     n.risk_level,
         hasOpportunity: n.has_opportunity,
         isUnconnected: n.is_unconnected,
@@ -556,8 +740,8 @@ export function toCytoscapeElements(nodes, edges, positions = {}) {
           ? "#ef4444"
           : n.has_opportunity ? "#22c55e"
           : n.is_unconnected ? "#94a3b8"
-          : "transparent",
-        borderWidth:   warning || n.has_opportunity ? 3 : n.is_unconnected ? 1.5 : 0,
+          : presentation.accent,
+        borderWidth:   warning || n.has_opportunity ? 3 : n.is_unconnected ? 1.5 : 2,
         presentationOnly: Boolean(n.presentation_only),
       },
       position: positions[n.id],
@@ -568,6 +752,7 @@ export function toCytoscapeElements(nodes, edges, positions = {}) {
         n.is_unconnected ? "unconnected" : "",
         warning ? "has-warning" : "",
         n.presentation_only ? "presentation-cluster" : "",
+        `importance-${importanceBand}`,
       ].filter(Boolean).join(" "),
     };
   });
@@ -579,7 +764,7 @@ export function toCytoscapeElements(nodes, edges, positions = {}) {
       target: e.target,
       label:  e.label,
       strength: e.strength,
-      width:  Math.max(1, Math.round(e.strength * 3)),
+      width:  Math.max(1.5, Number((1.5 + (Number(e.confidence ?? e.strength ?? 0.5) * 2)).toFixed(1))),
       predicate: e.predicate || e.relationship_type,
       relationship_type: e.relationship_type,
       status: e.status,
@@ -591,11 +776,15 @@ export function toCytoscapeElements(nodes, edges, positions = {}) {
       permitted_actions: e.permitted_actions,
       evidence: e.evidence,
       evidenceCount: e.evidence?.length || 0,
-      detailLabel: `${e.label || e.predicate || "relationship"}${e.evidence?.length ? ` · ${e.evidence.length} evidence` : ""}`,
+      detailLabel: `${e.label || e.predicate || "relationship"} · ${(e.assertion_state || e.status || "active").replaceAll("_", " ")} · ${Math.round(Number(e.confidence ?? 0) * 100)}%${e.evidence?.length ? ` · ${e.evidence.length} evidence` : ""}`,
     },
     classes: [
       ["canonical_relationship", "operator_confirmed_assertion"].includes(e.assertion_class) ? "edge-fact" : "edge-derived",
+      `assertion-${String(e.assertion_class || "unclassified").replaceAll("_", "-")}`,
+      `confidence-${Number(e.confidence ?? 0) >= 0.8 ? "high" : Number(e.confidence ?? 0) >= 0.5 ? "medium" : "low"}`,
+      ["proposed", "pending"].includes(e.assertion_state || e.status) ? "edge-proposed" : "",
       ["disputed", "rejected"].includes(e.assertion_state || e.status) ? "edge-disputed" : "",
+      (e.assertion_state || e.status) === "rejected" ? "edge-rejected" : "",
       ["expired", "superseded"].includes(e.assertion_state || e.status) ? "edge-expired" : "",
       e.evidence?.length ? "has-evidence" : "",
     ].filter(Boolean).join(" "),

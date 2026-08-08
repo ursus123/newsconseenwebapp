@@ -57,13 +57,21 @@ export const AuthProvider = ({ children }) => {
         profileCacheRef.current.set(authUser.id, profile);
       }
 
+      const metadata = authUser.user_metadata || {};
+      const onboardingComplete = Boolean(
+        metadata.setup_complete ?? metadata.onboarding_complete ?? false
+      );
       const resolvedUser = {
         id:         authUser.id,
         email:      authUser.email,
         full_name:  profile?.full_name  || authUser.user_metadata?.full_name || authUser.email,
         company_id: profile?.company_id || authUser.app_metadata?.company_id || null,
         role:       profile?.role       || authUser.app_metadata?.role       || 'user',
-        ...authUser.user_metadata,
+        ...metadata,
+        // setup_complete is the canonical workspace field. Keep the legacy
+        // onboarding_complete alias synchronized while older callers remain.
+        setup_complete: onboardingComplete,
+        onboarding_complete: onboardingComplete,
       };
       setUser(resolvedUser);
       setIsAuthenticated(true);
@@ -123,8 +131,11 @@ export const AuthProvider = ({ children }) => {
     authSubscriptionRef.current?.unsubscribe();
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && nextSession?.user) {
-        if (nextSession.user.id === user?.id && profileCacheRef.current.has(nextSession.user.id)) return;
         setAuthError(null);
+        // A same-user sign-in or token refresh can carry corrected role, tenant,
+        // onboarding, or other governed identity metadata. Re-resolve the user
+        // even when the canonical profile is cached; the cached profile does not
+        // include those Auth metadata fields.
         await _loadSupabaseUser(nextSession.user);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);

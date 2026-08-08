@@ -108,8 +108,9 @@ def get_pending_approvals(company_id: str = Query(...), authorization: Optional[
     verify_tenant_access(authorization, company_id)
     engine = get_engine_safe()
     if not engine:
-        return {"pending": []}
-    return {"pending": get_pending(engine, company_id)}
+        return {"state": "degraded", "pending": [], "message": "The approval store is unavailable."}
+    pending = get_pending(engine, company_id)
+    return {"state": "available" if pending else "empty", "pending": pending}
 
 
 @router.post("/approvals/{approval_id}/resolve")

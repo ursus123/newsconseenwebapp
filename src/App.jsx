@@ -122,7 +122,7 @@ const AuthenticatedApp = () => {
   // Onboarding redirect
   const needsOnboarding =
     (user?.role === "admin" || user?.role === "super_admin") &&
-    !user?.onboarding_complete;
+    !(user?.setup_complete || user?.onboarding_complete);
 
   if (needsOnboarding && location.pathname !== "/onboarding") {
     return <Navigate to="/onboarding" replace />;

@@ -103,10 +103,15 @@ def upsert(table: str, rows: list[dict], available: dict[str, set[str]]) -> int:
     return len(filtered)
 
 
-def profile(email: str) -> dict:
+def profile(email: str, expected_role: str) -> dict:
     rows = request("GET", "user_profiles", params={"select": "id,person_id,role", "email": f"eq.{email}"})
     if not rows:
         raise RuntimeError(f"Acceptance identity is missing: {email}")
+    if rows[0].get("role") != expected_role:
+        raise RuntimeError(
+            f"Acceptance identity {email} has role {rows[0].get('role')!r}; "
+            f"expected canonical role {expected_role!r}. Repair identity provisioning before seeding."
+        )
     return rows[0]
 
 
@@ -118,9 +123,9 @@ def existing_unit(name: str) -> dict | None:
 
 
 def records() -> dict[str, list[dict]]:
-    manager = profile("acceptance-manager@news-con-seen.com")
-    worker = profile("acceptance-worker@news-con-seen.com")
-    admin = profile("acceptance-admin@news-con-seen.com")
+    manager = profile("acceptance-manager@news-con-seen.com", "manager")
+    worker = profile("acceptance-worker@news-con-seen.com", "worker")
+    admin = profile("acceptance-admin@news-con-seen.com", "admin")
     org = uid("enterprise:organization")
     operations_record = existing_unit("Acceptance Operations")
     finance_record = existing_unit("Acceptance Finance")

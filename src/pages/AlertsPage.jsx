@@ -1,15 +1,13 @@
-import React, { useState, useEffect } from "react";
-import { ncClient } from "@/api/ncClient";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, BellOff, CheckCircle, AlertTriangle,
-         Info, Send, RefreshCw, Settings, Phone,
+import React, { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Bell, CheckCircle, Send, RefreshCw, Settings, Phone,
          Mail, MessageSquare, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 
-import { RAILWAY_URL } from "@/config/api";
+import { RAILWAY_URL, authHeaders } from "@/config/api";
 
 const SEVERITY_CONFIG = {
   critical: {
@@ -69,7 +67,7 @@ function AlertCard({ alert }) {
 // ----------------------------------------------------------
 // Channel status badge
 // ----------------------------------------------------------
-function ChannelBadge({ name, icon: Icon, configured, note }) {
+function ChannelBadge({ name, icon: Icon, configured }) {
   return (
     <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs ${
       configured
@@ -118,7 +116,7 @@ function TestChannelPanel({ companyId }) {
         const err = await resp.json();
         setTestResult({ success: false, message: err.detail || "Send failed" });
       }
-    } catch (e) {
+    } catch {
       setTestResult({ success: false, message: "Could not reach notification service" });
     } finally {
       setTesting(false);
@@ -194,9 +192,9 @@ export default function AlertsPage({ currentUser }) {
 
   // Load channel status
   const { data: channelStatus } = useQuery({
-    queryKey: ["alert-status"],
+    queryKey: ["alert-status", companyId],
     queryFn: async () => {
-      const resp = await fetch(`${RAILWAY_URL}/alerts/status`);
+      const resp = await fetch(`${RAILWAY_URL}/alerts/status?company_id=${encodeURIComponent(companyId)}`, { headers: await authHeaders() });
       return resp.json();
     },
     enabled: !!companyId,
@@ -204,7 +202,7 @@ export default function AlertsPage({ currentUser }) {
   });
 
   // Preview alerts (dry run)
-  const { data: preview, refetch: refetchPreview, isFetching: previewLoading } = useQuery({
+  const { data: preview, refetch: refetchPreview } = useQuery({
     queryKey: ["alert-preview", companyId],
     queryFn: async () => {
       const resp = await fetch(

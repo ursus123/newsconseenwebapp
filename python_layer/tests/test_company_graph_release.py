@@ -4,6 +4,7 @@ from pathlib import Path
 from company_graph.benchmark import PROFILES, TARGETS_MS
 from company_graph.endpoint_benchmark import TARGETS_MS as ENDPOINT_TARGETS
 from company_graph.release_contract import (
+    ADMINISTRATOR_WORKSPACE_ACCEPTANCE_SCENARIOS,
     OPERATOR_ACCEPTANCE_SCENARIOS,
     RELEASE_ENVIRONMENTS,
     STAGE_29_COVERAGE,
@@ -35,6 +36,13 @@ def test_all_operator_acceptance_scenarios_are_versioned_and_governed():
     unauthorized_export = OPERATOR_ACCEPTANCE_SCENARIOS[12]
     assert unauthorized_export["roles"] == ("worker",)
     assert unauthorized_export["expected_status"] == 403
+
+
+def test_administrator_workspace_acceptance_has_all_stage_14_scenarios():
+    assert len(ADMINISTRATOR_WORKSPACE_ACCEPTANCE_SCENARIOS) == 17
+    assert len(set(ADMINISTRATOR_WORKSPACE_ACCEPTANCE_SCENARIOS)) == 17
+    assert ADMINISTRATOR_WORKSPACE_ACCEPTANCE_SCENARIOS[0] == "Open Company Graph and see the graph immediately"
+    assert ADMINISTRATOR_WORKSPACE_ACCEPTANCE_SCENARIOS[-1] == "Complete the workflow using keyboard-accessible equivalents"
 
 
 def test_postgresql_benchmark_contract_covers_target_shapes_and_traversals():

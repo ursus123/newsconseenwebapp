@@ -33,6 +33,11 @@ Status: **not release-complete**
   `/alerts/status`, `/agents/approvals/pending`, `/intelligence/inbox`, and
   `/company-graph/audit`. The page and graph render, but these capabilities are
   not accepted until their token/policy contract is corrected and retested.
+  The repository now attaches the Supabase bearer token to every caller, makes
+  alerts status tenant-authorized, adds an authorized graph-audit status route,
+  and renders the five-state capability contract. This defect remains open until
+  the corrected frontend/backend are deployed and the four staging responses are
+  captured without a silent 401.
 - `ACC-AUTH-002`: intermittent aborted Supabase `/auth/v1/user` requests were
   observed during automated runs. Session refresh ultimately passed for all
   five role/surface scenarios, but the transient failure should be diagnosed.

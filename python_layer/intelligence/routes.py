@@ -217,7 +217,7 @@ def get_inbox(
     risks           = _load_analytics("risk_summary", company_id) or _fetch_supabase_entity("risk", company_id)
     opportunities   = _load_analytics("opportunity_summary", company_id) or _fetch_supabase_entity("opportunity", company_id)
 
-    return {
+    payload = {
         "insights":        insights[:limit],
         "recommendations": recommendations[:limit],
         "risks":           risks[:limit],
@@ -230,3 +230,5 @@ def get_inbox(
             "pending_recs":      sum(1 for r in recommendations if r.get("status") == "proposed"),
         },
     }
+    payload["state"] = "available" if any((insights, recommendations, risks, opportunities)) else "empty"
+    return payload

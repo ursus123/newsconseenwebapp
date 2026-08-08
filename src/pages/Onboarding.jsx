@@ -343,7 +343,7 @@ export default function Onboarding() {
       // If user is already logged in, mark onboarding complete and go to dashboard
       const me = await ncClient.auth.me().catch(() => null);
       if (me) {
-        await ncClient.auth.updateMe({ onboarding_complete: true });
+        await ncClient.auth.updateMe({ onboarding_complete: true, setup_complete: true });
         await refreshUser();
         navigate(createPageUrl("CompanyGraphHome"));
       } else {

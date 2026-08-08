@@ -1462,3 +1462,15 @@ frontend request-coordination and accessible-representation tests, recorded
 PostgreSQL benchmarks, and the read-only environment validator form one release
 gate. Local, staging, web, desktop, mobile-manager and mobile-worker results remain
 separate; success in one surface cannot stand in for another.
+# Company Graph administrator reliability boundary
+
+Company Graph is an authorized operational projection, not an unrestricted client
+graph. The Python service owns tenant verification, graph permissions, projections,
+audit and governed mutations. The web client owns visualization and interaction
+only. Supporting alerts, approval, intelligence and audit reads expose one of five
+explicit states: available, unauthorized, unavailable, empty or degraded.
+
+The current presentation registry is the extraction seam for a future Newsconseen
+Ontology SDK. No SDK runtime is introduced by the Company Graph redesign; canonical
+object/link/action/function/permission definitions remain owned by their existing
+registries and backend contracts.
