@@ -108,6 +108,17 @@ ENTITY_TABLES = {
     "network_memberships": "network_memberships",
     "network_join_code": "network_join_codes",
     "network_join_codes": "network_join_codes",
+    "intelligence_items": "intelligence_items",
+    "intelligence_deduplication_groups": "intelligence_deduplication_groups",
+    "intelligence_evidence_links": "intelligence_evidence_links",
+    "intelligence_assignments": "intelligence_assignments",
+    "intelligence_status_transitions": "intelligence_status_transitions",
+    "intelligence_decision_links": "intelligence_decision_links",
+    "intelligence_approval_requests": "intelligence_approval_requests",
+    "intelligence_actions": "intelligence_actions",
+    "intelligence_outcomes": "intelligence_outcomes",
+    "intelligence_operator_feedback": "intelligence_operator_feedback",
+    "intelligence_audit_events": "intelligence_audit_events",
 }
 
 LEGACY_TO_SUPABASE_COLUMNS = {

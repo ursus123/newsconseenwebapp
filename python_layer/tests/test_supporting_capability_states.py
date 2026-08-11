@@ -30,18 +30,27 @@ def test_pending_approvals_distinguishes_empty_from_available(monkeypatch):
 
 def test_intelligence_inbox_distinguishes_empty_from_available(monkeypatch):
     from intelligence import routes
+    from intelligence.adapters import adapt
+    from intelligence.cache import clear
+    from tenant_context.models import TenantContext
 
-    monkeypatch.setattr(routes, "verify_tenant_access", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(routes, "_load_analytics", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(routes, "_fetch_supabase_entity", lambda *_args, **_kwargs: [])
-    assert routes.get_inbox("tenant-a", 200, "Bearer token")["state"] == "empty"
-
-    monkeypatch.setattr(
-        routes,
-        "_fetch_supabase_entity",
-        lambda entity, *_args, **_kwargs: [{"id": "risk-1", "status": "open"}] if entity == "risk" else [],
+    context = TenantContext(
+        user_id="admin-1", tenant_id="tenant-a", role="admin", request_id="request-1",
+        auth_source="supabase", profile_found=True, profile_user_id_matches=True,
     )
-    assert routes.get_inbox("tenant-a", 200, "Bearer token")["state"] == "available"
+    monkeypatch.setattr(routes.tenant_repository, "resolve_context", lambda *_args, **_kwargs: context)
+    monkeypatch.setattr(routes.intelligence_repository, "list_items", lambda *_args, **_kwargs: [])
+    clear()
+    assert routes.get_inbox("tenant-a", None, 200, "Bearer token")["state"] == "empty"
+
+    item = adapt(
+        "rules_thresholds",
+        {"source_id": "rule-1", "intelligence_type": "risk", "title": "Risk", "explanation": "Evidence-backed."},
+        {"tenant_id": "tenant-a", "organization_id": "tenant-a"},
+    )
+    monkeypatch.setattr(routes.intelligence_repository, "list_items", lambda *_args, **_kwargs: [item])
+    clear()
+    assert routes.get_inbox("tenant-a", None, 200, "Bearer token")["state"] == "available"
 
 
 def test_alert_status_is_tenant_authorized_and_non_silent(monkeypatch):

@@ -146,3 +146,15 @@ The contract is upheld when Idjwi remains identifiable and useful without any
 external LLM; tenants can select one or multiple advisors; providers cannot bypass
 scope, memory, tool, policy, decision, approval, or audit boundaries; and no
 architectural document defines Idjwi as Claude, Anthropic, or merely a copilot.
+
+## Intelligence Inbox responsibility
+
+Idjwi is the admission and contextualization authority for the Intelligence Inbox. Candidate observations from rules, analytics, ML models, agents, external sources and tenant-controlled advisors become inbox items only after Idjwi binds them to authorized scope, governed evidence, operational consequence and a permitted next step. Idjwi maintains the chain through decision, approval, action and observed outcome.
+
+Idjwi reasons over the canonical case and authorized evidence, never arbitrary
+raw model text. Advisor output enters as an `advisor_proposal`. Correlated source
+support, operator decisions, actions, outcomes, and feedback remain auditable and
+may inform governed memory without turning unvalidated chat into organizational
+truth.
+
+Idjwi must not promote raw telemetry, every prediction, successful background operations, duplicate conditions or unvalidated advisor text into operational attention. It learns from governed corrections and outcomes, not arbitrary chat as truth. See `INTELLIGENCE_INBOX_DESIGN_SPEC.md` and `INTELLIGENCE_TERMINOLOGY.md`.

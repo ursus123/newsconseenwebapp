@@ -1474,3 +1474,33 @@ The current presentation registry is the extraction seam for a future Newsconsee
 Ontology SDK. No SDK runtime is introduced by the Company Graph redesign; canonical
 object/link/action/function/permission definitions remain owned by their existing
 registries and backend contracts.
+
+## Intelligence Inbox boundary
+
+The Intelligence Inbox is Layer 3's governed operational attention surface. It does not aggregate every ML, agent, rule, enrichment or advisor output. Idjwi admits only contextualized, evidence-backed findings requiring awareness, investigation, decision, approval, action or outcome verification from an authorized actor.
+
+Alerts deliver; Tasks assign work; Audit records transitions; ML Models and Agents configure and execute capabilities. The inbox coordinates the finding without replacing their ownership. Canonical terminology and admission rules are defined in `docs/INTELLIGENCE_TERMINOLOGY.md` and `docs/INTELLIGENCE_INBOX_DESIGN_SPEC.md`. Optional advisor output remains a proposal until Idjwi validates scope, evidence, policy and permissions.
+
+`intelligence-inbox.v1` is the envelope shared by the Python gateway, frontend,
+Idjwi context and audit. Its `intelligence-item.v1` entries are minimized safe
+projections; source rows, raw prompts and private rationale do not cross this
+boundary. Source class identifies origin while assertion class identifies
+authority. Tenant-controlled advisor output is always `advisor_proposal` until a
+separate governed validation promotes the underlying finding.
+
+Intelligence authorization is server-owned by `intelligence-policy.v1` and uses
+the shared tenant-context repository for verified user, role and operational-unit
+membership. Organization-wide non-admin requests are reduced to membership,
+ownership or explicit eligibility. Restricted records and source evidence require
+`intelligence.read_sensitive`. Short-lived caches are keyed by a principal
+authorization fingerprint, never tenant alone. Intelligence Inbox realtime is
+disabled until an authenticated server-side delivery channel exists; the browser
+re-fetches through the governed endpoint and has no direct-data fallback.
+#### Intelligence Inbox canonical boundary
+
+The Inbox does not present `raw.*`, `analytics.*`, model, agent, external API, or
+advisor output directly. Registry-driven adapters translate those sources to
+`intelligence-item.v1`; correlation creates or updates one canonical governed
+case in `public.intelligence_items`. Evidence and lifecycle objects remain in
+separate canonical tables. All reads and mutations pass through the Python
+tenant/role/unit policy boundary; the repository has no browser RLS policy.

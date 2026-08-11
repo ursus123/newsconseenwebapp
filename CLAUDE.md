@@ -1331,3 +1331,31 @@ or backend failures as empty data. Maintain equivalent keyboard record,
 relationship, outline and text representations. The future Newsconseen Ontology
 SDK is an architectural extraction target only—do not introduce Palantir
 OntologyJs or a parallel ontology runtime.
+
+# Intelligence Inbox product contract
+
+The Intelligence Inbox is the governed attention-and-decision surface for evidence-backed findings requiring awareness, investigation, decision, approval, action or outcome verification. It is not a notification feed, ML dashboard, agent configuration page or raw telemetry store. Idjwi validates and contextualizes candidate findings before admission; optional advisor text is never truth merely because a model generated it.
+
+Canonical ingestion rule: the operational inbox reads only governed
+`public.intelligence_items` written through the Python source-adapter and
+correlation boundary. Never display raw/analytics/model/advisor output directly.
+Migration `017_intelligence_repository.sql` owns case, evidence, assignment,
+transition, decision, approval, action, outcome, feedback, deduplication, and
+audit records. These tables are service-only; frontend clients must use the
+authorized `/intelligence/*` API.
+
+Use `docs/INTELLIGENCE_TERMINOLOGY.md`: signals are observations, findings are interpreted evidence-backed conditions, alerts are delivery, recommendations propose, decisions choose, approvals authorize, actions request execution, tasks assign work, and outcomes record what happened. The boundary and lifecycle live in `docs/INTELLIGENCE_INBOX_DESIGN_SPEC.md` and ADR-002.
+
+Implementation boundary: `/intelligence/inbox` emits `intelligence-inbox.v1`
+containing `intelligence-item.v1` projections. The frontend, Idjwi request
+context, and `intelligence.inbox.read` audit event preserve the same item IDs,
+tenant scope, source/assertion classes and evidence references. Never send
+complete database rows through this contract. `tenant_llm_advisor` always maps
+to `advisor_proposal`; a provider label or confidence score cannot upgrade it.
+
+Security boundary: Intelligence Inbox reads resolve `TenantContext` and enforce
+`intelligence-policy.v1` in Python. Do not restore browser-side Supabase fallback
+reads or direct table subscriptions. Cache only by the authorization fingerprint
+(tenant + user + role + effective permissions + scope + unit memberships).
+Backend projections determine permitted actions; frontend controls may reflect
+those decisions but are never the policy authority.
