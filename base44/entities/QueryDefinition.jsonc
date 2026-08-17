@@ -1,0 +1,65 @@
+{
+  "name": "QueryDefinition",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Query name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description"
+    },
+    "data_source": {
+      "type": "string",
+      "description": "Data source name"
+    },
+    "script": {
+      "type": "string",
+      "description": "SQL/script text"
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Selected fields"
+    },
+    "filters": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Filter conditions"
+    },
+    "joins": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Join definitions"
+    },
+    "output_schema": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Output column schema"
+    },
+    "last_run_rows": {
+      "type": "number",
+      "description": "Row count from last run"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags"
+    }
+  },
+  "required": [
+    "name",
+    "script"
+  ]
+}

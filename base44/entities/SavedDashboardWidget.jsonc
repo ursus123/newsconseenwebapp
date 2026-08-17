@@ -1,0 +1,34 @@
+{
+  "name": "SavedDashboardWidget",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Widget title"
+    },
+    "sql": {
+      "type": "string",
+      "description": "SQL query"
+    },
+    "chart_type": {
+      "type": "string",
+      "enum": [
+        "table",
+        "bar",
+        "pie",
+        "line",
+        "number"
+      ],
+      "default": "table",
+      "description": "Chart visualization type"
+    },
+    "created_by": {
+      "type": "string",
+      "description": "Email of creator"
+    }
+  },
+  "required": [
+    "title",
+    "sql"
+  ]
+}

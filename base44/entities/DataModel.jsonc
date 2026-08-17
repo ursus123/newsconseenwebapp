@@ -1,0 +1,54 @@
+{
+  "name": "DataModel",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Model name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description"
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Field definitions"
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Relationship definitions"
+    },
+    "source_script": {
+      "type": "string",
+      "description": "Source script text"
+    },
+    "source_query_id": {
+      "type": "string",
+      "description": "ID of the source QueryDefinition"
+    },
+    "sample_rows": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Sample result rows"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

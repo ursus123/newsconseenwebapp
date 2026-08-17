@@ -1,0 +1,45 @@
+{
+  "name": "FileShare",
+  "type": "object",
+  "properties": {
+    "file_id": {
+      "type": "string",
+      "description": "ID of the shared file"
+    },
+    "file_name": {
+      "type": "string",
+      "description": "Denormalized file name for display"
+    },
+    "shared_by_email": {
+      "type": "string",
+      "description": "Email of the person who shared the file"
+    },
+    "shared_with_email": {
+      "type": "string",
+      "description": "Email of the recipient"
+    },
+    "shared_with_name": {
+      "type": "string",
+      "description": "Display name of the recipient"
+    },
+    "access_level": {
+      "type": "string",
+      "enum": [
+        "view_only",
+        "can_edit"
+      ],
+      "default": "view_only",
+      "description": "Access permission level"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Tenant isolation"
+    }
+  },
+  "required": [
+    "file_id",
+    "shared_by_email",
+    "shared_with_email",
+    "access_level"
+  ]
+}

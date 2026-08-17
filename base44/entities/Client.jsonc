@@ -1,0 +1,70 @@
+{
+  "name": "Client",
+  "type": "object",
+  "properties": {
+    "business_name": {
+      "type": "string",
+      "description": "Name of the client business"
+    },
+    "contact_person": {
+      "type": "string",
+      "description": "Primary contact person"
+    },
+    "email": {
+      "type": "string",
+      "description": "Email address"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Phone number"
+    },
+    "address": {
+      "type": "string",
+      "description": "Business address"
+    },
+    "industry": {
+      "type": "string",
+      "enum": [
+        "retail",
+        "food_beverage",
+        "healthcare",
+        "technology",
+        "construction",
+        "education",
+        "finance",
+        "manufacturing",
+        "logistics",
+        "hospitality",
+        "other"
+      ],
+      "description": "Industry sector"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive",
+        "prospect",
+        "churned"
+      ],
+      "default": "active",
+      "description": "Client status"
+    },
+    "monthly_revenue": {
+      "type": "number",
+      "description": "Estimated monthly revenue from this client"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Client relationship start date"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    }
+  },
+  "required": [
+    "business_name"
+  ]
+}

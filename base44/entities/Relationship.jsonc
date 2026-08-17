@@ -1,0 +1,81 @@
+{
+  "name": "Relationship",
+  "type": "object",
+  "properties": {
+    "relationship_type": {
+      "type": "string",
+      "enum": [
+        "person_enterprise",
+        "item_enterprise",
+        "item_person",
+        "person_service",
+        "enterprise_service",
+        "person_address",
+        "enterprise_address"
+      ],
+      "description": "Type of relationship"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "ended",
+        "archived"
+      ],
+      "default": "active",
+      "description": "Assignment status"
+    },
+    "person_name": {
+      "type": "string",
+      "description": "Person (lookup)"
+    },
+    "enterprise_name": {
+      "type": "string",
+      "description": "Enterprise (lookup)"
+    },
+    "item_name": {
+      "type": "string",
+      "description": "Item / Product (lookup)"
+    },
+    "service_name": {
+      "type": "string",
+      "description": "Service (lookup)"
+    },
+    "role": {
+      "type": "string",
+      "description": "Role, custody role, address type, or location type"
+    },
+    "responsibility_type": {
+      "type": "string",
+      "enum": [
+        "owned",
+        "rented",
+        "leased",
+        "consigned"
+      ],
+      "description": "Responsibility type (item\u2192enterprise only)"
+    },
+    "location": {
+      "type": "string",
+      "description": "Physical location or address label"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Assignment start date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Assignment end date (optional)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Notes"
+    }
+  },
+  "required": [
+    "relationship_type",
+    "start_date"
+  ]
+}

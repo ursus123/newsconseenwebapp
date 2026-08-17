@@ -1,0 +1,49 @@
+{
+  "name": "ChartFolder",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Folder name e.g. 'Client Retention', 'Staffing', 'Revenue'"
+    },
+    "description": {
+      "type": "string",
+      "description": "Short description of what this folder contains"
+    },
+    "color": {
+      "type": "string",
+      "description": "Hex color for folder icon e.g. '#10b981'"
+    },
+    "icon": {
+      "type": "string",
+      "description": "Emoji icon e.g. '\ud83d\udcca' '\ud83d\udc65' '\ud83d\udcb0' '\ud83c\udfe5'"
+    },
+    "parent_folder_id": {
+      "type": "string",
+      "description": "ID of parent ChartFolder for nested folders. Null = root level."
+    },
+    "shared_with_roles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Roles that can see this folder e.g. ['admin', 'executive', 'user']"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Tenant / company this folder belongs to"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "archived"
+      ],
+      "default": "active",
+      "description": "Folder status"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

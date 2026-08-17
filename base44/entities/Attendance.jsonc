@@ -1,0 +1,69 @@
+{
+  "name": "Attendance",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of attendance record"
+    },
+    "person_name": {
+      "type": "string",
+      "description": "Name of the person (student or staff)"
+    },
+    "person_id": {
+      "type": "string",
+      "description": "ID of the related Person record"
+    },
+    "person_type": {
+      "type": "string",
+      "enum": [
+        "student",
+        "staff"
+      ],
+      "description": "Type of person"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "present",
+        "absent",
+        "late",
+        "excused",
+        "half_day"
+      ],
+      "default": "present",
+      "description": "Attendance status"
+    },
+    "check_in_time": {
+      "type": "string",
+      "description": "Time of check-in (HH:MM)"
+    },
+    "check_out_time": {
+      "type": "string",
+      "description": "Time of check-out (HH:MM)"
+    },
+    "hours_worked": {
+      "type": "number",
+      "description": "Total hours worked (for staff)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "marked_by": {
+      "type": "string",
+      "description": "Email of user who marked attendance"
+    },
+    "enterprise": {
+      "type": "string",
+      "description": "Related enterprise"
+    }
+  },
+  "required": [
+    "date",
+    "person_name",
+    "person_type",
+    "status"
+  ]
+}

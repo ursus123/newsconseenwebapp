@@ -1,0 +1,498 @@
+{
+  "name": "Enterprise",
+  "type": "object",
+  "properties": {
+    "enterprise_name": {
+      "type": "string",
+      "description": "Full enterprise name"
+    },
+    "short_name": {
+      "type": "string",
+      "description": "Short name or code"
+    },
+    "description": {
+      "type": "string",
+      "description": "Introduction to the enterprise"
+    },
+    "parent_enterprise_id": {
+      "type": "string",
+      "description": "ID of the parent enterprise (for hierarchy). Null = top-level enterprise."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive",
+        "prospect",
+        "archived"
+      ],
+      "default": "active",
+      "description": "Enterprise status"
+    },
+    "enterprise_type": {
+      "type": "string",
+      "enum": [
+        "commercial",
+        "nonprofit",
+        "government",
+        "household",
+        "cooperative",
+        "trust"
+      ],
+      "description": "Enterprise type"
+    },
+    "enterprise_subtype": {
+      "type": "string",
+      "description": "Enterprise subtype classification"
+    },
+    "sic_division": {
+      "type": "string",
+      "enum": [
+        "A_agriculture_forestry_fishing",
+        "B_mining",
+        "C_construction",
+        "D_manufacturing",
+        "E_transport_communications_utilities",
+        "F_wholesale_trade",
+        "G_retail_trade",
+        "H_finance_insurance_real_estate",
+        "I_services",
+        "J_public_administration",
+        "K_education_health_social",
+        "L_nonprofit_religious",
+        "M_household_individual"
+      ],
+      "description": "Standard Industrial Classification division"
+    },
+    "sic_code": {
+      "type": "string",
+      "description": "Standard Industrial Classification code. Examples: 0100 crop production, 5912 drug stores, 8200 educational services, 8049 health practitioners, 7011 hotels, 5812 eating places, 0200 livestock"
+    },
+    "sic_sector_id": {
+      "type": "number",
+      "description": "NAICS sector number 1\u201320"
+    },
+    "sic_sector_name": {
+      "type": "string",
+      "description": "NAICS sector name"
+    },
+    "enterprise_tier": {
+      "type": "string",
+      "enum": [
+        "headquarters",
+        "regional_office",
+        "branch",
+        "subsidiary",
+        "franchise",
+        "department",
+        "unit",
+        "project"
+      ],
+      "description": "Enterprise tier/structure type"
+    },
+    "sub_type": {
+      "type": "string",
+      "description": "Sub-type (e.g. Grocery Store)"
+    },
+    "business_model": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "retail",
+          "service",
+          "manufacturing",
+          "digital"
+        ]
+      },
+      "description": "Business model(s)"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Phone number"
+    },
+    "email": {
+      "type": "string",
+      "description": "Email address"
+    },
+    "website": {
+      "type": "string",
+      "description": "Website URL"
+    },
+    "primary_address": {
+      "type": "string",
+      "description": "Primary address"
+    },
+    "city": {
+      "type": "string",
+      "description": "City"
+    },
+    "region": {
+      "type": "string",
+      "description": "Region / State"
+    },
+    "country": {
+      "type": "string",
+      "description": "Country"
+    },
+    "additional_locations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "description": "Additional locations"
+    },
+    "owners": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "person_name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Owners and co-owners"
+    },
+    "management_roles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "assigned_person": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Management role assignments"
+    },
+    "legal_structure": {
+      "type": "string",
+      "enum": [
+        "sole_proprietorship",
+        "partnership",
+        "llc",
+        "corporation",
+        "nonprofit",
+        "cooperative",
+        "government",
+        "other"
+      ],
+      "description": "Legal structure of the enterprise"
+    },
+    "registration_number": {
+      "type": "string",
+      "description": "Company registration number"
+    },
+    "tax_number": {
+      "type": "string",
+      "description": "Tax / VAT number"
+    },
+    "ownership_type": {
+      "type": "string",
+      "enum": [
+        "privately_owned",
+        "publicly_traded",
+        "family_owned",
+        "government_owned",
+        "joint_venture",
+        "other"
+      ],
+      "description": "Ownership type"
+    },
+    "legal_notes": {
+      "type": "string",
+      "description": "Additional legal notes"
+    },
+    "org_chart_description": {
+      "type": "string",
+      "description": "Organizational structure description"
+    },
+    "org_chart_nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "description": "Interactive org chart nodes"
+    },
+    "management_table": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "string"
+          },
+          "reports_to": {
+            "type": "string"
+          },
+          "supervises": {
+            "type": "string"
+          },
+          "occupants": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Table of management positions"
+    },
+    "linked_service_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "IDs of linked services"
+    },
+    "linked_services": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Linked service records"
+    },
+    "linked_employee_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "IDs of linked employees"
+    },
+    "services_description": {
+      "type": "string",
+      "description": "Description of services delivered"
+    },
+    "scope_of_services": {
+      "type": "string",
+      "description": "Scope and boundaries of services"
+    },
+    "employee_docs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "person_id": {
+            "type": "string"
+          },
+          "employee_name": {
+            "type": "string"
+          },
+          "job_title": {
+            "type": "string"
+          },
+          "job_description": {
+            "type": "string"
+          },
+          "resume_url": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Job descriptions and resumes of identified employees"
+    },
+    "operating_status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "closed",
+        "temporarily_closed",
+        "seasonal"
+      ],
+      "default": "open",
+      "description": "Current operating status"
+    },
+    "operating_hours": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string"
+          },
+          "open": {
+            "type": "string"
+          },
+          "close": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Operating hours per day"
+    },
+    "operations_notes": {
+      "type": "string",
+      "description": "Internal operations notes"
+    },
+    "licenses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "expiry_date": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Licenses and permits"
+    },
+    "insurance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "policy": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "expiry": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Insurance policies"
+    },
+    "internal_notes": {
+      "type": "string",
+      "description": "Internal notes"
+    },
+    "attachment_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Attachment file URLs"
+    },
+    "subscription_tier": {
+      "type": "string",
+      "enum": [
+        "starter",
+        "professional",
+        "consultant"
+      ],
+      "default": "professional",
+      "description": "Subscription plan tier"
+    },
+    "subscription_status": {
+      "type": "string",
+      "enum": [
+        "trial",
+        "active",
+        "past_due",
+        "cancelled",
+        "expired"
+      ],
+      "default": "trial",
+      "description": "Subscription status"
+    },
+    "trial_ends_at": {
+      "type": "string",
+      "format": "date",
+      "description": "Trial end date"
+    },
+    "stripe_customer_id": {
+      "type": "string",
+      "description": "Stripe customer ID (internal)"
+    },
+    "stripe_subscription_id": {
+      "type": "string",
+      "description": "Stripe subscription ID (internal)"
+    },
+    "brand_logo_url": {
+      "type": "string",
+      "description": "URL of the uploaded logo image"
+    },
+    "brand_primary_color": {
+      "type": "string",
+      "default": "#10b981",
+      "description": "Primary brand color hex code"
+    },
+    "brand_secondary_color": {
+      "type": "string",
+      "default": "#1e293b",
+      "description": "Secondary brand color hex code"
+    },
+    "brand_accent_color": {
+      "type": "string",
+      "default": "#6366f1",
+      "description": "Accent brand color hex code"
+    },
+    "brand_name": {
+      "type": "string",
+      "description": "Custom app name shown instead of Newsconseen"
+    },
+    "brand_tagline": {
+      "type": "string",
+      "description": "Short tagline shown on login page"
+    },
+    "brand_custom_domain": {
+      "type": "string",
+      "description": "Custom domain e.g. ops.company.com"
+    },
+    "brand_hide_newsconseen": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, hide all Newsconseen branding"
+    },
+    "brand_favicon_url": {
+      "type": "string",
+      "description": "Custom favicon URL"
+    },
+    "brand_support_email": {
+      "type": "string",
+      "description": "Custom support email shown to users"
+    }
+  },
+  "required": [
+    "enterprise_name"
+  ]
+}

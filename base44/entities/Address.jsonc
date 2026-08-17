@@ -1,0 +1,101 @@
+{
+  "name": "Address",
+  "type": "object",
+  "properties": {
+    "label": {
+      "type": "string",
+      "description": "Address label (e.g. Main Office, Home, Branch)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "archived"
+      ],
+      "default": "active",
+      "description": "Address status"
+    },
+    "address_line1": {
+      "type": "string",
+      "description": "Address line 1"
+    },
+    "address_line2": {
+      "type": "string",
+      "description": "Address line 2"
+    },
+    "city": {
+      "type": "string",
+      "description": "City"
+    },
+    "state_region": {
+      "type": "string",
+      "description": "State / Region"
+    },
+    "postal_code": {
+      "type": "string",
+      "description": "Postal / ZIP code"
+    },
+    "country": {
+      "type": "string",
+      "description": "Country"
+    },
+    "latitude": {
+      "type": "number",
+      "description": "Latitude (optional)"
+    },
+    "longitude": {
+      "type": "number",
+      "description": "Longitude (optional)"
+    },
+    "linked_people": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "person_name": {
+            "type": "string"
+          },
+          "address_type": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "description": "Linked people (reference)"
+    },
+    "linked_enterprises": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "enterprise_name": {
+            "type": "string"
+          },
+          "location_type": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "description": "Linked enterprises (reference)"
+    },
+    "internal_notes": {
+      "type": "string",
+      "description": "Internal notes"
+    },
+    "attachment_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Attachment file URLs"
+    }
+  },
+  "required": [
+    "address_line1"
+  ]
+}

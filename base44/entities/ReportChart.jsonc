@@ -1,0 +1,125 @@
+{
+  "name": "ReportChart",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Chart title e.g. 'Revenue by Enterprise Q1 2025'"
+    },
+    "description": {
+      "type": "string",
+      "description": "What this chart shows"
+    },
+    "chart_type": {
+      "type": "string",
+      "enum": [
+        "bar",
+        "line",
+        "pie",
+        "area",
+        "number",
+        "table",
+        "scatter",
+        "gauge"
+      ],
+      "default": "bar",
+      "description": "Visualization type"
+    },
+    "sql_query": {
+      "type": "string",
+      "description": "The SQL that powers this chart"
+    },
+    "data_source": {
+      "type": "string",
+      "enum": [
+        "querybuilder",
+        "live_api",
+        "base44_direct"
+      ],
+      "default": "querybuilder",
+      "description": "Where the chart data comes from"
+    },
+    "folder_id": {
+      "type": "string",
+      "description": "ChartFolder this belongs to. Null = uncategorized."
+    },
+    "x_axis_key": {
+      "type": "string",
+      "description": "Column used as the X axis"
+    },
+    "y_axis_key": {
+      "type": "string",
+      "description": "Column used as the Y axis"
+    },
+    "color_scheme": {
+      "type": "string",
+      "enum": [
+        "emerald",
+        "blue",
+        "purple",
+        "orange",
+        "rose"
+      ],
+      "default": "emerald",
+      "description": "Color theme for the chart"
+    },
+    "shared_with_roles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Roles that can view this chart e.g. ['admin', 'executive']"
+    },
+    "shared_with_users": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Specific user emails who can see this chart"
+    },
+    "is_public": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, all users in the company can see it"
+    },
+    "last_run_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the chart data was last fetched"
+    },
+    "refresh_interval": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "hourly",
+        "daily",
+        "weekly"
+      ],
+      "default": "manual",
+      "description": "How often the chart data refreshes"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags e.g. ['retention', 'clients', 'monthly']"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Tenant / company this chart belongs to"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "archived"
+      ],
+      "default": "active",
+      "description": "Chart status"
+    }
+  },
+  "required": [
+    "title"
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "name": "Report",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Report title e.g. 'BrightStar Q1 2025 Operations Report'"
+    },
+    "description": {
+      "type": "string",
+      "description": "Executive summary / description"
+    },
+    "cover_image": {
+      "type": "string",
+      "description": "Optional cover image URL"
+    },
+    "folder_id": {
+      "type": "string",
+      "description": "ChartFolder this report lives in"
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "heading",
+              "text",
+              "chart",
+              "divider",
+              "spacer",
+              "metric"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "chart_id": {
+            "type": "string"
+          },
+          "width": {
+            "type": "string",
+            "enum": [
+              "full",
+              "half"
+            ]
+          },
+          "caption": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Ordered list of report sections (headings, text, charts, metrics, dividers)"
+    },
+    "shared_with_roles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Roles that can view this report"
+    },
+    "shared_with_users": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Specific user emails who can view this report"
+    },
+    "is_public": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, all company users can view"
+    },
+    "allow_comments": {
+      "type": "boolean",
+      "default": false,
+      "description": "Users can add comments to this report"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "published",
+        "archived"
+      ],
+      "default": "draft",
+      "description": "Report status"
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this report was published"
+    },
+    "last_edited_by": {
+      "type": "string",
+      "description": "Email of the last person to edit this report"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Tenant / company this report belongs to"
+    }
+  },
+  "required": [
+    "title"
+  ]
+}

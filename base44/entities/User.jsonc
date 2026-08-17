@@ -6,5 +6,8 @@
       "type": "string",
       "description": "The network this user belongs to. Null for standard operators. Set to a network ID for HQ users, NGO administrators, government regulators, or any user who should see the consolidated network view."
     }
-  }
+  },
+  "required": [
+    "network_company_id"
+  ]
 }

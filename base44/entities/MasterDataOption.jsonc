@@ -1,0 +1,80 @@
+{
+  "name": "MasterDataOption",
+  "type": "object",
+  "properties": {
+    "entity_type": {
+      "type": "string",
+      "enum": [
+        "person",
+        "enterprise",
+        "item"
+      ],
+      "description": "Which master entity this option belongs to"
+    },
+    "field_name": {
+      "type": "string",
+      "enum": [
+        "person_subtype",
+        "primary_role",
+        "enterprise_subtype",
+        "sic_sector",
+        "item_subtype",
+        "item_class",
+        "unit_of_measure"
+      ],
+      "description": "Which field this option belongs to"
+    },
+    "value": {
+      "type": "string",
+      "description": "The option value stored in records"
+    },
+    "label": {
+      "type": "string",
+      "description": "Human-readable display label"
+    },
+    "parent_value": {
+      "type": "string",
+      "description": "The parent type this option belongs to (e.g., primary_role='student' has parent_value='client')"
+    },
+    "sector_id": {
+      "type": "number",
+      "description": "For enterprise subtypes, the NAICS sector number 1\u201320"
+    },
+    "sector_name": {
+      "type": "string",
+      "description": "For enterprise subtypes, the NAICS sector name"
+    },
+    "sort_order": {
+      "type": "number",
+      "description": "Controls display order in dropdowns"
+    },
+    "is_system_default": {
+      "type": "boolean",
+      "default": true,
+      "description": "True for system defaults, false for operator-created custom values"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Allows soft-deleting options without removing records"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Null for system defaults visible to all, or company ID for custom options"
+    },
+    "created_by": {
+      "type": "string",
+      "description": "Email of user who created a custom option"
+    },
+    "usage_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Incremented each time this option is selected, used to sort popular options to top"
+    }
+  },
+  "required": [
+    "entity_type",
+    "field_name",
+    "value"
+  ]
+}

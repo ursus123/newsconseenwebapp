@@ -1,0 +1,32 @@
+{
+  "name": "PendingInvitation",
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "description": "Email of the invited user"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Company / tenant to stamp on the user when they register"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "user",
+        "admin",
+        "super_admin"
+      ],
+      "default": "user",
+      "description": "Role to assign"
+    },
+    "invited_by": {
+      "type": "string",
+      "description": "Email of the admin who sent the invite"
+    }
+  },
+  "required": [
+    "email",
+    "company_id"
+  ]
+}

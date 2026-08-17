@@ -1,0 +1,224 @@
+{
+  "name": "Person",
+  "type": "object",
+  "properties": {
+    "first_name": {
+      "type": "string",
+      "description": "First name"
+    },
+    "last_name": {
+      "type": "string",
+      "description": "Last name"
+    },
+    "preferred_name": {
+      "type": "string",
+      "description": "Display / preferred name"
+    },
+    "date_of_birth": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of birth"
+    },
+    "gender": {
+      "type": "string",
+      "enum": [
+        "male",
+        "female",
+        "non_binary",
+        "prefer_not_to_say"
+      ],
+      "description": "Gender"
+    },
+    "national_id": {
+      "type": "string",
+      "description": "National ID / passport / SSN number"
+    },
+    "height_cm": {
+      "type": "number",
+      "description": "Height in centimeters"
+    },
+    "weight_kg": {
+      "type": "number",
+      "description": "Weight in kilograms"
+    },
+    "person_type": {
+      "type": "string",
+      "enum": [
+        "staff",
+        "client",
+        "contact",
+        "volunteer"
+      ],
+      "default": "staff",
+      "description": "Person type"
+    },
+    "person_subtype": {
+      "type": "string",
+      "description": "Person subtype classification"
+    },
+    "primary_role": {
+      "type": "string",
+      "description": "Specific role within person_type"
+    },
+    "engagement_model": {
+      "type": "string",
+      "enum": [
+        "employed",
+        "contracted",
+        "freelance",
+        "volunteer",
+        "elected",
+        "appointed",
+        "enrolled",
+        "subscribed"
+      ],
+      "description": "Engagement model"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive",
+        "on_leave"
+      ],
+      "default": "active",
+      "description": "Current status"
+    },
+    "secondary_roles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Additional roles"
+    },
+    "role_category": {
+      "type": "string",
+      "enum": [
+        "operations_service",
+        "retail_customer_facing",
+        "professional_licensed",
+        "food_hospitality",
+        "creative_digital",
+        "administrative",
+        "management_leadership"
+      ],
+      "description": "Role category (auto-derived)"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Phone number"
+    },
+    "email": {
+      "type": "string",
+      "description": "Email address"
+    },
+    "emergency_contact": {
+      "type": "string",
+      "description": "Emergency contact name"
+    },
+    "emergency_phone": {
+      "type": "string",
+      "description": "Emergency contact phone"
+    },
+    "address": {
+      "type": "string",
+      "description": "Street address"
+    },
+    "city": {
+      "type": "string",
+      "description": "City"
+    },
+    "region": {
+      "type": "string",
+      "description": "Region / State"
+    },
+    "country": {
+      "type": "string",
+      "description": "Country"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Start date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "End date (if applicable)"
+    },
+    "cost_rate": {
+      "type": "number",
+      "description": "Cost rate"
+    },
+    "payment_type": {
+      "type": "string",
+      "enum": [
+        "monthly_salary",
+        "hourly",
+        "daily",
+        "per_task",
+        "retainer"
+      ],
+      "description": "Payment type"
+    },
+    "availability_status": {
+      "type": "string",
+      "enum": [
+        "available",
+        "busy",
+        "on_leave",
+        "unavailable"
+      ],
+      "default": "available",
+      "description": "Availability status"
+    },
+    "shift_schedule": {
+      "type": "string",
+      "description": "Shift or schedule info"
+    },
+    "scheduled_start_time": {
+      "type": "string",
+      "description": "Standard shift start time (HH:MM) \u2014 used for late arrival detection"
+    },
+    "availability_notes": {
+      "type": "string",
+      "description": "Availability notes"
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Skills list"
+    },
+    "certification_name": {
+      "type": "string",
+      "description": "Certification name"
+    },
+    "certification_expiry": {
+      "type": "string",
+      "format": "date",
+      "description": "Certification expiry date"
+    },
+    "license_number": {
+      "type": "string",
+      "description": "License number"
+    },
+    "internal_notes": {
+      "type": "string",
+      "description": "Internal notes"
+    },
+    "attachment_url": {
+      "type": "string",
+      "description": "Attachment file URL"
+    },
+    "photo_url": {
+      "type": "string",
+      "description": "Profile photo URL"
+    }
+  },
+  "required": [
+    "first_name",
+    "last_name"
+  ]
+}

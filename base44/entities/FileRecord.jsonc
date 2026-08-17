@@ -1,0 +1,90 @@
+{
+  "name": "FileRecord",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "File or folder name"
+    },
+    "file_type": {
+      "type": "string",
+      "enum": [
+        "folder",
+        "report",
+        "export",
+        "attachment",
+        "dashboard",
+        "config",
+        "other"
+      ],
+      "default": "other",
+      "description": "Type of file"
+    },
+    "folder_id": {
+      "type": "string",
+      "description": "Parent folder ID (null = root)"
+    },
+    "owner_email": {
+      "type": "string",
+      "description": "Email of the owner"
+    },
+    "owner_name": {
+      "type": "string",
+      "description": "Display name of the owner"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Tenant isolation"
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "personal",
+        "enterprise",
+        "shared"
+      ],
+      "default": "personal",
+      "description": "Visibility scope"
+    },
+    "file_url": {
+      "type": "string",
+      "description": "URL to the actual file (if uploaded)"
+    },
+    "size_bytes": {
+      "type": "number",
+      "description": "File size in bytes"
+    },
+    "mime_type": {
+      "type": "string",
+      "description": "MIME type of the file"
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional description or notes"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for organization"
+    },
+    "is_trashed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Soft-delete flag"
+    },
+    "source_app": {
+      "type": "string",
+      "description": "Which app created this file (e.g. reports, exports)"
+    },
+    "linked_entity_id": {
+      "type": "string",
+      "description": "ID of the related entity record (e.g. Report ID)"
+    }
+  },
+  "required": [
+    "name",
+    "file_type"
+  ]
+}

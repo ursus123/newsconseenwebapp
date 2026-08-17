@@ -1,0 +1,122 @@
+{
+  "name": "MedicationProfile",
+  "type": "object",
+  "properties": {
+    "client_name": {
+      "type": "string",
+      "description": "Full name of the client (Person)"
+    },
+    "client_id": {
+      "type": "string",
+      "description": "ID of the related Person record"
+    },
+    "medication_name": {
+      "type": "string",
+      "description": "Medication name"
+    },
+    "strength": {
+      "type": "string",
+      "description": "Strength / dosage (e.g. 500mg)"
+    },
+    "dose_amount": {
+      "type": "string",
+      "description": "Amount per dose (e.g. 1 tablet)"
+    },
+    "route": {
+      "type": "string",
+      "enum": [
+        "oral",
+        "sublingual",
+        "topical",
+        "inhalation",
+        "injection",
+        "rectal",
+        "ophthalmic",
+        "otic",
+        "nasal",
+        "IV",
+        "other"
+      ],
+      "default": "oral",
+      "description": "Route of administration"
+    },
+    "frequency": {
+      "type": "string",
+      "description": "Frequency (e.g. daily, BID, TID)"
+    },
+    "schedule_times": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Scheduled administration times (HH:MM)"
+    },
+    "prescriber": {
+      "type": "string",
+      "description": "Prescribing physician or FNPC"
+    },
+    "indication": {
+      "type": "string",
+      "description": "Indication / purpose"
+    },
+    "instructions": {
+      "type": "string",
+      "description": "Administration instructions"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date medication was started"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date medication was discontinued (if applicable)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "discontinued",
+        "on_hold",
+        "prn"
+      ],
+      "default": "active",
+      "description": "Medication status"
+    },
+    "discontinue_reason": {
+      "type": "string",
+      "description": "Reason for discontinuation"
+    },
+    "pharmacy": {
+      "type": "string",
+      "description": "Pharmacy name"
+    },
+    "rx_number": {
+      "type": "string",
+      "description": "Prescription / Rx number"
+    },
+    "refills_remaining": {
+      "type": "number",
+      "description": "Number of refills remaining"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "requires_vitals_check": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether vitals must be recorded before administration"
+    },
+    "is_controlled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Is this a controlled substance requiring PIN confirmation"
+    }
+  },
+  "required": [
+    "client_name",
+    "medication_name"
+  ]
+}

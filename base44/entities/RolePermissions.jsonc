@@ -1,0 +1,165 @@
+{
+  "name": "RolePermissions",
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string",
+      "description": "Company this permission set applies to (null = global default by super_admin)"
+    },
+    "target_role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "user"
+      ],
+      "description": "The role these permissions apply to"
+    },
+    "allowed_pages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of page names the role can access"
+    },
+    "data_scope": {
+      "type": "string",
+      "enum": [
+        "own",
+        "team",
+        "all"
+      ],
+      "default": "own",
+      "description": "Data visibility scope: own records only, team/enterprise, or all data"
+    },
+    "layer1_master_data": {
+      "type": "object",
+      "description": "Layer 1 \u2013 Master Data permissions (People, Enterprises, Items, Services, Addresses)",
+      "properties": {
+        "can_view": {
+          "type": "boolean",
+          "default": true
+        },
+        "can_create": {
+          "type": "boolean",
+          "default": false
+        },
+        "can_edit": {
+          "type": "boolean",
+          "default": false
+        },
+        "can_archive": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "layer2_relationships": {
+      "type": "object",
+      "description": "Layer 2 \u2013 Relationship permissions (Assign Person\u2194Enterprise, Item\u2194Enterprise, Item\u2194Person)",
+      "properties": {
+        "can_view": {
+          "type": "boolean",
+          "default": true
+        },
+        "can_assign": {
+          "type": "boolean",
+          "default": false
+        },
+        "can_unassign": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "layer3_tasks": {
+      "type": "object",
+      "description": "Layer 3 \u2013 Task permissions",
+      "properties": {
+        "can_view": {
+          "type": "boolean",
+          "default": true
+        },
+        "can_create": {
+          "type": "boolean",
+          "default": false
+        },
+        "can_assign": {
+          "type": "boolean",
+          "default": false
+        },
+        "can_update_status": {
+          "type": "boolean",
+          "default": false
+        },
+        "can_complete": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "layer4_transactions": {
+      "type": "object",
+      "description": "Layer 4 \u2013 Transaction permissions",
+      "properties": {
+        "can_view": {
+          "type": "boolean",
+          "default": false
+        },
+        "can_create_draft": {
+          "type": "boolean",
+          "default": false
+        },
+        "can_post": {
+          "type": "boolean",
+          "default": false
+        },
+        "can_void": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "layer5_dashboards": {
+      "type": "object",
+      "description": "Layer 5 \u2013 Dashboard permissions (read-only intelligence)",
+      "properties": {
+        "can_view": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "can_create": {
+      "type": "boolean",
+      "default": false,
+      "description": "Legacy: global create flag (kept for backwards compatibility)"
+    },
+    "can_edit": {
+      "type": "boolean",
+      "default": false,
+      "description": "Legacy: global edit flag (kept for backwards compatibility)"
+    },
+    "can_delete": {
+      "type": "boolean",
+      "default": false,
+      "description": "Can delete records (strongly discouraged \u2014 archive instead)"
+    },
+    "can_post_transactions": {
+      "type": "boolean",
+      "default": false,
+      "description": "Legacy: can post or void transactions"
+    },
+    "can_trigger_transactions": {
+      "type": "boolean",
+      "default": false,
+      "description": "Can trigger transactions indirectly via task completion"
+    },
+    "set_by": {
+      "type": "string",
+      "description": "Email of who configured this"
+    }
+  },
+  "required": [
+    "target_role"
+  ]
+}

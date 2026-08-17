@@ -1,0 +1,180 @@
+{
+  "name": "Task",
+  "type": "object",
+  "properties": {
+    "task_type": {
+      "type": "string",
+      "enum": [
+        "clock_in",
+        "clock_out",
+        "shift_start",
+        "shift_end",
+        "break_start_end",
+        "absence_leave",
+        "stock_counting",
+        "inventory_inspection",
+        "shelf_restocking",
+        "receiving_verification",
+        "picking_task",
+        "packing_task",
+        "delivery_preparation",
+        "delivery_confirmation",
+        "maintenance",
+        "preventive_maintenance",
+        "repair",
+        "installation",
+        "cleaning",
+        "equipment_inspection",
+        "service_visit",
+        "medication_admin",
+        "medication_refusal",
+        "vital_signs_check",
+        "care_plan_activity",
+        "incident_observation",
+        "safety_check",
+        "behavior_monitoring",
+        "documentation_review",
+        "medical_escort",
+        "daily_living_support",
+        "staff_onboarding",
+        "training_completion",
+        "certification_renewal",
+        "policy_acknowledgment",
+        "performance_review",
+        "document_review",
+        "meeting_followup",
+        "delivery_task",
+        "pickup_task",
+        "route_assignment",
+        "vehicle_inspection",
+        "fuel_log",
+        "equipment_checkout",
+        "expense_preparation",
+        "invoice_review",
+        "payment_followup",
+        "customer_support",
+        "complaint_handling",
+        "audit_evidence",
+        "other"
+      ],
+      "description": "Task type"
+    },
+    "title": {
+      "type": "string",
+      "description": "Task title / summary"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "in_progress",
+        "completed",
+        "cancelled"
+      ],
+      "default": "open",
+      "description": "Task status"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "normal",
+        "high",
+        "urgent"
+      ],
+      "default": "normal",
+      "description": "Task priority"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "User-defined tags for categorization and filtering"
+    },
+    "assigned_to_email": {
+      "type": "string",
+      "description": "App user email this task is assigned to"
+    },
+    "assigned_to_name": {
+      "type": "string",
+      "description": "Display name of assigned user"
+    },
+    "enterprise": {
+      "type": "string",
+      "description": "Related enterprise"
+    },
+    "related_person": {
+      "type": "string",
+      "description": "Related person (client, patient, etc.)"
+    },
+    "related_item": {
+      "type": "string",
+      "description": "Related item / product"
+    },
+    "related_service": {
+      "type": "string",
+      "description": "Related service"
+    },
+    "scheduled_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Scheduled date"
+    },
+    "scheduled_time": {
+      "type": "string",
+      "description": "Scheduled time (HH:MM)"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Due date"
+    },
+    "due_time": {
+      "type": "string",
+      "description": "Due time (HH:MM)"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "completed",
+        "partially_done",
+        "refused",
+        "missed",
+        "not_applicable"
+      ],
+      "default": "pending",
+      "description": "Execution outcome"
+    },
+    "outcome_notes": {
+      "type": "string",
+      "description": "Outcome / result notes"
+    },
+    "trigger_transaction": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this task should trigger a transaction"
+    },
+    "transaction_type": {
+      "type": "string",
+      "enum": [
+        "stock_in",
+        "stock_out",
+        "stock_transfer",
+        "sale_service",
+        "expense",
+        "adjustment"
+      ],
+      "description": "Transaction type to trigger (if applicable)"
+    },
+    "internal_notes": {
+      "type": "string",
+      "description": "Internal notes (admin only)"
+    }
+  },
+  "required": [
+    "task_type",
+    "title"
+  ]
+}

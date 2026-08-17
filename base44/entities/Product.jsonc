@@ -1,0 +1,276 @@
+{
+  "name": "Product",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Item name"
+    },
+    "sku": {
+      "type": "string",
+      "description": "SKU / code"
+    },
+    "description": {
+      "type": "string",
+      "description": "Item description"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Tenant / enterprise this product belongs to"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "discontinued",
+        "out_of_stock",
+        "archived"
+      ],
+      "default": "active",
+      "description": "Item status"
+    },
+    "item_type": {
+      "type": "string",
+      "enum": [
+        "physical",
+        "living",
+        "digital",
+        "service_package",
+        "financial_instrument"
+      ],
+      "description": "Item type"
+    },
+    "item_subtype": {
+      "type": "string",
+      "description": "Item subtype classification"
+    },
+    "item_class": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "perishable",
+          "non_perishable",
+          "hazardous",
+          "controlled",
+          "regulated",
+          "unrestricted",
+          "serialized",
+          "non_serialized",
+          "consumable",
+          "reusable",
+          "returnable"
+        ]
+      },
+      "description": "Item class(es)"
+    },
+    "item_brand": {
+      "type": "string",
+      "description": "Brand or manufacturer name"
+    },
+    "item_variant": {
+      "type": "string",
+      "description": "Variant within product line. Examples: size, color, dosage, model number, crop variety, animal breed"
+    },
+    "unit_of_measure": {
+      "type": "string",
+      "enum": [
+        "piece",
+        "box",
+        "carton",
+        "pallet",
+        "bag",
+        "sachet",
+        "bottle",
+        "vial",
+        "ampule",
+        "tube",
+        "kg",
+        "g",
+        "mg",
+        "ton",
+        "lb",
+        "oz",
+        "liter",
+        "ml",
+        "gallon",
+        "meter",
+        "cm",
+        "mm",
+        "foot",
+        "inch",
+        "head",
+        "flock",
+        "herd",
+        "acre",
+        "hectare",
+        "plot",
+        "license_seat",
+        "user_account",
+        "session",
+        "hour",
+        "day",
+        "month",
+        "year"
+      ],
+      "default": "piece",
+      "description": "Unit of measure"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "electronics",
+        "food_beverage",
+        "clothing",
+        "office_supplies",
+        "raw_materials",
+        "tools_equipment",
+        "health_beauty",
+        "household",
+        "vehicles",
+        "equipment",
+        "other"
+      ],
+      "description": "Item category"
+    },
+    "stock_quantity": {
+      "type": "number",
+      "description": "Current stock quantity"
+    },
+    "min_stock_level": {
+      "type": "number",
+      "description": "Reorder level"
+    },
+    "cost_price": {
+      "type": "number",
+      "description": "Purchase / cost price"
+    },
+    "unit_price": {
+      "type": "number",
+      "description": "Selling price"
+    },
+    "assigned_enterprises": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "enterprise_name": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Enterprise assignments"
+    },
+    "assigned_persons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "person_name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Person assignments"
+    },
+    "condition": {
+      "type": "string",
+      "enum": [
+        "new",
+        "good",
+        "fair",
+        "poor",
+        "damaged",
+        "under_repair"
+      ],
+      "description": "Item condition"
+    },
+    "acquisition_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Acquisition date"
+    },
+    "warranty_end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Warranty end date"
+    },
+    "expiry_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Expiry date"
+    },
+    "maintenance_required": {
+      "type": "boolean",
+      "description": "Maintenance required"
+    },
+    "batch_number": {
+      "type": "string",
+      "description": "Batch / lot number"
+    },
+    "serial_number": {
+      "type": "string",
+      "description": "Serial number"
+    },
+    "regulatory_status": {
+      "type": "string",
+      "enum": [
+        "compliant",
+        "non_compliant",
+        "pending_review",
+        "exempt"
+      ],
+      "description": "Regulatory status"
+    },
+    "supplier": {
+      "type": "string",
+      "description": "Supplier name"
+    },
+    "side_effects": {
+      "type": "string",
+      "description": "Common side effects (medication)"
+    },
+    "contraindications": {
+      "type": "string",
+      "description": "Contraindications and warnings (medication)"
+    },
+    "dosage_instructions": {
+      "type": "string",
+      "description": "Standard dosage instructions"
+    },
+    "storage_instructions": {
+      "type": "string",
+      "description": "Storage requirements (e.g. refrigerate, keep dry)"
+    },
+    "internal_notes": {
+      "type": "string",
+      "description": "Internal notes"
+    },
+    "attachment_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Attachment file URLs"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "Product image URL"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

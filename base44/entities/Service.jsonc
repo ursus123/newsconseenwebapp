@@ -1,0 +1,184 @@
+{
+  "name": "Service",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Service name"
+    },
+    "short_code": {
+      "type": "string",
+      "description": "Short code / identifier"
+    },
+    "description": {
+      "type": "string",
+      "description": "Service description"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive",
+        "archived"
+      ],
+      "default": "active",
+      "description": "Service status"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "consulting",
+        "maintenance",
+        "installation",
+        "delivery",
+        "cleaning",
+        "training",
+        "design",
+        "accounting",
+        "legal",
+        "marketing",
+        "it_support",
+        "other"
+      ],
+      "description": "Service category"
+    },
+    "sub_category": {
+      "type": "string",
+      "description": "Sub-category"
+    },
+    "service_type": {
+      "type": "string",
+      "enum": [
+        "one_time",
+        "recurring",
+        "on_demand"
+      ],
+      "description": "Service type"
+    },
+    "service_scope": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "on_site",
+          "remote",
+          "hybrid"
+        ]
+      },
+      "description": "Service scope"
+    },
+    "pricing_model": {
+      "type": "string",
+      "enum": [
+        "fixed",
+        "hourly",
+        "per_unit",
+        "subscription"
+      ],
+      "default": "fixed",
+      "description": "Pricing model"
+    },
+    "price": {
+      "type": "number",
+      "description": "Base price"
+    },
+    "billing_unit": {
+      "type": "string",
+      "enum": [
+        "hour",
+        "day",
+        "week",
+        "month",
+        "unit",
+        "project"
+      ],
+      "description": "Billing unit"
+    },
+    "tax_applicable": {
+      "type": "boolean",
+      "default": false,
+      "description": "Tax applicable"
+    },
+    "estimated_duration": {
+      "type": "number",
+      "description": "Estimated duration value"
+    },
+    "duration_unit": {
+      "type": "string",
+      "enum": [
+        "minutes",
+        "hours",
+        "days"
+      ],
+      "default": "hours",
+      "description": "Duration unit"
+    },
+    "response_sla_hours": {
+      "type": "number",
+      "description": "Response time SLA in hours"
+    },
+    "completion_sla_hours": {
+      "type": "number",
+      "description": "Completion SLA in hours"
+    },
+    "checklist": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      },
+      "description": "Service delivery checklist"
+    },
+    "linked_enterprises": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "enterprise_name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Linked enterprises"
+    },
+    "service_roles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      },
+      "description": "Default service roles"
+    },
+    "internal_notes": {
+      "type": "string",
+      "description": "Internal notes"
+    },
+    "attachment_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Attachment file URLs"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

@@ -1,0 +1,308 @@
+{
+  "name": "Transaction",
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string",
+      "description": "Workspace / tenant isolation"
+    },
+    "transaction_type": {
+      "type": "string",
+      "enum": [
+        "service_fee",
+        "tuition",
+        "membership_fee",
+        "donation",
+        "tithe",
+        "event_income",
+        "grant",
+        "sponsorship",
+        "livestock_sale",
+        "crop_sale",
+        "product_sale",
+        "rental_income",
+        "interest_income",
+        "refund_received",
+        "payroll",
+        "contractor_payment",
+        "rent_expense",
+        "utility_expense",
+        "supply_purchase",
+        "equipment_purchase",
+        "feed_purchase",
+        "vet_expense",
+        "medication_purchase",
+        "insurance_expense",
+        "tax_payment",
+        "refund_issued",
+        "ministry_expense",
+        "travel_expense",
+        "marketing_expense",
+        "other_expense",
+        "stock_in",
+        "stock_out",
+        "stock_adjustment",
+        "budget_allocation",
+        "fund_transfer",
+        "depreciation",
+        "stock_transfer",
+        "item_assignment",
+        "item_return",
+        "sale_service",
+        "expense",
+        "adjustment",
+        "attendance"
+      ],
+      "description": "Transaction type"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "posted",
+        "reconciled",
+        "voided",
+        "void"
+      ],
+      "default": "draft",
+      "description": "Lifecycle status"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Business date of the event"
+    },
+    "enterprise": {
+      "type": "string",
+      "description": "Which enterprise this transaction belongs to"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable summary of the transaction"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Gross transaction amount"
+    },
+    "currency": {
+      "type": "string",
+      "default": "USD",
+      "description": "Currency code"
+    },
+    "tax_amount": {
+      "type": "number",
+      "default": 0,
+      "description": "Tax amount"
+    },
+    "discount_amount": {
+      "type": "number",
+      "default": 0,
+      "description": "Discount applied"
+    },
+    "net_amount": {
+      "type": "number",
+      "description": "Net amount"
+    },
+    "primary_person": {
+      "type": "string",
+      "description": "Client being invoiced, supplier being paid, or staff on payroll"
+    },
+    "secondary_person": {
+      "type": "string",
+      "description": "Secondary person involved"
+    },
+    "counterparty": {
+      "type": "string",
+      "description": "Customer, vendor, or patient"
+    },
+    "service_id": {
+      "type": "string",
+      "description": "ID of the linked Service record"
+    },
+    "service_name": {
+      "type": "string",
+      "description": "Denormalized service name for display"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "ID of the Task that generated this transaction"
+    },
+    "task_title": {
+      "type": "string",
+      "description": "Denormalized task title for display"
+    },
+    "product_id": {
+      "type": "string",
+      "description": "ID of the linked Product record"
+    },
+    "product_name": {
+      "type": "string",
+      "description": "Denormalized product name for display"
+    },
+    "payment_status": {
+      "type": "string",
+      "enum": [
+        "unpaid",
+        "paid",
+        "partial",
+        "waived",
+        "refunded",
+        "na"
+      ],
+      "default": "unpaid",
+      "description": "Payment status"
+    },
+    "payment_method": {
+      "type": "string",
+      "enum": [
+        "private_pay",
+        "medicaid",
+        "medicare",
+        "insurance",
+        "cash",
+        "bank_transfer",
+        "donation",
+        "grant",
+        "check",
+        "crypto",
+        "mobile_money",
+        "other"
+      ],
+      "default": "private_pay",
+      "description": "How this was or will be paid"
+    },
+    "payment_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date payment was actually received"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date",
+      "description": "When payment is due"
+    },
+    "invoice_number": {
+      "type": "string",
+      "description": "Auto-generated invoice number"
+    },
+    "reference_number": {
+      "type": "string",
+      "description": "External PO or reference number"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Internal notes"
+    },
+    "attachment_url": {
+      "type": "string",
+      "description": "Receipt or invoice scan URL"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "User-defined tags for categorization and filtering"
+    },
+    "line_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "item_name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "unit_price": {
+            "type": "number"
+          },
+          "batch_lot": {
+            "type": "string"
+          },
+          "expiry_date": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Line items with qty, unit, price"
+    },
+    "from_enterprise": {
+      "type": "string",
+      "description": "Source enterprise for fund transfers"
+    },
+    "to_enterprise": {
+      "type": "string",
+      "description": "Destination enterprise for fund transfers"
+    },
+    "voided_reason": {
+      "type": "string",
+      "description": "Reason for voiding"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "task_complete",
+        "medadmin",
+        "stockcounter",
+        "barcode",
+        "clockinout",
+        "import"
+      ],
+      "default": "manual",
+      "description": "How this transaction was created"
+    },
+    "posted_by": {
+      "type": "string",
+      "description": "Email of user who posted this"
+    },
+    "posted_date": {
+      "type": "string",
+      "description": "ISO timestamp when posted"
+    },
+    "voided_by": {
+      "type": "string",
+      "description": "Email of user who voided this"
+    },
+    "voided_date": {
+      "type": "string",
+      "description": "ISO timestamp when voided"
+    },
+    "internal_notes": {
+      "type": "string",
+      "description": "Legacy: internal notes"
+    },
+    "attachment_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Legacy: attachment URLs array"
+    },
+    "source_task_id": {
+      "type": "string",
+      "description": "Legacy: task that triggered this"
+    },
+    "supplier_customer": {
+      "type": "string",
+      "description": "Legacy: supplier or customer name"
+    },
+    "assigned_person": {
+      "type": "string",
+      "description": "Legacy: assigned person name"
+    },
+    "client_name": {
+      "type": "string",
+      "description": "Legacy: client name"
+    }
+  },
+  "required": [
+    "transaction_type",
+    "date"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "name": "UserAppAccess",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "description": "Email of the user"
+    },
+    "user_name": {
+      "type": "string",
+      "description": "Display name of the user"
+    },
+    "allowed_apps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of app page keys the user can access (e.g. ClockInOut, MedAdmin)"
+    },
+    "allowed_reports": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of Report record IDs the user can access"
+    }
+  },
+  "required": [
+    "user_email"
+  ]
+}
