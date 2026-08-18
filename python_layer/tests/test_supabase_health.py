@@ -16,6 +16,7 @@ def test_health_probe_reports_connected(monkeypatch):
     response = Mock()
     response.raise_for_status.return_value = None
     monkeypatch.setattr(supabase_source, "configured", lambda: True)
+    monkeypatch.setattr(supabase_source.settings, "supabase_url", "https://example.supabase.co")
     monkeypatch.setattr(supabase_source.requests, "get", lambda *args, **kwargs: response)
 
     result = supabase_source.health_probe()

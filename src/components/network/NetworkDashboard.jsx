@@ -5,7 +5,7 @@ import { Globe, TrendingUp, TrendingDown, Users, Package,
          CheckCircle, AlertTriangle, BarChart2, MapPin,
          RefreshCw, ArrowUp, ArrowDown, Minus } from "lucide-react";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 // ----------------------------------------------------------
 // Health grade badge

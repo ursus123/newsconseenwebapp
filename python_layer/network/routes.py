@@ -239,7 +239,7 @@ def join_network(request: JoinRequest):
     if not success:
         raise HTTPException(
             status_code=500,
-            detail="Could not add member to network. Check BASE44_NETWORK_MEMBERSHIP_URL configuration.",
+            detail="Could not add the canonical network membership.",
         )
 
     return {
@@ -261,30 +261,25 @@ def generate_join_code(request: JoinCodeRequest):
 
     code = NetworkRegistry.generate_join_code(request.network_id)
 
-    # Optionally store the code in Base44 for validation
-    # (If BASE44_JOIN_CODES_URL is set)
+    # Persist the code in the canonical tenant store for validation.
     try:
-        from config.settings import settings, HEADERS
-        import requests as req
+        from data_sources import supabase_source
         from datetime import datetime, timezone, timedelta
 
-        join_codes_url = getattr(settings, "base44_join_codes_url", None)
-        if join_codes_url:
-            expires_at = (
-                datetime.now(timezone.utc) +
-                timedelta(days=request.expires_in_days or 30)
-            ).isoformat()
-            req.post(
-                join_codes_url,
-                json={
-                    "code":               code,
-                    "network_company_id": request.network_id,
-                    "is_active":          True,
-                    "expires_at":         expires_at,
-                },
-                headers=HEADERS,
-                timeout=10,
-            )
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(days=request.expires_in_days or 30)
+        ).isoformat()
+        supabase_source.create_record(
+            "network_join_code",
+            {
+                "company_id": request.network_id,
+                "code": code,
+                "network_company_id": request.network_id,
+                "is_active": True,
+                "expires_at": expires_at,
+            },
+            company_id=request.network_id,
+        )
     except Exception as e:
         logger.warning("generate_join_code: could not persist code — %s", e)
 
@@ -320,7 +315,7 @@ def remove_member(
     if not success:
         raise HTTPException(
             status_code=500,
-            detail="Could not remove member. Check BASE44_NETWORK_MEMBERSHIP_URL configuration.",
+            detail="Could not remove the canonical network membership.",
         )
 
     return {

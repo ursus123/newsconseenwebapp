@@ -42,9 +42,12 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-_RETENTION_DAYS = int(os.getenv("BACKUP_RETENTION_DAYS", "30"))
-_S3_BUCKET      = os.getenv("BACKUP_S3_BUCKET", "")
-_S3_PREFIX      = os.getenv("BACKUP_S3_PREFIX", "newsconseen/backups/")
+def _backup_config() -> tuple[int, str, str]:
+    return (
+        int(os.getenv("BACKUP_RETENTION_DAYS", "30")),
+        os.getenv("BACKUP_S3_BUCKET", "").strip(),
+        os.getenv("BACKUP_S3_PREFIX", "newsconseen/backups/").strip(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +81,12 @@ def run_backup() -> dict:
         _log_backup(result)
         return result
 
+    retention_days, s3_bucket, s3_prefix = _backup_config()
+    if settings.app_env.lower() in {"staging", "production"} and not s3_bucket:
+        result["error"] = "Durable backup storage is required in staging/production"
+        _log_backup(result)
+        return result
+
     dump_path = os.path.join(tempfile.gettempdir(), f"{backup_id}.sql.gz")
 
     try:
@@ -89,11 +98,12 @@ def run_backup() -> dict:
         logger.info("backup: dump written to %s (%d bytes)", dump_path, size)
 
         # Step 2: upload to S3 if configured
-        if _S3_BUCKET:
-            s3_key = f"{_S3_PREFIX}{backup_id}.sql.gz"
-            s3_url = _upload_to_s3(dump_path, _S3_BUCKET, s3_key)
+        if s3_bucket:
+            s3_key = f"{s3_prefix}{backup_id}.sql.gz"
+            s3_url = _upload_to_s3(dump_path, s3_bucket, s3_key)
             result["storage"].append({"backend": "s3", "key": s3_key, "url": s3_url})
-            logger.info("backup: uploaded to s3://%s/%s", _S3_BUCKET, s3_key)
+            _prune_s3_backups(s3_bucket, s3_prefix, retention_days)
+            logger.info("backup: uploaded to s3://%s/%s", s3_bucket, s3_key)
 
         result["status"] = "success"
 
@@ -217,7 +227,10 @@ def _download_from_s3(key: str) -> str:
         kwargs["endpoint_url"] = endpoint
     s3 = boto3.client("s3", **kwargs)
     local_path = os.path.join(tempfile.gettempdir(), os.path.basename(key))
-    s3.download_file(_S3_BUCKET, key, local_path)
+    _retention, bucket, _prefix = _backup_config()
+    if not bucket:
+        raise RuntimeError("BACKUP_S3_BUCKET is not configured")
+    s3.download_file(bucket, key, local_path)
     return local_path
 
 
@@ -238,6 +251,11 @@ def _verify_dump_structure(dump_path: str) -> None:
 def _restore_into_scratch_db(dump_path: str, restore_url: str) -> None:
     """Pipe the gzip-decompressed dump into psql against a scratch DB, then
     sanity-check a couple of key tables actually have rows after restore."""
+    source_url = str(settings.database_url or "").strip()
+    if _database_identity(source_url) == _database_identity(restore_url):
+        raise RuntimeError("RESTORE_TEST_DATABASE_URL resolves to the active database")
+    if os.getenv("RESTORE_TEST_DATABASE_CONFIRM_DISPOSABLE", "").lower() != "true":
+        raise RuntimeError("Set RESTORE_TEST_DATABASE_CONFIRM_DISPOSABLE=true after verifying the scratch database")
     if not shutil.which("psql"):
         raise RuntimeError("psql binary not available — cannot perform a full restore drill")
 
@@ -265,6 +283,12 @@ def _restore_into_scratch_db(dump_path: str, restore_url: str) -> None:
                 conn.execute(text(f"SELECT COUNT(*) FROM {table}"))  # noqa: S608
             except Exception as exc:
                 raise RuntimeError(f"Sanity check failed on {table}: {exc}")
+    scratch_engine.dispose()
+
+
+def _database_identity(database_url: str) -> tuple[str, int | None, str]:
+    parsed = urlparse(database_url)
+    return (parsed.hostname or "", parsed.port, (parsed.path or "").strip("/"))
 
 
 def get_backup_status() -> dict:
@@ -387,10 +411,30 @@ def _upload_to_s3(local_path: str, bucket: str, key: str) -> str:
 
     s3 = boto3.client("s3", **kwargs)
     s3.upload_file(local_path, bucket, key)
+    metadata = s3.head_object(Bucket=bucket, Key=key)
+    if int(metadata.get("ContentLength", 0)) != os.path.getsize(local_path):
+        raise RuntimeError("Durable upload size verification failed")
 
     if endpoint:
         return f"{endpoint}/{bucket}/{key}"
     return f"s3://{bucket}/{key}"
+
+
+def _prune_s3_backups(bucket: str, prefix: str, retention_days: int) -> None:
+    """Delete only backup objects under the configured prefix after retention."""
+    from datetime import timedelta
+    import boto3
+    endpoint = os.getenv("AWS_ENDPOINT_URL")
+    s3 = boto3.client("s3", **({"endpoint_url": endpoint} if endpoint else {}))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        expired = [
+            {"Key": item["Key"]} for item in page.get("Contents", [])
+            if item.get("LastModified") and item["LastModified"] < cutoff
+        ]
+        if expired:
+            s3.delete_objects(Bucket=bucket, Delete={"Objects": expired, "Quiet": True})
 
 
 # ---------------------------------------------------------------------------

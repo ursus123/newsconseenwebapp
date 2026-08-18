@@ -1,4 +1,3 @@
-import base44 from "@base44/vite-plugin"
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { fileURLToPath } from 'url'
@@ -55,7 +54,7 @@ const rollupFixPlugin = {
   },
 }
 
-// Vite plugin (enforce:'pre') — catches imports before base44 plugin runs
+// Vite plugin (enforce:'pre') — catches imports before supabase plugin runs
 const viteFixPlugin = {
   name: 'fix-react-paths-vite',
   enforce: 'pre',
@@ -84,7 +83,6 @@ const viteFixPlugin = {
 export default defineConfig({
   plugins: [
     viteFixPlugin,
-    base44(),
     react(),
   ],
   resolve: {
@@ -95,7 +93,6 @@ export default defineConfig({
       'react/jsx-dev-runtime',
       'react-dom/client',
       '@tanstack/react-query',
-      '@base44/sdk',
     ],
     // Sub-paths only — no base 'react' or 'react-dom' alias here, which
     // prevents prefix-matching from mangling 'react/jsx-dev-runtime'.
@@ -127,7 +124,6 @@ export default defineConfig({
       'recharts',
       'react-router-dom',
     ],
-    exclude: ['@base44/sdk'],
   },
   build: {
     rollupOptions: {

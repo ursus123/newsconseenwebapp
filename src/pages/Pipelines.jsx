@@ -10,7 +10,7 @@ import {
 import { ncClient } from "@/api/ncClient";
 import PipelineBuilder from "@/components/pipelines/PipelineBuilder";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const CRON_SECRET   = import.meta.env.VITE_CRON_SECRET   || "";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 

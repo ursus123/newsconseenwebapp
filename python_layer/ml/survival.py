@@ -100,7 +100,7 @@ def build_survival_features(
     """
     Build the feature matrix for Cox PH from either:
       - analytics.people_summary + analytics.task_summary (aggregated)
-      - raw.people + raw.tasks (individual Base44 records)
+      - raw.people + raw.tasks (individual Supabase records)
 
     Works with both schemas: detects which it has and adapts.
     """

@@ -26,8 +26,7 @@ from typing import Optional
 
 import pandas as pd
 
-from config import settings, HEADERS
-from etl.base import fetch_json_to_df
+from data_sources.supabase_source import fetch_entity_df
 from database import get_engine_safe
 
 logger = logging.getLogger(__name__)
@@ -84,9 +83,23 @@ def _fetch_revenue_monthly(company_id: str) -> Optional[float]:
         except Exception as e:
             logger.debug("goals: revenue_monthly DB — %s", e)
 
-    # Base44 fallback
-    url = getattr(settings, "base44_transactions_url", None)
-    if url:
+    # Canonical operational fallback
+    try:
+        df = fetch_entity_df("transactions", company_id=company_id)
+        if df.empty: return None
+        today = date.today()
+        if "status" in df.columns:
+            df = df[df["status"] == "posted"]
+        if "transaction_date" in df.columns:
+            df["_d"] = pd.to_datetime(df["transaction_date"], errors="coerce")
+            df = df[(df["_d"].dt.year == today.year) & (df["_d"].dt.month == today.month)]
+        if "amount" in df.columns:
+            return float(pd.to_numeric(df["amount"], errors="coerce").sum())
+    except Exception as e:
+        logger.debug("goals: revenue_monthly canonical fallback — %s", e)
+    return None
+
+    if False:
         try:
             df = fetch_json_to_df(url)
             if df.empty: return None
@@ -128,8 +141,17 @@ def _fetch_task_completion(company_id: str) -> Optional[float]:
         except Exception as e:
             logger.debug("goals: task_completion DB — %s", e)
 
-    url = getattr(settings, "base44_tasks_url", None)
-    if url:
+    try:
+        df = fetch_entity_df("tasks", company_id=company_id)
+        if df.empty: return None
+        total = len(df)
+        done = len(df[df["status"] == "completed"]) if "status" in df.columns else 0
+        return round(done / total * 100, 1) if total else None
+    except Exception as e:
+        logger.debug("goals: task_completion canonical fallback — %s", e)
+    return None
+
+    if False:
         try:
             df = fetch_json_to_df(url)
             if df.empty: return None
@@ -163,8 +185,18 @@ def _fetch_active_clients(company_id: str) -> Optional[float]:
         except Exception as e:
             logger.debug("goals: active_clients DB — %s", e)
 
-    url = getattr(settings, "base44_people_url", None)
-    if url:
+    try:
+        df = fetch_entity_df("people", company_id=company_id)
+        if df.empty: return None
+        client_types = {"client", "patient", "student", "member", "beneficiary"}
+        if "person_type" in df.columns: df = df[df["person_type"].isin(client_types)]
+        if "status" in df.columns: df = df[df["status"] == "active"]
+        return float(len(df))
+    except Exception as e:
+        logger.debug("goals: active_clients canonical fallback — %s", e)
+    return None
+
+    if False:
         try:
             df = fetch_json_to_df(url)
             if df.empty: return None
@@ -200,8 +232,17 @@ def _fetch_active_staff(company_id: str) -> Optional[float]:
         except Exception as e:
             logger.debug("goals: active_staff DB — %s", e)
 
-    url = getattr(settings, "base44_people_url", None)
-    if url:
+    try:
+        df = fetch_entity_df("people", company_id=company_id)
+        if df.empty: return None
+        if "person_type" in df.columns: df = df[df["person_type"] == "staff"]
+        if "status" in df.columns: df = df[df["status"] == "active"]
+        return float(len(df))
+    except Exception as e:
+        logger.debug("goals: active_staff canonical fallback — %s", e)
+    return None
+
+    if False:
         try:
             df = fetch_json_to_df(url)
             if df.empty: return None

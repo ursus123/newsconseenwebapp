@@ -89,7 +89,7 @@ async function clearBackup() {
   window.dispatchEvent(new Event("datamartBackupChanged"));
 }
 
-// Strip platform-managed fields so Base44 assigns fresh IDs on re-create
+// Strip platform-managed fields so Supabase assigns fresh IDs on re-create
 function stripMeta(record) {
   const { id, created_date, updated_date, ...rest } = record;
   return rest;
@@ -226,7 +226,7 @@ export default function EmptyDatamartButton({ currentUser }) {
           </div>
           <div className="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-xs text-rose-700">
             Only records belonging to your workspace will be removed.
-            No Base44 schema or configuration is changed.
+            No Supabase schema or configuration is changed.
           </div>
           {error && <p className="text-xs text-rose-600 font-medium">{error}</p>}
           <div className="flex gap-2 pt-1">

@@ -8,7 +8,7 @@ import {
   Database, Zap, Activity, ArrowRight,
 } from "lucide-react";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 // ── Pipeline table registry (analytics tables from ETL) ─────────────────────
 
@@ -356,7 +356,7 @@ function ViewEditor({ view, onSave, onClose, currentUser }) {
       let rows = [];
 
       if (draft.source === "pipeline") {
-        // Three-tier fallback: analytics (python_layer) → Base44 live
+        // Three-tier fallback: analytics (python_layer) → Supabase live
         const cid = currentUser?.company_id;
         const params = cid ? `?company_id=${cid}` : "";
         try {

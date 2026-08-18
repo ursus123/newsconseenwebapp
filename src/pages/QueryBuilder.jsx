@@ -165,7 +165,7 @@ function ValidationErrors({ errors, onDismiss }) {
 }
 
 // ── CRUD Helper Panel ─────────────────────────────────────────────────────
-// Generates INSERT and UPDATE templates for Base44 entities from MASTER_SCHEMA.
+// Generates INSERT and UPDATE templates for Supabase entities from MASTER_SCHEMA.
 // DELETE is always blocked — directs user to the entity pages instead.
 function CrudHelperPanel({ onLoad }) {
   const [entity, setEntity] = useState("people");

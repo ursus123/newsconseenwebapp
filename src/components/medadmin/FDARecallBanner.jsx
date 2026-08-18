@@ -18,7 +18,7 @@ async function checkRecall(medName) {
 
   try {
     const res = await fetch(
-      `https://newsconseenwebapp-production.up.railway.app/medications/recalls?name=${encodeURIComponent(medName)}`
+      `${RAILWAY_URL}/medications/recalls?name=${encodeURIComponent(medName)}`
     );
     const data = await res.json();
     const updated = { ...getCache(), [medName]: { ts: Date.now(), data } };
@@ -118,3 +118,4 @@ export default function FDARecallBanner({ profiles, darkMode }) {
     </>
   );
 }
+import { RAILWAY_URL } from "@/config/api";

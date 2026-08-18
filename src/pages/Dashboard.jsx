@@ -886,7 +886,7 @@ function AdminDashboard({ user }) {
   // Tier 1 (analytics): pre-aggregated summary rows  → use summary-specific fields
   // Tier 2 (raw) / Tier 3 (ncClient): full entity records → aggregate client-side
   //
-  // NOTE: raw.people and Base44 Person share the same field names, so Tier 2 and
+  // NOTE: raw.people and Supabase Person share the same field names, so Tier 2 and
   // Tier 3 use identical aggregation logic — only the source differs.
 
   const isPeopleAnalytics = peopleAnalytics.source === "analytics";
@@ -899,7 +899,7 @@ function AdminDashboard({ user }) {
   const productSummary     = isProdAnalytics   ? productAnalytics.data     : [];
   const transactionSummary = isTxAnalytics     ? transactionAnalytics.data : [];
 
-  // Raw / Base44 full records (used when analytics tier unavailable)
+  // Raw / Supabase full records (used when analytics tier unavailable)
   const peopleRecords      = !isPeopleAnalytics ? peopleAnalytics.data      : people;
   const taskRecords        = !isTaskAnalytics   ? taskAnalytics.data        : tasks;
   const productRecords     = !isProdAnalytics   ? productAnalytics.data     : products;
@@ -955,7 +955,7 @@ function AdminDashboard({ user }) {
         t.due_date && new Date(t.due_date) < new Date()
       ).length;
 
-  // ── Trend calculations (30-day vs previous 30-day from Base44 entities) ─────
+  // ── Trend calculations (30-day vs previous 30-day from Supabase entities) ─────
   const trends = useMemo(() => {
     const isRevenue = t => REVENUE_TYPES.includes(t.transaction_type) && t.status === "posted";
     const isCompleted = t => t.status === "completed";

@@ -3,7 +3,7 @@ import { ExternalLink, Loader2, Bell, CheckCircle2, AlertCircle } from "lucide-r
 import { ncClient } from "@/api/ncClient";
 import SectionSkeleton from "./SectionSkeleton";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const triggerETL = (entity) =>
   fetch(`${RAILWAY_URL}/load/${entity}-summary`, { method: "POST" }).catch(() => {});
 

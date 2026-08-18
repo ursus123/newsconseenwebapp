@@ -9,11 +9,11 @@ import {
 import { createPageUrl } from "@/utils";
 import EntityQuickViewDrawer from "@/components/layout/EntityQuickViewDrawer";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 
 // ── Entity config ─────────────────────────────────────────────────────────────
-// Used for the Base44 fallback path only.
+// Used for the Supabase fallback path only.
 // The python_layer endpoint handles everything else.
 const ENTITY_CONFIG = [
   {
@@ -198,7 +198,7 @@ export default function GlobalSearchBar({ currentUser }) {
     return () => clearTimeout(debounceRef.current);
   }, [input]);
 
-  // ── Search: try python_layer endpoint, fall back to Base44 parallel calls ───
+  // ── Search: try python_layer endpoint, fall back to Supabase parallel calls ───
   const runSearch = useCallback(async (query) => {
     setLoading(true);
 
@@ -219,10 +219,10 @@ export default function GlobalSearchBar({ currentUser }) {
         }
       }
     } catch (_) {
-      // endpoint unavailable — fall through to Base44
+      // endpoint unavailable — fall through to Supabase
     }
 
-    // Fallback: 12 parallel Base44 calls (raw tables empty or endpoint down)
+    // Fallback: 12 parallel Supabase calls (raw tables empty or endpoint down)
     if (hits.length === 0) {
       const scope = companyId ? { company_id: companyId } : {};
       const fetches = ENTITY_CONFIG.map(cfg => cfg.fetch(scope).catch(() => []));

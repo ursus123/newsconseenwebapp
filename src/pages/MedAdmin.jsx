@@ -24,7 +24,7 @@ import CriticalMissedBanner from "@/components/medadmin/CriticalMissedBanner";
 import { useMedNotifications } from "@/components/medadmin/useMedNotifications";
 import { queryPatients, queryProducts, queryEnterprises, queryAddresses } from "@/components/shared/masterDataQuery";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
 const triggerETL = (entity) =>
   fetch(`${RAILWAY_URL}/load/${entity}-summary`, {

@@ -52,3 +52,18 @@ Apply `013_mobile_governed_actions.sql` and
 `014_canonical_user_person_task_identity.sql` before runtime testing these
 flows. Migration 014 backfills only unique tenant-local email matches; ambiguous
 identity remains unlinked and therefore fails closed.
+
+## Administrator accessibility floor
+
+The administrator graph surface provides at least 11px supporting copy and larger
+body copy in equivalent views, visible `focus-visible` rings, minimum 32px page
+controls and minimum 44px primary targets in the accessible record and
+relationship views. State is expressed with text and symbols, never color alone.
+Relationships combine color with solid, dashed, dotted or faded line patterns.
+
+Canvas animation duration becomes zero when `prefers-reduced-motion: reduce` is
+active. `prefers-contrast: more` increases node borders, relationship width,
+opacity and arrow scale. Expansion dialogs support Escape, lock background
+scrolling and restore focus. Selection changes and dialog operations are announced
+through live regions. The record list, relationship table, neighborhood outline
+and textual summary operate over the same governed packet as Cytoscape.

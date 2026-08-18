@@ -625,7 +625,7 @@ function SourcesPanel({ toolsDetail, onOpenQueryBuilder }) {
               <div className="flex items-center gap-3">
                 {/* Source indicator dot */}
                 <span className={`w-2 h-2 rounded-full shrink-0 ${
-                  t.data_source === "base44_live" ? "bg-blue-400" : "bg-emerald-400"
+                  t.data_source === "supabase_live" ? "bg-blue-400" : "bg-emerald-400"
                 }`} />
 
                 {/* Emoji icon */}
@@ -655,15 +655,15 @@ function SourcesPanel({ toolsDetail, onOpenQueryBuilder }) {
 
                 {/* Source badge */}
                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
-                  t.data_source === "base44_live"
+                  t.data_source === "supabase_live"
                     ? "bg-blue-50 text-blue-600"
                     : "bg-emerald-50 text-emerald-700"
                 }`}>
-                  {t.data_source === "base44_live" ? "live" : "analytics"}
+                  {t.data_source === "supabase_live" ? "live" : "analytics"}
                 </span>
 
                 {/* Data age */}
-                {t.data_as_of && t.data_source !== "base44_live" && (
+                {t.data_as_of && t.data_source !== "supabase_live" && (
                   <span className="text-[9px] text-slate-400 shrink-0 whitespace-nowrap">
                     {t.data_as_of}
                   </span>
@@ -1330,14 +1330,14 @@ function MessageBubble({ message, onFeedback, companyId, currentUser, onOpenQuer
         {!isUser && message.data_freshness?.label && (
           <div className="w-full flex items-center gap-1.5 pt-0.5">
             <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium ${
-              message.data_freshness.source === "base44_live"
+              message.data_freshness.source === "supabase_live"
                 ? "bg-blue-50 text-blue-600 border border-blue-100"
                 : "bg-emerald-50 text-emerald-600 border border-emerald-100"
             }`}>
               <span className={`w-1.5 h-1.5 rounded-full ${
-                message.data_freshness.source === "base44_live" ? "bg-blue-400" : "bg-emerald-400"
+                message.data_freshness.source === "supabase_live" ? "bg-blue-400" : "bg-emerald-400"
               }`} />
-              {message.data_freshness.source === "base44_live" ? "Live data" : `Data from ${message.data_freshness.label}`}
+              {message.data_freshness.source === "supabase_live" ? "Live data" : `Data from ${message.data_freshness.label}`}
             </span>
           </div>
         )}

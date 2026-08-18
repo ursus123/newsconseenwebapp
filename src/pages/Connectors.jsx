@@ -2717,7 +2717,7 @@ export default function Connectors() {
           if (data.runs?.length > 0) return data.runs;
         }
       } catch {}
-      // Fallback: Base44 ConnectorRun entity
+      // Fallback: Supabase ConnectorRun entity
       try {
         return await ncClient.entities.ConnectorRun.filter({ company_id: currentUser.company_id });
       } catch {

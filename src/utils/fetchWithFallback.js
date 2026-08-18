@@ -1,3 +1,5 @@
+import { RAILWAY_URL } from "@/config/api";
+export { RAILWAY_URL };
 /**
  * fetchWithFallback — Three-tier data fallback utility
  *
@@ -12,31 +14,28 @@
  *     GET /raw/{rawEntity}?company_id=X&limit=N
  *     Full records from raw.* PostgreSQL tables (populated by ETL).
  *     Falls here when Tier 1 is unreachable OR returns empty data.
- *     Useful when Base44 is slow but PostgreSQL has a recent snapshot.
+ *     Useful when Supabase is slow but PostgreSQL has a recent snapshot.
  *
- *   Tier 3 — Base44 live entity query
- *     Calls base44Fn() directly — always available.
+ *   Tier 3 — Supabase live entity query
+ *     Calls supabaseFn() directly — always available.
  *     Falls here when both Tier 1 and Tier 2 fail or return empty.
  *
- * Return value: { data: any[], tier: 1|2|3, source: "analytics"|"raw"|"base44" }
+ * Return value: { data: any[], tier: 1|2|3, source: "analytics"|"raw"|"supabase" }
  *
  * The caller is responsible for aggregating Tier 2/3 records in the same way
- * (raw PostgreSQL and Base44 records share the same schema).
+ * (raw PostgreSQL and Supabase records share the same schema).
  *
  * Usage:
  *   const result = await fetchWithFallback({
  *     analyticsEndpoint: "/people-summary",
  *     rawEntity:         "people",
- *     base44Fn:          () => ncClient.entities.Person.filter({ company_id }),
+ *     supabaseFn:          () => ncClient.entities.Person.filter({ company_id }),
  *     companyId,
  *   });
  *   // result.source === "analytics" → use pre-aggregated summary fields
  *   // result.source === "raw"       → aggregate from full records
- *   // result.source === "base44"    → aggregate from full records (same shape as raw)
+ *   // result.source === "supabase"    → aggregate from full records (same shape as raw)
  */
-
-export const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-
 const TIMEOUT_MS   = 8_000;  // 8 s per attempt
 const RETRY_DELAY  = 800;    // ms between retries on the same tier
 
@@ -78,7 +77,7 @@ function isEmpty(data) {
  * @param {object} opts
  * @param {string}   opts.analyticsEndpoint  e.g. "/people-summary"
  * @param {string}   [opts.rawEntity]        e.g. "people" — omit to skip Tier 2
- * @param {Function} opts.base44Fn           async () => records[] — Tier 3
+ * @param {Function} opts.supabaseFn           async () => records[] — Tier 3
  * @param {string}   opts.companyId
  * @param {number}   [opts.retries=1]        retries per tier before moving on
  * @param {number}   [opts.rawLimit=1000]    max raw records to fetch
@@ -88,7 +87,7 @@ function isEmpty(data) {
 export async function fetchWithFallback({
   analyticsEndpoint,
   rawEntity,
-  base44Fn,
+  supabaseFn,
   companyId,
   retries    = 1,
   rawLimit   = 1000,
@@ -127,36 +126,36 @@ export async function fetchWithFallback({
     if (data) return { data, tier: 2, source: "raw" };
   }
 
-  // ── Tier 3: Base44 live ──────────────────────────────────────────────────────
+  // ── Tier 3: Supabase live ──────────────────────────────────────────────────────
   const data = await attempt(async () => {
-    const records = await base44Fn();
+    const records = await supabaseFn();
     return Array.isArray(records) ? records : [];
   }, retries);
 
-  return { data: data ?? [], tier: 3, source: "base44" };
+  return { data: data ?? [], tier: 3, source: "supabase" };
 }
 
 // ── Convenience wrappers for the 5 core entities ──────────────────────────────
 // Each wraps fetchWithFallback with the canonical endpoint + raw entity name.
 
-export const fetchPeopleFallback = (companyId, base44Fn, opts = {}) =>
-  fetchWithFallback({ analyticsEndpoint: "/people-summary",      rawEntity: "people",       base44Fn, companyId, ...opts });
+export const fetchPeopleFallback = (companyId, supabaseFn, opts = {}) =>
+  fetchWithFallback({ analyticsEndpoint: "/people-summary",      rawEntity: "people",       supabaseFn, companyId, ...opts });
 
-export const fetchTasksFallback = (companyId, base44Fn, opts = {}) =>
-  fetchWithFallback({ analyticsEndpoint: "/task-summary",         rawEntity: "tasks",        base44Fn, companyId, ...opts });
+export const fetchTasksFallback = (companyId, supabaseFn, opts = {}) =>
+  fetchWithFallback({ analyticsEndpoint: "/task-summary",         rawEntity: "tasks",        supabaseFn, companyId, ...opts });
 
-export const fetchProductsFallback = (companyId, base44Fn, opts = {}) =>
-  fetchWithFallback({ analyticsEndpoint: "/product-summary",      rawEntity: "products",     base44Fn, companyId, ...opts });
+export const fetchProductsFallback = (companyId, supabaseFn, opts = {}) =>
+  fetchWithFallback({ analyticsEndpoint: "/product-summary",      rawEntity: "products",     supabaseFn, companyId, ...opts });
 
-export const fetchTransactionsFallback = (companyId, base44Fn, opts = {}) =>
-  fetchWithFallback({ analyticsEndpoint: "/transaction-summary",  rawEntity: "transactions", base44Fn, companyId, ...opts });
+export const fetchTransactionsFallback = (companyId, supabaseFn, opts = {}) =>
+  fetchWithFallback({ analyticsEndpoint: "/transaction-summary",  rawEntity: "transactions", supabaseFn, companyId, ...opts });
 
-export const fetchEnterprisesFallback = (companyId, base44Fn, opts = {}) =>
-  fetchWithFallback({ analyticsEndpoint: "/enterprise-summary",   rawEntity: "enterprises",  base44Fn, companyId, ...opts });
+export const fetchEnterprisesFallback = (companyId, supabaseFn, opts = {}) =>
+  fetchWithFallback({ analyticsEndpoint: "/enterprise-summary",   rawEntity: "enterprises",  supabaseFn, companyId, ...opts });
 
 // ── Intelligence analytics (analytics-only, no raw fallback entity) ───────────
 // These tables have no equivalent raw.* entity — they are derived aggregates.
-// The fallback is the GET endpoint itself which recomputes live from Base44.
+// The fallback is the GET endpoint itself which recomputes live from Supabase.
 
 export const fetchKpiSnapshot = async (companyId) => {
   try {

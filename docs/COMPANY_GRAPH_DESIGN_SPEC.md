@@ -220,3 +220,21 @@ The implementation is evaluated through the security, truth, Idjwi,
 accessibility, performance, operator and environment gates in
 `COMPANY_GRAPH_VERIFICATION_AND_RELEASE.md`. A frontend build or a single
 administrator demonstration cannot complete the product contract.
+
+## Administrator workspace release contract
+
+The administrator workspace follows one fixed implementation sequence:
+hierarchy, disclosure persistence, graph sizing/expansion, light theme, semantic
+nodes, governed relationships, operational layouts, clustering, relationship
+review, quality repair, consolidated controls, coordinated inspector/Idjwi,
+authorization, and final acceptance. Later polish cannot bypass an earlier gate.
+
+Supporting capabilities—alerts, pending approvals, Intelligence Inbox and graph
+audit—use `company-graph-capability-state.v1`. Each response or client-side
+failure is rendered as `available`, `unauthorized`, `unavailable`, `empty`, or
+`degraded`. An HTTP failure must never disappear into the console or masquerade
+as an empty business queue.
+
+The visual canvas has equivalent record, relationship, hierarchy and textual
+representations. Administrator acceptance requires both canvas and keyboard-only
+completion of investigation and governance work.

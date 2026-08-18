@@ -193,20 +193,9 @@ def _load_analytics(table: str, company_id: Optional[str] = None):
 def _load_raw(table: str, company_id: Optional[str] = None):
     """
     Load from raw.* table (Layer 2), filtered by company_id at read time.
-    Falls back to _fetch_from_base44() if the raw table is empty or unavailable.
+    Falls back to _fetch_from_supabase() if the raw table is empty or unavailable.
     """
     import pandas as pd
-    # raw table name → Base44 settings URL attribute
-    _RAW_TO_URL = {
-        "enterprises":   "base44_enterprises_url",
-        "people":        "base44_people_url",
-        "products":      "base44_products_url",
-        "tasks":         "base44_tasks_url",
-        "transactions":  "base44_transactions_url",
-        "relationships": "base44_relationships_url",
-        "addresses":     "base44_addresses_url",
-        "services":      "base44_services_url",
-    }
     try:
         from database import get_engine_safe
         from sqlalchemy import text as sqlt
@@ -218,44 +207,15 @@ def _load_raw(table: str, company_id: Optional[str] = None):
                 df = pd.read_sql(sqlt(f"SELECT * FROM raw.{table} {where}"), conn, params=params)
             if not df.empty:
                 return df
-            logger.info("_load_raw: raw.%s empty — trying Base44 live fallback", table)
+            logger.info("_load_raw: raw.%s empty — trying canonical fallback", table)
     except Exception as e:
         logger.warning("_load_raw: raw.%s unavailable — %s", table, e)
 
-    # Fallback: fetch live from Base44 API
-    url_attr = _RAW_TO_URL.get(table)
-    if url_attr:
-        return _fetch_from_base44(url_attr, company_id)
-    return pd.DataFrame()
-
-
-def _fetch_from_base44(url_attr: str, company_id: Optional[str] = None):
-    """
-    Live fallback: fetch all records directly from Base44 API.
-    Uses the same fetch_json_to_df + HEADERS pattern as the ETL modules.
-    Filters by company_id client-side after fetch (Base44 API has no server filter).
-    """
-    import pandas as pd
     try:
-        from config import settings, HEADERS
-        from etl.base import fetch_json_to_df
-        url = getattr(settings, url_attr, None)
-        if not url:
-            logger.warning("_fetch_from_base44: %s not set in settings", url_attr)
-            return pd.DataFrame()
-        df = fetch_json_to_df(url)
-        if df.empty:
-            return df
-        # Tenant isolation at read time — filter by company_id if provided
-        if company_id and "company_id" in df.columns:
-            df = df[df["company_id"] == company_id].copy()
-        logger.info(
-            "_fetch_from_base44: fetched %d rows from Base44 (%s, company_id=%s)",
-            len(df), url_attr, company_id,
-        )
-        return df
+        from data_sources.supabase_source import fetch_entity_df
+        return fetch_entity_df(table, company_id=company_id)
     except Exception as e:
-        logger.warning("_fetch_from_base44: %s failed — %s", url_attr, e)
+        logger.warning("_load_raw: canonical %s fallback failed — %s", table, e)
         return pd.DataFrame()
 
 
@@ -375,10 +335,10 @@ def get_my_enterprises(
     """
     Return own enterprises with geocoordinates.
 
-    Three-tier data resolution (analytics → raw → Base44 live):
+    Three-tier data resolution (analytics → raw → Supabase live):
     1. analytics.enterprise_summary  — post-ETL enriched table (preferred)
     2. raw.enterprises               — ETL snapshot table
-    3. Base44 live API               — direct fetch if DB unavailable / empty
+    3. Supabase live API               — direct fetch if DB unavailable / empty
 
     Geocoordinates: if not on enterprise record itself, attempts to join
     addresses (same three-tier resolution) using enterprise_id.
@@ -387,18 +347,18 @@ def get_my_enterprises(
     import numpy as np
 
     # ── 1. Load enterprise records ─────────────────────────────────────────
-    # Try analytics summary first (has normalised columns), then raw, then Base44
+    # Try analytics summary first (has normalised columns), then raw, then Supabase
     df = _load_analytics("enterprise_summary", company_id)
     source = "analytics.enterprise_summary"
 
     if df.empty:
         df = _load_raw("enterprises", company_id)
-        source = "raw.enterprises / Base44 live"
+        source = "raw.enterprises / Supabase live"
 
     if df.empty:
         return {"company_id": company_id, "count": 0, "enterprises": [], "source": "no data"}
 
-    # Normalise enterprise_name — raw Base44 records use "name" field
+    # Normalise enterprise_name — raw Supabase records use "name" field
     if "enterprise_name" not in df.columns and "name" in df.columns:
         df = df.rename(columns={"name": "enterprise_name"})
 
@@ -1356,12 +1316,12 @@ class SaveCompetitorRequest(BaseModel):
 def save_competitor(req: SaveCompetitorRequest):
     """
     Write-back: save an MI-discovered competitor to the datamart and
-    create a Relationship record in Base44 linking the external entity
+    create a Relationship record in Supabase linking the external entity
     to an existing operator Enterprise.
 
     Two writes:
     1. INSERT into analytics.mi_competitors (persistent record for dashboards/queries)
-    2. POST to Base44 /relationships (creates Relationship entity so the link is
+    2. POST to Supabase /relationships (creates Relationship entity so the link is
        visible in the Relationships page and queryable via the ontology)
     """
     from database import get_engine_safe
@@ -1370,39 +1330,32 @@ def save_competitor(req: SaveCompetitorRequest):
     relationship_id: Optional[str] = None
     relationship_error: Optional[str] = None
 
-    # ── 1. Create Relationship record in Base44 ───────────────────────────────
-    if settings.base44_relationships_url:
-        try:
-            rel_payload = {
-                "company_id":          req.company_id,
-                "relationship_type":   "competitor",
-                "enterprise_name":     req.linked_enterprise_name,
-                "contact_name":        req.competitor_name,
-                "location":            req.address or req.source_location or "",
-                "status":              "active",
-                "notes": (
-                    f"Competitor discovered via Market Intelligence. "
-                    f"Distance: {req.distance_km} km. "
-                    f"Type: {req.competitor_type or req.business_type or 'unknown'}. "
-                    f"Source: {req.source_location or 'MI scan'}."
-                ),
-            }
-            resp = requests.post(
-                settings.base44_relationships_url,
-                json=rel_payload,
-                headers=HEADERS,
-                timeout=10,
-            )
-            if resp.ok:
-                relationship_id = resp.json().get("id")
-            else:
-                relationship_error = f"Base44 {resp.status_code}: {resp.text[:200]}"
-                logger.warning("save-competitor: Base44 relationship POST failed — %s", relationship_error)
-        except Exception as exc:
-            relationship_error = str(exc)
-            logger.warning("save-competitor: Base44 relationship POST error — %s", exc)
+    # ── 1. Create Relationship record in Supabase ───────────────────────────────
+    try:
+        from data_sources import supabase_source
+        rel_payload = {
+            "company_id": req.company_id,
+            "relationship_type": "competitor",
+            "enterprise_name": req.linked_enterprise_name,
+            "contact_name": req.competitor_name,
+            "location": req.address or req.source_location or "",
+            "status": "active",
+            "notes": (
+                f"Competitor discovered via Market Intelligence. "
+                f"Distance: {req.distance_km} km. "
+                f"Type: {req.competitor_type or req.business_type or 'unknown'}. "
+                f"Source: {req.source_location or 'MI scan'}."
+            ),
+        }
+        relationship = supabase_source.create_record(
+            "relationship", rel_payload, company_id=req.company_id
+        )
+        relationship_id = relationship.get("id")
+    except Exception as exc:
+        relationship_error = str(exc)
+        logger.warning("save-competitor: canonical relationship write failed - %s", exc)
 
-    # ── 2. INSERT into analytics.mi_competitors ───────────────────────────────
+    # 2. INSERT into analytics.mi_competitors
     engine = get_engine_safe()
     if engine:
         try:
@@ -1447,7 +1400,7 @@ def save_competitor(req: SaveCompetitorRequest):
 def get_enrichment_coverage(company_id: str = Query(...)):
     """
     Return per-entity-type enrichment coverage percentages.
-    Reads from analytics.enrichment_events and Base44 entity counts.
+    Reads from analytics.enrichment_events and Supabase entity counts.
     """
     try:
         from market.enrichment_planner import build_coverage_report

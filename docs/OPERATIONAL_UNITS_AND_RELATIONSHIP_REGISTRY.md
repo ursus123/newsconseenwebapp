@@ -101,3 +101,12 @@ The Phase 9 gate repeats these checks across administrator, manager, worker and
 technician policies. Operator acceptance must use operational-unit memberships
 and canonical `user_profiles.person_id → tasks.assigned_to_person_id` assignments;
 labels and email matches never authorize a scope.
+
+## Presentation metadata boundary
+
+Company Graph presentation is registry-driven in
+`src/services/companyGraphPresentationRegistry.js`: object type, icon, shape,
+accent, labels, status, warning marker, importance, accessible name and preferred
+layouts. This is a consumer projection, not a second ontology. It is deliberately
+kept independent of page layout code so it can later move into the Newsconseen
+Ontology SDK without changing canonical relationship truth.

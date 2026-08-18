@@ -15,7 +15,7 @@ import {
 import BrandingSection from "@/components/settings/BrandingSection";
 import ErrorLogSection from "@/components/settings/ErrorLogSection";
 import { fetchIdjwiConflicts, updateIdjwiMemory } from "@/services/idjwiMemoryClient";
-import { authHeaders } from "@/config/api";
+import { authHeaders, RAILWAY_URL } from "@/config/api";
 
 function passwordStrength(pw) {
   if (!pw) return null;
@@ -919,7 +919,7 @@ function SessionsSection() {
 }
 
 // ── Security Section (2FA + OAuth2) ──────────────────────────────────────────
-const RAILWAY_SEC_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_SEC_URL = RAILWAY_URL;
 
 function SecuritySection({ user }) {
   const [status2fa, setStatus2fa]   = useState(null);   // {enabled, status}
@@ -1168,7 +1168,7 @@ function SecuritySection({ user }) {
 }
 
 // ── Audit Trail Section ───────────────────────────────────────────────────────
-const RAILWAY_AUDIT_URL = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_AUDIT_URL = RAILWAY_URL;
 
 const ENTITY_OPTS = [
   { id: "",             label: "All entities" },
@@ -1462,7 +1462,7 @@ function AuditTrailSection({ user }) {
 
 
 // ── AI Readiness Section ─────────────────────────────────────────────────────
-const RAILWAY_URL_READINESS = "https://newsconseenwebapp-production.up.railway.app";
+const RAILWAY_URL_READINESS = RAILWAY_URL;
 
 const ENTITY_LABELS = {
   people:        { label: "People",        emoji: "👥" },
@@ -1771,7 +1771,6 @@ function DangerSection({ user }) {
 }
 
 function NetworkSection({ user, enterprises }) {
-  const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
   const isNetworkAdmin = !!user?.network_company_id;
 
   // Network Admin: Manage Members
@@ -2023,7 +2022,6 @@ function NetworkSection({ user, enterprises }) {
 }
 
 // ── Reports Section ──────────────────────────────────────────────────────────
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 const API_HEADERS = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
 
@@ -2432,7 +2430,7 @@ function AutoTaskSection({ user }) {
       <div className="bg-violet-50 border border-violet-100 rounded-2xl px-4 py-3 flex items-start gap-3">
         <Zap className="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />
         <p className="text-xs text-violet-700">
-          Auto-remediation runs after every ETL cycle. Tasks are created in Base44 and appear
+          Auto-remediation runs after every ETL cycle. Tasks are created in Supabase and appear
           on your Tasks page immediately — assigned to the configured person, or unassigned if none is set.
         </p>
       </div>

@@ -1,11 +1,11 @@
 # ==============================================================
 # Workflow Step Executor
 # ==============================================================
-# Executes individual workflow steps against Base44 entities
+# Executes individual workflow steps against Supabase entities
 # and the alerts infrastructure.
 #
 # Step types:
-#   create_task    — create a Task entity in Base44
+#   create_task    — create a Task entity in Supabase
 #   send_alert     — send WhatsApp/Email/SMS via alerts channels
 #   update_field   — update a field on the triggering entity
 #   log_note       — append an audit log entry
@@ -15,8 +15,6 @@ import logging
 import re
 from datetime import datetime, timezone, timedelta
 from typing import Any
-
-import requests
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +43,7 @@ def _render(template: str, context: dict) -> str:
 
 def step_create_task(params: dict, context: dict, company_id: str) -> dict:
     """
-    Create a Task entity in Base44.
+    Create a Task entity in Supabase.
 
     params keys:
         title         str  — task title (supports {{field}} placeholders)
@@ -56,7 +54,7 @@ def step_create_task(params: dict, context: dict, company_id: str) -> dict:
         assigned_to   str  — email of the assignee (optional)
     """
     try:
-        from config.settings import settings, HEADERS
+        from data_sources import supabase_source
 
         title    = _render(params.get("title", "Workflow task"), context)
         due_date = (datetime.now(timezone.utc) + timedelta(
@@ -79,17 +77,9 @@ def step_create_task(params: dict, context: dict, company_id: str) -> dict:
         # Remove None values
         task_payload = {k: v for k, v in task_payload.items() if v is not None}
 
-        resp = requests.post(
-            settings.base44_tasks_url,
-            json=task_payload,
-            headers=HEADERS,
-            timeout=15,
-        )
-        resp.raise_for_status()
-        created = resp.json()
+        created = supabase_source.create_record("task", task_payload, company_id=company_id)
         logger.info("workflow executor: created task id=%s title=%s", created.get("id"), title)
         return {"status": "ok", "task_id": created.get("id"), "title": title}
-
     except Exception as e:
         logger.error("step_create_task failed: %s", e)
         return {"status": "error", "error": str(e)}
@@ -145,18 +135,18 @@ def step_update_field(params: dict, context: dict, company_id: str) -> dict:
     params keys:
         field     str  — field name to update (e.g. "status")
         value     str  — new value (supports {{field}} placeholders)
-        entity_url str — Base44 URL for the entity type (uses context._entity_url if absent)
+        entity_url str — Supabase URL for the entity type (uses context._entity_url if absent)
     """
     try:
-        from config.settings import settings, HEADERS
+        from data_sources import supabase_source
 
         entity_id  = context.get("id")
         if not entity_id:
             return {"status": "skipped", "reason": "no entity id in trigger context"}
 
-        entity_url = params.get("entity_url") or context.get("_entity_url")
-        if not entity_url:
-            return {"status": "skipped", "reason": "entity_url not configured for this step"}
+        entity_type = params.get("entity_type") or context.get("_entity_type")
+        if not entity_type:
+            return {"status": "skipped", "reason": "entity_type not configured for this step"}
 
         field = params.get("field")
         value = _render(str(params.get("value", "")), context)
@@ -164,13 +154,11 @@ def step_update_field(params: dict, context: dict, company_id: str) -> dict:
         if not field:
             return {"status": "error", "error": "field param is required"}
 
-        resp = requests.patch(
-            f"{entity_url}/{entity_id}",
-            json={field: value},
-            headers=HEADERS,
-            timeout=15,
+        updated = supabase_source.update_record(
+            entity_type, entity_id, {field: value}, company_id=company_id
         )
-        resp.raise_for_status()
+        if not updated or updated.get("error"):
+            raise RuntimeError(updated.get("error", "canonical update returned no record"))
         logger.info(
             "workflow executor: updated %s.%s = %s for entity %s",
             context.get("_entity_type"), field, value, entity_id,

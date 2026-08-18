@@ -65,7 +65,7 @@ GROUP_COLUMNS = [
 
 def extract_products() -> pd.DataFrame:
     """
-    Extract all product/item records from Base44.
+    Extract all product/item records from Supabase.
     Returns raw DataFrame — no transformation applied here.
     """
     return fetch_supabase_entity_to_df("products")

@@ -5,10 +5,10 @@
 #   Called once after Enterprise creation during the onboarding wizard.
 #   Creates default Workflows for the tenant's enterprise_type and
 #   returns a taxonomy template for the frontend to materialise as
-#   MasterDataOption records via the Base44 SDK.
+#   MasterDataOption records via the Supabase SDK.
 #
 # Design:
-#   - All taxonomy definitions live here as pure data (no Base44 write
+#   - All taxonomy definitions live here as pure data (no Supabase write
 #     from the backend — frontend owns MasterDataOption creation).
 #   - Workflows are created directly into _WORKFLOWS (same process,
 #     no HTTP round-trip required).

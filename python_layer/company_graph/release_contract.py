@@ -39,6 +39,26 @@ OPERATOR_ACCEPTANCE_SCENARIOS = (
     {"id": 15, "name": "Observe disruption and approve an alternative", "roles": ("admin", "manager"), "endpoint": "/company-graph/external-observations", "evidence_required": True},
 )
 
+ADMINISTRATOR_WORKSPACE_ACCEPTANCE_SCENARIOS = (
+    "Open Company Graph and see the graph immediately",
+    "Collapse and restore each section",
+    "Expand the graph",
+    "Expand the complete workspace",
+    "Search and center a record",
+    "Select and explain a node",
+    "Select and explain an edge",
+    "Review relationship evidence",
+    "Confirm a relationship",
+    "Reject an incorrect proposal",
+    "Inspect a graph-quality finding",
+    "Create repair work",
+    "Open Idjwi and retain graph context",
+    "Switch layouts without losing the mental map",
+    "Verify authorized export",
+    "Refresh and preserve safe preferences",
+    "Complete the workflow using keyboard-accessible equivalents",
+)
+
 RELEASE_ENVIRONMENTS = {
     "local": ("frontend", "python_backend", "supabase_alignment", "migrations", "performance"),
     "staging": ("web_domain", "api_domain", "synthetic_multi_role_tenant", "monitoring", "migration_rollback"),

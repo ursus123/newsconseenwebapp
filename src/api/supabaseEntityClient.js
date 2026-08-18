@@ -1,15 +1,15 @@
 /**
  * supabaseEntityClient.js
  *
- * Drop-in replacement for ncClient.entities.* usage inside dataService.js.
- * Every entity wrapper exposes the same four methods Base44 does:
+ * Canonical Supabase entity access used throughout the frontend.
+ * Every entity wrapper exposes the established application methods:
  *   .create(data)              → supabase insert
  *   .filter(filters, sort)     → supabase select + eq filters
  *   .list(sort)                → supabase select all
  *   .update(id, data)          → supabase update by id
  *   .delete(id)                → supabase delete by id
  *
- * Sort strings follow the Base44 convention: "-created_date" means DESC.
+ * Sort strings use "-created_date" to mean descending order.
  * "created_date" is mapped to the Supabase column "created_at" for backward compat.
  * Every returned row gets a synthetic "created_date" and "updated_date" field so
  * callers that read those fields still work without change.
@@ -28,13 +28,13 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL     || "";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
-// Guard: if env vars are absent (e.g. VITE_DATA_LAYER=ncClient), create a no-op
-// client so the import itself never crashes the Base44 build path.
-export const supabase = (supabaseUrl && supabaseAnonKey)
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : createClient("https://placeholder.supabase.co", "placeholder-key");
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are required.");
+}
 
-// ── Column name map — Base44 field names → Supabase column names ──────────────
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// ── Column name map — Supabase field names → Supabase column names ──────────────
 // Applied on filter keys and sort strings. Does NOT rename payload fields on
 // insert/update — use FIELD_ALIASES per entity for that.
 const COL_MAP = {
@@ -234,7 +234,7 @@ function entityWrapper(table) {
     /**
      * filter(filters, sort, limit?) — selects rows matching all key=value pairs.
      * filters: plain object { company_id: "x", person_type: "staff" }
-     * sort:    Base44-style string e.g. "-created_date"
+     * sort:    Supabase-style string e.g. "-created_date"
      * limit:   optional integer cap on result count
      */
     async filter(filters = {}, sort = "-created_at", limit) {
@@ -338,7 +338,7 @@ function entityWrapper(table) {
 
     /**
      * subscribe(callback) — listen for INSERT/UPDATE/DELETE on this table.
-     * Mirrors the Base44 entity.subscribe() API.
+     * Mirrors the Supabase entity.subscribe() API.
      * Returns an unsubscribe function.
      */
     subscribe(callback) {
@@ -356,7 +356,7 @@ function entityWrapper(table) {
   };
 }
 
-// ── Entity registry — mirrors every entity in Base44 ─────────────────────────
+// ── Entity registry — mirrors every entity in Supabase ─────────────────────────
 // Key: the name used on ncClient.entities.* (PascalCase)
 // Value: the Supabase table name (snake_case, plural)
 
@@ -399,10 +399,10 @@ export const supabaseEntities = {
   Opportunity:      entityWrapper("opportunities"),
   MetricDefinition: entityWrapper("metric_definitions"),
 
-  // Platform internals — formerly Base44-only fallback, added via
+  // Platform internals — formerly Supabase-only fallback, added via
   // 003_supabase_entity_expansion.sql. Run that migration before deploying
   // this block, or every read/write to these entities will error against a
-  // nonexistent table instead of falling back to Base44.
+  // nonexistent table instead of falling back to Supabase.
   User:                 entityWrapper("user_profiles"),   // wraps existing auth table, not a new one
   RolePermissions:      entityWrapper("role_permissions"),
   UserAppAccess:        entityWrapper("user_app_access"),

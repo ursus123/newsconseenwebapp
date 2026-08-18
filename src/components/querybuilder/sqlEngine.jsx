@@ -2,7 +2,7 @@ import { ncClient } from "@/api/ncClient";
 import { UploadedDataStore } from "./UploadedDataStore";
 import { fetchOpenDataTable, OPEN_DATA_TABLES } from "./openDataAPIs";
 
-const RAILWAY_BASE = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL as RAILWAY_BASE } from "@/config/api";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 const RAILWAY_HEADERS = { "x-api-key": RAILWAY_API_KEY };
 
@@ -200,7 +200,7 @@ export const ANALYTICS_TABLES = {
 
 // ── Raw individual-record tables (python_layer raw.* schema) ──────────────
 // Endpoint: GET /raw/{entity}?company_id=...&limit=...
-// Returns full per-row records from Base44 — no aggregation, no transforms.
+// Returns full per-row records from Supabase — no aggregation, no transforms.
 // Use these when a user needs to query, chart, or report on individual records.
 export const RAW_TABLES = {
   raw_people: {
@@ -476,7 +476,7 @@ async function fetchAnalyticsTable(name, companyId) {
   const cfg = ANALYTICS_TABLES[name];
   if (!cfg) return [];
 
-  // Tier 1 — python_layer analytics.* (GET endpoint fetches Base44 live and transforms)
+  // Tier 1 — python_layer analytics.* (GET endpoint fetches Supabase live and transforms)
   try {
     const url = companyId
       ? `${RAILWAY_BASE}${cfg.endpoint}?company_id=${encodeURIComponent(companyId)}`
@@ -492,7 +492,7 @@ async function fetchAnalyticsTable(name, companyId) {
     }
   } catch { /* fall through */ }
 
-  // Tier 2 — raw table fallback (includes Base44 live fallback inside fetchRawTable)
+  // Tier 2 — raw table fallback (includes Supabase live fallback inside fetchRawTable)
   const rawName = ANALYTICS_TO_RAW[name];
   if (rawName) {
     const rows = await fetchRawTable(rawName, companyId);
@@ -1749,7 +1749,7 @@ async function loadTable(name, uploadedTables, companyId, masterDataSnapshot = {
     if (masterDataSnapshot[lower] && masterDataSnapshot[lower].length > 0) {
       return masterDataSnapshot[lower];
     }
-    // Fallback: fetch live from Base44 scoped to this tenant
+    // Fallback: fetch live from Supabase scoped to this tenant
     const filter = companyId ? { company_id: companyId } : {};
     return ncClient.entities[MASTER_TABLES[lower].entity].filter(filter);
   }
@@ -2077,7 +2077,7 @@ export async function executeSQL(sql, uploadedTables, companyId, masterDataSnaps
     if (!m) throw new Error("Invalid DELETE syntax.");
     const [, tableName, whereStr] = m;
     const tbl = tableName.toLowerCase();
-    // DELETE on any Base44 entity is always blocked in Query Builder.
+    // DELETE on any Supabase entity is always blocked in Query Builder.
     // Records must be deleted manually via the entity pages (People, Enterprises, etc.)
     // to preserve audit trail and prevent accidental bulk deletes.
     if (MASTER_TABLES[tbl]) {

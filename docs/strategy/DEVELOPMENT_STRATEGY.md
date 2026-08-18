@@ -179,6 +179,11 @@ isolated configuration, synthetic data, role-specific accounts, health checks,
 monitoring, smoke tests, migrations, and rollback. Release through local validation,
 commit/push, staging deployment, role/device verification, and production approval.
 
+The temporary `news-con-seen.com` launch follows the DNS freeze and reversible
+cutover contract in `docs/DNS_CUTOVER_RUNBOOK.md`. Root, `www`, and mail records
+remain protected until the replacement staging deployment passes online
+acceptance.
+
 ## Base44 retirement
 
 Inventory Base44 imports, URLs, fallbacks, and terminology; classify active,

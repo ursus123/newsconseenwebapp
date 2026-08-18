@@ -1,5 +1,5 @@
 /**
- * Role-based permission system for Base44 app
+ * Role-based permission system for Supabase app
  * Defines page access and CRUD operations per role
  */
 

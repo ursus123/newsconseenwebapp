@@ -17,7 +17,36 @@ if (sentryDsn) {
     integrations: [Sentry.browserTracingIntegration()],
     tracesSampleRate: 0.1,
     sendDefaultPii: false,
+    environment: import.meta.env.VITE_APP_ENV || "development",
+    beforeSend(event) {
+      if (event.request) {
+        delete event.request.cookies;
+        delete event.request.data;
+        if (event.request.headers) {
+          for (const key of Object.keys(event.request.headers)) {
+            if (["authorization", "cookie", "x-api-key", "apikey"].includes(key.toLowerCase())) {
+              event.request.headers[key] = "[Filtered]";
+            }
+          }
+        }
+      }
+      delete event.user;
+      return event;
+    },
   });
+
+  if ((import.meta.env.VITE_APP_ENV || "") === "staging") {
+    window.__NEWSCONSEEN_CAPTURE_STAGING_ERROR__ = () => {
+      const requestId = crypto.randomUUID();
+      Sentry.withScope((scope) => {
+        scope.setTag("controlled_test", "frontend");
+        scope.setTag("request_id", requestId);
+        scope.setContext("acceptance", { environment: "staging", tenant_safe: true });
+        Sentry.captureException(new Error("Controlled staging frontend monitoring test"));
+      });
+      return requestId;
+    };
+  }
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(

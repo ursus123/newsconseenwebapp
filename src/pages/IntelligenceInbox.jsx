@@ -17,6 +17,14 @@ import {
 } from "lucide-react";
 import { RAILWAY_URL, authHeaders } from "@/config/api";
 import SharedEmptyState from "@/components/shared/EmptyState";
+import {
+  INTELLIGENCE_ATTENTION_REASONS,
+  INTELLIGENCE_INBOX_EXCLUSIONS,
+} from "@/contracts/intelligenceTerminology";
+import {
+  legacyCollectionsFromItems,
+  normalizeIntelligenceEnvelope,
+} from "@/contracts/intelligenceItemContract";
 
 // ── Tab config ─────────────────────────────────────────────────────
 
@@ -100,6 +108,25 @@ function EvidenceList({ evidence }) {
   );
 }
 
+function SourceAuthority({ record }) {
+  const item = record?.contract_item;
+  if (!item?.source) return null;
+  const label = item.source.label || item.source.type.replaceAll("_", " ");
+  const authority = item.source.assertion_class.replaceAll("_", " ");
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-600"
+      title={`Source authority: ${authority}`}>
+      <ShieldAlert className="h-3 w-3 text-indigo-500" aria-hidden="true" />
+      <span>{label}</span>
+      <span className="text-slate-400">· {authority}</span>
+    </span>
+  );
+}
+
+function canPerform(record, action) {
+  return Boolean(record?.contract_item?.permitted_actions?.some(item => item.action === action && item.allowed));
+}
+
 // ── Insight Card ───────────────────────────────────────────────────
 
 function InsightCard({ insight, onAcknowledge, onDismiss, onCreateRec, onMarkActioned, loading }) {
@@ -107,6 +134,9 @@ function InsightCard({ insight, onAcknowledge, onDismiss, onCreateRec, onMarkAct
   const sev  = SEVERITY_STYLE[insight.severity] || SEVERITY_STYLE.medium;
   const type = TYPE_STYLE[insight.insight_type] || TYPE_STYLE.explanation;
   const TypeIcon = type.icon;
+  const canInvestigate = canPerform(insight, "investigate");
+  const canDismiss = canPerform(insight, "dismiss");
+  const canAct = canPerform(insight, "act");
 
   return (
     <div className={`bg-white border border-slate-200 rounded-xl border-l-4 ${sev.border} shadow-sm hover:shadow-md transition-shadow`}>
@@ -140,6 +170,7 @@ function InsightCard({ insight, onAcknowledge, onDismiss, onCreateRec, onMarkAct
                   {(insight.source || "").replace(/_/g, " ")}
                 </span>
               )}
+              <SourceAuthority record={insight} />
               {insight.subject_name && (
                 <>
                   <span className="text-[10px] text-slate-300">·</span>
@@ -178,7 +209,7 @@ function InsightCard({ insight, onAcknowledge, onDismiss, onCreateRec, onMarkAct
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: {
               initialMessage: `Tell me more about this ${(insight.insight_type || "insight").replace(/_/g, " ")}: "${insight.title}". What should I do about it?`,
-              context: { entity_type: "insight", entity_id: insight.id, entity_label: insight.title },
+              context: { entity_type: "intelligence_item", entity_id: insight.contract_item?.id || insight.id, entity_label: insight.title, intelligence_item: insight.contract_item },
             } }))}
             className="text-[11px] text-violet-600 hover:text-violet-800 font-medium flex items-center gap-1"
           >
@@ -189,20 +220,20 @@ function InsightCard({ insight, onAcknowledge, onDismiss, onCreateRec, onMarkAct
             <>
               <button
                 onClick={() => onAcknowledge(insight)}
-                disabled={loading}
+                disabled={loading || !canInvestigate}
                 className="text-[11px] text-slate-600 hover:text-slate-800 border border-slate-200 px-2.5 py-1 rounded-lg flex items-center gap-1"
               >
                 <CheckCircle2 className="w-3 h-3" /> Acknowledge
               </button>
               <button
-                onClick={() => onCreateRec(insight)}
+                onClick={() => onCreateRec(insight)} disabled={!canAct}
                 className="text-[11px] text-indigo-600 hover:text-indigo-800 border border-indigo-200 px-2.5 py-1 rounded-lg flex items-center gap-1"
               >
                 <Plus className="w-3 h-3" /> Recommend
               </button>
               <button
                 onClick={() => onDismiss(insight)}
-                disabled={loading}
+                disabled={loading || !canDismiss}
                 className="text-[11px] text-rose-500 hover:text-rose-700 flex items-center gap-1 ml-auto"
               >
                 <XCircle className="w-3 h-3" /> Dismiss
@@ -212,14 +243,14 @@ function InsightCard({ insight, onAcknowledge, onDismiss, onCreateRec, onMarkAct
           {insight.status === "acknowledged" && (
             <>
               <button
-                onClick={() => onCreateRec(insight)}
+                onClick={() => onCreateRec(insight)} disabled={!canAct}
                 className="text-[11px] text-indigo-600 hover:text-indigo-800 border border-indigo-200 px-2.5 py-1 rounded-lg flex items-center gap-1"
               >
                 <Plus className="w-3 h-3" /> Recommend
               </button>
               <button
                 onClick={() => onMarkActioned(insight)}
-                disabled={loading}
+                disabled={loading || !canAct}
                 className="text-[11px] text-emerald-600 hover:text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1"
               >
                 <CheckCircle2 className="w-3 h-3" /> Mark Actioned
@@ -237,6 +268,8 @@ function InsightCard({ insight, onAcknowledge, onDismiss, onCreateRec, onMarkAct
 function RecommendationCard({ rec, onApprove, onReject, loading }) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
+  const canApprove = canPerform(rec, "approve");
+  const canDecide = canPerform(rec, "decide");
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
@@ -268,6 +301,7 @@ function RecommendationCard({ rec, onApprove, onReject, loading }) {
             {rec.source && (
               <span className="text-[10px] text-slate-400">{rec.source.replace(/_/g, " ")}</span>
             )}
+            <SourceAuthority record={rec} />
           </div>
 
           {rec.rationale && (
@@ -281,7 +315,7 @@ function RecommendationCard({ rec, onApprove, onReject, loading }) {
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: {
               initialMessage: `Tell me more about this recommendation: "${rec.title}". Is this a good idea?`,
-              context: { entity_type: "recommendation", entity_id: rec.id, entity_label: rec.title },
+              context: { entity_type: "intelligence_item", entity_id: rec.contract_item?.id || rec.id, entity_label: rec.title, intelligence_item: rec.contract_item },
             } }))}
             className="text-[11px] text-violet-600 hover:text-violet-800 font-medium flex items-center gap-1 mt-2"
           >
@@ -297,7 +331,7 @@ function RecommendationCard({ rec, onApprove, onReject, loading }) {
                 className="text-xs min-h-16 resize-none"
               />
               <div className="flex gap-2">
-                <Button size="sm" variant="destructive" onClick={() => { onReject(rec, reason); setRejecting(false); }} disabled={loading}>
+                <Button size="sm" variant="destructive" onClick={() => { onReject(rec, reason); setRejecting(false); }} disabled={loading || !canDecide}>
                   Confirm Reject
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setRejecting(false)}>Cancel</Button>
@@ -307,15 +341,15 @@ function RecommendationCard({ rec, onApprove, onReject, loading }) {
 
           {rec.status === "proposed" && !rejecting && (
             <div className="flex items-center gap-2 mt-3">
-              <Button size="sm" variant="outline" onClick={() => onApprove(rec, { createTask: rec.action_type === "create_task" })} disabled={loading}
+              <Button size="sm" variant="outline" onClick={() => onApprove(rec, { createTask: rec.action_type === "create_task" })} disabled={loading || !canApprove}
                 className="text-emerald-700 border-emerald-200 hover:bg-emerald-50 flex items-center gap-1.5">
                 <ThumbsUp className="w-3 h-3" /> Approve
               </Button>
-              <Button size="sm" variant="outline" onClick={() => onApprove(rec, { createTask: true })} disabled={loading}
+              <Button size="sm" variant="outline" onClick={() => onApprove(rec, { createTask: true })} disabled={loading || !canApprove}
                 className="text-indigo-700 border-indigo-200 hover:bg-indigo-50 flex items-center gap-1.5">
                 <Plus className="w-3 h-3" /> Approve + Task
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setRejecting(true)} disabled={loading}
+              <Button size="sm" variant="ghost" onClick={() => setRejecting(true)} disabled={loading || !canDecide}
                 className="text-rose-600 hover:bg-rose-50 flex items-center gap-1.5">
                 <ThumbsDown className="w-3 h-3" /> Reject
               </Button>
@@ -352,6 +386,7 @@ function RiskCard({ risk, onUpdateStatus, loading }) {
           {risk.category && (
             <Badge className="text-[10px] px-1.5 py-0 bg-slate-100 text-slate-500 mt-1 capitalize">{risk.category}</Badge>
           )}
+          <div className="mt-1"><SourceAuthority record={risk} /></div>
           {risk.description && (
             <p className="text-xs text-slate-600 mt-2 leading-relaxed line-clamp-2">{risk.description}</p>
           )}
@@ -361,7 +396,7 @@ function RiskCard({ risk, onUpdateStatus, loading }) {
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: {
               initialMessage: `Tell me more about this risk: "${risk.title}". What's the best way to address it?`,
-              context: { entity_type: "risk", entity_id: risk.id, entity_label: risk.title },
+              context: { entity_type: "intelligence_item", entity_id: risk.contract_item?.id || risk.id, entity_label: risk.title, intelligence_item: risk.contract_item },
             } }))}
             className="text-[11px] text-violet-600 hover:text-violet-800 font-medium flex items-center gap-1 mt-2"
           >
@@ -415,6 +450,7 @@ function OpportunityCard({ opp, onUpdateStatus, loading }) {
           {opp.type && (
             <Badge className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 mt-1 capitalize">{opp.type}</Badge>
           )}
+          <div className="mt-1"><SourceAuthority record={opp} /></div>
           {opp.description && (
             <p className="text-xs text-slate-600 mt-2 leading-relaxed line-clamp-2">{opp.description}</p>
           )}
@@ -426,7 +462,7 @@ function OpportunityCard({ opp, onUpdateStatus, loading }) {
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("open-idjwi-panel", { detail: {
               initialMessage: `Tell me more about this opportunity: "${opp.title}". How should we pursue it?`,
-              context: { entity_type: "opportunity", entity_id: opp.id, entity_label: opp.title },
+              context: { entity_type: "intelligence_item", entity_id: opp.contract_item?.id || opp.id, entity_label: opp.title, intelligence_item: opp.contract_item },
             } }))}
             className="text-[11px] text-violet-600 hover:text-violet-800 font-medium flex items-center gap-1 mt-2"
           >
@@ -567,51 +603,36 @@ export default function IntelligenceInbox() {
   const companyId = currentUser?.company_id;
 
   // Fetch all intelligence objects
-  const { data: inbox = {}, isLoading, refetch } = useQuery({
+  const { data: inbox = {}, isLoading, isError, error: inboxError, refetch } = useQuery({
     queryKey: ["intelligence-inbox", companyId],
     queryFn:  async () => {
-      try {
-        const params = new URLSearchParams({ company_id: companyId || "", limit: "200" });
-        const res = await fetch(`${RAILWAY_URL}/intelligence/inbox?${params}`, {
-          headers: await authHeaders(),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.insights || data?.recommendations || data?.risks || data?.opportunities) return data;
-        }
-      } catch (_) {}
-
-      // Fallback: load each entity directly
-      const [insights, recommendations, risks, opportunities] = await Promise.allSettled([
-        intelligenceService.listInsights(currentUser),
-        intelligenceService.listRecommendations(currentUser),
-        intelligenceService.listRisks(currentUser),
-        intelligenceService.listOpportunities(currentUser),
-      ]).then(results => results.map(r => r.status === "fulfilled" ? r.value : []));
-
-      return {
-        insights,
-        recommendations,
-        risks,
-        opportunities,
-        summary: {
-          new_insights:  insights.filter(i => i.status === "new").length,
-          open_risks:    risks.filter(r => ["open","acknowledged"].includes(r.status)).length,
-          active_opps:   opportunities.filter(o => ["identified","evaluating","pursuing"].includes(o.status)).length,
-          pending_recs:  recommendations.filter(r => r.status === "proposed").length,
-        },
-      };
+      const params = new URLSearchParams({ company_id: companyId || "", limit: "200" });
+      const res = await fetch(`${RAILWAY_URL}/intelligence/inbox?${params}`, {
+        headers: await authHeaders(),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        const message = detail?.detail?.message || detail?.detail || `Intelligence Inbox request failed (${res.status})`;
+        throw new Error(typeof message === "string" ? message : "Intelligence Inbox is unavailable");
+      }
+      return normalizeIntelligenceEnvelope(await res.json(), companyId);
     },
     enabled:   !!currentUser,
     staleTime: 30000,
     refetchOnMount: "always",
   });
 
-  const insights        = inbox.insights        || [];
-  const recommendations = inbox.recommendations || [];
-  const risks           = inbox.risks           || [];
-  const opportunities   = inbox.opportunities   || [];
-  const summary         = inbox.summary         || {};
+  const legacyCollections = useMemo(() => legacyCollectionsFromItems(inbox.items || []), [inbox.items]);
+  const insights        = legacyCollections.insights;
+  const recommendations = legacyCollections.recommendations;
+  const risks           = legacyCollections.risks;
+  const opportunities   = legacyCollections.opportunities;
+  const summary = {
+    ...(inbox.summary || {}),
+    new_insights: inbox.summary?.new_insights ?? inbox.summary?.new_findings ?? 0,
+    active_opps: inbox.summary?.active_opps ?? inbox.summary?.active_opportunities ?? 0,
+    pending_recs: inbox.summary?.pending_recs ?? inbox.summary?.pending_recommendations ?? 0,
+  };
 
   // Derived tab lists
   const tabData = useMemo(() => ({
@@ -702,7 +723,7 @@ export default function IntelligenceInbox() {
             </div>
             <div>
               <h1 className="text-base font-bold text-slate-800">Intelligence Inbox</h1>
-              <p className="text-xs text-slate-500">AI, ML, enrichment, and agent outputs — all in one place</p>
+              <p className="text-xs text-slate-500">Governed findings that require attention, investigation, decision or action</p>
             </div>
           </div>
           <button onClick={() => refetch()}
@@ -710,6 +731,28 @@ export default function IntelligenceInbox() {
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} /> Refresh
           </button>
         </div>
+
+        <details className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-xs text-slate-600">
+          <summary className="cursor-pointer rounded font-bold text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+            What is the Intelligence Inbox?
+          </summary>
+          <div className="mt-3 grid gap-4 md:grid-cols-2">
+            <div>
+              <p className="font-semibold text-slate-700">What belongs here</p>
+              <p className="mt-1 leading-relaxed">
+                Evidence-backed findings validated and contextualized by Idjwi that require an authorized next step:
+                {` ${INTELLIGENCE_ATTENTION_REASONS.join(", ")}.`}
+              </p>
+            </div>
+            <div>
+              <p className="font-semibold text-slate-700">What stays outside</p>
+              <p className="mt-1 leading-relaxed">{INTELLIGENCE_INBOX_EXCLUSIONS.join(", ")}.</p>
+            </div>
+          </div>
+          <p className="mt-3 border-t border-indigo-100 pt-3 leading-relaxed">
+            Alerts deliver urgent conditions, Tasks assign work, Audit records history, and ML Models and Agents configure capabilities. This inbox coordinates the governed finding from evidence through decision, action and observed outcome.
+          </p>
+        </details>
 
         {/* Summary strip */}
         <SummaryStrip summary={summary} />
@@ -746,6 +789,12 @@ export default function IntelligenceInbox() {
           <div className="flex justify-center py-20">
             <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
           </div>
+        ) : isError ? (
+          <SharedEmptyState
+            icon={ShieldAlert}
+            message="Intelligence Inbox is unavailable"
+            sub={`${inboxError?.message || "The governed intelligence service could not be reached."} No direct-data fallback was used.`}
+          />
         ) : (
           <>
             {/* New insights tab */}

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import * as XLSX from "xlsx";
 
-const API_BASE = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL as API_BASE } from "@/config/api";
 
 const ENDPOINTS = {
   "Enterprise Summary": "/enterprise-summary",

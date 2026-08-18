@@ -23,7 +23,7 @@ import {
   ChevronRight, Command, Plus,
 } from "lucide-react";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 
 // ── Navigation commands ───────────────────────────────────────────────────────

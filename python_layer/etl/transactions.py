@@ -49,7 +49,7 @@ GROUP_COLUMNS = [
 
 def extract_transactions() -> pd.DataFrame:
     """
-    Extract all transaction records from Base44.
+    Extract all transaction records from Supabase.
     Returns raw DataFrame — no transformation applied here.
     """
     return fetch_supabase_entity_to_df("transactions")
@@ -117,7 +117,7 @@ def transform_transactions(df: pd.DataFrame) -> pd.DataFrame:
         logger.warning(
             "transform_transactions: no posted transactions found — "
             "financial dashboards will show zero. "
-            "Confirm transactions have been posted in Base44."
+            "Confirm transactions have been posted in Supabase."
         )
         return _empty_summary()
 
@@ -177,7 +177,7 @@ def transform_transactions(df: pd.DataFrame) -> pd.DataFrame:
     df["expense_amount_last_30d"] = df["amount"].where(df["is_expense"] & in_30d, 0.0)
     df["expense_amount_prev_30d"] = df["amount"].where(df["is_expense"] & in_prev_30d, 0.0)
 
-    # Days to pay: requires payment_date field (optional on Base44 transactions)
+    # Days to pay: requires payment_date field (optional on Supabase transactions)
     if "payment_date" in df.columns:
         df["payment_date_dt"] = pd.to_datetime(df["payment_date"], errors="coerce", utc=True)
         df["_days_to_pay"] = (

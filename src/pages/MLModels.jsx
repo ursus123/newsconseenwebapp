@@ -17,7 +17,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
 const API_HEADERS = { "x-api-key": RAILWAY_API_KEY, "Content-Type": "application/json" };
 
@@ -564,7 +564,7 @@ function ShiftDemandChart({ data }) {
 }
 
 // ── ResultsView — model-aware ──────────────────────────────────────────────────
-function ResultsView({ data, modelId, onPushToBase44, pushing }) {
+function ResultsView({ data, modelId, onPushToSupabase, pushing }) {
   if (!data) return null;
 
   // Warning / error from backend
@@ -607,20 +607,20 @@ function ResultsView({ data, modelId, onPushToBase44, pushing }) {
       {/* Data table */}
       <DataTable rows={rows} />
 
-      {/* Push to Base44 */}
-      {onPushToBase44 && rows.length > 0 && (
+      {/* Push to Supabase */}
+      {onPushToSupabase && rows.length > 0 && (
         <div className="flex justify-end">
           <Button
             size="sm"
             variant="outline"
             className="h-8 text-xs rounded-lg gap-1.5 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
-            onClick={onPushToBase44}
+            onClick={onPushToSupabase}
             disabled={pushing}
           >
             {pushing
               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
               : <Upload className="w-3.5 h-3.5" />}
-            {pushing ? "Pushing…" : "Push to Base44"}
+            {pushing ? "Pushing…" : "Push to Supabase"}
           </Button>
         </div>
       )}
@@ -722,17 +722,17 @@ export default function MLModels() {
     toast({ title: "Custom model added" });
   };
 
-  const pushToBase44 = async (modelId) => {
+  const pushToSupabase = async (modelId) => {
     const cid = currentUser?.company_id || "";
     setPushing(prev => ({ ...prev, [modelId]: true }));
     try {
-      const res = await fetch(`${RAILWAY_URL}/ml/push-to-ncClient?company_id=${cid}&model=${modelId}`, {
+      const res = await fetch(`${RAILWAY_URL}/ml/push-to-canonical?company_id=${cid}&model=${modelId}`, {
         method: "POST",
         headers: API_HEADERS,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-      toast({ title: "Pushed to Base44", description: `${data.pushed ?? 0} predictions written.` });
+      toast({ title: "Pushed to Supabase", description: `${data.pushed ?? 0} predictions written.` });
     } catch (e) {
       toast({ title: "Push failed", description: e.message, variant: "destructive" });
     } finally {
@@ -998,7 +998,7 @@ export default function MLModels() {
                         <ResultsView
                           data={result}
                           modelId={model.id}
-                          onPushToBase44={!model.isCustom ? () => pushToBase44(model.id) : null}
+                          onPushToSupabase={!model.isCustom ? () => pushToSupabase(model.id) : null}
                           pushing={pushing[model.id]}
                         />
                       )}

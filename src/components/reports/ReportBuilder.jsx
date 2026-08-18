@@ -229,7 +229,7 @@ export default function ReportBuilder({ report, folders, charts, currentUser, on
       "transaction-summary", "service-summary", "product-summary",
       "address-summary", "relationship-summary",
     ];
-    const API = "https://newsconseenwebapp-production.up.railway.app";
+    const API = RAILWAY_URL;
     const apiKey = import.meta.env.VITE_RAILWAY_API_KEY || "";
     for (const ep of endpoints) {
       try {
@@ -403,3 +403,4 @@ export default function ReportBuilder({ report, folders, charts, currentUser, on
     </div>
   );
 }
+import { RAILWAY_URL } from "@/config/api";

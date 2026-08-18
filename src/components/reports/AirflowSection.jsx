@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { ExternalLink, RefreshCw, Wind, Calendar } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
-const API_BASE = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL as API_BASE } from "@/config/api";
 
 const LOAD_ENDPOINTS = [
   { key: "enterprise_summary", path: "/load/enterprise-summary" },

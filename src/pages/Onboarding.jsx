@@ -6,7 +6,7 @@ import { ncClient } from "@/api/ncClient";
 import { supabase } from "@/api/supabaseEntityClient";
 import dataService from "@/services/dataService";
 import { createPageUrl } from "@/utils";
-import { RAILWAY_URL, RAILWAY_API_KEY } from "@/config/api";
+import { APP_URL, RAILWAY_URL, RAILWAY_API_KEY } from "@/config/api";
 
 const API_HEADERS = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
 
@@ -307,7 +307,7 @@ export default function Onboarding() {
           body: JSON.stringify({
             email: inv.email,
             role: inv.role,
-            redirect_to: `${window.location.origin}/AcceptInvite`,
+            redirect_to: `${APP_URL}/AcceptInvite`,
           }),
         }).catch(() => {})
       ));
@@ -343,7 +343,7 @@ export default function Onboarding() {
       // If user is already logged in, mark onboarding complete and go to dashboard
       const me = await ncClient.auth.me().catch(() => null);
       if (me) {
-        await ncClient.auth.updateMe({ onboarding_complete: true });
+        await ncClient.auth.updateMe({ onboarding_complete: true, setup_complete: true });
         await refreshUser();
         navigate(createPageUrl("CompanyGraphHome"));
       } else {

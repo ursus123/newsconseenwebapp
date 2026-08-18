@@ -29,7 +29,7 @@ def transform_entity_index(people_df: pd.DataFrame) -> pd.DataFrame:
         "Who became inactive in the last 30 days?"
 
     Columns produced:
-        entity_id           — Base44 person id
+        entity_id           — Supabase person id
         company_id
         enterprise_id       — linked enterprise (if present)
         entity_name         — display name (preferred_name or first+last)

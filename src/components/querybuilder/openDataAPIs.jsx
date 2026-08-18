@@ -8,7 +8,7 @@ const WORLDBANK  = "https://api.worldbank.org/v2";
 const ER_API     = "https://open.er-api.com/v6/latest";
 const REST_COUNTRIES = "https://restcountries.com/v3.1";
 const FDA_API    = "https://api.fda.gov";
-const RAILWAY_BASE = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 // WMO weather codes → human readable
 const WMO_CODES = {
@@ -326,10 +326,10 @@ export const OPEN_DATA_TABLES = {
   osm_nearby:                { label: "OSM Nearby",          provider: "OpenStreetMap", icon: "📍", color: "#16a34a", pingUrl: "https://nominatim.openstreetmap.org", columns: ["osm_id","name","amenity","lat","lon","address","opening_hours","phone","distance_km"] },
   weather_current:           { label: "Weather Current",     provider: "Open-Meteo",    icon: "🌤️", color: "#0284c7", pingUrl: "https://api.open-meteo.com",           columns: ["city","lat","lon","temperature_c","feels_like_c","humidity_pct","wind_speed_kmh","precipitation_mm","weather_description","local_time"] },
   weather_forecast:          { label: "Weather Forecast",    provider: "Open-Meteo",    icon: "🌧️", color: "#0284c7", pingUrl: "https://api.open-meteo.com",           columns: ["date","temp_max_c","temp_min_c","precipitation_mm","weather_description"] },
-  medications_api:           { label: "Medications Search",  provider: "Railway API",   icon: "💊", color: "#7c3aed", pingUrl: "https://newsconseenwebapp-production.up.railway.app", columns: ["rxcui","name","synonym","tty_label","is_generic","is_branded"] },
-  medications_recalls:       { label: "Med Recalls",         provider: "Railway API",   icon: "⚠️", color: "#7c3aed", pingUrl: "https://newsconseenwebapp-production.up.railway.app", columns: ["product_description","reason_for_recall","status","recall_initiation_date","recalling_firm","is_active"] },
-  medications_interactions:  { label: "Drug Interactions",   provider: "Railway API",   icon: "🔬", color: "#7c3aed", pingUrl: "https://newsconseenwebapp-production.up.railway.app", columns: ["drug1","drug2","severity","description","is_serious","source"] },
-  medications_label:         { label: "Drug Label",          provider: "Railway API",   icon: "📋", color: "#7c3aed", pingUrl: "https://newsconseenwebapp-production.up.railway.app", columns: ["drug_name","warnings","dosage_and_admin","contraindications","adverse_reactions","storage_conditions","drug_interactions","pregnancy_category"] },
+  medications_api:           { label: "Medications Search",  provider: "Railway API",   icon: "💊", color: "#7c3aed", pingUrl: RAILWAY_URL, columns: ["rxcui","name","synonym","tty_label","is_generic","is_branded"] },
+  medications_recalls:       { label: "Med Recalls",         provider: "Railway API",   icon: "⚠️", color: "#7c3aed", pingUrl: RAILWAY_URL, columns: ["product_description","reason_for_recall","status","recall_initiation_date","recalling_firm","is_active"] },
+  medications_interactions:  { label: "Drug Interactions",   provider: "Railway API",   icon: "🔬", color: "#7c3aed", pingUrl: RAILWAY_URL, columns: ["drug1","drug2","severity","description","is_serious","source"] },
+  medications_label:         { label: "Drug Label",          provider: "Railway API",   icon: "📋", color: "#7c3aed", pingUrl: RAILWAY_URL, columns: ["drug_name","warnings","dosage_and_admin","contraindications","adverse_reactions","storage_conditions","drug_interactions","pregnancy_category"] },
   fda_devices:               { label: "FDA Devices",         provider: "OpenFDA",       icon: "⚕️", color: "#dc2626", pingUrl: "https://api.fda.gov",                 columns: ["product_description","reason_for_recall","recall_initiation_date","recalling_firm","distribution_pattern","classification","status"] },
   fda_food_recalls:          { label: "FDA Food Recalls",    provider: "OpenFDA",       icon: "🍎", color: "#dc2626", pingUrl: "https://api.fda.gov",                 columns: ["product_description","reason_for_recall","recall_initiation_date","recalling_firm","status"] },
   worldbank_indicators:      { label: "World Bank",          provider: "World Bank",    icon: "🌍", color: "#ca8a04", pingUrl: "https://api.worldbank.org",            columns: ["country_name","country_code","indicator_name","indicator_code","year","value","unit"] },

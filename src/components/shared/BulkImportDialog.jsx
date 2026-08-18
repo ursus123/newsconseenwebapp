@@ -1,3 +1,4 @@
+import { RAILWAY_URL } from "@/config/api";
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -424,8 +425,6 @@ export default function BulkImportDialog({
 
   // ── Import ────────────────────────────────────────────────────────────
   const CHUNK_SIZE = 10;
-  const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-
   const handleImport = async () => {
     cancelRef.current = false;
     const rowsToImport = auditRows.filter(r => r.selected);

@@ -1,0 +1,241 @@
+{
+  "contract": "newsconseen-browser-role-acceptance.v1",
+  "environment": "staging",
+  "generatedAt": "2026-08-05T15:55:37.543Z",
+  "results": [
+    {
+      "role": "administrator",
+      "email": "acceptance-admin@news-con-seen.com",
+      "width": 1440,
+      "height": 900,
+      "surface": "desktop",
+      "status": "pass",
+      "detail": "{\"focused\":{\"tag\":\"BUTTON\",\"label\":\"Add with AI\"},\"refreshedAuthenticated\":true,\"url\":\"https://staging.news-con-seen.com/CompanyGraphHome\"}",
+      "har": "artifacts\\browser-acceptance\\administrator-desktop.har",
+      "legacyRequestMatches": 0,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()"
+      ],
+      "failedRequests": [
+        {
+          "url": "https://staging-api.news-con-seen.com/alerts/status",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/agents/approvals/pending?company_id=newsconseen-acceptance",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/intelligence/inbox?company_id=newsconseen-acceptance&limit=200",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/company-graph/audit",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/agents/approvals/pending?company_id=newsconseen-acceptance",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/intelligence/inbox?company_id=newsconseen-acceptance&limit=200",
+          "error": "net::ERR_ABORTED"
+        }
+      ]
+    },
+    {
+      "role": "manager",
+      "email": "acceptance-manager@news-con-seen.com",
+      "width": 1280,
+      "height": 800,
+      "surface": "desktop",
+      "status": "pass",
+      "detail": "{\"focused\":{\"tag\":\"BUTTON\",\"label\":\"Add with AI\"},\"refreshedAuthenticated\":true,\"url\":\"https://staging.news-con-seen.com/CompanyGraphHome\"}",
+      "har": "artifacts\\browser-acceptance\\manager-desktop.har",
+      "legacyRequestMatches": 0,
+      "consoleErrors": [
+        "TypeError: Failed to fetch\n    at https://staging.news-con-seen.com/assets/index-Dr3iG8rY.js:1092:2980\n    at b0t (https://staging.news-con-seen.com/assets/index-Dr3iG8rY.js:1092:9861)\n    at Mr (https://staging.news-con-seen.com/assets/index-Dr3iG8rY.js:1092:9607)\n    at https://staging.news-con-seen.com/assets/index-Dr3iG8rY.js:1108:9985\n    at txt._useSession (https://staging.news-con-seen.com/assets/index-Dr3iG8rY.js:1108:8197)\n    at async txt._getUser (https://staging.news-con-seen.com/ass",
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()"
+      ],
+      "failedRequests": [
+        {
+          "url": "https://staging-api.news-con-seen.com/intelligence/inbox?company_id=newsconseen-acceptance&limit=200",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/alerts/status",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://onqxuydbobwupijyheps.supabase.co/auth/v1/user",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/agents/approvals/pending?company_id=newsconseen-acceptance",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/agents/approvals/pending?company_id=newsconseen-acceptance",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/intelligence/inbox?company_id=newsconseen-acceptance&limit=200",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/company-graph/audit",
+          "error": "net::ERR_ABORTED"
+        }
+      ]
+    },
+    {
+      "role": "manager",
+      "email": "acceptance-manager@news-con-seen.com",
+      "width": 390,
+      "height": 844,
+      "surface": "mobile-manager",
+      "status": "pass",
+      "detail": "{\"focused\":{\"tag\":\"BUTTON\",\"label\":\"Add with AI\"},\"refreshedAuthenticated\":true,\"url\":\"https://staging.news-con-seen.com/CompanyGraphHome\"}",
+      "har": "artifacts\\browser-acceptance\\manager-mobile-manager.har",
+      "legacyRequestMatches": 0,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()"
+      ],
+      "failedRequests": [
+        {
+          "url": "https://staging-api.news-con-seen.com/intelligence/inbox?company_id=newsconseen-acceptance&limit=200",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/alerts/status",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/agents/approvals/pending?company_id=newsconseen-acceptance",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/company-graph/audit",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/agents/approvals/pending?company_id=newsconseen-acceptance",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/intelligence/inbox?company_id=newsconseen-acceptance&limit=200",
+          "error": "net::ERR_ABORTED"
+        }
+      ]
+    },
+    {
+      "role": "technician",
+      "email": "acceptance-technician@news-con-seen.com",
+      "width": 1366,
+      "height": 768,
+      "surface": "desktop",
+      "status": "pass",
+      "detail": "{\"focused\":{\"tag\":\"BUTTON\",\"label\":\"Add with AI\"},\"refreshedAuthenticated\":true,\"url\":\"https://staging.news-con-seen.com/CompanyGraphHome\"}",
+      "har": "artifacts\\browser-acceptance\\technician-desktop.har",
+      "legacyRequestMatches": 0,
+      "consoleErrors": [
+        "TypeError: Failed to fetch\n    at https://staging.news-con-seen.com/assets/index-Dr3iG8rY.js:1092:2980\n    at b0t (https://staging.news-con-seen.com/assets/index-Dr3iG8rY.js:1092:9861)\n    at Mr (https://staging.news-con-seen.com/assets/index-Dr3iG8rY.js:1092:9607)\n    at https://staging.news-con-seen.com/assets/index-Dr3iG8rY.js:1108:9985\n    at txt._useSession (https://staging.news-con-seen.com/assets/index-Dr3iG8rY.js:1108:8197)\n    at async txt._getUser (https://staging.news-con-seen.com/ass",
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()"
+      ],
+      "failedRequests": [
+        {
+          "url": "https://staging-api.news-con-seen.com/alerts/status",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/agents/approvals/pending?company_id=newsconseen-acceptance",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/intelligence/inbox?company_id=newsconseen-acceptance&limit=200",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging.news-con-seen.com/favicon.svg",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://onqxuydbobwupijyheps.supabase.co/auth/v1/user",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/company-graph/audit",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/agents/approvals/pending?company_id=newsconseen-acceptance",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/intelligence/inbox?company_id=newsconseen-acceptance&limit=200",
+          "error": "net::ERR_ABORTED"
+        }
+      ]
+    },
+    {
+      "role": "worker",
+      "email": "acceptance-worker@news-con-seen.com",
+      "width": 390,
+      "height": 844,
+      "surface": "mobile-worker",
+      "status": "pass",
+      "detail": "{\"focused\":{\"tag\":\"BUTTON\",\"label\":\"Add with AI\"},\"refreshedAuthenticated\":true,\"url\":\"https://staging.news-con-seen.com/CompanyGraphHome\"}",
+      "har": "artifacts\\browser-acceptance\\worker-mobile-worker.har",
+      "legacyRequestMatches": 0,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()",
+        "Failed to load resource: the server responded with a status of 401 ()"
+      ],
+      "failedRequests": [
+        {
+          "url": "https://staging-api.news-con-seen.com/alerts/status",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/agents/approvals/pending?company_id=newsconseen-acceptance",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/intelligence/inbox?company_id=newsconseen-acceptance&limit=200",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/company-graph/audit",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/agents/approvals/pending?company_id=newsconseen-acceptance",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://staging-api.news-con-seen.com/intelligence/inbox?company_id=newsconseen-acceptance&limit=200",
+          "error": "net::ERR_ABORTED"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "legacyRequestMatches": 0
+  }
+}

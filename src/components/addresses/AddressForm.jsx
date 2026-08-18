@@ -1,3 +1,4 @@
+import { RAILWAY_URL } from "@/config/api";
 import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -69,8 +70,6 @@ export default function AddressForm({ open, onClose, onSubmit, onArchive, initia
 
       let result = null;
       let usedStrategy = 0;
-
-      const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
       for (let i = 0; i < strategies.length; i++) {
         const response = await fetch(`${RAILWAY_URL}/geo/geocode?address=${encodeURIComponent(strategies[i])}`);
         const data = await response.json();

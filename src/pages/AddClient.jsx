@@ -3,7 +3,7 @@ import { ncClient } from "@/api/ncClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import dataService from "@/services/dataService";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
 const triggerETL = (entity, companyId) =>
   fetch(`${RAILWAY_URL}/load/${entity}-summary${companyId ? `?company_id=${encodeURIComponent(companyId)}` : ""}`, {

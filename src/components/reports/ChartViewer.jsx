@@ -4,7 +4,7 @@ import { executeSQL } from "@/components/querybuilder/sqlEngine";
 import ChartRenderer from "./ChartRenderer";
 import { freshnessLabel, queryRunLabel, rowCountLabel, sourceMeta } from "@/components/shared/chartUtils";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 const TONE = {
   emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",

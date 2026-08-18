@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Search, AlertTriangle, ChevronDown, Loader2 } from "lucide-react";
 
-const API_BASE = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL as API_BASE } from "@/config/api";
 
 // Cache recall checks per session
 const recallCache = {};

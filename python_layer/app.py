@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
@@ -85,6 +86,7 @@ from copilot.routes import idjwi_router, router as copilot_router
 
 # Phase 3B — Proactive Alerts
 from alerts.routes import router as alerts_router
+from integrations.routes import router as integrations_router
 
 # Phase 3C — Network Intelligence
 from network.routes import router as network_router
@@ -275,6 +277,17 @@ async def lifespan(app: FastAPI):
             max_instances=1,          # never overlap; skip if previous run is still going
             misfire_grace_time=60,    # tolerate up to 60s latency before skipping
         )
+        if os.getenv("BACKUP_S3_BUCKET") and settings.cron_secret:
+            from backup.engine import run_backup
+            scheduler.add_job(
+                run_backup,
+                trigger="interval",
+                hours=max(1, int(os.getenv("BACKUP_INTERVAL_HOURS", "24"))),
+                id="durable_backup",
+                max_instances=1,
+                misfire_grace_time=3600,
+            )
+            logger.info("Startup: durable backup scheduler enabled")
         scheduler.start()
         logger.info("Startup: ETL scheduler started — running every 5 minutes")
     except Exception as _sched_err:
@@ -297,12 +310,15 @@ if settings.sentry_dsn:
         import sentry_sdk
         from sentry_sdk.integrations.fastapi import FastApiIntegration
         from sentry_sdk.integrations.starlette import StarletteIntegration
+        from observability import scrub_sentry_event
 
         sentry_sdk.init(
             dsn=settings.sentry_dsn,
             integrations=[StarletteIntegration(), FastApiIntegration()],
             traces_sample_rate=0.1,
             send_default_pii=False,
+            environment=settings.app_env,
+            before_send=scrub_sentry_event,
         )
         _sentry_enabled = True
         logger.info("Startup: Sentry error monitoring enabled")
@@ -316,7 +332,7 @@ app = FastAPI(
     title="Newsconseen — Autonomous SME Operating System",
     description=(
         "**The Autonomous SME Operating System.**\n\n"
-        "Layer 1 — Enterprise OS: Base44 master data (Person, Enterprise, Product)\n"
+        "Layer 1 — Enterprise OS: Supabase master data (Person, Enterprise, Product)\n"
         "Layer 2 — Deployable Datamart: ETL pipeline, PostgreSQL, FastAPI\n"
         "Layer 3 — Autonomous Intelligence: Copilot + Alerts + Network Intelligence\n"
         "Layer 4 — Agentic AI: 8 autonomous agents, multi-LLM orchestration, "
@@ -327,10 +343,26 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+allowed_origins = [
+    origin.strip().rstrip("/")
+    for origin in settings.cors_allowed_origins.split(",")
+    if origin.strip()
+]
+if not allowed_origins:
+    raise RuntimeError("CORS_ALLOWED_ORIGINS must contain at least one trusted origin")
+if "*" in allowed_origins:
+    logger.warning("Wildcard CORS value ignored; using the trusted origin set")
+    allowed_origins = [
+        "http://localhost:5173",
+        "https://staging.news-con-seen.com",
+        "https://news-con-seen.com",
+        "https://www.news-con-seen.com",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -364,8 +396,7 @@ if _sentry_enabled:
                 scope.set_tag("path", request.url.path)
                 company_id = request.query_params.get("company_id")
                 if company_id:
-                    scope.set_tag("company_id", company_id)
-                    scope.set_user({"id": company_id})
+                    scope.set_tag("tenant_id", company_id)
             return await call_next(request)
 
     app.add_middleware(SentryContextMiddleware)
@@ -384,32 +415,44 @@ _PUBLIC_PATHS = {
 _CRON_PREFIXES = ("/load/", "/cron/", "/webhook/")
 
 
-_CORS_HEADERS = {
-    "Access-Control-Allow-Origin":  "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-    "Access-Control-Allow-Headers": "x-api-key, x-idjwi-api-key, x-idjwi-role, x-idjwi-user, x-idjwi-plan, x-cron-secret, Content-Type, Authorization, Accept, X-Requested-With, X-Request-ID",
-    "Access-Control-Expose-Headers": "X-Request-ID",
-    "Access-Control-Max-Age":       "86400",
-}
-
-
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
     """Attach an audit-safe correlation id to every backend response."""
     import uuid
     request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
     request.state.request_id = request_id
+    if _sentry_enabled:
+        sentry_sdk.set_tag("request_id", request_id)
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
     return response
 
 
+@app.post("/monitoring/test-error", include_in_schema=False)
+async def controlled_monitoring_error(request: Request, x_cron_secret: str = Header(default="")):
+    """Capture a sanitized staging-only Sentry event for acceptance evidence."""
+    if settings.app_env.lower() != "staging":
+        raise HTTPException(status_code=404, detail="Not found")
+    if not settings.cron_secret or x_cron_secret != settings.cron_secret:
+        raise HTTPException(status_code=403, detail="Invalid monitoring test authorization")
+    if not _sentry_enabled:
+        raise HTTPException(status_code=503, detail="Sentry is not configured")
+    with sentry_sdk.push_scope() as scope:
+        scope.set_tag("controlled_test", "backend")
+        scope.set_tag("request_id", request.state.request_id)
+        scope.set_context("acceptance", {"environment": "staging", "tenant_safe": True})
+        event_id = sentry_sdk.capture_exception(RuntimeError("Controlled staging backend monitoring test"))
+        sentry_sdk.flush(timeout=5)
+    return {"captured": True, "event_id": str(event_id), "request_id": request.state.request_id}
+
+
 @app.middleware("http")
 async def cors_and_auth_middleware(request: Request, call_next):
-    # Always handle OPTIONS preflight immediately with explicit CORS headers.
+    # Let the configured CORSMiddleware validate and answer preflight requests.
+    # Handling them here used to stamp `Access-Control-Allow-Origin: *`, which
+    # bypassed the trusted-origin contract used by web and staging deployments.
     if request.method == "OPTIONS":
-        from fastapi.responses import Response as _Resp
-        return _Resp(status_code=200, headers=_CORS_HEADERS)
+        return await call_next(request)
 
     # Check API key (skip if API_KEY not configured)
     expected = settings.api_key
@@ -418,19 +461,17 @@ async def cors_and_auth_middleware(request: Request, call_next):
         if path not in _PUBLIC_PATHS and not any(path.startswith(p) for p in _CRON_PREFIXES):
             provided = request.headers.get("x-api-key", "")
             if provided != expected:
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=401,
                     content={"detail": "Missing or invalid x-api-key header"},
-                    headers={"Access-Control-Allow-Origin": "*"},
                 )
+                origin = request.headers.get("origin", "").rstrip("/")
+                if origin in allowed_origins:
+                    response.headers["Access-Control-Allow-Origin"] = origin
+                    response.headers["Vary"] = "Origin"
+                return response
 
-    response = await call_next(request)
-
-    # Stamp every response with CORS headers so the browser never blocks it.
-    response.headers["Access-Control-Allow-Origin"]  = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-    response.headers["Access-Control-Allow-Headers"] = "x-api-key, x-idjwi-api-key, x-idjwi-role, x-idjwi-user, x-idjwi-plan, x-cron-secret, Content-Type, Authorization, Accept, X-Requested-With"
-    return response
+    return await call_next(request)
 
 # ----------------------------------------------------------
 # Mount all routers
@@ -456,6 +497,7 @@ app.include_router(company_graph_router)
 
 # Phase 3B — Proactive Alerts
 app.include_router(alerts_router)
+app.include_router(integrations_router)
 
 # Phase 3C — Network Intelligence
 app.include_router(network_router)
@@ -922,7 +964,7 @@ def root():
         "version": "4.9.0",
         "mantra":  "The Autonomous SME Operating System",
         "layers": {
-            "layer_1": "Enterprise OS — Base44 master data",
+            "layer_1": "Enterprise OS — Supabase master data",
             "layer_2": "Deployable Datamart — ETL + PostgreSQL + FastAPI",
             "layer_3": "Autonomous Intelligence — Copilot + Alerts + Network",
             "layer_4": "Agentic AI — 8 agents, orchestrator, approval gate, agent memory",
@@ -1097,7 +1139,7 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
     }
 
     # ── Step 1: Extract all entities in PARALLEL ──────────────────────────────
-    # All Base44 fetches are independent HTTP calls — fire them simultaneously.
+    # All Supabase fetches are independent HTTP calls — fire them simultaneously.
     # ThreadPoolExecutor: threads bypass Python's GIL for I/O-bound work.
     # max_workers=8 matches number of entities — each gets its own thread.
     # Wall-clock time drops from (sum of all fetches) → (slowest single fetch).
@@ -1151,7 +1193,7 @@ def cron_etl_all(x_cron_secret: str = Header(None)):
             "Cron: no company_ids found in ANY entity extract — "
             "running once without company_id scoping. "
             "Analytics rows will have NULL company_id and will NOT be queryable by the copilot. "
-            "Check that Base44 entity records include a company_id field."
+            "Check that Supabase entity records include a company_id field."
         )
         company_ids = [None]
 
@@ -1531,12 +1573,12 @@ def cron_etl_company(
     Scoped ETL refresh for a single company/tenant.
 
     Called by org admins via the 'Refresh My Data' button in Pipelines.jsx.
-    Extracts all Base44 data (no server-side filter is available — Base44
+    Extracts all Supabase data (no server-side filter is available — Supabase
     returns all records on every call), then filters in-memory to the caller's
     company_id before transforming and writing to analytics tables.
 
     Raw tables (raw.*) always receive the full extract — this is correct
-    behaviour because raw.* is a global mirror of Base44. Analytics tables
+    behaviour because raw.* is a global mirror of Supabase. Analytics tables
     (analytics.*) only receive rows matching the caller's company_id.
 
     Returns row counts and status scoped to the caller's company only.
@@ -1600,7 +1642,7 @@ def cron_etl_company(
             "status":     "no_data",
             "company_id": company_id,
             "detail":     (
-                "No records found for this company_id in Base44. "
+                "No records found for this company_id in Supabase. "
                 "Check that company_id is set correctly on your records."
             ),
             "raw_stored": list(raw_data.keys()),
@@ -1770,7 +1812,7 @@ def raw_stats():
     """
     Returns row counts for every table in the raw schema.
     Use this to verify the python_layer has captured the same
-    number of records as Base44. If counts differ, check ETL logs.
+    number of records as Supabase. If counts differ, check ETL logs.
     """
     from database import get_engine_safe
     from sqlalchemy import text as sqlt
@@ -1795,7 +1837,7 @@ def raw_stats():
     return {
         "schema": "raw",
         "tables": {r[0]: r[1] for r in rows},
-        "note":   "Counts should match Base44 entity totals. Re-run ETL if they differ.",
+        "note":   "Counts should match Supabase entity totals. Re-run ETL if they differ.",
     }
 
 
@@ -1905,7 +1947,7 @@ def debug_relationships(company_id: Optional[str] = Query(None)):
 
 # ----------------------------------------------------------
 # Analytics Summary Endpoints — Layer 2
-# GET  = read from Base44 → transform → return JSON
+# GET  = read from Supabase → transform → return JSON
 # POST /load/* = ETL write to PostgreSQL (triggered by mutations)
 # ----------------------------------------------------------
 

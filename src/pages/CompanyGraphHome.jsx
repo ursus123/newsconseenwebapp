@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import cytoscape from "cytoscape";
@@ -33,7 +34,7 @@ import {
   buildGraphData, toCytoscapeElements, filterForMode,
   GRAPH_MODES, GRAPH_CONTRACT_VERSION, assertGovernedGraphContract,
   buildIdjwiGraphContext, IDJWI_GRAPH_INTENTS, buildOperationalFocus,
-  semanticPositions, createLatestGraphRequestCoordinator,
+  buildSemanticClusters, semanticPositions, createLatestGraphRequestCoordinator,
 } from "@/services/companyGraphService";
 import { getAttentionSignals } from "@/utils/attentionSignals";
 import AccessibleInteractionHost, {
@@ -42,39 +43,41 @@ import AccessibleInteractionHost, {
   showNotice,
 } from "@/components/shared/AccessibleInteractionDialog";
 import AccessibleGraphView from "@/components/companyGraph/AccessibleGraphView";
+import {
+  DEFAULT_COMPANY_GRAPH_SECTIONS,
+  companyGraphDeviceCategory,
+  companyGraphSectionPreferenceKey,
+  normalizeCompanyGraphSections,
+} from "@/services/companyGraphPreferences";
+import { COMPANY_GRAPH_PRESENTATION_REGISTRY } from "@/services/companyGraphPresentationRegistry";
+import { requestCapability } from "@/services/capabilityState";
 
 // ── Entity type UI config ─────────────────────────────────────────────────────
-const ENTITY_CONFIG = {
-  enterprise:     { icon: Building2,   label: "Enterprises",     color: "#6366f1" },
-  person:         { icon: Users,        label: "People",          color: "#3b82f6" },
-  product:        { icon: Package,      label: "Products",        color: "#10b981" },
-  service:        { icon: Package,      label: "Services",        color: "#059669" },
-  task:           { icon: CheckSquare,  label: "Tasks",           color: "#f97316" },
-  transaction:    { icon: Receipt,      label: "Transactions",    color: "#f59e0b" },
-  address:        { icon: MapPin,       label: "Addresses",       color: "#14b8a6" },
-  territory:      { icon: MapPin,       label: "Territories",     color: "#0d9488" },
-  insight:        { icon: Lightbulb,    label: "Insights",        color: "#a855f7" },
-  risk:           { icon: ShieldAlert,  label: "Risks",           color: "#ef4444" },
-  opportunity:    { icon: TrendingUp,   label: "Opportunities",   color: "#22c55e" },
-  recommendation: { icon: Zap,          label: "Recommendations", color: "#fb923c" },
-  document:       { icon: Link2,        label: "Documents",       color: "#64748b" },
-  schedule:       { icon: CheckSquare,  label: "Schedules",       color: "#0ea5e9" },
-  signal:         { icon: TrendingUp,   label: "Signals",         color: "#8b5cf6" },
-  decision:       { icon: CheckCircle2, label: "Decisions",       color: "#2563eb" },
-  action:         { icon: Zap,          label: "Actions",         color: "#dc2626" },
-  operational_unit: { icon: Building2, label: "Operational units", color: "#4f46e5" },
-  animal:         { icon: Circle,       label: "Animals",         color: "#84cc16" },
-  plot:           { icon: MapPin,       label: "Plots",           color: "#65a30d" },
-  observation:    { icon: Eye,          label: "Observations",    color: "#7c3aed" },
-  external_observation: { icon: Eye,    label: "External observations", color: "#7c3aed" },
-  quality_cluster: { icon: Unlink,      label: "Summarized records", color: "#64748b" },
+const ENTITY_ICONS = {
+  enterprise: Building2, operational_unit: Building2, person: Users,
+  product: Package, service: Package, task: CheckSquare, transaction: Receipt,
+  address: MapPin, territory: MapPin, insight: Lightbulb, risk: ShieldAlert,
+  opportunity: TrendingUp, recommendation: Zap, document: Link2,
+  schedule: CheckSquare, signal: TrendingUp, decision: CheckCircle2, action: Zap,
+  animal: Circle, plot: MapPin, observation: Eye, external_observation: Eye,
+  quality_cluster: Unlink,
 };
+const ENTITY_CONFIG = Object.freeze(Object.fromEntries(
+  Object.entries(COMPANY_GRAPH_PRESENTATION_REGISTRY).map(([type, presentation]) => [type, {
+    icon: ENTITY_ICONS[type] || Circle,
+    label: presentation.label,
+    color: presentation.accent,
+    shape: presentation.shape,
+    preferredLayouts: presentation.preferredLayouts,
+  }]),
+));
 
 const reportGraphError = (title, error) => showNotice({
   title,
   message: error?.message || "The requested Company Graph action could not be completed.",
   tone: "error",
 });
+const graphMotionDuration = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? 0 : 350;
 
 // ── Cytoscape graph style ─────────────────────────────────────────────────────
 const CY_STYLE = [
@@ -84,38 +87,57 @@ const CY_STYLE = [
       "background-color":   "data(nodeColor)",
       "shape":              "data(shape)",
       "label":              "data(label)",
-      "color":              "#ffffff",
+      "color":              "#334155",
       "text-valign":        "center",
       "text-halign":        "center",
-      "font-size":          "10px",
-      "font-weight":        "600",
+      "font-size":          "9px",
+      "font-weight":        "700",
       "text-wrap":          "ellipsis",
-      "text-max-width":     "80px",
+      "text-max-width":     "64px",
       "width":              "data(size)",
       "height":             "data(size)",
       "border-color":       "data(borderColor)",
       "border-width":       "data(borderWidth)",
       "border-opacity":     1,
-      "text-outline-color": "#0f172a",
-      "text-outline-width": 1,
+      "text-outline-width": 0,
+      "shadow-blur":        12,
+      "shadow-color":       "#64748b",
+      "shadow-opacity":     0.14,
+      "shadow-offset-y":    3,
       "transition-property": "background-color, border-color, border-width, opacity",
       "transition-duration": "200ms",
     },
   },
   {
-    selector: "node.zoom-detail",
+    selector: "node.zoom-medium",
+    style: {
+      "label": "data(mediumLabel)",
+      "shape": "round-rectangle",
+      "width": "data(cardWidth)",
+      "height": 48,
+      "text-wrap": "wrap",
+      "text-max-width": "140px",
+      "font-size": "10px",
+    },
+  },
+  {
+    selector: "node.zoom-close",
     style: {
       "label": "data(detailLabel)",
+      "shape": "round-rectangle",
+      "width": "data(cardWidth)",
+      "height": "data(cardHeight)",
       "text-wrap": "wrap",
-      "text-max-width": "130px",
+      "text-max-width": "150px",
       "font-size": "11px",
+      "line-height": 1.35,
     },
   },
   {
     selector: "node.presentation-cluster",
     style: {
       "background-fill": "linear-gradient",
-      "background-gradient-stop-colors": "#334155 #64748b",
+      "background-gradient-stop-colors": "#f8fafc #e2e8f0",
       "border-style": "dashed",
       "border-width": 3,
     },
@@ -147,9 +169,11 @@ const CY_STYLE = [
   {
     selector: "node:selected",
     style: {
-      "border-color": "#ffffff",
-      "border-width":  3,
-      "box-shadow":   "0 0 0 4px rgba(255,255,255,0.3)",
+      "border-color": "#059669",
+      "border-width":  4,
+      "shadow-color": "#10b981",
+      "shadow-opacity": 0.35,
+      "shadow-blur": 18,
     },
   },
   {
@@ -159,7 +183,7 @@ const CY_STYLE = [
   {
     selector: "node.highlighted",
     style: {
-      "border-color": "#fbbf24",
+      "border-color": "#0d9488",
       "border-width":  4,
       "opacity":       1,
     },
@@ -169,12 +193,34 @@ const CY_STYLE = [
     style: {
       "line-color":         "#64748b",
       "width":              "data(width)",
-      "opacity":            0.72,
+      "opacity":            0.82,
       "curve-style":        "bezier",
       "target-arrow-shape": "triangle",
       "target-arrow-color": "#64748b",
-      "arrow-scale":        0.9,
+      "arrow-scale":        1.05,
+      "transition-property": "line-color, target-arrow-color, width, opacity",
+      "transition-duration": "160ms",
     },
+  },
+  {
+    selector: "edge.assertion-operator-confirmed-assertion",
+    style: { "line-color": "#059669", "target-arrow-color": "#059669", "line-style": "solid" },
+  },
+  {
+    selector: "edge.assertion-deterministic-derivation, edge.assertion-canonical-reference-projection",
+    style: { "line-color": "#2563eb", "target-arrow-color": "#2563eb", "line-style": "dashed" },
+  },
+  {
+    selector: "edge.assertion-analytical-inference",
+    style: { "line-color": "#7c3aed", "target-arrow-color": "#7c3aed", "line-style": "dashed" },
+  },
+  {
+    selector: "edge.assertion-external-observation",
+    style: { "line-color": "#0891b2", "target-arrow-color": "#0891b2", "line-style": "dashed" },
+  },
+  {
+    selector: "edge.assertion-advisor-proposal, edge.edge-proposed",
+    style: { "line-color": "#d97706", "target-arrow-color": "#d97706", "line-style": "dashed" },
   },
   {
     selector: "edge.edge-derived",
@@ -195,46 +241,58 @@ const CY_STYLE = [
     },
   },
   {
-    selector: "edge.zoom-detail",
+    selector: "edge.edge-rejected",
+    style: { "display": "none" },
+  },
+  {
+    selector: "edge.show-label, edge.highlighted",
     style: {
-      "label": "data(detailLabel)", "color": "#e2e8f0", "font-size": "10px",
-      "text-background-color": "#0f172a", "text-background-opacity": 0.86,
-      "text-background-padding": "3px", "text-rotation": "autorotate",
+      "label": "data(label)", "color": "#334155", "font-size": "10px",
+      "font-weight": "700", "text-background-color": "#ffffff", "text-background-opacity": 0.94,
+      "text-background-padding": "4px", "text-background-shape": "roundrectangle", "text-rotation": "autorotate",
     },
   },
   {
     selector: "edge.has-evidence",
-    style: { "source-arrow-shape": "circle", "source-arrow-color": "#38bdf8" },
+    style: { "source-arrow-shape": "circle", "source-arrow-color": "#4f46e5", "source-arrow-fill": "filled" },
   },
   {
     selector: "edge:selected",
     style: {
-      "line-color": "#fbbf24", "target-arrow-color": "#fbbf24",
-      "width": 4, "opacity": 1, "label": "data(label)", "color": "#f8fafc",
-      "font-size": "11px", "font-weight": "700", "text-background-color": "#0f172a",
-      "text-background-opacity": 0.9, "text-background-padding": "4px",
+      "line-color": "#059669", "target-arrow-color": "#059669",
+      "width": 5, "opacity": 1, "label": "data(detailLabel)", "color": "#334155",
+      "font-size": "11px", "font-weight": "700", "text-background-color": "#ffffff",
+      "text-background-opacity": 0.96, "text-background-padding": "5px", "text-background-shape": "roundrectangle",
       "text-rotation": "autorotate",
     },
   },
   {
     selector: "edge.hovered",
     style: {
-      "line-color": "#38bdf8", "target-arrow-color": "#38bdf8", "opacity": 1,
-      "label": "data(label)", "color": "#f8fafc", "font-size": "10px",
-      "text-background-color": "#0f172a", "text-background-opacity": 0.9,
-      "text-background-padding": "3px", "text-rotation": "autorotate",
+      "line-color": "#0d9488", "target-arrow-color": "#0d9488", "opacity": 1,
+      "label": "data(detailLabel)", "color": "#334155", "font-size": "10px",
+      "text-background-color": "#ffffff", "text-background-opacity": 0.96,
+      "text-background-padding": "4px", "text-background-shape": "roundrectangle", "text-rotation": "autorotate",
     },
   },
   {
     selector: "edge.highlighted",
     style: {
-      "line-color": "#fbbf24",
+      "line-color": "#0d9488",
       "opacity":    0.9,
     },
   },
   {
     selector: "edge.dimmed",
     style: { "opacity": 0.05 },
+  },
+  {
+    selector: ".hover-dim",
+    style: { "opacity": 0.08 },
+  },
+  {
+    selector: "node.hover-endpoint",
+    style: { "border-color": "#0d9488", "border-width": 4, "opacity": 1 },
   },
 ];
 
@@ -283,12 +341,14 @@ function openIdjwiGraphAction(question, intent, context, extraContext = {}) {
     detail: { initialMessage: question, context: { ...context, ...extraContext, intent } },
   }));
 }
-
 // ── Context Panel ─────────────────────────────────────────────────────────────
 function ContextPanel({
   selected, onClose, navigate, companyId, onGraphRefresh, graphContext,
   onInspectNode, onExpand, neighborhoodDepth = 1, inspectionState,
   isPinned, onTogglePin, isCompared, onToggleCompare,
+  onExpandCluster, onCreateRepairWork,
+  onRestorePrevious, canRestorePrevious = false,
+  onCandidateDecision,
   insights = [], risks = [], opportunities = [],
 }) {
   if (!selected) {
@@ -312,7 +372,7 @@ function ContextPanel({
           ))}
         </div>
         <div className="p-4 border-t border-slate-50">
-          <p className="text-[10px] text-slate-300 text-center">Drag to pan · Scroll to zoom · Click node to inspect</p>
+          <p className="text-[11px] text-slate-300 text-center">Drag to pan · Scroll to zoom · Click node to inspect</p>
         </div>
       </div>
     );
@@ -320,6 +380,7 @@ function ContextPanel({
 
   if (selected.edge) {
     const { edge, sourceNode, targetNode } = selected;
+    const relationshipCandidate = selected.relationshipCandidate;
     const evidence = edge.evidence?.[0] || {};
     const isFact = ["canonical_relationship", "operator_confirmed_assertion"].includes(edge.assertion_class);
     const canPropose = edge.permitted_actions?.some(action => action.action === "record_proposal" && action.allowed);
@@ -379,6 +440,7 @@ function ContextPanel({
             <p className="text-sm font-black text-slate-800">Explain connection</p>
             <p className="text-xs text-slate-500 capitalize">{(edge.predicate || edge.relationship_type || "related to").replaceAll("_", " ")}</p>
           </div>
+          {canRestorePrevious && <button onClick={onRestorePrevious} className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-bold text-slate-600">Previous</button>}
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -388,46 +450,46 @@ function ContextPanel({
             <p className="font-bold">{targetNode?.label || edge.target}</p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${isFact ? "bg-emerald-100 text-emerald-700" : "bg-violet-100 text-violet-700"}`}>{isFact ? "Verified fact" : "Derived connection"}</span>
-            <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-600">{Math.round((edge.confidence ?? 0) * 100)}% confidence</span>
-            <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-600 capitalize">{edge.status || "active"}</span>
-            <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-600 capitalize">{(edge.verification_state || "unverified").replaceAll("_", " ")}</span>
+            <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${isFact ? "bg-emerald-100 text-emerald-700" : "bg-violet-100 text-violet-700"}`}>{isFact ? "Verified fact" : "Derived connection"}</span>
+            <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-600">{Math.round((edge.confidence ?? 0) * 100)}% confidence</span>
+            <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-600 capitalize">{edge.status || "active"}</span>
+            <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-600 capitalize">{(edge.verification_state || "unverified").replaceAll("_", " ")}</span>
           </div>
           <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Why this connection exists</p>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Why this connection exists</p>
             <p className="text-xs text-slate-700 leading-relaxed">{evidence.explanation || "The graph projection found a canonical reference between these records."}</p>
           </div>
           <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Evidence ({edge.evidence?.length || 0})</p>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Evidence ({edge.evidence?.length || 0})</p>
             <div className="space-y-1.5">
               {(edge.evidence || []).map(item => (
-                <div key={item.evidence_id} className="rounded-lg border border-slate-200 p-2 text-[10px]">
+                <div key={item.evidence_id} className="rounded-lg border border-slate-200 p-2 text-[11px]">
                   <p className="font-bold text-slate-700 break-all">{item.evidence_id}</p>
                   <p className="text-slate-500 mt-0.5">{item.explanation}</p>
                   <p className="text-slate-400 mt-1">{item.source_zone} · {item.source_table} · record {item.source_record_id}</p>
                 </div>
               ))}
-              {!edge.evidence?.length && <p className="text-[10px] text-amber-600">No governed evidence record was returned for this relationship.</p>}
+              {!edge.evidence?.length && <p className="text-[11px] text-amber-600">No governed evidence record was returned for this relationship.</p>}
             </div>
           </div>
           <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 text-xs">
-            {[["Source", evidence.source_table || "Canonical ontology"], ["Record", evidence.source_record_id || "Not provided"], ["Data zone", evidence.source_zone || "canonical"], ["Assertion", (edge.assertion_class || "unclassified").replaceAll("_", " ")], ["Assertion state", (edge.assertion_state || edge.status || "active").replaceAll("_", " ")], ["Rule", evidence.derivation_rule || (isFact ? "Direct tenant assertion" : "Governed projection")], ["Valid from", edge.temporal?.valid_from || "Not specified"], ["Valid to", edge.temporal?.valid_to || "Current"], ["Observed", edge.temporal?.observed_at || "Not specified"], ["Confirmed", edge.temporal?.confirmed_at || "Not confirmed"], ["Rejected", edge.temporal?.rejected_at || "Not rejected"]].map(([label, value]) => (
+            {[["Source", evidence.source_table || "Canonical ontology"], ["Record", evidence.source_record_id || "Not provided"], ["Data zone", evidence.source_zone || "canonical"], ["Assertion", (edge.assertion_class || "unclassified").replaceAll("_", " ")], ["Assertion state", (edge.assertion_state || edge.status || "active").replaceAll("_", " ")], ["Contradictions", edge.contradictions?.length ? `${edge.contradictions.length} disclosed` : "None disclosed"], ["Rule", evidence.derivation_rule || (isFact ? "Direct tenant assertion" : "Governed projection")], ["Valid from", edge.temporal?.valid_from || "Not specified"], ["Valid to", edge.temporal?.valid_to || "Current"], ["Observed", edge.temporal?.observed_at || "Not specified"], ["Confirmed", edge.temporal?.confirmed_at || "Not confirmed"], ["Rejected", edge.temporal?.rejected_at || "Not rejected"]].map(([label, value]) => (
               <div key={label} className="flex gap-3 justify-between p-2.5"><span className="text-slate-400">{label}</span><span className="text-slate-700 font-medium text-right break-all">{value}</span></div>
             ))}
           </div>
           <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Assertion history</p>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Assertion history</p>
             {assertionHistory.length ? (
               <div className="space-y-1.5">
                 {assertionHistory.map((event, index) => (
-                  <div key={`${event.occurred_at || "event"}-${index}`} className="rounded-lg border border-slate-200 p-2 text-[10px] text-slate-600">
+                  <div key={`${event.occurred_at || "event"}-${index}`} className="rounded-lg border border-slate-200 p-2 text-[11px] text-slate-600">
                     <p className="font-bold capitalize">{event.from_state || "new"} → {event.to_state}</p>
                     <p>{event.reason || "No reason recorded"}</p>
                     <p className="text-slate-400">{event.occurred_at ? new Date(event.occurred_at).toLocaleString() : "Time unavailable"} · evidence v{event.evidence_version || 1}</p>
                   </div>
                 ))}
               </div>
-            ) : <p className="text-[10px] text-slate-400">No operator state changes have been recorded for this assertion.</p>}
+            ) : <p className="text-[11px] text-slate-400">No operator state changes have been recorded for this assertion.</p>}
           </div>
           <button
             onClick={() => openIdjwiGraphAction(
@@ -438,6 +500,14 @@ function ContextPanel({
             className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700"
           ><Sparkles className="w-3.5 h-3.5" /> Ask Idjwi about this connection</button>
           <div className="grid grid-cols-2 gap-2">
+            {relationshipCandidate?.assertion_state === "proposed" && <>
+              <button onClick={() => onCandidateDecision?.(relationshipCandidate, "confirm")} className="py-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Confirm proposal</button>
+              <button onClick={async () => {
+                const corrected = await requestText({ title: "Edit relationship predicate", message: "Enter the governed predicate that accurately describes this proposed connection.", label: "Governed predicate", defaultValue: relationshipCandidate.predicate || "", confirmLabel: "Review correction" });
+                if (corrected?.trim() && corrected.trim() !== relationshipCandidate.predicate) onCandidateDecision?.(relationshipCandidate, "confirm", corrected.trim());
+              }} className="py-2 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">Edit proposal</button>
+              <button onClick={() => onCandidateDecision?.(relationshipCandidate, "reject")} className="py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">Reject proposal</button>
+            </>}
             {canPropose && <button onClick={() => govern("propose").catch(error => showNotice({ title: "Relationship proposal failed", message: error.message, tone: "error" }))} className="py-2 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">Record proposal</button>}
             {canConfirm && <button onClick={() => govern("confirm").catch(error => showNotice({ title: "Relationship confirmation failed", message: error.message, tone: "error" }))} className="py-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Confirm</button>}
             {canConfirm && <button onClick={() => govern("edit").catch(error => showNotice({ title: "Relationship correction failed", message: error.message, tone: "error" }))} className="py-2 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">Edit & confirm</button>}
@@ -529,6 +599,7 @@ function ContextPanel({
         <button onClick={() => onTogglePin?.(node)} title={isPinned ? "Unpin node" : "Pin node"} aria-label={isPinned ? "Unpin node" : "Pin node"} className={`p-1.5 rounded-lg border ${isPinned ? "bg-amber-50 text-amber-700 border-amber-200" : "text-slate-400 border-slate-200 hover:bg-slate-50"}`}>
           <Pin className="w-3.5 h-3.5" />
         </button>
+        {canRestorePrevious && <button onClick={onRestorePrevious} className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-bold text-slate-600">Previous</button>}
         <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 shrink-0">
           <X className="w-4 h-4" />
         </button>
@@ -548,25 +619,58 @@ function ContextPanel({
         )}
         {/* Status badges */}
         <div className="flex flex-wrap gap-1.5">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
             importance {Math.round((node.importance || 0) * 100)}%
           </span>
           {node.risk_level && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
               {node.risk_level} risk
             </span>
           )}
           {node.has_opportunity && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
               opportunity
             </span>
           )}
           {node.is_unconnected && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">
               unconnected
             </span>
           )}
         </div>
+
+        {node.presentation_only && Array.isArray(meta.member_ids) && meta.member_ids.length > 0 && (
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-[11px] text-slate-700">
+            <p className="font-black text-indigo-900">Governed summary cluster</p>
+            <p className="mt-1 leading-relaxed">{meta.explanation || "Authorized lower-attention records were summarized to preserve an understandable operational view."}</p>
+            <p className="mt-2 text-[11px] text-slate-500">Why summarized: {meta.reason || "bounded operational relevance"}</p>
+            <p className="text-[11px] text-slate-500">Source pattern: {meta.source_summary || "multiple authorized sources"}</p>
+            <p className="text-[11px] text-emerald-700">Critical and high-importance records are never concealed in this cluster.</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button onClick={() => onExpandCluster?.(node)} className="rounded-lg border border-indigo-200 bg-white px-2 py-2 font-bold text-indigo-700">Expand {meta.record_count || ""} records</button>
+              <button onClick={() => openIdjwiGraphAction(
+                `Explain why these ${meta.record_count || ""} records were summarized and what deserves attention.`,
+                IDJWI_GRAPH_INTENTS.EXPLAIN_NODE, graphContext,
+                { selected_node_id: node.id, graph_cluster: node },
+              )} className="rounded-lg bg-emerald-600 px-2 py-2 font-bold text-white">Ask Idjwi</button>
+              {meta.repair_eligible && <button onClick={() => onCreateRepairWork?.(node)} className="col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-2 font-bold text-amber-800">Create governed repair work</button>}
+            </div>
+          </div>
+        )}
+        {node.presentation_only && (!Array.isArray(meta.member_ids) || meta.member_ids.length === 0) && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-700">
+            <p className="font-black">Bounded graph summary</p>
+            <p className="mt-1">{meta.explanation || "Records outside the bounded operational packet are summarized without exposing or inventing their details."}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button onClick={() => navigate(createPageUrl("DataReadiness"))} className="rounded-lg border border-slate-200 bg-white px-2 py-2 font-bold">Open Data Readiness</button>
+              <button onClick={() => openIdjwiGraphAction(
+                `Explain this bounded graph summary: ${node.label}.`,
+                IDJWI_GRAPH_INTENTS.EXPLAIN_NODE, graphContext,
+                { selected_node_id: node.id, graph_cluster: node },
+              )} className="rounded-lg bg-emerald-600 px-2 py-2 font-bold text-white">Ask Idjwi</button>
+            </div>
+          </div>
+        )}
 
         {/* Field details */}
         {details.length > 0 && (
@@ -580,9 +684,11 @@ function ContextPanel({
           </div>
         )}
 
+        {node.permitted_actions?.length > 0 && <div><p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-slate-400">Permitted actions</p><div className="flex flex-wrap gap-1">{node.permitted_actions.map(action => <span key={action.action} className={`rounded-full px-2 py-1 text-[11px] font-bold ${action.allowed ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{action.action.replaceAll("_", " ")}{action.requires_approval ? " · approval" : ""}</span>)}</div></div>}
+
         {relationshipGroups.map(group => group.edges.length > 0 && (
           <div key={group.label}>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">
               {group.label} relationships ({group.edges.length})
             </p>
             <div className="space-y-1">
@@ -595,9 +701,9 @@ function ContextPanel({
                     <EndpointIcon className="w-3.5 h-3.5 shrink-0" style={{ color: endpointConfig.color || "#64748b" }} />
                     <span className="min-w-0 flex-1">
                       <span className="block text-[11px] font-semibold text-slate-700 truncate">{endpoint?.label || (group.label === "Outgoing" ? edge.target : edge.source)}</span>
-                      <span className="block text-[9px] text-amber-600 capitalize truncate">{(edge.predicate || edge.relationship_type || "related to").replaceAll("_", " ")}</span>
+                      <span className="block text-[11px] text-amber-600 capitalize truncate">{(edge.predicate || edge.relationship_type || "related to").replaceAll("_", " ")}</span>
                     </span>
-                    <span className="text-[9px] text-slate-400">{Math.round((edge.confidence ?? 0) * 100)}%</span>
+                    <span className="text-[11px] text-slate-400">{Math.round((edge.confidence ?? 0) * 100)}%</span>
                   </button>
                 );
               })}
@@ -607,13 +713,13 @@ function ContextPanel({
 
         {operationalGroups.some(group => group.nodes.length) && (
           <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Operational context</p>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Operational context</p>
             <div className="grid grid-cols-2 gap-2">
               {operationalGroups.map(group => (
                 <div key={group.label} className={`rounded-xl p-2.5 ${group.color}`}>
-                  <p className="text-[10px] font-black uppercase">{group.label} · {group.nodes.length}</p>
+                  <p className="text-[11px] font-black uppercase">{group.label} · {group.nodes.length}</p>
                   {group.nodes.slice(0, 3).map(item => (
-                    <button key={item.id} onClick={() => onInspectNode?.(item)} className="block w-full text-left text-[10px] truncate mt-1 hover:underline">{item.label}</button>
+                    <button key={item.id} onClick={() => onInspectNode?.(item)} className="block w-full text-left text-[11px] truncate mt-1 hover:underline">{item.label}</button>
                   ))}
                 </div>
               ))}
@@ -624,7 +730,7 @@ function ContextPanel({
         {/* App signals */}
         {appSignals.length > 0 && (
           <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">
               App Signals ({appSignals.length})
             </p>
             <div className="space-y-1.5">
@@ -645,9 +751,9 @@ function ContextPanel({
                         {sig.title || sig._kind}
                       </p>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">{appLabel}</span>
+                        <span className="text-[11px] font-bold text-slate-400 uppercase">{appLabel}</span>
                         {sev !== "info" && (
-                          <span className={`text-[9px] font-bold uppercase ${sevStyle.text} opacity-70`}>
+                          <span className={`text-[11px] font-bold uppercase ${sevStyle.text} opacity-70`}>
                             {sev}
                           </span>
                         )}
@@ -657,7 +763,7 @@ function ContextPanel({
                 );
               })}
               {appSignals.length > 6 && (
-                <p className="text-[10px] text-slate-400">+{appSignals.length - 6} more signals</p>
+                <p className="text-[11px] text-slate-400">+{appSignals.length - 6} more signals</p>
               )}
             </div>
           </div>
@@ -665,7 +771,7 @@ function ContextPanel({
 
         {/* AI prompts */}
         <div>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Ask Idjwi</p>
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Ask Idjwi</p>
           <div className="space-y-1.5">
             {[
               `Explain this ${node.entity_type}: ${node.label}`,
@@ -717,20 +823,18 @@ function ContextPanel({
     </div>
   );
 }
-
 // ── Graph Canvas ──────────────────────────────────────────────────────────────
 export function LegacyAccessibleGraphView({ mode, nodes, edges, onInspectNode, onInspectEdge }) {
   const byId = new Map(nodes.map(node => [node.id, node]));
   if (mode === "summary") return <section tabIndex={0} className="h-full overflow-auto rounded-2xl border bg-white p-5" aria-label="Textual graph summary"><h2 className="font-black">Company Graph textual summary</h2><p className="mt-2 text-sm">{nodes.length} authorized records and {edges.length} governed relationships are visible.</p><p className="mt-2 text-sm">{nodes.filter(node => !edges.some(edge => edge.source === node.id || edge.target === node.id)).length} records have no visible connection.</p></section>;
   if (mode === "relationships") return <div className="h-full overflow-auto rounded-2xl border bg-white"><table className="w-full text-left text-xs"><caption className="p-3 text-left font-black">Governed relationships</caption><thead><tr className="border-y bg-slate-50"><th className="p-3">Source</th><th className="p-3">Relationship</th><th className="p-3">Target</th><th className="p-3">State</th></tr></thead><tbody>{edges.map(edge => <tr key={edge.id} tabIndex={0} onClick={() => onInspectEdge(edge)} onKeyDown={event => event.key === "Enter" && onInspectEdge(edge)} className="cursor-pointer border-b focus:bg-indigo-50"><td className="p-3">{byId.get(edge.source)?.label || edge.source}</td><td className="p-3 font-bold">{edge.label || edge.predicate}</td><td className="p-3">{byId.get(edge.target)?.label || edge.target}</td><td className="p-3">{edge.assertion_state}; {Math.round((edge.confidence || 0) * 100)}% confidence</td></tr>)}</tbody></table></div>;
   if (mode === "outline") return <section className="h-full overflow-auto rounded-2xl border bg-white p-4" aria-label="Hierarchical neighborhood outline"><h2 className="font-black">Relationship outline</h2><ul className="mt-3 space-y-3">{nodes.map(node => <li key={node.id}><button onClick={() => onInspectNode(node)} className="font-bold text-indigo-700 focus:ring-2">{node.label}</button><ul className="ml-5 list-disc text-xs">{edges.filter(edge => edge.source === node.id).map(edge => <li key={edge.id}>{edge.label || edge.predicate} → {byId.get(edge.target)?.label || edge.target}</li>)}</ul></li>)}</ul></section>;
-  return <section className="h-full overflow-auto rounded-2xl border bg-white p-3" aria-label="Keyboard navigable graph records"><h2 className="px-2 font-black">Authorized records</h2><div className="mt-2 grid gap-2 sm:grid-cols-2">{nodes.map(node => <button key={node.id} onClick={() => onInspectNode(node)} className="rounded-xl border p-3 text-left focus:ring-2"><span className="block text-xs font-black">{node.label}</span><span className="text-[10px]">{node.entity_type}; status {node.status || "not available"}; {edges.filter(edge => edge.source === node.id || edge.target === node.id).length} relationships</span></button>)}</div></section>;
+  return <section className="h-full overflow-auto rounded-2xl border bg-white p-3" aria-label="Keyboard navigable graph records"><h2 className="px-2 font-black">Authorized records</h2><div className="mt-2 grid gap-2 sm:grid-cols-2">{nodes.map(node => <button key={node.id} onClick={() => onInspectNode(node)} className="rounded-xl border p-3 text-left focus:ring-2"><span className="block text-xs font-black">{node.label}</span><span className="text-[11px]">{node.entity_type}; status {node.status || "not available"}; {edges.filter(edge => edge.source === node.id || edge.target === node.id).length} relationships</span></button>)}</div></section>;
 }
 
-function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlightTypes, activeFilter, focusNodeId, focusEdgeId, isFullscreen, onToggleFullscreen }) {
+function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlightTypes, activeFilter, focusNodeId, focusNodeIds = [], focusEdgeId, expansionMode = null, onExpandGraph, onExpandWorkspace, onCloseExpansion, graphExpandButtonRef, workspaceExpandButtonRef, legendExpanded, onToggleLegend, viewportRef }) {
   const containerRef = useRef(null);
   const cyRef        = useRef(null);
-  const [legendExpanded, setLegendExpanded] = useState(false);
 
   const elementsKey = useMemo(
     () => elements.map(e => e.data.id).join(","),
@@ -740,13 +844,20 @@ function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlig
   // Re-init on element change
   useEffect(() => {
     if (!containerRef.current || elements.length === 0) return;
+    const prefersContrast = window.matchMedia?.("(prefers-contrast: more)")?.matches;
 
     if (cyRef.current) { cyRef.current.destroy(); cyRef.current = null; }
 
     const cy = cytoscape({
       container:           containerRef.current,
       elements,
-      style:               CY_STYLE,
+      style:               prefersContrast ? [...CY_STYLE, {
+        selector: "edge",
+        style: { "width": 3, "opacity": 1, "arrow-scale": 1.3 },
+      }, {
+        selector: "node",
+        style: { "border-width": 3, "color": "#0f172a" },
+      }] : CY_STYLE,
       layout: {
         name:              "preset",
         fit:               true,
@@ -759,6 +870,30 @@ function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlig
       minZoom:             0.08,
       maxZoom:             3,
     });
+
+    const restoreViewport = () => {
+      cy.resize();
+      const viewport = viewportRef?.current;
+      if (viewport?.zoom && viewport?.pan) {
+        cy.viewport({ zoom: viewport.zoom, pan: viewport.pan });
+      } else {
+        cy.fit(undefined, 70);
+      }
+    };
+    requestAnimationFrame(restoreViewport);
+    const rememberViewport = () => {
+      if (viewportRef) viewportRef.current = { zoom: cy.zoom(), pan: cy.pan() };
+    };
+    cy.on("pan zoom", rememberViewport);
+    const resizeObserver = new ResizeObserver(entries => {
+      const box = entries[0]?.contentRect;
+      if (!box || box.width < 1 || box.height < 1) return;
+      const viewport = viewportRef?.current;
+      cy.resize();
+      if (viewport?.zoom && viewport?.pan) cy.viewport({ zoom: viewport.zoom, pan: viewport.pan });
+    });
+    resizeObserver.observe(containerRef.current);
+    window.addEventListener("resize", restoreViewport);
 
     cy.on("tap", "node", evt => {
       const node   = evt.target;
@@ -780,14 +915,24 @@ function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlig
       cy.elements().not(edge).not(".highlighted").addClass("dimmed");
       onEdgeSelect(edge.data());
     });
-    cy.on("mouseover", "edge", evt => evt.target.addClass("hovered"));
-    cy.on("mouseout", "edge", evt => evt.target.removeClass("hovered"));
+    cy.on("mouseover", "edge", evt => {
+      const edge = evt.target;
+      const endpoints = edge.connectedNodes();
+      cy.elements().removeClass("hovered hover-endpoint hover-dim");
+      edge.addClass("hovered");
+      endpoints.addClass("hover-endpoint");
+      cy.elements().not(edge).not(endpoints).addClass("hover-dim");
+    });
+    cy.on("mouseout", "edge", () => cy.elements().removeClass("hovered hover-endpoint hover-dim"));
     const applyZoomDetail = () => {
-      const detailed = cy.zoom() >= 0.72;
-      cy.nodes().toggleClass("zoom-detail", detailed);
-      cy.edges().toggleClass("zoom-detail", detailed);
+      const zoom = cy.zoom();
+      cy.nodes().removeClass("zoom-distant zoom-medium zoom-close");
+      cy.nodes().addClass(zoom >= 0.9 ? "zoom-close" : zoom >= 0.42 ? "zoom-medium" : "zoom-distant");
     };
     cy.on("zoom", applyZoomDetail);
+    if (cy.edges().length <= 30 || layoutMode !== "full_graph") {
+      cy.edges().addClass("show-label");
+    }
     applyZoomDetail();
 
     cy.on("tap", evt => {
@@ -799,7 +944,12 @@ function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlig
     });
 
     cyRef.current = cy;
-    return () => { if (cyRef.current) { cyRef.current.destroy(); cyRef.current = null; } };
+    return () => {
+      rememberViewport();
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", restoreViewport);
+      if (cyRef.current) { cyRef.current.destroy(); cyRef.current = null; }
+    };
   }, [elementsKey, layoutMode]);
 
   // Apply highlight filter (from pulse bar)
@@ -830,8 +980,20 @@ function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlig
     cyRef.current.elements().removeClass("highlighted dimmed");
     node.addClass("highlighted");
     node.connectedEdges().addClass("highlighted");
-    cyRef.current.animate({ center: { eles: node }, zoom: 1.35 }, { duration: 350 });
+    cyRef.current.animate({ center: { eles: node }, zoom: 1.35 }, { duration: graphMotionDuration() });
   }, [focusNodeId, elementsKey]);
+
+  useEffect(() => {
+    if (!cyRef.current || !focusNodeIds.length) return;
+    const ids = new Set(focusNodeIds);
+    const selected = cyRef.current.nodes().filter(node => ids.has(node.id()));
+    if (!selected.length) return;
+    cyRef.current.elements().removeClass("highlighted dimmed");
+    selected.addClass("highlighted");
+    selected.connectedEdges().addClass("highlighted");
+    cyRef.current.elements().not(".highlighted").addClass("dimmed");
+    cyRef.current.animate({ fit: { eles: selected.union(selected.connectedEdges()), padding: 100 } }, { duration: graphMotionDuration() });
+  }, [focusNodeIds.join("|"), elementsKey]);
 
   useEffect(() => {
     if (!cyRef.current || !focusEdgeId) return;
@@ -842,15 +1004,30 @@ function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlig
     edge.addClass("highlighted");
     endpoints.addClass("highlighted");
     cyRef.current.elements().not(edge).not(endpoints).addClass("dimmed");
-    cyRef.current.animate({ fit: { eles: edge.union(endpoints), padding: 100 } }, { duration: 350 });
+    cyRef.current.animate({ fit: { eles: edge.union(endpoints), padding: 100 } }, { duration: graphMotionDuration() });
   }, [focusEdgeId, elementsKey]);
 
   return (
-    <div className="relative flex-1 min-h-0 bg-slate-950 rounded-2xl overflow-hidden border border-slate-800">
+    <div
+      data-company-graph-canvas={expansionMode || "embedded"}
+      data-layout-mode={layoutMode}
+      className="relative flex-1 min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-[#f8faf9] shadow-inner"
+      style={{
+        backgroundImage: "radial-gradient(circle at 1px 1px, rgba(100,116,139,0.16) 1px, transparent 0)",
+        backgroundSize: "24px 24px",
+      }}
+    >
       <div ref={containerRef} className="absolute inset-0" />
       <div className="absolute top-3 left-3 z-20 flex gap-1">
-        <button aria-label="Reset graph view" title="Reset graph view" onClick={() => cyRef.current?.fit(undefined, 40)} className="p-2 rounded-lg bg-slate-900/90 border border-slate-700 text-slate-300 hover:text-white"><RotateCcw className="w-3.5 h-3.5" /></button>
-        <button aria-label={isFullscreen ? "Exit full screen" : "Open full screen"} title={isFullscreen ? "Exit full screen" : "Open full screen"} onClick={onToggleFullscreen} className="p-2 rounded-lg bg-slate-900/90 border border-slate-700 text-slate-300 hover:text-white">{isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}</button>
+        <button aria-label="Reset graph view" title="Reset graph view" onClick={() => { cyRef.current?.fit(undefined, 40); if (cyRef.current && viewportRef) viewportRef.current = { zoom: cyRef.current.zoom(), pan: cyRef.current.pan() }; }} className="rounded-lg border border-slate-200 bg-white/95 p-2 text-slate-600 shadow-sm hover:border-slate-300 hover:text-slate-900"><RotateCcw className="w-3.5 h-3.5" /></button>
+        {expansionMode ? (
+          <button aria-label="Exit expanded graph" title="Exit expanded graph" onClick={onCloseExpansion} className="rounded-lg border border-slate-200 bg-white/95 p-2 text-slate-600 shadow-sm hover:border-slate-300 hover:text-slate-900"><Minimize2 className="w-3.5 h-3.5" /></button>
+        ) : (
+          <>
+            <button ref={graphExpandButtonRef} aria-label="Expand graph canvas" title="Expand graph canvas" onClick={onExpandGraph} className="rounded-lg border border-slate-200 bg-white/95 p-2 text-slate-600 shadow-sm hover:border-slate-300 hover:text-slate-900"><Maximize2 className="w-3.5 h-3.5" /></button>
+            <button ref={workspaceExpandButtonRef} aria-label="Expand graph workspace" title="Expand graph workspace with inspector and Idjwi" onClick={onExpandWorkspace} className="rounded-lg border border-slate-200 bg-white/95 p-2 text-slate-600 shadow-sm hover:border-slate-300 hover:text-slate-900"><ExternalLink className="w-3.5 h-3.5" /></button>
+          </>
+        )}
       </div>
 
       {/* Entity type legend */}
@@ -858,9 +1035,9 @@ function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlig
         {Object.entries(ENTITY_CONFIG).filter(([t]) =>
           elements.some(e => e.data.entity_type === t)
         ).map(([type, cfg]) => (
-          <div key={type} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-900/80 border border-slate-700">
+          <div key={type} className="flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-1.5 py-0.5 shadow-sm">
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: cfg.color }} />
-            <span className="text-[9px] font-bold" style={{ color: cfg.color }}>{cfg.label}</span>
+            <span className="text-[11px] font-bold" style={{ color: cfg.color }}>{cfg.label}</span>
           </div>
         ))}
       </div>
@@ -868,27 +1045,31 @@ function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlig
         <button
           type="button"
           aria-expanded={legendExpanded}
-          onClick={() => setLegendExpanded(value => !value)}
-          className="px-2.5 py-1.5 rounded-lg bg-slate-900/95 border border-slate-700 text-[10px] font-bold text-slate-100 hover:border-slate-500"
+          onClick={onToggleLegend}
+          className="rounded-lg border border-slate-200 bg-white/95 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 shadow-sm hover:border-slate-300"
         >
           Relationship legend {legendExpanded ? "−" : "+"}
         </button>
         {legendExpanded && (
-          <div className="w-72 rounded-xl bg-slate-900/95 border border-slate-700 p-3 text-[10px] text-slate-200 shadow-xl space-y-2">
-            <p><span className="font-black text-white">Solid line</span> — canonical or operator-confirmed assertion.</p>
-            <p><span className="font-black text-white">Dashed line</span> — deterministic or analytical derivation requiring evidence review.</p>
-            <p><span className="font-black text-rose-300">Dotted red</span> — disputed or rejected assertion retained for history.</p>
-            <p><span className="font-black text-slate-400">Faded line</span> — expired or superseded relationship.</p>
-            <p><span className="font-black text-sky-300">Circle at source</span> — evidence is attached and can be inspected.</p>
-            <p><span className="font-black text-white">Arrow</span> — the governed predicate direction, from source to target.</p>
-            <p className="pt-1 border-t border-slate-700 text-slate-400">Hover a relationship to read its predicate. Select it to inspect confidence, temporal state, and evidence.</p>
+          <div className="w-72 space-y-2 rounded-xl border border-slate-200 bg-white/95 p-3 text-[11px] text-slate-600 shadow-xl">
+            <p><span className="font-black text-slate-800">Solid slate</span> — canonical relationship.</p>
+            <p><span className="font-black text-emerald-700">Solid emerald</span> — operator-confirmed assertion.</p>
+            <p><span className="font-black text-blue-700">Dashed blue</span> — deterministic derivation or reference projection.</p>
+            <p><span className="font-black text-violet-700">Dashed violet</span> — analytical inference.</p>
+            <p><span className="font-black text-cyan-700">Dashed cyan</span> — external observation.</p>
+            <p><span className="font-black text-amber-700">Dashed amber</span> — proposal awaiting review.</p>
+            <p><span className="font-black text-rose-700">Dotted rose</span> — disputed assertion; rejected assertions appear only in history.</p>
+            <p><span className="font-black text-slate-500">Faded slate</span> — expired or superseded relationship.</p>
+            <p><span className="font-black text-indigo-700">Circle at source</span> — governed evidence is attached.</p>
+            <p><span className="font-black text-slate-800">Arrow</span> — predicate direction from source to target.</p>
+            <p className="border-t border-slate-200 pt-1 text-slate-500">Line weight reflects confidence. Hover to see predicate, state, confidence and evidence count; select to inspect evidence.</p>
           </div>
         )}
       </div>
 
       {/* Hint */}
       <div className="absolute top-3 right-3 pointer-events-none z-10">
-        <p className="text-[10px] text-slate-500 bg-slate-900/80 px-2 py-1 rounded-lg border border-slate-800">
+        <p className="rounded-lg border border-slate-200 bg-white/90 px-2 py-1 text-[11px] text-slate-500 shadow-sm">
           Click node to inspect · Drag to pan · Scroll to zoom
         </p>
       </div>
@@ -896,9 +1077,9 @@ function GraphCanvas({ elements, layoutMode, onNodeSelect, onEdgeSelect, highlig
       {elements.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center">
-            <GitBranch className="w-10 h-10 text-slate-700 mx-auto mb-3" />
+            <GitBranch className="mx-auto mb-3 h-10 w-10 text-slate-300" />
             <p className="text-sm text-slate-500">No data to show</p>
-            <p className="text-xs text-slate-600 mt-1">Add entities to see your company graph</p>
+            <p className="mt-1 text-xs text-slate-400">Add entities to see your company graph</p>
           </div>
         </div>
       )}
@@ -937,15 +1118,62 @@ export default function CompanyGraphHome() {
   const [idjwiWorkspaceWidth, setIdjwiWorkspaceWidth] = useState(0);
   const [continuedOverview, setContinuedOverview] = useState(null);
   const [loadingContinuation, setLoadingContinuation] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [pageGuideOpen, setPageGuideOpen] = useState(false);
-  const [briefingOpen, setBriefingOpen] = useState(true);
+  const [expansionMode, setExpansionMode] = useState(null);
+  const [expandedClusterIds, setExpandedClusterIds] = useState(new Set());
+  const graphViewportRef = useRef(null);
+  const graphPositionCacheRef = useRef(new Map());
+  const graphExpandButtonRef = useRef(null);
+  const workspaceExpandButtonRef = useRef(null);
+  const expandedOverlayRef = useRef(null);
+  const [sectionPreferences, setSectionPreferences] = useState(DEFAULT_COMPANY_GRAPH_SECTIONS);
+  const [sectionPreferencesReady, setSectionPreferencesReady] = useState(false);
+  const loadedPreferenceKeyRef = useRef("");
   const [selectedCandidates, setSelectedCandidates] = useState(new Set());
   const [candidateExplanations, setCandidateExplanations] = useState({});
   const [candidateAction, setCandidateAction] = useState("");
   const [lastRelationshipOutcome, setLastRelationshipOutcome] = useState(null);
+  const [relationshipQueue, setRelationshipQueue] = useState({ state: "", confidence: "", source: "", age: "", sort: "priority", offset: 0 });
+  const [qualityQueue, setQualityQueue] = useState({ severity: "", verification: "", sort: "priority", offset: 0 });
+  const [governanceWorkspace, setGovernanceWorkspace] = useState(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState("");
+  const [selectedQualityFinding, setSelectedQualityFinding] = useState(null);
+  const [expandedEvidence, setExpandedEvidence] = useState(new Set());
   const [graphRepresentation, setGraphRepresentation] = useState("visual");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [citationPreviousSelection, setCitationPreviousSelection] = useState(null);
   const [screenReaderMessage, setScreenReaderMessage] = useState("");
+  const deviceCategory = companyGraphDeviceCategory(typeof window === "undefined" ? 1280 : window.innerWidth);
+  const sectionPreferenceKey = companyGraphSectionPreferenceKey({
+    tenantId: currentUser?.company_id,
+    userId: currentUser?.id,
+    surface: productSurface,
+    deviceCategory,
+  });
+  useEffect(() => {
+    if (!sectionPreferenceKey) { setSectionPreferencesReady(false); return; }
+    let stored = {};
+    try { stored = JSON.parse(window.localStorage.getItem(sectionPreferenceKey) || "{}"); } catch { stored = {}; }
+    setSectionPreferences(normalizeCompanyGraphSections(stored));
+    loadedPreferenceKeyRef.current = sectionPreferenceKey;
+    setSectionPreferencesReady(true);
+  }, [sectionPreferenceKey]);
+  useEffect(() => {
+    if (!sectionPreferenceKey || loadedPreferenceKeyRef.current !== sectionPreferenceKey) return;
+    window.localStorage.setItem(sectionPreferenceKey, JSON.stringify(sectionPreferences));
+  }, [sectionPreferenceKey, sectionPreferences]);
+  const toggleSection = useCallback(section => {
+    setSectionPreferences(current => {
+      const next = { ...current, [section]: !current[section] };
+      if (sectionPreferenceKey) window.localStorage.setItem(sectionPreferenceKey, JSON.stringify(next));
+      return next;
+    });
+  }, [sectionPreferenceKey]);
+  const briefingOpen = sectionPreferences.briefing;
+  const relationshipReviewOpen = sectionPreferences.relationshipReview;
+  const graphQualityOpen = sectionPreferences.graphQuality;
+  const pageGuideOpen = sectionPreferences.pageGuide;
+  const graphStatusOpen = sectionPreferences.graphStatus;
+  const relationshipLegendOpen = sectionPreferences.relationshipLegend;
   const neighborhoodCoordinatorRef = useRef(null);
   if (!neighborhoodCoordinatorRef.current) {
     neighborhoodCoordinatorRef.current = createLatestGraphRequestCoordinator();
@@ -959,10 +1187,42 @@ export default function CompanyGraphHome() {
     window.addEventListener("idjwi-workspace-state", coordinateWorkspace);
     return () => window.removeEventListener("idjwi-workspace-state", coordinateWorkspace);
   }, []);
+  const closeExpansion = useCallback(() => {
+    setExpansionMode(current => {
+      const restoreTarget = current === "workspace" ? workspaceExpandButtonRef : graphExpandButtonRef;
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new Event("resize"));
+        restoreTarget.current?.focus();
+      });
+      return null;
+    });
+  }, []);
+  useEffect(() => {
+    if (!expansionMode) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    requestAnimationFrame(() => expandedOverlayRef.current?.focus());
+    const handleKeyDown = event => {
+      if (event.key === "Escape") closeExpansion();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [expansionMode, closeExpansion]);
+  useEffect(() => {
+    if (!governanceWorkspace) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const close = event => { if (event.key === "Escape") setGovernanceWorkspace(null); };
+    window.addEventListener("keydown", close);
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener("keydown", close); };
+  }, [governanceWorkspace]);
 
   // ── Entity fetches ───────────────────────────────────────────────────────────
   const enabled = !!currentUser?.company_id || currentUser?.role === "super_admin";
-  const isAdministrator = ["admin", "super_admin"].includes(currentUser?.role);
+  const isAdministrator = ["admin", "administrator", "super_admin"].includes(String(currentUser?.role || "").toLowerCase());
 
   const savedViewsQuery = useQuery({
     queryKey: ["company-graph-saved-views", currentUser?.company_id],
@@ -975,14 +1235,35 @@ export default function CompanyGraphHome() {
     },
   });
   const savedViews = savedViewsQuery.data?.views || [];
+  const supportingCapabilitiesQuery = useQuery({
+    queryKey: ["company-graph-supporting-capabilities", currentUser?.company_id],
+    enabled: enabled && !!currentUser?.company_id,
+    staleTime: 30_000,
+    retry: false,
+    queryFn: async () => {
+      const headers = await authHeaders();
+      const company = encodeURIComponent(currentUser.company_id);
+      const entries = await Promise.all([
+        requestCapability(`${RAILWAY_URL}/alerts/status?company_id=${company}`, { headers, availableWhen: payload => Boolean(payload?.channels) }),
+        requestCapability(`${RAILWAY_URL}/agents/approvals/pending?company_id=${company}`, { headers, collectionKeys: ["pending"] }),
+        requestCapability(`${RAILWAY_URL}/intelligence/inbox?company_id=${company}&limit=200`, { headers, collectionKeys: ["insights", "recommendations", "risks", "opportunities"] }),
+        requestCapability(`${RAILWAY_URL}/company-graph/audit/status?company_id=${company}`, { headers, availableWhen: payload => payload?.audit_recording === true }),
+      ]);
+      return Object.fromEntries(["alerts", "approvals", "intelligence", "graph_audit"].map((key, index) => [key, entries[index]]));
+    },
+  });
+  const supportingCapabilities = supportingCapabilitiesQuery.data || {};
   const qualityQuery = useQuery({
-    queryKey: ["company-graph-quality-findings", currentUser?.company_id, scopeId],
+    queryKey: ["company-graph-quality-findings", currentUser?.company_id, scopeId, qualityQueue, governanceWorkspace],
     enabled: enabled && !!currentUser?.company_id,
     staleTime: 30_000,
     queryFn: async () => {
       const scope = scopeId ? `&operational_unit_id=${encodeURIComponent(scopeId)}` : "";
+      const filters = new URLSearchParams({ limit: governanceWorkspace === "quality" ? "20" : "4", offset: String(qualityQueue.offset), sort: qualityQueue.sort });
+      if (qualityQueue.severity) filters.set("severity", qualityQueue.severity);
+      if (qualityQueue.verification) filters.set("verification_status", qualityQueue.verification);
       const response = await fetch(
-        `${RAILWAY_URL}/company-graph/quality/findings?company_id=${encodeURIComponent(currentUser.company_id)}${scope}`,
+        `${RAILWAY_URL}/company-graph/quality/findings?company_id=${encodeURIComponent(currentUser.company_id)}${scope}&${filters}`,
         { headers: await authHeaders() },
       );
       if (!response.ok) {
@@ -996,13 +1277,18 @@ export default function CompanyGraphHome() {
   });
   const qualityFindings = qualityQuery.data?.findings || [];
   const relationshipCandidatesQuery = useQuery({
-    queryKey: ["company-graph-relationship-candidates", currentUser?.company_id, scopeId],
+    queryKey: ["company-graph-relationship-candidates", currentUser?.company_id, scopeId, relationshipQueue, governanceWorkspace],
     enabled: enabled && isAdministrator && !!currentUser?.company_id,
     staleTime: 15_000,
     queryFn: async () => {
       const scope = scopeId ? `&operational_unit_id=${encodeURIComponent(scopeId)}` : "";
+      const filters = new URLSearchParams({ limit: governanceWorkspace === "relationships" ? "25" : "5", offset: String(relationshipQueue.offset), sort: relationshipQueue.sort });
+      if (relationshipQueue.state) filters.set("assertion_state", relationshipQueue.state);
+      if (relationshipQueue.confidence) filters.set("confidence", relationshipQueue.confidence);
+      if (relationshipQueue.source) filters.set("source", relationshipQueue.source);
+      if (relationshipQueue.age) filters.set("age", relationshipQueue.age);
       const response = await fetch(
-        `${RAILWAY_URL}/company-graph/relationship-candidates?company_id=${encodeURIComponent(currentUser.company_id)}${scope}`,
+        `${RAILWAY_URL}/company-graph/relationship-candidates?company_id=${encodeURIComponent(currentUser.company_id)}${scope}&${filters}`,
         { headers: await authHeaders() },
       );
       if (!response.ok) throw new Error("Relationship review is unavailable.");
@@ -1010,6 +1296,15 @@ export default function CompanyGraphHome() {
     },
   });
   const relationshipCandidates = relationshipCandidatesQuery.data?.candidates || [];
+  const groupedRelationshipCandidates = useMemo(() => {
+    const groups = new Map();
+    relationshipCandidates.forEach(candidate => {
+      const key = `${candidate.predicate || "unknown"}::${candidate.bulk_group_key || candidate.assertion_key}`;
+      if (!groups.has(key)) groups.set(key, { key, predicate: candidate.predicate || "unknown", bulkGroup: candidate.bulk_group_key, candidates: [] });
+      groups.get(key).candidates.push(candidate);
+    });
+    return [...groups.values()];
+  }, [relationshipCandidates]);
   const selectedBulkGroup = relationshipCandidates.find(candidate =>
     selectedCandidates.has(candidate.assertion_key)
   )?.bulk_group_key || null;
@@ -1127,23 +1422,60 @@ export default function CompanyGraphHome() {
 
   // ── Apply mode + type filters ────────────────────────────────────────────────
   const { nodes: filteredNodes, edges: filteredEdges } = useMemo(() => {
+    const clustered = buildSemanticClusters(nodes, edges, {
+      expandedClusterIds: [...expandedClusterIds],
+    });
     const focused = graphMode === "operational_focus"
-      ? buildOperationalFocus(nodes, edges, governedGraph)
-      : { nodes, edges };
+      ? buildOperationalFocus(clustered.nodes, clustered.edges, governedGraph)
+      : clustered;
     const { nodes: mNodes, edges: mEdges } = filterForMode(focused.nodes, focused.edges, graphMode);
     const visible = mNodes.filter(n => visibleTypes.has(n.entity_type));
     const visibleIds = new Set(visible.map(n => n.id));
     const visibleEdges = mEdges.filter(e => visibleIds.has(e.source) && visibleIds.has(e.target));
     return { nodes: visible, edges: visibleEdges };
-  }, [nodes, edges, graphMode, visibleTypes, governedGraph]);
+  }, [nodes, edges, graphMode, visibleTypes, governedGraph, expandedClusterIds]);
 
-  const graphPositions = useMemo(
-    () => semanticPositions(filteredNodes, graphMode),
-    [filteredNodes, graphMode],
-  );
+  const selectedCandidate = relationshipCandidates.find(item => item.assertion_key === selectedCandidateId);
+  const selectedCandidateEdge = useMemo(() => {
+    if (!selectedCandidate) return null;
+    const source = selectedCandidate.source_node_id;
+    const target = selectedCandidate.target_node_id;
+    if (!filteredNodes.some(node => node.id === source) || !filteredNodes.some(node => node.id === target)) return null;
+    return {
+      id: `proposal:${selectedCandidate.assertion_key}`,
+      source, target,
+      predicate: selectedCandidate.predicate,
+      relationship_type: selectedCandidate.predicate,
+      assertion_class: "advisor_proposal",
+      assertion_state: selectedCandidate.assertion_state || "proposed",
+      confidence: Number(selectedCandidate.candidate_confidence || 0),
+      evidence: selectedCandidate.evidence || [],
+      presentation_only: true,
+    };
+  }, [selectedCandidate, filteredNodes]);
+  const displayedEdges = useMemo(() => selectedCandidateEdge
+    ? [...filteredEdges.filter(edge => edge.id !== selectedCandidateEdge.id), selectedCandidateEdge]
+    : filteredEdges, [filteredEdges, selectedCandidateEdge]);
+
+  const effectiveLayoutMode = neighborhoodGraph && selectedNode?.node ? "selected_neighborhood" : graphMode;
+  const graphPositions = useMemo(() => {
+    const anchorNodeId = selectedNode?.node?.id
+      || filteredNodes.find(node => node.entity_type === "operational_unit" && (!scopeId || node.entity_id === scopeId))?.id
+      || filteredNodes.find(node => node.entity_type === "enterprise")?.id
+      || null;
+    const cacheKey = `${currentUser?.company_id || "tenant"}:${scopeId || "organization"}:${effectiveLayoutMode}:${anchorNodeId || "default"}`;
+    const previousPositions = graphPositionCacheRef.current.get(cacheKey) || {};
+    const positions = semanticPositions(filteredNodes, effectiveLayoutMode, {
+      edges: displayedEdges,
+      anchorNodeId,
+      previousPositions,
+    });
+    graphPositionCacheRef.current.set(cacheKey, positions);
+    return positions;
+  }, [filteredNodes, displayedEdges, effectiveLayoutMode, selectedNode?.node?.id, scopeId, currentUser?.company_id]);
   const cyElements = useMemo(
-    () => toCytoscapeElements(filteredNodes, filteredEdges, graphPositions),
-    [filteredNodes, filteredEdges, graphPositions],
+    () => toCytoscapeElements(filteredNodes, displayedEdges, graphPositions),
+    [filteredNodes, displayedEdges, graphPositions],
   );
 
   const graphRecords = useMemo(() => ({
@@ -1206,6 +1538,9 @@ export default function CompanyGraphHome() {
     ],
   }, [governedGraph, currentUser?.company_id, scopeId, nodes, edges, stats.unconnected]);
 
+  const idjwiContextEdges = selectedCandidateEdge
+    ? [...edges.filter(edge => edge.id !== selectedCandidateEdge.id), selectedCandidateEdge]
+    : edges;
   const idjwiGraphContext = useMemo(() => buildIdjwiGraphContext(effectiveGraphContract, {
     intent: null,
     selectedNodeId: selectedNode?.node?.id || null,
@@ -1213,12 +1548,12 @@ export default function CompanyGraphHome() {
     // Idjwi receives the same governed packet as the page. Focus/type filters
     // remain view state and must not silently change graph-quality totals.
     nodes,
-    edges,
+    edges: idjwiContextEdges,
     tenantId: currentUser?.company_id || null,
     role: currentUser?.role || "user",
     page: "CompanyGraphHome",
     productSurface,
-  }), [effectiveGraphContract, selectedNode, nodes, edges, currentUser?.company_id, currentUser?.role, productSurface]);
+  }), [effectiveGraphContract, selectedNode, nodes, idjwiContextEdges, currentUser?.company_id, currentUser?.role, productSurface]);
 
   const unavailableSourceCount = effectiveGraphContract.source_status
     .filter(source => ["unavailable", "partial"].includes(source.state)).length;
@@ -1290,6 +1625,21 @@ export default function CompanyGraphHome() {
     } finally {
       setLoadingContinuation(false);
     }
+  };
+  const askIdjwiToFind = async () => {
+    const query = searchTerm.trim() || await requestText({
+      title: "Ask Idjwi to find graph context",
+      message: "Describe the record, relationship, operational condition, or question you want Idjwi to locate.",
+      label: "Natural-language graph search",
+      confirmLabel: "Ask Idjwi",
+    });
+    if (!query?.trim()) return;
+    openIdjwiGraphAction(
+      `Search the governed company graph for: ${query.trim()}`,
+      IDJWI_GRAPH_INTENTS.SEARCH_COMPANY_GRAPH,
+      idjwiGraphContext,
+      { graph_search_query: query.trim() },
+    );
   };
   const StatusIcon = graphStatus.Icon;
 
@@ -1468,6 +1818,11 @@ export default function CompanyGraphHome() {
       if (!response.ok) throw new Error(result?.detail?.message || result?.detail?.code || "Relationship decision failed.");
       const failures = result.results?.filter(item => item.status === "failed") || [];
       setSelectedCandidates(new Set());
+      if (candidateIds.includes(selectedCandidateId)) {
+        setSelectedCandidateId("");
+        setSelectedNode(null);
+        setFocusEdgeId("");
+      }
       await Promise.all([
         relationshipCandidatesQuery.refetch(),
         governedQuery.refetch(),
@@ -1525,8 +1880,6 @@ export default function CompanyGraphHome() {
     auditGraph("node_inspected", fullNode.id, { graph_mode: graphMode, scope_id: scopeId, depth });
     if (fullNode.presentation_only) {
       neighborhoodCoordinatorRef.current.cancel();
-      setGraphMode("data_quality");
-      setActiveFilter("unconnected");
       setNeighborhoodState({ status: "ready", error: "" });
       return;
     }
@@ -1565,6 +1918,38 @@ export default function CompanyGraphHome() {
     filteredNodes, filteredEdges, selectionFor, currentUser?.company_id,
     fallbackEnabled, scopeId, graphMode, auditGraph, governedQuery.data, pinnedNodes,
   ]);
+
+  const expandSemanticCluster = useCallback(cluster => {
+    setExpandedClusterIds(previous => new Set([...previous, cluster.id]));
+    setSelectedNode(null);
+    setFocusNodeId("");
+    setScreenReaderMessage(`${cluster.attributes?.record_count || "The summarized"} authorized records are now expanded.`);
+    auditGraph("semantic_cluster_expanded", cluster.id, {
+      graph_mode: graphMode,
+      scope_id: scopeId,
+      member_count: cluster.attributes?.record_count || 0,
+    });
+  }, [auditGraph, graphMode, scopeId]);
+
+  const createClusterRepairWork = useCallback(async cluster => {
+    const key = String(cluster.attributes?.cluster_key || "");
+    const finding = qualityFindings.find(item => {
+      const code = String(item.issue_code || item.finding_key || "").toLowerCase();
+      if (key.includes("disconnected")) return code.includes("disconnected") || code.includes("unconnected");
+      return code.includes(key.replaceAll("_", "-")) || code.includes(key);
+    });
+    if (!finding) {
+      openIdjwiGraphAction(
+        `Create governed repair work for ${cluster.label}.`,
+        IDJWI_GRAPH_INTENTS.RECOMMEND_GRAPH_ACTION,
+        idjwiGraphContext,
+        { selected_node_id: cluster.id, graph_cluster: cluster, repair_work_requested: true },
+      );
+      return;
+    }
+    await runQualityWork(finding, "create_task");
+    showNotice({ title: "Repair work created", message: `A governed task now owns the finding represented by ${cluster.label}.`, tone: "success" });
+  }, [qualityFindings, idjwiGraphContext]);
 
   const handleNodeSelect = useCallback(nodeData => {
     if (!nodeData) { setSelectedNode(null); return; }
@@ -1620,6 +2005,72 @@ export default function CompanyGraphHome() {
     auditGraph("edge_inspected", edge.id, { predicate: edge.predicate || edge.relationship_type });
   }, [filteredNodes, filteredEdges, auditGraph]);
 
+  const restorePreviousCitationContext = useCallback(() => {
+    if (!citationPreviousSelection) return;
+    setSelectedNode(citationPreviousSelection);
+    if (citationPreviousSelection.edge) {
+      setFocusNodeId(citationPreviousSelection.edge.source || "");
+      setFocusEdgeId(citationPreviousSelection.edge.id || "");
+    } else if (citationPreviousSelection.node) {
+      setFocusEdgeId("");
+      setFocusNodeId(citationPreviousSelection.node.id || "");
+    }
+    setCitationPreviousSelection(null);
+  }, [citationPreviousSelection]);
+
+  const inspectRelationshipCandidate = useCallback(async candidate => {
+    setSelectedCandidateId(candidate.assertion_key);
+    setGraphMode("full_graph");
+    const edge = {
+      id: `proposal:${candidate.assertion_key}`,
+      source: candidate.source_node_id,
+      target: candidate.target_node_id,
+      predicate: candidate.predicate,
+      relationship_type: candidate.predicate,
+      assertion_class: "advisor_proposal",
+      assertion_state: candidate.assertion_state || "proposed",
+      confidence: Number(candidate.candidate_confidence || 0),
+      evidence: candidate.evidence || [],
+      presentation_only: true,
+    };
+    setFocusNodeId("");
+    setFocusEdgeId(edge.id);
+    setSelectedNode({
+      edge,
+      sourceNode: nodes.find(node => node.id === edge.source),
+      targetNode: nodes.find(node => node.id === edge.target),
+      relationshipCandidate: candidate,
+    });
+    if (!candidateExplanations[candidate.assertion_key]) await explainCandidate(candidate.assertion_key);
+    document.getElementById("company-graph-inspector")?.focus();
+    auditGraph("relationship_candidate_inspected", candidate.assertion_key, { predicate: candidate.predicate });
+  }, [nodes, candidateExplanations, auditGraph]);
+
+  const findingNodeIds = useCallback(finding => {
+    const candidates = [
+      ...(finding.affected_node_ids || []), ...(finding.affected_record_ids || []),
+      ...(finding.evidence || []).flatMap(item => item.node_ids || item.affected_node_ids || []),
+    ];
+    return [...new Set(candidates.map(value => String(value)).flatMap(value => {
+      if (value.includes(":")) return [value];
+      const match = nodes.find(node => String(node.entity_id) === value);
+      return match ? [match.id] : [];
+    }))];
+  }, [nodes]);
+
+  const inspectQualityFinding = useCallback(finding => {
+    const ids = findingNodeIds(finding);
+    setSelectedQualityFinding(finding);
+    setFocusEdgeId("");
+    setFocusNodeId(ids[0] || "");
+    if (ids[0]) {
+      const node = nodes.find(item => item.id === ids[0]);
+      if (node) setSelectedNode(selectionFor(node, nodes, edges));
+    }
+    setScreenReaderMessage(`Inspecting ${finding.issue_code.replaceAll("_", " ")} affecting ${finding.affected_count || ids.length} records.`);
+    auditGraph("graph_quality_finding_inspected", finding.finding_key, { affected_node_ids: ids });
+  }, [findingNodeIds, nodes, edges, selectionFor, auditGraph]);
+
   const inspectSearchedEdge = useCallback(async match => {
     setSearchTerm("");
     const response = await fetch(
@@ -1638,6 +2089,7 @@ export default function CompanyGraphHome() {
   useEffect(() => {
     const inspectCitation = event => {
       const citation = event.detail || {};
+      setCitationPreviousSelection(selectedNode);
       const edge = citation.edge_id
         ? edges.find(candidate => candidate.id === citation.edge_id)
         : null;
@@ -1675,7 +2127,7 @@ export default function CompanyGraphHome() {
     };
     window.addEventListener("company-graph-citation-selected", inspectCitation);
     return () => window.removeEventListener("company-graph-citation-selected", inspectCitation);
-  }, [nodes, edges, auditGraph]);
+  }, [nodes, edges, auditGraph, selectedNode]);
 
   useEffect(() => {
     const handleWorkspaceAction = event => {
@@ -1683,6 +2135,7 @@ export default function CompanyGraphHome() {
       const nodeIds = action.node_ids || (action.node_id ? [action.node_id] : []);
       const selectedNodes = nodeIds.map(id => nodes.find(node => node.id === id)).filter(Boolean);
       const edge = action.edge_id ? edges.find(candidate => candidate.id === action.edge_id) : null;
+      if ((selectedNodes.length || edge) && selectedNode) setCitationPreviousSelection(selectedNode);
 
       if (action.action === "highlight_records" && selectedNodes.length) {
         setActiveFilter(null);
@@ -1732,7 +2185,7 @@ export default function CompanyGraphHome() {
     };
     window.addEventListener("company-graph-workspace-action", handleWorkspaceAction);
     return () => window.removeEventListener("company-graph-workspace-action", handleWorkspaceAction);
-  }, [nodes, edges, inspectNode, handleEdgeSelect, idjwiGraphContext, auditGraph]);
+  }, [nodes, edges, inspectNode, handleEdgeSelect, idjwiGraphContext, auditGraph, selectedNode]);
 
   // ── Type toggle ──────────────────────────────────────────────────────────────
   const toggleType = useCallback(type => {
@@ -1748,26 +2201,42 @@ export default function CompanyGraphHome() {
     setSelectedNode(null);
   };
 
+  const relationshipReviewSummary = relationshipCandidatesQuery.data?.summary || {
+    pending: 0, proposed: 0, high_confidence: 0, disputed: 0, critical: 0, oldest_proposal: null,
+  };
+  relationshipReviewSummary.pending ??= relationshipReviewSummary.proposed || 0;
+  relationshipReviewSummary.highConfidence ??= relationshipReviewSummary.high_confidence || 0;
+  const graphQualitySummary = qualityQuery.data?.summary || {
+    open: 0, critical: 0, unverified: 0, affected_records: 0,
+  };
+  const graphHealth = graphQualitySummary.critical ? "Critical attention" : graphQualitySummary.open ? "Needs repair" : "Healthy";
+  const qualityFocusNodeIds = selectedQualityFinding ? findingNodeIds(selectedQualityFinding) : [];
+  const selectedScopeLabel = scopeId
+    ? scopeOptions.find(node => node.entity_id === scopeId)?.label || "Selected operational unit"
+    : "Organization-wide";
+
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div
-      className={`flex flex-col min-h-0 gap-3 transition-[padding] duration-300 ${isFullscreen ? "fixed inset-0 z-50 bg-slate-50 p-3" : "h-full"}`}
+      data-company-graph-root="true"
+      data-company-graph-preferences-ready={sectionPreferencesReady ? "true" : "false"}
+      className="flex h-full min-h-0 flex-col gap-3 text-[11px] transition-[padding] duration-300 motion-reduce:transition-none [&_button]:min-h-8 [&_button]:focus-visible:outline-none [&_button]:focus-visible:ring-2 [&_button]:focus-visible:ring-emerald-600 [&_input]:min-h-8 [&_input]:focus-visible:ring-2 [&_input]:focus-visible:ring-emerald-600 [&_select]:min-h-8 [&_select]:focus-visible:ring-2 [&_select]:focus-visible:ring-emerald-600"
       style={{ paddingRight: idjwiWorkspaceWidth ? `${idjwiWorkspaceWidth + 12}px` : undefined }}
     >
       <AccessibleInteractionHost />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shrink-0" aria-label="Idjwi operational briefing">
+      <section className="order-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 shrink-0" aria-label="Idjwi operational briefing">
         <div className="flex flex-col lg:flex-row lg:items-center gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <Sparkles className="w-4 h-4 text-emerald-600" />
               <h1 className="text-sm font-black text-slate-800">Idjwi operational briefing</h1>
-              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[10px] font-bold ${graphStatus.color}`}><StatusIcon className="w-3 h-3" />{graphStatus.label}</span>
+              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-bold text-slate-600">{selectedScopeLabel}</span>
             </div>
             <p className="text-xs text-slate-600 mt-2">{governedGraph?.briefing?.headline || (governedQuery.isLoading ? "Evaluating your operational graph…" : "Using available company records.")}</p>
             <p className="text-[11px] text-slate-400 mt-1">{governedGraph?.briefing?.recommended_focus || "Select a node or relationship to investigate with Idjwi."}</p>
             {effectiveGraphContract.truncation?.truncated && (
-              <p className="text-[10px] text-amber-700 mt-1">
+              <p className="text-[11px] text-amber-700 mt-1">
                 Bounded view: {effectiveGraphContract.truncation.returned_nodes} nodes and {effectiveGraphContract.truncation.returned_edges} edges returned; at least {effectiveGraphContract.truncation.omitted_nodes || 0} nodes and {effectiveGraphContract.truncation.omitted_edges || 0} edges were omitted.
               </p>
             )}
@@ -1778,25 +2247,25 @@ export default function CompanyGraphHome() {
                   IDJWI_GRAPH_INTENTS.DAILY_OPERATIONAL_BRIEFING,
                   idjwiGraphContext,
                 )}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-emerald-700"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-black text-white hover:bg-emerald-700"
               >
                 <Sparkles className="w-3 h-3" /> Ask Idjwi for the briefing
               </button>
-              <button onClick={() => setBriefingOpen(open => !open)} className="text-[10px] font-bold text-slate-600 hover:text-slate-900">
+              <button onClick={() => toggleSection("briefing")} aria-expanded={briefingOpen} aria-controls="company-graph-briefing-detail" className="text-[11px] font-bold text-slate-600 hover:text-slate-900">
                 {briefingOpen ? "Hide operational detail" : "Show operational detail"}
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-2 text-center">
-            {[["Open work", governedGraph?.briefing?.open_tasks || 0], ["High risks", governedGraph?.briefing?.high_risks || 0], ["Recommendations", governedGraph?.briefing?.pending_recommendations || 0], ["Data gaps", governedGraph?.briefing?.quality_issues || 0]].map(([label, value]) => (
-              <div key={label} className="px-2 py-1.5 rounded-xl bg-slate-50 border border-slate-100"><p className="text-sm font-black text-slate-800">{value}</p><p className="text-[9px] text-slate-400">{label}</p></div>
+          <div className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
+            {[["Open work", governedGraph?.briefing?.open_tasks || 0], ["High risks", governedGraph?.briefing?.high_risks || 0], ["Recommendations", governedGraph?.briefing?.pending_recommendations || 0], ["Data gaps", governedGraph?.briefing?.quality_issues || 0], ["Relationship review", relationshipReviewSummary.pending], ["Quality work", graphQualitySummary.open]].map(([label, value]) => (
+              <div key={label} className="px-2 py-1.5 rounded-xl bg-slate-50 border border-slate-100"><p className="text-sm font-black text-slate-800">{value}</p><p className="text-[11px] text-slate-400">{label}</p></div>
             ))}
           </div>
         </div>
         {briefingOpen && governedGraph?.briefing?.contract_version && (
-          <div className="mt-4 grid gap-3 lg:grid-cols-3 border-t border-slate-100 pt-4">
+          <div id="company-graph-briefing-detail" className="mt-4 grid gap-3 lg:grid-cols-3 border-t border-slate-100 pt-4">
             <div className="rounded-xl bg-slate-50 p-3">
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">What changed</p>
+              <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">What changed</p>
               <div className="mt-2 space-y-2">
                 {(governedGraph.briefing.what_changed || []).slice(0, 3).map(change => (
                   <button key={`${change.record_type}:${change.record_id}`} onClick={() => {
@@ -1804,14 +2273,14 @@ export default function CompanyGraphHome() {
                     if (node) inspectNode(node, 1);
                   }} className="block w-full text-left">
                     <span className="block text-[11px] font-bold text-slate-700">{change.label}</span>
-                    <span className="block text-[9px] text-slate-400">{change.change}</span>
+                    <span className="block text-[11px] text-slate-400">{change.change}</span>
                   </button>
                 ))}
-                {!governedGraph.briefing.what_changed?.length && <p className="text-[10px] text-slate-400">No authorized change was recorded in the last 24 hours.</p>}
+                {!governedGraph.briefing.what_changed?.length && <p className="text-[11px] text-slate-400">No authorized change was recorded in the last 24 hours.</p>}
               </div>
             </div>
             <div className="rounded-xl bg-emerald-50/60 p-3">
-              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700">What matters today</p>
+              <p className="text-[11px] font-black uppercase tracking-wider text-emerald-700">What matters today</p>
               <div className="mt-2 space-y-2">
                 {(governedGraph.briefing.what_matters_today || []).slice(0, 3).map(priority => (
                   <button key={priority.priority_id} onClick={() => {
@@ -1819,23 +2288,23 @@ export default function CompanyGraphHome() {
                     if (node) inspectNode(node, 1);
                   }} className="block w-full text-left rounded-lg border border-emerald-100 bg-white p-2">
                     <span className="block text-[11px] font-black text-slate-800">{priority.title}</span>
-                    <span className="block text-[9px] text-slate-500">{priority.why_it_matters}</span>
-                    <span className="block mt-1 text-[9px] font-bold text-emerald-700">{priority.owner?.display_name} · {priority.relationship_explanation?.length || 0} explaining relationships</span>
+                    <span className="block text-[11px] text-slate-500">{priority.why_it_matters}</span>
+                    <span className="block mt-1 text-[11px] font-bold text-emerald-700">{priority.owner?.display_name} · {priority.relationship_explanation?.length || 0} explaining relationships</span>
                   </button>
                 ))}
-                {!governedGraph.briefing.what_matters_today?.length && <p className="text-[10px] text-emerald-700">No critical priority is visible in this bounded scope.</p>}
+                {!governedGraph.briefing.what_matters_today?.length && <p className="text-[11px] text-emerald-700">No critical priority is visible in this bounded scope.</p>}
               </div>
             </div>
             <div className="rounded-xl bg-amber-50/60 p-3">
-              <p className="text-[10px] font-black uppercase tracking-wider text-amber-700">Uncertainty and attention</p>
+              <p className="text-[11px] font-black uppercase tracking-wider text-amber-700">Uncertainty and attention</p>
               <div className="mt-2 space-y-1.5">
                 {(governedGraph.briefing.uncertainties || []).slice(0, 3).map((item, index) => (
-                  <p key={`${item.type}-${index}`} className="text-[10px] text-amber-800">{item.explanation}</p>
+                  <p key={`${item.type}-${index}`} className="text-[11px] text-amber-800">{item.explanation}</p>
                 ))}
                 {(governedGraph.briefing.requires_attention || []).slice(0, 3).map(item => (
-                  <p key={item.finding_code} className="text-[10px] text-slate-600"><span className="font-black">{item.count}</span> · {item.message}</p>
+                  <p key={item.finding_code} className="text-[11px] text-slate-600"><span className="font-black">{item.count}</span> · {item.message}</p>
                 ))}
-                {!governedGraph.briefing.uncertainties?.length && !governedGraph.briefing.requires_attention?.length && <p className="text-[10px] text-slate-500">No material uncertainty is disclosed.</p>}
+                {!governedGraph.briefing.uncertainties?.length && !governedGraph.briefing.requires_attention?.length && <p className="text-[11px] text-slate-500">No material uncertainty is disclosed.</p>}
               </div>
             </div>
           </div>
@@ -1843,48 +2312,65 @@ export default function CompanyGraphHome() {
       </section>
 
       {isAdministrator && (
-        <section className="rounded-2xl border border-indigo-200 bg-white p-4 shrink-0" aria-label="Governed relationship review">
+        <section className="order-4 rounded-2xl border border-indigo-200 bg-white p-4 shrink-0" aria-label="Governed relationship review">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
+            <button type="button" onClick={() => toggleSection("relationshipReview")} aria-expanded={relationshipReviewOpen} aria-controls="company-graph-relationship-review-detail" className="flex min-w-0 flex-1 items-start gap-3 text-left">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><GitBranch className="h-4 w-4" /></span>
+              <span className="min-w-0 flex-1">
               <p className="text-xs font-black text-slate-800">Relationship review</p>
-              <p className="mt-0.5 text-[10px] text-slate-500">
-                Review Idjwi Core&apos;s evidence-backed proposals across the ontology. Nothing becomes canonical until an authorized operator confirms it.
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                {relationshipReviewSummary.pending} pending · {relationshipReviewSummary.highConfidence} high confidence · {relationshipReviewSummary.disputed} disputed
               </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
+              <p className="mt-0.5 text-[11px] text-slate-400">{relationshipReviewSummary.critical || 0} critical · oldest {relationshipReviewSummary.oldest_proposal ? new Date(relationshipReviewSummary.oldest_proposal).toLocaleDateString() : "none"}</p>
+              </span>
+              {relationshipReviewOpen ? <ChevronUp className="mt-1 h-4 w-4 shrink-0 text-slate-400" /> : <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-slate-400" />}
+            </button>
+            {relationshipReviewOpen && <div className="flex flex-wrap gap-2">
+              <button onClick={() => setGovernanceWorkspace("relationships")} className="rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-black text-slate-700">Open workspace</button>
               <button
                 onClick={() => detectRelationshipCandidates().catch(error => reportGraphError("Relationship detection failed", error))}
                 disabled={!!candidateAction}
-                className="rounded-lg border border-indigo-200 px-3 py-1.5 text-[10px] font-black text-indigo-700 disabled:opacity-50"
+                className="rounded-lg border border-indigo-200 px-3 py-1.5 text-[11px] font-black text-indigo-700 disabled:opacity-50"
               >
                 {candidateAction === "detect" ? "Detecting…" : "Detect relationships"}
               </button>
               <button
                 onClick={() => decideCandidates([...selectedCandidates], "confirm").catch(error => reportGraphError("Relationship confirmation failed", error))}
                 disabled={!selectedCandidates.size || !!candidateAction}
-                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[10px] font-black text-white disabled:opacity-40"
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-black text-white disabled:opacity-40"
               >
                 Confirm selected ({selectedCandidates.size})
               </button>
-            </div>
+            </div>}
+          </div>
+          {relationshipReviewOpen && <div id="company-graph-relationship-review-detail">
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-2" aria-label="Relationship review filters">
+            <select aria-label="Filter relationship state" value={relationshipQueue.state} onChange={event => setRelationshipQueue(current => ({ ...current, state: event.target.value, offset: 0 }))} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"><option value="">All states</option><option value="proposed">Proposed</option><option value="disputed">Disputed</option><option value="rejected">Rejected</option></select>
+            <select aria-label="Filter relationship confidence" value={relationshipQueue.confidence} onChange={event => setRelationshipQueue(current => ({ ...current, confidence: event.target.value, offset: 0 }))} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"><option value="">All confidence</option><option value="high">High confidence</option><option value="medium">Medium confidence</option><option value="low">Low confidence</option></select>
+            <select aria-label="Filter relationship age" value={relationshipQueue.age} onChange={event => setRelationshipQueue(current => ({ ...current, age: event.target.value, offset: 0 }))} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"><option value="">Any age</option><option value="older_30_days">Older than 30 days</option></select>
+            <select aria-label="Sort relationship review" value={relationshipQueue.sort} onChange={event => setRelationshipQueue(current => ({ ...current, sort: event.target.value, offset: 0 }))} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"><option value="priority">Risk and impact</option><option value="confidence">Confidence</option><option value="oldest">Oldest first</option></select>
+            <input aria-label="Filter relationship source" placeholder="Source or method" value={relationshipQueue.source} onChange={event => setRelationshipQueue(current => ({ ...current, source: event.target.value, offset: 0 }))} className="w-36 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]" />
+            <span className="ml-auto text-[11px] font-semibold text-slate-500">Showing {relationshipCandidatesQuery.data?.pagination?.visible || 0} of {relationshipCandidatesQuery.data?.pagination?.total || 0}</span>
           </div>
           {relationshipCandidatesQuery.isError && (
-            <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[10px] text-rose-700">
+            <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[11px] text-rose-700">
               {relationshipCandidatesQuery.error.message}
             </p>
           )}
           {!relationshipCandidatesQuery.isError && relationshipCandidates.length === 0 && (
-            <p className="mt-3 rounded-xl bg-slate-50 p-3 text-[10px] text-slate-500">
+            <p className="mt-3 rounded-xl bg-slate-50 p-3 text-[11px] text-slate-500">
               No durable proposals are queued. Run detection to evaluate currently authorized records.
             </p>
           )}
-          <div className="mt-3 grid gap-2 xl:grid-cols-2">
-            {relationshipCandidates.slice(0, 20).map(candidate => {
+          <div className="mt-3 space-y-3">
+            {groupedRelationshipCandidates.map(group => <section key={group.key} className="rounded-xl border border-slate-200 bg-slate-50/50 p-2" aria-label={`${group.predicate} review group`}>
+              <div className="mb-2 flex items-center justify-between gap-2 px-1"><p className="text-[11px] font-black text-slate-700">{group.predicate.replaceAll("_", " ")} · {group.candidates.length} visible</p><span className="text-[11px] text-slate-400">{group.bulkGroup ? "Safe bulk group" : "Individual decisions only"}</span></div>
+              <div className="grid gap-2 xl:grid-cols-2">{group.candidates.map(candidate => {
               const fields = candidate.evidence?.[0]?.matching_fields || {};
               const explanation = candidateExplanations[candidate.assertion_key];
               const selectable = candidate.assertion_state === "proposed" && !!candidate.bulk_group_key;
               return (
-                <article key={candidate.assertion_key} className="rounded-xl border border-slate-200 p-3">
+                <article key={candidate.assertion_key} className={`rounded-xl border p-3 ${selectedCandidateId === candidate.assertion_key ? "border-indigo-400 bg-indigo-50/30" : "border-slate-200"}`}>
                   <div className="flex items-start gap-2">
                     <input
                       type="checkbox"
@@ -1901,17 +2387,17 @@ export default function CompanyGraphHome() {
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[9px] font-black text-indigo-700">{candidate.assertion_state}</span>
-                        <span className="text-[9px] text-slate-400">{candidate.matching_method?.replaceAll("_", " ")}</span>
+                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-black text-indigo-700">{candidate.assertion_state}</span>
+                        <span className="text-[11px] text-slate-400">{candidate.matching_method?.replaceAll("_", " ")}</span>
                       </div>
                       <p className="mt-2 text-[11px] font-black text-slate-800">
                         {fields.source_label || candidate.source_node_id} <span className="text-indigo-600">→ {candidate.predicate?.replaceAll("_", " ")} →</span> {fields.target_label || candidate.target_node_id}
                       </p>
-                      <p className="mt-1 text-[9px] text-slate-500">
+                      <p className="mt-1 text-[11px] text-slate-500">
                         Source: {candidate.carrier_type}:{candidate.carrier_record_id} · {Math.round(Number(candidate.candidate_confidence || 0) * 100)}% confidence · evidence v{candidate.evidence_version || 1}
                       </p>
                       {explanation && (
-                        <div className="mt-2 rounded-lg bg-slate-50 p-2 text-[9px] text-slate-600">
+                        <div className="mt-2 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-600">
                           <p className="font-bold text-slate-700">{explanation.summary}</p>
                           <p className="mt-1">{explanation.reasoning?.uncertainty}</p>
                           <p className="mt-1">{explanation.why_bulk_confirmation}</p>
@@ -1921,10 +2407,12 @@ export default function CompanyGraphHome() {
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
-                    <button onClick={() => explainCandidate(candidate.assertion_key).catch(error => reportGraphError("Relationship explanation failed", error))} className="rounded-lg border border-violet-200 px-2 py-1 text-[9px] font-bold text-violet-700">Why this match?</button>
+                    <button onClick={() => inspectRelationshipCandidate(candidate).catch(error => reportGraphError("Relationship inspection failed", error))} className="rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-bold text-white">Inspect records</button>
+                    <button onClick={() => explainCandidate(candidate.assertion_key).catch(error => reportGraphError("Relationship explanation failed", error))} className="rounded-lg border border-violet-200 px-2 py-1 text-[11px] font-bold text-violet-700">Why this match?</button>
+                    <button onClick={() => setExpandedEvidence(current => { const next = new Set(current); if (next.has(candidate.assertion_key)) next.delete(candidate.assertion_key); else next.add(candidate.assertion_key); return next; })} aria-expanded={expandedEvidence.has(candidate.assertion_key)} className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-bold text-slate-600">{expandedEvidence.has(candidate.assertion_key) ? "Hide evidence" : "Evidence"}</button>
                     {candidate.assertion_state === "proposed" && (
                       <>
-                        <button onClick={() => decideCandidates([candidate.assertion_key], "confirm").catch(error => reportGraphError("Relationship confirmation failed", error))} className="rounded-lg border border-emerald-200 px-2 py-1 text-[9px] font-bold text-emerald-700">Confirm</button>
+                        <button onClick={() => decideCandidates([candidate.assertion_key], "confirm").catch(error => reportGraphError("Relationship confirmation failed", error))} className="rounded-lg border border-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-700">Confirm</button>
                         <button onClick={async () => {
                           const corrected = await requestText({
                             title: "Edit relationship predicate",
@@ -1936,19 +2424,25 @@ export default function CompanyGraphHome() {
                           if (corrected?.trim() && corrected.trim() !== candidate.predicate) {
                             decideCandidates([candidate.assertion_key], "confirm", corrected.trim()).catch(error => reportGraphError("Relationship correction failed", error));
                           }
-                        }} className="rounded-lg border border-indigo-200 px-2 py-1 text-[9px] font-bold text-indigo-700">Edit predicate</button>
-                        <button onClick={() => decideCandidates([candidate.assertion_key], "reject").catch(error => reportGraphError("Relationship rejection failed", error))} className="rounded-lg border border-rose-200 px-2 py-1 text-[9px] font-bold text-rose-700">Reject</button>
+                        }} className="rounded-lg border border-indigo-200 px-2 py-1 text-[11px] font-bold text-indigo-700">Edit predicate</button>
+                        <button onClick={() => decideCandidates([candidate.assertion_key], "reject").catch(error => reportGraphError("Relationship rejection failed", error))} className="rounded-lg border border-rose-200 px-2 py-1 text-[11px] font-bold text-rose-700">Reject</button>
                       </>
                     )}
-                    {candidate.assertion_state === "disputed" && <span className="text-[9px] font-bold text-amber-700">Individual semantic review required</span>}
+                    {candidate.assertion_state === "disputed" && <span className="text-[11px] font-bold text-amber-700">Individual semantic review required</span>}
                   </div>
+                  {expandedEvidence.has(candidate.assertion_key) && <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-slate-950 p-2 text-[11px] text-slate-100">{JSON.stringify(candidate.evidence || [], null, 2)}</pre>}
                 </article>
               );
-            })}
+            })}</div></section>)}
+          </div>
+          <div className="mt-3 flex items-center justify-between">
+            <button disabled={relationshipQueue.offset === 0} onClick={() => setRelationshipQueue(current => ({ ...current, offset: Math.max(0, current.offset - (governanceWorkspace === "relationships" ? 25 : 5)) }))} className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-bold disabled:opacity-40">Previous</button>
+            <span className="text-[11px] text-slate-500">Backend page {Math.floor(relationshipQueue.offset / (governanceWorkspace === "relationships" ? 25 : 5)) + 1}</span>
+            <button disabled={!relationshipCandidatesQuery.data?.pagination?.has_more} onClick={() => setRelationshipQueue(current => ({ ...current, offset: relationshipCandidatesQuery.data.pagination.next_offset }))} className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-bold disabled:opacity-40">Next</button>
           </div>
           {lastRelationshipOutcome?.quality_comparison && (
             <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-              <p className="text-[10px] font-black text-emerald-800">
+              <p className="text-[11px] font-black text-emerald-800">
                 Governed review completed · {lastRelationshipOutcome.summary.successful} succeeded · {lastRelationshipOutcome.summary.failed} failed
               </p>
               <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -1960,74 +2454,97 @@ export default function CompanyGraphHome() {
                   ["Legacy proposals", "legacy_links_requiring_confirmation"],
                 ].map(([label, key]) => (
                   <div key={key} className="rounded-lg bg-white p-2">
-                    <p className="text-[9px] text-slate-500">{label}</p>
+                    <p className="text-[11px] text-slate-500">{label}</p>
                     <p className="text-xs font-black text-slate-800">
                       {lastRelationshipOutcome.quality_comparison.before[key]} → {lastRelationshipOutcome.quality_comparison.after[key]}
                     </p>
                   </div>
                 ))}
               </div>
-              <p className="mt-2 text-[9px] text-emerald-700">
+              <p className="mt-2 text-[11px] text-emerald-700">
                 Operational Focus: {lastRelationshipOutcome.quality_comparison.after.selection_strategy?.replaceAll("_", " ")} · {lastRelationshipOutcome.quality_comparison.after.preserved_relationship_edges} relationship edges preserved.
               </p>
             </div>
           )}
+          </div>}
         </section>
       )}
 
       {(qualityFindings.length > 0 || qualityQuery.isError) && (
-        <section className="rounded-2xl border border-amber-200 bg-white p-4 shrink-0" aria-label="Governed graph-quality work">
+        <section className="order-5 rounded-2xl border border-amber-200 bg-white p-4 shrink-0" aria-label="Governed graph-quality work">
           <div className="flex items-start justify-between gap-3">
-            <div>
+            <button type="button" onClick={() => toggleSection("graphQuality")} aria-expanded={graphQualityOpen} aria-controls="company-graph-quality-detail" className="flex min-w-0 flex-1 items-start gap-3 text-left">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><AlertCircle className="h-4 w-4" /></span>
+              <span className="min-w-0 flex-1">
               <p className="text-xs font-black text-slate-800">Graph-quality work</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">Findings become owned, evidence-backed repair work connected to tasks, recommendations, alerts, Data Readiness, and audit.</p>
-            </div>
-            <button onClick={() => navigate(createPageUrl("DataReadiness"))} className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800">Open Data Readiness</button>
+              <p className="text-[11px] text-slate-500 mt-0.5">{graphQualitySummary.open} open · {graphQualitySummary.critical} critical · {graphQualitySummary.unverified || 0} unverified · {graphQualitySummary.affected_records || 0} affected</p>
+              <p className="mt-0.5 text-[11px] font-bold text-amber-700">Overall health: {graphHealth}</p>
+              </span>
+              {graphQualityOpen ? <ChevronUp className="mt-1 h-4 w-4 shrink-0 text-slate-400" /> : <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-slate-400" />}
+            </button>
+            <div className="flex gap-2"><button onClick={() => setGovernanceWorkspace("quality")} className="text-[11px] font-bold text-slate-600 hover:text-slate-900">Open workspace</button><button onClick={() => navigate(createPageUrl("DataReadiness"))} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800">Open Data Readiness</button></div>
+          </div>
+          {graphQualityOpen && <div id="company-graph-quality-detail">
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-2">
+            <select aria-label="Filter graph-quality severity" value={qualityQueue.severity} onChange={event => setQualityQueue(current => ({ ...current, severity: event.target.value, offset: 0 }))} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"><option value="">All severities</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="low">Low</option></select>
+            <select aria-label="Filter graph-quality verification" value={qualityQueue.verification} onChange={event => setQualityQueue(current => ({ ...current, verification: event.target.value, offset: 0 }))} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"><option value="">All verification</option><option value="unverified">Unverified</option><option value="verified">Verified</option></select>
+            <select aria-label="Sort graph-quality work" value={qualityQueue.sort} onChange={event => setQualityQueue(current => ({ ...current, sort: event.target.value, offset: 0 }))} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"><option value="priority">Severity and consequence</option><option value="affected_records">Affected records</option></select>
+            <span className="ml-auto text-[11px] font-semibold text-slate-500">Showing {qualityQuery.data?.pagination?.visible || 0} of {qualityQuery.data?.pagination?.total || 0}</span>
           </div>
           {qualityQuery.isError ? (
-            <div role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[10px] text-rose-700">
+            <div role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[11px] text-rose-700">
               {qualityQuery.error.message}
               {qualityQuery.error.action && <span className="block mt-1 font-bold">Operator action: {qualityQuery.error.action.replaceAll("_", " ")}</span>}
             </div>
           ) : (
             <div className="mt-3 grid gap-2 xl:grid-cols-2">
-              {qualityFindings.slice(0, 6).map(finding => (
-                <article key={finding.finding_key} className="rounded-xl border border-slate-200 p-3">
+              {qualityFindings.map(finding => (
+                <article key={finding.finding_key} className={`rounded-xl border p-3 ${selectedQualityFinding?.finding_key === finding.finding_key ? "border-amber-400 bg-amber-50/30" : "border-slate-200"}`}>
                   <div className="flex items-start gap-2">
-                    <span className={`mt-0.5 rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${finding.severity === "critical" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>{finding.severity}</span>
+                    <span className={`mt-0.5 rounded-full px-2 py-0.5 text-[11px] font-black uppercase ${finding.severity === "critical" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>{finding.severity}</span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[11px] font-black text-slate-800">{finding.affected_count} · {finding.issue_code.replaceAll("_", " ").toLowerCase()}</p>
-                      <p className="mt-1 text-[10px] text-slate-500">{finding.business_consequence}</p>
-                      <p className="mt-1 text-[10px] font-semibold text-slate-700">Owner: {finding.owner?.display_name} · {finding.verification_status}</p>
-                      <p className="mt-1 text-[9px] text-slate-400">Repair: {finding.suggested_repair}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">{finding.business_consequence}</p>
+                      <p className="mt-1 text-[11px] font-semibold text-slate-700">Owner: {finding.owner?.display_name || "Unassigned"} · {finding.verification_status} · scope {finding.affected_scope?.label || finding.scope?.id || selectedScopeLabel}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">Repair: {finding.suggested_repair}</p>
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
-                    {qualityQuery.data?.can_manage && !finding.task_id && <button onClick={() => runQualityWork(finding, "create_task").catch(error => reportGraphError("Task creation failed", error))} className="rounded-lg border border-slate-200 px-2 py-1 text-[9px] font-bold">Create task</button>}
-                    {qualityQuery.data?.can_manage && !finding.recommendation_id && <button onClick={() => runQualityWork(finding, "create_recommendation").catch(error => reportGraphError("Recommendation creation failed", error))} className="rounded-lg border border-slate-200 px-2 py-1 text-[9px] font-bold">Recommend repair</button>}
-                    {qualityQuery.data?.can_manage && finding.alert_state === "open" && <button onClick={() => runQualityWork(finding, "acknowledge_alert").catch(error => reportGraphError("Alert acknowledgement failed", error))} className="rounded-lg border border-rose-200 px-2 py-1 text-[9px] font-bold text-rose-700">Acknowledge alert</button>}
-                    {qualityQuery.data?.can_manage && finding.verification_status !== "verified" && <button onClick={() => runQualityWork(finding, "mark_verified").catch(error => reportGraphError("Finding verification failed", error))} className="rounded-lg border border-emerald-200 px-2 py-1 text-[9px] font-bold text-emerald-700">Verify</button>}
-                    {qualityQuery.data?.can_manage && finding.status !== "resolved" && <button onClick={() => runQualityWork(finding, "resolve").catch(error => reportGraphError("Finding resolution failed", error))} className="rounded-lg border border-blue-200 px-2 py-1 text-[9px] font-bold text-blue-700">Resolve</button>}
+                    <button onClick={() => inspectQualityFinding(finding)} className="rounded-lg bg-amber-600 px-2 py-1 text-[11px] font-bold text-white">Inspect affected records</button>
+                    {qualityQuery.data?.can_manage && !finding.task_id && <button onClick={() => runQualityWork(finding, "create_task").catch(error => reportGraphError("Task creation failed", error))} className="rounded-lg bg-slate-900 px-2 py-1 text-[11px] font-bold text-white">Create repair task</button>}
                     <button onClick={() => openIdjwiGraphAction(
                       `Explain graph-quality finding ${finding.issue_code} and its safest repair.`,
                       IDJWI_GRAPH_INTENTS.RECOMMEND_GRAPH_ACTION,
                       idjwiGraphContext,
                       { graph_quality_finding: finding },
-                    )} className="rounded-lg border border-violet-200 px-2 py-1 text-[9px] font-bold text-violet-700">Ask Idjwi</button>
+                    )} className="rounded-lg border border-violet-200 px-2 py-1 text-[11px] font-bold text-violet-700">Ask Idjwi</button>
+                    <details className="relative"><summary className="cursor-pointer list-none rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-bold text-slate-600">More actions</summary><div className="absolute right-0 z-30 mt-1 w-40 space-y-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                      {qualityQuery.data?.can_manage && !finding.recommendation_id && <button onClick={() => runQualityWork(finding, "create_recommendation").catch(error => reportGraphError("Recommendation creation failed", error))} className="block w-full rounded px-2 py-1 text-left text-[11px] font-bold hover:bg-slate-50">Recommend repair</button>}
+                      {qualityQuery.data?.can_manage && finding.alert_state === "open" && <button onClick={() => runQualityWork(finding, "acknowledge_alert").catch(error => reportGraphError("Alert acknowledgement failed", error))} className="block w-full rounded px-2 py-1 text-left text-[11px] font-bold text-rose-700 hover:bg-rose-50">Acknowledge alert</button>}
+                      {qualityQuery.data?.can_manage && finding.verification_status !== "verified" && <button onClick={() => runQualityWork(finding, "mark_verified").catch(error => reportGraphError("Finding verification failed", error))} className="block w-full rounded px-2 py-1 text-left text-[11px] font-bold text-emerald-700 hover:bg-emerald-50">Verify</button>}
+                      {qualityQuery.data?.can_manage && finding.status !== "resolved" && <button onClick={() => runQualityWork(finding, "resolve").catch(error => reportGraphError("Finding resolution failed", error))} className="block w-full rounded px-2 py-1 text-left text-[11px] font-bold text-blue-700 hover:bg-blue-50">Resolve</button>}
+                    </div></details>
                   </div>
-                  {finding.resolution_history?.length > 0 && <p className="mt-2 text-[9px] text-slate-400">{finding.resolution_history.length} audited resolution event{finding.resolution_history.length === 1 ? "" : "s"}</p>}
+                  <details className="mt-2 rounded-lg bg-slate-50 p-2"><summary className="cursor-pointer text-[11px] font-bold text-slate-600">Evidence and repair rationale</summary><pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] text-slate-600">{JSON.stringify(finding.evidence || [], null, 2)}</pre></details>
+                  {finding.resolution_history?.length > 0 && <p className="mt-2 text-[11px] text-slate-400">{finding.resolution_history.length} audited resolution event{finding.resolution_history.length === 1 ? "" : "s"}</p>}
                 </article>
               ))}
             </div>
           )}
+          <div className="mt-3 flex items-center justify-between">
+            <button disabled={qualityQueue.offset === 0} onClick={() => setQualityQueue(current => ({ ...current, offset: Math.max(0, current.offset - (governanceWorkspace === "quality" ? 20 : 4)) }))} className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-bold disabled:opacity-40">Previous</button>
+            <button onClick={() => navigate(createPageUrl("DataReadiness"))} className="text-[11px] font-black text-indigo-700">View all in Data Readiness</button>
+            <button disabled={!qualityQuery.data?.pagination?.has_more} onClick={() => setQualityQueue(current => ({ ...current, offset: qualityQuery.data.pagination.next_offset }))} className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-bold disabled:opacity-40">Next</button>
+          </div>
+          </div>}
         </section>
       )}
 
       {isAdministrator && (
-        <section className="rounded-2xl border border-slate-200 bg-white shrink-0" aria-labelledby="company-graph-guide-title">
+        <section className="order-1 rounded-2xl border border-slate-200 bg-white shrink-0" aria-labelledby="company-graph-guide-title">
           <button
             type="button"
-            onClick={() => setPageGuideOpen(open => !open)}
+            onClick={() => toggleSection("pageGuide")}
             aria-expanded={pageGuideOpen}
             aria-controls="company-graph-guide"
             className="w-full flex items-center gap-3 p-3 text-left hover:bg-slate-50 rounded-2xl"
@@ -2064,15 +2581,29 @@ export default function CompanyGraphHome() {
         </section>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 shrink-0">
-        <div className="relative min-w-[220px] flex-1 max-w-md">
-          <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
-          <input aria-label="Find a record in the company graph" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Find people, enterprises, work or risks…" className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white" />
+      <section className="order-2 flex min-h-[620px] flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3" aria-label="Primary Company Graph workspace">
+      <div className="grid shrink-0 gap-2 xl:grid-cols-[auto_minmax(280px,1fr)_auto]" aria-label="Company Graph controls">
+        <div className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-2" aria-label="Scope controls">
+          <label className="text-[11px] font-black uppercase tracking-wider text-slate-400"><span className="mb-1 block">Scope</span><select aria-label="Organization or operational-unit scope" value={scopeId} onChange={event => {
+            neighborhoodCoordinatorRef.current.cancel();
+            setScopeId(event.target.value);
+            setNeighborhoodGraph(null);
+            setSelectedNode(null);
+            setInspectionTrail([]);
+            setNeighborhoodState({ status: "idle", error: "" });
+          }} className="min-w-48 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold normal-case tracking-normal text-slate-700"><option value="">Organization-wide</option>{scopeOptions.map(node => <option key={node.id} value={node.entity_id}>{node.label} · {(node.attributes?.unit_type || "operational unit").replaceAll("_", " ")}</option>)}</select></label>
+        </div>
+
+        <div className="flex min-w-0 items-end gap-2 rounded-xl border border-slate-200 bg-white p-2" aria-label="Find controls">
+          <div className="relative min-w-[220px] flex-1">
+          <span className="mb-1 block text-[11px] font-black uppercase tracking-wider text-slate-400">Find</span>
+          <Search className="absolute left-3 top-6 w-3.5 h-3.5 text-slate-400" />
+          <input aria-label="Find a record in the company graph" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Find records, references, predicates or status…" className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-9 pr-3 text-[11px]" />
           {searchTerm.trim().length >= 2 && (
             <div className="absolute z-40 top-full mt-1 w-full max-h-96 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl">
               {searchResults.map(node => (
                 <button key={node.id} onClick={() => { setSearchTerm(""); inspectNode(node, 1); }} className="w-full flex justify-between gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-left">
-                  <span className="truncate"><span className="font-semibold">{node.label}</span><span className="block text-[9px] text-slate-400 truncate">{node.sublabel || node.status || node.entity_id}</span></span>
+                  <span className="truncate"><span className="font-semibold">{node.label}</span><span className="block text-[11px] text-slate-400 truncate">{node.sublabel || node.status || node.entity_id}</span></span>
                   <span className="capitalize text-slate-400 shrink-0">{node.entity_type}</span>
                 </button>
               ))}
@@ -2081,7 +2612,7 @@ export default function CompanyGraphHome() {
                   <span className="font-semibold text-slate-700">{edge.source_label}</span>
                   <span className="mx-1.5 text-amber-600">{edge.label || edge.predicate}</span>
                   <span className="font-semibold text-slate-700">{edge.target_label}</span>
-                  <span className="block text-[9px] text-slate-400">{edge.match_reason.replaceAll("_", " ")} · {Math.round((edge.confidence || 0) * 100)}%</span>
+                  <span className="block text-[11px] text-slate-400">{edge.match_reason.replaceAll("_", " ")} · {Math.round((edge.confidence || 0) * 100)}%</span>
                 </button>
               ))}
               <button onClick={() => {
@@ -2094,41 +2625,59 @@ export default function CompanyGraphHome() {
               }} className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-bold text-violet-700 bg-violet-50 border-t border-violet-100 hover:bg-violet-100">
                 <Sparkles className="w-3.5 h-3.5" /> Ask Idjwi to search naturally
               </button>
-              {!graphSearchQuery.isLoading && searchResults.length === 0 && edgeSearchResults.length === 0 && <p className="px-3 py-2 text-[10px] text-slate-400">No direct governed match. Idjwi can interpret the question using the visible graph.</p>}
+              {!graphSearchQuery.isLoading && searchResults.length === 0 && edgeSearchResults.length === 0 && <p className="px-3 py-2 text-[11px] text-slate-400">No direct governed match. Idjwi can interpret the question using the visible graph.</p>}
             </div>
           )}
+          </div>
+          <button onClick={() => askIdjwiToFind().catch(error => reportGraphError("Idjwi graph search failed", error))} className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-violet-50 px-2.5 py-1.5 text-[11px] font-black text-violet-700"><Sparkles className="h-3.5 w-3.5" /> Ask Idjwi</button>
         </div>
-        <select aria-label="Organization or operational-unit scope" value={scopeId} onChange={event => {
-          neighborhoodCoordinatorRef.current.cancel();
-          setScopeId(event.target.value);
-          setNeighborhoodGraph(null);
-          setSelectedNode(null);
-          setInspectionTrail([]);
-          setNeighborhoodState({ status: "idle", error: "" });
-        }} className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white"><option value="">Organization-wide</option>{scopeOptions.map(node => <option key={node.id} value={node.entity_id}>{node.label} · {(node.attributes?.unit_type || "operational unit").replaceAll("_", " ")}</option>)}</select>
-        {savedViews.length > 0 && <select aria-label="Governed saved graph views" defaultValue="" onChange={event => applySavedView(event.target.value)} className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white"><option value="">Saved views</option>{savedViews.map(view => <option key={view.id} value={view.id}>{view.name} · {view.audience}{view.validation_state !== "valid" ? " · review" : ""}</option>)}</select>}
-        {savedViewsQuery.isError && <span role="status" className="text-[10px] font-semibold text-amber-700">Saved views unavailable</span>}
-        <button onClick={() => saveCurrentView().catch(error => reportGraphError("Saved view could not be created", error))} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600" title="Save governed view" aria-label="Save governed graph view"><Save className="w-4 h-4" /></button>
-        <button disabled={!canExportGraph} onClick={() => exportGraph().catch(error => reportGraphError("Governed export failed", error))} className="p-2 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed" title={canExportGraph ? "Export visible graph through the governed backend" : "Governed graph export is not yet permitted"} aria-label="Export visible graph"><Download className="w-4 h-4" /></button>
-        {inspectionTrail.length > 0 && <button onClick={inspectBack} className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 flex items-center gap-1"><ArrowLeft className="w-3.5 h-3.5" />Back</button>}
-        {neighborhoodGraph && <button onClick={returnToOverview} className="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600">Return to overview</button>}
-        {!neighborhoodGraph && effectiveGraphContract.truncation?.continuation_available && <button disabled={loadingContinuation} onClick={() => loadNextBoundedPage().catch(error => reportGraphError("Additional graph records could not be loaded", error))} className="text-xs px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 disabled:opacity-50">{loadingContinuation ? "Loading bounded page…" : "Load next bounded page"}</button>}
+
+        <button type="button" onClick={() => toggleSection("graphStatus")} aria-expanded={graphStatusOpen} aria-controls="company-graph-status-detail" className={`flex min-w-56 items-center gap-2 rounded-xl border px-3 py-2 text-left ${graphStatus.color}`}><StatusIcon className="h-4 w-4 shrink-0" /><span className="min-w-0 flex-1"><span className="block text-[11px] font-black uppercase tracking-wider">Graph health</span><span className="block truncate text-[11px] font-bold">{graphStatus.label}</span></span>{graphStatusOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}</button>
+
+        <div className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-2 xl:col-span-3" aria-label="View, navigation, boundary and governance controls">
+          <div className="flex flex-wrap items-end gap-1.5 border-r border-slate-200 pr-2"><span className="mb-1 w-full text-[11px] font-black uppercase tracking-wider text-slate-400">View</span><select aria-label="Operational graph question and layout" value={graphMode} onChange={event => setGraphMode(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold">{Object.entries(GRAPH_MODES).filter(([, definition]) => !definition.legacy).map(([key, { label }]) => <option key={key} value={key}>{label}</option>)}</select>{savedViews.length > 0 && <select aria-label="Governed saved graph views" defaultValue="" onChange={event => applySavedView(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px]"><option value="">Saved views</option>{savedViews.map(view => <option key={view.id} value={view.id}>{view.name} · {view.audience}{view.validation_state !== "valid" ? " · review" : ""}</option>)}</select>}<select aria-label="Accessible graph representation" value={graphRepresentation} onChange={event => setGraphRepresentation(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px]"><option value="visual">Visual graph</option><option value="records">Record list</option><option value="relationships">Relationship table</option><option value="outline">Neighborhood outline</option><option value="summary">Text summary</option></select><button onClick={() => setFiltersOpen(value => !value)} aria-expanded={filtersOpen} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-bold"><Filter className="h-3 w-3" /> Filters</button></div>
+
+          <div className="flex flex-wrap items-end gap-1.5 border-r border-slate-200 pr-2"><span className="mb-1 w-full text-[11px] font-black uppercase tracking-wider text-slate-400">Navigate</span><button onClick={returnToOverview} className="rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-bold">Overview</button><button disabled={!inspectionTrail.length} onClick={inspectBack} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-bold disabled:opacity-40"><ArrowLeft className="h-3 w-3" /> Back</button><span className="rounded-lg bg-slate-50 px-2 py-1.5 text-[11px] text-slate-500">{pinnedNodes.length} pinned · {compareNodes.length}/2 compare</span></div>
+
+          <div className="flex flex-wrap items-end gap-1.5 border-r border-slate-200 pr-2"><span className="mb-1 w-full text-[11px] font-black uppercase tracking-wider text-slate-400">Boundary</span><span className="rounded-lg bg-slate-50 px-2 py-1.5 text-[11px] font-semibold text-slate-600">Showing {effectiveGraphContract.truncation?.returned_nodes ?? nodes.length} of at least {(effectiveGraphContract.truncation?.returned_nodes ?? nodes.length) + (effectiveGraphContract.truncation?.omitted_nodes || 0)} authorized records</span>{!neighborhoodGraph && effectiveGraphContract.truncation?.continuation_available && <button disabled={loadingContinuation} onClick={() => loadNextBoundedPage().catch(error => reportGraphError("Additional graph records could not be loaded", error))} className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] font-black text-amber-800 disabled:opacity-50">{loadingContinuation ? "Loading…" : `Load ${effectiveGraphContract.truncation?.omitted_nodes || "more"} more`}</button>}</div>
+
+          <div className="flex flex-wrap items-end gap-1.5"><span className="mb-1 w-full text-[11px] font-black uppercase tracking-wider text-slate-400">Governance</span><button onClick={() => saveCurrentView().catch(error => reportGraphError("Saved view could not be created", error))} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-bold"><Save className="h-3 w-3" /> Save</button><button disabled={!canExportGraph} onClick={() => exportGraph().catch(error => reportGraphError("Governed export failed", error))} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-bold disabled:opacity-40"><Download className="h-3 w-3" /> Export</button>{isAdministrator && <button onClick={() => setGovernanceWorkspace("relationships")} className="rounded-lg border border-indigo-200 px-2 py-1.5 text-[11px] font-bold text-indigo-700">Review queues</button>}</div>
+          {savedViewsQuery.isError && <span role="status" className="text-[11px] font-semibold text-amber-700">Saved views unavailable</span>}
+        </div>
       </div>
+
+      {graphStatusOpen && <div id="company-graph-status-detail" className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-600 sm:grid-cols-2 lg:grid-cols-4" role="status">
+        <p><span className="font-black text-slate-800">Service:</span> {governedQuery.isError ? "Unavailable" : "Available"}</p>
+        <p><span className="font-black text-slate-800">Scope:</span> {selectedScopeLabel}</p>
+        <p><span className="font-black text-slate-800">Completeness:</span> {effectiveGraphContract.completeness?.state || "unavailable"}</p>
+        <p><span className="font-black text-slate-800">Freshness:</span> {effectiveGraphContract.generated_at ? new Date(effectiveGraphContract.generated_at).toLocaleString() : "Not disclosed"}</p>
+        <p><span className="font-black text-slate-800">Source failures:</span> {unavailableSourceCount}</p>
+        <p><span className="font-black text-slate-800">Boundary:</span> {effectiveGraphContract.truncation?.truncated ? `${effectiveGraphContract.truncation.omitted_nodes || 0} records omitted` : "No disclosed truncation"}</p>
+        <p><span className="font-black text-slate-800">Relationship work:</span> {relationshipReviewSummary.pending}</p>
+        <p><span className="font-black text-slate-800">Quality work:</span> {graphQualitySummary.open}</p>
+        <p className="sm:col-span-2 lg:col-span-4"><span className="font-black text-slate-800">System health:</span> {graphStatus.label}. <span className="font-black text-slate-800">Data quality:</span> {graphHealth}.</p>
+        <div className="sm:col-span-2 lg:col-span-4" aria-label="Supporting capability status"><p className="mb-2 font-black text-slate-800">Supporting capabilities</p><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{[["alerts", "Alerts status"], ["approvals", "Pending approvals"], ["intelligence", "Intelligence inbox"], ["graph_audit", "Graph audit"]].map(([key, label]) => {
+          const capability = supportingCapabilities[key];
+          const state = capability?.state || (supportingCapabilitiesQuery.isLoading ? "checking" : "unavailable");
+          const icon = state === "available" ? "✓" : state === "empty" ? "○" : state === "unauthorized" ? "⊘" : state === "degraded" ? "△" : state === "checking" ? "…" : "!";
+          return <div key={key} className="rounded-lg border border-slate-200 bg-slate-50 p-2"><p className="font-black text-slate-700"><span aria-hidden="true">{icon} </span>{label}</p><p className="mt-1 capitalize text-slate-500">{state}</p>{capability?.message && <p className="mt-1 text-slate-500">{capability.message}</p>}</div>;
+        })}</div></div>
+      </div>}
 
       {(inspectionTrail.length > 0 || pinnedNodes.length > 0) && (
         <div className="flex items-center gap-2 flex-wrap shrink-0" aria-label="Graph inspection navigation">
-          <button onClick={returnToOverview} className="text-[10px] font-bold text-slate-500 hover:text-slate-800">Overview</button>
+          <button onClick={returnToOverview} className="text-[11px] font-bold text-slate-500 hover:text-slate-800">Overview</button>
           {inspectionTrail.map((item, index) => (
             <React.Fragment key={`${item.id}-${index}`}>
               <span className="text-slate-300">/</span>
-              <button onClick={() => inspectTrailIndex(index)} className={`max-w-36 truncate text-[10px] ${index === inspectionTrail.length - 1 ? "font-black text-slate-800" : "text-slate-500 hover:text-slate-800"}`}>{item.label}</button>
+              <button onClick={() => inspectTrailIndex(index)} className={`max-w-36 truncate text-[11px] ${index === inspectionTrail.length - 1 ? "font-black text-slate-800" : "text-slate-500 hover:text-slate-800"}`}>{item.label}</button>
             </React.Fragment>
           ))}
           {pinnedNodes.length > 0 && (
             <div className="ml-auto flex items-center gap-1">
               <Pin className="w-3 h-3 text-amber-600" />
               {pinnedNodes.map(node => (
-                <button key={node.id} onClick={() => inspectNode(node, 1)} className="px-2 py-1 rounded-full border border-amber-200 bg-amber-50 text-[9px] font-bold text-amber-800 max-w-28 truncate">{node.label}</button>
+                <button key={node.id} onClick={() => inspectNode(node, 1)} className="px-2 py-1 rounded-full border border-amber-200 bg-amber-50 text-[11px] font-bold text-amber-800 max-w-28 truncate">{node.label}</button>
               ))}
             </div>
           )}
@@ -2146,27 +2695,27 @@ export default function CompanyGraphHome() {
       {compareNodes.length > 0 && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 shrink-0" aria-label="Node comparison">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Compare nodes · {compareNodes.length}/2</p>
-            <button onClick={() => setCompareNodes([])} className="text-[10px] font-bold text-blue-600">Clear</button>
+            <p className="text-[11px] font-black uppercase tracking-widest text-blue-700">Compare nodes · {compareNodes.length}/2</p>
+            <button onClick={() => setCompareNodes([])} className="text-[11px] font-bold text-blue-600">Clear</button>
           </div>
           <div className="grid grid-cols-2 gap-3">
             {compareNodes.map(node => (
               <button key={node.id} onClick={() => inspectNode(node, 1)} className="rounded-lg bg-white border border-blue-100 p-2 text-left">
                 <p className="text-xs font-black text-slate-800 truncate">{node.label}</p>
-                <p className="text-[10px] text-slate-500 capitalize">{node.entity_type} · {node.status || "status unavailable"}</p>
-                <p className="text-[10px] text-slate-500">Importance {Math.round((node.importance || 0) * 100)}% · {node.risk_level ? `${node.risk_level} risk` : "no flagged risk"}</p>
-                <p className="text-[10px] font-semibold text-blue-600">
+                <p className="text-[11px] text-slate-500 capitalize">{node.entity_type} · {node.status || "status unavailable"}</p>
+                <p className="text-[11px] text-slate-500">Importance {Math.round((node.importance || 0) * 100)}% · {node.risk_level ? `${node.risk_level} risk` : "no flagged risk"}</p>
+                <p className="text-[11px] font-semibold text-blue-600">
                   {edges.filter(edge => edge.source === node.id || edge.target === node.id).length} visible relationships
                 </p>
               </button>
             ))}
-            {compareNodes.length === 1 && <div className="rounded-lg border border-dashed border-blue-200 flex items-center justify-center text-[10px] text-blue-500 p-2">Select another node and choose Compare node</div>}
+            {compareNodes.length === 1 && <div className="rounded-lg border border-dashed border-blue-200 flex items-center justify-center text-[11px] text-blue-500 p-2">Select another node and choose Compare node</div>}
           </div>
         </div>
       )}
 
-      {/* ── Company Pulse bar ──────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 flex-wrap shrink-0">
+      {/* ── Optional view filters ─────────────────────────────────────────── */}
+      {filtersOpen && <div className="flex items-center gap-2 flex-wrap shrink-0 rounded-xl border border-slate-200 bg-white p-2">
         <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mr-1">Focus</span>
         {PULSE_FILTERS.map(pf => {
           const PIcon = pf.icon;
@@ -2176,6 +2725,7 @@ export default function CompanyGraphHome() {
             <button
               key={pf.key}
               onClick={() => pulseClick(pf.key)}
+              aria-pressed={isActive}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
                 isActive
                   ? "bg-slate-800 text-white border-slate-700 shadow-sm"
@@ -2185,7 +2735,7 @@ export default function CompanyGraphHome() {
               <PIcon className="w-3.5 h-3.5" />
               {pf.label}
               {count > 0 && (
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${isActive ? "bg-white/20" : "bg-current/10"}`}>
+                <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-black ${isActive ? "bg-white/20" : "bg-current/10"}`}>
                   {count}
                 </span>
               )}
@@ -2194,26 +2744,15 @@ export default function CompanyGraphHome() {
         })}
 
         <div className="ml-auto flex items-center gap-2">
-          {/* Graph mode selector */}
-          <select
-            value={graphMode}
-            onChange={e => setGraphMode(e.target.value)}
-            className="text-xs border border-slate-200 rounded-xl px-3 py-1.5 bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-slate-300"
-          >
-            {Object.entries(GRAPH_MODES).map(([key, { label }]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
-
-          {/* Stats */}
-          <div className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500">
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>{filteredNodes.length} nodes · {filteredEdges.length} edges</span>
-          </div>
+          {expandedClusterIds.size > 0 && (
+            <button onClick={() => setExpandedClusterIds(new Set())} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[11px] font-bold text-indigo-700">
+              Restore {expandedClusterIds.size} summary {expandedClusterIds.size === 1 ? "cluster" : "clusters"}
+            </button>
+          )}
 
           {isLoading && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
         </div>
-      </div>
+      </div>}
 
       {/* ── What needs attention today ──────────────────────────────────────── */}
       <div className="flex items-center gap-2 flex-wrap shrink-0">
@@ -2247,12 +2786,12 @@ export default function CompanyGraphHome() {
       </div>
 
       {governedGraph?.quality?.issues?.length > 0 && <div className="flex items-center gap-2 overflow-x-auto shrink-0" role="status" aria-label="Graph data-quality issues">
-        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Graph quality</span>
-        {governedGraph.quality.issues.map(issue => <button key={issue.code} onClick={() => { setGraphMode("data_quality"); setActiveFilter("unconnected"); }} className={`shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-full border ${issue.severity === "critical" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{issue.code.replaceAll("_", " ")} · {issue.count}</button>)}
+        <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Graph quality</span>
+        {governedGraph.quality.issues.map(issue => <button key={issue.code} onClick={() => { setGraphMode("data_quality"); setActiveFilter("unconnected"); }} className={`shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-full border ${issue.severity === "critical" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{issue.code.replaceAll("_", " ")} · {issue.count}</button>)}
       </div>}
 
       {/* ── Type filter toggles ─────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+      {filtersOpen && <div className="flex items-center gap-1.5 flex-wrap shrink-0 rounded-xl border border-slate-200 bg-white p-2">
         <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
         {Object.entries(ENTITY_CONFIG).map(([type, cfg]) => {
           const isOn = visibleTypes.has(type);
@@ -2262,7 +2801,7 @@ export default function CompanyGraphHome() {
             <button
               key={type}
               onClick={() => toggleType(type)}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border transition-all ${
                 isOn ? "opacity-100" : "opacity-35"
               }`}
               style={{
@@ -2276,16 +2815,11 @@ export default function CompanyGraphHome() {
             </button>
           );
         })}
-      </div>
+      </div>}
 
       {/* ── Main area: Graph + Context panel ──────────────────────────────────── */}
-      <div className="flex flex-wrap gap-1" role="tablist" aria-label="Company Graph representation">
-        {[["visual", "Visual graph"], ["records", "Record list"], ["relationships", "Relationship table"], ["outline", "Neighborhood outline"], ["summary", "Text summary"]].map(([value, label]) => (
-          <button key={value} role="tab" aria-selected={graphRepresentation === value} onClick={() => setGraphRepresentation(value)} className={`rounded-lg px-3 py-1.5 text-[10px] font-bold focus:ring-2 focus:ring-indigo-500 ${graphRepresentation === value ? "bg-slate-800 text-white" : "border bg-white text-slate-600"}`}>{label}</button>
-        ))}
-      </div>
       <p className="sr-only" aria-live="polite">{screenReaderMessage}</p>
-      <div className="flex flex-col lg:flex-row gap-3 flex-1 min-h-0">
+      <div className={`flex flex-none flex-col gap-3 lg:flex-row ${productSurface === "desktop" ? "h-[calc(100vh-15rem)] min-h-[600px]" : "h-[480px] sm:h-[540px] lg:h-[clamp(600px,68vh,720px)]"}`}>
 
         {/* Graph canvas */}
         <div className={`flex flex-col flex-1 min-w-0 min-h-0 transition-all ${selectedNode ? "mr-0" : ""}`}>
@@ -2301,21 +2835,27 @@ export default function CompanyGraphHome() {
           ) : (
             <GraphCanvas
               elements={cyElements}
-              layoutMode={graphMode}
+              layoutMode={effectiveLayoutMode}
               onNodeSelect={handleNodeSelect}
               onEdgeSelect={handleEdgeSelect}
               highlightTypes={pulseHighlight}
               activeFilter={activeFilter}
               focusNodeId={focusNodeId}
+              focusNodeIds={qualityFocusNodeIds}
               focusEdgeId={focusEdgeId}
-              isFullscreen={isFullscreen}
-              onToggleFullscreen={() => setIsFullscreen(value => !value)}
+              onExpandGraph={() => setExpansionMode("graph")}
+              onExpandWorkspace={() => setExpansionMode("workspace")}
+              graphExpandButtonRef={graphExpandButtonRef}
+              workspaceExpandButtonRef={workspaceExpandButtonRef}
+              legendExpanded={relationshipLegendOpen}
+              onToggleLegend={() => toggleSection("relationshipLegend")}
+              viewportRef={graphViewportRef}
             />
           )}
         </div>
 
         {/* Context panel */}
-        <div className={`shrink-0 transition-all duration-200 w-full ${selectedNode ? "lg:w-80" : "lg:w-72"} max-h-[45vh] lg:max-h-none bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col`}>
+        <div id="company-graph-inspector" tabIndex={-1} className={`shrink-0 transition-all duration-200 w-full ${selectedNode ? "flex max-h-[220px] lg:w-80 lg:max-h-none" : "hidden"} bg-white border border-slate-200 rounded-2xl overflow-hidden flex-col focus:outline-none focus:ring-2 focus:ring-indigo-500`}>
           <ContextPanel
             selected={selectedNode}
             onClose={() => setSelectedNode(null)}
@@ -2331,12 +2871,118 @@ export default function CompanyGraphHome() {
             onTogglePin={togglePin}
             isCompared={Boolean(selectedNode?.node && compareNodes.some(node => node.id === selectedNode.node.id))}
             onToggleCompare={toggleCompare}
+            onExpandCluster={expandSemanticCluster}
+            onCreateRepairWork={createClusterRepairWork}
+            onRestorePrevious={restorePreviousCitationContext}
+            canRestorePrevious={Boolean(citationPreviousSelection)}
+            onCandidateDecision={(candidate, decision, corrected) => decideCandidates([candidate.assertion_key], decision, corrected).catch(error => reportGraphError("Relationship decision failed", error))}
             insights={insights}
             risks={risks}
             opportunities={opportunities}
           />
         </div>
       </div>
+      </section>
+      {governanceWorkspace && typeof document !== "undefined" && createPortal(
+        <div role="dialog" aria-modal="true" aria-label={governanceWorkspace === "relationships" ? "Relationship governance workspace" : "Graph-quality governance workspace"} className="fixed inset-0 z-[75] flex flex-col bg-slate-50 p-4">
+          <header className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3 shadow-sm">
+            <div className="min-w-0 flex-1"><h2 className="text-sm font-black text-slate-900">{governanceWorkspace === "relationships" ? "Relationship governance" : "Graph-quality repair workspace"}</h2><p className="text-[11px] text-slate-500">{selectedScopeLabel} · authorized administrator work queue</p></div>
+            <button onClick={() => setGovernanceWorkspace(null)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-black">Close</button>
+          </header>
+          <div className="mt-3 grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,42%)]">
+            <div className="overflow-auto rounded-2xl border border-slate-200 bg-white p-4">
+              {governanceWorkspace === "relationships" ? relationshipCandidates.map(candidate => (
+                <button key={candidate.assertion_key} onClick={() => inspectRelationshipCandidate(candidate).catch(error => reportGraphError("Relationship inspection failed", error))} className="mb-2 block w-full rounded-xl border border-slate-200 p-3 text-left hover:border-indigo-300">
+                  <span className="text-[11px] font-black uppercase text-indigo-700">{candidate.assertion_state} · {Math.round(Number(candidate.candidate_confidence || 0) * 100)}%</span>
+                  <span className="mt-1 block text-[11px] font-black text-slate-800">{candidate.source_node_id} → {candidate.predicate?.replaceAll("_", " ")} → {candidate.target_node_id}</span>
+                  <span className="mt-1 block text-[11px] text-slate-500">Safe bulk group: {candidate.bulk_group_key || "individual review only"}</span>
+                </button>
+              )) : qualityFindings.map(finding => (
+                <button key={finding.finding_key} onClick={() => inspectQualityFinding(finding)} className="mb-2 block w-full rounded-xl border border-slate-200 p-3 text-left hover:border-amber-300">
+                  <span className="text-[11px] font-black uppercase text-amber-700">{finding.severity} · {finding.verification_status}</span>
+                  <span className="mt-1 block text-[11px] font-black text-slate-800">{finding.issue_code.replaceAll("_", " ")} · {finding.affected_count} affected</span>
+                  <span className="mt-1 block text-[11px] text-slate-500">{finding.business_consequence}</span>
+                </button>
+              ))}
+              {!relationshipCandidates.length && governanceWorkspace === "relationships" && <p className="text-xs text-slate-500">No proposals match this authorized page.</p>}
+              {!qualityFindings.length && governanceWorkspace === "quality" && <p className="text-xs text-slate-500">No findings match this authorized page.</p>}
+            </div>
+            <div className="min-h-[420px] overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <GraphCanvas elements={cyElements} layoutMode={effectiveLayoutMode} onNodeSelect={handleNodeSelect} onEdgeSelect={handleEdgeSelect} highlightTypes={pulseHighlight} activeFilter={activeFilter} focusNodeId={focusNodeId} focusNodeIds={qualityFocusNodeIds} focusEdgeId={focusEdgeId} expansionMode="workspace" onCloseExpansion={() => setGovernanceWorkspace(null)} legendExpanded={relationshipLegendOpen} onToggleLegend={() => toggleSection("relationshipLegend")} viewportRef={graphViewportRef} />
+            </div>
+          </div>
+        </div>, document.body,
+      )}
+      {expansionMode && typeof document !== "undefined" && createPortal(
+        <div
+          ref={expandedOverlayRef}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-label={expansionMode === "workspace" ? "Expanded Company Graph workspace" : "Expanded Company Graph canvas"}
+          className="fixed inset-0 z-[70] flex min-h-0 flex-col bg-slate-50 p-3 focus:outline-none"
+          style={{ paddingRight: expansionMode === "workspace" && idjwiWorkspaceWidth ? `${idjwiWorkspaceWidth + 12}px` : undefined }}
+        >
+          <header className="mb-3 flex min-h-12 flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-black text-slate-800">{expansionMode === "workspace" ? "Company Graph workspace" : "Company Graph"}</p>
+              <p className="truncate text-[11px] text-slate-500">{selectedScopeLabel} · {graphStatus.label} · {filteredNodes.length} nodes · {filteredEdges.length} relationships</p>
+            </div>
+            {inspectionTrail.length > 0 && <button onClick={inspectBack} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-bold text-slate-600"><ArrowLeft className="h-3.5 w-3.5" /> Back</button>}
+            <button onClick={() => openIdjwiGraphAction("Explain the currently visible governed graph.", IDJWI_GRAPH_INTENTS.EXPLAIN_COMPANY_GRAPH, idjwiGraphContext)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-black text-white"><Sparkles className="h-3.5 w-3.5" /> Ask Idjwi</button>
+            <button onClick={closeExpansion} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-black text-slate-700" aria-label="Exit expanded Company Graph"><Minimize2 className="h-3.5 w-3.5" /> Exit</button>
+          </header>
+          <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <GraphCanvas
+                elements={cyElements}
+                layoutMode={effectiveLayoutMode}
+                onNodeSelect={handleNodeSelect}
+                onEdgeSelect={handleEdgeSelect}
+                highlightTypes={pulseHighlight}
+                activeFilter={activeFilter}
+                focusNodeId={focusNodeId}
+                focusNodeIds={qualityFocusNodeIds}
+                focusEdgeId={focusEdgeId}
+                expansionMode={expansionMode}
+                onCloseExpansion={closeExpansion}
+                legendExpanded={relationshipLegendOpen}
+                onToggleLegend={() => toggleSection("relationshipLegend")}
+                viewportRef={graphViewportRef}
+              />
+            </div>
+            {expansionMode === "workspace" && selectedNode && (
+              <aside className={`flex min-h-0 max-h-[40vh] w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white lg:max-h-none lg:w-80 ${idjwiWorkspaceWidth ? "hidden 2xl:flex" : ""}`} aria-label="Expanded graph inspector">
+                <ContextPanel
+                  selected={selectedNode}
+                  onClose={() => setSelectedNode(null)}
+                  navigate={navigate}
+                  companyId={currentUser?.company_id}
+                  onGraphRefresh={async () => { setNeighborhoodGraph(null); await governedQuery.refetch(); }}
+                  graphContext={idjwiGraphContext}
+                  onInspectNode={node => inspectNode(node, 1)}
+                  onExpand={node => inspectNode(node, Math.min(3, neighborhoodDepth + 1), { recordHistory: false })}
+                  neighborhoodDepth={neighborhoodDepth}
+                  inspectionState={neighborhoodState}
+                  isPinned={Boolean(selectedNode?.node && pinnedNodes.some(node => node.id === selectedNode.node.id))}
+                  onTogglePin={togglePin}
+                  isCompared={Boolean(selectedNode?.node && compareNodes.some(node => node.id === selectedNode.node.id))}
+                  onToggleCompare={toggleCompare}
+                  onExpandCluster={expandSemanticCluster}
+                  onCreateRepairWork={createClusterRepairWork}
+                  onRestorePrevious={restorePreviousCitationContext}
+                  canRestorePrevious={Boolean(citationPreviousSelection)}
+                  onCandidateDecision={(candidate, decision, corrected) => decideCandidates([candidate.assertion_key], decision, corrected).catch(error => reportGraphError("Relationship decision failed", error))}
+                  insights={insights}
+                  risks={risks}
+                  opportunities={opportunities}
+                />
+              </aside>
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

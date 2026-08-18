@@ -10,13 +10,13 @@
 # for cattle.
 #
 # Lookup order:
-#   1. Exact match in saved operator mappings (Base44 entity)
+#   1. Exact match in saved operator mappings (Supabase entity)
 #   2. Exact match in built-in taxonomy normalization
 #   3. Fuzzy match against taxonomy system defaults (>85% confidence)
 #   4. Flag as UNMAPPED — queue for operator review
 #
 # The operator maps once in the Connectors UI.
-# The mapping is saved to ConnectorMapping in Base44.
+# The mapping is saved to ConnectorMapping in Supabase.
 # All future syncs use the saved mapping automatically.
 # ==============================================================
 
@@ -24,9 +24,6 @@ import logging
 from difflib import SequenceMatcher
 from typing import Optional
 
-import requests
-
-from config.settings import settings, HEADERS
 from config.taxonomy import (
     PERSON_TYPE_MAP, PERSON_SUBTYPES,
     ENTERPRISE_TYPE_MAP,
@@ -116,7 +113,7 @@ class MappingEngine:
         parent_value:    str = None,
     ) -> bool:
         """
-        Save a confirmed operator mapping to Base44 ConnectorMapping entity.
+        Save a confirmed operator mapping to Supabase ConnectorMapping entity.
         Called when the operator confirms a mapping in the Connectors UI.
 
         Returns True on success, False on failure.
@@ -134,39 +131,36 @@ class MappingEngine:
             logger.debug("mapping: history skipped — %s", e)
 
         try:
-            connector_mapping_url = getattr(
-                settings, "base44_connector_mappings_url", None
+            from data_sources import supabase_source
+            existing = supabase_source.list_records(
+                "connector_mapping", company_id=self.company_id,
+                filters={"field_name": field_name, "source_value": source_value},
+                limit=1,
             )
-            if not connector_mapping_url:
-                # Store in-memory if entity not configured yet
-                key = f"{field_name}:{source_value.lower()}"
-                self._mappings[key] = taxonomy_value
-                logger.info(
-                    "mapping: saved in-memory (ConnectorMapping entity not configured) "
-                    "%s → %s", source_value, taxonomy_value,
-                )
-                return True
-
-            requests.post(
-                connector_mapping_url,
-                json={
+            payload = {
                     "company_id":     self.company_id,
                     "field_name":     field_name,
                     "source_value":   source_value,
                     "taxonomy_value": taxonomy_value,
                     "parent_value":   parent_value,
                     "is_confirmed":   True,
-                },
-                headers=HEADERS,
-                timeout=15,
-            ).raise_for_status()
+            }
+            if existing:
+                supabase_source.update_record(
+                    "connector_mapping", existing[0]["id"], payload,
+                    company_id=self.company_id,
+                )
+            else:
+                supabase_source.create_record(
+                    "connector_mapping", payload, company_id=self.company_id
+                )
 
             # Update in-memory cache
             key = f"{field_name}:{source_value.lower()}"
             self._mappings[key] = taxonomy_value
 
             logger.info(
-                "mapping: saved to Base44 — '%s' → '%s'",
+                "mapping: saved to Supabase — '%s' → '%s'",
                 source_value, taxonomy_value,
             )
             return True
@@ -189,26 +183,15 @@ class MappingEngine:
 
     def _load_saved_mappings(self) -> dict:
         """
-        Load saved operator mappings from Base44 ConnectorMapping entity.
+        Load saved operator mappings from Supabase ConnectorMapping entity.
         Returns dict keyed as "field_name:source_value_lower".
         Falls back to empty dict if entity not configured yet.
         """
         try:
-            connector_mapping_url = getattr(
-                settings, "base44_connector_mappings_url", None
+            from data_sources import supabase_source
+            records = supabase_source.list_records(
+                "connector_mapping", company_id=self.company_id, limit=1000
             )
-            if not connector_mapping_url:
-                return {}
-
-            resp = requests.get(
-                connector_mapping_url,
-                params={"company_id": self.company_id, "limit": 1000},
-                headers=HEADERS,
-                timeout=15,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            records = data if isinstance(data, list) else data.get("data", [])
 
             mappings = {}
             for record in records:

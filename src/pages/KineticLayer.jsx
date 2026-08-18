@@ -4,10 +4,10 @@
  * The kinetic layer is the "operational" side of the ontology:
  * it defines ACTIONS that can be taken on ontology objects,
  * governs who can execute them, requires approvals where needed,
- * and writes results back through the ontology (Base44 entities).
+ * and writes results back through the ontology (Supabase entities).
  *
  * Architecture:
- *   Action Definition (this page) → Execution (Base44 SDK write-back) → Audit Log (python_layer)
+ *   Action Definition (this page) → Execution (Supabase SDK write-back) → Audit Log (python_layer)
  */
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
@@ -25,7 +25,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEntityListFn, useWithScope } from "@/components/shared/useDataQuery";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
 const API_HEADERS = { "x-api-key": RAILWAY_API_KEY, "Content-Type": "application/json" };
 

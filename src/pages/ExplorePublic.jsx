@@ -2,13 +2,11 @@ import React, { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import DemoShell from "@/components/demo/DemoShell";
 import DemoChartCard, { PALETTE } from "@/components/demo/DemoChartCard";
+import { RAILWAY_URL } from "@/config/api";
 import {
   BarChart2, TrendingUp, Globe, Leaf, Briefcase, Users,
   Loader2, ChevronRight, ArrowRight,
 } from "lucide-react";
-
-const RAILWAY_URL = import.meta.env.VITE_RAILWAY_URL
-  || "https://newsconseenwebapp-production.up.railway.app";
 
 // ── Shared data helpers ───────────────────────────────────────────────────────
 async function worldBank(indicator, countries, yearStart, yearEnd) {

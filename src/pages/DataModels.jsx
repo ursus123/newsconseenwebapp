@@ -18,7 +18,7 @@ import html2canvas from "html2canvas";
 
 // ─── Platform-internal entities not yet migrated to Supabase ─────────────────
 // These aren't part of the universal ontology (see removal note above) but are
-// real entities the app reads/writes — currently still served by Base44 via
+// real entities the app reads/writes — currently still served by Supabase via
 // ncClient.js's fallback proxy. Remove an entry here once it's added to
 // supabaseEntities in supabaseEntityClient.js.
 const UNMIGRATED_ENTITIES = [
@@ -1860,7 +1860,7 @@ const API_CATALOGUE = [
       { method: "GET",  path: "/backup/list",                     desc: "Infra: recent backup log entries from analytics.backup_log. Requires x-cron-secret." },
       { method: "GET",  path: "/admin/tenants",                     desc: "Platform Admin: list all tenants with health signals. Requires x-admin-secret." },
       { method: "GET",  path: "/admin/tenants/{company_id}",        desc: "Platform Admin: single tenant detail — enrichment coverage, onboarding history, audit trail." },
-      { method: "POST", path: "/admin/tenants",                     desc: "Platform Admin: create + provision a new tenant. Still writes the Enterprise record to Base44 (live migration debt — frontend Onboarding.jsx separately creates it in Supabase, so this is a known duplicate-write risk pending Phase C cleanup), runs onboarding/provision, triggers ETL." },
+      { method: "POST", path: "/admin/tenants",                     desc: "Platform Admin: create + provision a new tenant. Still writes the Enterprise record to Supabase (live migration debt — frontend Onboarding.jsx separately creates it in Supabase, so this is a known duplicate-write risk pending Phase C cleanup), runs onboarding/provision, triggers ETL." },
       { method: "POST", path: "/admin/tenants/{company_id}/etl",    desc: "Platform Admin: trigger full ETL for one tenant in background." },
       { method: "POST", path: "/admin/tenants/{company_id}/suspend",    desc: "Platform Admin: suspend a tenant (writes to analytics.tenant_flags)." },
       { method: "POST", path: "/admin/tenants/{company_id}/reactivate", desc: "Platform Admin: remove suspension flag for a tenant." },
@@ -2844,11 +2844,11 @@ export default function DataModels() {
               <div className="flex items-center gap-1.5 mb-1">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
                 <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">
-                  Base44 Fallback ({UNMIGRATED_ENTITIES.length})
+                  Supabase Fallback ({UNMIGRATED_ENTITIES.length})
                 </p>
               </div>
               <p className="text-[10px] text-amber-700 leading-snug">
-                These entities aren't in Supabase yet — reads/writes still go to Base44
+                These entities aren't in Supabase yet — reads/writes still go to Supabase
                 (see <code className="font-mono">ncClient.js</code> / <code className="font-mono">supabaseEntityClient.js</code>).
               </p>
               <div className="flex flex-wrap gap-1">

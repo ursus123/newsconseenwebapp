@@ -33,7 +33,7 @@ function KpiCard({ label, value, sub, color, icon, isLight, loading }) {
   );
 }
 
-// Three-tier fallback: python_layer analytics → Base44 live
+// Three-tier fallback: python_layer analytics → Supabase live
 async function fetchBriefingData(companyId) {
   try {
     const [taskRes, peopleRes, txRes, entRes, prodRes] = await Promise.all([
@@ -62,7 +62,7 @@ async function fetchBriefingData(companyId) {
     }
   } catch (_) {}
 
-  // Fallback: Base44 live
+  // Fallback: Supabase live
   const today = new Date().toISOString().split("T")[0];
   const [tasks, people, enterprises, products, transactions] = await Promise.all([
     ncClient.entities.Task.filter({ company_id: companyId }, "-created_date", 500),
@@ -83,7 +83,7 @@ async function fetchBriefingData(companyId) {
     activeProducts:   products.length,
     openTx:           openTx.length,
     txAmount,
-    source: "base44",
+    source: "supabase",
   };
 }
 

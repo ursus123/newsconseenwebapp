@@ -3,9 +3,8 @@ import { ncClient } from "@/api/ncClient";
 import { supabase } from "@/api/supabaseEntityClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dataService from "@/services/dataService";
+import { APP_URL, RAILWAY_API_KEY, RAILWAY_URL } from "@/config/api";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
-const RAILWAY_API_KEY = (import.meta["env"] || {})["VITE_RAILWAY_API_KEY"] || "";
 const API_HEADERS = RAILWAY_API_KEY ? { "x-api-key": RAILWAY_API_KEY } : {};
 
 async function inviteUser(email, role, companyId) {
@@ -14,7 +13,7 @@ async function inviteUser(email, role, companyId) {
   const res = await fetch(`${RAILWAY_URL}/onboarding/invite-user`, {
     method: "POST",
     headers: { ...API_HEADERS, "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ email, role, company_id: companyId || undefined, redirect_to: `${window.location.origin}/AcceptInvite` }),
+    body: JSON.stringify({ email, role, company_id: companyId || undefined, redirect_to: `${APP_URL}/AcceptInvite` }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

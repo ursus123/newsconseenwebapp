@@ -30,3 +30,16 @@ dist-ssr
 
 .env
 base44/.app.jsonc
+.vercel
+.env*
+
+# Local agent and Python environments
+.claude/
+.venv*/
+**/__pycache__/
+*.py[cod]
+
+# Acceptance evidence that may contain sessions, personal data, or binary dumps
+artifacts/browser-acceptance/*.har
+artifacts/browser-acceptance/*.png
+artifacts/local-restore-drill/*.dump

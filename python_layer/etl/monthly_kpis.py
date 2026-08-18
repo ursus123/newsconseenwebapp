@@ -73,7 +73,7 @@ def transform_monthly_kpis(
         tasks_completed         — tasks completed/closed this month
         task_completion_rate_pct
 
-    All amounts in the native currency stored in Base44 (no FX conversion).
+    All amounts in the native currency stored in Supabase (no FX conversion).
     Months with no activity are filled with zeros so the time series is continuous.
     """
     now = pd.Timestamp.now(tz="UTC")

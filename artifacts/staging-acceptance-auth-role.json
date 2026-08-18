@@ -1,0 +1,104 @@
+{
+  "contract": "newsconseen-staging-acceptance.v1",
+  "api": "https://staging-api.news-con-seen.com",
+  "tenant": "newsconseen-acceptance",
+  "results": [
+    {
+      "check": "auth.sign_in.administrator",
+      "status": "pass",
+      "detail": "HTTP 200"
+    },
+    {
+      "check": "auth.sign_in.manager",
+      "status": "pass",
+      "detail": "HTTP 200"
+    },
+    {
+      "check": "auth.sign_in.technician",
+      "status": "pass",
+      "detail": "HTTP 200"
+    },
+    {
+      "check": "auth.sign_in.worker",
+      "status": "pass",
+      "detail": "HTTP 200"
+    },
+    {
+      "check": "auth.sign_in.isolation_worker",
+      "status": "pass",
+      "detail": "HTTP 200"
+    },
+    {
+      "check": "auth.session_refresh",
+      "status": "pass",
+      "detail": "HTTP 200"
+    },
+    {
+      "check": "graph.read.administrator",
+      "status": "pass",
+      "detail": "HTTP 200"
+    },
+    {
+      "check": "graph.read.manager",
+      "status": "pass",
+      "detail": "HTTP 200"
+    },
+    {
+      "check": "graph.read.technician",
+      "status": "pass",
+      "detail": "HTTP 200"
+    },
+    {
+      "check": "graph.read.worker",
+      "status": "pass",
+      "detail": "HTTP 200"
+    },
+    {
+      "check": "role.worker_bounded_graph",
+      "status": "pass",
+      "detail": "admin_nodes=16, worker_nodes=12, readiness=None"
+    },
+    {
+      "check": "graph.export.administrator",
+      "status": "pass",
+      "detail": "HTTP 200, expected 200"
+    },
+    {
+      "check": "graph.export.worker",
+      "status": "pass",
+      "detail": "HTTP 403, expected 403"
+    },
+    {
+      "check": "tenant.cross_read_blocked",
+      "status": "pass",
+      "detail": "HTTP 403"
+    },
+    {
+      "check": "cache.principal_tenant_isolation",
+      "status": "pass",
+      "detail": "administrator:200, isolation_worker:200, worker:200, administrator:200"
+    },
+    {
+      "check": "auth.expired_session_rejected",
+      "status": "pass",
+      "detail": "HTTP 401"
+    },
+    {
+      "check": "auth.sign_out",
+      "status": "pass",
+      "detail": "logout=204, reused_token=403"
+    }
+  ],
+  "manual_email_evidence_required": [
+    "invitation acceptance from an accessible inbox",
+    "email-confirmation link delivery and completion",
+    "password-reset email delivery",
+    "recovery-link completion at /ResetPassword",
+    "browser rejection of a redirect URL not on the Supabase allowlist"
+  ],
+  "summary": {
+    "passed": 17,
+    "failed": 0,
+    "manual": 5
+  }
+}

@@ -5,8 +5,8 @@
 # python_layer. Every ETL module and every API response imports
 # from here. No type strings are hardcoded anywhere else.
 #
-# This file mirrors the MasterDataOption entity in Base44.
-# When Base44 taxonomy values change, update this file first,
+# This file mirrors the MasterDataOption entity in Supabase.
+# When Supabase taxonomy values change, update this file first,
 # then the ETL modules pick up the changes automatically.
 #
 # Three master entities: Person, Enterprise, Item
@@ -140,7 +140,7 @@ PERSON_TYPE_MAP = {
     "client":           "client",
     "contact":          "contact",
     "volunteer":        "volunteer",
-    # legacy Base44 values
+    # legacy Supabase values
     "employee":         "staff",
     "contractor":       "staff",
     "freelancer":       "staff",

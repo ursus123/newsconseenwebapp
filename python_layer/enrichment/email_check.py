@@ -42,7 +42,15 @@ def validate_email(email_str: str) -> dict:
     """
     raw = str(email_str or "").strip().lower()
     if not raw:
-        return {"email_valid": False, "enrichment_status": "skipped", "reason": "empty"}
+        return {
+            "email_valid": False,
+            "email_format_valid": False,
+            "email_domain": "",
+            "email_domain_valid": False,
+            "email_disposable": False,
+            "enrichment_status": "skipped",
+            "reason": "empty",
+        }
 
     # Format check
     if not _EMAIL_RE.match(raw):

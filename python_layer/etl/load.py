@@ -101,7 +101,7 @@ def load_dataframe(
 
     # ----------------------------------------------------------
     # Guard: never write an empty snapshot
-    # An empty DataFrame means Base44 returned no data, which is
+    # An empty DataFrame means Supabase returned no data, which is
     # either a fetch failure or a genuine zero. Either way, writing
     # a zero snapshot would corrupt trend calculations.
     # ----------------------------------------------------------
@@ -200,7 +200,7 @@ def _sanitize_for_sql(df: pd.DataFrame) -> pd.DataFrame:
     """
     Convert any column that contains Python dicts or lists into JSON strings.
 
-    Base44 returns nested objects in some fields (e.g. address sub-objects,
+    Supabase returns nested objects in some fields (e.g. address sub-objects,
     relationship arrays). PostgreSQL cannot INSERT a Python dict directly.
     Storing as TEXT preserves the data for JSON-based queries.
 
@@ -241,20 +241,20 @@ def load_raw(
     schema: str = "raw",
 ) -> dict:
     """
-    Replace the raw table with the full extract from Base44.
+    Replace the raw table with the full extract from Supabase.
 
     The 'raw' schema stores individual entity records with no aggregation —
     one row per person, product, task, transaction, etc. This is the
-    source-of-truth mirror of Base44 in PostgreSQL.
+    source-of-truth mirror of Supabase in PostgreSQL.
 
     Why this matters:
         - ML models need individual records (features per person/product)
         - Advanced copilot queries need to filter by name, ID, date range
-        - Data validation: compare raw row count to Base44 entity count
+        - Data validation: compare raw row count to Supabase entity count
         - analytics.* summaries are derived FROM raw.* — not the reverse
 
     This is a full REPLACE on every ETL run (not an append). The raw schema
-    is always the current state of Base44, not a time-series history.
+    is always the current state of Supabase, not a time-series history.
     Use analytics.* tables for trend analysis.
 
     Args:

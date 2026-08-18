@@ -247,7 +247,7 @@ export function transformPerson(row, currentUser) {
   if (row.relationship_to_org)     notes.push(`Relationship: ${row.relationship_to_org}`);
   if (row.organization)            notes.push(`Organization: ${row.organization}`);
 
-  // skills — coerce comma/semicolon string → array so Base44 accepts it
+  // skills — coerce comma/semicolon string → array so Supabase accepts it
   if (typeof row.skills === "string") {
     row.skills = row.skills.split(/[,;]/).map(s => s.trim()).filter(Boolean);
   }

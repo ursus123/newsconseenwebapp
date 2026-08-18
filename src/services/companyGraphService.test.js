@@ -5,10 +5,14 @@ import {
   buildIdjwiGraphAction,
   buildIdjwiGraphContext,
   buildOperationalFocus,
+  buildSemanticClusters,
   createLatestGraphRequestCoordinator,
+  GRAPH_LAYOUT_CONTRACT_VERSION,
+  GRAPH_LAYOUT_REGISTRY,
   IDJWI_GRAPH_INTENTS,
   semanticPositions,
   serializeGovernedGraphPacket,
+  toCytoscapeElements,
 } from "./companyGraphService.js";
 
 const packet = {
@@ -144,6 +148,75 @@ test("semantic positions remain stable when a neighborhood expands", () => {
   assert.deepEqual(first["enterprise:e1"], expanded["enterprise:e1"]);
   assert.deepEqual(first["task:t1"], expanded["task:t1"]);
   assert.notDeepEqual(first["enterprise:e1"], first["task:t1"]);
+});
+
+test("semantic layout registry covers each operational question", () => {
+  assert.equal(GRAPH_LAYOUT_CONTRACT_VERSION, "company-graph-layouts.v1");
+  for (const mode of ["operational_focus", "organizational_structure", "responsibilities_work", "customers_suppliers", "products_services", "risks_opportunities", "decisions_actions", "data_quality", "external_disruptions", "selected_neighborhood"]) {
+    assert.ok(GRAPH_LAYOUT_REGISTRY[mode]?.question, `${mode} must state its operational question`);
+    assert.ok(GRAPH_LAYOUT_REGISTRY[mode]?.strategy, `${mode} must select a layout strategy`);
+  }
+});
+
+test("Operational Focus anchors the selected unit and neighborhood layout uses relationship depth", () => {
+  const layoutNodes = [
+    { id: "operational_unit:u1", entity_id: "u1", entity_type: "operational_unit", importance: 0.8 },
+    { id: "task:t1", entity_type: "task", importance: 0.7 },
+    { id: "person:p1", entity_type: "person", importance: 0.5 },
+  ];
+  const edges = [
+    { source: "operational_unit:u1", target: "task:t1" },
+    { source: "task:t1", target: "person:p1" },
+  ];
+  const focus = semanticPositions(layoutNodes, "operational_focus", { anchorNodeId: "operational_unit:u1", edges });
+  assert.deepEqual(focus["operational_unit:u1"], { x: 620, y: 470 });
+  const neighborhood = semanticPositions(layoutNodes, "selected_neighborhood", { anchorNodeId: "operational_unit:u1", edges });
+  const firstDistance = Math.abs(neighborhood["task:t1"].x - 620) + Math.abs(neighborhood["task:t1"].y - 470);
+  const secondDistance = Math.abs(neighborhood["person:p1"].x - 620) + Math.abs(neighborhood["person:p1"].y - 470);
+  assert.ok(secondDistance > firstDistance);
+});
+
+test("semantic clusters summarize authorized low-attention populations without concealing critical records", () => {
+  const completed = Array.from({ length: 18 }, (_, index) => ({
+    id: `task:done-${index}`, entity_type: "task", entity_id: `done-${index}`,
+    label: `Completed task ${index}`, status: "completed", importance: 0.1,
+    is_unconnected: index > 0, attributes: { status: "completed", import_name: "Import 24" },
+  }));
+  const critical = { id: "task:critical", entity_type: "task", entity_id: "critical", label: "Critical task", status: "open", importance: 1, risk_level: "critical", attributes: {} };
+  const enterprise = { id: "enterprise:e1", entity_type: "enterprise", entity_id: "e1", label: "Acme", status: "active", importance: 0.9, attributes: {} };
+  const result = buildSemanticClusters([...completed, critical, enterprise], [
+    { id: "edge:1", source: "task:done-0", target: "enterprise:e1", predicate: "assigned_to", confidence: 1 },
+  ]);
+  const cluster = result.clusters.find(node => node.attributes.cluster_key === "completed_tasks");
+  assert.equal(cluster.attributes.record_count, 18);
+  assert.equal(cluster.attributes.critical_records_excluded, true);
+  assert.equal(result.nodes.some(node => node.id === critical.id), true);
+  assert.equal(result.nodes.some(node => node.id === "task:done-0"), false);
+  assert.equal(result.edges.some(edge => edge.source === cluster.id && edge.target === enterprise.id), true);
+  const expanded = buildSemanticClusters([...completed, critical, enterprise], [], { expandedClusterIds: [cluster.id] });
+  assert.equal(expanded.nodes.filter(node => node.entity_type === "task").length, 19);
+});
+
+test("Cytoscape projection carries semantic node cards and governed assertion classes", () => {
+  const elements = toCytoscapeElements([
+    { id: "enterprise:e1", entity_type: "enterprise", label: "Acme", sublabel: "Supplier", status: "active", importance: 0.8 },
+    { id: "product:p1", entity_type: "product", label: "Medicine", status: "active", importance: 0.5 },
+  ], [{
+    id: "edge:1", source: "enterprise:e1", target: "product:p1", label: "supplies",
+    assertion_class: "advisor_proposal", assertion_state: "proposed", confidence: 0.72,
+    evidence: [{ evidence_id: "evidence:1" }],
+  }]);
+  const node = elements.find(element => element.data.id === "enterprise:e1");
+  const edge = elements.find(element => element.data.id === "edge:1");
+  assert.equal(node.data.nodeColor, "#ffffff");
+  assert.equal(node.data.importanceBand, "critical");
+  assert.equal(node.data.statusLabel, "active");
+  assert.match(node.data.mediumLabel, /● active/);
+  assert.match(node.data.accessibleName, /Enterprise, Acme, Supplier, status active/);
+  assert.match(edge.classes, /assertion-advisor-proposal/);
+  assert.match(edge.classes, /edge-proposed/);
+  assert.match(edge.classes, /has-evidence/);
+  assert.match(edge.data.detailLabel, /proposed · 72% · 1 evidence/);
 });
 
 test("latest graph request coordinator suppresses a stale neighborhood response", async () => {

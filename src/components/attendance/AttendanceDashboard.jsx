@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 // Taxonomy config for this app
 // These are the canonical person_subtype values that identify
 // students and teachers in the universal taxonomy.
-// To support a new role, add it to MasterDataOption in Base44
+// To support a new role, add it to MasterDataOption in Supabase
 // with the correct parent_value — do not add it here.
 
 const STUDENT_SUBTYPES = [

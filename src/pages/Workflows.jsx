@@ -9,7 +9,7 @@ import {
   ArrowDown, GripVertical, ToggleLeft, ToggleRight, History,
 } from "lucide-react";
 
-const RAILWAY_URL = "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 const RAILWAY_API_KEY = import.meta.env.VITE_RAILWAY_API_KEY || "";
 const API_HEADERS = {
   "Content-Type": "application/json",
@@ -99,7 +99,7 @@ const STEP_TYPES = [
     fields: [
       { key: "field",      label: "Field name",  placeholder: "status" },
       { key: "value",      label: "New value",   placeholder: "active" },
-      { key: "entity_url", label: "Entity URL (Base44)", placeholder: "https://..." },
+      { key: "entity_url", label: "Entity URL (Supabase)", placeholder: "https://..." },
     ],
   },
   {

@@ -11,12 +11,12 @@ Flow:
   4. Provider redirects to /security/oauth2/{provider}/callback?code=...
   5. Backend exchanges code for tokens → gets user email/name/picture
   6. Backend returns {email, name, picture, provider, access_token}
-  7. Frontend uses this to call base44.auth or create/update the user session
+  7. Frontend uses this to call supabase.auth or create/update the user session
 
 Architecture note:
-  Base44 manages the actual session. OAuth2 here returns verified identity
+  Supabase manages the actual session. OAuth2 here returns verified identity
   claims (email, name). The frontend uses these to pre-fill or auto-authenticate
-  via the base44 SDK. If Base44 adds OIDC in future, this layer becomes
+  via the supabase SDK. If Supabase adds OIDC in future, this layer becomes
   the adapter.
 
 Environment variables required:

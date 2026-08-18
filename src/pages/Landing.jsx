@@ -10,8 +10,7 @@ import DemoShell from "@/components/demo/DemoShell";
 import DemoChartCard from "@/components/demo/DemoChartCard";
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const RAILWAY_URL = import.meta.env.VITE_RAILWAY_URL
-  || "https://newsconseenwebapp-production.up.railway.app";
+import { RAILWAY_URL } from "@/config/api";
 
 // ── Funnel telemetry ──────────────────────────────────────────────────────────
 function trackEvent(event, properties = {}) {

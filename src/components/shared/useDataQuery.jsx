@@ -101,7 +101,7 @@ export function useWithScope(currentUser) {
 
 /**
  * Creates a tenant-scoped record and verifies the saved record still carries
- * the current workspace id. Some Base44 create responses can omit custom
+ * the current workspace id. Some Supabase create responses can omit custom
  * fields, so we patch company_id immediately when needed.
  */
 export async function createWithScope(entity, data, currentUser) {
@@ -135,7 +135,7 @@ export async function createWithScope(entity, data, currentUser) {
 
 /**
  * Keeps newly-created records visible immediately after a mutation succeeds,
- * even if Base44 indexing/refetching lags for a moment.
+ * even if Supabase indexing/refetching lags for a moment.
  */
 export function addRecordToQueryCache(queryClient, queryKey, record) {
   if (!queryClient || !record?.id) return;

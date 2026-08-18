@@ -7,50 +7,27 @@
 #   1. Reads the cached data quality report
 #   2. Reads latest analytics (transactions, tasks, products, people)
 #   3. Applies rule definitions to identify actionable issues
-#   4. Creates tasks in Base44 for each unresolved issue
+#   4. Creates tasks in Supabase for each unresolved issue
 #   5. Respects per-rule cooldown windows (no duplicate spam)
 #
-# Tasks are created via direct POST to Base44 tasks endpoint.
+# Tasks are created via direct POST to Supabase tasks endpoint.
 # The same API key used for ETL reads is used for writes.
 # ==============================================================
 
 import logging
-import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from urllib.parse import urlparse, urlunparse
-
-import requests
-
-from config import settings, HEADERS
 
 logger = logging.getLogger(__name__)
-
-
-def _tasks_create_url() -> str:
-    """
-    Derive the Base44 task CREATE URL from the list URL.
-    List URL:   https://app.base44.com/api/apps/{APP_ID}/entities/Task?limit=500
-    Create URL: https://app.base44.com/api/apps/{APP_ID}/entities/Task
-    """
-    raw = settings.base44_tasks_url or ""
-    parsed = urlparse(raw)
-    # Strip query string — POST to the bare path
-    return urlunparse(parsed._replace(query="", fragment=""))
 
 
 def _create_task(title: str, description: str, task_type: str,
                  company_id: str, assignee_id: Optional[str] = None,
                  priority: str = "high") -> Optional[dict]:
     """
-    Create a single task in Base44.
+    Create a single task in Supabase.
     Returns the created task dict on success, None on failure.
     """
-    url = _tasks_create_url()
-    if not url:
-        logger.warning("autotask: base44_tasks_url not configured")
-        return None
-
     now = datetime.now(timezone.utc)
     due = (now + timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -69,15 +46,10 @@ def _create_task(title: str, description: str, task_type: str,
         payload["assignee_id"] = assignee_id
 
     try:
-        resp = requests.post(url, json=payload, headers=HEADERS, timeout=15)
-        if resp.status_code in (200, 201):
-            logger.info("autotask: created task '%s' for company=%s", title, company_id)
-            return resp.json()
-        logger.warning(
-            "autotask: Base44 returned %s for task creation — %s",
-            resp.status_code, resp.text[:200],
-        )
-        return None
+        from data_sources import supabase_source
+        result = supabase_source.create_record("task", payload, company_id=company_id)
+        logger.info("autotask: created task '%s' for company=%s", title, company_id)
+        return result
     except Exception as e:
         logger.error("autotask: task creation failed — %s", e)
         return None

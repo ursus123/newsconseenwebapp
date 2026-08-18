@@ -3,9 +3,9 @@ tests/conftest.py
 ------------------
 Shared pytest fixtures for python_layer tests.
 
-Strategy: tests run without Railway/PostgreSQL/Base44 credentials.
+Strategy: tests run without Railway/PostgreSQL production credentials.
   - FastAPI app is mounted in-process via TestClient (no network)
-  - Database engine is mocked to None (exercises Base44 fallback paths)
+  - Database engine is mocked to None (exercises canonical fallback paths)
   - External HTTP calls are patched at the requests/httpx level
   - Enrichment modules that call external APIs are monkey-patched
 
@@ -23,13 +23,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # Stub mandatory env vars before any imports load Settings
 _ENV_STUBS = {
-    "BASE44_API_KEY":          "test-key",
-    "BASE44_PEOPLE_URL":       "https://stub.example.com/people",
-    "BASE44_ENTERPRISES_URL":  "https://stub.example.com/enterprises",
-    "BASE44_PRODUCTS_URL":     "https://stub.example.com/products",
-    "BASE44_TASKS_URL":        "https://stub.example.com/tasks",
-    "BASE44_TRANSACTIONS_URL": "https://stub.example.com/transactions",
-    "BASE44_SERVICES_URL":     "https://stub.example.com/services",
     "DATABASE_URL":            "",   # empty → get_engine_safe returns None
     "CRON_SECRET":             "test-secret",
     "ANTHROPIC_API_KEY":       "test-anthropic-key",
@@ -45,7 +38,7 @@ def client():
     """
     In-process TestClient for the full FastAPI app.
     Database is unavailable (DATABASE_URL="") so all endpoints fall back
-    to Base44 stubs or return graceful empty responses.
+    to network stubs or return graceful empty responses.
     """
     from fastapi.testclient import TestClient
 

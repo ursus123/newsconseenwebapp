@@ -1,0 +1,9 @@
+.git
+.claude
+.venv311
+base44
+docs
+python_layer
+src/migrations
+*.log
+benchmark-*.json

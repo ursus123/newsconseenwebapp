@@ -163,7 +163,7 @@ Layer 2 — Deployable Datamart (python_layer on Railway, FastAPI + PostgreSQL)
   The analytical engine. ETL pipeline extracts from Layer 1, transforms, and loads
   into PostgreSQL analytics tables.
   Rule: ALL stat card values and copilot tool queries come from here.
-         Never query Base44 directly for analytics.
+         Never query retired legacy platform directly for analytics.
 
 Layer 3 — Idjwi Operational Mind (Idjwi Core, Advisors, Agents, Alerts, Network Intelligence)
   Rule: immediate canonical context is read only through tenant- and permission-enforcing
@@ -365,9 +365,9 @@ at read time (WHERE company_id = :id). Adding a new client requires zero ETL con
 ```
 Tier 1 — analytics.*     PostgreSQL analytics tables (fast, aggregated)
 Tier 2 — raw.*           PostgreSQL raw tables (full records)
-Tier 3 — Base44 live     Direct Base44 entity query (always available)
+Tier 3 — retired legacy platform live     Direct retired legacy platform entity query (always available)
 ```
-If ETL has not run (tables are empty), every feature falls back to Base44 live data.
+If ETL has not run (tables are empty), every feature falls back to retired legacy platform live data.
 The user always sees their data regardless of ETL state.
 
 ---
@@ -520,12 +520,12 @@ classification. “Explain this company” never invokes `find_graph_gaps`.
 | **Ontology-Native Tools (Copilot v2)** | |
 | `get_company_graph_context` | Fetch an entity and its full graph — relationships, open tasks, recent transactions. Returns: center entity fields, connected nodes (type/label/status/strength), edge list, node_count, edge_count. Use for questions about a specific entity's connections or context. |
 | `get_enrichment_context` | Read enrichment data attached to an entity — sanctions flags, geocoding, risk scores, spend_trend, churn_probability, domain metadata. Returns structured enrichment records grouped by enrichment_type. |
-| `search_intelligence` | Search the intelligence layer for insights, risks, opportunities, or recommendations. Tries Base44 intelligence entities first, falls back to analytics.copilot_insights, then analytics.agent_approvals. Filter by intelligence_type, subject_type, or subject_id. |
+| `search_intelligence` | Search the intelligence layer for insights, risks, opportunities, or recommendations. Tries retired legacy platform intelligence entities first, falls back to analytics.copilot_insights, then analytics.agent_approvals. Filter by intelligence_type, subject_type, or subject_id. |
 | `get_ontology_schema` | Returns the full schema for all 15 canonical entities — field names, valid enum values, and descriptions. Use when an operator asks what fields exist, what values are valid, or before proposing a record update. |
 | `propose_task` | Proposes a new task for operator review. Writes to analytics.agent_approvals with action_type="create_task". Returns approval_id. NEVER executes without the operator approving in the Agents panel. |
 | `propose_chart` | Proposes a chart or visualisation for operator review. Returns a preview config (type, metric, title) plus approval_id. Chart is not rendered until approved. |
 | `propose_record_update` | Proposes a field-level patch on an existing entity record. Returns approval_id. The update is NOT applied until the operator approves. Always call `get_ontology_schema` first to confirm valid field values. |
-| `write_insight` | Immediately saves a structured insight to the intelligence layer (analytics.copilot_insights or Base44 insights entity). Returns insight_id. Appears in the "Saved to Intelligence Layer" panel in the chat UI. Use for key findings the operator should be able to retrieve later. |
+| `write_insight` | Immediately saves a structured insight to the intelligence layer (analytics.copilot_insights or retired legacy platform insights entity). Returns insight_id. Appears in the "Saved to Intelligence Layer" panel in the chat UI. Use for key findings the operator should be able to retrieve later. |
 
 ---
 
@@ -757,16 +757,16 @@ A single Newsconseen deployment serves multiple organisations simultaneously.
 ## Environment Variables (Railway)
 
 ```
-BASE44_API_KEY              Authentication for Base44 API
-BASE44_APP_ID               Application identifier
-BASE44_PEOPLE_URL           Base44 People entity URL
-BASE44_ENTERPRISES_URL      Base44 Enterprises entity URL
-BASE44_PRODUCTS_URL         Base44 Products entity URL
-BASE44_TASKS_URL            Base44 Tasks entity URL
-BASE44_TRANSACTIONS_URL     Base44 Transactions entity URL
-BASE44_SERVICES_URL         Base44 Services entity URL
-BASE44_RELATIONSHIPS_URL    Base44 Relationships entity URL   ← commonly missing
-BASE44_ADDRESSES_URL        Base44 Addresses entity URL       ← commonly missing
+RETIRED_LEGACY_PLATFORM_API_KEY              Authentication for retired legacy platform API
+RETIRED_LEGACY_PLATFORM_APP_ID               Application identifier
+RETIRED_LEGACY_PLATFORM_PEOPLE_URL           retired legacy platform People entity URL
+RETIRED_LEGACY_PLATFORM_ENTERPRISES_URL      retired legacy platform Enterprises entity URL
+RETIRED_LEGACY_PLATFORM_PRODUCTS_URL         retired legacy platform Products entity URL
+RETIRED_LEGACY_PLATFORM_TASKS_URL            retired legacy platform Tasks entity URL
+RETIRED_LEGACY_PLATFORM_TRANSACTIONS_URL     retired legacy platform Transactions entity URL
+RETIRED_LEGACY_PLATFORM_SERVICES_URL         retired legacy platform Services entity URL
+RETIRED_LEGACY_PLATFORM_RELATIONSHIPS_URL    retired legacy platform Relationships entity URL   ← commonly missing
+RETIRED_LEGACY_PLATFORM_ADDRESSES_URL        retired legacy platform Addresses entity URL       ← commonly missing
 DATABASE_URL                PostgreSQL connection string
 CRON_SECRET                 Header secret for POST /cron/etl-all
 API_KEY                     x-api-key header for python_layer endpoints
@@ -780,7 +780,7 @@ OPUS_ENABLED                Set to "true" to enable Opus for strategic agents
 ADMIN_SECRET                Super-admin API access
 ```
 
-**Startup crash pattern**: If `BASE44_RELATIONSHIPS_URL` or `BASE44_ADDRESSES_URL` are missing,
+**Startup crash pattern**: If `RETIRED_LEGACY_PLATFORM_RELATIONSHIPS_URL` or `RETIRED_LEGACY_PLATFORM_ADDRESSES_URL` are missing,
 python_layer crashes with `pydantic_core.ValidationError: Field required`. Fix: add the variables
 to Railway, or make the fields `Optional[str] = None` in `settings.py`.
 
@@ -793,12 +793,12 @@ to Railway, or make the fields `Optional[str] = None` in `settings.py`.
 | Stat cards show 0 | ETL hasn't run | POST /cron/etl-all or wait for cron |
 | Advisor-assisted reasoning unavailable | Selected advisor credential missing | Configure an allowed tenant advisor or use Idjwi Core |
 | "relation does not exist" in query builder | Table not pre-created | Run startup DDL via /health endpoint |
-| python_layer crashes on startup | Missing BASE44_*_URL variable | Add variable to Railway |
+| python_layer crashes on startup | Missing RETIRED_LEGACY_PLATFORM_*_URL variable | Add variable to Railway |
 | ML predictions empty | ETL not run since data was added | Trigger POST /cron/etl-all |
 | Alerts not sending | SENDGRID/WHATSAPP env vars missing | Add to Railway env vars |
 | Advisor-dependent agent cannot reason | Selected advisor unavailable | Use a permitted fallback advisor or a deterministic Idjwi Core plan |
 | `get_company_graph_context` returns empty nodes | raw.relationships table is empty | Trigger POST /load/relationship-summary to populate raw tables |
-| `write_insight` falls back to PostgreSQL | BASE44_INSIGHTS_URL not set | Set env var in Railway, or leave as-is (PostgreSQL fallback is intentional) |
+| `write_insight` falls back to PostgreSQL | RETIRED_LEGACY_PLATFORM_INSIGHTS_URL not set | Set env var in Railway, or leave as-is (PostgreSQL fallback is intentional) |
 | `propose_task` approval not appearing in UI | analytics.agent_approvals table missing | Run POST /health to trigger startup DDL which pre-creates the table |
 | `search_intelligence` returns no results | No insights saved yet | Use write_insight tool to save findings; or run agents which also save to the table |
 

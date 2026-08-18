@@ -36,7 +36,7 @@ GROUP_COLUMNS = [
 
 def extract_people() -> pd.DataFrame:
     """
-    Extract all people records from Base44.
+    Extract all people records from Supabase.
     Returns raw DataFrame — no transformation applied here.
     """
     return fetch_supabase_entity_to_df("people")
@@ -185,10 +185,10 @@ def transform_people(df: pd.DataFrame) -> pd.DataFrame:
 
     # ----------------------------------------------------------
     # Debug: log column names so we can verify company_id and
-    # enterprise_id are present in the Base44 response
+    # enterprise_id are present in the Supabase response
     # ----------------------------------------------------------
     logger.info(
-        "transform_people: raw columns from Base44: %s",
+        "transform_people: raw columns from Supabase: %s",
         sorted(df.columns.tolist()),
     )
     if "company_id" in df.columns:
@@ -197,17 +197,17 @@ def transform_people(df: pd.DataFrame) -> pd.DataFrame:
             df["company_id"].notna().sum(),
         )
     else:
-        logger.warning("transform_people: company_id NOT in Base44 response")
+        logger.warning("transform_people: company_id NOT in Supabase response")
 
     if "enterprise_id" not in df.columns:
-        logger.warning("transform_people: enterprise_id NOT in Base44 response — will be null in analytics")
+        logger.warning("transform_people: enterprise_id NOT in Supabase response — will be null in analytics")
         df["enterprise_id"] = None
 
     # ----------------------------------------------------------
     # Normalise person_type to canonical taxonomy values
     # Maps "employee" → "staff", "patient" → "client", etc.
     # Uses PERSON_TYPE_MAP from taxonomy so analytics tables store
-    # canonical values regardless of what Base44 returns.
+    # canonical values regardless of what Supabase returns.
     # ----------------------------------------------------------
     person_type_raw = (
         df.get("person_type", pd.Series("", index=df.index))

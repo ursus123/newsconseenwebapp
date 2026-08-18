@@ -4,7 +4,7 @@ bi/generators.py
 Fetches data for each exportable report.
 
 Three-tier fallback: analytics.* → raw.* → empty DataFrame.
-(Base44 live is not called here — exports are analytics/datamart-only.
+(Supabase live is not called here — exports are analytics/datamart-only.
  Operators always have the dashboard for live data; exports serve the BI use case.)
 
 Each generator returns a dict:
